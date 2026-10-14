@@ -77,13 +77,16 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
 
   Future<CryptoWalletSnapshot> _load() async {
     final capabilities = await _transport.capabilities();
-    final depositRoutes = capabilities.deposits
-        ? await _transport.depositRoutes()
-        : const <CryptoRoute>[];
-    final conversionRoutes = capabilities.conversions
-        ? await _transport.conversionRoutes()
-        : const <CryptoRoute>[];
-    final history = await _transport.history(limit: 50);
+    // Load independent provider resources in parallel; a slow history call
+    // should not serially block the asset list and overview.
+    final resources = await Future.wait<Object>([
+      capabilities.deposits ? _transport.depositRoutes() : Future.value(<CryptoRoute>[]),
+      capabilities.conversions ? _transport.conversionRoutes() : Future.value(<CryptoRoute>[]),
+      _transport.history(limit: 50),
+    ]);
+    final depositRoutes = resources[0] as List<CryptoRoute>;
+    final conversionRoutes = resources[1] as List<CryptoRoute>;
+    final history = resources[2] as List<CryptoIntent>;
 
     final selected = _initialSelectedCode(depositRoutes, history);
     final balances = <String, String>{};
