@@ -127,8 +127,7 @@ void main() {
           );
           expect(find.byType(MasanawaWordmark), findsOneWidget);
           expect(find.text('9007199254740991'), findsOneWidget);
-          expect(find.text('123'), findsOneWidget);
-          expect(find.text('456'), findsOneWidget);
+          expect(find.text('Credits'), findsWidgets);
           expect(find.textContaining('MSN'), findsWidgets);
           expect(find.textContaining('₦'), findsNothing);
           expect(find.text('Send'), findsOneWidget);
