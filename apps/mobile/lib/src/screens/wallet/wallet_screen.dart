@@ -594,14 +594,24 @@ class WalletServiceShortcuts extends StatelessWidget {
           ),
         if (billing != null) ...[
           ActionChip(
+            avatar: const Icon(Icons.bolt, size: 16),
+            label: const Text('Data bundles'),
+            onPressed: () => billing('data'),
+          ),
+          ActionChip(
             avatar: const Icon(Icons.phone_android, size: 16),
             label: const Text('Airtime'),
             onPressed: () => billing('airtime'),
           ),
           ActionChip(
-            avatar: const Icon(Icons.bolt, size: 16),
-            label: const Text('Data bundles'),
-            onPressed: () => billing('data'),
+            avatar: const Icon(Icons.electric_bolt_outlined, size: 16),
+            label: const Text('Electricity'),
+            onPressed: () => billing('electricity'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.live_tv_outlined, size: 16),
+            label: const Text('TV / Cable'),
+            onPressed: () => billing('tv'),
           ),
         ] else if (onBuyBills != null)
           ActionChip(
