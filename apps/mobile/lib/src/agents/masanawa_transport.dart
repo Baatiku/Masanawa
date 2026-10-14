@@ -473,8 +473,13 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
               return _turnResultFromData(done ?? {}, reply: reply);
             }
           }
-        } catch (_) {
-          // If streaming connection fails, seamlessly fallback to reliable non-streaming turn
+          if (streamedText.isNotEmpty) throw const ApiException('Incomplete agent stream. Check message status before retrying.');
+        } catch (error) {
+          // Never replay a turn after server-generated text/audio began: a
+          // fallback POST could execute the same task and charge twice.
+          if (streamedText.isNotEmpty || token.isCancelled) rethrow;
+          // Before the first streamed delta the legacy turn endpoint remains
+          // an interoperability fallback for older Gateway deployments.
         }
       }
 
