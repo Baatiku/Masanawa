@@ -99,9 +99,12 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
+      color: Theme.of(context).colorScheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Semantics(
+        child: DefaultTextStyle.merge(
+          style: const TextStyle(color: Colors.white),
+          child: Semantics(
           label: 'MSN wallet balance',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,13 +134,10 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
               else
                 Text(_error ?? 'Balance unavailable',
                     style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 6),
-              Text(
-                'MSN is separate from cryptocurrency. NGN deposits are funding, not held wallet balance.',
-                style: theme.textTheme.bodySmall,
-              ),
+
             ],
           ),
+        ),
         ),
       ),
     );
