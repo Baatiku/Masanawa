@@ -463,12 +463,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
                     ? () => _runAction(() => _withdraw(context, ref, data))
                     : null,
               ),
-              if (!data.capabilities.fiatOnRamp ||
-                  !data.capabilities.conversions ||
-                  !data.capabilities.withdrawals) ...[
-                const SizedBox(height: 14),
-                _CapabilityNotice(capabilities: data.capabilities),
-              ],
+
               const SizedBox(height: 22),
               Text(
                 'Activity',
