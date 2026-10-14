@@ -1,0 +1,10 @@
+packages:
+  - "packages/*"
+  - "services/*"
+  - "apps/*"
+  - "adapters/*/*"
+  - "infra/*/*"
+
+allowBuilds:
+  '@whiskeysockets/baileys': true
+  protobufjs: true

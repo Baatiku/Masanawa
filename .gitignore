@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.pub-cache/
+.pub/
+
+# Builds & Outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+*.log
+
+# Environment & Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+
+# Mobile (Flutter & Android / iOS)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+apps/mobile/build/
+apps/mobile/.dart_tool/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/ios/Flutter/ephemeral/
+apps/mobile/ios/Flutter/Generated.xcconfig
+apps/mobile/ios/Flutter/flutter_export_environment.sh
+apps/mobile/ios/Runner/GeneratedPluginRegistrant.h
+apps/mobile/ios/Runner/GeneratedPluginRegistrant.m
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.class

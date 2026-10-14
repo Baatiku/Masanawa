@@ -1,0 +1,420 @@
+import type { CharacterId, TenantId, UserId } from "@masanawa/contracts";
+import { parseCanonicalId } from "@masanawa/contracts";
+export type OwnerAccessModality = "text" | "voice" | "video";
+
+export interface OwnerAccessQuote {
+  readonly requestId: string;
+  readonly ownerUserId: string;
+  readonly originatingCharacterId: string;
+  readonly modality: OwnerAccessModality;
+  readonly durationMinutes: number;
+  readonly priceCredits: number;
+  readonly platformFeeCredits: number;
+  readonly ownerEarningCredits: number;
+  readonly chargeMode: "trial" | "paid";
+  readonly trialDurationDays: number;
+  readonly policyRevision: number;
+  readonly trialPolicyRevision: number;
+  readonly quoteExpiresAt: string;
+}
+
+export interface OwnerAccessRequest {
+  readonly requestId: string;
+  readonly requesterUserId: string;
+  readonly ownerUserId: string;
+  readonly originatingCharacterId: string;
+  readonly modality: OwnerAccessModality;
+  readonly durationMinutes: number;
+  readonly priceCredits: number;
+  readonly platformFeeCredits: number;
+  readonly ownerEarningCredits: number;
+  readonly chargeMode: "trial" | "paid";
+  readonly trialPolicyRevision: number;
+  readonly state:
+    | "requested"
+    | "accepted"
+    | "scheduled"
+    | "active"
+    | "completed"
+    | "settled"
+    | "releasing"
+    | "declined"
+    | "expired"
+    | "cancelled"
+    | "no-show"
+    | "refunded"
+    | "disputed";
+  readonly requestedAt: string;
+  readonly acceptBy: string;
+  readonly scheduledFor: string | null;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly disputeBy?: string | null;
+  readonly disputedAt?: string | null;
+  readonly disputeReason?: "service-not-delivered" | "service-quality" | "other" | null;
+  readonly earningsReleasedAt?: string | null;
+  readonly disputeResolvedAt?: string | null;
+  readonly disputeResolution?: "release" | "refund" | null;
+}
+
+export interface OwnerAccessRoomMessage {
+  readonly requestId: string;
+  readonly messageId: string;
+  readonly senderUserId: string;
+  readonly body: string;
+  readonly sentAt: string;
+}
+
+export interface OwnerAccessRoomPresence {
+  readonly userId: string;
+  readonly firstSeenAt: string;
+  readonly lastSeenAt: string;
+  readonly heartbeatCount: number;
+}
+
+export interface OwnerAccessRoomStatus {
+  readonly attendanceVerified: boolean;
+  readonly verifiedSeconds: number;
+  readonly sessionEndsAt: string | null;
+  readonly realPersonSession: true;
+  readonly recordingAllowed: false;
+  readonly messageRetentionDays: number;
+  readonly presence: readonly OwnerAccessRoomPresence[];
+}
+
+export interface OwnerAccessAuthority {
+  readonly tenantId: TenantId;
+  readonly userId: UserId;
+}
+
+export interface OwnerAccessAuthorizer {
+  authorize(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly capability:
+      | "owner-access.request"
+      | "owner-access.manage"
+      | "owner-access.read";
+    readonly characterId: CharacterId;
+  }): Promise<OwnerAccessAuthority>;
+}
+
+export interface OwnerAccessQuotePort {
+  quote(input: {
+    readonly tenantId: TenantId;
+    readonly requesterUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly modality: OwnerAccessModality;
+    readonly durationMinutes: number;
+  }): Promise<OwnerAccessQuote>;
+}
+
+export interface OwnerAccessRequestPort {
+  createFromQuote(input: {
+    readonly tenantId: TenantId;
+    readonly requesterUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly quoteId: string;
+  }): Promise<OwnerAccessRequest>;
+
+  act(input: {
+    readonly tenantId: TenantId;
+    readonly actorUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly requestId: string;
+    readonly action:
+      | "accept"
+      | "decline"
+      | "schedule"
+      | "start"
+      | "complete"
+      | "cancel"
+      | "dispute";
+    readonly scheduledFor?: string;
+    readonly disputeReason?: "service-not-delivered" | "service-quality" | "other";
+  }): Promise<OwnerAccessRequest>;
+
+  get(input: {
+    readonly tenantId: TenantId;
+    readonly actorUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly requestId: string;
+  }): Promise<OwnerAccessRequest | null>;
+
+  latestForRequester(input: {
+    readonly tenantId: TenantId;
+    readonly requesterUserId: UserId;
+    readonly characterId: CharacterId;
+  }): Promise<OwnerAccessRequest | null>;
+
+  heartbeat(input: {
+    readonly tenantId: TenantId;
+    readonly actorUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly requestId: string;
+  }): Promise<OwnerAccessRoomStatus>;
+
+  listMessages(input: {
+    readonly tenantId: TenantId;
+    readonly actorUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly requestId: string;
+    readonly limit: number;
+  }): Promise<readonly OwnerAccessRoomMessage[]>;
+
+  sendMessage(input: {
+    readonly tenantId: TenantId;
+    readonly actorUserId: UserId;
+    readonly characterId: CharacterId;
+    readonly requestId: string;
+    readonly messageId: string;
+    readonly body: string;
+  }): Promise<OwnerAccessRoomMessage>;
+}
+
+export interface OwnerAccessService {
+  quote(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly modality: OwnerAccessModality;
+    readonly durationMinutes: number;
+  }): Promise<OwnerAccessQuote>;
+
+  request(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly quoteId: string;
+  }): Promise<OwnerAccessRequest>;
+
+  act(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly requestId: string;
+    readonly action:
+      | "accept"
+      | "decline"
+      | "schedule"
+      | "start"
+      | "complete"
+      | "cancel"
+      | "dispute";
+    readonly scheduledFor?: string;
+    readonly disputeReason?: "service-not-delivered" | "service-quality" | "other";
+  }): Promise<OwnerAccessRequest>;
+
+  read(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly requestId: string;
+  }): Promise<OwnerAccessRequest | null>;
+
+  latest(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+  }): Promise<OwnerAccessRequest | null>;
+
+  heartbeat(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly requestId: string;
+  }): Promise<OwnerAccessRoomStatus>;
+
+  messages(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly requestId: string;
+    readonly limit: number;
+  }): Promise<readonly OwnerAccessRoomMessage[]>;
+
+  sendMessage(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly characterId: string;
+    readonly requestId: string;
+    readonly messageId: string;
+    readonly body: string;
+  }): Promise<OwnerAccessRoomMessage>;
+}
+
+function duration(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 5 || value > 480) {
+    throw new RangeError("durationMinutes is invalid");
+  }
+  return value;
+}
+
+function messageId(value: string): string {
+  if (typeof value !== "string" || value.length < 8 || value.length > 160) {
+    throw new TypeError("messageId is invalid");
+  }
+  return value;
+}
+
+function messageBody(value: string): string {
+  if (typeof value !== "string") throw new TypeError("message body is invalid");
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 4000) {
+    throw new TypeError("message body is invalid");
+  }
+  return normalized;
+}
+
+function boundedLimit(value: number): number {
+  if (!Number.isSafeInteger(value)) throw new TypeError("limit is invalid");
+  return Math.max(1, Math.min(200, value));
+}
+
+function disputeReason(
+  value: string | undefined,
+): "service-not-delivered" | "service-quality" | "other" | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value !== "service-not-delivered" &&
+    value !== "service-quality" &&
+    value !== "other"
+  ) {
+    throw new TypeError("dispute reason is invalid");
+  }
+  return value;
+}
+
+function requestId(value: string): string {
+  if (typeof value !== "string" || value.length < 8 || value.length > 256) {
+    throw new TypeError("requestId is invalid");
+  }
+  return value;
+}
+
+export function createOwnerAccessService(input: {
+  readonly authorizer: OwnerAccessAuthorizer;
+  readonly quotes: OwnerAccessQuotePort;
+  readonly requests: OwnerAccessRequestPort;
+}): OwnerAccessService {
+  return Object.freeze<OwnerAccessService>({
+    async quote(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.request",
+      });
+      return input.quotes.quote({
+        tenantId: authority.tenantId,
+        requesterUserId: authority.userId,
+        characterId,
+        modality: request.modality,
+        durationMinutes: duration(request.durationMinutes),
+      });
+    },
+
+    async request(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.request",
+      });
+      return input.requests.createFromQuote({
+        tenantId: authority.tenantId,
+        requesterUserId: authority.userId,
+        characterId,
+        quoteId: requestId(request.quoteId),
+      });
+    },
+
+    async act(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.manage",
+      });
+      return input.requests.act({
+        tenantId: authority.tenantId,
+        actorUserId: authority.userId,
+        characterId,
+        requestId: requestId(request.requestId),
+        action: request.action,
+        ...(request.scheduledFor ? { scheduledFor: request.scheduledFor } : {}),
+        ...(disputeReason(request.disputeReason)
+          ? { disputeReason: disputeReason(request.disputeReason)! }
+          : {}),
+      });
+    },
+
+    async read(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.read",
+      });
+      return input.requests.get({
+        tenantId: authority.tenantId,
+        actorUserId: authority.userId,
+        characterId,
+        requestId: requestId(request.requestId),
+      });
+    },
+
+    async latest(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.read",
+      });
+      return input.requests.latestForRequester({
+        tenantId: authority.tenantId,
+        requesterUserId: authority.userId,
+        characterId,
+      });
+    },
+
+    async heartbeat(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.read",
+      });
+      return input.requests.heartbeat({
+        tenantId: authority.tenantId,
+        actorUserId: authority.userId,
+        characterId,
+        requestId: requestId(request.requestId),
+      });
+    },
+
+    async messages(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.read",
+      });
+      return input.requests.listMessages({
+        tenantId: authority.tenantId,
+        actorUserId: authority.userId,
+        characterId,
+        requestId: requestId(request.requestId),
+        limit: boundedLimit(request.limit),
+      });
+    },
+
+    async sendMessage(request) {
+      const characterId = parseCanonicalId("character", request.characterId);
+      const authority = await input.authorizer.authorize({
+        authorizationHeader: request.authorizationHeader,
+        characterId,
+        capability: "owner-access.read",
+      });
+      return input.requests.sendMessage({
+        tenantId: authority.tenantId,
+        actorUserId: authority.userId,
+        characterId,
+        requestId: requestId(request.requestId),
+        messageId: messageId(request.messageId),
+        body: messageBody(request.body),
+      });
+    },
+  });
+}

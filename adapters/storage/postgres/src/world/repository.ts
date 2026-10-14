@@ -1,0 +1,2219 @@
+import {
+  PlatformError,
+  parseCanonicalId,
+  toInstant,
+  type CharacterId,
+  type CharacterVersionId,
+  type Instant,
+  type TenantId,
+  type WorldEventId,
+  type WorldGenerationId,
+  type WorldId,
+  type WorldInteractionId,
+} from "@masanawa/contracts";
+import { fingerprintCanonicalJson, assertCurrentAuthority, createAuthorityContext } from "@masanawa/security";
+import { worldContextReadCapability, type PublicWorldContextReader } from "@masanawa/world";
+import { createPostgresCurrentAuthoritySource } from "../security/approvals.js";
+import {
+  assertRoutineScheduledTime,
+  assertSimulationTimeDoesNotMoveBackward,
+  assertWorldPayloadHasNoPrivateReferences,
+  assertWorldTextsHaveNoPrivateReferences,
+  assertStoryArcTransition,
+  normalizeIanaTimezone,
+  normalizeLocalTime,
+  normalizeRoutineKey,
+  normalizeSimulationInputKey,
+  normalizeSimulationInputKind,
+  normalizeWorldPolicy,
+  routineOccurrenceKey,
+  type AdmitRoutineOccurrenceInput,
+  type AdmitSimulationInput,
+  type AppendWorldInteractionInput,
+  type AppendWorldEventInput,
+  type ApproveWorldEventInput,
+  type CharacterLifeState,
+  type CommitWorldGenerationInput,
+  type CommitWorldGenerationResult,
+  type CreateWorldInput,
+  type GovernedWorldRepository,
+  type NarrativeWorldRepository,
+  type PauseWorldInput,
+  type RecoverPausedWorldInput,
+  type RecoverPausedWorldResult,
+  type PutCharacterLifeStateInput,
+  type PutRoutineInput,
+  type PutStoryArcInput,
+  type RetireWorldEventInput,
+  type Routine,
+  type SimulationInput,
+  type StoryArc,
+  type World,
+  type WorldEvent,
+  type WorldGeneration,
+  type WorldInteraction,
+  type WorldInteractionParticipant,
+  type WorldRepository,
+} from "@masanawa/world";
+import type { PoolClient } from "pg";
+import { publishWorldEvidenceRecorded } from "./evidence-publication.js";
+
+interface WorldRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  status: World["status"];
+  policy: World["policy"];
+  policy_revision: string;
+  current_generation_id: WorldGenerationId;
+  current_generation_number: string;
+  simulation_time: Date;
+  paused_at: Date | null;
+  recovery_target_time: Date | null;
+  revision: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface GenerationRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  world_generation_id: WorldGenerationId;
+  generation_number: string;
+  previous_generation_id: WorldGenerationId | null;
+  simulation_time: Date;
+  committed_at: Date;
+}
+
+interface InputRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  sequence: string;
+  idempotency_key: string;
+  kind: string;
+  payload: SimulationInput["payload"];
+  state: SimulationInput["state"];
+  received_at: Date;
+  effective_at: Date;
+  completed_generation_number: string | null;
+}
+
+interface LifeStateRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  character_id: CharacterId;
+  availability: string | null;
+  narrative_state: string | null;
+  active_goal: string | null;
+  story_arc: string | null;
+  coarse_location: string | null;
+  revision: string;
+  effective_at: Date;
+  updated_at: Date;
+}
+
+interface WorldEventRow {
+  tenant_id: TenantId;
+  world_event_id: WorldEventId;
+  world_id: WorldId;
+  character_id: CharacterId | null;
+  character_version_id: CharacterVersionId | null;
+  event_kind: string;
+  payload: WorldEvent["payload"];
+  provenance: WorldEvent["provenance"];
+  visibility: WorldEvent["visibility"];
+  canon_state: WorldEvent["canonState"];
+  occurrence_key: string | null;
+  effective_start: Date;
+  effective_end: Date | null;
+  recorded_at: Date;
+  approved_at: Date | null;
+  retired_at: Date | null;
+}
+
+interface WorldInteractionRow {
+  tenant_id: TenantId;
+  world_interaction_id: WorldInteractionId;
+  world_id: WorldId;
+  interaction_kind: string;
+  payload: WorldInteraction["payload"];
+  provenance: WorldInteraction["provenance"];
+  visibility: WorldInteraction["visibility"];
+  canon_state: WorldInteraction["canonState"];
+  occurrence_key: string | null;
+  effective_start: Date;
+  effective_end: Date | null;
+  recorded_at: Date;
+  approved_at: Date | null;
+  retired_at: Date | null;
+}
+
+interface WorldInteractionParticipantRow {
+  character_id: CharacterId;
+  character_version_id: CharacterVersionId;
+  role: string;
+  ordinal: number;
+}
+
+interface RoutineRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  routine_key: string;
+  character_id: CharacterId;
+  character_version_id: CharacterVersionId;
+  timezone: string;
+  local_time: string;
+  enabled: boolean;
+  input_kind: string;
+  input_payload: Routine["inputPayload"];
+  revision: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface StoryArcRow {
+  tenant_id: TenantId;
+  world_id: WorldId;
+  story_arc_key: string;
+  character_id: CharacterId;
+  character_version_id: CharacterVersionId;
+  state: StoryArc["state"];
+  title: string;
+  summary: string;
+  revision: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function integer(value: string, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`PostgreSQL returned invalid ${name}`);
+  }
+  return parsed;
+}
+
+function asWorld(row: WorldRow): World {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    status: row.status,
+    policy: normalizeWorldPolicy(row.policy),
+    policyRevision: integer(row.policy_revision, "policy revision"),
+    currentGenerationId: row.current_generation_id,
+    currentGenerationNumber: integer(
+      row.current_generation_number,
+      "generation number",
+    ),
+    simulationTime: toInstant(row.simulation_time),
+    pausedAt: row.paused_at ? toInstant(row.paused_at) : null,
+    recoveryTargetTime: row.recovery_target_time
+      ? toInstant(row.recovery_target_time)
+      : null,
+    revision: integer(row.revision, "world revision"),
+    createdAt: toInstant(row.created_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+function asGeneration(row: GenerationRow): WorldGeneration {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    worldGenerationId: row.world_generation_id,
+    generationNumber: integer(row.generation_number, "generation number"),
+    previousGenerationId: row.previous_generation_id,
+    simulationTime: toInstant(row.simulation_time),
+    committedAt: toInstant(row.committed_at),
+  });
+}
+
+function asInput(row: InputRow): SimulationInput {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    sequence: integer(row.sequence, "input sequence"),
+    idempotencyKey: row.idempotency_key,
+    kind: row.kind,
+    payload: Object.freeze({ ...row.payload }),
+    state: row.state,
+    receivedAt: toInstant(row.received_at),
+    effectiveAt: toInstant(row.effective_at),
+    completedGenerationNumber:
+      row.completed_generation_number === null
+        ? null
+        : integer(row.completed_generation_number, "completed generation number"),
+  });
+}
+
+function asLifeState(row: LifeStateRow): CharacterLifeState {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    characterId: row.character_id,
+    availability: row.availability,
+    narrativeState: row.narrative_state,
+    activeGoal: row.active_goal,
+    storyArc: row.story_arc,
+    coarseLocation: row.coarse_location,
+    revision: integer(row.revision, "life-state revision"),
+    effectiveAt: toInstant(row.effective_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+function asWorldEvent(row: WorldEventRow): WorldEvent {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldEventId: row.world_event_id,
+    worldId: row.world_id,
+    characterId: row.character_id,
+    characterVersionId: row.character_version_id,
+    eventKind: row.event_kind,
+    payload: Object.freeze({ ...row.payload }),
+    provenance: row.provenance,
+    visibility: row.visibility,
+    canonState: row.canon_state,
+    occurrenceKey: row.occurrence_key,
+    effectiveStart: toInstant(row.effective_start),
+    effectiveEnd: row.effective_end ? toInstant(row.effective_end) : null,
+    recordedAt: toInstant(row.recorded_at),
+    approvedAt: row.approved_at ? toInstant(row.approved_at) : null,
+    retiredAt: row.retired_at ? toInstant(row.retired_at) : null,
+  });
+}
+
+function asWorldInteraction(
+  row: WorldInteractionRow,
+  participants: readonly WorldInteractionParticipant[],
+): WorldInteraction {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldInteractionId: row.world_interaction_id,
+    worldId: row.world_id,
+    interactionKind: row.interaction_kind,
+    participants: Object.freeze([...participants]),
+    payload: Object.freeze({ ...row.payload }),
+    provenance: row.provenance,
+    visibility: row.visibility,
+    canonState: row.canon_state,
+    occurrenceKey: row.occurrence_key,
+    effectiveStart: toInstant(row.effective_start),
+    effectiveEnd: row.effective_end ? toInstant(row.effective_end) : null,
+    recordedAt: toInstant(row.recorded_at),
+    approvedAt: row.approved_at ? toInstant(row.approved_at) : null,
+    retiredAt: row.retired_at ? toInstant(row.retired_at) : null,
+  });
+}
+
+function asRoutine(row: RoutineRow): Routine {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    routineKey: row.routine_key,
+    characterId: row.character_id,
+    characterVersionId: row.character_version_id,
+    timezone: row.timezone,
+    localTime: row.local_time.slice(0, 5),
+    enabled: row.enabled,
+    inputKind: row.input_kind,
+    inputPayload: Object.freeze({ ...row.input_payload }),
+    revision: integer(row.revision, "routine revision"),
+    createdAt: toInstant(row.created_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+function asStoryArc(row: StoryArcRow): StoryArc {
+  return Object.freeze({
+    tenantId: row.tenant_id,
+    worldId: row.world_id,
+    storyArcKey: row.story_arc_key,
+    characterId: row.character_id,
+    characterVersionId: row.character_version_id,
+    state: row.state,
+    title: row.title,
+    summary: row.summary,
+    revision: integer(row.revision, "story-arc revision"),
+    createdAt: toInstant(row.created_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+function conflict(code: string, message: string): PlatformError {
+  return new PlatformError({
+    code,
+    category: "conflict",
+    message,
+    retryable: false,
+  });
+}
+
+function notFound(): PlatformError {
+  return new PlatformError({
+    code: "world.not_found",
+    category: "not-found",
+    message: "World does not exist in the requested tenant",
+    retryable: false,
+  });
+}
+
+async function loadWorld(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+  forUpdate: boolean,
+): Promise<World | null> {
+  const result = await client.query<WorldRow>(
+    `SELECT tenant_id,
+            world_id,
+            status,
+            policy,
+            policy_revision,
+            current_generation_id,
+            current_generation_number,
+            simulation_time,
+            paused_at,
+            recovery_target_time,
+            revision,
+            created_at,
+            updated_at
+       FROM world.worlds
+      WHERE tenant_id = $1
+        AND world_id = $2
+      ${forUpdate ? "FOR UPDATE" : ""}`,
+    [tenantId, worldId],
+  );
+  return result.rows[0] ? asWorld(result.rows[0]) : null;
+}
+
+export async function createWorld(
+  client: PoolClient,
+  input: CreateWorldInput,
+): Promise<World> {
+  const policy = normalizeWorldPolicy(input.policy);
+
+  const inserted = await client.query<WorldRow>(
+    `INSERT INTO world.worlds (
+       tenant_id,
+       world_id,
+       policy,
+       policy_revision,
+       current_generation_id,
+       current_generation_number,
+       simulation_time,
+       revision,
+       created_at,
+       updated_at
+     )
+     VALUES ($1, $2, $3::jsonb, 1, $4, 0, $5, 1, $6, $6)
+     RETURNING tenant_id,
+               world_id,
+               status,
+               policy,
+               policy_revision,
+               current_generation_id,
+               current_generation_number,
+               simulation_time,
+               paused_at,
+               recovery_target_time,
+               revision,
+               created_at,
+               updated_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      JSON.stringify(policy),
+      input.initialGenerationId,
+      input.simulationTime,
+      input.createdAt,
+    ],
+  );
+
+  await client.query(
+    `INSERT INTO world.generations (
+       tenant_id,
+       world_id,
+       world_generation_id,
+       generation_number,
+       previous_generation_id,
+       simulation_time,
+       committed_at
+     )
+     VALUES ($1, $2, $3, 0, NULL, $4, $5)`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.initialGenerationId,
+      input.simulationTime,
+      input.createdAt,
+    ],
+  );
+
+  return asWorld(inserted.rows[0]!);
+}
+
+export async function getWorld(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+): Promise<World | null> {
+  return loadWorld(client, tenantId, worldId, false);
+}
+
+export async function admitSimulationInput(
+  client: PoolClient,
+  input: AdmitSimulationInput,
+): Promise<SimulationInput> {
+  const idempotencyKey = normalizeSimulationInputKey(input.idempotencyKey);
+  const kind = normalizeSimulationInputKind(input.kind);
+  assertWorldPayloadHasNoPrivateReferences(input.payload);
+
+  const result = await client.query<InputRow>(
+    `INSERT INTO world.simulation_inputs (
+       tenant_id,
+       world_id,
+       idempotency_key,
+       kind,
+       payload,
+       received_at,
+       effective_at
+     )
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+     ON CONFLICT (tenant_id, world_id, idempotency_key)
+     DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
+       WHERE world.simulation_inputs.kind = EXCLUDED.kind
+         AND world.simulation_inputs.payload = EXCLUDED.payload
+         AND world.simulation_inputs.effective_at = EXCLUDED.effective_at
+     RETURNING tenant_id,
+               world_id,
+               sequence,
+               idempotency_key,
+               kind,
+               payload,
+               state,
+               received_at,
+               effective_at,
+               completed_generation_number`,
+    [
+      input.tenantId,
+      input.worldId,
+      idempotencyKey,
+      kind,
+      JSON.stringify(input.payload),
+      input.receivedAt,
+      input.effectiveAt,
+    ],
+  );
+
+  if (!result.rows[0]) {
+    throw conflict(
+      "world.simulation_input_conflict",
+      "Simulation input idempotency key was reused with different content",
+    );
+  }
+  return asInput(result.rows[0]);
+}
+
+export async function commitWorldGeneration(
+  client: PoolClient,
+  input: CommitWorldGenerationInput,
+): Promise<CommitWorldGenerationResult> {
+  if (
+    !Number.isSafeInteger(input.expectedGenerationNumber) ||
+    input.expectedGenerationNumber < 0
+  ) {
+    throw new RangeError("expectedGenerationNumber must be non-negative");
+  }
+
+  const current = await loadWorld(
+    client,
+    input.tenantId,
+    input.worldId,
+    true,
+  );
+  if (!current) {
+    throw notFound();
+  }
+  if (current.status !== "active") {
+    throw conflict(
+      "world.not_active",
+      "Only an active World may commit a simulation generation",
+    );
+  }
+  if (current.currentGenerationNumber !== input.expectedGenerationNumber) {
+    throw conflict(
+      "world.generation_conflict",
+      "World generation was advanced by another writer",
+    );
+  }
+
+  assertSimulationTimeDoesNotMoveBackward(
+    current.simulationTime,
+    input.simulationTime,
+  );
+
+  const sequences = [
+    ...new Set(input.completedInputSequences),
+  ].sort((left, right) => left - right);
+
+  for (const sequence of sequences) {
+    if (!Number.isSafeInteger(sequence) || sequence < 1) {
+      throw new RangeError("completed input sequences must be positive integers");
+    }
+  }
+
+  let inputs: InputRow[] = [];
+  if (sequences.length > 0) {
+    const claimed = await client.query<InputRow>(
+      `SELECT tenant_id,
+              world_id,
+              sequence,
+              idempotency_key,
+              kind,
+              payload,
+              state,
+              received_at,
+              effective_at,
+              completed_generation_number
+         FROM world.simulation_inputs
+        WHERE tenant_id = $1
+          AND world_id = $2
+          AND sequence = ANY($3::bigint[])
+        ORDER BY sequence
+        FOR UPDATE`,
+      [input.tenantId, input.worldId, sequences],
+    );
+    inputs = claimed.rows;
+    if (
+      inputs.length !== sequences.length ||
+      inputs.some((row) => row.state !== "admitted")
+    ) {
+      throw conflict(
+        "world.simulation_input_not_admitted",
+        "One or more simulation inputs are missing or already settled",
+      );
+    }
+  }
+
+  const nextGenerationNumber = input.expectedGenerationNumber + 1;
+
+  const generationResult = await client.query<GenerationRow>(
+    `INSERT INTO world.generations (
+       tenant_id,
+       world_id,
+       world_generation_id,
+       generation_number,
+       previous_generation_id,
+       simulation_time,
+       committed_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING tenant_id,
+               world_id,
+               world_generation_id,
+               generation_number,
+               previous_generation_id,
+               simulation_time,
+               committed_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.nextGenerationId,
+      nextGenerationNumber,
+      current.currentGenerationId,
+      input.simulationTime,
+      input.committedAt,
+    ],
+  );
+
+  if (sequences.length > 0) {
+    const completed = await client.query<InputRow>(
+      `UPDATE world.simulation_inputs
+          SET state = 'completed',
+              completed_generation_number = $4
+        WHERE tenant_id = $1
+          AND world_id = $2
+          AND sequence = ANY($3::bigint[])
+          AND state = 'admitted'
+      RETURNING tenant_id,
+                world_id,
+                sequence,
+                idempotency_key,
+                kind,
+                payload,
+                state,
+                received_at,
+                effective_at,
+                completed_generation_number`,
+      [
+        input.tenantId,
+        input.worldId,
+        sequences,
+        nextGenerationNumber,
+      ],
+    );
+    inputs = completed.rows;
+  }
+
+  const worldResult = await client.query<WorldRow>(
+    `UPDATE world.worlds
+        SET current_generation_id = $3,
+            current_generation_number = $4,
+            simulation_time = $5,
+            revision = revision + 1,
+            updated_at = $6
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND current_generation_number = $7
+      RETURNING tenant_id,
+                world_id,
+                status,
+                policy,
+                policy_revision,
+                current_generation_id,
+                current_generation_number,
+                simulation_time,
+                paused_at,
+                recovery_target_time,
+                revision,
+                created_at,
+                updated_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.nextGenerationId,
+      nextGenerationNumber,
+      input.simulationTime,
+      input.committedAt,
+      input.expectedGenerationNumber,
+    ],
+  );
+
+  if (!worldResult.rows[0]) {
+    throw conflict(
+      "world.generation_conflict",
+      "World generation was advanced by another writer",
+    );
+  }
+
+  return Object.freeze({
+    world: asWorld(worldResult.rows[0]),
+    generation: asGeneration(generationResult.rows[0]!),
+    completedInputs: Object.freeze(inputs.map(asInput)),
+  });
+}
+
+function assertExpectedWorldRevision(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new RangeError("expectedRevision must be a positive safe integer");
+  }
+}
+
+export async function pauseWorld(
+  client: PoolClient,
+  input: PauseWorldInput,
+): Promise<World> {
+  assertExpectedWorldRevision(input.expectedRevision);
+  const current = await loadWorld(
+    client,
+    input.tenantId,
+    input.worldId,
+    true,
+  );
+  if (!current) {
+    throw notFound();
+  }
+  if (current.revision !== input.expectedRevision) {
+    throw conflict(
+      "world.revision_conflict",
+      "World revision was changed by another writer",
+    );
+  }
+  if (current.status !== "active") {
+    throw conflict(
+      "world.pause_invalid_state",
+      "Only an active World may be paused",
+    );
+  }
+
+  const result = await client.query<WorldRow>(
+    `UPDATE world.worlds
+        SET status = 'paused',
+            paused_at = $4,
+            recovery_target_time = NULL,
+            revision = revision + 1,
+            updated_at = $4
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND revision = $3
+        AND status = 'active'
+      RETURNING tenant_id,
+                world_id,
+                status,
+                policy,
+                policy_revision,
+                current_generation_id,
+                current_generation_number,
+                simulation_time,
+                paused_at,
+                recovery_target_time,
+                revision,
+                created_at,
+                updated_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.expectedRevision,
+      input.pausedAt,
+    ],
+  );
+  if (!result.rows[0]) {
+    throw conflict(
+      "world.revision_conflict",
+      "World pause raced with another writer",
+    );
+  }
+  return asWorld(result.rows[0]);
+}
+
+interface DueRoutineOccurrenceRow {
+  routine_key: string;
+  scheduled_for: Date;
+}
+
+async function dueRoutineOccurrences(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+  after: Instant,
+  through: Instant,
+  maxSteps: number,
+): Promise<{
+  readonly rows: readonly DueRoutineOccurrenceRow[];
+  readonly stepTimes: readonly Instant[];
+  readonly hasMore: boolean;
+}> {
+  const result = await client.query<DueRoutineOccurrenceRow>(
+    `WITH candidates AS (
+       SELECT r.routine_key,
+              ((day.local_date::date + r.local_time)
+                AT TIME ZONE r.timezone) AS scheduled_for
+         FROM world.routines AS r
+         CROSS JOIN LATERAL generate_series(
+           ($3::timestamptz AT TIME ZONE r.timezone)::date,
+           ($4::timestamptz AT TIME ZONE r.timezone)::date,
+           interval '1 day'
+         ) AS day(local_date)
+        WHERE r.tenant_id = $1
+          AND r.world_id = $2
+          AND r.enabled = true
+     ),
+     valid_candidates AS (
+       SELECT c.routine_key, c.scheduled_for
+         FROM candidates AS c
+         JOIN world.routines AS r
+           ON r.tenant_id = $1
+          AND r.world_id = $2
+          AND r.routine_key = c.routine_key
+        WHERE c.scheduled_for > $3::timestamptz
+          AND c.scheduled_for <= $4::timestamptz
+          AND (c.scheduled_for AT TIME ZONE r.timezone)::time = r.local_time
+     ),
+     selected_steps AS (
+       SELECT DISTINCT scheduled_for
+         FROM valid_candidates
+        ORDER BY scheduled_for
+        LIMIT $5
+     )
+     SELECT c.routine_key, c.scheduled_for
+       FROM valid_candidates AS c
+       JOIN selected_steps AS s USING (scheduled_for)
+      ORDER BY c.scheduled_for, c.routine_key`,
+    [tenantId, worldId, after, through, maxSteps + 1],
+  );
+
+  const allSteps = [
+    ...new Set(result.rows.map((row) => row.scheduled_for.toISOString())),
+  ];
+  const hasMore = allSteps.length > maxSteps;
+  const selectedSteps = allSteps.slice(0, maxSteps);
+  const selected = new Set(selectedSteps);
+  return Object.freeze({
+    rows: Object.freeze(
+      result.rows.filter((row) => selected.has(row.scheduled_for.toISOString())),
+    ),
+    stepTimes: Object.freeze(
+      selectedSteps.map((value) => toInstant(value)),
+    ),
+    hasMore,
+  });
+}
+
+async function appendRecoveryGeneration(
+  client: PoolClient,
+  input: RecoverPausedWorldInput,
+  current: World,
+  simulationTime: Instant,
+  status: "active" | "paused",
+  recoveryTargetTime: Instant | null,
+): Promise<{ readonly world: World; readonly generation: WorldGeneration }> {
+  const nextGenerationNumber = current.currentGenerationNumber + 1;
+  const generationResult = await client.query<GenerationRow>(
+    `INSERT INTO world.generations (
+       tenant_id,
+       world_id,
+       world_generation_id,
+       generation_number,
+       previous_generation_id,
+       simulation_time,
+       committed_at
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING tenant_id,
+               world_id,
+               world_generation_id,
+               generation_number,
+               previous_generation_id,
+               simulation_time,
+               committed_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.nextGenerationId,
+      nextGenerationNumber,
+      current.currentGenerationId,
+      simulationTime,
+      input.requestedAt,
+    ],
+  );
+
+  const worldResult = await client.query<WorldRow>(
+    `UPDATE world.worlds
+        SET status = $4,
+            current_generation_id = $5,
+            current_generation_number = $6,
+            simulation_time = $7,
+            paused_at = CASE WHEN $4 = 'paused' THEN paused_at ELSE NULL END,
+            recovery_target_time = $8,
+            revision = revision + 1,
+            updated_at = $9
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND revision = $3
+        AND status = 'paused'
+      RETURNING tenant_id,
+                world_id,
+                status,
+                policy,
+                policy_revision,
+                current_generation_id,
+                current_generation_number,
+                simulation_time,
+                paused_at,
+                recovery_target_time,
+                revision,
+                created_at,
+                updated_at`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.expectedRevision,
+      status,
+      input.nextGenerationId,
+      nextGenerationNumber,
+      simulationTime,
+      recoveryTargetTime,
+      input.requestedAt,
+    ],
+  );
+  if (!worldResult.rows[0]) {
+    throw conflict(
+      "world.revision_conflict",
+      "World recovery raced with another writer",
+    );
+  }
+
+  return Object.freeze({
+    world: asWorld(worldResult.rows[0]),
+    generation: asGeneration(generationResult.rows[0]!),
+  });
+}
+
+export async function recoverPausedWorld(
+  client: PoolClient,
+  input: RecoverPausedWorldInput,
+): Promise<RecoverPausedWorldResult> {
+  assertExpectedWorldRevision(input.expectedRevision);
+  const current = await loadWorld(
+    client,
+    input.tenantId,
+    input.worldId,
+    true,
+  );
+  if (!current) {
+    throw notFound();
+  }
+  if (current.revision !== input.expectedRevision) {
+    throw conflict(
+      "world.revision_conflict",
+      "World revision was changed by another writer",
+    );
+  }
+  if (current.status !== "paused") {
+    throw conflict(
+      "world.recovery_invalid_state",
+      "Only a paused World may be recovered",
+    );
+  }
+  assertSimulationTimeDoesNotMoveBackward(
+    current.simulationTime,
+    input.resumeTo,
+  );
+  if (
+    current.recoveryTargetTime !== null &&
+    current.recoveryTargetTime !== input.resumeTo
+  ) {
+    throw conflict(
+      "world.recovery_target_conflict",
+      "A bounded recovery is already targeting a different simulation time",
+    );
+  }
+
+  if (current.policy.catchUpMode === "manual") {
+    throw conflict(
+      "world.manual_recovery_required",
+      "World policy requires operator reconciliation before restart",
+    );
+  }
+
+  if (current.policy.catchUpMode === "skip") {
+    const recovered = await appendRecoveryGeneration(
+      client,
+      input,
+      current,
+      input.resumeTo,
+      "active",
+      null,
+    );
+    return Object.freeze({
+      ...recovered,
+      admittedInputs: Object.freeze([]),
+      complete: true,
+    });
+  }
+
+  const due = await dueRoutineOccurrences(
+    client,
+    input.tenantId,
+    input.worldId,
+    current.simulationTime,
+    input.resumeTo,
+    current.policy.maxCatchUpSteps,
+  );
+  const admittedInputs: SimulationInput[] = [];
+  for (const occurrence of due.rows) {
+    admittedInputs.push(
+      await admitRoutineOccurrence(client, {
+        tenantId: input.tenantId,
+        worldId: input.worldId,
+        routineKey: occurrence.routine_key,
+        scheduledFor: toInstant(occurrence.scheduled_for),
+        receivedAt: input.requestedAt,
+      }),
+    );
+  }
+
+  const lastStep = due.stepTimes.at(-1);
+  const complete = !due.hasMore;
+  const nextSimulationTime = complete
+    ? input.resumeTo
+    : (lastStep ?? current.simulationTime);
+  const recovered = await appendRecoveryGeneration(
+    client,
+    input,
+    current,
+    nextSimulationTime,
+    complete ? "active" : "paused",
+    complete ? null : input.resumeTo,
+  );
+
+  return Object.freeze({
+    ...recovered,
+    admittedInputs: Object.freeze(admittedInputs),
+    complete,
+  });
+}
+
+function boundedText(value: string, name: string, max: number): string {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > max) {
+    throw new TypeError(`${name} is invalid`);
+  }
+  return normalized;
+}
+
+function nullableText(
+  value: string | null,
+  name: string,
+  max: number,
+): string | null {
+  return value === null ? null : boundedText(value, name, max);
+}
+
+async function assertActiveCharacterVersion(
+  client: PoolClient,
+  tenantId: TenantId,
+  characterId: CharacterId,
+  characterVersionId: CharacterVersionId,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT 1
+       FROM identity.characters c
+       JOIN identity.character_versions v
+         ON v.tenant_id = c.tenant_id
+        AND v.character_id = c.character_id
+        AND v.character_version_id = c.active_character_version_id
+      WHERE c.tenant_id = $1
+        AND c.character_id = $2
+        AND c.state = 'active'
+        AND c.active_character_version_id = $3
+        AND v.state = 'published'`,
+    [tenantId, characterId, characterVersionId],
+  );
+  if ((result.rowCount ?? 0) !== 1) {
+    throw conflict(
+      "world.character_version_not_active",
+      "World mutation requires the Character's active published version",
+    );
+  }
+}
+
+export async function putCharacterLifeState(
+  client: PoolClient,
+  input: PutCharacterLifeStateInput,
+): Promise<CharacterLifeState> {
+  await assertActiveCharacterVersion(
+    client,
+    input.tenantId,
+    input.characterId,
+    input.characterVersionId,
+  );
+
+  const world = await loadWorld(client, input.tenantId, input.worldId, false);
+  if (!world) {
+    throw notFound();
+  }
+  if (input.effectiveAt > world.simulationTime) {
+    throw conflict(
+      "world.life_state_from_future",
+      "Character life state cannot become effective after current simulation time",
+    );
+  }
+
+  assertWorldTextsHaveNoPrivateReferences({
+    availability: input.availability,
+    narrativeState: input.narrativeState,
+    activeGoal: input.activeGoal,
+    storyArc: input.storyArc,
+    coarseLocation: input.coarseLocation,
+  });
+
+  const values = [
+    nullableText(input.availability, "availability", 1000),
+    nullableText(input.narrativeState, "narrativeState", 4000),
+    nullableText(input.activeGoal, "activeGoal", 4000),
+    nullableText(input.storyArc, "storyArc", 4000),
+    nullableText(input.coarseLocation, "coarseLocation", 1000),
+  ] as const;
+
+  const currentResult = await client.query<LifeStateRow>(
+    `SELECT *
+       FROM world.character_life_state
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND character_id = $3
+      FOR UPDATE`,
+    [input.tenantId, input.worldId, input.characterId],
+  );
+  const current = currentResult.rows[0];
+
+  if (input.expectedRevision === null) {
+    if (current) {
+      throw conflict(
+        "world.life_state_revision_conflict",
+        "Character life state already exists",
+      );
+    }
+
+    const created = await client.query<LifeStateRow>(
+      `INSERT INTO world.character_life_state (
+         tenant_id,
+         world_id,
+         character_id,
+         availability,
+         narrative_state,
+         active_goal,
+         story_arc,
+         coarse_location,
+         revision,
+         effective_at,
+         updated_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.worldId,
+        input.characterId,
+        ...values,
+        input.effectiveAt,
+        input.updatedAt,
+      ],
+    );
+    return asLifeState(created.rows[0]!);
+  }
+
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    input.expectedRevision < 1
+  ) {
+    throw new RangeError("expectedRevision must be a positive safe integer");
+  }
+  if (
+    !current ||
+    integer(current.revision, "life-state revision") !== input.expectedRevision
+  ) {
+    throw conflict(
+      "world.life_state_revision_conflict",
+      "Character life state revision is stale",
+    );
+  }
+  if (input.effectiveAt < toInstant(current.effective_at)) {
+    throw conflict(
+      "world.life_state_time_regression",
+      "Character life-state effective time cannot move backward",
+    );
+  }
+
+  const updated = await client.query<LifeStateRow>(
+    `UPDATE world.character_life_state
+        SET availability = $4,
+            narrative_state = $5,
+            active_goal = $6,
+            story_arc = $7,
+            coarse_location = $8,
+            revision = revision + 1,
+            effective_at = $9,
+            updated_at = $10
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND character_id = $3
+        AND revision = $11
+      RETURNING *`,
+    [
+      input.tenantId,
+      input.worldId,
+      input.characterId,
+      ...values,
+      input.effectiveAt,
+      input.updatedAt,
+      input.expectedRevision,
+    ],
+  );
+  if (!updated.rows[0]) {
+    throw conflict(
+      "world.life_state_revision_conflict",
+      "Character life state revision is stale",
+    );
+  }
+  return asLifeState(updated.rows[0]);
+}
+
+async function loadWorldEvent(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldEventId: WorldEventId,
+  forUpdate: boolean,
+): Promise<WorldEvent | null> {
+  const result = await client.query<WorldEventRow>(
+    `SELECT *
+       FROM world.events
+      WHERE tenant_id = $1
+        AND world_event_id = $2
+      ${forUpdate ? "FOR UPDATE" : ""}`,
+    [tenantId, worldEventId],
+  );
+  return result.rows[0] ? asWorldEvent(result.rows[0]) : null;
+}
+
+export async function getWorldEvent(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldEventId: WorldEventId,
+): Promise<WorldEvent | null> {
+  return loadWorldEvent(client, tenantId, worldEventId, false);
+}
+
+export async function appendWorldEvent(
+  client: PoolClient,
+  input: AppendWorldEventInput,
+): Promise<WorldEvent> {
+  const eventKind = boundedText(input.eventKind, "eventKind", 128);
+  assertWorldPayloadHasNoPrivateReferences(input.payload);
+  const occurrenceKey =
+    input.occurrenceKey === null
+      ? null
+      : boundedText(input.occurrenceKey, "occurrenceKey", 256);
+
+  if ((input.characterId === null) !== (input.characterVersionId === null)) {
+    throw new TypeError(
+      "characterId and characterVersionId must be supplied together",
+    );
+  }
+  if (
+    input.effectiveEnd !== null &&
+    input.effectiveEnd < input.effectiveStart
+  ) {
+    throw new TypeError("effectiveEnd must not precede effectiveStart");
+  }
+
+  if (input.admission === "automatic-approved") {
+    const world = await loadWorld(client, input.tenantId, input.worldId, false);
+    if (!world) {
+      throw notFound();
+    }
+    if (!world.policy.automaticCanonEnabled) {
+      throw conflict(
+        "world.automatic_canon_disabled",
+        "World policy does not permit automatic canon admission",
+      );
+    }
+    if (input.provenance !== "engine") {
+      throw conflict(
+        "world.automatic_canon_provenance_forbidden",
+        "Only engine-produced evidence may use automatic canon admission",
+      );
+    }
+    if (input.characterId !== null && input.characterVersionId !== null) {
+      await assertActiveCharacterVersion(
+        client,
+        input.tenantId,
+        input.characterId,
+        input.characterVersionId,
+      );
+    }
+  }
+
+  const canonState =
+    input.admission === "automatic-approved" ? "approved" : "draft";
+  const approvedAt =
+    input.admission === "automatic-approved" ? input.recordedAt : null;
+
+  const parameters = [
+    input.tenantId,
+    input.worldEventId,
+    input.worldId,
+    input.characterId,
+    input.characterVersionId,
+    eventKind,
+    JSON.stringify(input.payload),
+    input.provenance,
+    input.visibility,
+    canonState,
+    occurrenceKey,
+    input.effectiveStart,
+    input.effectiveEnd,
+    input.recordedAt,
+    approvedAt,
+  ];
+
+  const conflictClause =
+    occurrenceKey === null
+      ? ""
+      : `ON CONFLICT (tenant_id, world_id, occurrence_key)
+           WHERE occurrence_key IS NOT NULL
+         DO UPDATE SET occurrence_key = EXCLUDED.occurrence_key
+           WHERE world.events.character_id IS NOT DISTINCT FROM EXCLUDED.character_id
+             AND world.events.character_version_id IS NOT DISTINCT FROM EXCLUDED.character_version_id
+             AND world.events.event_kind = EXCLUDED.event_kind
+             AND world.events.payload = EXCLUDED.payload
+             AND world.events.provenance = EXCLUDED.provenance
+             AND world.events.visibility = EXCLUDED.visibility
+             AND world.events.canon_state = EXCLUDED.canon_state
+             AND world.events.effective_start = EXCLUDED.effective_start
+             AND world.events.effective_end IS NOT DISTINCT FROM EXCLUDED.effective_end`;
+
+  const result = await client.query<WorldEventRow>(
+    `INSERT INTO world.events (
+       tenant_id,
+       world_event_id,
+       world_id,
+       character_id,
+       character_version_id,
+       event_kind,
+       payload,
+       provenance,
+       visibility,
+       canon_state,
+       occurrence_key,
+       effective_start,
+       effective_end,
+       recorded_at,
+       approved_at
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15)
+     ${conflictClause}
+     RETURNING *`,
+    parameters,
+  );
+
+  if (!result.rows[0]) {
+    throw conflict(
+      "world.event_occurrence_conflict",
+      "World occurrence key was reused with different canon content",
+    );
+  }
+  const stored = asWorldEvent(result.rows[0]);
+  await publishWorldEvidenceRecorded(client, stored);
+  return stored;
+}
+
+export async function approveWorldEvent(
+  client: PoolClient,
+  input: ApproveWorldEventInput,
+): Promise<WorldEvent> {
+  const existing = await loadWorldEvent(
+    client,
+    input.tenantId,
+    input.worldEventId,
+    true,
+  );
+  if (!existing) {
+    throw new PlatformError({
+      code: "world.event_not_found",
+      category: "not-found",
+      message: "World event does not exist in the requested tenant",
+      retryable: false,
+    });
+  }
+  if (existing.canonState === "approved") {
+    return existing;
+  }
+  if (existing.canonState !== "draft") {
+    throw conflict(
+      "world.event_not_approvable",
+      "Only draft world events can be approved",
+    );
+  }
+
+  if (
+    existing.characterId !== null &&
+    existing.characterVersionId !== null
+  ) {
+    await assertActiveCharacterVersion(
+      client,
+      existing.tenantId,
+      existing.characterId,
+      existing.characterVersionId,
+    );
+  }
+
+  const result = await client.query<WorldEventRow>(
+    `UPDATE world.events
+        SET canon_state = 'approved',
+            approved_at = $3
+      WHERE tenant_id = $1
+        AND world_event_id = $2
+        AND canon_state = 'draft'
+      RETURNING *`,
+    [input.tenantId, input.worldEventId, input.approvedAt],
+  );
+  if (!result.rows[0]) {
+    throw conflict(
+      "world.event_approval_conflict",
+      "World event approval raced with another writer",
+    );
+  }
+  return asWorldEvent(result.rows[0]);
+}
+
+export async function retireWorldEvent(
+  client: PoolClient,
+  input: RetireWorldEventInput,
+): Promise<WorldEvent> {
+  const existing = await loadWorldEvent(
+    client,
+    input.tenantId,
+    input.worldEventId,
+    true,
+  );
+  if (!existing) {
+    throw new PlatformError({
+      code: "world.event_not_found",
+      category: "not-found",
+      message: "World event does not exist in the requested tenant",
+      retryable: false,
+    });
+  }
+  if (existing.canonState === "retired") {
+    return existing;
+  }
+  if (existing.canonState !== "approved") {
+    throw conflict(
+      "world.event_not_retirable",
+      "Only approved world events can be retired",
+    );
+  }
+
+  const result = await client.query<WorldEventRow>(
+    `UPDATE world.events
+        SET canon_state = 'retired',
+            retired_at = $3
+      WHERE tenant_id = $1
+        AND world_event_id = $2
+        AND canon_state = 'approved'
+      RETURNING *`,
+    [input.tenantId, input.worldEventId, input.retiredAt],
+  );
+  if (!result.rows[0]) {
+    throw conflict(
+      "world.event_retirement_conflict",
+      "World event retirement raced with another writer",
+    );
+  }
+  return asWorldEvent(result.rows[0]);
+}
+
+function normalizeInteractionParticipants(
+  participants: readonly WorldInteractionParticipant[],
+): readonly WorldInteractionParticipant[] {
+  if (participants.length < 2 || participants.length > 64) {
+    throw new TypeError("WorldInteraction requires between 2 and 64 participants");
+  }
+
+  const seen = new Set<string>();
+  const normalized = participants.map((participant) => {
+    if (seen.has(participant.characterId)) {
+      throw new TypeError("WorldInteraction participants must be unique Characters");
+    }
+    seen.add(participant.characterId);
+    return Object.freeze({
+      characterId: participant.characterId,
+      characterVersionId: participant.characterVersionId,
+      role: boundedText(participant.role, "interaction participant role", 128),
+    });
+  });
+
+  normalized.sort((left, right) => {
+    const characterOrder = left.characterId.localeCompare(right.characterId);
+    return characterOrder !== 0
+      ? characterOrder
+      : left.role.localeCompare(right.role);
+  });
+  return Object.freeze(normalized);
+}
+
+function interactionContentFingerprint(input: {
+  readonly interactionKind: string;
+  readonly participants: readonly WorldInteractionParticipant[];
+  readonly payload: WorldInteraction["payload"];
+  readonly provenance: WorldInteraction["provenance"];
+  readonly visibility: WorldInteraction["visibility"];
+  readonly canonState: WorldInteraction["canonState"];
+  readonly effectiveStart: Instant;
+  readonly effectiveEnd: Instant | null;
+}): string {
+  return fingerprintCanonicalJson({
+    interactionKind: input.interactionKind,
+    participants: input.participants,
+    payload: input.payload,
+    provenance: input.provenance,
+    visibility: input.visibility,
+    canonState: input.canonState,
+    effectiveStart: input.effectiveStart,
+    effectiveEnd: input.effectiveEnd,
+  });
+}
+
+async function loadWorldInteraction(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldInteractionId: WorldInteractionId,
+  forUpdate: boolean,
+): Promise<WorldInteraction | null> {
+  const result = await client.query<WorldInteractionRow>(
+    `SELECT *
+       FROM world.interactions
+      WHERE tenant_id = $1
+        AND world_interaction_id = $2
+      ${forUpdate ? "FOR UPDATE" : ""}`,
+    [tenantId, worldInteractionId],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  const participantResult = await client.query<WorldInteractionParticipantRow>(
+    `SELECT character_id,
+            character_version_id,
+            role,
+            ordinal
+       FROM world.interaction_participants
+      WHERE tenant_id = $1
+        AND world_interaction_id = $2
+      ORDER BY ordinal`,
+    [tenantId, worldInteractionId],
+  );
+  const participants = participantResult.rows.map((participant) =>
+    Object.freeze({
+      characterId: participant.character_id,
+      characterVersionId: participant.character_version_id,
+      role: participant.role,
+    }),
+  );
+  return asWorldInteraction(row, participants);
+}
+
+async function loadWorldInteractionByOccurrence(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+  occurrenceKey: string,
+): Promise<WorldInteraction | null> {
+  const result = await client.query<{ world_interaction_id: WorldInteractionId }>(
+    `SELECT world_interaction_id
+       FROM world.interactions
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND occurrence_key = $3`,
+    [tenantId, worldId, occurrenceKey],
+  );
+  const interactionId = result.rows[0]?.world_interaction_id;
+  return interactionId
+    ? loadWorldInteraction(client, tenantId, interactionId, false)
+    : null;
+}
+
+export async function getWorldInteraction(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldInteractionId: WorldInteractionId,
+): Promise<WorldInteraction | null> {
+  return loadWorldInteraction(client, tenantId, worldInteractionId, false);
+}
+
+export async function appendWorldInteraction(
+  client: PoolClient,
+  input: AppendWorldInteractionInput,
+): Promise<WorldInteraction> {
+  const interactionKind = boundedText(
+    input.interactionKind,
+    "interactionKind",
+    128,
+  );
+  assertWorldPayloadHasNoPrivateReferences(input.payload);
+  for (const participant of input.participants) {
+    assertWorldTextsHaveNoPrivateReferences({ role: participant.role });
+  }
+  const occurrenceKey =
+    input.occurrenceKey === null
+      ? null
+      : boundedText(input.occurrenceKey, "occurrenceKey", 256);
+  const participants = normalizeInteractionParticipants(input.participants);
+
+  if (
+    input.effectiveEnd !== null &&
+    input.effectiveEnd < input.effectiveStart
+  ) {
+    throw new TypeError("effectiveEnd must not precede effectiveStart");
+  }
+
+  const desiredCanonState =
+    input.admission === "automatic-approved" ? "approved" : "draft";
+
+  if (input.admission === "automatic-approved") {
+    const world = await loadWorld(client, input.tenantId, input.worldId, false);
+    if (!world) {
+      throw notFound();
+    }
+    if (!world.policy.automaticCanonEnabled) {
+      throw conflict(
+        "world.automatic_canon_disabled",
+        "World policy does not permit automatic canon admission",
+      );
+    }
+    if (input.provenance !== "engine") {
+      throw conflict(
+        "world.automatic_canon_provenance_forbidden",
+        "Only engine-produced evidence may use automatic canon admission",
+      );
+    }
+    for (const participant of participants) {
+      await assertActiveCharacterVersion(
+        client,
+        input.tenantId,
+        participant.characterId,
+        participant.characterVersionId,
+      );
+    }
+  }
+
+  if (occurrenceKey !== null) {
+    const existing = await loadWorldInteractionByOccurrence(
+      client,
+      input.tenantId,
+      input.worldId,
+      occurrenceKey,
+    );
+    if (existing) {
+      const expectedFingerprint = interactionContentFingerprint({
+        interactionKind,
+        participants,
+        payload: input.payload,
+        provenance: input.provenance,
+        visibility: input.visibility,
+        canonState: desiredCanonState,
+        effectiveStart: input.effectiveStart,
+        effectiveEnd: input.effectiveEnd,
+      });
+      const existingFingerprint = interactionContentFingerprint({
+        interactionKind: existing.interactionKind,
+        participants: existing.participants,
+        payload: existing.payload,
+        provenance: existing.provenance,
+        visibility: existing.visibility,
+        canonState: existing.canonState,
+        effectiveStart: existing.effectiveStart,
+        effectiveEnd: existing.effectiveEnd,
+      });
+      if (expectedFingerprint !== existingFingerprint) {
+        throw conflict(
+          "world.interaction_occurrence_conflict",
+          "World interaction occurrence key was reused with different content",
+        );
+      }
+      await publishWorldEvidenceRecorded(client, existing);
+      return existing;
+    }
+  }
+
+  const inserted = await client.query<WorldInteractionRow>(
+    `INSERT INTO world.interactions (
+       tenant_id,
+       world_interaction_id,
+       world_id,
+       interaction_kind,
+       payload,
+       provenance,
+       visibility,
+       canon_state,
+       occurrence_key,
+       effective_start,
+       effective_end,
+       recorded_at,
+       approved_at,
+       retired_at
+     )
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,'draft',$8,$9,$10,$11,NULL,NULL)
+     ${occurrenceKey === null
+       ? ""
+       : "ON CONFLICT (tenant_id, world_id, occurrence_key) WHERE occurrence_key IS NOT NULL DO NOTHING"}
+     RETURNING *`,
+    [
+      input.tenantId,
+      input.worldInteractionId,
+      input.worldId,
+      interactionKind,
+      JSON.stringify(input.payload),
+      input.provenance,
+      input.visibility,
+      occurrenceKey,
+      input.effectiveStart,
+      input.effectiveEnd,
+      input.recordedAt,
+    ],
+  );
+
+  if (!inserted.rows[0]) {
+    const raced =
+      occurrenceKey === null
+        ? null
+        : await loadWorldInteractionByOccurrence(
+            client,
+            input.tenantId,
+            input.worldId,
+            occurrenceKey,
+          );
+    if (!raced) {
+      throw conflict(
+        "world.interaction_insert_conflict",
+        "World interaction could not be admitted",
+      );
+    }
+    const expectedFingerprint = interactionContentFingerprint({
+      interactionKind,
+      participants,
+      payload: input.payload,
+      provenance: input.provenance,
+      visibility: input.visibility,
+      canonState: desiredCanonState,
+      effectiveStart: input.effectiveStart,
+      effectiveEnd: input.effectiveEnd,
+    });
+    const racedFingerprint = interactionContentFingerprint({
+      interactionKind: raced.interactionKind,
+      participants: raced.participants,
+      payload: raced.payload,
+      provenance: raced.provenance,
+      visibility: raced.visibility,
+      canonState: raced.canonState,
+      effectiveStart: raced.effectiveStart,
+      effectiveEnd: raced.effectiveEnd,
+    });
+    if (expectedFingerprint !== racedFingerprint) {
+      throw conflict(
+        "world.interaction_occurrence_conflict",
+        "World interaction occurrence key was reused with different content",
+      );
+    }
+    await publishWorldEvidenceRecorded(client, raced);
+    return raced;
+  }
+
+  for (const [ordinal, participant] of participants.entries()) {
+    await client.query(
+      `INSERT INTO world.interaction_participants (
+         tenant_id,
+         world_interaction_id,
+         ordinal,
+         character_id,
+         character_version_id,
+         role
+       )
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        input.tenantId,
+        input.worldInteractionId,
+        ordinal,
+        participant.characterId,
+        participant.characterVersionId,
+        participant.role,
+      ],
+    );
+  }
+
+  if (desiredCanonState === "approved") {
+    await client.query(
+      `UPDATE world.interactions
+          SET canon_state = 'approved',
+              approved_at = $3
+        WHERE tenant_id = $1
+          AND world_interaction_id = $2
+          AND canon_state = 'draft'`,
+      [input.tenantId, input.worldInteractionId, input.recordedAt],
+    );
+  }
+
+  const stored = await loadWorldInteraction(
+    client,
+    input.tenantId,
+    input.worldInteractionId,
+    false,
+  );
+  if (!stored) {
+    throw new Error("World interaction disappeared after admission");
+  }
+  await publishWorldEvidenceRecorded(client, stored);
+  return stored;
+}
+
+async function loadRoutine(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+  routineKeyInput: string,
+  forUpdate: boolean,
+): Promise<Routine | null> {
+  const routineKey = normalizeRoutineKey(routineKeyInput);
+  const result = await client.query<RoutineRow>(
+    `SELECT *
+       FROM world.routines
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND routine_key = $3
+      ${forUpdate ? "FOR UPDATE" : ""}`,
+    [tenantId, worldId, routineKey],
+  );
+  return result.rows[0] ? asRoutine(result.rows[0]) : null;
+}
+
+export async function putRoutine(
+  client: PoolClient,
+  input: PutRoutineInput,
+): Promise<Routine> {
+  const routineKey = normalizeRoutineKey(input.routineKey);
+  assertWorldPayloadHasNoPrivateReferences(input.inputPayload);
+  const timezone = normalizeIanaTimezone(input.timezone);
+  const localTime = normalizeLocalTime(input.localTime);
+  const inputKind = normalizeSimulationInputKind(input.inputKind);
+
+  await assertActiveCharacterVersion(
+    client,
+    input.tenantId,
+    input.characterId,
+    input.characterVersionId,
+  );
+
+  if (input.expectedRevision === null) {
+    const created = await client.query<RoutineRow>(
+      `INSERT INTO world.routines (
+         tenant_id,
+         world_id,
+         routine_key,
+         character_id,
+         character_version_id,
+         timezone,
+         local_time,
+         enabled,
+         input_kind,
+         input_payload,
+         revision,
+         created_at,
+         updated_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7::time,$8,$9,$10::jsonb,1,$11,$11)
+       ON CONFLICT (tenant_id, world_id, routine_key) DO NOTHING
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.worldId,
+        routineKey,
+        input.characterId,
+        input.characterVersionId,
+        timezone,
+        localTime,
+        input.enabled,
+        inputKind,
+        JSON.stringify(input.inputPayload),
+        input.updatedAt,
+      ],
+    );
+    if (!created.rows[0]) {
+      throw conflict("world.routine_revision_conflict", "Routine already exists");
+    }
+    return asRoutine(created.rows[0]);
+  }
+
+  const current = await loadRoutine(
+    client,
+    input.tenantId,
+    input.worldId,
+    routineKey,
+    true,
+  );
+  if (
+    !current ||
+    current.characterId !== input.characterId ||
+    current.revision !== input.expectedRevision
+  ) {
+    throw conflict(
+      "world.routine_revision_conflict",
+      "Routine revision is stale",
+    );
+  }
+
+  const updated = await client.query<RoutineRow>(
+    `UPDATE world.routines
+        SET character_version_id = $4,
+            timezone = $5,
+            local_time = $6::time,
+            enabled = $7,
+            input_kind = $8,
+            input_payload = $9::jsonb,
+            revision = revision + 1,
+            updated_at = $10
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND routine_key = $3
+        AND character_id = $11
+        AND revision = $12
+      RETURNING *`,
+    [
+      input.tenantId,
+      input.worldId,
+      routineKey,
+      input.characterVersionId,
+      timezone,
+      localTime,
+      input.enabled,
+      inputKind,
+      JSON.stringify(input.inputPayload),
+      input.updatedAt,
+      input.characterId,
+      input.expectedRevision,
+    ],
+  );
+  if (!updated.rows[0]) {
+    throw conflict(
+      "world.routine_revision_conflict",
+      "Routine revision is stale",
+    );
+  }
+  return asRoutine(updated.rows[0]);
+}
+
+export async function admitRoutineOccurrence(
+  client: PoolClient,
+  input: AdmitRoutineOccurrenceInput,
+): Promise<SimulationInput> {
+  const routine = await loadRoutine(
+    client,
+    input.tenantId,
+    input.worldId,
+    input.routineKey,
+    false,
+  );
+  if (!routine || !routine.enabled) {
+    throw conflict(
+      "world.routine_unavailable",
+      "Routine is missing or disabled",
+    );
+  }
+
+  await assertActiveCharacterVersion(
+    client,
+    routine.tenantId,
+    routine.characterId,
+    routine.characterVersionId,
+  );
+
+  const occurrence = assertRoutineScheduledTime(
+    input.scheduledFor,
+    routine.timezone,
+    routine.localTime,
+  );
+  const idempotencyKey = routineOccurrenceKey(
+    routine.characterId,
+    routine.routineKey,
+    occurrence.localDate,
+  );
+
+  return admitSimulationInput(client, {
+    tenantId: routine.tenantId,
+    worldId: routine.worldId,
+    idempotencyKey,
+    kind: routine.inputKind,
+    payload: {
+      routine: {
+        key: routine.routineKey,
+        characterId: routine.characterId,
+        characterVersionId: routine.characterVersionId,
+        localDate: occurrence.localDate,
+      },
+      payload: routine.inputPayload,
+    },
+    receivedAt: input.receivedAt,
+    effectiveAt: input.scheduledFor,
+  });
+}
+
+async function loadStoryArc(
+  client: PoolClient,
+  tenantId: TenantId,
+  worldId: WorldId,
+  storyArcKey: string,
+): Promise<StoryArc | null> {
+  const result = await client.query<StoryArcRow>(
+    `SELECT *
+       FROM world.story_arcs
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND story_arc_key = $3
+      FOR UPDATE`,
+    [tenantId, worldId, storyArcKey],
+  );
+  return result.rows[0] ? asStoryArc(result.rows[0]) : null;
+}
+
+export async function putStoryArc(
+  client: PoolClient,
+  input: PutStoryArcInput,
+): Promise<StoryArc> {
+  const storyArcKey = boundedText(input.storyArcKey, "storyArcKey", 128);
+  assertWorldTextsHaveNoPrivateReferences({
+    title: input.title,
+    summary: input.summary,
+  });
+  const title = boundedText(input.title, "title", 500);
+  const summary = input.summary.trim();
+  if (summary.length > 10_000) {
+    throw new TypeError("summary is too long");
+  }
+
+  await assertActiveCharacterVersion(
+    client,
+    input.tenantId,
+    input.characterId,
+    input.characterVersionId,
+  );
+
+  if (input.expectedRevision === null) {
+    const created = await client.query<StoryArcRow>(
+      `INSERT INTO world.story_arcs (
+         tenant_id,
+         world_id,
+         story_arc_key,
+         character_id,
+         character_version_id,
+         state,
+         title,
+         summary,
+         revision,
+         created_at,
+         updated_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$9)
+       ON CONFLICT (tenant_id, world_id, story_arc_key) DO NOTHING
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.worldId,
+        storyArcKey,
+        input.characterId,
+        input.characterVersionId,
+        input.state,
+        title,
+        summary,
+        input.updatedAt,
+      ],
+    );
+    if (!created.rows[0]) {
+      throw conflict(
+        "world.story_arc_revision_conflict",
+        "Story arc already exists",
+      );
+    }
+    return asStoryArc(created.rows[0]);
+  }
+
+  const current = await loadStoryArc(
+    client,
+    input.tenantId,
+    input.worldId,
+    storyArcKey,
+  );
+  if (
+    !current ||
+    current.characterId !== input.characterId ||
+    current.revision !== input.expectedRevision
+  ) {
+    throw conflict(
+      "world.story_arc_revision_conflict",
+      "Story arc revision is stale",
+    );
+  }
+  assertStoryArcTransition(current.state, input.state);
+
+  const updated = await client.query<StoryArcRow>(
+    `UPDATE world.story_arcs
+        SET character_version_id = $4,
+            state = $5,
+            title = $6,
+            summary = $7,
+            revision = revision + 1,
+            updated_at = $8
+      WHERE tenant_id = $1
+        AND world_id = $2
+        AND story_arc_key = $3
+        AND character_id = $9
+        AND revision = $10
+      RETURNING *`,
+    [
+      input.tenantId,
+      input.worldId,
+      storyArcKey,
+      input.characterVersionId,
+      input.state,
+      title,
+      summary,
+      input.updatedAt,
+      input.characterId,
+      input.expectedRevision,
+    ],
+  );
+  if (!updated.rows[0]) {
+    throw conflict(
+      "world.story_arc_revision_conflict",
+      "Story arc revision is stale",
+    );
+  }
+  return asStoryArc(updated.rows[0]);
+}
+
+export function createPostgresWorldRepository(
+  client: PoolClient,
+): NarrativeWorldRepository {
+  const repository: NarrativeWorldRepository = {
+    createWorld: (input: CreateWorldInput) => createWorld(client, input),
+    getWorld: (tenantId: TenantId, worldId: WorldId) =>
+      getWorld(client, tenantId, worldId),
+    admitSimulationInput: (input: AdmitSimulationInput) =>
+      admitSimulationInput(client, input),
+    commitGeneration: (input: CommitWorldGenerationInput) =>
+      commitWorldGeneration(client, input),
+    pauseWorld: (input: PauseWorldInput) => pauseWorld(client, input),
+    recoverPausedWorld: (input: RecoverPausedWorldInput) =>
+      recoverPausedWorld(client, input),
+    putCharacterLifeState: (input: PutCharacterLifeStateInput) =>
+      putCharacterLifeState(client, input),
+    appendWorldEvent: (input: AppendWorldEventInput) =>
+      appendWorldEvent(client, input),
+    getWorldEvent: (tenantId: TenantId, worldEventId: WorldEventId) =>
+      getWorldEvent(client, tenantId, worldEventId),
+    appendWorldInteraction: (input: AppendWorldInteractionInput) =>
+      appendWorldInteraction(client, input),
+    getWorldInteraction: (
+      tenantId: TenantId,
+      worldInteractionId: WorldInteractionId,
+    ) => getWorldInteraction(client, tenantId, worldInteractionId),
+    putRoutine: (input: PutRoutineInput) => putRoutine(client, input),
+    admitRoutineOccurrence: (input: AdmitRoutineOccurrenceInput) =>
+      admitRoutineOccurrence(client, input),
+    putStoryArc: (input: PutStoryArcInput) => putStoryArc(client, input),
+  };
+  return Object.freeze(repository);
+}
+
+export function createPostgresPublicWorldContextReader(client: PoolClient): PublicWorldContextReader {
+  return Object.freeze({
+    async readEvents(input: Parameters<PublicWorldContextReader["readEvents"]>[0]) {
+      const tenantId = parseCanonicalId("tenant", input.tenantId), characterId = parseCanonicalId("character", input.characterId);
+      const versionId = parseCanonicalId("character-version", input.characterVersionId), at = toInstant(input.at);
+      if (!Array.isArray(input.worldIds) || input.worldIds.length < 1 || input.worldIds.length > 16) throw new RangeError("Public World context requires 1-16 admitted Worlds");
+      const worldIds = [...new Set(input.worldIds.map(id => parseCanonicalId("world", id)))].sort();
+      const authority = Object.freeze({ ...createAuthorityContext(input.authority),
+        authorityContextId: parseCanonicalId("authority-context", input.authority.authorityContextId),
+        principal: Object.freeze({ ...input.authority.principal }), issuedAt: toInstant(input.authority.issuedAt),
+        ...(input.authority.expiresAt ? { expiresAt: toInstant(input.authority.expiresAt) } : {}) });
+      if (authority.tenantId !== tenantId || !authority.capabilities.includes(worldContextReadCapability) ||
+          worldIds.some(id => !authority.resourceScope.worldIds?.includes(id))) {
+        throw new PlatformError({ code: "world.context_access_denied", category: "authorization",
+          message: "Public World context requires explicit World admission.", retryable: false });
+      }
+      await assertCurrentAuthority(authority, createPostgresCurrentAuthoritySource(client), at);
+      const result = await client.query<WorldEventRow>(
+        `SELECT * FROM world.events
+          WHERE tenant_id = $1 AND world_id = ANY($2::text[])
+            AND visibility = 'public' AND canon_state = 'approved'
+            AND retired_at IS NULL AND approved_at <= $5 AND recorded_at <= $5
+            AND effective_start <= $5 AND (effective_end IS NULL OR effective_end > $5)
+            AND ((character_id IS NULL AND character_version_id IS NULL)
+              OR (character_id = $3 AND character_version_id = $4))
+          ORDER BY effective_start DESC, world_event_id LIMIT 8`,
+        [tenantId, worldIds, characterId, versionId, at]);
+      return Object.freeze(result.rows.map(asWorldEvent));
+    },
+  });
+}
+

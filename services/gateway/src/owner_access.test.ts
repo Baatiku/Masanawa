@@ -1,0 +1,213 @@
+import { createCanonicalId } from "@masanawa/contracts";
+import { describe, expect, it } from "vitest";
+import {
+  createOwnerAccessService,
+  type OwnerAccessAuthorizer,
+  type OwnerAccessQuotePort,
+  type OwnerAccessRequestPort,
+} from "./owner_access.js";
+
+const tenantId = createCanonicalId("tenant");
+const requesterUserId = createCanonicalId("user");
+const characterId = createCanonicalId("character");
+
+function build() {
+  const authorizer: OwnerAccessAuthorizer = {
+    async authorize(input) {
+      expect(input.characterId).toBe(characterId);
+      return { tenantId, userId: requesterUserId };
+    },
+  };
+  const quotes: OwnerAccessQuotePort = {
+    async quote(input) {
+      return {
+        requestId: "owner-request-123",
+        ownerUserId: "user-owner",
+        originatingCharacterId: input.characterId,
+        modality: input.modality,
+        durationMinutes: input.durationMinutes,
+        priceCredits: 0,
+        platformFeeCredits: 0,
+        ownerEarningCredits: 0,
+        chargeMode: "trial",
+        trialDurationDays: 7,
+        policyRevision: 1,
+        trialPolicyRevision: 1,
+        quoteExpiresAt: "2026-10-05T11:00:00Z",
+      };
+    },
+  };
+  const requests: OwnerAccessRequestPort = {
+    async createFromQuote(input) {
+      return {
+        requestId: input.quoteId,
+        requesterUserId,
+        ownerUserId: "user-owner",
+        originatingCharacterId: input.characterId,
+        modality: "text",
+        durationMinutes: 20,
+        priceCredits: 0,
+        platformFeeCredits: 0,
+        ownerEarningCredits: 0,
+        chargeMode: "trial",
+        trialPolicyRevision: 1,
+        state: "requested",
+        requestedAt: "2026-10-05T10:00:00Z",
+        acceptBy: "2026-10-05T11:00:00Z",
+        scheduledFor: null,
+        startedAt: null,
+        completedAt: null,
+      };
+    },
+    async act(input) {
+      return {
+        requestId: input.requestId,
+        requesterUserId,
+        ownerUserId: input.actorUserId,
+        originatingCharacterId: input.characterId,
+        modality: "text",
+        durationMinutes: 20,
+        priceCredits: 1000,
+        platformFeeCredits: 100,
+        ownerEarningCredits: 900,
+        chargeMode: "paid",
+        trialPolicyRevision: 1,
+        state: input.action === "accept" ? "accepted" : "cancelled",
+        requestedAt: "2026-10-05T10:00:00Z",
+        acceptBy: "2026-10-05T11:00:00Z",
+        scheduledFor: input.scheduledFor ?? null,
+        startedAt: null,
+        completedAt: null,
+      };
+    },
+    async get() {
+      return null;
+    },
+    async latestForRequester(input) {
+      return {
+        requestId: "owner-request-latest",
+        requesterUserId: input.requesterUserId,
+        ownerUserId: "user-owner",
+        originatingCharacterId: input.characterId,
+        modality: "text",
+        durationMinutes: 20,
+        priceCredits: 0,
+        platformFeeCredits: 0,
+        ownerEarningCredits: 0,
+        chargeMode: "trial",
+        trialPolicyRevision: 1,
+        state: "requested",
+        requestedAt: "2026-10-05T10:00:00Z",
+        acceptBy: "2026-10-05T11:00:00Z",
+        scheduledFor: null,
+        startedAt: null,
+        completedAt: null,
+      };
+    },
+    async heartbeat() {
+      return {
+        attendanceVerified: true,
+        verifiedSeconds: 75,
+        sessionEndsAt: "2026-10-05T10:20:00Z",
+        realPersonSession: true,
+        recordingAllowed: false,
+        messageRetentionDays: 30,
+        presence: [
+          {
+            userId: requesterUserId,
+            firstSeenAt: "2026-10-05T10:00:00Z",
+            lastSeenAt: "2026-10-05T10:01:15Z",
+            heartbeatCount: 6,
+          },
+        ],
+      };
+    },
+    async listMessages() {
+      return [
+        {
+          requestId: "owner-request-latest",
+          messageId: "message-owner-1",
+          senderUserId: requesterUserId,
+          body: "Hello",
+          sentAt: "2026-10-05T10:00:10Z",
+        },
+      ];
+    },
+    async sendMessage(input) {
+      return {
+        requestId: input.requestId,
+        messageId: input.messageId,
+        senderUserId: input.actorUserId,
+        body: input.body,
+        sentAt: "2026-10-05T10:00:15Z",
+      };
+    },
+  };
+  return createOwnerAccessService({ authorizer, quotes, requests });
+}
+
+describe("owner access service", () => {
+  it("returns a trial-aware quote", async () => {
+    const quote = await build().quote({
+      authorizationHeader: "Bearer user",
+      characterId,
+      modality: "text",
+      durationMinutes: 20,
+    });
+    expect(quote.chargeMode).toBe("trial");
+    expect(quote.trialDurationDays).toBe(7);
+    expect(quote.priceCredits).toBe(0);
+  });
+
+  it("reads the latest request only through the authenticated requester scope", async () => {
+    const latest = await build().latest({
+      authorizationHeader: "Bearer user",
+      characterId,
+    });
+    expect(latest).toEqual(
+      expect.objectContaining({
+        requestId: "owner-request-latest",
+        requesterUserId,
+        originatingCharacterId: characterId,
+      }),
+    );
+  });
+
+  it("authorizes private room heartbeat and messages through owner-access read", async () => {
+    const service = build();
+    const status = await service.heartbeat({
+      authorizationHeader: "Bearer user",
+      characterId,
+      requestId: "owner-request-latest",
+    });
+    expect(status.attendanceVerified).toBe(true);
+    expect(status.verifiedSeconds).toBe(75);
+
+    const messages = await service.messages({
+      authorizationHeader: "Bearer user",
+      characterId,
+      requestId: "owner-request-latest",
+      limit: 50,
+    });
+    expect(messages[0]?.body).toBe("Hello");
+
+    const sent = await service.sendMessage({
+      authorizationHeader: "Bearer user",
+      characterId,
+      requestId: "owner-request-latest",
+      messageId: "message-client-123",
+      body: "  Hi owner  ",
+    });
+    expect(sent.body).toBe("Hi owner");
+  });
+
+  it("creates a request from an opaque server quote id only", async () => {
+    const created = await build().request({
+      authorizationHeader: "Bearer user",
+      characterId,
+      quoteId: "owner-request-123",
+    });
+    expect(created.requestId).toBe("owner-request-123");
+    expect(created.originatingCharacterId).toBe(characterId);
+  });
+});

@@ -1,0 +1,44 @@
+{
+  "name": "masanawa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.8.2",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=12 <13"
+  },
+  "scripts": {
+    "check": "pnpm typecheck && pnpm test:ci && pnpm build",
+    "typecheck": "tsc -p tsconfig.json && pnpm -r --if-present typecheck",
+    "test": "pnpm test:ci",
+    "test:watch": "vitest",
+    "architecture:check": "pnpm test:architecture",
+    "build": "pnpm -r --if-present build",
+    "test:ci": "vitest run",
+    "test:architecture": "vitest run test/architecture",
+    "test:contracts": "vitest run tests/contracts",
+    "test:integration": "vitest run tests/integration --passWithNoTests",
+    "test:e2e": "vitest run tests/e2e --passWithNoTests",
+    "test:parity": "vitest run tests/parity --passWithNoTests",
+    "test:security": "vitest run tests/security",
+    "test:recovery": "vitest run tests/recovery",
+    "test:load": "vitest run tests/load",
+    "test:chaos": "vitest run tests/chaos",
+    "alpha:bootstrap": "node --conditions=production scripts/alpha-bootstrap.mjs",
+    "alpha:prepare": "pnpm --filter @masanawa/gateway-service... build && pnpm alpha:bootstrap"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3",
+    "@masanawa/contracts": "workspace:*",
+    "@masanawa/providers": "workspace:*",
+    "@masanawa/security": "workspace:*",
+    "@masanawa/postgres": "workspace:*",
+    "@masanawa/skills": "workspace:*",
+    "@masanawa/tools": "workspace:*",
+    "@masanawa/agents": "workspace:*",
+    "@masanawa/identity": "workspace:*"
+  }
+}

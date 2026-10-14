@@ -1,0 +1,55 @@
+name: Foundation CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18
+        env:
+          POSTGRES_DB: masanawa_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d masanawa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MASANAWA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/masanawa_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.8.2"
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test:ci
+      - name: Provider qualification tooling tests
+        run: >-
+          node --test
+          scripts/flutterwave-billing-qualification-gate.test.mjs
+          scripts/flutterwave-billing-production-qualification.test.mjs
+          scripts/nowpayments-production-qualification.test.mjs
+      - name: Build
+        run: pnpm build

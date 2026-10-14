@@ -1,0 +1,218 @@
+import type {
+  CharacterId,
+  CharacterVersionId,
+  Instant,
+  TenantId,
+  WorldEventId,
+  WorldGenerationId,
+  WorldId,
+  WorldInteractionId,
+} from "@masanawa/contracts";
+import type {
+  CharacterLifeState,
+  JsonObject,
+  Routine,
+  StoryArc,
+  SimulationInput,
+  World,
+  WorldEvent,
+  WorldEventProvenance,
+  WorldEventVisibility,
+  WorldGeneration,
+  WorldInteraction,
+  WorldInteractionParticipant,
+  WorldPolicy,
+} from "./model.js";
+
+export interface CreateWorldInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly initialGenerationId: WorldGenerationId;
+  readonly policy: WorldPolicy;
+  readonly simulationTime: Instant;
+  readonly createdAt: Instant;
+}
+
+export interface AdmitSimulationInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly idempotencyKey: string;
+  readonly kind: string;
+  readonly payload: JsonObject;
+  readonly receivedAt: Instant;
+  readonly effectiveAt: Instant;
+}
+
+export interface CommitWorldGenerationInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly expectedGenerationNumber: number;
+  readonly nextGenerationId: WorldGenerationId;
+  readonly simulationTime: Instant;
+  readonly committedAt: Instant;
+  readonly completedInputSequences: readonly number[];
+}
+
+export interface CommitWorldGenerationResult {
+  readonly world: World;
+  readonly generation: WorldGeneration;
+  readonly completedInputs: readonly SimulationInput[];
+}
+
+export interface WorldRepository {
+  createWorld(input: CreateWorldInput): Promise<World>;
+  getWorld(tenantId: TenantId, worldId: WorldId): Promise<World | null>;
+  admitSimulationInput(input: AdmitSimulationInput): Promise<SimulationInput>;
+  commitGeneration(
+    input: CommitWorldGenerationInput,
+  ): Promise<CommitWorldGenerationResult>;
+  pauseWorld(input: PauseWorldInput): Promise<World>;
+  recoverPausedWorld(
+    input: RecoverPausedWorldInput,
+  ): Promise<RecoverPausedWorldResult>;
+}
+
+export interface PauseWorldInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly expectedRevision: number;
+  readonly pausedAt: Instant;
+}
+
+export interface RecoverPausedWorldInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly expectedRevision: number;
+  readonly nextGenerationId: WorldGenerationId;
+  readonly resumeTo: Instant;
+  readonly requestedAt: Instant;
+}
+
+export interface RecoverPausedWorldResult {
+  readonly world: World;
+  readonly generation: WorldGeneration;
+  readonly admittedInputs: readonly SimulationInput[];
+  readonly complete: boolean;
+}
+
+export interface PutCharacterLifeStateInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly characterId: CharacterId;
+  readonly characterVersionId: CharacterVersionId;
+  readonly expectedRevision: number | null;
+  readonly availability: string | null;
+  readonly narrativeState: string | null;
+  readonly activeGoal: string | null;
+  readonly storyArc: string | null;
+  readonly coarseLocation: string | null;
+  readonly effectiveAt: Instant;
+  readonly updatedAt: Instant;
+}
+
+export interface AppendWorldEventInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly worldEventId: WorldEventId;
+  readonly characterId: CharacterId | null;
+  readonly characterVersionId: CharacterVersionId | null;
+  readonly eventKind: string;
+  readonly payload: JsonObject;
+  readonly provenance: WorldEventProvenance;
+  readonly visibility: WorldEventVisibility;
+  readonly occurrenceKey: string | null;
+  readonly effectiveStart: Instant;
+  readonly effectiveEnd: Instant | null;
+  readonly recordedAt: Instant;
+  readonly admission: "draft" | "automatic-approved";
+}
+
+export interface ApproveWorldEventInput {
+  readonly tenantId: TenantId;
+  readonly worldEventId: WorldEventId;
+  readonly approvedAt: Instant;
+}
+
+export interface RetireWorldEventInput {
+  readonly tenantId: TenantId;
+  readonly worldEventId: WorldEventId;
+  readonly retiredAt: Instant;
+}
+
+export interface GovernedWorldRepository extends WorldRepository {
+  putCharacterLifeState(
+    input: PutCharacterLifeStateInput,
+  ): Promise<CharacterLifeState>;
+  appendWorldEvent(input: AppendWorldEventInput): Promise<WorldEvent>;
+  getWorldEvent(
+    tenantId: TenantId,
+    worldEventId: WorldEventId,
+  ): Promise<WorldEvent | null>;
+  appendWorldInteraction(
+    input: AppendWorldInteractionInput,
+  ): Promise<WorldInteraction>;
+  getWorldInteraction(
+    tenantId: TenantId,
+    worldInteractionId: WorldInteractionId,
+  ): Promise<WorldInteraction | null>;
+}
+
+export interface AppendWorldInteractionInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly worldInteractionId: WorldInteractionId;
+  readonly interactionKind: string;
+  readonly participants: readonly WorldInteractionParticipant[];
+  readonly payload: JsonObject;
+  readonly provenance: WorldEventProvenance;
+  readonly visibility: WorldEventVisibility;
+  readonly occurrenceKey: string | null;
+  readonly effectiveStart: Instant;
+  readonly effectiveEnd: Instant | null;
+  readonly recordedAt: Instant;
+  readonly admission: "draft" | "automatic-approved";
+}
+
+export interface PutRoutineInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly routineKey: string;
+  readonly characterId: CharacterId;
+  readonly characterVersionId: CharacterVersionId;
+  readonly expectedRevision: number | null;
+  readonly timezone: string;
+  readonly localTime: string;
+  readonly enabled: boolean;
+  readonly inputKind: string;
+  readonly inputPayload: JsonObject;
+  readonly updatedAt: Instant;
+}
+
+export interface AdmitRoutineOccurrenceInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly routineKey: string;
+  readonly scheduledFor: Instant;
+  readonly receivedAt: Instant;
+}
+
+export interface PutStoryArcInput {
+  readonly tenantId: TenantId;
+  readonly worldId: WorldId;
+  readonly storyArcKey: string;
+  readonly characterId: CharacterId;
+  readonly characterVersionId: CharacterVersionId;
+  readonly expectedRevision: number | null;
+  readonly state: StoryArc["state"];
+  readonly title: string;
+  readonly summary: string;
+  readonly updatedAt: Instant;
+}
+
+export interface NarrativeWorldRepository extends GovernedWorldRepository {
+  putRoutine(input: PutRoutineInput): Promise<Routine>;
+  admitRoutineOccurrence(
+    input: AdmitRoutineOccurrenceInput,
+  ): Promise<SimulationInput>;
+  putStoryArc(input: PutStoryArcInput): Promise<StoryArc>;
+}

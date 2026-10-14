@@ -1,0 +1,135 @@
+{
+  "@@locale": "ha",
+  "home": "Gida",
+  "agents": "Wakilai",
+  "wallet": "Walati",
+  "talk": "Hira",
+  "explore": "Bincika",
+  "liveTalks": "Hirarraki kai tsaye",
+  "startTalk": "Fara hira",
+  "activity": "Ayyuka",
+  "profile": "Bayanan martaba",
+  "settings": "Saituna",
+  "retry": "Sake gwadawa",
+  "cancel": "Soke",
+  "confirm": "Tabbatar",
+  "loading": "Ana lodawa…",
+  "listen": "Saurara",
+  "raiseHand": "Ɗaga hannu",
+  "speakerSeats": "{count, plural, =0{Babu kujerar mai magana} =1{Kujerar mai magana 1} other{Kujerun masu magana {count}}}",
+  "walletAmount": "{amount} {currency}",
+  "appTitle": "Masanawa",
+  "splashTagline": "Hirarraki kai tsaye tsakanin mutane da AI",
+  "welcomeTitle": "Barka da zuwa Masanawa",
+  "checkingSignInMethods": "Ana duba hanyoyin shiga…",
+  "signInInstruction": "Shiga ta imel ko waya. Za mu aiko maka da lambar tabbatarwa sau ɗaya.",
+  "signInMethodsUnavailable": "Ba a samun damar shiga a yanzu. Da fatan a sake gwadawa nan gaba kaɗan.",
+  "signInMethodsLoadFailed": "Ba a iya ɗauko hanyoyin shiga ba. Duba haɗin intanet ɗinka sannan ka sake gwadawa.",
+  "invalidPhoneNumber": "Shigar da ingantacciyar lambar waya",
+  "invalidEmailAddress": "Shigar da ingantaccen adireshin imel",
+  "phoneMethod": "Waya",
+  "emailMethod": "Imel",
+  "emailExample": "you@example.com",
+  "sendingCode": "Ana aika lamba…",
+  "sendCode": "Aika lamba",
+  "continueAction": "Ci gaba",
+  "termsNotice": "Ta ci gaba, ka amince da Sharuɗɗanmu da Manufar Sirri.",
+  "otpTitle": "Shigar da lambar",
+  "otpSentTo": "An aika zuwa {identifier}",
+  "invalidOtpCode": "Shigar da lambar tabbatarwa mai lambobi 6",
+  "otpSessionExpired": "Lokacin shiga ya ƙare. Nemi sabuwar lamba.",
+  "verifyingCode": "Ana tabbatarwa…",
+  "verifyCode": "Tabbatar",
+  "resendCodeIn": "Sake aika lamba bayan sakan {seconds}",
+  "resendCode": "Sake aika lamba",
+  "nameQuestion": "Wane suna za mu kira ka?",
+  "completeProfile": "Cika bayanan martabarka na Masanawa.",
+  "codeVerifiedName": "An tabbatar da lambarka. Ƙara sunanka don kammala shiga.",
+  "fullNameLabel": "Cikakken suna",
+  "fullNameExample": "Misali: Amina Bello",
+  "fullNameRequired": "Da fatan a shigar da cikakken sunanka",
+  "finishingSignIn": "Ana kammala shiga…",
+  "verifiedSignInNotice": "Lambar waya ko imel ɗin da aka tabbatar da shi zai ci gaba da zama hanyar shigarka.",
+  "countryDialCode": "Lambar ƙasar waya: {code}",
+  "unknownCountryDialCode": "Ba a gane lambar ƙasar wayar ba",
+  "authCodeInvalid": "Lambar ba daidai ba ce. Duba ta, sannan ka sake gwadawa.",
+  "authCodeLocked": "An yi ƙoƙari sau da yawa. Nemi sabuwar lamba daga baya.",
+  "authCodeExpired": "Lokacin amfani da wannan lambar ya ƙare. Nemi wata sabuwa.",
+  "authRateLimited": "An yi buƙatu da yawa. Sake gwadawa daga baya.",
+  "authSendFailed": "Ba a iya aika lambar ba. Duba haɗin intanet ɗinka sannan ka sake gwadawa.",
+  "authVerifyFailed": "Ba a iya tabbatar da lambar ba. Sake gwadawa.",
+  "authProfileFailed": "Ba a iya kammala bayanan martabarka ba. Duba bayananka sannan ka sake gwadawa.",
+  "languageAction": "Harshen manhaja",
+  "languageDialogTitle": "Zaɓi harshen manhaja",
+  "languageSystem": "Yi amfani da harshen na'ura",
+  "languageSaveFailed": "Ba a iya adana zaɓin harshe ba. Sake gwadawa.",
+  "languagePreviewNotice": "Har yanzu ba a fassara wasu shafuka gaba ɗaya ba.",
+  "languageHausaUnavailable": "Ana kammala tallafin harshen Hausa na manhaja.",
+  "languageSelected": "An zaɓa",
+  "platformAgentsTab": "Wakilan Masanawa",
+  "searchPlatformAgents": "Nemo wakilan Masanawa",
+  "clearAgentSearch": "Share binciken wakilai",
+  "agentsLoadFailed": "Ba a iya ɗauko wakilai ba. Sake gwadawa.",
+  "noPlatformAgents": "Ba a samu wakilan Masanawa a yanzu ba.",
+  "noMatchingAgents": "Babu wakilin da ya dace da bincikenka.",
+  "gwaniUnavailableRetry": "Ba a samun Gwani a yanzu. Sake gwadawa nan gaba kaɗan.",
+  "gwaniUnavailableNow": "Ba a samun Gwani a yanzu.",
+  "searchTalks": "Nemo hirarraki",
+  "loadMore": "Ƙara nunawa",
+  "statusAvailable": "Akwai",
+  "statusListening": "Yana sauraro…",
+  "statusWorking": "Yana aiki",
+  "statusOnCall": "Yana kan kira",
+  "statusOffline": "Ba ya kan layi",
+  "statusUnverified": "Ba a tabbatar da halinsa ba",
+  "statusWorkingTasks": "{count, plural, =1{Yana aiki · aiki 1} other{Yana aiki · ayyuka {count}}}",
+  "chats": "Chats",
+  "@chats": {
+    "description": "Bottom navigation: Masana conversations"
+  },
+  "status": "Status",
+  "@status": {
+    "description": "Bottom navigation: Masana status updates"
+  },
+  "calls": "Calls",
+  "@calls": {
+    "description": "Bottom navigation: voice and video calls"
+  },
+  "rooms": "Rooms",
+  "@rooms": {
+    "description": "Bottom navigation: audio group rooms"
+  },
+  "passwordCreateTitle": "Create a password",
+  "@passwordCreateTitle": {
+    "description": "Password setup heading for an unregistered phone number"
+  },
+  "passwordConfirmTitle": "Repeat your password",
+  "@passwordConfirmTitle": {
+    "description": "Password setup confirmation heading"
+  },
+  "passwordCreateSubtitle": "Six digits. You will need it when you sign in on a new device.",
+  "@passwordCreateSubtitle": {
+    "description": "Password setup explanation"
+  },
+  "passwordEnterTitle": "Enter your password",
+  "@passwordEnterTitle": {
+    "description": "Password entry heading for a registered number on a new device"
+  },
+  "passwordEnterSubtitle": "Six-digit password for {identifier}",
+  "@passwordEnterSubtitle": {
+    "description": "Password entry subtitle naming the phone number",
+    "placeholders": {
+      "identifier": {
+        "type": "String"
+      }
+    }
+  },
+  "passwordMismatch": "Passwords do not match. Try again.",
+  "@passwordMismatch": {
+    "description": "Password setup confirmation mismatch"
+  },
+  "passwordSignIn": "Sign in",
+  "@passwordSignIn": {
+    "description": "Password entry submit button"
+  }
+}

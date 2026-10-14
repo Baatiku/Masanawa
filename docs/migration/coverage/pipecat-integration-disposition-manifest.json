@@ -1,0 +1,2206 @@
+{
+  "source": "pipecat-ai/pipecat@6396f9771e4d7870b3d538fda38a4241caf6c642",
+  "count": 275,
+  "entries": [
+    {
+      "path": "src/pipecat/services/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/ai_service.py",
+      "kind": "provider-service",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/anthropic/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/anthropic/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/assemblyai/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/assemblyai/models.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/assemblyai/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/asyncai/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/asyncai/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/agent_core.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/nova_sonic/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/nova_sonic/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/nova_sonic/ready.wav",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/nova_sonic/session_continuation.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/sagemaker/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/sagemaker/bidi_client.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/aws/utils.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/common.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/image.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/realtime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/realtime/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/azure/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/baseten/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/baseten/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/bland/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/bland/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/camb/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/camb/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cartesia/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cartesia/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cartesia/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cartesia/turns/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cartesia/turns/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cerebras/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/cerebras/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/crusoe/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/crusoe/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/sagemaker/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/sagemaker/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/sagemaker/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/stt_base.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/flux/tts_base.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/sagemaker/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/sagemaker/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/sagemaker/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepgram/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepseek/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/deepseek/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/dialogue/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/dialogue/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/elevenlabs/tts_base.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fal/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fal/image.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fal/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fireworks/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fireworks/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fish/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/fish/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/funasr/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/funasr/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gladia/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gladia/config.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gladia/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/frames.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/file_api.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/vertex/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/gemini_live/vertex/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/image.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/rtvi.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/utils.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/vertex/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/google/vertex/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gradium/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gradium/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/gradium/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/grok/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/grok/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/grok/realtime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/grok/realtime/events.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/grok/realtime/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/groq/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/groq/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/groq/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/groq/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/api_interactive_avatar.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/api_liveavatar.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/base_api.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/client.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/heygen/video.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/hume/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/hume/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/image_service.py",
+      "kind": "provider-service",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inception/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inception/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inworld/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inworld/realtime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inworld/realtime/events.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inworld/realtime/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/inworld/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/keenable/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/keenable/search.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/kokoro/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/kokoro/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/llm_service.py",
+      "kind": "provider-service",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mcp_service.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mem0/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mem0/memory.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/meta/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/meta/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/minimax/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/minimax/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mistral/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mistral/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mistral/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/mistral/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/moondream/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/moondream/vision.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/moonshine/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/moonshine/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nebius/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nebius/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/neuphonic/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/neuphonic/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/novita/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/novita/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/sagemaker/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/sagemaker/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/sagemaker/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/nvidia/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/ollama/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/ollama/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/_constants.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/base_llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/image.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/live/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/live/events.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/live/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/realtime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/realtime/events.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/realtime/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/responses/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/responses/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openai/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openclaw/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openclaw/client.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openclaw/frames.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openclaw/gateway.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openrouter/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/openrouter/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/perplexity/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/perplexity/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/piper/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/piper/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/pocket_tts/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/pocket_tts/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/qwen/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/qwen/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/resembleai/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/resembleai/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/rime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/rime/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sambanova/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sambanova/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sarvam/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sarvam/_sdk.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sarvam/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sarvam/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/sarvam/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/settings.py",
+      "kind": "provider-service",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/simli/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/simli/video.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/smallest/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/smallest/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/smallest/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/soniox/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/soniox/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/soniox/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/speechify/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/speechify/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/speechmatics/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/speechmatics/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/speechmatics/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/stt_latency.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/stt_service.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/tavus/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/tavus/video.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/together/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/together/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/together/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/together/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/tts_service.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/ultravox/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/ultravox/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/vision_service.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/websocket_service.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/whisper/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/whisper/base_stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/whisper/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/whisper/utils.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/realtime/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/realtime/events.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/realtime/llm.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/stt.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xai/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xtts/__init__.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/services/xtts/tts.py",
+      "kind": "provider-service",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "packages/providers",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/base_input.py",
+      "kind": "transport-adapter",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/base_output.py",
+      "kind": "transport-adapter",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/base_transport.py",
+      "kind": "transport-adapter",
+      "classification": "B",
+      "disposition": "structural contract/reference",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/daily/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/daily/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/daily/utils.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/heygen/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/heygen/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/lemonslice/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/lemonslice/api.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/lemonslice/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/livekit/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/livekit/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/livekit/utils.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/local/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/local/audio.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/local/tk.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/moq/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/moq/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/smallwebrtc/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/smallwebrtc/connection.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/smallwebrtc/request_handler.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/smallwebrtc/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/tavus/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/tavus/transport.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/vonage/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/vonage/client.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/vonage/utils.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/vonage/video_connector.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/websocket/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/websocket/client.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/websocket/fastapi.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/websocket/rtvi_client.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/websocket/server.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/whatsapp/__init__.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/whatsapp/api.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    },
+    {
+      "path": "src/pipecat/transports/whatsapp/client.py",
+      "kind": "transport-adapter",
+      "classification": "C/B",
+      "disposition": "reference-unless-selected",
+      "canonical_destination": "services/presence/gateway",
+      "activation_rule": "Concrete provider/transport remains optional. Any selected adapter must satisfy Masanawa provider/presence contracts, readiness, retry/ambiguity, auth and parity requirements."
+    }
+  ]
+}
