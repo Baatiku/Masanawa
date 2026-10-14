@@ -114,7 +114,7 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
                   const Icon(Icons.account_balance_wallet_outlined),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('MSN · Masanawa', style: theme.textTheme.titleMedium),
+                    child: Text('MSN · Masanawa', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white)),
                   ),
                   IconButton(
                     tooltip: 'Refresh MSN balance',
@@ -129,11 +129,11 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
               else if (_balance != null)
                 SelectableText(
                   '${_balance!.displayAmount} MSN',
-                  style: theme.textTheme.headlineSmall,
+                  style: theme.textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 )
               else
                 Text(_error ?? 'Balance unavailable',
-                    style: theme.textTheme.bodyMedium),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
 
             ],
           ),
