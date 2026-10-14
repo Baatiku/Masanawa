@@ -594,6 +594,11 @@ class WalletServiceShortcuts extends StatelessWidget {
           ),
         if (billing != null) ...[
           ActionChip(
+            avatar: const Icon(Icons.phone_android, size: 16),
+            label: const Text('Airtime'),
+            onPressed: () => billing('airtime'),
+          ),
+          ActionChip(
             avatar: const Icon(Icons.bolt, size: 16),
             label: const Text('Data bundles'),
             onPressed: () => billing('data'),
