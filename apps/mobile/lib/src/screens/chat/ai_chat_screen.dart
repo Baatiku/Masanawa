@@ -151,12 +151,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             .setScrollOffset(widget.characterId, _scroll.offset);
       });
     });
-    _walletRefreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (!mounted) return;
-      unawaited(ref.read(walletProvider.notifier).refresh());
-    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(walletProvider.notifier).refresh());
       final controller = ref.read(aiChatProvider.notifier);
       controller.openThread(widget.characterId);
       final thread = controller.threadOf(widget.characterId);
