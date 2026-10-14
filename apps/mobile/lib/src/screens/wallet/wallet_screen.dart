@@ -72,6 +72,12 @@ class WalletScreen extends ConsumerStatefulWidget {
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   bool _crypto = false;
 
+  void _openCrypto() {
+    final navigate = widget.onOpenCrypto;
+    if (navigate != null) { navigate(); return; }
+    setState(() => _crypto = true);
+  }
+
   Future<void> _fund(WalletView? value) async {
     if (widget.onAddMoney != null) { widget.onAddMoney!(); return; }
     if (value?.accountNumber case final number? when number.isNotEmpty) {
@@ -136,7 +142,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         accountId != null && balance != null) {
       sendAction = () => _send(balance, accountId);
     }
-    void openCrypto() => setState(() => _crypto = true);
+    final openCrypto = _openCrypto;
     return Scaffold(
       backgroundColor: u.surfaceCard,
       appBar: widget.embeddedInShell ? null : masanawaMainHeader(context),
@@ -155,7 +161,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   readAccessToken: () => ref.read(apiClientProvider).accessToken))
             else _MsnHero(signedIn: accountId != null),
             const SizedBox(height: 22),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Wrap(alignment: WrapAlignment.spaceBetween,
+              spacing: 12, runSpacing: 16, children: [
               _WalletShortcut(label: 'Send', icon: Icons.north_east,
                 onTap: sendAction),
               _WalletShortcut(label: 'Convert', icon: Icons.swap_horiz,
@@ -190,8 +197,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     leading: const CircleAvatar(child: Icon(Icons.toll_outlined)),
                     title: const Text('Credits'),
                     subtitle: const Text('Legacy service balance'),
-                    trailing: Text(balance.spendableCredits.toString(),
-                      style: const TextStyle(fontWeight: FontWeight.w700))),
+                    trailing: SizedBox(width: 90, child: FittedBox(
+                      fit: BoxFit.scaleDown, alignment: Alignment.centerRight,
+                      child: Text(balance.spendableCredits.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w700))))),
                 ],
               ]),
             ),
