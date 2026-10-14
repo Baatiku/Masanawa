@@ -99,9 +99,12 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
+      color: Theme.of(context).colorScheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Semantics(
+        child: DefaultTextStyle.merge(
+          style: const TextStyle(color: Colors.white),
+          child: Semantics(
           label: 'MSN wallet balance',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -111,7 +114,7 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
                   const Icon(Icons.account_balance_wallet_outlined),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('MSN · Masanawa', style: theme.textTheme.titleMedium),
+                    child: Text('MSN · Masanawa', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white)),
                   ),
                   IconButton(
                     tooltip: 'Refresh MSN balance',
@@ -126,18 +129,15 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
               else if (_balance != null)
                 SelectableText(
                   '${_balance!.displayAmount} MSN',
-                  style: theme.textTheme.headlineSmall,
+                  style: theme.textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 )
               else
                 Text(_error ?? 'Balance unavailable',
-                    style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 6),
-              Text(
-                'MSN is separate from cryptocurrency. NGN deposits are funding, not held wallet balance.',
-                style: theme.textTheme.bodySmall,
-              ),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+
             ],
           ),
+        ),
         ),
       ),
     );

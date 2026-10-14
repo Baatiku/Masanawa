@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -151,12 +150,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             .setScrollOffset(widget.characterId, _scroll.offset);
       });
     });
-    _walletRefreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (!mounted) return;
-      unawaited(ref.read(walletProvider.notifier).refresh());
-    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(walletProvider.notifier).refresh());
       final controller = ref.read(aiChatProvider.notifier);
       controller.openThread(widget.characterId);
       final thread = controller.threadOf(widget.characterId);
@@ -1500,11 +1495,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onTogglePreview: _toggleInlinePreview,
                 previewPlaying: _inlinePreviewPlaying,
               ),
-            if (_showEmoji)
-              SizedBox(
-                height: 270,
-                child: EmojiPicker(textEditingController: _input),
-              ),
+
           ],
         ),
       ),
@@ -2966,11 +2957,7 @@ class _Composer extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _ComposerIcon(
-          tooltip: 'Emoji',
-          icon: Icons.emoji_emotions_outlined,
-          onPressed: onEmojiToggle,
-        ),
+
         Expanded(
           child: TextField(
             controller: controller,

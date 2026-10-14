@@ -438,6 +438,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
     try {
       if (onTextDelta != null) {
         var streamedText = '';
+        var receivedServerOutput = false;
         Map<String, dynamic>? done;
         try {
           await for (final event in _client.postStream(
@@ -447,6 +448,11 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
             requestId: requestId,
           )) {
             final type = event['type'];
+            // Any audio, text or completed response may already have executed
+            // provider work. It must never be replayed as a new fallback turn.
+            if (type == 'delta' || type == 'audio' || type == 'done') {
+              receivedServerOutput = true;
+            }
             if (type == 'delta') {
               final delta = event['text'];
               if (delta is String && delta.isNotEmpty) {
@@ -473,8 +479,13 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
               return _turnResultFromData(done ?? {}, reply: reply);
             }
           }
-        } catch (_) {
-          // If streaming connection fails, seamlessly fallback to reliable non-streaming turn
+          if (receivedServerOutput) throw const ApiException('Incomplete agent stream. Check message status before retrying.');
+        } catch (error) {
+          // Never replay a turn after server-generated text/audio began: a
+          // fallback POST could execute the same task and charge twice.
+          if (receivedServerOutput || token.isCancelled) rethrow;
+          // Before the first streamed delta the legacy turn endpoint remains
+          // an interoperability fallback for older Gateway deployments.
         }
       }
 

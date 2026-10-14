@@ -27,7 +27,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('Wallet balances are unavailable right now.'),
+      find.text('Activity unavailable'),
       findsOneWidget,
     );
     expect(find.text('Data bundles'), findsOneWidget);

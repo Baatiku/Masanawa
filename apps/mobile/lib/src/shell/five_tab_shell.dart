@@ -58,7 +58,6 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     1 => const StatusScreen(),
     2 => WalletScreen(
       embeddedInShell: true,
-      onOpenCrypto: () => context.push('/crypto'),
       onOpenBillingService: (service) =>
           context.push('/billing?service=' + Uri.encodeQueryComponent(service)),
     ),

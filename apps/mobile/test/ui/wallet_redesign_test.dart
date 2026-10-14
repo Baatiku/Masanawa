@@ -37,7 +37,7 @@ class _FakeCryptoController extends CryptoWalletController {
 }
 
 void main() {
-  testWidgets('Wallet screen renders Balance and Crypto tabs with assigned bank card',
+  testWidgets('Wallet renders one MSN-first wallet with crypto drilldown and bank card',
       (tester) async {
     final testView = WalletView(
       spendableCredits: 2500,
@@ -74,12 +74,12 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Verify TabBar with Balance and Crypto tabs
-    expect(find.text('Balance'), findsOneWidget);
-    expect(find.text('Crypto'), findsOneWidget);
+    // No duplicated Balance/Crypto tab strip: MSN hero and direct crypto navigation.
+    expect(find.text('MSN balance'), findsOneWidget);
+    expect(find.text('My assets'), findsOneWidget);
 
     // Verify Balance tab contents
-    expect(find.text('2500 Cr'), findsOneWidget);
+    expect(find.text('2500'), findsOneWidget);
     expect(find.text('Dedicated Bank Account'), findsOneWidget);
     expect(find.text('9930481726'), findsOneWidget);
     expect(find.text('Wema Bank (Paystack)'), findsOneWidget);
@@ -91,8 +91,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Account number copied to clipboard'), findsOneWidget);
 
-    // Verify switching to Crypto tab
-    await tester.tap(find.text('Crypto'));
+    // Verify navigating to the same crypto wallet within the Wallet screen.
+    await tester.tap(find.text('Crypto assets'));
     await tester.pumpAndSettle();
 
     // Verify Crypto tab loaded

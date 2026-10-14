@@ -69,244 +69,252 @@ class WalletScreen extends ConsumerStatefulWidget {
   ConsumerState<WalletScreen> createState() => _WalletScreenState();
 }
 
-class _WalletScreenState extends ConsumerState<WalletScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _WalletScreenState extends ConsumerState<WalletScreen> {
+  bool _crypto = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+  void _openCrypto() {
+    final navigate = widget.onOpenCrypto;
+    if (navigate != null) { navigate(); return; }
+    setState(() => _crypto = true);
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  Future<void> _fund(WalletView? value) async {
+    if (widget.onAddMoney != null) { widget.onAddMoney!(); return; }
+    if (value?.accountNumber case final number? when number.isNotEmpty) {
+      await showModalBottomSheet<void>(
+        context: context, showDragHandle: true,
+        builder: (_) => SafeArea(child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: _BankAccountCard(
+            bankName: value?.bankName ?? 'Bank',
+            accountNumber: number,
+            accountHolderName: value?.accountHolderName ?? 'Wallet owner'))));
+      return;
+    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Funding is unavailable until a verified bank account is assigned.')));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final u = context.masanawa;
-    final wallet = ref.watch(walletProvider);
-    final accountId = (widget.walletCreditSendEnabled ||
-            widget.walletMsnBalanceEnabled ||
-            widget.walletMsnFundingStatusEnabled)
-        ? switch (ref.watch(sessionProvider)) {
-            SessionSignedIn(:final user) => user.id,
-            _ => null,
-          }
-        : null;
-
-    // Loading or a balance failure must not remove entry to separate,
-    // independently qualified Billing/Crypto routes.
-    Widget pendingOrUnavailableWallet({bool loading = false}) => ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      children: [
-        WalletServiceShortcuts(
-          onOpenCrypto: widget.onOpenCrypto,
-          onBuyBills: widget.onBuyBills,
-          onOpenBillingService: widget.onOpenBillingService,
-        ),
-        const SizedBox(height: 24),
-        if (loading)
-          const Center(child: CircularProgressIndicator())
-        else ...[
-          Text(
-            'Wallet balances are unavailable right now.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: u.textMuted),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: OutlinedButton(
-              onPressed: () => ref.read(walletProvider.notifier).refresh(),
-              child: const Text('Retry'),
-            ),
-          ),
-        ],
-      ],
-    );
-
-    Widget balanceTab = RefreshIndicator(
-      onRefresh: () => ref.read(walletProvider.notifier).refresh(),
-      child: wallet.when(
-        skipLoadingOnRefresh: false,
-        loading: () => pendingOrUnavailableWallet(loading: true),
-        error: (_, _) => pendingOrUnavailableWallet(),
-        data: (value) {
-          if (value == null) return pendingOrUnavailableWallet();
-          VoidCallback? sendAction = widget.onSend;
-          if (sendAction == null &&
-              widget.walletCreditSendEnabled &&
-              accountId != null) {
-            sendAction = () async {
-              final receipt = await showModalBottomSheet<CreditTransferReceipt>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => SendCreditsSheet(
-                  expectedAccountId: accountId,
-                  currentAccountId: () => switch (ref.read(sessionProvider)) {
-                    SessionSignedIn(:final user) => user.id,
-                    _ => null,
-                  },
-                  spendableCredits: value.spendableCredits,
-                  onSend: (recipient, amount) =>
-                      ref.read(walletProvider.notifier).sendCredits(
-                        recipient: recipient, amountCredits: amount,
-                      ),
-                ),
-              );
-              if (!context.mounted || receipt == null) {
-                return;
-              }
-              final current = ref.read(sessionProvider);
-              if (current is! SessionSignedIn ||
-                  current.user.id != accountId) {
-                return;
-              }
-              await showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => WalletReceiptSheet(
-                  title: 'Credits sent',
-                  amountCredits: receipt.amountCredits,
-                  reference: receipt.transferId,
-                  detail: 'Sent to ${receipt.recipientUserId}.',
-                ),
-              );
-            };
-          }
-
-          final assignedAccount = value.accountNumber != null
-              ? _BankAccountCard(
-                  bankName: value.bankName ?? 'Wema Bank',
-                  accountNumber: value.accountNumber!,
-                  accountHolderName: value.accountHolderName ?? 'Masanawa User',
-                )
-              : null;
-
-          return ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-            children: [
-              _Balances(view: value),
-              ?assignedAccount,
-              if (widget.walletMsnBalanceEnabled && accountId != null)
-                MsnBalanceCard(
-                  sessionIdentity: accountId,
-                  transport: GatewayMsnBalanceTransport(
-                    dio: ref.watch(dioProvider),
-                    baseUrl: kApiBaseUrl,
-                    readAccessToken: () => ref.read(apiClientProvider).accessToken,
-                  ),
-                ),
-              if (widget.walletMsnFundingStatusEnabled && accountId != null)
-                MsnFundingCard(
-                  sessionIdentity: accountId,
-                  transport: GatewayMsnFundingTransport(
-                    dio: ref.watch(dioProvider),
-                    baseUrl: kApiBaseUrl,
-                    readAccessToken: () => ref.read(apiClientProvider).accessToken,
-                  ),
-                ),
-              const SizedBox(height: 12),
-              WalletServiceShortcuts(
-                onOpenCrypto: widget.onOpenCrypto,
-                onBuyBills: widget.onBuyBills,
-                onOpenBillingService: widget.onOpenBillingService,
-              ),
-              if (widget.onAddMoney != null ||
-                  sendAction != null ||
-                  widget.onWithdraw != null) ...[
-                const SizedBox(height: 12),
-                _Actions(
-                  onAddMoney: widget.onAddMoney,
-                  onSend: sendAction,
-                  onWithdraw: widget.onWithdraw,
-                ),
-              ],
-              const SizedBox(height: 20),
-              Text(
-                'History',
-                style: TextStyle(
-                  color: u.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (value.entries.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Text(
-                    'No wallet activity yet.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: u.textMuted),
-                  ),
-                )
-              else
-                ...value.entries.map(
-                  (entry) => Column(
-                    children: [
-                      _WalletEntryTile(entry: entry),
-                      Divider(height: 1, color: u.structuralBorder),
-                    ],
-                  ),
-                ),
-            ],
-          );
+  Future<void> _send(WalletView view, String accountId) async {
+    final receipt = await showModalBottomSheet<CreditTransferReceipt>(
+      context: context, isScrollControlled: true,
+      builder: (_) => SendCreditsSheet(
+        expectedAccountId: accountId,
+        currentAccountId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id, _ => null,
         },
+        spendableCredits: view.spendableCredits,
+        onSend: (recipient, amount) => ref.read(walletProvider.notifier)
+            .sendCredits(recipient: recipient, amountCredits: amount),
       ),
     );
+    if (!mounted || receipt == null) return;
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != accountId) return;
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true,
+      builder: (_) => WalletReceiptSheet(
+        title: 'Credits sent', amountCredits: receipt.amountCredits,
+        reference: receipt.transferId,
+        detail: 'Sent to ' + receipt.recipientUserId + '.'));
+  }
 
-    if (widget.embeddedInShell) {
-      return Scaffold(
-        backgroundColor: u.surfaceBg,
-        body: Column(
+  @override Widget build(BuildContext context) {
+    final u = context.masanawa;
+    if (_crypto) return Scaffold(
+      backgroundColor: u.surfaceCard,
+      appBar: AppBar(
+        backgroundColor: u.surfaceCard,
+        title: const Text('Crypto assets'),
+        leading: IconButton(
+          tooltip: 'Back to wallet', icon: const Icon(Icons.arrow_back),
+          onPressed: () => setState(() => _crypto = false)),
+      ),
+      body: const CryptoWalletScreen(embedded: true),
+    );
+    final wallet = ref.watch(walletProvider);
+    final accountId = switch (ref.watch(sessionProvider)) {
+      SessionSignedIn(:final user) => user.id, _ => null,
+    };
+    final balance = wallet.valueOrNull;
+    VoidCallback? sendAction = widget.onSend;
+    if (sendAction == null && widget.walletCreditSendEnabled &&
+        accountId != null && balance != null) {
+      sendAction = () => _send(balance, accountId);
+    }
+    final openCrypto = _openCrypto;
+    return Scaffold(
+      backgroundColor: u.surfaceCard,
+      appBar: widget.embeddedInShell ? null : masanawaMainHeader(context),
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(walletProvider.notifier).refresh(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: u.surfaceBg,
-                border: Border(
-                  bottom: BorderSide(color: u.structuralBorder, width: 0.8),
-                ),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                indicatorColor: u.brand,
-                indicatorWeight: 3,
-                labelColor: u.brandStrong,
-                unselectedLabelColor: u.textMuted,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
-                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14.5),
-                tabs: const [
-                  Tab(text: 'Balance'),
-                  Tab(text: 'Crypto'),
+            if (widget.walletMsnBalanceEnabled && accountId != null)
+              MsnBalanceCard(
+                sessionIdentity: accountId,
+                transport: GatewayMsnBalanceTransport(
+                  dio: ref.watch(dioProvider),
+                  baseUrl: kApiBaseUrl,
+                  readAccessToken: () => ref.read(apiClientProvider).accessToken))
+            else _MsnHero(signedIn: accountId != null),
+            const SizedBox(height: 22),
+            Wrap(alignment: WrapAlignment.spaceBetween,
+              spacing: 12, runSpacing: 16, children: [
+              _WalletShortcut(label: 'Send', icon: Icons.north_east,
+                onTap: sendAction),
+              _WalletShortcut(label: 'Convert', icon: Icons.swap_horiz,
+                onTap: openCrypto),
+              _WalletShortcut(label: 'Fund', icon: Icons.add,
+                onTap: () => _fund(balance)),
+              _WalletShortcut(label: 'Receive', icon: Icons.south_west,
+                onTap: openCrypto),
+            ]),
+            const SizedBox(height: 24),
+            _WalletSection(label: 'My assets', action: 'View crypto',
+              onTap: openCrypto),
+            const SizedBox(height: 8),
+            Card(
+              color: u.surfaceCard, margin: EdgeInsets.zero,
+              child: Column(children: [
+                const ListTile(
+                  leading: CircleAvatar(child: Text('M')),
+                  title: Text('MSN', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('Masanawa')),
+                Divider(height: 1, color: u.structuralBorder),
+                ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.currency_bitcoin)),
+                  title: const Text('Crypto assets', style: TextStyle(
+                    fontWeight: FontWeight.w700)),
+                  subtitle: const Text('All supported networks'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: openCrypto),
+                if (balance != null) ...[
+                  Divider(height: 1, color: u.structuralBorder),
+                  ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.toll_outlined)),
+                    title: const Text('Credits'),
+                    subtitle: const Text('Legacy service balance'),
+                    trailing: SizedBox(width: 90, child: FittedBox(
+                      fit: BoxFit.scaleDown, alignment: Alignment.centerRight,
+                      child: Text(balance.spendableCredits.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w700))))),
                 ],
-              ),
+              ]),
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  balanceTab,
-                  const CryptoWalletScreen(embedded: true),
-                ],
-              ),
-            ),
+            if (widget.walletMsnFundingStatusEnabled && accountId != null) ...[
+              const SizedBox(height: 14),
+              MsnFundingCard(
+                sessionIdentity: accountId,
+                transport: GatewayMsnFundingTransport(
+                  dio: ref.watch(dioProvider),
+                  baseUrl: kApiBaseUrl,
+                  readAccessToken: () => ref.read(apiClientProvider).accessToken)),
+            ],
+            if (balance?.accountNumber != null) ...[
+              const SizedBox(height: 14),
+              _BankAccountCard(
+                bankName: balance?.bankName ?? 'Bank',
+                accountNumber: balance!.accountNumber!,
+                accountHolderName: balance.accountHolderName ?? 'Wallet owner'),
+            ],
+            const SizedBox(height: 22),
+            const _WalletSection(label: 'Services'),
+            const SizedBox(height: 8),
+            WalletServiceShortcuts(
+              onOpenCrypto: openCrypto,
+              onBuyBills: widget.onBuyBills,
+              onOpenBillingService: widget.onOpenBillingService),
+            const SizedBox(height: 24),
+            _WalletSection(label: 'Recent activity', action: 'Refresh',
+              onTap: () => ref.read(walletProvider.notifier).refresh()),
+            if (wallet.isLoading && balance == null)
+              const Padding(padding: EdgeInsets.all(16),
+                child: LinearProgressIndicator(minHeight: 2))
+            else if (wallet.hasError)
+              ListTile(title: const Text('Activity unavailable'),
+                trailing: TextButton(
+                  onPressed: () => ref.read(walletProvider.notifier).refresh(),
+                  child: const Text('Retry')))
+            else if (balance == null || balance.entries.isEmpty)
+              const ListTile(title: Text('No recent activity'))
+            else ...balance.entries.take(8).map(
+              (item) => _WalletEntryTile(entry: item)),
           ],
         ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: u.surfaceBg,
-      appBar: masanawaMainHeader(context),
-      body: balanceTab,
+      ),
     );
   }
+}
+
+class _MsnHero extends StatelessWidget {
+  const _MsnHero({required this.signedIn});
+  final bool signedIn;
+  @override Widget build(BuildContext context) {
+    final u = context.masanawa;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 156),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: u.brand, borderRadius: BorderRadius.circular(22)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.account_balance_wallet_outlined, color: Colors.white),
+          SizedBox(width: 10),
+          Text('MSN balance', style: TextStyle(
+            color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+        ]),
+        const SizedBox(height: 22),
+        const Text('— MSN', style: TextStyle(
+          color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
+        Text(signedIn ? 'Balance unavailable' : 'Sign in to view balance',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.86))),
+      ]),
+    );
+  }
+}
+
+class _WalletShortcut extends StatelessWidget {
+  const _WalletShortcut({required this.label, required this.icon, required this.onTap});
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+  @override Widget build(BuildContext context) {
+    final u = context.masanawa;
+    return Column(children: [
+      SizedBox.square(dimension: 62, child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor: u.brand.withValues(alpha: 0.10),
+          foregroundColor: u.brand,
+          disabledBackgroundColor: u.surfaceBg,
+          disabledForegroundColor: u.textMuted,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(17))),
+        child: Icon(icon, size: 24),
+      )),
+      const SizedBox(height: 7),
+      Text(label, style: const TextStyle(fontSize: 12,
+        fontWeight: FontWeight.w600)),
+    ]);
+  }
+}
+
+class _WalletSection extends StatelessWidget {
+  const _WalletSection({required this.label, this.action, this.onTap});
+  final String label;
+  final String? action;
+  final VoidCallback? onTap;
+  @override Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Text(label, style: const TextStyle(
+      fontSize: 17, fontWeight: FontWeight.w700))),
+    if (action != null) TextButton(
+      onPressed: onTap, child: Text(action!,
+        style: const TextStyle(fontSize: 12))),
+  ]);
 }
 
 class _BankAccountCard extends StatelessWidget {
@@ -366,7 +374,7 @@ class _BankAccountCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Transfer to this account to fund your wallet instantly',
+                      'Bank transfer',
                       style: TextStyle(fontSize: 11.5, color: u.textMuted),
                     ),
                   ],
@@ -501,10 +509,10 @@ class _Balances extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Spendable Credits', style: TextStyle(color: u.textMuted)),
+          Text('Credits', style: TextStyle(color: u.textMuted)),
           const SizedBox(height: 4),
           Text(
-            '${view.spendableCredits} Cr',
+            '${view.spendableCredits} Credits',
             style: TextStyle(
               color: u.textPrimary,
               fontSize: 24,
@@ -518,11 +526,11 @@ class _Balances extends StatelessWidget {
             children: [
               _SmallBalance(
                 label: 'Pending',
-                value: '${view.pendingEarningsCredits} Cr',
+                value: '${view.pendingEarningsCredits} Credits',
               ),
               _SmallBalance(
                 label: 'Available',
-                value: '${view.availableEarningsCredits} Cr',
+                value: '${view.availableEarningsCredits} Credits',
               ),
             ],
           ),
@@ -589,6 +597,21 @@ class WalletServiceShortcuts extends StatelessWidget {
             avatar: const Icon(Icons.bolt, size: 16),
             label: const Text('Data bundles'),
             onPressed: () => billing('data'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.phone_android, size: 16),
+            label: const Text('Airtime'),
+            onPressed: () => billing('airtime'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.electric_bolt_outlined, size: 16),
+            label: const Text('Electricity'),
+            onPressed: () => billing('electricity'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.live_tv_outlined, size: 16),
+            label: const Text('TV / Cable'),
+            onPressed: () => billing('tv'),
           ),
         ] else if (onBuyBills != null)
           ActionChip(
@@ -701,7 +724,7 @@ class _WalletEntryTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$sign${entry.amountCredits} Cr',
+                  '$sign${entry.amountCredits} Credits',
                   style: TextStyle(
                     color: u.textPrimary,
                     fontWeight: FontWeight.w600,

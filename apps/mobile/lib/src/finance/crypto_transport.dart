@@ -134,13 +134,11 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
         await _get('/v1/financial/capabilities'),
       );
     } catch (_) {
+      // Missing provider is not evidence that deposits or payouts are live.
       return const CryptoCapabilities(
-        deposits: true,
-        withdrawals: true,
-        conversions: true,
-        fiatOnRamp: false,
-        fiatCurrencies: ['NGN', 'USD'],
-        fiatSettlementProviderCode: 'usdttrc20',
+        deposits: false, withdrawals: false, conversions: false,
+        fiatOnRamp: false, fiatCurrencies: [],
+        fiatSettlementProviderCode: null,
       );
     }
   }
@@ -150,12 +148,7 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
     try {
       return _routes(await _get('/v1/financial/crypto/routes'));
     } catch (_) {
-      return const [
-        CryptoRoute(providerCode: 'usdttrc20', asset: 'USDT', network: 'TRC-20'),
-        CryptoRoute(providerCode: 'btc', asset: 'BTC', network: 'Bitcoin'),
-        CryptoRoute(providerCode: 'eth', asset: 'ETH', network: 'Ethereum'),
-        CryptoRoute(providerCode: 'sol', asset: 'SOL', network: 'Solana'),
-      ];
+      return const <CryptoRoute>[];
     }
   }
 
@@ -184,7 +177,7 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
         await _get('/v1/financial/crypto/balances/$code'),
       );
     } catch (_) {
-      return CryptoBalance(providerCode: providerCode, amount: '0.00');
+      rethrow;
     }
   }
 
