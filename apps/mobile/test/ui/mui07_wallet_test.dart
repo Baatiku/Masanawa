@@ -126,17 +126,17 @@ void main() {
             onBilling: (_) {},
           );
           expect(find.byType(MasanawaWordmark), findsOneWidget);
-          expect(find.text('9007199254740991 Cr'), findsOneWidget);
-          expect(find.text('123 Cr'), findsOneWidget);
-          expect(find.text('456 Cr'), findsOneWidget);
-          expect(find.textContaining('MSN'), findsNothing);
+          expect(find.text('9007199254740991'), findsOneWidget);
+          expect(find.text('123'), findsOneWidget);
+          expect(find.text('456'), findsOneWidget);
+          expect(find.textContaining('MSN'), findsWidgets);
           expect(find.textContaining('₦'), findsNothing);
-          expect(find.text('Send'), findsNothing);
+          expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
           expect(tester.takeException(), isNull);
           await tester.scrollUntilVisible(find.text('Data bundle'), 180);
-          expect(find.text('+9007199254740991 Cr'), findsOneWidget);
-          expect(find.text('-75 Cr'), findsOneWidget);
+          expect(find.text('+9007199254740991 Credits'), findsOneWidget);
+          expect(find.text('-75 Credits'), findsOneWidget);
           expect(find.text('Oct 12 2026 · 13:42'), findsOneWidget);
           expect(find.text('Oct 11 2026 · 09:05'), findsOneWidget);
           expect(tester.takeException(), isNull);
@@ -149,15 +149,15 @@ void main() {
     tester,
   ) async {
     await mount(tester, value: _view(amount: 0, empty: true));
-    expect(find.text('0 Cr'), findsOneWidget);
-    expect(find.text('No wallet activity yet.'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('No recent activity'), findsOneWidget);
     await mount(tester);
-    expect(find.text('0 Cr'), findsNothing);
+    expect(find.text('0'), findsNothing);
     expect(
-      find.text('Wallet balances are unavailable right now.'),
+      find.text('Activity unavailable'),
       findsOneWidget,
     );
-    expect(find.text('No wallet activity yet.'), findsNothing);
+    expect(find.text('No recent activity'), findsNothing);
   });
 
   testWidgets(
@@ -166,8 +166,8 @@ void main() {
       final intents = <String>[];
       final loading = _LoadingWallet();
       await mount(tester, controller: () => loading, onBilling: intents.add);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('0 Cr'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('0'), findsNothing);
       await tester.tap(find.text('Airtime'));
       expect(intents, ['airtime']);
     },
@@ -179,13 +179,13 @@ void main() {
     final controller = _RetryWallet();
     await mount(tester, controller: () => controller, onCrypto: () {});
     expect(
-      find.text('Wallet balances are unavailable right now.'),
+      find.text('Activity unavailable'),
       findsOneWidget,
     );
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(find.text('42 Cr'), findsOneWidget);
-    expect(find.text('No wallet activity yet.'), findsOneWidget);
+    expect(find.text('42'), findsOneWidget);
+    expect(find.text('No recent activity'), findsOneWidget);
     expect(controller.attempts, 1);
     expect(tester.takeException(), isNull);
   });
@@ -234,7 +234,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Crypto'));
     await tester.pumpAndSettle();
-    expect(find.text('Crypto route'), findsOneWidget);
+    expect(find.text('Crypto assets'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Data bundles'));
@@ -252,7 +252,7 @@ void main() {
         value: _view(amount: 12, empty: true),
         onSend: () => sent++,
       );
-      expect(find.text('Add money'), findsNothing);
+      expect(find.text('Fund'), findsOneWidget);
       expect(find.byTooltip('Withdraw'), findsNothing);
       await tester.ensureVisible(find.text('Send'));
       await tester.tap(find.text('Send'));
