@@ -75,3 +75,12 @@ order state and atomic refund port. An admin action lets staff recover overdue,
 unclaimed orders. Automatic Worker leases/scheduling and custody-backed
 refunds are **still required** for full end-to-end completion; this endpoint
 does not substitute for them. New source tests are authored but not executed.
+
+## 2026-10-15 private payment evidence end-to-end source
+
+- Private storage: existing SigV4 `ReplayObjectStore` extended with bounded server-side signed SHA-256 PUT; a dedicated P2P bucket is configured using `MASANAWA_P2P_EVIDENCE_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_ACCESS_KEY`, `_SECRET_KEY` (no public bucket or raw credentials in mobile).
+- Gateway: `services/gateway/src/p2p/evidence_storage.ts` validates PDF/PNG/JPEG/WEBP magic, canonical base64 and 2MB maximum; checks membership and claim/dispute state; securely uploads a server-generated key, verifies digest and records an immutable evidence reference; deletes orphan storage if journal recording fails. `routes.ts` composes upload/list/authorized 60-second participant/admin links. Nobody can submit a client-chosen object key; evidence never authorizes escrow release.
+- Mobile: `apps/mobile/lib/src/finance/msnw_p2p_screen.dart` now has the order-bound file picker, evidence list and signed download action. **Fixed a pre-existing source corruption:** the P2P screen had a second, duplicated Dart tail after its closing class and was not build-valid; trimmed the duplicate while retaining all current features.
+- Admin: `apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart` lets privileged dispute reviewers retrieve a private evidence URL for 60 seconds; raw S3 credentials/keys are not displayed.
+- Tests written: `services/gateway/src/p2p/evidence_storage.test.ts` checks valid upload, MIME spoof rejection, orphan cleanup and authorized download; `.github/workflows/msnw-p2p.yml` runs Gateway P2P Vitest, TypeScript/build and PostgreSQL 18 migration in PR CI.
+- **Status:** evidence upload/display source **implemented, execution pending CI**. To activate at runtime configure the dedicated private S3 bucket with server-only credentials and verified storage policy. Canonical reserve/release/refund and automatic Worker expiry still depend on actually backed MSNW custody; fiat claims/screenshots still must never release assets.
