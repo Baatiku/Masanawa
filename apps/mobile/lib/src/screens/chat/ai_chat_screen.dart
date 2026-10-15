@@ -1968,7 +1968,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
     final transport = ref.read(agentTransportProvider);
     if (transport is! AgentShellTransport) {
-      if (mounted) _pickerFailed('Live voice');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Live voice is unavailable. Please try again.')),
+        );
+      }
       return;
     }
     final reporter = ref.read(callLifecycleReporterProvider);
@@ -2150,7 +2154,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
     final transport = ref.read(agentTransportProvider);
     if (transport is! AgentShellTransport) {
-      if (mounted) _pickerFailed('Live voice');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Live voice is unavailable. Please try again.')),
+        );
+      }
       return;
     }
     final reporter = ref.read(callLifecycleReporterProvider);
