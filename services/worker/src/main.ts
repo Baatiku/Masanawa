@@ -11,6 +11,8 @@ import {
 } from "@masanawa/node-runtime";
 import { createPostgresServiceDependency, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
+import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
+import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
   createWorkerApp,
@@ -104,6 +106,7 @@ export async function startWorkerService(
   // Lack of a pool or Gemini configuration is a startup error, not a silent
   // "disabled" customer feature that can accept questions without answers.
   let roomReview: ReturnType<typeof createRoomTeacherRuntime> | undefined;
+  let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -122,6 +125,26 @@ export async function startWorkerService(
       workerId: env.MASANAWA_ROOMS_TEACHER_WORKER_ID ?? "rooms-ai-" + process.pid,
       enabled: () => !drain.isDraining(),
     });
+    // Consume the existing authorized YouTube reconciliation outbox with the
+    // existing PostgreSQL fence/lease/quota controls. Without credentials,
+    // the feature is unavailable, not a fake successful synchronization.
+    const youtubeKey = env.MASANAWA_YOUTUBE_DATA_API_KEY ?? env.YOUTUBE_API_KEY;
+    if (youtubeKey?.trim()) {
+      const youtube = createYouTubeSyncRuntime({
+        pool: database.pool,
+        workerId: env.MASANAWA_YOUTUBE_WORKER_ID ?? "youtube-sync-" + process.pid,
+        apiKey: youtubeKey,
+        enabled: true,
+      });
+      youtubeOutbox = createYouTubeOutboxScheduler({
+        runOnce: youtube.runOnce,
+        enabled: () => !drain.isDraining(),
+        onError: () => {
+          // Provider errors can contain tokens or private metadata.
+          process.stderr.write('{"event":"youtube_sync.retry","reason":"batch_failed"}\\n');
+        },
+      });
+    }
     app = appFactory({
       ...(options.appOptions ?? {}),
       readinessChecks: [
@@ -147,6 +170,7 @@ export async function startWorkerService(
       // Cancel the timer and await the current fenced outbox job before the
       // shared PostgreSQL pool shuts down; do not abandon in-flight claims.
       onAfterClose: async () => {
+        await youtubeOutbox?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -155,7 +179,9 @@ export async function startWorkerService(
       },
     });
     roomReview?.start();
+    youtubeOutbox?.start();
   } catch (error) {
+    await youtubeOutbox?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
