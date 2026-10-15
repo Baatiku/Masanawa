@@ -14,6 +14,7 @@ import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
+import { createMsnwFundingObligationRecovery } from "./jobs/msnw/funding_obligations.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
   createWorkerApp,
@@ -109,6 +110,7 @@ export async function startWorkerService(
   let roomReview: ReturnType<typeof createRoomTeacherRuntime> | undefined;
   let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -142,6 +144,17 @@ export async function startWorkerService(
           event: "status_scheduled.retry", reason: "batch_failed",
         }) + "\n");
       },
+    });
+    // Missing immutable funding obligations are recovered from independently
+    // Paystack-verified fiat evidence. This job never mints or spends MSNW.
+    const obligationRecovery = createMsnwFundingObligationRecovery(database.pool);
+    msnwObligationRecovery = createYouTubeOutboxScheduler({
+      runOnce: obligationRecovery.runOnce,
+      enabled: () => !drain.isDraining(),
+      intervalMs: 30_000,
+      onError: () => process.stderr.write(JSON.stringify({
+        event: "msnw_funding_obligations.retry", reason: "batch_failed",
+      }) + "\n"),
     });
     // Consume the existing authorized YouTube reconciliation outbox with the
     // existing PostgreSQL fence/lease/quota controls. Without credentials,
@@ -190,6 +203,7 @@ export async function startWorkerService(
       onAfterClose: async () => {
         await youtubeOutbox?.stop();
         await feedPublisher?.stop();
+        await msnwObligationRecovery?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -200,9 +214,11 @@ export async function startWorkerService(
     roomReview?.start();
     youtubeOutbox?.start();
     feedPublisher?.start();
+    msnwObligationRecovery?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
+    await msnwObligationRecovery?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;

@@ -96,7 +96,10 @@ class _MsnwVerifiedFundingActivityState extends State<MsnwVerifiedFundingActivit
             !RegExp(r'^[1-9][0-9]*$').hasMatch(row['amountKobo'] as String) ||
             row['paidAt'] is! String ||
             DateTime.tryParse(row['paidAt'] as String) == null ||
-            row['state'] != 'fiat_verified_backing_pending') {
+            row['state'] != 'fiat_verified_backing_pending' ||
+            (row['obligationState'] != null &&
+              row['obligationState'] != 'backing_pending' &&
+              row['obligationState'] != 'registration_pending')) {
           throw const FormatException('Invalid funding state');
         }
         entries.add(row);
@@ -140,7 +143,9 @@ class _MsnwVerifiedFundingActivityState extends State<MsnwVerifiedFundingActivit
           ListTile(
             leading: const Icon(Icons.account_balance),
             title: Text('Verified bank transfer · ${_ngn(row['amountKobo'] as String)}'),
-            subtitle: Text('MSNW backing pending · Ref: ${row['reference']}'),
+            subtitle: Text(row['obligationState'] == 'registration_pending'
+              ? 'Settlement journal reconciliation pending · Ref: ${row['reference']}'
+              : 'MSNW backing pending · Ref: ${row['reference']}'),
             trailing: const Icon(Icons.schedule),
           ),
         Align(
