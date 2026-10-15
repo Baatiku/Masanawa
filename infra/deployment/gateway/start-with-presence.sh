@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# One canonical, checksum-verified, serializable migration pass before the
+# Gateway accepts requests. This is safe on concurrent instance starts because
+# runMigrations takes the PostgreSQL schema advisory transaction lock.
+# Never try to mint, migrate old MSN/Cr balances or delete existing finance rows.
+echo "Applying forward-only Masanawa database migrations"
+pnpm --filter @masanawa/gateway-service migrate
+
+
 pnpm --filter @masanawa/gateway-service start &
 gateway_pid=$!
 presence_pid=""
