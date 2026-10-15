@@ -169,6 +169,7 @@ import {
 import { createGeminiLiveAudioRenderer } from "./native_audio.js";
 import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
+import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2526,6 +2527,18 @@ export async function startGatewayService(
             authorizer: msnBalanceAuthorizer,
             reader: createMsnFundingJournal(database.featurePool),
           } }
+        : {}),
+      // A DVA is only a bank payment destination, never token issuance.
+      // Requires the separately reviewed 0113 staged schema, qualified KYC,
+      // provider approval and secret. Default OFF in every deployment.
+      ...(env.MASANAWA_MSNW_PAYSTACK_DVA_ENABLED === "true" &&
+          env.PAYSTACK_SECRET_KEY?.trim() &&
+          database.featurePool && msnBalanceAuthorizer
+        ? { msnwPaystackDva: createMsnwPaystackDvaService({
+            pool: database.featurePool,
+            authorizer: msnBalanceAuthorizer,
+            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+          }) }
         : {}),
       // Only the production operator may enable this legacy credit-ledger
       // transfer. This never activates MSN minting, funding or crypto payouts.
