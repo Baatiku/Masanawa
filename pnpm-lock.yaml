@@ -526,6 +526,9 @@ importers:
       '@masanawa/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@masanawa/masana':
+        specifier: workspace:*
+        version: link:../../packages/masana
       '@masanawa/node-runtime':
         specifier: workspace:*
         version: link:../../infra/runtime/node

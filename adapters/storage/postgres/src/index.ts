@@ -50,3 +50,6 @@ export { createPgTeacherQueue } from "./rooms/teacher_outbox.js";
 
 // Platform-owned 26 Masana profile/Room seed; tenant-scoped and additive.
 export {ensureMasanaCatalogProfilesAndRooms,withCatalogProvisionLock} from "./masana/catalog_seed.js";
+
+// Canonical immutable Masana editorial revisions and staff audit.
+export {createMasanaPostgresStore} from './masana/repository.js';
