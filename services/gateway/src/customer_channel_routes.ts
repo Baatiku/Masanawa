@@ -219,6 +219,42 @@ async function sendTelegram(
   }
 }
 
+/** Send a bounded, already rendered audio reply. Ogg/Opus is a voice
+ * note; MP3/M4A an audio file; WAV travels as a playable document because
+ * Telegram's sendAudio API accepts only MP3/M4A. No media URLs or tokens are
+ * exposed to the model or the customer. */
+export async function sendTelegramAudio(
+  config: TelegramChannelConfig,
+  chatId: string,
+  audio: Readonly<{ mimeType: string; dataBase64: string }>,
+): Promise<void> {
+  const base = audio.mimeType.split(";")[0]?.toLowerCase() ?? "";
+  const choice = base === "audio/ogg"
+    ? { method: "sendVoice", field: "voice", filename: "masanawa-voice.ogg" }
+    : base === "audio/mpeg"
+      ? { method: "sendAudio", field: "audio", filename: "masanawa-audio.mp3" }
+      : base === "audio/mp4" || base === "audio/m4a"
+        ? { method: "sendAudio", field: "audio", filename: "masanawa-audio.m4a" }
+        : base === "audio/wav" || base === "audio/x-wav"
+          ? { method: "sendDocument", field: "document", filename: "masanawa-voice.wav" }
+          : null;
+  if (!choice) throw new TypeError("channels.audio_format_unsupported");
+  const bytes = Buffer.from(audio.dataBase64, "base64");
+  if (bytes.length < 1 || bytes.length > 8 * 1024 * 1024) {
+    throw new RangeError("channels.media_too_large");
+  }
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append(choice.field, new Blob([new Uint8Array(bytes)], {
+    type: base === "audio/x-wav" ? "audio/wav" : base,
+  }), choice.filename);
+  const response = await fetchJson(
+    `https://api.telegram.org/bot${config.botToken}/${choice.method}`,
+    { method: "POST", body: form },
+  );
+  if (response.ok !== true) throw new Error("channels.telegram_audio_rejected");
+}
+
 async function telegramMedia(
   config: TelegramChannelConfig,
   message: Record<string, unknown>,
@@ -454,13 +490,24 @@ export function registerCustomerChannelRoutes(
         text: text || "Please help me with this attachment.",
         ...(media ? { media } : {}),
       });
-      if (result.shouldDeliver && result.reply) {
-        await sendTelegram(
-          config,
-          chatId,
-          result.reply,
-          result.requestContact,
-        );
+      if (result.shouldDeliver && (result.reply || result.audio)) {
+        if (result.reply) {
+          await sendTelegram(
+            config,
+            chatId,
+            result.reply,
+            result.requestContact,
+          );
+        }
+        if (result.audio) {
+          try {
+            await sendTelegramAudio(config, chatId, result.audio);
+          } catch {
+            // The canonical conversation is already persisted and its text
+            // is delivered. Optional media failure cannot replay a paid or
+            // idempotent turn or duplicate the text on the next webhook retry.
+          }
+        }
         await options.bridge.delivered({
           channel: "telegram",
           messageId: durableMessageId,
