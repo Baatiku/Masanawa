@@ -377,6 +377,26 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       }
       return {expired};
     },
+    async assertEvidenceAllowed(actor:P2pActor, orderId:string) {
+      const result=await pool.query(`SELECT 1 FROM commerce.msnw_p2p_orders
+        WHERE tenant_id=$1 AND order_id=$2 AND (seller_id=$3 OR buyer_id=$3)
+          AND state IN ('payment_claimed','disputed')`,
+        [actor.tenantId,id(orderId),actor.userId]);
+      if(!result.rowCount)throw new P2pError("p2p.evidence_forbidden",403);
+    },
+    async evidenceFor(actor:P2pActor,orderId:string,evidenceId:string,operator=false) {
+      const value=await pool.query(`SELECT e.object_ref,e.sha256,e.submitted_by,
+          o.order_id,o.state
+        FROM commerce.msnw_p2p_evidence e JOIN commerce.msnw_p2p_orders o
+         ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
+        WHERE o.tenant_id=$1 AND o.order_id=$2 AND e.evidence_id=$3
+        AND ($5::boolean OR o.seller_id=$4 OR o.buyer_id=$4)`,
+        [actor.tenantId,id(orderId),id(evidenceId),actor.userId,operator]);
+      const row=take<Record<string,unknown>>(value);
+      if(typeof row.object_ref!=="string"||!row.object_ref.startsWith("p2p/"))
+        throw new P2pError("p2p.evidence_unavailable",503);
+      return {objectRef:row.object_ref,sha256:row.sha256};
+    },
     async recordEvidence(actor:P2pActor, orderId:string, evidence:{
       objectRef:string; sha256:string; verifiedOwnerId:string;
     }) {
