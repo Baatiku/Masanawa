@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/commerce/wallet_models.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/wallet/send_credits_sheet.dart';
-import 'package:masanawa/src/screens/wallet/wallet_receipt_sheet.dart';
 import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
 import 'package:masanawa/src/finance/msnw_custody_send.dart';
 import 'package:masanawa/src/state/session_state.dart';
