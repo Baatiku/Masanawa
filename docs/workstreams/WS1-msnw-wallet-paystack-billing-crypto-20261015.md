@@ -6,6 +6,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 
 - Repository: Baatiku/Masanawa; base main 1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4 (PR #19).
 - Completed PR #22: b542c7106987c46529516d96ff74a3e226dbc905 (Paystack customer/DVA onboarding and Billing fail-closed improvements).
+- Completed PR #29: 39842f458638ccc80928f80e791344a8a07ab9bf (phone-only enrollment and complete identity fields).
 - Completed PR #24: ced8df8a1a1d283f3fbbf45a2dd91f67a856bdbb (role-separated mint/burn controls, Foundry deployment config and source tests).
 - Main advanced independently to ad940610b66c7f8817add88a3bd4ac1ad8aa50cd (chat/WS2, no changed-file overlap) while this branch was being developed.
 - Source commits include 7a63d6c (enrollment migration), 8a8f9fb and 295d2a9 (Paystack service), e89f2c4 (routes), 179dec0 and 537309d (Gateway app/startup), 07e6cd1 and 1d39611 (Flutter funding), 7c44cb8/c641e50 (Gateway test), de7a698 (Billing fake-data/unsafe-debit removal).
@@ -14,7 +15,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 
 ## Workstream 1 — MSNW Wallet, Paystack, Billing, crypto
 
-- [ ] **IN PROGRESS — Paystack enrollment, consent, customer creation and DVA:** added authenticated GET/POST /v1/wallet/msnw/funding/enrollment, SQL 0123, Flutter KYC form. Existing DVA source: services/gateway/src/msn_wallet/paystack_dva.ts, paystack_dva_routes.ts, commerce migration 0120. Missing customer contact attributes can now be supplied with signed-in, consented enrollment; account-change fencing protects existing canonical session claims. Complete production/customer tests and provider compatibility.
+- [ ] **IN PROGRESS — Paystack enrollment, consent, customer creation and DVA:** added authenticated GET/POST /v1/wallet/msnw/funding/enrollment, SQL 0123, Flutter KYC form. Existing DVA source: services/gateway/src/msn_wallet/paystack_dva.ts, paystack_dva_routes.ts, commerce migration 0120. Missing customer contact attributes can now be supplied with signed-in, consented enrollment; account-change fencing protects existing canonical session claims. Added independently Paystack-confirmed signed customeridentification.success / failed webhook handling, retry from failed validation, and valid-to-verified transition before DVA; tests authored, production/customer provider qualification still outstanding.
 - [ ] **IN PROGRESS — verified transfer to backed issuance:** signed verified Paystack webhook, immutable provider-fiat evidence already exist in services/gateway/src/msn_wallet/paystack_fiat_evidence.ts and commerce/0122. Need treasury reconciliation, quote/rate, custody-backed issuance, provider reversal handling, mint confirmation; evidence must stay pending until actual backing.
 - [ ] **IN PROGRESS — official blockchain token/custody/supply/mint/burn:** Solidity source at contracts/msnw/MasanawaToken.sol now has isolated governance/minter/burner/pauser, replay-proof mint and custodian-only burn; Foundry chain-bound deploy source and focused tests at contracts/msnw/script/DeployMasanawaToken.s.sol, test/MasanawaToken.t.sol and foundry.toml. Verified on-chain read in msnw_onchain_balance.ts. No deployed contract, signed custody, customer binding challenge, supply-reserve audit or production mint/burn Worker yet. Must not fabricate address or supply.
 - [ ] **IN PROGRESS — canonical MSNW balances/history/receipts:** existing legacy MSN ledger, fiat journal and immutable Paystack evidence are not spendable MSNW. Build canonical MSNW issuance/spending journal with available, pending and reserved projection plus receipt lifecycle; use PostgreSQL identity and on-chain confirmations.
@@ -80,3 +81,7 @@ Progress labels indicate incomplete journeys even when historic source fragments
 
 - New contract burn commit b0f58c1, Foundry config 376276e, deployment script db2bd62, Solidity tests 08c5024, docs 56a3b06. Safe burn is caller-custody-only and requires BURNER_ROLE; globally consumed settlement references prevent cross mint/burn replay.
 - Live execution of this deployment script, chain choice, contract verification and signer/key setup have NOT happened. Require actual signed chain deployment before setting address.
+
+## Source delivery increment 4
+
+- Added `MsnwPaystackEnrollmentService.handleProviderIdentification`, dispatch from existing raw HMAC-protected Paystack finance webhook and compose same enrollment service instance in Gateway. Only matching customer id/code/email and independently observed Paystack `identified=true` can grant DVA identity. Failed verification returns to retryable enrollment without losing customer ID. Late failure never downgrades verified onboarding. Tests: services/gateway/src/msn_wallet/paystack_customer_enrollment.test.ts and paystack_identity_webhook.test.ts. No payment issuances or deployed contracts. Merge SHA to record once PR lands.
