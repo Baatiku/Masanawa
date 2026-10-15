@@ -252,11 +252,13 @@ class LiveVoiceSession with WidgetsBindingObserver {
       await _incoming;
     } catch (_) {}
     if (_closed || !identical(_socket, socket)) return;
+    // A WebSocket may call onError followed by onDone for one failure.
+    // Never turn its second callback into a fatal error while resuming.
+    if (_reconnectTask != null) return;
     if (!_ready.isCompleted ||
         _resumptionHandle == null ||
         !DateTime.now().isBefore(grant.expiresAt) ||
-        _resumeAttempts >= 2 ||
-        _reconnectTask != null) {
+        _resumeAttempts >= 2) {
       _fail('Live voice disconnected. Start a new call to reconnect.');
       unawaited(close());
       return;
