@@ -9,6 +9,15 @@ String? shellDeepLinkRoute(Uri uri) {
     return null;
   }
 
+  // P2P notifications must open only the authenticated Wallet surface;
+  // the link is a navigation hint and never a payment authorization.
+  if (uri.scheme == 'masanawa' && uri.host == 'wallet') {
+    if (uri.pathSegments.isNotEmpty || uri.queryParameters.isNotEmpty) {
+      return null;
+    }
+    return '/wallet';
+  }
+
   if (uri.scheme == 'masanawa' && uri.host == 'calls') {
     if (uri.queryParameters.isNotEmpty ||
         uri.pathSegments.length != 2 ||
