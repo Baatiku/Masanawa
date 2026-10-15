@@ -1,0 +1,92 @@
+import { describe, expect, it } from "vitest";
+import type { Pool } from "@masanawa/postgres";
+import { createMsnwMerchantSettlementRuntime } from "./paystack_merchant_settlement.js";
+
+const settlement = {
+  id: 3090024,domain:"test",status:"success",currency:"NGN",
+  total_processed:10000,effective_amount:9800,
+  settlement_date:"2026-10-15T10:00:00Z",
+};
+const transactions = [
+  {id:2067030515,domain:"test",status:"success",currency:"NGN",
+   reference:"verified-fund-1",amount:10000},
+];
+
+function fake(patches: Readonly<{
+  settlement?: Record<string,unknown>;
+  transaction?: Record<string,unknown>;
+  partial?: boolean;
+}> = {}) {
+  const calls: string[] = [];
+  const writes: string[] = [];
+  const paymentId = "2067030515";
+  const fundingReference = "verified-fund-1";
+  const fetchImpl = async (url: string, init?: RequestInit) => {
+    expect(init?.method).toBe("GET");
+    const path = new URL(url);
+    calls.push(path.pathname);
+    const data = path.pathname === "/settlement"
+      ? [{...settlement,...patches.settlement}]
+      : path.pathname === "/settlement/3090024/transactions"
+        ? transactions.map(x=>({...x,...patches.transaction}))
+        : [];
+    return new Response(JSON.stringify({status:true,data}),{
+      status:200,headers:{"content-type":"application/json"},
+    });
+  };
+  const query = async (sql:string) => {
+    writes.push(sql);
+    if (sql.startsWith("SELECT settlement_id FROM"))
+      return {rowCount:0,rows:[]};
+    if (sql.startsWith("SELECT 1 AS scanned"))
+      return {rowCount:0,rows:[]};
+    if (sql.startsWith("SELECT e.reference"))
+      return {rowCount:1,rows:[{
+        reference:fundingReference,
+        provider_transaction_id:paymentId,
+        amount_kobo:"10000",
+      }]};
+    return {rowCount:1,rows:[]};
+  };
+  const client = { query,release() {} };
+  const pool = {query,async connect(){return client;}} as unknown as Pool;
+  const runtime = createMsnwMerchantSettlementRuntime({
+    pool,paystackSecretKey:"sk_test_testmerchantpayout",
+    fetchImpl:fetchImpl as typeof fetch,
+  });
+  return {runtime,calls,writes};
+}
+describe("MSNW Paystack completed merchant payout provenance",()=>{
+  it("requires actual settled provider payout and matching independently verified funding",async()=>{
+    const t = fake();
+    expect(await t.runtime.runOnce()).toEqual({scanned:1,matched:1,failed:0});
+    expect(t.calls).toContain("/settlement");
+    expect(t.calls).toContain("/settlement/3090024/transactions");
+    expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_merchant_settlements")))
+      .toBe(true);
+    expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_payout_matches")))
+      .toBe(true);
+    expect(t.writes.some(x=>x.includes("mintSettled"))).toBe(false);
+    expect(t.writes.some(x=>x.includes("UPDATE commerce.msnw_custody_accounts")))
+      .toBe(false);
+  });
+  it("refuses unsettled or incorrectly denominated batches",async()=>{
+    for(const patch of [
+      {status:"processing"},
+      {currency:"USD"},
+      {domain:"live"},
+      {effective_amount:11000},
+    ]){
+      const t=fake({settlement:patch});
+      await expect(t.runtime.runOnce()).rejects.toThrow();
+      expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_merchant_settlements")))
+        .toBe(false);
+    }
+  });
+  it("never attaches mismatched transaction amounts or references as backing proof",async()=>{
+    const t=fake({transaction:{amount:20000}});
+    expect(await t.runtime.runOnce()).toEqual({scanned:1,matched:0,failed:0});
+    expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_payout_matches")))
+      .toBe(false);
+  });
+});
