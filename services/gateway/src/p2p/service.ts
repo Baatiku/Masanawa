@@ -384,6 +384,13 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         [actor.tenantId,id(orderId),actor.userId]);
       if(!result.rowCount)throw new P2pError("p2p.evidence_forbidden",403);
     },
+    async listEvidence(actor:P2pActor,orderId:string) {
+      await this.assertEvidenceAllowed(actor,orderId);
+      const evidence=await pool.query(`SELECT evidence_id,submitted_by,sha256,created_at
+        FROM commerce.msnw_p2p_evidence WHERE tenant_id=$1 AND order_id=$2
+        ORDER BY created_at ASC LIMIT 100`,[actor.tenantId,orderId]);
+      return evidence.rows;
+    },
     async evidenceFor(actor:P2pActor,orderId:string,evidenceId:string,operator=false) {
       const value=await pool.query(`SELECT e.object_ref,e.sha256,e.submitted_by,
           o.order_id,o.state
