@@ -65,6 +65,35 @@ CREATE TRIGGER msnw_custody_entries_immutable
  BEFORE UPDATE OR DELETE ON commerce.msnw_custody_entries
  FOR EACH ROW EXECUTE FUNCTION commerce.msnw_custody_forbid_journal_mutation();
 
+-- Deferred commit gate: even a privileged partial writer cannot persist an
+-- operation unless exactly two opposite postings belong to the two owners.
+CREATE OR REPLACE FUNCTION commerce.msnw_custody_assert_balanced()
+RETURNS trigger LANGUAGE plpgsql AS $
+DECLARE posting_count integer;
+DECLARE net_micro numeric(78,0);
+DECLARE debit_user text;
+DECLARE credit_user text;
+BEGIN
+  SELECT count(*),COALESCE(sum(available_delta_micro),0),
+         max(user_id) FILTER (WHERE available_delta_micro < 0),
+         max(user_id) FILTER (WHERE available_delta_micro > 0)
+    INTO posting_count,net_micro,debit_user,credit_user
+    FROM commerce.msnw_custody_entries
+   WHERE operation_id=NEW.operation_id;
+  IF posting_count<>2 OR net_micro<>0 OR
+     debit_user IS DISTINCT FROM NEW.actor_user_id OR
+     credit_user IS DISTINCT FROM NEW.recipient_user_id THEN
+    RAISE EXCEPTION 'MSNW custody operation has unbalanced postings'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+END;
+$;
+CREATE CONSTRAINT TRIGGER msnw_custody_balance_at_commit
+ AFTER INSERT ON commerce.msnw_custody_operations
+ DEFERRABLE INITIALLY DEFERRED
+ FOR EACH ROW EXECUTE FUNCTION commerce.msnw_custody_assert_balanced();
+
 -- Only the trusted authenticated Gateway may write. No exposed customer SQL.
 REVOKE ALL ON commerce.msnw_custody_accounts FROM PUBLIC;
 REVOKE ALL ON commerce.msnw_custody_operations FROM PUBLIC;
