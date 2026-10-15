@@ -284,7 +284,21 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   : reply.allAttachments.isNotEmpty
                       ? reply.allAttachments.first.label
                       : 'Message'),
-        ),
+        ).catchError((Object error) {
+          // Retention can fail when the OS revokes access to a picker file.
+          // Restore the message and attachments instead of silently losing
+          // the user's offline draft after tapping Send.
+          if (!mounted) return;
+          _input.text = text;
+          ctl.setDraft(widget.characterId, text);
+          ctl.setDraftAttachments(widget.characterId, attachments);
+          setState(() => _pendingAttachments = attachments);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'Could not keep the selected files for sending. Choose the files again or retry.',
+            )),
+          );
+        }),
       );
       return;
     }
