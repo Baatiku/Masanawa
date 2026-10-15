@@ -17,6 +17,7 @@ export interface MsnwPaystackEnrollmentService {
   readonly sessions: PlatformCustomerSessionAuthorizer;
   read(identity: Identity): Promise<EnrollmentStatus>;
   submit(identity: Identity, body: unknown): Promise<EnrollmentStatus>;
+  handleProviderIdentification(eventName: "customeridentification.success" | "customeridentification.failed", data: unknown): Promise<boolean>;
 }
 function identityDetails(identity: Identity, extras?: Record<string, unknown>) {
   const emailFromSession = identity.profile.email?.trim().toLowerCase() ?? "";
@@ -123,7 +124,7 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
       throw new MsnwEnrollmentError("funding.concurrent_change", 409);
   }
 
-  async function qualify(identity: Identity, record: Row, email: string): Promise<EnrollmentStatus> {
+  async function qualify(identity: Pick<Identity, "tenantId" | "userId">, record: Row, email: string): Promise<EnrollmentStatus> {
     if (!record.customer_id || !record.customer_code)
       throw new MsnwEnrollmentError("funding.customer_invalid");
     const live = customer(await api("/customer/" + encodeURIComponent(record.customer_code)), email);
@@ -174,6 +175,49 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
 
   return Object.freeze({
     sessions: input.sessions, read,
+    async handleProviderIdentification(eventName, data) {
+      if (!data || typeof data !== "object" || Array.isArray(data))
+        throw new MsnwEnrollmentError("funding.identity_event_invalid", 400);
+      const detail = data as Record<string, unknown>;
+      const id = typeof detail.customer_id === "number" && Number.isSafeInteger(detail.customer_id)
+        ? String(detail.customer_id) : detail.customer_id;
+      const code = detail.customer_code;
+      const email = detail.email;
+      if (typeof id !== "string" || !/^[1-9][0-9]{0,19}$/.test(id) ||
+          typeof code !== "string" || !/^CUS_[A-Za-z0-9]+$/.test(code) ||
+          typeof email !== "string")
+        throw new MsnwEnrollmentError("funding.identity_event_invalid", 400);
+      const result = await input.pool.query(
+        "SELECT tenant_id,user_id,state,email,phone,legal_name,customer_id::text,customer_code " +
+        "FROM commerce.msnw_paystack_customer_onboarding WHERE customer_id=$1", [id]);
+      if (result.rowCount === 0) return false;
+      const owner = result.rows[0];
+      if (result.rowCount !== 1 || !owner ||
+          typeof owner.tenant_id !== "string" || typeof owner.user_id !== "string" ||
+          owner.customer_id !== id || owner.customer_code !== code ||
+          owner.email !== email.trim().toLowerCase())
+        throw new MsnwEnrollmentError("funding.identity_event_owner_mismatch", 409);
+      if (eventName === "customeridentification.failed") {
+        // A delayed failure must never undo verified onboarding.
+        await input.pool.query(
+          "UPDATE commerce.msnw_paystack_customer_onboarding " +
+          "SET state='created',updated_at=statement_timestamp() " +
+          "WHERE tenant_id=$1 AND user_id=$2 AND customer_id=$3 AND state='validating'",
+          [owner.tenant_id, owner.user_id, id]);
+        return true;
+      }
+      const identification = detail.identification;
+      if (!identification || typeof identification !== "object" ||
+          (identification as { type?: unknown }).type !== "bank_account")
+        throw new MsnwEnrollmentError("funding.identity_event_invalid", 400);
+      if (owner.state !== "validating" && owner.state !== "verified") return false;
+      await qualify({ tenantId: owner.tenant_id, userId: owner.user_id }, {
+        state: owner.state as string, email: owner.email as string,
+        phone: owner.phone as string, legal_name: owner.legal_name as string,
+        customer_id: id, customer_code: code,
+      }, owner.email as string);
+      return true;
+    },
     async submit(identity: Identity, supplied: unknown) {
       if (!supplied || typeof supplied !== "object" || Array.isArray(supplied))
         throw new MsnwEnrollmentError("funding.bank_identity_invalid", 400);
