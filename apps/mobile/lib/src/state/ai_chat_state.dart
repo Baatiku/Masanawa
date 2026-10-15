@@ -1035,16 +1035,23 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     if (state.sendingIn.contains(characterId)) return;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    final requestId = createRequestId();
+    final cached = await _retainMediaForOwner(owner, requestId, [attachment]);
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
       id: _newId(),
       isUser: true,
       text: (caption ?? '').trim(),
       createdAt: DateTime.now(),
-      attachment: attachment,
+      attachment: cached.single,
       replyToId: replyToId,
       replyPreview: replyPreview,
       deliveryStatus: 'sending',
-      requestId: createRequestId(),
+      requestId: requestId,
     );
     final offline = await _offlineNow();
     if (_disposed ||
@@ -1077,7 +1084,13 @@ class AiChatController extends Notifier<AiChatState> {
       return;
     }
     final threadGeneration = _threadGenerations[characterId] ?? 0;
-    final bounded = List<ChatAttachment>.unmodifiable(attachments.take(8));
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    final requestId = createRequestId();
+    final bounded = await _retainMediaForOwner(owner, requestId, attachments);
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
       id: _newId(),
       isUser: true,
@@ -1088,7 +1101,7 @@ class AiChatController extends Notifier<AiChatState> {
       replyPreview: replyPreview,
       deliveryStatus: 'sending',
       uploadProgress: 0,
-      requestId: createRequestId(),
+      requestId: requestId,
     );
     final offline = await _offlineNow();
     if (_disposed ||
