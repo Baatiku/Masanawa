@@ -83,7 +83,12 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
     if (typeof value.state !== "string" || typeof value.email !== "string" ||
         typeof value.phone !== "string" || typeof value.legal_name !== "string")
       throw new MsnwEnrollmentError("funding.onboarding_data_invalid");
-    return value as Row;
+    return {
+      state: value.state, email: value.email,
+      phone: value.phone, legal_name: value.legal_name,
+      customer_id: typeof value.customer_id === "string" ? value.customer_id : null,
+      customer_code: typeof value.customer_code === "string" ? value.customer_code : null,
+    };
   }
 
   async function saveCustomer(identity: Identity, live: Customer) {
