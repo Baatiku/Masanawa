@@ -34,7 +34,7 @@ export function createGeminiLiveTokenService(input: {
   const apiKey = input.apiKey.trim();
   if (!apiKey) throw new TypeError("Gemini API key is required");
   const model = input.model?.trim() || "gemini-3.8-live";
-  const voiceName = input.voiceName?.trim() || "Kore";
+  const voiceName = input.voiceName?.trim() || "Bodi";
   const fetchImpl = input.fetchImpl ?? fetch;
   const now = input.now ?? (() => new Date());
 
@@ -99,13 +99,9 @@ export function createGeminiLiveTokenService(input: {
         profile.voiceName.trim()
           ? profile.voiceName.trim()
           : voiceName;
-      // Google Gemini Live exposes a fixed prebuilt-voice roster. Bodi is a
-      // separate speech voice, not a supported Gemini Live session voice;
-      // preserve the persona while selecting the supported male Live voice.
-      // Sulafat is supported in both contexts and is preserved unchanged.
-      const liveVoiceName = selectedVoiceName.toLowerCase() === "bodi"
-        ? "Achird"
-        : selectedVoiceName;
+      // Do not substitute owner-selected Gemini voices. Bodi and Fora are
+      // passed unchanged to the mobile Live setup, exactly as configured.
+      // Provider acceptance is verified at runtime, never guessed here.
       if (input.callHistory && !profile) {
         throw new CallHistoryError("calls.masana_unavailable", 403);
       }
@@ -218,7 +214,7 @@ export function createGeminiLiveTokenService(input: {
             "BidiGenerateContentConstrained?access_token=" +
             encodeURIComponent(payload.name),
           model,
-          voiceName: liveVoiceName,
+          voiceName: selectedVoiceName,
           expiresAt: expiresAt.toISOString(),
         });
       } catch (error) {
