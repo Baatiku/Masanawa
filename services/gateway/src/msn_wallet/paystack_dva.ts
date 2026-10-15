@@ -210,6 +210,9 @@ export function createMsnwPaystackDvaService(input: Readonly<{
       const previous = await row(tenantId, userId);
       if (!previous) throw new DvaError("funding.identity_verification_required", 409);
       if (previous.state === "assigned") return status(previous);
+      if (previous.state === "ready" || (began.rowCount !== 1 && previous.state !== "requested")) {
+        throw new DvaError("funding.identity_verification_required", 409);
+      }
       if (began.rowCount !== 1) {
         // Account already requested; reconcile but never create twice.
         return reconcile(tenantId, userId, previous.customerId);
