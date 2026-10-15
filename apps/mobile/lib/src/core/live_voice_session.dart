@@ -564,7 +564,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached ||
         (state == AppLifecycleState.paused &&
-            !_foregroundCallActive)) {
+            (!Platform.isAndroid || !_foregroundCallActive))) {
       // Native Android foreground service keeps a customer-authorized live
       // call visible when they lock the phone or switch apps. Standalone
       // notes and unsupported platforms retain the conservative close path.
