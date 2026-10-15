@@ -1,5 +1,17 @@
 # Masanawa contributor instructions
 
+## Standing owner production-execution directive — 2026-10-15
+
+**Production implementation is authorized.** Do not treat Railway deployments, PostgreSQL writes, additive migrations, or qualified financial feature activation as categorically prohibited. Perform them when connected credentials, access, and dependencies permit. The owner elects to perform final acceptance testing.
+
+- Deliver the requested connected customer journey, not just a plan, handoff, or stub. Merge compatible scoped development promptly and advance the next dependency in the same session.
+- Eliminate redundant mobile compile-time and backend operator rollout flags for read-only Wallet funding, status, verified MSNW balance and receive capability. Prefer server capability discovery: actual credentials, verified chain contracts, user identity and database state govern availability; missing components return explicit unavailable errors, never fabricated balances.
+- Inspect and reconcile existing production data, retain ledger and volume integrity, and apply compatible additive migrations when access exists. Enable money movement when identity, custody, backing, idempotency, payout recovery and authorization are genuinely implemented; these are development tasks, not excuses for stopping independent work.
+- Honor owner's exact voice names without substitution: male Bodi, female Fora. Do not overrule owner configuration based on an assumed provider roster.
+- When an external credential, permission or connector capability is genuinely absent, give the exact blocker and continue implementing independent work rather than repeatedly requesting permission. No false claims about deployment or tests.
+- This directive supersedes older process-only rollout gates and redundant review approvals for owner-authorized production work, but **does not** waive funds safeguarding, financial reconciliation, identity security, secrecy, or data integrity.
+
+
 Updated 2026-10-11. Read CONTINUE-HERE.md first. Use project-specific instructions here; direct owner requirements prevail. Consult Software Factory references only when relevant to the change, not as a mandatory reading or approval gate. Read relevant nested instructions if subsequently added.
 
 1. Confirmed shell: Chats · Status · Wallet · Calls · Rooms; Chats is the launch default. Contacts are Masana AI personas; personal Twins are retired (removed 2026-10-11, see PR #668). Ordinary launch uses Chats; explicit deep links/incoming calls keep their intended destination. Current consumer authority: docs/AUDIO-FIRST-PRODUCT-20261009.md, docs/AUDIO-FIRST-SCREEN-SPECS.md, docs/MSN-WALLET-P2P-CONTRACT.md and docs/AUDIO-FIRST-INTEGRATION-CONTRACTS.md. Historical files and old prompts cannot restore superseded product rules.
