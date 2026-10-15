@@ -14,6 +14,7 @@ import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
 import {createP2pNoticeRuntime} from "./jobs/msnw/p2p_notifications.js";
+import { createP2pExpiryRuntime } from "./jobs/msnw/p2p_expiry.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
@@ -115,6 +116,7 @@ export async function startWorkerService(
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let p2pExpiry: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
@@ -221,6 +223,17 @@ export async function startWorkerService(
         })+"\n"),
       });
     }
+    // No separate escrow scheduler authority: the canonical PG function
+    // takes bounded SKIP LOCKED order claims and performs refund+event
+    // postings in the same transaction. No backend feature flag.
+    const expiry=createP2pExpiryRuntime(database.pool);
+    p2pExpiry=createYouTubeOutboxScheduler({
+      runOnce:expiry.runOnce,enabled:()=>!drain.isDraining(),
+      intervalMs:20000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"p2p.expiry.retry",reason:"batch_failed",
+      })+"\n"),
+    });
     app = appFactory({
       ...(options.appOptions ?? {}),
       readinessChecks: [
@@ -251,6 +264,7 @@ export async function startWorkerService(
         await msnwObligationRecovery?.stop();
         await roomNotices?.stop();
         await p2pNotices?.stop();
+        await p2pExpiry?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -264,6 +278,7 @@ export async function startWorkerService(
     msnwObligationRecovery?.start();
     roomNotices?.start();
     p2pNotices?.start();
+    p2pExpiry?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
