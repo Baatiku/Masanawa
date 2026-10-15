@@ -187,6 +187,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                 onChanged:(value)=>update(()=>code=value),
               ),
               TextField(controller:number,keyboardType:TextInputType.number,
+                onChanged:(_)=>update((){}),
                 maxLength:10,decoration:const InputDecoration(
                   labelText:'Your 10-digit account number')),
               CheckboxListTile(
