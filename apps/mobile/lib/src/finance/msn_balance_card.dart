@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/network/api_client.dart';
 import 'msn_balance_transport.dart';
 
-/// Customer-facing MSN readback. No fabricated zero, optimistic financial
+/// Customer-facing MSNW readback. No fabricated zero, optimistic financial
 /// updates or persistence of private balance data between accounts.
 class MsnBalanceCard extends StatefulWidget {
   const MsnBalanceCard({
@@ -55,7 +55,7 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
       setState(() {
         _balance = null;
         _loading = false;
-        _error = 'Sign in to view your MSN balance.';
+        _error = 'Sign in to view your MSNW balance.';
       });
       return;
     }
@@ -87,9 +87,9 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
         _balance = null;
         _loading = false;
         _error = failure is ApiException && failure.statusCode == 401
-            ? 'Sign in again to view your MSN balance.'
+            ? 'Sign in again to view your MSNW balance.'
             : failure is ApiException && failure.statusCode == 404
-                ? 'MSN balance is not available yet.'
+                ? 'MSNW balance is not available yet.'
                 : 'Balance is unavailable. Please retry.';
       });
     }
@@ -105,7 +105,7 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
         child: DefaultTextStyle.merge(
           style: const TextStyle(color: Colors.white),
           child: Semantics(
-          label: 'MSN wallet balance',
+          label: 'MSNW wallet balance',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -114,10 +114,10 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
                   const Icon(Icons.account_balance_wallet_outlined),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('MSN · Masanawa', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white)),
+                    child: Text('MSNW · Masanawa', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white)),
                   ),
                   IconButton(
-                    tooltip: 'Refresh MSN balance',
+                    tooltip: 'Refresh MSNW balance',
                     onPressed: _loading ? null : _load,
                     icon: const Icon(Icons.refresh),
                   ),
@@ -128,12 +128,12 @@ class _MsnBalanceCardState extends State<MsnBalanceCard> {
                 const LinearProgressIndicator()
               else if (_balance != null)
                 SelectableText(
-                  '${_balance!.displayAmount} MSN',
+                  '${_balance!.displayAmount} MSNW',
                   style: theme.textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 )
               else
                 Text(_error ?? 'Balance unavailable',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white)),
 
             ],
           ),
