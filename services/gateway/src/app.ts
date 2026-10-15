@@ -1,5 +1,7 @@
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
+import { registerYouTubeSourceAdminRoutes } from "./modules/youtube_websub/source_admin_routes.js";
+import type { AdminYouTubeSourceStore } from "./modules/youtube_websub/source_admin.js";
 import { registerRoomsRoutes, type RoomsRoutePorts } from "./modules/rooms/routes.js";
 import { registerRoomDiscussionRoutes, type DiscussionRoutePorts } from "./modules/rooms/discussion_routes.js";
 import { registerRoomBookmarkRoutes, type RoomBookmarkPorts } from "./modules/rooms/bookmark_routes.js";
@@ -125,6 +127,10 @@ export interface GatewayAppOptions {
   }>;
   readonly videos?: {
     store: VideoStore;
+    resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
+  };
+  readonly videoSources?: {
+    store: AdminYouTubeSourceStore;
     resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
   };
   readonly callHistory?: CallHistoryService;
@@ -1557,6 +1563,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.videos) {
     app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });
+  }
+  if (options.videoSources) {
+    app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
   }
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
   if (options.rooms) {

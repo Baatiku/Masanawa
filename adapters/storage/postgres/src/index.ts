@@ -38,6 +38,7 @@ export { PgEditorialReviewRepository } from "./home_feed/review_repository.js";
 export { PgStatusEligibility } from "./home_feed/eligibility.js";
 export { PgFeedMediaAuthorization } from "./home_feed/media_authorization.js";
 export { createPostgresVideoStore } from "./external_videos/repository.js";
+export { createPostgresYouTubeSourceAdminStore } from "./external_videos/youtube_sources.js";
 export { createPgRoomsRepository } from "./rooms/repository.js";
 export { createPgRoomDiscussionRepository } from "./rooms/discussion.js";
 export { createPgRoomBookmarkStore } from "./rooms/bookmarks.js";
