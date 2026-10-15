@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { MsnBalanceAuthority } from "./routes.js";
 import type { PaystackDvaPg } from "./paystack_dva.js";
 
@@ -12,6 +12,9 @@ export interface MsnwPaystackFiatService {
   readonly authorizer: MsnBalanceAuthority;
   verify(tenantId: string, userId: string, reference: string): Promise<VerifiedPaystackFunding>;
   list(tenantId: string, userId: string): Promise<readonly VerifiedPaystackFunding[]>;
+  handleSignedWebhook(rawBody: Buffer, signature: unknown): Promise<Readonly<{
+    accepted: true; recorded: boolean;
+  }>>;
 }
 export class PaystackEvidenceError extends Error {
   constructor(readonly code: string, readonly statusCode = 503) {
@@ -191,6 +194,71 @@ export function createMsnwPaystackFiatService(input: Readonly<{
         throw new PaystackEvidenceError("funding.replay_conflict", 409);
       }
       return toStatus(row);
+    },
+    async handleSignedWebhook(rawBody: Buffer, signature: unknown) {
+      // Paystack signs the ORIGINAL UTF-8 request bytes with HMAC-SHA512.
+      // JSON reserialization (or trusting x-forwarded-for) is not authority.
+      if (!Buffer.isBuffer(rawBody) || rawBody.length < 2 ||
+          rawBody.length > 128 * 1024 ||
+          typeof signature !== "string" ||
+          !/^[0-9a-fA-F]{128}$/.test(signature)) {
+        throw new PaystackEvidenceError("funding.webhook_signature_invalid", 401);
+      }
+      const expected = createHmac("sha512", secret).update(rawBody).digest();
+      const observed = Buffer.from(signature, "hex");
+      if (!timingSafeEqual(expected, observed)) {
+        throw new PaystackEvidenceError("funding.webhook_signature_invalid", 401);
+      }
+      let parsed: unknown;
+      try { parsed = JSON.parse(rawBody.toString("utf8")); }
+      catch { throw new PaystackEvidenceError("funding.webhook_payload_invalid", 400); }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new PaystackEvidenceError("funding.webhook_payload_invalid", 400);
+      }
+      const event = parsed as Record<string, unknown>;
+      if (event.event !== "charge.success") {
+        return Object.freeze({ accepted: true as const, recorded: false });
+      }
+      const data = event.data;
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new PaystackEvidenceError("funding.webhook_payload_invalid", 400);
+      }
+      const transaction = data as Record<string, unknown>;
+      const authorization = transaction.authorization as Record<string, unknown> | undefined;
+      // Ignore unrelated successful card/subscription transactions, never
+      // reinterpret them as a virtual-account bank transfer.
+      if (authorization?.channel !== "dedicated_nuban") {
+        return Object.freeze({ accepted: true as const, recorded: false });
+      }
+      const reference = transaction.reference;
+      const customer = transaction.customer as Record<string, unknown> | undefined;
+      const receiver = authorization.receiver_bank_account_number;
+      if (typeof reference !== "string" ||
+          !/^[A-Za-z0-9_.:-]{1,128}$/.test(reference) ||
+          typeof receiver !== "string" || !/^[0-9]{10}$/.test(receiver)) {
+        throw new PaystackEvidenceError("funding.webhook_payload_invalid", 400);
+      }
+      const customerId = numericId(customer?.id);
+      const owners = await input.pool.query(
+        `SELECT tenant_id,user_id FROM commerce.msnw_paystack_dva
+          WHERE paystack_customer_id=$1 AND account_number=$2
+            AND state='assigned' AND identity_verified_at IS NOT NULL
+            AND consented_at IS NOT NULL`,
+        [customerId, receiver],
+      );
+      // Other Paystack products and unknown customers never acquire MSNW.
+      if (owners.rowCount === 0) {
+        return Object.freeze({ accepted: true as const, recorded: false });
+      }
+      const owner = owners.rows[0];
+      if (owners.rowCount !== 1 || typeof owner?.tenant_id !== "string" ||
+          typeof owner?.user_id !== "string") {
+        throw new PaystackEvidenceError("funding.webhook_owner_unavailable");
+      }
+      // Re-verify by reference with the secret directly against Paystack,
+      // then insert immutable global evidence with replay and owner fencing.
+      await this.verify(owner.tenant_id, owner.user_id, reference);
+      return Object.freeze({ accepted: true as const, recorded: true });
     },
     async list(tenantId: string, userId: string) {
       const result = await input.pool.query(
