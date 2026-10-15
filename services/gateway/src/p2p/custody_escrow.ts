@@ -171,34 +171,19 @@ export function createMsnwP2pCustodyEscrow():MsnwEscrowAuthority {
     },
     async refund(tx,input) {
       guard(input.orderId,input.tenantId,input.sellerId);
-      const reserve=await reserved(tx,{tenantId:input.tenantId,
-        orderId:input.orderId,sellerId:input.sellerId});
-      const principal=micros(reserve.amount_micro),fee=micros(reserve.fee_micro,true);
-      const total=principal+fee;
-      if(micros(input.amountMicro)!==total)
-        throw new P2pError("p2p.custody_refund_mismatch",409);
-      await unused(tx,input.tenantId,input.orderId);
-      const locked=await tx.query(`SELECT reserved_micro::text
-        FROM commerce.msnw_custody_accounts
-        WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
-        [input.tenantId,input.sellerId]);
-      const seller=row<{reserved_micro:string}>(locked,"p2p.custody_seller_unavailable");
-      if(BigInt(amountString(seller.reserved_micro))<total)
-        throw new P2pError("p2p.custody_reserve_mismatch",409);
-      const result=await tx.query(`UPDATE commerce.msnw_custody_accounts
-        SET reserved_micro=reserved_micro-$3::numeric,
-            available_micro=available_micro+$3::numeric,
-            updated_at=statement_timestamp()
-        WHERE tenant_id=$1 AND user_id=$2 AND reserved_micro>=$3::numeric`,
-        [input.tenantId,input.sellerId,total.toString()]);
-      if(result.rowCount!==1)throw new P2pError("p2p.custody_refund_failed",503);
-      return post(tx,{tenantId:input.tenantId,orderId:input.orderId,
-        sellerId:input.sellerId,buyerId:reserve.buyer_id,
-        stage:"refund",amount:principal.toString(),fee:fee.toString(),
-        entries:[
-          {kind:"customer",user:input.sellerId,bucket:"reserved",delta:(-total).toString()},
-          {kind:"customer",user:input.sellerId,bucket:"available",delta:total.toString()},
-        ]});
+      const total=micros(input.amountMicro);
+      // One canonical database refund implementation for both Gateway and
+      // automatic Worker expiry; the existing locked order, reservation and
+      // journal must all match. No separate financial ledger is created.
+      const result=await tx.query(
+        `SELECT commerce.msnw_p2p_refund_custody(
+            $1,$2::uuid,$3,$4::numeric) AS receipt`,
+        [input.tenantId,input.orderId,input.sellerId,total.toString()]);
+      const receipt=result.rows[0]?.receipt;
+      if(typeof receipt!=="string"||
+         receipt!=="msnw-p2p:"+input.orderId+":refund")
+        throw new P2pError("p2p.custody_refund_unavailable",503);
+      return receipt;
     },
   });
 }
