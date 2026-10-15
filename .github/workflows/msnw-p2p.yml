@@ -1,0 +1,59 @@
+name: MSNW P2P Escrow Source Qualification
+on:
+  pull_request:
+    paths:
+      - "services/gateway/src/p2p/**"
+      - "services/gateway/src/talk_replay/playback/s3_object_store.ts"
+      - "packages/commerce/migrations/0123_msnw_p2p.sql"
+      - "packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql"
+      - "apps/mobile/lib/src/finance/msnw_p2p_screen.dart"
+      - ".github/workflows/msnw-p2p.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/gateway/src/p2p/**"
+      - ".github/workflows/msnw-p2p.yml"
+permissions:
+  contents: read
+jobs:
+  p2p:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: p2p_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d p2p_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.8.2"
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: P2P Gateway and storage source tests
+        run: pnpm exec vitest run services/gateway/src/p2p services/gateway/src/modules/home_feed/object_store.test.ts
+      - name: Gateway production compilation and TypeScript
+        run: |
+          pnpm --filter @masanawa/gateway-service... build
+          pnpm --filter @masanawa/gateway-service typecheck
+      - name: Forward-only PostgreSQL escrow schema
+        run: |
+          psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/commerce/migrations/0123_msnw_p2p.sql
+          psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql
+          psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM commerce.msnw_p2p_orders"
