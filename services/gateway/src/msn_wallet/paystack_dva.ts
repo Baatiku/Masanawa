@@ -113,7 +113,7 @@ export function createMsnwPaystackDvaService(input: Readonly<{
   function status(value: Enrollment | null): DvaAccountStatus {
     if (!value) return { state: "identity_verification_required" };
     if (value.state === "ready") return { state: "awaiting_consent" };
-    if (value.state === "requested") return { state: "pending" };
+    if (value.state === "requested") return { state: "pending" as const };
     if (value.accountNumber && /^[0-9]{10}$/.test(value.accountNumber) &&
         value.bankName && value.accountName && value.providerId) {
       return { state: "assigned", account: {
@@ -185,7 +185,7 @@ export function createMsnwPaystackDvaService(input: Readonly<{
     if (accounts.length === 1) {
       return persist(tenantId, userId, customerId, accounts[0]!);
     }
-    return { state: "pending" };
+    return { state: "pending" as const };
   }
 
   return Object.freeze({
