@@ -61,6 +61,17 @@ const _portraitKeys = [
   "mei",
 ];
 
+/// Canonical Room ID survives staff changes to the visible profile name.
+int _roomPortraitIndex(String? roomId) {
+  if (roomId == null) return -1;
+  final match = RegExp(r'^room_masana_([0-9]{2})_([a-z0-9_]+)$').firstMatch(roomId);
+  if (match == null) return -1;
+  final index = int.tryParse(match.group(1)!) ?? -1;
+  if (index < 0 || index >= _portraitKeys.length ||
+      _portraitKeys[index] != match.group(2)) return -1;
+  return index;
+}
+
 int _findNameIndex(String displayName) {
   final clean = displayName.trim();
   int index = _names.indexOf(clean);
@@ -85,8 +96,9 @@ int _findNameIndex(String displayName) {
   return -1;
 }
 
-String? portraitPhotoAssetFor(String displayName) {
-  final index = _findNameIndex(displayName);
+String? portraitPhotoAssetFor(String displayName, {String? roomId}) {
+  final seeded = _roomPortraitIndex(roomId);
+  final index = seeded >= 0 ? seeded : _findNameIndex(displayName);
   if (index >= 0 && index < _portraitKeys.length) {
     return 'assets/masana/portraits/${_portraitKeys[index]}.webp';
   }
@@ -109,18 +121,20 @@ class MasanaPortraitAvatar extends StatelessWidget {
     this.agent,
     this.displayName,
     this.avatarUrl,
+    this.roomId,
     this.size = 52,
   });
 
   final AgentDirectoryEntry? agent;
   final String? displayName;
   final String? avatarUrl;
+  final String? roomId;
   final double size;
 
   @override
   Widget build(BuildContext context) {
     final name = (displayName ?? agent?.displayName ?? '').trim();
-    final photoAsset = portraitPhotoAssetFor(name);
+    final photoAsset = portraitPhotoAssetFor(name, roomId: roomId ?? agent?.roomId);
     final svgAsset = portraitAssetFor(name);
     final url = avatarUrl ?? agent?.avatarUrl;
     final initial = agent?.initial ?? (name.isNotEmpty ? name[0].toUpperCase() : 'M');
@@ -157,7 +171,8 @@ class MasanaPortraitAvatar extends StatelessWidget {
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
-                errorBuilder: (_, error, stackTrace) => fallbackSvgOrUrl(),
+                // Never replace a bundled professional portrait with an old cartoon.
+                errorBuilder: (_, error, stackTrace) => _initial(initial),
               )
             : fallbackSvgOrUrl(),
       ),
