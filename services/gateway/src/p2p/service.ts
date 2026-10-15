@@ -139,6 +139,13 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       // Account number and holder name are deliberately NOT exposed in discovery.
       return rows.rows;
     },
+    async myOffers(actor: P2pActor) {
+      return (await pool.query(`SELECT offer_id,rate_kobo_per_msnw::text,
+        min_micro::text,max_micro::text,remaining_micro::text,state,created_at,
+        payment_method_id,fee_bps
+        FROM commerce.msnw_p2p_offers WHERE tenant_id=$1 AND seller_id=$2
+        ORDER BY created_at DESC LIMIT 100`,[actor.tenantId,actor.userId])).rows;
+    },
     async methods(actor: P2pActor) {
       const rows = await pool.query(`SELECT method_id,method_type,bank_name,account_name,
         account_number,verified_at FROM commerce.msnw_p2p_payment_methods
