@@ -175,6 +175,7 @@ import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
+import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2604,6 +2605,31 @@ export async function startGatewayService(
             authorizer: msnBalanceAuthorizer,
             paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
+        : {}),
+      // P2P is composed independently of legacy Credits/MSN. The API can
+      // discover offers and manage escrow journals; order creation is FAILED
+      // CLOSED until finance supplies a genuine atomic MSNW reserve/release/
+      // refund adapter. Never turn an on-chain balance read into a debit.
+      ...(database.featurePool && msnBalanceAuthorizer
+        ? { p2p: options.appOptions?.p2p ?? {
+            service: createP2pService(database.featurePool, {
+              async reserve() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
+              async release() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
+              async refund() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
+            } satisfies MsnwEscrowAuthority),
+            authorize: async (header: string | undefined) => {
+              const owner = await msnBalanceAuthorizer!.authorize({authorizationHeader:header});
+              return {tenantId:owner.tenantId,userId:owner.userId};
+            },
+            // Reuse the existing explicit admin-principal authority. A
+            // bearer token or unverified client role is never enough.
+            ...(talkSafetyPlatformAuthority ? {
+              authorizeOperator: async (header: string | undefined) => {
+                const admin = await talkSafetyPlatformAuthority!.authorize({authorizationHeader:header});
+                return {tenantId:admin.tenantId,userId:admin.actorId};
+              },
+            } : {}),
+          } }
         : {}),
       // Only the production operator may enable this legacy credit-ledger
       // transfer. This never activates MSN minting, funding or crypto payouts.

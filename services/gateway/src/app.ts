@@ -75,6 +75,7 @@ import { registerMsnwOnchainBalanceRoutes } from "./msn_wallet/msnw_onchain_rout
 import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
 import { registerMsnwPaystackFiatRoutes } from "./msn_wallet/paystack_fiat_routes.js";
 import type { MsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
+import { registerP2pRoutes, type P2pRoutesDependencies } from "./p2p/routes.js";
 import { registerTwinAttributionRoutes, registerCommissionPolicyAdminRoutes } from "./twin_attribution_routes.js";
 import { registerProviderValuationAdminRoutes } from "./provider_valuation_admin_routes.js";
 import { registerPaidVoiceRoutes, registerPaidVoiceSettlementRoutes } from "./paid_voice_routes.js";
@@ -188,6 +189,7 @@ export interface GatewayAppOptions {
   readonly msnwOnchainBalance?: MsnwOnchainBalanceDependencies;
   /** Fiat verification journal only: no MSNW issuance permission. */
   readonly msnwPaystackFiat?: MsnwPaystackFiatService;
+  readonly p2p?: P2pRoutesDependencies;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -1659,6 +1661,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.msnwPaystackFiat) {
     registerMsnwPaystackFiatRoutes(app, options.msnwPaystackFiat);
   }
+  if (options.p2p) registerP2pRoutes(app, options.p2p);
 
   if (options.twinProduction) {
     const twin = options.twinProduction;
