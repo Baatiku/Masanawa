@@ -1,0 +1,35 @@
+# Workstream 2 — Chat, Voice, Calls and Channels
+Date: 2026-10-15. Repository: `Baatiku/Masanawa`.
+Baseline: `1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4`.
+Branch: `work/ws2-chat-attachments-20261015`.
+
+This record distinguishes **committed source** from provider, live-device and release qualification. Statuses below are for **Workstream 2 only**. Workstreams 1 (MSNW), 3 (Status/Rooms/Admin) and 4 (P2P) are parallel owner assignments; their incompleteness is not counted as a WS2 success. Their shared dependencies remain explicit below. No Railway/database/ledger/native configuration was changed by this branch.
+
+## Exact Workstream 2 checklist
+
+- [ ] **IN PROGRESS — Authenticated Masana text, persistence, streaming, retry and history.** Existing `apps/mobile/lib/src/state/ai_chat_state.dart` has history merge, event streaming, offline queue and retries; `services/gateway/src/agent_conversation.ts` handles turns/media. Live two-account and provider qualification are outstanding. This branch does not claim end-to-end completion.
+- [ ] **IN PROGRESS — Voice-note record, upload, playback, download and persistence, independently from calls.** Existing `apps/mobile/lib/src/core/voice_note_recorder.dart`, `apps/mobile/lib/src/ui/components/voice_note_composer.dart`, `apps/mobile/lib/src/screens/chat/ai_chat_screen.dart`, `apps/mobile/lib/src/state/ai_chat_state.dart` and AF05 handoff include implementation. Real Android media and persisted playback need device/provider acceptance; do not conflate this with Gemini Live.
+- [x] **DONE (source, unverified) — Photo, video, document and audio picker integration.** Updated `apps/mobile/lib/src/screens/chat/ai_chat_screen.dart`, `apps/mobile/lib/src/state/ai_chat_state.dart`. All pickers now stage drafts, imported audio retains its actual MIME (not falsely forced to a recorded M4A voice note), audio uses the existing player, draft limits align with server media caps, picker failures give useful errors, and location requires explicit customer input rather than a hardcoded address. Added `apps/mobile/test/chat_attachment_policy_test.dart`. Live transfer/playback still requires acceptance.
+- [ ] **IN PROGRESS — Continuous Gemini Live, Bodi/Fora, interruption, reconnect and transcripts.** Existing `apps/mobile/lib/src/core/live_voice_session.dart` handles live PCM, microphone, interruption, output/input transcript streams and lifecycle. `services/gateway/src/live_voice_token.ts` and `services/gateway/src/platform_agent_bootstrap.ts` provide voice grants and Bodi/Fora configuration. Automatic continuation/reconnect, native audio and two-way device tests remain.
+- [ ] **IN PROGRESS — Outgoing/incoming Masana calls, background ringing, missed history and push.** Existing `apps/mobile/lib/src/calls/incoming_call_*.dart`, `apps/mobile/lib/src/screens/calls/calls_screen.dart`, `services/gateway/src/incoming_calls/` and `services/gateway/src/mobile_push.ts` implement substantial source. Foreground/background Android, Firebase, LiveKit/provider and delivery receipts need completion/acceptance.
+- [ ] **BLOCKED ON WS1 — Canonical MSNW paid-call admission and settlement.** Existing `services/gateway/src/paid_voice.ts`, `apps/mobile/lib/src/voice/` and `apps/mobile/lib/src/calls/group_paid_voice_*.dart` reference historical financial contracts. Must be reconciled through canonical MSNW ledgers and backing, not renamed or spent as legacy Credits.
+- [ ] **IN PROGRESS — Personal WhatsApp linked device, admin QR, durable session and shared context.** Existing `services/gateway/src/whatsapp_linked_device.ts`, `services/gateway/src/main.ts` and linked-admin paths already provide the intended adapter (not Cloud API as default). Confirm persistent `MASANAWA_WHATSAPP_AUTH_DIR` storage/QR and live conversation continuity before calling this done. No credentials or production volume changed here.
+- [x] **DONE (source, unverified) — Telegram text/webhook/identity and supported inbound media.** Existing `services/gateway/src/telegram_webhook_registration.ts`, `customer_channel_bridge.ts`, `customer_channel_routes.ts` handle bot webhook registration, phone-controlled linking, inbound/outbound text, photos/voice/docs. This branch adds audio/video/video-note ingestion with per-chat unique durable message IDs, bounded media download, and oversize recovery. Added route tests in `customer_channel_routes.test.ts`. Provider webhook/outbound/identity flow still needs acceptance, so the complete Telegram milestone remains in progress.
+- [ ] **IN PROGRESS / WS1 DEPENDENCY — Authorized Wallet and Billing operations via conversations, voice commands and channel menus with explicit spending confirmation.** Reuse existing `services/gateway/src/agent_billing_assistant.ts`, `agent_crypto_assistant.ts` and `customer_channel_bridge.ts`. No new financial authority introduced. Complete MSNW-backed execution and authorization before enabling spending.
+- [ ] **IN PROGRESS — All 26 professional personas with portraits, skills, voice profiles, independent chat and Room links.** Existing `services/gateway/src/platform_agent_bootstrap.ts`, `apps/mobile/assets/masana/portraits/` (26 WebP assets), `apps/mobile/lib/src/agents/masana_portrait_avatar.dart` and `services/gateway/src/agent_directory_rooms.ts` supply source. Must qualify actual server seed count and each runtime chat/call/Room target, not count files alone.
+
+## Committed changes and scoped proof
+
+| File | Change |
+| --- | --- |
+| `apps/mobile/lib/src/state/ai_chat_state.dart` | Accurate audio MIME + bounded attachment draft selection |
+| `apps/mobile/lib/src/screens/chat/ai_chat_screen.dart` | Preview-first gallery, audio picker/player, explicit location, actionable file errors |
+| `apps/mobile/test/chat_attachment_policy_test.dart` | Media MIME and size/limit tests |
+| `services/gateway/src/customer_channel_routes.ts` | Telegram audio/video media, per-chat webhook identity, streamed cap, oversize response |
+| `services/gateway/src/customer_channel_routes.test.ts` | Telegram media, identity collision and oversized-file tests |
+
+Environment check: Flutter/Dart toolchains are not installed in the available container; Git remote network access is unavailable from it. GitHub source read/write works through the connected GitHub account. **Automated tests and APK were not executed or produced here**. Next executable checks: `cd apps/mobile && flutter test test/chat_attachment_policy_test.dart` and `cd services/gateway && pnpm exec vitest run src/customer_channel_routes.test.ts`; run relevant analysis/typecheck, then two-account/provider/device acceptance.
+
+## Dependencies and next executable changes
+
+Continue the ten checklist items above rather than interpreting this media correction as WS2 completion. Prioritize: Gemini Live reconnection/resume with correct paid-call lifecycle; live-call Firebase/background handling; real linked-device QR/session recovery; server-backed 26-persona call/Room acceptance; MSNW paid-call integration after WS1 canonical financial contract is ready. Do not create a second ledger, new bot identity, fake provider receipt, or separate chat system.

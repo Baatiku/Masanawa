@@ -63,11 +63,28 @@ async function download(
   if (Number.isFinite(length) && length > maxBytes) {
     throw new RangeError("channels.media_too_large");
   }
-  const data = Buffer.from(await response.arrayBuffer());
-  if (data.length < 1 || data.length > maxBytes) {
-    throw new RangeError("channels.media_too_large");
+  // Check actual streamed bytes as well as Content-Length: Telegram/other
+  // providers may omit or misstate the header. Never buffer an unbounded file.
+  if (!response.body) throw new Error("channels.media_body_missing");
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new RangeError("channels.media_too_large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
   }
-  return data;
+  if (received === 0) throw new RangeError("channels.media_too_large");
+  return Buffer.concat(chunks, received);
 }
 
 function splitText(value: string, max = 3500): readonly string[] {
@@ -214,6 +231,20 @@ async function telegramMedia(
     const voice = message.voice as Record<string, unknown>;
     fileId = typeof voice.file_id === "string" ? voice.file_id : "";
     mimeType = typeof voice.mime_type === "string" ? voice.mime_type : "audio/ogg";
+  } else if (message.audio && typeof message.audio === "object" && !Array.isArray(message.audio)) {
+    const audio = message.audio as Record<string, unknown>;
+    fileId = typeof audio.file_id === "string" ? audio.file_id : "";
+    mimeType = typeof audio.mime_type === "string" ? audio.mime_type : "audio/mpeg";
+    name = typeof audio.file_name === "string" ? audio.file_name.slice(0, 240) : undefined;
+  } else if (message.video && typeof message.video === "object" && !Array.isArray(message.video)) {
+    const video = message.video as Record<string, unknown>;
+    fileId = typeof video.file_id === "string" ? video.file_id : "";
+    mimeType = typeof video.mime_type === "string" ? video.mime_type : "video/mp4";
+    name = typeof video.file_name === "string" ? video.file_name.slice(0, 240) : undefined;
+  } else if (message.video_note && typeof message.video_note === "object" && !Array.isArray(message.video_note)) {
+    const videoNote = message.video_note as Record<string, unknown>;
+    fileId = typeof videoNote.file_id === "string" ? videoNote.file_id : "";
+    mimeType = "video/mp4";
   } else if (message.document && typeof message.document === "object" && !Array.isArray(message.document)) {
     const doc = message.document as Record<string, unknown>;
     fileId = typeof doc.file_id === "string" ? doc.file_id : "";
@@ -396,11 +427,27 @@ export function registerCustomerChannelRoutes(
         (typeof message.text === "string" && message.text.trim()) ||
         (typeof message.caption === "string" && message.caption.trim()) ||
         (phone ? "Connect my Telegram account." : "");
-      const media = await telegramMedia(config, message);
+      let media: CustomerChannelInbound["media"];
+      try {
+        media = await telegramMedia(config, message);
+      } catch (error) {
+        if (error instanceof RangeError && error.message === "channels.media_too_large") {
+          await sendTelegram(
+            config, chatId,
+            "That file is too large. Please send a file smaller than 8 MB.",
+            false,
+          );
+          return { received: true };
+        }
+        throw error;
+      }
       if (!text && !media && !phone) return { received: true };
+      // Telegram message_id is unique only within its chat. Scope the durable
+      // idempotency/receipt key to prevent different customers colliding.
+      const durableMessageId = `${chatId}:${messageId}`;
       const result = await options.bridge.handle({
         channel: "telegram",
-        messageId,
+        messageId: durableMessageId,
         externalUserId: fromId,
         chatId,
         ...(phone ? { phone } : {}),
@@ -416,7 +463,7 @@ export function registerCustomerChannelRoutes(
         );
         await options.bridge.delivered({
           channel: "telegram",
-          messageId,
+          messageId: durableMessageId,
         });
       }
       return { received: true };
