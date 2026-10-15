@@ -141,25 +141,36 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
         closed = true;
       });
       const until = Date.now() + 25_000;
-      while (!closed && Date.now() < until) {
-        const events = initialEvents ?? await shell.events({
-          authorizationHeader: request.headers.authorization,
-          characterId,
-          ...(cursor ? { after: cursor } : {}),
-          limit,
-        });
-        initialEvents = null;
-        for (const event of events) {
-          cursor = event.cursor;
-          if (!reply.raw.destroyed && !reply.raw.writableEnded) {
-            reply.raw.write(JSON.stringify(event) + "\n");
+      try {
+        while (!closed && Date.now() < until) {
+          let events: Awaited<ReturnType<typeof shell.events>>;
+          try {
+            events = initialEvents ?? await shell.events({
+              authorizationHeader: request.headers.authorization,
+              characterId,
+              ...(cursor ? { after: cursor } : {}),
+              limit,
+            });
+            initialEvents = null;
+          } catch {
+            // Authorization may expire or the event store may fail during an
+            // already-accepted stream. End it so the mobile client's session
+            // recovery/reconnect path can fetch a new authenticated response.
+            break;
+          }
+          for (const event of events) {
+            cursor = event.cursor;
+            if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+              reply.raw.write(JSON.stringify(event) + "\n");
+            }
+          }
+          if (events.length === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 750));
           }
         }
-        if (events.length === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 750));
-        }
+      } finally {
+        if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
       }
-      if (!reply.raw.writableEnded) reply.raw.end();
     });
 
     app.post("/agent/sessions/:characterSessionId/actions", async (request) => {
