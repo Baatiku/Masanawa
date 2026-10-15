@@ -6,6 +6,7 @@ import {
   IncomingCallError,
 } from "./service.js";
 import { registerIncomingCallRoutes } from "./routes.js";
+import type { MobilePushSender } from "../mobile_push.js";
 const call = {
   callId: "01999999-0000-7000-8000-000000000001",
   characterId: "character_01999999-0000-7000-8000-000000000001",
@@ -210,8 +211,8 @@ describe("incoming authorization and explicit media", () => {
     vi.mocked(h.repository.claimPush).mockImplementation(async () =>
       queue.shift() ?? null,
     );
-    const send = vi.fn(async (request: { data: { callId: string } }) =>
-      request.data.callId === call.callId
+    const send = vi.fn(async (request: Parameters<MobilePushSender["send"]>[0]) =>
+      request.data?.callId === call.callId
         ? { attempted: 1, delivered: 1 }
         : { attempted: 1, delivered: 0 },
     );
@@ -220,7 +221,7 @@ describe("incoming authorization and explicit media", () => {
       authorizer: { authorize: h.authorize },
       serverAuthorizer: { authorize: async () => {} },
       liveVoiceTokens: { mint: h.mint },
-      pushSender: { send: send as never },
+      pushSender: { send },
     });
     await service.recover();
     expect(h.repository.finishPush).toHaveBeenCalledWith({
