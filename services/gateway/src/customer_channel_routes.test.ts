@@ -290,12 +290,12 @@ describe("customer channel webhook routes", () => {
   });
 
 
-  it("renders Telegram Twin choices as tappable @publicId reply buttons", async () => {
+  it("renders Masana choices as tappable conversation commands", async () => {
     const app = Fastify();
     const channelBridge = bridge();
     channelBridge.handle.mockResolvedValueOnce({
       duplicate: false,
-      reply: "I found several public Twins. Tell me the name or @ID you want:\n1. Aisha Bello (@aisha-one)\n2. Aisha Musa (@aisha-two)",
+      reply: "Several Masana match. Choose one by full name:\n1. chat with Dr. Amina Yusuf\n2. chat with Dr. Aisha Tanko",
       shouldDeliver: true,
       requestContact: false,
     });
@@ -328,7 +328,7 @@ describe("customer channel webhook routes", () => {
           message_id: 12,
           from: { id: 123 },
           chat: { id: 123, type: "private" },
-          text: "talk to Aisha twin",
+          text: "chat with Dr",
         },
       },
     });
@@ -338,7 +338,7 @@ describe("customer channel webhook routes", () => {
     const request = fetchMock.mock.calls[0]![1] as RequestInit;
     const body = JSON.parse(String(request.body));
     expect(body.reply_markup).toEqual({
-      keyboard: [[{ text: "@aisha-one" }], [{ text: "@aisha-two" }]],
+      keyboard: [[{ text: "chat with Dr. Amina Yusuf" }], [{ text: "chat with Dr. Aisha Tanko" }]],
       resize_keyboard: true,
       one_time_keyboard: true,
     });

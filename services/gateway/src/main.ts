@@ -1771,9 +1771,9 @@ export async function startGatewayService(
         ? { userPreferences: database.userAgentPreferences }
         : {}),
       conversation: composedConversation,
-      ...(twinProduction
-        ? { twinDirectory: twinProduction.twinDirectory }
-        : {}),
+      // Use the same authenticated, tenant-scoped, published Masana directory
+      // as the Flutter app. Retired user-created Twins are not channel targets.
+      ...(composedDirectory ? { directory: composedDirectory } : {}),
     });
 
     if (whatsappEnabled) {

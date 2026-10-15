@@ -15,10 +15,8 @@ import {
   type PlatformSessionRepository,
 } from "@masanawa/security";
 import type { AgentConversationService } from "./agent_conversation_contract.js";
-import type {
-  PublicTwinDirectoryItem,
-  TwinDirectoryService,
-} from "./twin_directory.js";
+import type { AgentDirectoryService } from "./agent_directory.js";
+import { PROFESSIONAL_MASANA_CATALOG } from "./platform_agent_bootstrap.js";
 
 export interface CustomerChannelInbound {
   readonly channel: CustomerChannel;
@@ -74,7 +72,7 @@ export function createCustomerChannelBridge(input: Readonly<{
   platformProfiles: PlatformAgentProfileRepository;
   userPreferences?: UserAgentPreferenceRepository;
   conversation: AgentConversationService;
-  twinDirectory?: TwinDirectoryService;
+  directory?: Pick<AgentDirectoryService, "list">;
 }>): Readonly<{
   handle(request: CustomerChannelInbound): Promise<CustomerChannelResult>;
   delivered(input: Readonly<{
@@ -90,7 +88,7 @@ export function createCustomerChannelBridge(input: Readonly<{
       tenantId: identity.tenantId as never,
     });
     if (requested) {
-      const voice = requested === "gwana" ? "sulafat" : "bodi";
+      const voice = requested === "gwana" ? "fora" : "bodi";
       const named = support.find(
         (agent) => agent.voiceName.trim().toLowerCase() === voice,
       );
@@ -117,63 +115,71 @@ export function createCustomerChannelBridge(input: Readonly<{
 
   type ChannelNavigation =
     | Readonly<{ kind: "support"; requested?: "gwani" | "gwana" }>
-    | Readonly<{ kind: "twin"; query: string }>;
+    | Readonly<{ kind: "masana"; query: string }>;
 
+  // Route only explicit switch commands. Ordinary questions are always sent
+  // to the active Masana and are never misinterpreted as a persona change.
   function navigationIntent(text: string): ChannelNavigation | null {
     const value = text.trim().replace(/\s+/gu, " ");
     if (!value || value.length > 240) return null;
-    const lower = value.toLowerCase();
     if (
       /^(?:go\s+)?back\s+to\s+(?:gwani|masanawa|support)[.!?]?$/iu.test(value) ||
       /^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+gwani[.!?]?$/iu.test(value)
     ) {
       return Object.freeze({ kind: "support", requested: "gwani" as const });
     }
-    if (
-      /^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+gwana[.!?]?$/iu.test(value)
-    ) {
+    if (/^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+gwana[.!?]?$/iu.test(value)) {
       return Object.freeze({ kind: "support", requested: "gwana" as const });
     }
     if (/^(?:go\s+)?back\s+to\s+(?:my\s+)?(?:assistant|agent)[.!?]?$/iu.test(value)) {
       return Object.freeze({ kind: "support" });
     }
 
-    const url = /\/twin\/([a-z0-9][a-z0-9_-]{2,63})/iu.exec(value);
-    if (url?.[1]) return Object.freeze({ kind: "twin", query: url[1] });
-
-    const patterns = [
-      /^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+(.+?)(?:['’]s)?\s+twin[.!?]?$/iu,
-      /^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+(?:the\s+)?twin\s+(?:of\s+)?(.+?)[.!?]?$/iu,
-    ];
-    for (const pattern of patterns) {
-      const match = pattern.exec(value);
-      const query = match?.[1]?.trim();
-      if (query && !["gwani","gwana","masanawa","support"].includes(query.toLowerCase())) {
-        return Object.freeze({ kind: "twin", query });
-      }
-    }
-    if (lower.startsWith("@") && /^[a-z0-9@_-]{4,65}$/iu.test(lower)) {
-      return Object.freeze({ kind: "twin", query: value.slice(1) });
-    }
-    return null;
+    const match =
+      /^(?:talk|chat|switch)(?:\s+me)?\s+(?:to|with)\s+(.+?)[.!?]?$/iu.exec(value);
+    const handle = /^@masana[._-]([a-z][a-z0-9_-]{1,63})$/iu.exec(value);
+    const query = (handle?.[1] ?? match?.[1] ?? "").trim();
+    if (!query || /(?:^|\s)twin(?:\s|$)/iu.test(query)) return null;
+    return Object.freeze({ kind: "masana", query });
   }
 
   function normalizeLookup(value: string): string {
     return value.trim().toLowerCase().replace(/[^a-z0-9]+/gu, " ").trim();
   }
 
-  function chooseTwin(
-    query: string,
-    candidates: readonly PublicTwinDirectoryItem[],
-  ): PublicTwinDirectoryItem | null {
-    const wanted = normalizeLookup(query);
-    const exact = candidates.filter(
-      (item) =>
-        normalizeLookup(item.displayName) === wanted ||
-        normalizeLookup(item.publicId) === wanted,
+  // Never search user-created or legacy Twin identities. Resolve from the
+  // published, user-authorized platform directory intersected with the 26
+  // current canonical Masana professionals. Ambiguous matches do not switch.
+  async function availableMasana(authorizationHeader: string) {
+    const visible = await input.directory?.list({ authorizationHeader }) ?? [];
+    const catalog = new Map(
+      PROFESSIONAL_MASANA_CATALOG.map((seed) =>
+        [normalizeLookup(seed.displayName), seed] as const
+      ),
     );
-    if (exact.length === 1) return exact[0]!;
-    return candidates.length === 1 ? candidates[0]! : null;
+    return visible.flatMap((agent) => {
+      const seed = catalog.get(normalizeLookup(agent.displayName));
+      return seed
+        ? [{ characterId: agent.characterId as CharacterId, displayName: agent.displayName, key: seed.key }]
+        : [];
+    });
+  }
+
+  function matchMasana(
+    query: string,
+    available: Awaited<ReturnType<typeof availableMasana>>,
+  ) {
+    const wanted = normalizeLookup(query);
+    if (!wanted) return [];
+    const exact = available.filter(
+      (agent) => normalizeLookup(agent.displayName) === wanted ||
+        normalizeLookup(agent.key) === wanted,
+    );
+    if (exact.length > 0) return exact;
+    // A partial name (e.g. Aisha) is acceptable only when unambiguous.
+    return available.filter((agent) =>
+      normalizeLookup(agent.displayName).split(" ").includes(wanted),
+    );
   }
 
   async function resolveOrLink(
@@ -399,34 +405,19 @@ export function createCustomerChannelBridge(input: Readonly<{
                 return `You're back with ${label}. How can I help?`;
               }
 
-              if (!input.twinDirectory) {
-                return "Public Twin chat is not available on this channel right now.";
-              }
-              let selected: PublicTwinDirectoryItem | null = null;
-              if (/^[a-z0-9][a-z0-9_-]{2,63}$/iu.test(navigation.query)) {
-                selected = await input.twinDirectory.resolve({
-                  authorizationHeader,
-                  publicId: navigation.query,
-                }).catch(() => null);
-              }
-              const candidates = selected
-                ? [selected]
-                : await input.twinDirectory.search({
-                    authorizationHeader,
-                    query: navigation.query,
-                    limit: 8,
-                  });
-              selected ??= chooseTwin(navigation.query, candidates);
-              if (!selected) {
+              const roster = await availableMasana(authorizationHeader);
+              const candidates = matchMasana(navigation.query, roster);
+              if (candidates.length !== 1) {
                 if (candidates.length === 0) {
-                  return `I couldn't find a public Twin matching "${navigation.query}". Try the person's Twin name or share link.`;
+                  return "That Masana is not available here. Send 'chat with Dr. Amina Yusuf' or another professional's full name.";
                 }
                 const choices = candidates
-                  .slice(0, 5)
-                  .map((item, index) => `${index + 1}. ${item.displayName} (@${item.publicId})`)
+                  .slice(0, 8)
+                  .map((item, index) => `${index + 1}. chat with ${item.displayName}`)
                   .join("\n");
-                return `I found several public Twins. Tell me the name or @ID you want:\n${choices}`;
+                return `Several Masana match. Choose one by full name:\n${choices}`;
               }
+              const selected = candidates[0]!;
               if (link.characterSessionId) {
                 await input.conversation.close({
                   authorizationHeader,
@@ -436,11 +427,11 @@ export function createCustomerChannelBridge(input: Readonly<{
               }
               await input.channels.putLink({
                 ...link,
-                characterId: selected.characterId as never,
+                characterId: selected.characterId,
                 characterSessionId: null,
                 updatedAt: instant(),
               });
-              return `You're now chatting with ${selected.displayName}'s AI Twin. Text chat here is free. The real owner is not present.\n\nSend your message, or say "back to Gwani" anytime.`;
+              return `You're now chatting with ${selected.displayName}. How can I help?`;
             },
           );
           await input.channels.completeMessage({
@@ -485,10 +476,12 @@ export function createCustomerChannelBridge(input: Readonly<{
               tenantId: link.tenantId,
               characterId: link.characterId,
             });
-            const representation =
-              activeProfile?.supportAgent === true
-                ? ("platform-agent" as const)
-                : ("public-twin" as const);
+            // All channel-accessible characters are platform-owned Masana.
+            // Never downgrade a professional to a retired public-Twin mode.
+            if (!activeProfile) {
+              throw new Error("channels.masanawa_profile_missing");
+            }
+            const representation = "platform-agent" as const;
             if (request.media) {
               return input.conversation.mediaTurn({
                 authorizationHeader,
