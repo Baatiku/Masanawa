@@ -5,17 +5,18 @@ This file is the single durable checklist for the owner's October 15 four-workst
 ## Baseline and integration
 
 - Repository: Baatiku/Masanawa; base main 1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4 (PR #19).
-- New feature branch: feat/msnw-paystack-customer-onboarding-20261015.
+- Completed PR #22: b542c7106987c46529516d96ff74a3e226dbc905 (Paystack customer/DVA onboarding and Billing fail-closed improvements).
+- Current additional feature branch: feat/msnw-governed-mint-burn-deployment-20261015 (contract supply controls and explicit chain deployment configuration).
 - Main advanced independently to ad940610b66c7f8817add88a3bd4ac1ad8aa50cd (chat/WS2, no changed-file overlap) while this branch was being developed.
 - Source commits include 7a63d6c (enrollment migration), 8a8f9fb and 295d2a9 (Paystack service), e89f2c4 (routes), 179dec0 and 537309d (Gateway app/startup), 07e6cd1 and 1d39611 (Flutter funding), 7c44cb8/c641e50 (Gateway test), de7a698 (Billing fake-data/unsafe-debit removal).
-- Full test/merge/production qualification: PENDING as of this initial checklist version. Do not interpret source additions as actual issued MSNW.
+- PR #22 merged source; provider/device/Flutter/PostgreSQL tests not executed in the connector-only runtime. Production issuance qualification still PENDING. Solidity/Foundry test suite is source only until dependencies and forge are installed. Do not interpret source additions as actual issued MSNW.
 - No production PostgreSQL data was edited by these GitHub source changes. Existing Ledger/Paystack/Flutterwave/crypto provider paths preserved.
 
 ## Workstream 1 — MSNW Wallet, Paystack, Billing, crypto
 
 - [ ] **IN PROGRESS — Paystack enrollment, consent, customer creation and DVA:** added authenticated GET/POST /v1/wallet/msnw/funding/enrollment, SQL 0123, Flutter KYC form. Existing DVA source: services/gateway/src/msn_wallet/paystack_dva.ts, paystack_dva_routes.ts, commerce migration 0120. Complete production/customer tests, provider compatibility and identity-capture onboarding for signed-in profiles lacking both email and phone.
 - [ ] **IN PROGRESS — verified transfer to backed issuance:** signed verified Paystack webhook, immutable provider-fiat evidence already exist in services/gateway/src/msn_wallet/paystack_fiat_evidence.ts and commerce/0122. Need treasury reconciliation, quote/rate, custody-backed issuance, provider reversal handling, mint confirmation; evidence must stay pending until actual backing.
-- [ ] **IN PROGRESS — official blockchain token/custody/supply/mint/burn:** Solidity source at contracts/msnw/MasanawaToken.sol and verified on-chain read in msnw_onchain_balance.ts. No verified deployed chain/contract, binding challenge, controlled live signer, supply reserve ledger or production mint/burn/reconciliation. Must not fabricate address or supply.
+- [ ] **IN PROGRESS — official blockchain token/custody/supply/mint/burn:** Solidity source at contracts/msnw/MasanawaToken.sol now has isolated governance/minter/burner/pauser, replay-proof mint and custodian-only burn; Foundry chain-bound deploy source and focused tests at contracts/msnw/script/DeployMasanawaToken.s.sol, test/MasanawaToken.t.sol and foundry.toml. Verified on-chain read in msnw_onchain_balance.ts. No deployed contract, signed custody, customer binding challenge, supply-reserve audit or production mint/burn Worker yet. Must not fabricate address or supply.
 - [ ] **IN PROGRESS — canonical MSNW balances/history/receipts:** existing legacy MSN ledger, fiat journal and immutable Paystack evidence are not spendable MSNW. Build canonical MSNW issuance/spending journal with available, pending and reserved projection plus receipt lifecycle; use PostgreSQL identity and on-chain confirmations.
 - [ ] **IN PROGRESS — authenticated Send:** Wallet Send callback is not backed by a canonical MSNW transfer. Add verified recipient binding, reservation, idempotency, token execution, receipt/history and Flutter confirmation.
 - [ ] **IN PROGRESS — Convert:** Wallet Convert button is deliberately unbound. Build NOWPayments quote TTL, fees, consent, execution, irreversible side-effects and recovery before enabling.
@@ -71,3 +72,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 - Source validation when available: pnpm --filter @masanawa/gateway-service build; pnpm exec vitest run services/gateway/src/msn_wallet/paystack_customer_enrollment.test.ts; cd apps/mobile && flutter analyze lib/src/finance/msnw_identity_enrollment.dart lib/src/finance/msnw_paystack_funding_sheet.dart lib/src/screens/billing/billing_screen.dart; flutter test; PostgreSQL migration tests. Tests written are not tests executed.
 
 Progress labels indicate incomplete journeys even when historic source fragments already exist. Only mark DONE after the full listed source slice is actually wired and tested; distinguish production from development merge.
+## Source delivery increment 2
+
+- New contract burn commit b0f58c1, Foundry config 376276e, deployment script db2bd62, Solidity tests 08c5024, docs 56a3b06. Safe burn is caller-custody-only and requires BURNER_ROLE; globally consumed settlement references prevent cross mint/burn replay.
+- Live execution of this deployment script, chain choice, contract verification and signer/key setup have NOT happened. Require actual signed chain deployment before setting address.
