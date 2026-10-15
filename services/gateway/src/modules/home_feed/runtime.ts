@@ -11,6 +11,8 @@ export interface StatusRuntime {
  feed:FeedRoutesOptions["service"];
  editorial:AdminReviewRoutesOptions["service"];
  isEditor?:(session:StatusSession)=>Promise<boolean>;
+ /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
+ isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
 }
@@ -54,8 +56,11 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
     :{kind:"fan" as const,tenantId:session.tenantId,id:session.userId};
   };
   await registerHomeFeedRoutes(scope,{service:options.feed,principal,tenant,
-   // Conservative existing review path until canonical account-age policy is supplied.
-   isNewAccount:async()=>true,enabled});
+   // Do not silently route every authenticated customer's comment into an
+   // unserved review queue. A trusted server policy can explicitly quarantine
+   // new-account comments without accepting a client-provided role/age flag.
+   isNewAccount:async request=>options.isNewAccount
+     ? options.isNewAccount(await resolve(request)) : false,enabled});
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
  });
