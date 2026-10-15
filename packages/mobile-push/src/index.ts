@@ -45,6 +45,17 @@ function serviceAccount(raw: string): ServiceAccount {
   };
 }
 
+/** Incoming invitations are urgent but short-lived. Avoid routing them to
+ * ordinary work channels or letting Firebase deliver stale call alerts. */
+export function mobilePushAndroidChannel(
+  data: Readonly<Record<string, string>> | undefined,
+): "masanawa_calls" | "masanawa_work" {
+  return data?.type === "incoming_call" && typeof data.callId === "string" &&
+      /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/u.test(data.callId)
+    ? "masanawa_calls"
+    : "masanawa_work";
+}
+
 export function createFcmPushSender(input: {
   readonly serviceAccountJson: string;
   readonly repository: MobilePushRepository;
@@ -137,8 +148,18 @@ export function createFcmPushSender(input: {
                 },
                 android: {
                   priority: "high",
+                  ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
+                    ? { ttl: "60s" }
+                    : {}),
                   notification: {
-                    channel_id: "masanawa_work",
+                    channel_id: mobilePushAndroidChannel(request.data),
+                    ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
+                      ? {
+                          sound: "default",
+                          notification_priority: "PRIORITY_MAX",
+                          tag: `masanawa-call-${request.data?.callId}`,
+                        }
+                      : {}),
                   },
                 },
                 apns: {
