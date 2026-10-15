@@ -40,3 +40,32 @@ and reserve accounting remain outstanding and MUST be finished before launch.
 
 This repository change does not deploy a token, create reserves, or authorize
 minting. Do not invent an address, private key, total supply or current chain.
+
+
+## Reproducible finalized issuance binding
+
+The Worker admits only an existing operator-authorized Paystack
+settlement in PostgreSQL that has progressed through backing_qualified,
+mint_authorized, and chain_submitted. For each chain_submitted reference:
+
+- settlementReference = SHA256(UTF8("masanawa:msnw:mint:v1") || 0x00 || UTF8(reference))
+- recipient = MSNW_CUSTODY_ADDRESS (platform custodian, not a self-custody customer address)
+- amountMicro = settlement.amount_micro (approved, exact six-decimal amount)
+- chain and contract must match the independently verified deployment
+
+The Worker validates the finalized block and canonical receipt hash,
+chain ID, deployed code SHA-256, correct SettledMint event topic
+0x66a5f8fb8e9eb955e066808e11058dfbe29c4982773a75e58462c333c35d5bd1,
+recipient, settlement reference, token amount, and the actual finalized
+custody token balance against all existing customer custody liabilities
+plus the candidate credit. Untrusted customers never supply mint receipts.
+
+Additional Worker variables: MSNW_CUSTODY_ADDRESS and
+MSNW_TOKEN_BYTECODE_SHA256 (SHA-256 of exact deployed runtime bytecode
+returned by eth_getCode), alongside MSNW_CHAIN_ID, MSNW_TOKEN_CONTRACT,
+MSNW_RPC_URL. Do not set fabricated addresses/hashes/networks.
+A partial configuration does not enable the Worker.
+
+Automated Paystack merchant settlement proof, MSNW pricing policy,
+custody signer and mint authorization are still outstanding external and
+implementation dependencies. Source integration is not an executed mint.
