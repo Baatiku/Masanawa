@@ -2,10 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { P2pError, type P2pActor, type P2pService } from "./service.js";
 import type { VerifiedP2pBankMethods } from "./bank_methods.js";
 import { sellerConfirmedReceipt } from "./seller_confirmation.js";
+import type { P2pEvidenceStorage } from "./evidence_storage.js";
 
 export interface P2pRoutesDependencies {
   readonly service: P2pService;
   readonly bankMethods?: VerifiedP2pBankMethods;
+  readonly evidenceStorage?: P2pEvidenceStorage;
   /** Existing platform session authorizer, same identity authority as MSNW Wallet. */
   readonly authorize: (authorizationHeader: string | undefined) => Promise<P2pActor>;
   /** An operator session must be independently role-checked; never trust client roles. */
@@ -146,6 +148,35 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
         throw new P2pError("p2p.confirmation_denied",403);
       return await deps.service.action(a,orderId,"confirm",{releaseAuthorized:true});
     }catch(error){return respond(error,reply);}
+  });
+  // Private object uploaded by Gateway using bounded bytes and signed digest.
+  // Mobile never sees S3 credentials or selects another order's storage path.
+  app.post("/v1/wallet/msnw/p2p/orders/:orderId/evidence/upload",
+    {bodyLimit:3_100_000},async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      if(!deps.evidenceStorage)throw new P2pError("p2p.evidence_storage_unavailable",503);
+      return reply.code(201).send(await deps.evidenceStorage.upload(
+        a,(req.params as {orderId:string}).orderId,req.body));
+    } catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/orders/:orderId/evidence/:evidenceId",
+    async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      if(!deps.evidenceStorage)throw new P2pError("p2p.evidence_storage_unavailable",503);
+      const p=req.params as {orderId:string;evidenceId:string};
+      return await deps.evidenceStorage.download(a,p.orderId,p.evidenceId);
+    } catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/admin/msnw/p2p/disputes/:orderId/evidence/:evidenceId",
+    async(req,reply)=>{
+    try {
+      const a=await operator(req.headers.authorization);
+      if(!deps.evidenceStorage)throw new P2pError("p2p.evidence_storage_unavailable",503);
+      const p=req.params as {orderId:string;evidenceId:string};
+      return await deps.evidenceStorage.download(a,p.orderId,p.evidenceId,true);
+    } catch(error){return respond(error,reply);}
   });
   app.post("/v1/wallet/msnw/p2p/orders/:orderId/evidence",async(req,reply)=>{
     try{
