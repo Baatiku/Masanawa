@@ -10,6 +10,7 @@ import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../finance/msnw_verified_funding_activity.dart';
 import '../../finance/msnw_p2p_screen.dart';
+import '../../finance/msnw_p2p_activity.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
@@ -293,6 +294,18 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               )
             else
               const ListTile(title: Text('MSNW history unavailable')),
+            if (accountId != null)
+              MsnwP2pActivity(
+                dio: ref.watch(dioProvider),
+                baseUrl: kApiBaseUrl,
+                expectedUserId: accountId,
+                currentUserId: () => switch (ref.read(sessionProvider)) {
+                  SessionSignedIn(:final user) => user.id,
+                  _ => null,
+                },
+                accessToken: () => ref.read(apiClientProvider).accessToken,
+                onOpenP2p: _openP2p,
+              ),
           ],
       ),
     );
