@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/admin_api.dart';
 import '../core/admin_rooms_api.dart';
+import 'admin_room_discussion_review_page.dart';
 
 class AdminRoomsPage extends StatefulWidget {
   const AdminRoomsPage({super.key,required this.api});
@@ -156,7 +157,22 @@ class _AdminRoomsPageState extends State<AdminRoomsPage> {
     }
   }
 
-  @override Widget build(BuildContext context)=>Column(children:[
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Column(children: [
+      const TabBar(tabs: [
+        Tab(text: 'Rooms & lessons'),
+        Tab(text: 'Held replies'),
+      ]),
+      Expanded(child: TabBarView(children: [
+        _roomCatalog(context),
+        AdminRoomDiscussionReviewPage(api: widget.api),
+      ])),
+    ]),
+  );
+
+  Widget _roomCatalog(BuildContext context) => Column(children:[
     Padding(padding:const EdgeInsets.fromLTRB(16,12,16,8),
       child:Wrap(spacing:8,runSpacing:8,
         crossAxisAlignment:WrapCrossAlignment.center,children:[
