@@ -17,7 +17,7 @@ const event={
   attempt:1,
   fence:3,
   payload:{
-    userId:"user_demo12345678",
+    userId:"user_0199ea9d-60c5-7c69-8bbb-0f5d119fc203",
     roomId:"room_study-circle",
     questionId:"room-question_demo12345678",
   },
@@ -40,9 +40,9 @@ describe("Room reply outbox Firebase delivery",()=>{
     const result=await worker.runOnce();
     expect(result).toEqual({claimed:1,acknowledged:1,delivered:1,retried:0,deadLetter:0});
     expect(query).toHaveBeenCalledWith(expect.stringContaining("rooms.entitlements"),
-      ["tenant_demo","room_study-circle","room-question_demo12345678","user_demo12345678"]);
+      ["tenant_demo","room_study-circle","room-question_demo12345678","user_0199ea9d-60c5-7c69-8bbb-0f5d119fc203"]);
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      scope:{tenantId:"tenant_demo",userId:"user_demo12345678"},
+      scope:{tenantId:"tenant_demo",userId:"user_0199ea9d-60c5-7c69-8bbb-0f5d119fc203"},
       data:expect.objectContaining({type:"room_reply",eventId:event.outboxEventId}),
     }));
     expect(settleOutboxClaim).toHaveBeenCalledWith(expect.anything(),
