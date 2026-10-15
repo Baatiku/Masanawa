@@ -266,6 +266,15 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             reason == null ? {} : {'reason': reason});
         }),
         userId: widget.expectedUserId,
+        confirmReceipt: (order) => _act(() async {
+          await _request('POST','/orders/$id/confirm-receipt',{
+            'confirmation':{
+              'orderId':id,
+              'fiatKobo':'${order['fiat_kobo']}',
+              'attestation':'I HAVE RECEIVED PAYMENT',
+            },
+          });
+        }),
       )));
   }
   @override Widget build(BuildContext context) => Scaffold(
@@ -337,9 +346,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
 }
 
 class _P2pOrderDetail extends StatefulWidget {
-  const _P2pOrderDetail({required this.load,required this.act,required this.userId});
+  const _P2pOrderDetail({required this.load,required this.act,
+    required this.confirmReceipt,required this.userId});
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
+  final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
   final String userId;
   @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
 }
@@ -374,6 +385,44 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     await widget.act(action,reason);
     if(mounted)_refresh();
   }
+  Future<void> _sellerConfirm(Map<String,dynamic> order) async {
+    final typed=TextEditingController();
+    try {
+      final accepted=await showDialog<bool>(context:context,
+        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>AlertDialog(
+          title:const Text('Confirm bank payment received'),
+          content:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
+            children:[
+              Text('Order: ${order['order_id']}'),
+              Text('Expected bank payment: ${_ngn(order['fiat_kobo'])}'),
+              const SizedBox(height:12),
+              const Text('Check your own bank account or bank transaction '
+                'records. Do not rely on the buyer’s message or screenshot. '
+                'Once released, MSNW goes to the buyer and cannot be '
+                'reclaimed simply by cancelling this order.'),
+              const SizedBox(height:16),
+              const Text('Type RECEIVED to explicitly authorize release:'),
+              TextField(controller:typed,onChanged:(_)=>update((){}),
+                decoration:const InputDecoration(hintText:'RECEIVED'),
+                textCapitalization:TextCapitalization.characters),
+            ])),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(ctx,false),
+              child:const Text('Not received')),
+            FilledButton(
+              onPressed:typed.text.trim()=='RECEIVED'
+                ? ()=>Navigator.pop(ctx,true):null,
+              child:const Text('Authorize MSNW release')),
+          ],
+        )))??false;
+      if(!accepted)return;
+      await widget.confirmReceipt(order);
+      if(mounted)_refresh();
+    } finally {
+      typed.dispose();
+    }
+  }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('P2P order'),actions:[
       IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh)),
@@ -406,10 +455,16 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           OutlinedButton(onPressed:()=>_perform('dispute',reasonRequired:true),
             child:const Text('Open dispute')),
         ],
-        if(!buyer&&state=='payment_claimed') const ListTile(
-          title:Text('Seller confirmation pending'),
-          subtitle:Text('Release requires authenticated bank receipt confirmation. '
-            'Use the secure settlement confirmation process; screenshots do not qualify.')),
+        if(!buyer&&state=='payment_claimed') ...[
+          const ListTile(
+            title:Text('Seller confirmation pending'),
+            subtitle:Text('Confirm only after you independently see '
+              'the correct transfer credited in your own bank account. '
+              'A screenshot or buyer claim is not enough.')),
+          FilledButton(
+            onPressed:()=>_sellerConfirm(o),
+            child:const Text('I received the bank payment')),
+        ],
         if(state=='disputed')const ListTile(
           title:Text('Escrow frozen'),
           subtitle:Text('An authorized operator must resolve this dispute.')),
