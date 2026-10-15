@@ -3,6 +3,8 @@ import { createHash, createHmac } from "node:crypto";
 export interface ReplayObjectStore {
   /** Optional extension: HEAD metadata for rights-cleared Status objects. */
   statObject?(objectKey:string):Promise<{contentType:string;bytes:number}|null>;
+  /** Server-side upload with signed SHA-256. No public bucket permission. */
+  putObject?(objectKey:string,body:Buffer,contentType:string):Promise<{sha256:string;bytes:number}>;
   checksumSha256(objectKey:string):Promise<string>;
   deleteObject(objectKey:string):Promise<void>;
   presignGet(objectKey:string,ttlSeconds:number):Promise<{
@@ -81,9 +83,9 @@ export function createReplayObjectStore(input:Readonly<{
     return url;
   }
 
-  function authHeaders(url:URL,date:Date,method:"GET"|"HEAD"|"DELETE"):Record<string,string>{
+  function authHeaders(url:URL,date:Date,method:"GET"|"HEAD"|"DELETE"|"PUT",bodyHash=sha256("")):Record<string,string>{
     const {date:datePart,timestamp}=amzTimestamp(date);
-    const payloadHash=sha256("");
+    const payloadHash=bodyHash;
     const canonicalHeaders=`host:${url.host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${timestamp}\n`;
     const signedHeaders="host;x-amz-content-sha256;x-amz-date";
     const canonicalRequest=[
@@ -112,6 +114,22 @@ export function createReplayObjectStore(input:Readonly<{
   }
 
   return Object.freeze<ReplayObjectStore>({
+    async putObject(objectKey,body,contentType){
+      if(!Buffer.isBuffer(body)||body.length<1||body.length>maxObjectBytes ||
+         !/^(?:image\/(?:png|jpeg|webp)|application\/pdf)$/.test(contentType)){
+        throw new TypeError("Replay object upload invalid");
+      }
+      const url=objectUrl(objectKey),digest=sha256(body);
+      const response=await fetchImpl(url,{
+        method:"PUT",
+        headers:{...authHeaders(url,now(),"PUT",digest),"content-type":contentType},
+        body,
+        redirect:"error",
+        signal:AbortSignal.timeout(20000),
+      });
+      if(!response.ok)throw new Error("talks.replay.object_upload_failed");
+      return {sha256:digest,bytes:body.length};
+    },
     async statObject(objectKey){
       const url=objectUrl(objectKey);
       const response=await fetchImpl(url,{
