@@ -150,6 +150,85 @@ void main() {
       await server.close(force: true);
     }
   });
+  test('Gemini connection-grant expiry never caps an established call', () {
+    final now = DateTime(2026, 10, 15, 10);
+    // The admission controls call length, not the short-lived grant token.
+    expect(
+      permittedConnectedCallDuration(now: now),
+      isNull,
+    );
+    expect(
+      permittedConnectedCallDuration(
+        now: now,
+        endAt: now.add(const Duration(minutes: 12)),
+      ),
+      const Duration(minutes: 12),
+    );
+    expect(
+      permittedConnectedCallDuration(
+        now: now,
+        maxDuration: const Duration(minutes: 4),
+        endAt: now.add(const Duration(minutes: 12)),
+      ),
+      const Duration(minutes: 4),
+    );
+    expect(
+      permittedConnectedCallDuration(
+        now: now,
+        maxDuration: const Duration(minutes: 12),
+        endAt: now.add(const Duration(minutes: 4)),
+      ),
+      const Duration(minutes: 4),
+    );
+    expect(
+      permittedConnectedCallDuration(
+        now: now,
+        endAt: now.subtract(const Duration(seconds: 1)),
+      )!.isNegative,
+      isTrue,
+    );
+  });
+
+  test('an already connected call remains active after grant expiry', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final peer = Completer<WebSocket>();
+    final listener = server.listen((request) async {
+      peer.complete(await WebSocketTransformer.upgrade(request));
+    });
+    var closed = 0;
+    final microphone = StreamController<Uint8List>.broadcast();
+    final live = LiveVoiceSession(
+      grant: AgentLiveVoiceGrant(
+        token: 'ephemeral',
+        websocketUrl: 'ws://127.0.0.1:${server.port}',
+        model: 'test',
+        voiceName: 'Fora',
+        expiresAt: DateTime.now().add(const Duration(milliseconds: 450)),
+      ),
+      characterName: 'Gwana',
+      sharedMicrophone: microphone.stream,
+      sendGreeting: false,
+      onClosed: () { closed++; },
+    );
+    try {
+      await live.start();
+      final socket = await peer.future;
+      socket.add(jsonEncode({'setupComplete': {}}));
+      await live.ready.timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(closed, 0,
+          reason: 'Token expiry should not terminate an active audio session');
+      expect(live.muted, isFalse);
+      await socket.close();
+    } finally {
+      await live.close();
+      expect(closed, 1);
+      await microphone.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
   for (final useDeadline in [false, true]) {
     test(
       useDeadline
