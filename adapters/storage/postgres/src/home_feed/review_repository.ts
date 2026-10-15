@@ -179,6 +179,24 @@ export class PgEditorialReviewRepository {
     WHERE tenant_id=$1 AND id=$2::uuid AND review_revision=$3 AND state='scheduled'
       AND scheduled_at<=$4 AND reviewed_by IS NOT NULL
       AND ${eligibleAuthor}
+      AND ((kind='text' AND cardinality(media_ids)=0)
+        OR (kind='image' AND cardinality(media_ids) BETWEEN 1 AND 10)
+        OR (kind='audio' AND cardinality(media_ids)=1
+          AND length(btrim(transcript))>0))
+      AND NOT EXISTS (
+        SELECT 1 FROM unnest(feed.posts.media_ids) AS ref(media_id)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM masana.character_media m
+          WHERE m.tenant_id=feed.posts.tenant_id
+            AND m.character_id=feed.posts.author_masana_id
+            AND m.media_id=ref.media_id
+            AND length(btrim(m.rights_note))>4
+            AND length(btrim(m.approved_by))>0
+            AND length(btrim(m.object_key))>0
+            AND ((feed.posts.kind='image' AND m.kind IN ('portrait','banner','cover'))
+              OR (feed.posts.kind='audio' AND m.kind='audio'))
+        )
+      )
     RETURNING review_revision`,[tenant,post,revision,at.toISOString()]);
    if(r.rowCount){
     await client.query(`INSERT INTO feed.editorial_events
