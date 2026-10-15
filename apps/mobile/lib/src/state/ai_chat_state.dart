@@ -334,6 +334,29 @@ class AiChatMessage {
   );
 }
 
+/// A process crash may interrupt a send between the local 'sent' status and
+/// the server receipt. Reconcile by the original requestId before resending;
+/// never generate a new financial/service operation on app restart.
+String recoveredChatDeliveryStatus(AiChatMessage message) {
+  if (!message.isUser ||
+      !{'sending', 'sent'}.contains(message.deliveryStatus)) {
+    return message.deliveryStatus;
+  }
+  // Legacy messages without an idempotency key cannot be safely replayed.
+  return message.requestId == null ? 'failed' : 'queued';
+}
+
+enum ChatQueuedTurnResolution { resend, delivered, processing, failed, wait }
+
+ChatQueuedTurnResolution resolveChatQueuedTurn(AgentTurnStatus status) =>
+    switch (status.state) {
+      'missing' => ChatQueuedTurnResolution.resend,
+      'completed' => ChatQueuedTurnResolution.delivered,
+      'pending' => ChatQueuedTurnResolution.processing,
+      'failed' => ChatQueuedTurnResolution.failed,
+      _ => ChatQueuedTurnResolution.wait,
+    };
+
 /// One conversation per canonical Character.
 class ChatThread {
   ChatThread({
