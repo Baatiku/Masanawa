@@ -137,11 +137,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       SessionSignedIn(:final user) => user.id, _ => null,
     };
     final balance = wallet.valueOrNull;
-    VoidCallback? sendAction = widget.onSend;
-    if (sendAction == null && widget.walletCreditSendEnabled &&
-        accountId != null && balance != null) {
-      sendAction = () => _send(balance, accountId);
-    }
+    // Primary Send is MSN-only and requires a qualified host action. Legacy
+    // Credits Send is exposed separately on the Credits asset row below.
+    final sendAction = widget.onSend;
     final openCrypto = _openCrypto;
     return Scaffold(
       backgroundColor: u.surfaceCard,
@@ -197,10 +195,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     leading: const CircleAvatar(child: Icon(Icons.toll_outlined)),
                     title: const Text('Credits'),
                     subtitle: const Text('Legacy service balance'),
-                    trailing: SizedBox(width: 90, child: FittedBox(
-                      fit: BoxFit.scaleDown, alignment: Alignment.centerRight,
-                      child: Text(balance.spendableCredits.toString(),
-                        style: const TextStyle(fontWeight: FontWeight.w700))))),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 90),
+                        child: Text(balance.spendableCredits.toString(),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700))),
+                      if (widget.walletCreditSendEnabled && accountId != null)
+                        TextButton(
+                          onPressed: () => _send(balance, accountId),
+                          child: const Text('Send Credits')),
+                    ])),
                 ],
               ]),
             ),
