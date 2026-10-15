@@ -114,8 +114,15 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
 
     app.get("/agent/events/stream", async (request, reply) => {
       const query = request.query as Record<string, unknown>;
-      const characterId = text(query.characterId, "characterId", 160);
-      const limit = query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 100);
+      let characterId: string;
+      let limit: number;
+      try {
+        characterId = text(query.characterId, "characterId", 160);
+        limit = query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 100);
+      } catch {
+        reply.code(400);
+        return { error: "events.invalid_request" };
+      }
       let cursor =
         typeof query.after === "string" && query.after ? query.after.slice(0, 64) : undefined;
 
