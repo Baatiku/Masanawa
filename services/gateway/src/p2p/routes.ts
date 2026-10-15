@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { P2pError, type P2pActor, type P2pService } from "./service.js";
 import type { VerifiedP2pBankMethods } from "./bank_methods.js";
+import { sellerConfirmedReceipt } from "./seller_confirmation.js";
 
 export interface P2pRoutesDependencies {
   readonly service: P2pService;
@@ -134,11 +135,15 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try{
       const a=await actor(req.headers.authorization);
       const orderId=(req.params as {orderId:string}).orderId;
-      if(!deps.verifySellerConfirmation)throw new P2pError("p2p.confirmation_unavailable",503);
       const body=req.body as {confirmation?:unknown}|null;
-      const authorized=await deps.verifySellerConfirmation({
-        actor:a,orderId,confirmation:body?.confirmation});
-      if(!authorized)throw new P2pError("p2p.confirmation_denied",403);
+      // Seller-owned, exact-order voluntary bank-receipt assertion is always
+      // mandatory. An optional stronger identity step-up cannot bypass it.
+      const local=await sellerConfirmedReceipt(deps.service,a,orderId,body?.confirmation);
+      if(!local)throw new P2pError("p2p.confirmation_denied",403);
+      if(deps.verifySellerConfirmation &&
+         !await deps.verifySellerConfirmation({actor:a,orderId,
+           confirmation:body?.confirmation}))
+        throw new P2pError("p2p.confirmation_denied",403);
       return await deps.service.action(a,orderId,"confirm",{releaseAuthorized:true});
     }catch(error){return respond(error,reply);}
   });
@@ -160,6 +165,14 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try { return await deps.service.caseFile(await operator(req.headers.authorization),
       (req.params as {orderId:string}).orderId); }
     catch(error){ return respond(error,reply); }
+  });
+  app.post("/v1/admin/msnw/p2p/expire",async(req,reply)=>{
+    try{
+      const a=await operator(req.headers.authorization);
+      // Manual operator recovery, safe to retry. Locked state + canonical
+      // custody refund must commit together; unavailable custody returns 503.
+      return await deps.service.expireDue(a,25);
+    }catch(error){return respond(error,reply);}
   });
   app.get("/v1/admin/msnw/p2p/disputes",async(req,reply)=>{
     try{return {items:await deps.service.disputes(await operator(req.headers.authorization))};}
