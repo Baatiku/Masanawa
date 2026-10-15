@@ -37,7 +37,7 @@ class _FakeCryptoController extends CryptoWalletController {
 }
 
 void main() {
-  testWidgets('Wallet renders one MSN-first wallet with crypto drilldown and bank card',
+  testWidgets('Wallet renders MSNW without rebranding old Credits or unverified bank details',
       (tester) async {
     final testView = WalletView(
       spendableCredits: 2500,
@@ -74,22 +74,18 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // No duplicated Balance/Crypto tab strip: MSN hero and direct crypto navigation.
-    expect(find.text('MSN balance'), findsOneWidget);
+    // MSNW is the only wallet credit/token; legacy Credits and historical
+    // bank metadata must not be silently presented as MSNW funding.
+    expect(find.text('MSNW balance'), findsOneWidget);
+    expect(find.text('MSNW'), findsOneWidget);
     expect(find.text('My assets'), findsOneWidget);
-
-    // Verify Balance tab contents
-    expect(find.text('2500'), findsOneWidget);
-    expect(find.text('Dedicated Bank Account'), findsOneWidget);
-    expect(find.text('9930481726'), findsOneWidget);
-    expect(find.text('Wema Bank (Paystack)'), findsOneWidget);
-    expect(find.text('Masanawa / Test User'), findsOneWidget);
-
-    // Verify Copy button
-    expect(find.text('Copy'), findsOneWidget);
-    await tester.tap(find.text('Copy'));
-    await tester.pumpAndSettle();
-    expect(find.text('Account number copied to clipboard'), findsOneWidget);
+    expect(find.text('2500'), findsNothing);
+    expect(find.text('Credits'), findsNothing);
+    expect(find.text('Dedicated Bank Account'), findsNothing);
+    expect(find.text('9930481726'), findsNothing);
+    expect(find.text('Wema Bank (Paystack)'), findsNothing);
+    expect(find.text('Masanawa / Test User'), findsNothing);
+    expect(find.text('MSNW history unavailable'), findsOneWidget);
 
     // Verify navigating to the same crypto wallet within the Wallet screen.
     await tester.tap(find.text('Crypto assets'));
