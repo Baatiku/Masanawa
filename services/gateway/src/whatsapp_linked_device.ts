@@ -39,9 +39,29 @@ export interface LinkedWhatsAppOptions {
   readonly socketFactory?: typeof makeWASocket;
 }
 
-function phoneFromJid(jid: string): string {
-  const bare = jid.split("@")[0]?.split(":")[0]?.replace(/\D/gu, "") ?? "";
-  return bare ? `+${bare}` : "";
+/** A WhatsApp LID is an opaque privacy identifier, not a phone number.
+ * Never create/login a platform phone customer from a raw @lid value. */
+export function linkedWhatsAppPhoneFromJid(jid: string): string | null {
+  if (!jid.endsWith("@s.whatsapp.net")) return null;
+  const local = jid.slice(0, -("@s.whatsapp.net".length)).split(":")[0] ?? "";
+  if (!/^[1-9][0-9]{6,14}$/u.test(local)) return null;
+  return `+${local}`;
+}
+
+/** Resolve a linked-device direct sender through WhatsApp's authenticated
+ * PN/LID mapping. An absent mapping fails closed, never guesses a phone. */
+export async function resolveLinkedWhatsAppSenderPhone(
+  remoteJid: string,
+  remoteJidAlt: string | undefined,
+  pnForLid: (lid: string) => Promise<string | null | undefined>,
+): Promise<string | null> {
+  const direct = linkedWhatsAppPhoneFromJid(remoteJid);
+  if (direct) return direct;
+  if (!remoteJid.endsWith("@lid")) return null;
+  const alt = remoteJidAlt ? linkedWhatsAppPhoneFromJid(remoteJidAlt) : null;
+  if (alt) return alt;
+  const mapped = await pnForLid(remoteJid);
+  return mapped ? linkedWhatsAppPhoneFromJid(mapped) : null;
 }
 
 function textFromMessage(message: Record<string, unknown>): string {
@@ -153,9 +173,18 @@ export function createLinkedWhatsAppController(
     const messageId = typeof key?.id === "string" ? key.id : "";
     if (!remoteJid || !messageId || key?.fromMe === true) return;
     if (remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us")) return;
-
-    const phone = phoneFromJid(remoteJid);
-    if (!phone) return;
+    const alt = typeof key?.remoteJidAlt === "string" ? key.remoteJidAlt : undefined;
+    const phone = await resolveLinkedWhatsAppSenderPhone(
+      remoteJid,
+      alt,
+      async (lid) => sock.signalRepository.lidMapping.getPNForLID(lid),
+    );
+    if (!phone) {
+      // The owner may need to re-link/sync LID mappings. Do not create a
+      // fictional +LID phone identity or leak data into the wrong account.
+      update({ lastEvent: "sender-phone-unresolved" });
+      return;
+    }
     const message =
       raw?.message && typeof raw.message === "object" && !Array.isArray(raw.message)
         ? raw.message as Record<string, unknown>
@@ -294,7 +323,7 @@ export function createLinkedWhatsAppController(
         update({
           status: "connected",
           connected: true,
-          phone: phoneFromJid(id) || snapshot.phone,
+          phone: linkedWhatsAppPhoneFromJid(id) || snapshot.phone,
           qrDataUrl: null,
           lastEvent: "connected",
           reconnectAttempt: 0,
