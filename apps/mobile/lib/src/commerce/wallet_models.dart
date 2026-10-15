@@ -50,20 +50,20 @@ class WalletEntry {
     final title = json['title'];
     final amount = json['amountCredits'];
     final createdAt = json['createdAt'];
-    if (id is! String ||
+    if (id is! String || id.isEmpty ||
         kind is! String ||
-        title is! String ||
-        amount is! num ||
-        amount < 0 ||
-        createdAt is! String) {
+        title is! String || title.isEmpty ||
+        amount is! int || amount < 0 || amount > 1000000000000 ||
+        json['incoming'] is! bool ||
+        createdAt is! String || DateTime.tryParse(createdAt) == null) {
       throw const FormatException('Invalid wallet entry');
     }
     return WalletEntry(
       id: id,
       kind: _kind(kind),
       title: title,
-      amountCredits: amount.toInt(),
-      incoming: json['incoming'] == true,
+      amountCredits: amount,
+      incoming: json['incoming'] as bool,
       createdAt: DateTime.parse(createdAt).toLocal(),
     );
   }
@@ -84,46 +84,57 @@ class WalletView {
   final int spendableCredits;
   final int pendingEarningsCredits;
   final int availableEarningsCredits;
-  final int ngnBalanceKobo;
+  final int? ngnBalanceKobo;
   final List<WalletEntry> entries;
   final String? bankName;
   final String? accountNumber;
   final String? accountHolderName;
 
   String get ngnBalanceLabel {
-    final naira = ngnBalanceKobo ~/ 100;
-    final kobo = (ngnBalanceKobo % 100).toString().padLeft(2, '0');
+    final amount = ngnBalanceKobo;
+    if (amount == null) return 'Unavailable';
+    final naira = amount ~/ 100;
+    final kobo = (amount % 100).toString().padLeft(2, '0');
     return '₦$naira.$kobo';
   }
 
   factory WalletView.fromJson(Map<String, dynamic> json) {
-    int credits(String key) {
+    // Never transform a missing, fractional, over-precision or rejected
+    // authenticated Credit projection into a successful zero balance.
+    int exactCredits(String key) {
       final value = json[key];
-      if (value is! num || value < 0) {
-        return 0;
+      if (value is! int || value < 0 || value > 1000000000000) {
+        throw const FormatException('Invalid wallet balance');
       }
-      return value.toInt();
+      return value;
     }
+
     final entries = json['entries'];
+    if (entries is! List) {
+      throw const FormatException('Invalid wallet history');
+    }
+    final ngn = json['ngnBalanceKobo'];
+    if (ngn != null && (ngn is! int || ngn < 0)) {
+      throw const FormatException('Invalid NGN metadata');
+    }
     return WalletView(
-      spendableCredits: credits('spendableCredits'),
-      pendingEarningsCredits: credits('pendingEarningsCredits'),
-      availableEarningsCredits: credits('availableEarningsCredits'),
-      ngnBalanceKobo: (json['ngnBalanceKobo'] is num &&
-              (json['ngnBalanceKobo'] as num) >= 0)
-          ? (json['ngnBalanceKobo'] as num).toInt()
-          : 0,
+      spendableCredits: exactCredits('spendableCredits'),
+      pendingEarningsCredits: exactCredits('pendingEarningsCredits'),
+      availableEarningsCredits: exactCredits('availableEarningsCredits'),
+      ngnBalanceKobo: ngn as int?,
       entries: [
-        if (entries is List)
-          for (final item in entries)
-            if (item is Map)
-              WalletEntry.fromJson(item.cast<String, dynamic>()),
+        for (final item in entries)
+          if (item is Map)
+            WalletEntry.fromJson(item.cast<String, dynamic>())
+          else
+            throw const FormatException('Invalid wallet history entry'),
       ],
       bankName: json['bankName'] as String?,
       accountNumber: json['accountNumber'] as String?,
       accountHolderName: json['accountHolderName'] as String?,
     );
   }
+
 }
 
 abstract class WalletTransport {
