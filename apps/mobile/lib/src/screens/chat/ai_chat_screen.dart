@@ -304,18 +304,27 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     );
   }
   void _stageAttachments(List<ChatAttachment> attachments) {
-    if (attachments.isEmpty) return;
-    final merged = [
-      ..._pendingAttachments,
-      ...attachments,
-    ].take(8).toList(growable: false);
+    if (attachments.isEmpty || !mounted) return;
+    final selection = selectChatDraftAttachments(
+      _pendingAttachments,
+      attachments,
+    );
     setState(() {
-      _pendingAttachments = merged;
+      _pendingAttachments = selection.attachments;
       _showEmoji = false;
     });
     ref
         .read(aiChatProvider.notifier)
-        .setDraftAttachments(widget.characterId, merged);
+        .setDraftAttachments(widget.characterId, selection.attachments);
+    if (selection.rejectedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Some files were not added. Maximum 8 files, 8 MB each and 12 MB combined.',
+          ),
+        ),
+      );
+    }
   }
 
   void _removePendingAttachment(int index) {
@@ -327,9 +336,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         .setDraftAttachments(widget.characterId, next);
   }
 
-  void _comingSoon(String what) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$what are coming soon.')));
+  void _pickerFailed(String what) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open $what. Check file access and try again.')),
+    );
   }
 
   Future<bool> _ensurePermission(
@@ -630,10 +640,46 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     );
   }
 
-  void _shareLocation() {
-    const text = '📍 Location: Kano, Nigeria';
-    _input.text = _input.text.isEmpty ? text : '${_input.text} $text';
-    _input.selection = TextSelection.fromPosition(TextPosition(offset: _input.text.length));
+  Future<void> _shareLocation() async {
+    // Do not guess a customer's GPS location or silently share their position.
+    // A user may voluntarily describe a place without granting device access.
+    final place = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        var value = '';
+        return StatefulBuilder(
+          builder: (context, rebuild) => AlertDialog(
+            title: const Text('Share a location'),
+            content: TextField(
+              autofocus: true,
+              maxLength: 200,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Place or address',
+                hintText: 'Enter the place you want to share',
+              ),
+              onChanged: (text) => rebuild(() => value = text.trim()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: value.isEmpty
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(value),
+                child: const Text('Add to message'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || place == null || place.isEmpty) return;
+    final text = '📍 Location: $place';
+    _input.text = _input.text.isEmpty ? text : '${_input.text}\n$text';
+    _input.selection = TextSelection.collapsed(offset: _input.text.length);
   }
 
   Future<void> _shareContact() async {
@@ -756,7 +802,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       if (mounted) {
         _stageAttachments([
           ChatAttachment(
-            kind: 'voice',
+            kind: 'audio',
             path: path,
             name: file.name,
             sizeBytes: size,
@@ -764,7 +810,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ]);
       }
     } catch (_) {
-      if (mounted) _comingSoon('Audio picker');
+      if (mounted) _pickerFailed('Audio picker');
     }
   }
 
@@ -790,7 +836,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         _stageAttachments(attachments);
       }
     } catch (_) {
-      if (mounted) _comingSoon('Documents');
+      if (mounted) _pickerFailed('Documents');
     }
   }
 
@@ -817,7 +863,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ),
       ]);
     } catch (_) {
-      if (mounted) _comingSoon('Photos');
+      if (mounted) _pickerFailed('Photos');
     }
   }
 
@@ -839,13 +885,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           ),
         );
       }
-      if (attachments.isNotEmpty) {
-        await ref
-            .read(aiChatProvider.notifier)
-            .sendAttachments(widget.characterId, attachments);
+      if (attachments.isNotEmpty && mounted) {
+        _stageAttachments(attachments);
       }
     } catch (_) {
-      if (mounted) _comingSoon('Photos');
+      if (mounted) _pickerFailed('Photos');
     }
   }
 
@@ -875,7 +919,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ),
       ]);
     } catch (_) {
-      if (mounted) _comingSoon('Video');
+      if (mounted) _pickerFailed('Video');
     }
   }
 
@@ -1924,7 +1968,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
     final transport = ref.read(agentTransportProvider);
     if (transport is! AgentShellTransport) {
-      if (mounted) _comingSoon('Live voice');
+      if (mounted) _pickerFailed('Live voice');
       return;
     }
     final reporter = ref.read(callLifecycleReporterProvider);
@@ -2106,7 +2150,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
     final transport = ref.read(agentTransportProvider);
     if (transport is! AgentShellTransport) {
-      if (mounted) _comingSoon('Live voice');
+      if (mounted) _pickerFailed('Live voice');
       return;
     }
     final reporter = ref.read(callLifecycleReporterProvider);
@@ -3842,6 +3886,7 @@ class _AttachmentView extends StatelessWidget {
           initialIndex: imageIndex,
         );
       case 'voice':
+      case 'audio':
         return _VoiceBubble(attachment: attachment);
       case 'video':
         return _VideoAttachment(attachment: attachment);
