@@ -32,7 +32,10 @@ function config(changes: Record<string, unknown> = {}) {
     const body = JSON.parse(String(init?.body ?? "{}"));
     methods.push(body.method);
     return new Response(JSON.stringify({
-      jsonrpc: "2.0",id: body.id,result: value[body.method],
+      jsonrpc: "2.0",id: body.id,result: body.method === "eth_getBlockByNumber" &&
+        body.params?.[0] === "0x63"
+        ? { number: "0x63",hash: blockHash }
+        : value[body.method],
     }), { status: 200,headers: { "content-type": "application/json" } });
   };
   const verifier = createMsnwFinalityVerifier({
