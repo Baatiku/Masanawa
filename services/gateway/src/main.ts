@@ -1,7 +1,7 @@
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import { RoomError } from "@masanawa/rooms";
 import {
-  PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
+  createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgFeedMediaAuthorization, createPostgresVideoStore,
   createPostgresYouTubeSourceAdminStore,
   createPgRoomsRepository, createPgRoomDiscussionRepository,
@@ -12,6 +12,8 @@ import {
 import {createPgAgentRoomDirectory} from "./agent_directory_rooms.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
+import {validateMasanaProfile} from "@masanawa/masana";
+import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import type { StatusRuntime } from "./modules/home_feed/runtime.js";
 import { VideoAdmissionError } from "./modules/external_videos/service.js";
 import { createIncomingCallService, type IncomingRepository, type IncomingCallService } from "./incoming_calls/service.js";
@@ -2335,8 +2337,9 @@ export async function startGatewayService(
     env.MASANAWA_ADMIN_EMAILS,
   );
   let status: StatusRuntime | undefined = options.appOptions?.status;
+  let mediaConfiguration:StatusMediaConfiguration | undefined;
   try {
-    const mediaConfiguration = options.statusMedia ?? createConfiguredStatusMedia(env);
+    mediaConfiguration = options.statusMedia ?? createConfiguredStatusMedia(env);
     if (!status && sessions && database.status) {
     const {feed,editorial,eligibility,published} = database.status;
     const mediaRuntime = createStatusMediaRuntime({
@@ -2484,6 +2487,24 @@ export async function startGatewayService(
         },
       };
     })() : undefined);
+  const masana: GatewayAppOptions["masana"] = options.appOptions?.masana ??
+    (featurePool && sessions && featureTenant ? {
+      auth:{
+        optional: async(header:string|undefined) => header
+          ? resolveFeatureFan(header)
+          : {tenantId:featureTenant,userId:null},
+        fan: resolveFeatureFan,
+        staff: async(header:string|undefined) => {
+          const actor=await resolveFeatureFan(header);
+          if(!editors.has(actor.userId))
+            throw new CustomerAuthError("FORBIDDEN",403);
+          return actor;
+        },
+      },
+      store:createMasanaPostgresStore(featurePool),
+      validateProfile:validateMasanaProfile,
+      ...createApprovedMasanaMediaPort(featurePool,mediaConfiguration),
+    } : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2523,6 +2544,7 @@ export async function startGatewayService(
       ...(videos ? {videos} : {}),
       ...(videoSources ? {videoSources} : {}),
       ...(rooms ? {rooms} : {}),
+      ...(masana ? {masana} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       ...(customerAuth ? { customerAuth } : {}),
