@@ -202,9 +202,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w700))),
                       if (widget.walletCreditSendEnabled && accountId != null)
-                        TextButton(
+                        IconButton(
+                          tooltip: 'Send Credits',
                           onPressed: () => _send(balance, accountId),
-                          child: const Text('Send Credits')),
+                          icon: const Icon(Icons.north_east_rounded, size: 20)),
                     ])),
                 ],
               ]),
