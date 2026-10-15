@@ -220,6 +220,17 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         WHERE tenant_id=$1 AND order_id=$2)`, [actor.tenantId,orderId]));
       return { ...order, payment: method };
     },
+    async notifications(actor:P2pActor) {
+      // The outbox is durable and tenant/user-scoped; processing push attempts
+      // must never delete a customer's in-app order notification.
+      const result=await pool.query(`SELECT event_id,order_id,action,state,created_at,
+        processed_at,delivered
+        FROM commerce.msnw_p2p_notifications
+        WHERE tenant_id=$1 AND user_id=$2
+        ORDER BY created_at DESC,event_id DESC LIMIT 50`,
+        [actor.tenantId,actor.userId]);
+      return result.rows;
+    },
     async orders(actor: P2pActor) {
       const r = await pool.query(`SELECT order_id,offer_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,
