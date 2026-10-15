@@ -52,6 +52,7 @@ class ChatAttachment {
     'image' => '📷 Photo',
     'voice' => '🎤 Voice note (${formatDurationMs(durationMs ?? 0)})',
     'video' => '🎬 ${name ?? 'Video'}',
+    'audio' => '🎵 ${name ?? 'Audio'}',
     _ => '📄 ${name ?? 'Document'}',
   };
 
@@ -75,6 +76,59 @@ class ChatAttachment {
         if (value is num) value.toDouble().clamp(0.0, 1.0).toDouble(),
     ],
   );
+}
+
+/// Preserve the actual type for imported audio. Only native recorded .m4a
+/// voice notes have the special Gemini MIME mapping.
+String chatAttachmentMimeType(ChatAttachment attachment, List<int> headerBytes) {
+  if ((attachment.kind == 'voice' || attachment.kind == 'audio') &&
+      attachment.path.toLowerCase().endsWith('.m4a')) {
+    return 'audio/m4a';
+  }
+  return lookupMimeType(
+        attachment.path,
+        headerBytes: headerBytes.take(16).toList(),
+      ) ??
+      switch (attachment.kind) {
+        'image' => 'image/jpeg',
+        'video' => 'video/mp4',
+        _ => 'application/octet-stream',
+      };
+}
+
+/// One preview-first draft for all pickers, bounded by the server media limit.
+/// Callers must show rejected selections rather than silently sending them.
+class ChatAttachmentDraftSelection {
+  const ChatAttachmentDraftSelection(this.attachments, this.rejectedCount);
+
+  final List<ChatAttachment> attachments;
+  final int rejectedCount;
+}
+
+ChatAttachmentDraftSelection selectChatDraftAttachments(
+  List<ChatAttachment> existing,
+  List<ChatAttachment> selected,
+) {
+  const maxItemBytes = 8 * 1024 * 1024;
+  const maxTotalBytes = 12 * 1024 * 1024;
+  const maxItems = 8;
+  final accepted = <ChatAttachment>[];
+  var bytes = 0;
+  var rejected = 0;
+  for (final item in [...existing, ...selected]) {
+    final size = item.sizeBytes ?? 0;
+    if (item.path.isEmpty ||
+        size <= 0 ||
+        size > maxItemBytes ||
+        accepted.length >= maxItems ||
+        bytes + size > maxTotalBytes) {
+      rejected++;
+      continue;
+    }
+    accepted.add(item);
+    bytes += size;
+  }
+  return ChatAttachmentDraftSelection(List.unmodifiable(accepted), rejected);
 }
 
 class AiChatMessage {
@@ -1211,18 +1265,7 @@ class AiChatController extends Notifier<AiChatState> {
         code: 'ATTACHMENT_TOO_LARGE',
       );
     }
-    // Voice notes are AAC-LC in an M4A container. Gemini accepts audio/m4a;
-    // generic inference may label the same container audio/mp4 and reject it.
-    final mimeType = attachment.kind == 'voice'
-        ? 'audio/m4a'
-        : lookupMimeType(
-                attachment.path,
-                headerBytes: bytes.take(16).toList(),
-              ) ??
-              switch (attachment.kind) {
-                'image' => 'image/jpeg',
-                _ => 'application/octet-stream',
-              };
+    final mimeType = chatAttachmentMimeType(attachment, bytes);
 
     final transport = ref.read(agentTransportProvider);
     final hadCachedBinding = _bindings.containsKey(characterId);
@@ -1281,17 +1324,7 @@ class AiChatController extends Notifier<AiChatState> {
           code: 'ATTACHMENT_TOO_LARGE',
         );
       }
-      final mimeType = attachment.kind == 'voice'
-          ? 'audio/m4a'
-          : lookupMimeType(
-                  attachment.path,
-                  headerBytes: bytes.take(16).toList(),
-                ) ??
-                switch (attachment.kind) {
-                  'image' => 'image/jpeg',
-                  'video' => 'video/mp4',
-                  _ => 'application/octet-stream',
-                };
+      final mimeType = chatAttachmentMimeType(attachment, bytes);
       media.add(
         AgentMediaInput(
           bytes: bytes,
