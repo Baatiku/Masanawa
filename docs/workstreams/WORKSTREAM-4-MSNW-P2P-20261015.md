@@ -52,3 +52,26 @@ Initial commits: schema `9a0c24ae`, engine `5e96ada4`, routes `2c6d3f69`, tests 
 
 Source: `apps/mobile/lib/src/finance/msnw_p2p_activity.dart` and
 `apps/mobile/lib/src/screens/wallet/wallet_screen.dart`. Wallet Recent Activity now reads authenticated persisted P2P orders and shows directional Buy/Sell labels, exact MSNW amount, transaction state and receipt reference (if settled). Account isolation is rechecked after the network response. This is **not** a substitute for canonical completed ledger activity; P2P open orders are not token balances.
+
+## Seller-authorized release and expiry recovery source
+
+Source: `services/gateway/src/p2p/seller_confirmation.ts`,
+`seller_confirmation.test.ts`, `services/gateway/src/p2p/routes.ts`,
+`apps/mobile/lib/src/finance/msnw_p2p_screen.dart` and
+`apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart`.
+
+An authenticated seller must independently affirm **I HAVE RECEIVED PAYMENT**
+for the persisted exact order and fiat amount before the release route calls
+the canonical MSNW custody port. The mobile screen requires a second, typed
+RECEIVED action, explicitly warning the seller not to rely on buyer screenshots.
+An optional stronger financial step-up authority can only add checks, not
+bypass the mandatory seller affirmation. Underlying token movement remains
+**unavailable** without the custody-backed MSNW adapter. Seller affirmation
+is the seller's declaration, not independent bank-provider settlement proof.
+
+Added authorized operator manual batch expiry/recovery endpoint
+`POST /v1/admin/msnw/p2p/expire`, using existing `expireDue` under locked
+order state and atomic refund port. An admin action lets staff recover overdue,
+unclaimed orders. Automatic Worker leases/scheduling and custody-backed
+refunds are **still required** for full end-to-end completion; this endpoint
+does not substitute for them. New source tests are authored but not executed.
