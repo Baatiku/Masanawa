@@ -140,7 +140,7 @@ export async function startWorkerService(
       onError: () => {
         process.stderr.write(JSON.stringify({
           event: "status_scheduled.retry", reason: "batch_failed",
-        }) + "\\n");
+        }) + "\n");
       },
     });
     // Consume the existing authorized YouTube reconciliation outbox with the
@@ -159,7 +159,7 @@ export async function startWorkerService(
         enabled: () => !drain.isDraining(),
         onError: () => {
           // Provider errors can contain tokens or private metadata.
-          process.stderr.write('{"event":"youtube_sync.retry","reason":"batch_failed"}\\n');
+          process.stderr.write('{"event":"youtube_sync.retry","reason":"batch_failed"}\n');
         },
       });
     }
