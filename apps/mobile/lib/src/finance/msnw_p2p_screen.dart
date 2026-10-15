@@ -270,6 +270,22 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             reason == null ? {} : {'reason': reason});
         }),
         userId: widget.expectedUserId,
+        listEvidence: () async {
+          final data=_json(await _request('GET','/orders/$id/evidence'));
+          return (data['items'] as List<dynamic>? ?? []).map(_json).toList();
+        },
+        uploadEvidence: (data)=>_act(() async {
+          await _request('POST','/orders/$id/evidence/upload',data);
+        }),
+        openEvidence: (evidenceId) async {
+          final link=_json(await _request('GET',
+            '/orders/$id/evidence/$evidenceId'));
+          final uri=Uri.tryParse('${link['url'] ?? ''}');
+          if(uri==null||uri.scheme!='https')throw StateError('Evidence link unavailable');
+          if(!await launchUrl(uri,mode:LaunchMode.externalApplication)) {
+            throw StateError('Unable to open private evidence');
+          }
+        },
         confirmReceipt: (order) => _act(() async {
           await _request('POST','/orders/$id/confirm-receipt',{
             'confirmation':{
@@ -351,16 +367,50 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
 
 class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
-    required this.confirmReceipt,required this.userId});
+    required this.confirmReceipt,required this.listEvidence,
+    required this.uploadEvidence,required this.openEvidence,required this.userId});
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
   final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
+  final Future<List<Map<String,dynamic>>> Function() listEvidence;
+  final Future<void> Function(Map<String,dynamic>) uploadEvidence;
+  final Future<void> Function(String) openEvidence;
   final String userId;
   @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
 }
 class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   late Future<Map<String,dynamic>> _future=widget.load();
-  void _refresh()=>setState(()=>_future=widget.load());
+  late Future<List<Map<String,dynamic>>> _evidence=widget.listEvidence();
+  void _refresh()=>setState((){
+    _future=widget.load();
+    _evidence=widget.listEvidence();
+  });
+  Future<void> _uploadEvidence() async {
+    try {
+      final selection=await FilePicker.platform.pickFiles(
+        type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf'],
+        withData:true,allowMultiple:false);
+      if(selection==null || selection.files.isEmpty)return;
+      final file=selection.files.single;
+      final bytes=file.bytes;
+      if(bytes==null||bytes.isEmpty||bytes.length>2*1024*1024)
+        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
+      final extension=(file.extension??'').toLowerCase();
+      final contentType=switch(extension){
+        'png'=>'image/png','jpg'||'jpeg'=>'image/jpeg',
+        'webp'=>'image/webp','pdf'=>'application/pdf',
+        _=>throw StateError('Unsupported evidence type'),
+      };
+      await widget.uploadEvidence({
+        'contentType':contentType,'contentBase64':base64Encode(bytes),
+      });
+      if(mounted)_refresh();
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Could not attach evidence: $error')));
+    }
+  }
+
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
     String? reason;
     if(reasonRequired) {
@@ -468,6 +518,40 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           FilledButton(
             onPressed:()=>_sellerConfirm(o),
             child:const Text('I received the bank payment')),
+        ],
+        if(state=='payment_claimed'||state=='disputed') ...[
+          const SizedBox(height:18),
+          Text('Payment evidence',style:Theme.of(context).textTheme.titleMedium),
+          const Text('Optional. Attach a bank receipt only to assist a dispute. '
+            'Screenshots and attachments never release MSNW escrow.'),
+          OutlinedButton.icon(onPressed:_uploadEvidence,
+            icon:const Icon(Icons.upload_file_outlined),
+            label:const Text('Attach receipt (2 MB max)')),
+          FutureBuilder<List<Map<String,dynamic>>>(future:_evidence,
+            builder:(ctx,snapshot){
+              if(snapshot.connectionState!=ConnectionState.done)
+                return const LinearProgressIndicator();
+              if(snapshot.hasError) return const Text('Evidence unavailable. Refresh to retry.');
+              final items=snapshot.data??[];
+              if(items.isEmpty)return const Text('No evidence attached.');
+              return Column(children:[
+                for(final item in items)
+                  ListTile(
+                    leading:const Icon(Icons.verified_user_outlined),
+                    title:Text('Evidence ${item['created_at'] ?? ''}'),
+                    subtitle:Text('SHA256: ${item['sha256'] ?? ''}',
+                      maxLines:1,overflow:TextOverflow.ellipsis),
+                    trailing:const Icon(Icons.open_in_new),
+                    onTap:()async{
+                      try { await widget.openEvidence('${item['evidence_id']}'); }
+                      catch(error) {
+                        if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content:Text('Unable to open evidence: $error')));
+                      }
+                    },
+                  ),
+              ]);
+            }),
         ],
         if(state=='disputed')const ListTile(
           title:Text('Escrow frozen'),
