@@ -216,7 +216,7 @@ export function createMsnwPaystackDvaService(input: Readonly<{
       }
       return status(enrollment);
     },
-    async request(tenantId: string, userId: string, consent: boolean) {
+    async request(tenantId: string, userId: string, consent: boolean): Promise<DvaAccountStatus> {
       if (consent !== true) throw new DvaError("funding.explicit_consent_required", 400);
       // The trusted onboarding/KYC service must have inserted this account,
       // with its verified identity and provider customer ID, beforehand.
@@ -246,7 +246,7 @@ export function createMsnwPaystackDvaService(input: Readonly<{
       const account = qualifiedAccount(data, previous.customerId);
       return account
         ? persist(tenantId, userId, previous.customerId, account)
-        : { state: "pending" };
+        : { state: "pending" as const };
     },
   });
 }
