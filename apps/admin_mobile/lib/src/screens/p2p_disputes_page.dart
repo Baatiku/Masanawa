@@ -32,6 +32,52 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       .map((e)=>Map<String,dynamic>.from(e as Map)).toList();
   }
   void _reload()=>setState(()=>_disputes=_load());
+  Future<void> _inspect(Map<String,dynamic> order) async {
+    final id='${order['order_id']}';
+    await showModalBottomSheet<void>(context:context,isScrollControlled:true,
+      showDragHandle:true,builder:(ctx)=>FractionallySizedBox(
+        heightFactor:0.85,child:SafeArea(child:FutureBuilder<Map<String,dynamic>>(
+          future:()async{
+            final response=await _dio.get<dynamic>(
+              '$_base/v1/admin/msnw/p2p/disputes/$id',options:_auth);
+            return Map<String,dynamic>.from(response.data as Map);
+          }(),
+          builder:(ctx,snapshot){
+            if(!snapshot.hasData)return Center(child:snapshot.hasError
+              ? Text('Case file unavailable: ${snapshot.error}')
+              : const CircularProgressIndicator());
+            final file=snapshot.data!;
+            final events=(file['events'] as List<dynamic>? ?? []);
+            final evidence=(file['evidence'] as List<dynamic>? ?? []);
+            return ListView(padding:const EdgeInsets.all(18),children:[
+              Text('Escrow audit • $id',style:Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height:8),
+              Text('State: ${(file['order'] as Map?)?['state'] ?? 'Unknown'}'),
+              const Text('Payment is not provider-verified. A screenshot or buyer '
+                'claim alone must never authorize a release.'),
+              const SizedBox(height:12),
+              Text('Evidence references (${evidence.length})',
+                style:Theme.of(ctx).textTheme.titleMedium),
+              if(evidence.isEmpty)const Text('No evidence attached.'),
+              for(final entry in evidence)
+                ListTile(leading:const Icon(Icons.attachment_outlined),
+                  title:Text('${(entry as Map)['object_ref']}'),
+                  subtitle:Text('Submitted by ${entry['submitted_by']}\nSHA-256: ${entry['sha256']}')),
+              const SizedBox(height:12),
+              Text('Audit events (${events.length})',
+                style:Theme.of(ctx).textTheme.titleMedium),
+              if(events.isEmpty)const Text('No recorded state changes.'),
+              for(final entry in events)
+                ListTile(leading:const Icon(Icons.history_outlined),
+                  title:Text('${(entry as Map)['action']}'),
+                  subtitle:Text('${entry['from_state']} → ${entry['to_state']}\n'
+                    'Actor: ${entry['actor_id']}\n'
+                    'Reason: ${entry['reason'] ?? '—'}')),
+            ]);
+          }))),
+      ));
+  }
+
   Future<void> _resolve(Map<String,dynamic> order) async {
     final id='${order['order_id']}';
     final reason=TextEditingController();
@@ -136,9 +182,13 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
               'Buyer: ${o['buyer_id']}\n'
               'MSNW micro: ${o['amount_micro']}'),
             isThreeLine:true,
-            trailing:FilledButton(
-              onPressed:_submitting?null:()=>_resolve(o),
-              child:const Text('Resolve')),
+            trailing:Wrap(spacing:6,children:[
+              IconButton(tooltip:'Review audit and evidence',
+                onPressed:()=>_inspect(o),
+                icon:const Icon(Icons.folder_open_outlined)),
+              FilledButton(onPressed:_submitting?null:()=>_resolve(o),
+                child:const Text('Resolve')),
+            ]),
           ));
         });
       })),
