@@ -78,6 +78,36 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       ));
   }
 
+  Future<void> _expireUnpaid() async {
+    if(_submitting)return;
+    final accepted=await showDialog<bool>(context:context,
+      builder:(ctx)=>AlertDialog(
+        title:const Text('Recover overdue unpaid escrow'),
+        content:const Text('Only unpaid orders past their deadline are eligible. '
+          'The Gateway checks locked order state and refunds through the canonical '
+          'MSNW custody ledger; claims and disputes remain frozen.'),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Back')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Check and refund')),
+        ]))??false;
+    if(!accepted)return;
+    setState(()=>_submitting=true);
+    try{
+      final result=await _dio.post<dynamic>('$_base/v1/admin/msnw/p2p/expire',
+        data:{},options:_auth);
+      if(!mounted)return;
+      final count=(result.data as Map?)?['expired']??0;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Overdue orders recovered: $count')));
+      _reload();
+    } on DioException catch(e) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Escrow recovery unavailable: '
+          '${e.response?.data is Map?(e.response!.data as Map)['error']:e.message}')));
+    } finally {
+      if(mounted)setState(()=>_submitting=false);
+    }
+  }
   Future<void> _resolve(Map<String,dynamic> order) async {
     final id='${order['order_id']}';
     final reason=TextEditingController();
@@ -159,8 +189,13 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
     ListTile(title:const Text('MSNW P2P disputes'),
       subtitle:const Text('Authorized resolutions only. Bank claims and screenshots '
         'do not automatically release escrow.'),
-      trailing:IconButton(tooltip:'Reload disputes',icon:const Icon(Icons.refresh),
-        onPressed:_submitting?null:_reload)),
+      trailing:Wrap(spacing:4,children:[
+        IconButton(tooltip:'Recover overdue unpaid orders',
+          onPressed:_submitting?null:_expireUnpaid,
+          icon:const Icon(Icons.history_toggle_off_outlined)),
+        IconButton(tooltip:'Reload disputes',icon:const Icon(Icons.refresh),
+          onPressed:_submitting?null:_reload),
+      ])),
     Expanded(child:FutureBuilder<List<Map<String,dynamic>>>(
       future:_disputes,builder:(ctx,s){
         if(s.connectionState!=ConnectionState.done)
