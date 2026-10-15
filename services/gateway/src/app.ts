@@ -7,6 +7,7 @@ import { registerRoomDiscussionRoutes, type DiscussionRoutePorts } from "./modul
 import { registerRoomBookmarkRoutes, type RoomBookmarkPorts } from "./modules/rooms/bookmark_routes.js";
 import { registerRoomMembershipRoutes, type RoomMembershipRoutePorts } from "./modules/rooms/membership_routes.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
+import {registerMasanaRoutes} from "./modules/masana/service.js";
 import type { VideoStore } from "./modules/external_videos/service.js";
 import type { VideoPrincipal } from "./modules/external_videos/contract.js";
 import type { FastifyRequest } from "fastify";
@@ -117,6 +118,8 @@ export interface ReadinessCheck {
 
 export interface GatewayAppOptions {
   readonly status?: StatusRuntime;
+  /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
+  readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
   readonly masanaInbox?: MasanaInboxRoutesDeps;
   /** Persistent Rooms; never reintroduce legacy live Talk as a Room. */
@@ -1569,6 +1572,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.videoSources) {
     app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
   }
+  if (options.masana) registerMasanaRoutes(app, options.masana);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
   if (options.rooms) {
     registerRoomsRoutes(app, options.rooms.routes);
