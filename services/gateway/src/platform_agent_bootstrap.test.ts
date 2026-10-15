@@ -21,7 +21,12 @@ function fixture(){
   profilesPort:{
     listSupportAgents:async()=>profiles.filter(p=>p.supportAgent),
     readForCharacter:async({characterId}:{characterId:string})=>profiles.find(p=>p.characterId===characterId)??null,
-    put:async({profile}:{profile:PlatformAgentProfile})=>{profiles.push(profile);return profile;},
+    put:async({profile,expectedRevision}:{profile:PlatformAgentProfile;expectedRevision:number|null})=>{
+      const i=profiles.findIndex(p=>p.characterId===profile.characterId);
+      if(i>=0){expect(profiles[i]?.revision).toBe(expectedRevision);profiles[i]=profile;}
+      else {expect(expectedRevision).toBeNull();profiles.push(profile);}
+      return profile;
+    },
   },
   assignmentsPort:{
     readForCharacter:async({characterId}:{characterId:string})=>assignments.get(characterId)??null,
@@ -57,7 +62,7 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.assignments.size).toBe(26);
    expect(f.profiles.filter(p=>p.defaultForNewUsers)).toHaveLength(1);
    expect(f.profiles[0]).toMatchObject({supportAgent:true,voiceName:"Bodi"});
-   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Sulafat"});
+   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Fora"});
    expect(f.profiles.slice(2).every(p=>!p.supportAgent&&p.voiceProvider==="gemini")).toBe(true);
    const second=await run(f,tenant);
    expect(second.changed).toBe(false);
@@ -78,10 +83,11 @@ describe("26 professional Masana production bootstrap",()=>{
    const result=await run(f,tenant);
    expect(result.characterIds[0]).toBe(gwani);
    expect(result.characterIds[1]).toBe(gwana);
-   expect(f.presentations[0]?.displayName).toBe("Mallam Gwani Bodi");
-   expect(f.presentations[1]?.displayName).toBe("Malamah Gwana Sulafat");
+   expect(f.presentations[0]?.displayName).toBe("Mallam Gwani");
+   expect(f.presentations[1]?.displayName).toBe("Malamah Gwana");
    expect(f.identity.provision).toHaveBeenCalledTimes(24);
    expect(f.profiles).toHaveLength(26);
+   expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Fora");
  });
  it("does not override hidden or administrator-customized characters",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
