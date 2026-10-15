@@ -306,6 +306,49 @@ void main() {
     }
   });
 
+  test('a disconnected call without provider resumption handle ends once',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final peer = Completer<WebSocket>();
+    var connections = 0;
+    final listener = server.listen((request) async {
+      connections++;
+      final socket = await WebSocketTransformer.upgrade(request);
+      peer.complete(socket);
+    });
+    final ended = Completer<void>();
+    final input = StreamController<Uint8List>.broadcast();
+    final live = LiveVoiceSession(
+      grant: AgentLiveVoiceGrant(
+        token: 'ephemeral',
+        websocketUrl: 'ws://127.0.0.1:${server.port}',
+        model: 'test',
+        voiceName: 'Bodi',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      ),
+      characterName: 'Mallam Gwani',
+      sharedMicrophone: input.stream,
+      sendGreeting: false,
+      onClosed: () {
+        if (!ended.isCompleted) ended.complete();
+      },
+    );
+    try {
+      await live.start();
+      final socket = await peer.future;
+      socket.add(jsonEncode({'setupComplete': {}}));
+      await live.ready.timeout(const Duration(seconds: 2));
+      await socket.close();
+      await ended.future.timeout(const Duration(seconds: 2));
+      expect(connections, 1, reason: 'Never start a new session as the same paid call');
+    } finally {
+      await live.close();
+      await input.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
   for (final useDeadline in [false, true]) {
     test(
       useDeadline
