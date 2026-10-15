@@ -161,12 +161,11 @@ Future<List<ChatAttachment>> retainOutgoingChatMedia({
       total += bytes;
       final suffix = RegExp(r'\.([a-zA-Z0-9]{1,8})$')
           .firstMatch(attachment.path)?.group(1)?.toLowerCase();
-      final file = File(
-        '${ownerFolder.path}/${token}_$index${suffix == null ? '' : '.$suffix'}',
-      );
+      final extension = suffix == null ? '' : '.$suffix';
+      final file = File('${ownerFolder.path}/${token}_$index$extension');
       if (source.absolute.path != file.absolute.path) {
-        await source.copy(file.path);
         copied.add(file);
+        await source.copy(file.path);
       }
       saved.add(ChatAttachment(
         kind: attachment.kind,
