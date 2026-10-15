@@ -11,7 +11,7 @@ This record distinguishes **committed source** from provider, live-device and re
 - **Second scoped integration (this branch) — IN PROGRESS:** `services/gateway/src/customer_channel_bridge.ts` now accepts explicit WhatsApp/Telegram commands to switch to user-authorized entries from the 26 seeded professional Masana catalog instead of obsolete public Twins, preserving the linked account and separate professional session. `services/gateway/src/main.ts` connects the existing authorized agent directory. Gwana selection uses `Fora`, never the retired voice. Channel turns identify platform-owned professionals as `platform-agent`. Added `services/gateway/src/customer_channel_masana_routing.test.ts`, retired the obsolete `customer_channel_twin_routing.test.ts`, and corrected Telegram tappable menu expectations in `customer_channel_routes.test.ts`. Source qualification remains pending.
 
 - **PR #23 — MERGED:** Authorized professional Masana switching, retire Twin channel routing, Gwana/Fora, chat-linked identity/Telegram menus. Merge commit `e6a557433a54f7e287fc7b074cfe1a7651f29083` (https://github.com/Baatiku/Masanawa/pull/23).
-- **Third scoped integration (this branch) — IN PROGRESS:** `services/gateway/src/whatsapp_linked_device.ts` now accepts linked-device videos, streams/decrypts media under the same 8 MB ceiling without buffering oversized files, reports oversize attempts, scopes message receipts to the remote chat, and serializes incoming turns per customer while allowing independent senders. `services/gateway/src/whatsapp_linked_device.test.ts` tests media classification, byte ordering and streaming limits; the real paired-device and persistent Railway auth-directory behavior still requires acceptance.
+- **PR #27 — MERGED:** `services/gateway/src/whatsapp_linked_device.ts` now accepts linked-device videos, streams/decrypts media under the same 8 MB ceiling without buffering oversized files, reports oversize attempts, scopes message receipts to the remote chat, and serializes incoming turns per customer while allowing independent senders. `services/gateway/src/whatsapp_linked_device.test.ts` tests media classification, byte ordering and streaming limits. Merge commit `cab068d2b7035ad084262fd363438fb03773afb7` (https://github.com/Baatiku/Masanawa/pull/27); the real paired-device and persistent Railway auth-directory behavior still requires acceptance.
 
 ## Exact Workstream 2 checklist
 
@@ -41,6 +41,31 @@ This record distinguishes **committed source** from provider, live-device and re
 | `services/gateway/src/whatsapp_linked_device.test.ts` | Media kind and streamed byte-limit test cases |
 
 Environment check: Flutter/Dart toolchains are not installed in the available container; Git remote network access is unavailable from it. GitHub source read/write works through the connected GitHub account. **Automated tests and APK were not executed or produced here**. Next executable checks: `cd apps/mobile && flutter test test/chat_attachment_policy_test.dart` and `cd services/gateway && pnpm exec vitest run src/customer_channel_routes.test.ts src/customer_channel_masana_routing.test.ts src/customer_channel_bridge.test.ts src/whatsapp_linked_device.test.ts`; run relevant analysis/typecheck, then two-account/provider/device acceptance.
+
+## Real source checkpoint
+
+As of the merged `main` containing PRs #20, #23, and #27, these exact implementation SHAs are present:
+
+| PR | Merge SHA | Scope |
+| --- | --- | --- |
+| #20 | `ad940610b66c7f8817add88a3bd4ac1ad8aa50cd` | Flutter media drafts + Telegram media/idempotency |
+| #23 | `e6a557433a54f7e287fc7b074cfe1a7651f29083` | Authorized 26-Masana channel switching, Gwana/Fora |
+| #27 | `cab068d2b7035ad084262fd363438fb03773afb7` | Personal WhatsApp videos, streamed byte caps, ordered sessions |
+
+Verified by repository source inspection (not handset acceptance): 26 `.webp` files exist in `apps/mobile/assets/masana/portraits/`; `apps/mobile/pubspec.yaml` includes that asset directory, and `apps/mobile/lib/src/agents/masana_portrait_avatar.dart` lists 26 matching professional names and image keys. This proves source assets and references exist, not that all server profiles are enabled or that APK/device rendering has passed.
+
+### Remaining Workstream 2 engineering tasks
+
+1. Finish authenticated chat sync across devices and durable provider-backed media download/playback after app restarts.
+2. Complete Gemini Live transport interruption/reconnection using fresh authorizations, transcript recovery, and Bodi/Fora audio acceptance.
+3. Complete incoming/outgoing calls, background ringing and Firebase/LiveKit notification delivery.
+4. Replace legacy paid-call Credits handling with WS1's canonical backed MSNW ledger; no silent balance mapping.
+5. Verify and complete persistent WhatsApp linked-device auth volume, admin QR lifecycle, reconnection and linked-ID handling.
+6. Qualify Telegram bot webhook registration, profile linking, supported outbound media and cross-channel conversation handoff.
+7. Connect authorized conversational Wallet/Billing actions to MSNW spending confirmation and final provider receipts, coordinated with WS1.
+8. Activate and qualify all 26 seeded professional Masana server profiles, independent chats/calls, correct voice profiles/Room IDs and portraits.
+
+No merged PR here establishes Android APK build, real Google/Firebase/LiveKit responses, paired-device acceptance, or source test execution. Do not mark the whole workstream DONE until these journeys are implemented and proven.
 
 ## Dependencies and next executable changes
 
