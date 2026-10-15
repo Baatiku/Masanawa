@@ -131,6 +131,60 @@ ChatAttachmentDraftSelection selectChatDraftAttachments(
   return ChatAttachmentDraftSelection(List.unmodifiable(accepted), rejected);
 }
 
+ 
+/// Copies picker paths into private per-account app support storage before
+/// queuing or sending. This is a local retry cache, not server media history.
+Future<List<ChatAttachment>> retainOutgoingChatMedia({
+  required Directory ownerFolder,
+  required String requestId,
+  required List<ChatAttachment> attachments,
+}) async {
+  if (attachments.isEmpty || attachments.length > 8) {
+    throw const ApiException('Select 1 to 8 attachments',
+        code: 'ATTACHMENT_INVALID');
+  }
+  final token = base64Url.encode(utf8.encode(requestId)).replaceAll('=', '');
+  final copied = <File>[];
+  final saved = <ChatAttachment>[];
+  var total = 0;
+  try {
+    await ownerFolder.create(recursive: true);
+    for (var index = 0; index < attachments.length; index++) {
+      final attachment = attachments[index];
+      final source = File(attachment.path);
+      final bytes = await source.length();
+      if (bytes < 1 || bytes > 8 * 1024 * 1024 ||
+          total + bytes > 12 * 1024 * 1024) {
+        throw const ApiException('Attachments exceed allowed size',
+            code: 'ATTACHMENT_TOO_LARGE');
+      }
+      total += bytes;
+      final suffix = RegExp(r'\.([a-zA-Z0-9]{1,8})$')
+          .firstMatch(attachment.path)?.group(1)?.toLowerCase();
+      final extension = suffix == null ? '' : '.$suffix';
+      final file = File('${ownerFolder.path}/${token}_$index$extension');
+      if (source.absolute.path != file.absolute.path) {
+        copied.add(file);
+        await source.copy(file.path);
+      }
+      saved.add(ChatAttachment(
+        kind: attachment.kind,
+        path: file.path,
+        name: attachment.name,
+        sizeBytes: bytes,
+        durationMs: attachment.durationMs,
+        waveform: attachment.waveform,
+      ));
+    }
+    return List.unmodifiable(saved);
+  } catch (_) {
+    for (final file in copied) {
+      try { await file.delete(); } catch (_) {}
+    }
+    rethrow;
+  }
+}
+
 class AiChatMessage {
   const AiChatMessage({
     required this.id,
@@ -422,6 +476,7 @@ class AiChatController extends Notifier<AiChatState> {
   String? _cacheOwnerId;
   int _cacheGeneration = 0;
   Future<Directory?>? _documentsDirectoryFuture;
+  Future<void> _previousCacheSave = Future<void>.value();
 
   @override
   AiChatState build() {
@@ -872,6 +927,34 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
+  Future<List<ChatAttachment>> _retainMediaForOwner(
+    String? owner,
+    String requestId,
+    List<ChatAttachment> attachments,
+  ) async {
+    if (owner == null || owner.isEmpty) {
+      throw const ApiException('Sign in to send media', code: 'AUTH_REQUIRED');
+    }
+    final support = await getApplicationSupportDirectory();
+    final ownerKey = base64Url.encode(utf8.encode(owner)).replaceAll('=', '');
+    return retainOutgoingChatMedia(
+      ownerFolder: Directory('${support.path}/masanawa_chat_media_$ownerKey'),
+      requestId: requestId,
+      attachments: attachments,
+    );
+  }
+
+  Future<void> _deleteOwnedMediaCache(String owner) async {
+    try {
+      final support = await getApplicationSupportDirectory();
+      final ownerKey = base64Url.encode(utf8.encode(owner)).replaceAll('=', '');
+      await Directory('${support.path}/masanawa_chat_media_$ownerKey')
+          .delete(recursive: true);
+    } on FileSystemException {
+      // Missing or locked files must never block account logout.
+    } catch (_) {}
+  }
+
   Future<void> _enqueueMessage(
     String characterId,
     AiChatMessage message,
@@ -974,16 +1057,23 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     if (state.sendingIn.contains(characterId)) return;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    final requestId = createRequestId();
+    final cached = await _retainMediaForOwner(owner, requestId, [attachment]);
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
       id: _newId(),
       isUser: true,
       text: (caption ?? '').trim(),
       createdAt: DateTime.now(),
-      attachment: attachment,
+      attachment: cached.single,
       replyToId: replyToId,
       replyPreview: replyPreview,
       deliveryStatus: 'sending',
-      requestId: createRequestId(),
+      requestId: requestId,
     );
     final offline = await _offlineNow();
     if (_disposed ||
@@ -1016,7 +1106,13 @@ class AiChatController extends Notifier<AiChatState> {
       return;
     }
     final threadGeneration = _threadGenerations[characterId] ?? 0;
-    final bounded = List<ChatAttachment>.unmodifiable(attachments.take(8));
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    final requestId = createRequestId();
+    final bounded = await _retainMediaForOwner(owner, requestId, attachments);
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
       id: _newId(),
       isUser: true,
@@ -1027,7 +1123,7 @@ class AiChatController extends Notifier<AiChatState> {
       replyPreview: replyPreview,
       deliveryStatus: 'sending',
       uploadProgress: 0,
-      requestId: createRequestId(),
+      requestId: requestId,
     );
     final offline = await _offlineNow();
     if (_disposed ||
@@ -1961,6 +2057,7 @@ class AiChatController extends Notifier<AiChatState> {
     if (previousOwner != null && previousOwner.isNotEmpty) {
       await clearSecureShellState(ownerId: previousOwner);
       await _deleteThreadCache(previousOwner);
+      await _deleteOwnedMediaCache(previousOwner);
     }
     await Future.wait([
       for (final binding in bindings)
@@ -2011,17 +2108,28 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save() {
     final ownerId = _cacheOwnerId;
-    if (ownerId == null || ownerId.isEmpty) return;
-    try {
-      final file = await _threadsFile(ownerId);
-      if (file == null) return;
-      final list = state.threads.values.map((t) => t.toJson()).toList();
-      await file.writeAsString(jsonEncode(list));
-    } catch (_) {
-      // Local cache is best-effort. Server session/run truth is canonical.
-    }
+    if (ownerId == null || ownerId.isEmpty) return Future<void>.value();
+    final generation = _cacheGeneration;
+    // Snapshot before waiting: account B must never be written to A's file.
+    final payload = jsonEncode(
+      state.threads.values.map((thread) => thread.toJson()).toList(),
+    );
+    final next = _previousCacheSave.catchError((_) {}).then((_) async {
+      if (_disposed || ownerId != _cacheOwnerId ||
+          generation != _cacheGeneration) return;
+      try {
+        final file = await _threadsFile(ownerId);
+        if (file == null || _disposed || ownerId != _cacheOwnerId ||
+            generation != _cacheGeneration) return;
+        await file.writeAsString(payload, flush: true);
+      } catch (_) {
+        // Server session/run truth is canonical; local cache best effort.
+      }
+    });
+    _previousCacheSave = next;
+    return next;
   }
 }
 
