@@ -28,10 +28,11 @@ function scenario() {
       queries.push(sql);
       if (sql.includes("FROM commerce.msnw_paystack_customer_onboarding") &&
           sql.startsWith("SELECT")) return {
-        rows: row ? [row] : [], rowCount: row ? 1 : 0,
+        rows: row && (!sql.includes("WHERE customer_id=$1") || row.customer_id === values[0]) ? [row] : [], rowCount: row && (!sql.includes("WHERE customer_id=$1") || row.customer_id === values[0]) ? 1 : 0,
       };
       if (sql.startsWith("INSERT INTO commerce.msnw_paystack_customer_onboarding")) {
         if (!row) row = {
+          tenant_id: values[0], user_id: values[1],
           state: "preparing", email: values[2], phone: values[3],
           legal_name: values[4], customer_id: null, customer_code: null,
         };
@@ -41,6 +42,10 @@ function scenario() {
         if (sql.includes("state='creating'") && row?.state === "preparing") {
           row.state = "creating";
           return { rows: [{ state: "creating" }], rowCount: 1 };
+        }
+        if (sql.includes("state='created'") && row?.state === "validating") {
+          row.state = "created";
+          return { rows: [], rowCount: 1 };
         }
         if (sql.includes("state='created'") && row?.state === "creating") {
           row.state = "created"; row.customer_id = String(values[2]);
@@ -158,5 +163,29 @@ describe("MSNW Paystack customer identity enrollment", () => {
       ...phoneOnly,
       profile: { ...phoneOnly.profile, email: "other@example.com" },
     })).rejects.toMatchObject({ code: "funding.identity_changed" });
+  });
+
+  it("reconciles signed identification callbacks without creating duplicate customers", async () => {
+    const test = scenario();
+    await test.service.submit(owner, details);
+    const event = {
+      customer_id: "321", customer_code: "CUS_test321",
+      email: "owner@example.com", identification: { type: "bank_account" },
+    };
+    expect(await test.service.handleProviderIdentification(
+      "customeridentification.failed", event)).toBe(true);
+    expect(await test.service.read(owner)).toEqual({ state: "awaiting_bank_identity" });
+    await test.service.submit(owner, details);
+    expect(test.calls.filter(x => x === "POST /customer")).toHaveLength(1);
+    test.setIdentified(true);
+    expect(await test.service.handleProviderIdentification(
+      "customeridentification.success", event)).toBe(true);
+    expect(await test.service.read(owner)).toEqual({ state: "ready_for_bank_account" });
+    expect(await test.service.handleProviderIdentification(
+      "customeridentification.failed", event)).toBe(true);
+    expect(await test.service.read(owner)).toEqual({ state: "ready_for_bank_account" });
+    await expect(test.service.handleProviderIdentification(
+      "customeridentification.success", { ...event, email: "attacker@example.com" },
+    )).rejects.toMatchObject({ code: "funding.identity_event_owner_mismatch" });
   });
 });
