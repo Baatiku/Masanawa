@@ -230,7 +230,7 @@ void main() {
     expect(find.text('Billing data'), findsOneWidget);
   });
   testWidgets(
-    'only supplied financial callbacks are exposed and work at 320px large text',
+    'legacy Send callback cannot authorize MSNW in a signed-out wallet',
     (tester) async {
       var sent = 0;
       await mount(
@@ -244,7 +244,10 @@ void main() {
       expect(find.byTooltip('Withdraw'), findsNothing);
       await tester.ensureVisible(find.text('Send'));
       await tester.tap(find.text('Send'));
-      expect(sent, 1);
+      expect(sent, 0);
+      final send = tester.widget<FilledButton>(
+        find.widgetWithIcon(FilledButton, Icons.north_east));
+      expect(send.onPressed, isNull);
       expect(tester.takeException(), isNull);
     },
   );

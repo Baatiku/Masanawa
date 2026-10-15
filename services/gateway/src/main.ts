@@ -177,6 +177,7 @@ import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
+import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
 import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
@@ -2605,6 +2606,15 @@ export async function startGatewayService(
             contract: env.MSNW_TOKEN_CONTRACT,
             rpcUrl: env.MSNW_RPC_URL,
           }) }
+        : {}),
+      // Custodied MSNW transfers are enabled by the installed, zero-initial
+      // custody ledger; no legacy NGN/Cr/MSN source is accepted. A missing
+      // provider-backed issuance leaves every new account at zero available.
+      ...(database.featurePool && msnBalanceAuthorizer
+        ? { msnwCustody: {
+            authorizer: msnBalanceAuthorizer,
+            ledger: createMsnwCustodyService(database.featurePool),
+          } }
         : {}),
       // Paystack verification is independent of MSNW issuance. Verified fiat
       // remains a pending obligation until custody/quote settlement.
