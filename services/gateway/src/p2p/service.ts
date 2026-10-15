@@ -315,6 +315,22 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           action==="claim"?"payment_claimed":"disputed"};
       });
     },
+    async caseFile(actor: P2pActor, orderId: string) {
+      // Gateway must authorize this caller as a finance/dispute operator.
+      const order = take<P2pOrder>(await pool.query(`SELECT order_id,tenant_id,offer_id,seller_id,
+        buyer_id,amount_micro::text,fee_micro::text,fiat_kobo::text,
+        payment_deadline,state,version,receipt_reference,created_at,updated_at
+        FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND order_id=$2`,
+        [actor.tenantId,id(orderId)]));
+      const events = await pool.query(`SELECT action,actor_id,from_state,to_state,reason,created_at
+        FROM commerce.msnw_p2p_events WHERE tenant_id=$1 AND order_id=$2
+        ORDER BY created_at`,[actor.tenantId,orderId]);
+      const evidence = await pool.query(`SELECT evidence_id,submitted_by,sha256,object_ref,created_at
+        FROM commerce.msnw_p2p_evidence WHERE tenant_id=$1 AND order_id=$2
+        ORDER BY created_at`,[actor.tenantId,orderId]);
+      // Supporting evidence references are NEVER treated as confirmed fiat.
+      return {order,events:events.rows,evidence:evidence.rows,paymentVerified:false};
+    },
     async disputes(actor: P2pActor) {
       return (await pool.query(`SELECT order_id,tenant_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,state,version,created_at
