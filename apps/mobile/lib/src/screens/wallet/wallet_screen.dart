@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
@@ -110,6 +111,67 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     );
   }
 
+  Future<void> _receive() async {
+    final session = ref.read(sessionProvider);
+    if (!widget.walletMsnBalanceEnabled || session is! SessionSignedIn) return;
+    final expectedUserId = session.user.id;
+    MsnBalance wallet;
+    try {
+      wallet = await GatewayMsnBalanceTransport(
+        dio: ref.read(dioProvider),
+        baseUrl: kApiBaseUrl,
+        readAccessToken: () => ref.read(apiClientProvider).accessToken,
+      ).read();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Verified MSNW receive address unavailable.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final active = ref.read(sessionProvider);
+    if (active is! SessionSignedIn || active.user.id != expectedUserId) return;
+    final address = wallet.receiveAddress;
+    if (address == null || wallet.chainId == null || wallet.tokenContract == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('MSNW deposit address is not yet verified.')),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Receive MSNW', style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('Chain ID: ${wallet.chainId}'),
+            Text('Verified token: ${wallet.tokenContract}'),
+            const SizedBox(height: 8),
+            const Text('Only send MSNW on the shown blockchain to this '
+              'verified address. Other assets or networks may be lost.'),
+            const SizedBox(height: 16),
+            SelectableText(address),
+            OutlinedButton.icon(
+              onPressed: () {
+                final current = ref.read(sessionProvider);
+                if (current is SessionSignedIn &&
+                    current.user.id == expectedUserId) {
+                  Clipboard.setData(ClipboardData(text: address));
+                }
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy verified address'),
+            ),
+          ]),
+      )),
+    );
+  }
+
   @override Widget build(BuildContext context) {
     final u = context.masanawa;
     if (_crypto) return Scaffold(
@@ -155,7 +217,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               _WalletShortcut(label: 'Fund', icon: Icons.add,
                 onTap: _fund),
               _WalletShortcut(label: 'Receive', icon: Icons.south_west,
-                onTap: null),
+                onTap: widget.walletMsnBalanceEnabled ? _receive : null),
             ]),
             const SizedBox(height: 24),
             _WalletSection(label: 'My assets', action: 'View crypto',
