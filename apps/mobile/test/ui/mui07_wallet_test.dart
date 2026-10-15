@@ -259,4 +259,19 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('MSN Send stays disabled without qualified host action', (
+    tester,
+  ) async {
+    await mount(
+      tester,
+      value: _view(amount: 1000, empty: true),
+    );
+    final sendButton = tester.widget<FilledButton>(
+      find.widgetWithIcon(FilledButton, Icons.north_east),
+    );
+    expect(sendButton.onPressed, isNull);
+    expect(find.byTooltip('Send Credits'), findsNothing);
+    expect(find.text('Credits'), findsOneWidget);
+  });
 }
