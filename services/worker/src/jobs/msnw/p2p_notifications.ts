@@ -55,7 +55,8 @@ export function createP2pNoticeRuntime(input:Readonly<{
               scope:{tenantId:event.tenantId,userId:parseCanonicalId("user",p.userId)},
               title:"MSNW P2P order update",
               body:"Open Wallet to review your current order status.",
-              data:{type:"p2p_order",orderId:p.orderId,eventId:event.outboxEventId},
+              data:{type:"p2p_order",orderId:p.orderId,eventId:event.outboxEventId,
+                deepLink:"masanawa://wallet"},
             });
             stats.delivered+=sent.delivered;
             if(sent.attempted>0&&sent.delivered<sent.attempted)
