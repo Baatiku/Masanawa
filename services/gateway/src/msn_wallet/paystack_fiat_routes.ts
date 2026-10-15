@@ -33,6 +33,29 @@ export function registerMsnwPaystackFiatRoutes(
       ? error.code : "funding.unavailable" };
   }
 
+  // Scope a raw-byte JSON parser to this webhook only. Fastify's normal
+  // JSON parsing would discard the original bytes used in Paystack's HMAC.
+  app.register(async (scope) => {
+    scope.removeContentTypeParser("application/json");
+    scope.addContentTypeParser("application/json", {
+      parseAs: "buffer",
+      bodyLimit: 128 * 1024,
+    }, (_request, body, done) => done(null, body));
+
+    scope.post("/v1/wallet/msnw/funding/webhook", async (request, reply) => {
+      try {
+        const result = await deps.handleSignedWebhook(
+          request.body as Buffer,
+          request.headers["x-paystack-signature"],
+        );
+        reply.code(200);
+        return { accepted: result.accepted };
+      } catch (error) {
+        return failed(reply, error);
+      }
+    });
+  });
+
   app.get("/v1/wallet/msnw/funding/verified", async (request, reply) => {
     try {
       const owner = await authorize(request.headers.authorization);
