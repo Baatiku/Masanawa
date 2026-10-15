@@ -75,6 +75,8 @@ import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { registerMsnwOnchainBalanceRoutes } from "./msn_wallet/msnw_onchain_routes.js";
 import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
 import { registerMsnwPaystackFiatRoutes } from "./msn_wallet/paystack_fiat_routes.js";
+import { registerMsnwCustodyRoutes } from "./msn_wallet/custody_routes.js";
+import type { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import type { MsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { registerP2pRoutes, type P2pRoutesDependencies } from "./p2p/routes.js";
 import { registerTwinAttributionRoutes, registerCommissionPolicyAdminRoutes } from "./twin_attribution_routes.js";
@@ -192,6 +194,10 @@ export interface GatewayAppOptions {
   readonly msnwOnchainBalance?: MsnwOnchainBalanceDependencies;
   /** Fiat verification journal only: no MSNW issuance permission. */
   readonly msnwPaystackFiat?: MsnwPaystackFiatService;
+  readonly msnwCustody?: {
+    authorizer: MsnBalanceAuthority;
+    ledger: ReturnType<typeof createMsnwCustodyService>;
+  };
   readonly p2p?: P2pRoutesDependencies;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
@@ -1664,6 +1670,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.msnwPaystackFiat) {
     registerMsnwPaystackFiatRoutes(app, options.msnwPaystackFiat);
+  }
+  if (options.msnwCustody) {
+    registerMsnwCustodyRoutes(app, options.msnwCustody);
   }
   if (options.p2p) registerP2pRoutes(app, options.p2p);
 
