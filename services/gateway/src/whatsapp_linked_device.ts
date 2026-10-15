@@ -237,8 +237,22 @@ export function createLinkedWhatsAppController(
       ...(media ? { media } : {}),
     });
 
-    if (result.shouldDeliver && result.reply) {
-      await sock.sendMessage(remoteJid, { text: result.reply });
+    if (result.shouldDeliver && (result.reply || result.audio)) {
+      if (result.reply) await sock.sendMessage(remoteJid, { text: result.reply });
+      if (result.audio) {
+        try {
+          // WAV is valid as a file attachment, not as an Opus voice note.
+          // Preserve the exact provider media type instead of faking a codec.
+          await sock.sendMessage(remoteJid, {
+            document: result.audio.bytes,
+            mimetype: result.audio.mimeType,
+            fileName: result.audio.fileName,
+          });
+        } catch (_) {
+          // Text is the durable fallback; optional audio must not replay a
+          // completed conversation or create duplicate text on retry.
+        }
+      }
       await options.bridge.delivered({
         channel: "whatsapp",
         messageId: durableMessageId,

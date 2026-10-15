@@ -17,6 +17,7 @@ import {
 import type { AgentConversationService } from "./agent_conversation_contract.js";
 import type { AgentDirectoryService } from "./agent_directory.js";
 import { PROFESSIONAL_MASANA_CATALOG } from "./platform_agent_bootstrap.js";
+import { prepareChannelReplyAudio, type ChannelReplyAudio } from "./channel_reply_audio.js";
 
 export interface CustomerChannelInbound {
   readonly channel: CustomerChannel;
@@ -38,6 +39,10 @@ export interface CustomerChannelResult {
   readonly reply: string | null;
   readonly requestContact: boolean;
   readonly shouldDeliver: boolean;
+  /** Optional, best-effort media for the current provider response. The
+   * canonical conversation/receipt is the text; provider retry uses stored
+   * text if this transient media cannot be redelivered. */
+  readonly audio?: ChannelReplyAudio;
 }
 
 export interface CustomerChannelBridge {
@@ -523,12 +528,16 @@ export function createCustomerChannelBridge(input: Readonly<{
           reply: result.reply,
           completedAt: instant(),
         });
+        const audio = prepareChannelReplyAudio(
+          result.audioBase64, result.audioMimeType,
+        );
         return Object.freeze({
           handled: true,
           duplicate: false,
           reply: result.reply,
           requestContact: false,
           shouldDeliver: true,
+          ...(audio ? { audio } : {}),
         });
       } catch (error) {
         await input.channels.failMessage({
