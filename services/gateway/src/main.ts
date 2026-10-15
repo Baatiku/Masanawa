@@ -2509,6 +2509,14 @@ export async function startGatewayService(
             ...(pushSender ? { pushSender } : {}),
           })
         : undefined);
+    const msnwPaystackEnrollment = env.PAYSTACK_SECRET_KEY?.trim() &&
+      database.featurePool && billingCustomerAuthorizer
+      ? createMsnwPaystackEnrollmentService({
+          pool: database.featurePool,
+          sessions: billingCustomerAuthorizer,
+          paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+        })
+      : undefined;
     app = appFactory({
       ...(status ? {status} : {}),
       ...(videos ? {videos} : {}),
@@ -2583,18 +2591,14 @@ export async function startGatewayService(
             pool: database.featurePool,
             authorizer: msnBalanceAuthorizer,
             paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+            ...(msnwPaystackEnrollment ? {
+              onCustomerIdentification: msnwPaystackEnrollment.handleProviderIdentification,
+            } : {}),
           }) }
         : {}),
       // Paystack customer creation and identity verification precede account assignment.
       // This never issues MSNW; it only establishes provider-verified KYC.
-      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
-          database.featurePool && billingCustomerAuthorizer
-        ? { msnwPaystackEnrollment: createMsnwPaystackEnrollmentService({
-            pool: database.featurePool,
-            sessions: billingCustomerAuthorizer,
-            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
-          }) }
-        : {}),
+      ...(msnwPaystackEnrollment ? { msnwPaystackEnrollment } : {}),
       // A DVA is only a bank payment destination, never token issuance.
       // Presence of credentials is enough to mount the route; the endpoint
       // verifies actual staged schema/identity. Absence fails as unavailable.
