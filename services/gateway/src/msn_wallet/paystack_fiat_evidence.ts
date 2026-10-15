@@ -1,12 +1,14 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { MsnBalanceAuthority } from "./routes.js";
 import type { PaystackDvaPg } from "./paystack_dva.js";
+import { ensureMsnwFundingObligation } from "./funding_obligations.js";
 
 export interface VerifiedPaystackFunding {
   readonly reference: string;
   readonly amountKobo: string;
   readonly state: "fiat_verified_backing_pending";
   readonly paidAt: string;
+  readonly obligationState: "backing_pending" | "registration_pending";
 }
 export interface MsnwPaystackFiatService {
   readonly authorizer: MsnBalanceAuthority;
@@ -148,6 +150,8 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     return Object.freeze({
       reference: ref, amountKobo: amount,
       paidAt: timestamp, state: "fiat_verified_backing_pending" as const,
+      obligationState: record.obligation_state === "backing_pending"
+        ? "backing_pending" as const : "registration_pending" as const,
     });
   }
 
@@ -173,7 +177,8 @@ export function createMsnwPaystackFiatService(input: Readonly<{
          proof.evidenceHash, proof.paidAt],
       );
       if (result.rowCount === 1 && result.rows[0]) {
-        return toStatus(result.rows[0]);
+        await ensureMsnwFundingObligation(input.pool, { tenantId, userId, reference });
+        return { ...toStatus(result.rows[0]), obligationState: "backing_pending" as const };
       }
       // Global references may only be replayed by the EXACT same owner,
       // transaction, amount, Paystack evidence and destination bank account.
@@ -194,7 +199,8 @@ export function createMsnwPaystackFiatService(input: Readonly<{
           row.provider_evidence_sha256 !== proof.evidenceHash) {
         throw new PaystackEvidenceError("funding.replay_conflict", 409);
       }
-      return toStatus(row);
+      await ensureMsnwFundingObligation(input.pool, { tenantId, userId, reference });
+      return { ...toStatus(row), obligationState: "backing_pending" as const };
     },
     async handleSignedWebhook(rawBody: Buffer, signature: unknown) {
       // Paystack signs the ORIGINAL UTF-8 request bytes with HMAC-SHA512.
@@ -270,10 +276,13 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     },
     async list(tenantId: string, userId: string) {
       const result = await input.pool.query(
-        `SELECT reference,amount_kobo::text,provider_paid_at
-           FROM commerce.msnw_paystack_fiat_evidence
-          WHERE tenant_id=$1 AND user_id=$2
-          ORDER BY created_at DESC,reference DESC LIMIT 30`,
+        `SELECT e.reference,e.amount_kobo::text,e.provider_paid_at,
+                CASE WHEN o.reference IS NOT NULL THEN 'backing_pending'
+                     ELSE 'registration_pending' END AS obligation_state
+           FROM commerce.msnw_paystack_fiat_evidence e
+           LEFT JOIN commerce.msnw_funding_obligations o ON o.reference=e.reference
+          WHERE e.tenant_id=$1 AND e.user_id=$2
+          ORDER BY e.created_at DESC,e.reference DESC LIMIT 30`,
         [tenantId, userId],
       );
       return Object.freeze(result.rows.map(toStatus));
