@@ -413,7 +413,7 @@ export function createCustomerChannelBridge(input: Readonly<{
                 }
                 const choices = candidates
                   .slice(0, 8)
-                  .map((item) => item.displayName)
+                  .map((item, index) => `${index + 1}. chat with ${item.displayName}`)
                   .join("\n");
                 return `Several Masana match. Choose one by full name:\n${choices}`;
               }
