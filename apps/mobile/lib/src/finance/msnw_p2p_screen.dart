@@ -70,7 +70,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   }
   Future<List<Map<String, dynamic>>> _load() async {
     final path = switch (_tab) {
-      0 => '/offers', 1 => '/methods', _ => '/orders',
+      0 => '/offers', 1 => '/my-offers', _ => '/orders',
     };
     final json = _json(await _request('GET', path));
     return (json['items'] as List<dynamic>? ?? [])
@@ -154,7 +154,18 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       await _orderDetail('${res['orderId']}');
     });
   }
-  Future<void> _sell(List<Map<String,dynamic>> methods) async {
+  Future<void> _sell() async {
+    late final List<Map<String,dynamic>> methods;
+    try {
+      final json=_json(await _request('GET','/methods'));
+      methods=(json['items'] as List<dynamic>? ?? [])
+        .map((item)=>_json(item)).toList();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('Verified bank methods unavailable: $error')));
+      return;
+    }
+    if (!mounted) return;
     if (methods.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:
         Text('A verified bank payment method is required before selling MSNW.')));
@@ -239,7 +250,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             _reload();await _list;
           },child:ListView(children:[
             if(_tab==1) Padding(padding:const EdgeInsets.all(12),
-              child:FilledButton.icon(onPressed:_busy?null:()=>_sell(items),
+              child:FilledButton.icon(onPressed:_busy?null:_sell,
                 icon:const Icon(Icons.add),label:const Text('Create sell offer'))),
             if(items.isEmpty) const Padding(padding:EdgeInsets.all(28),
               child:Text('Nothing here yet. Pull down to refresh.',
@@ -248,17 +259,23 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
               title:Text(_tab==0
                   ? '${_ngn(item['rate_kobo_per_msnw'])} / MSNW'
                   : _tab==1
-                    ? '${item['bank_name']} · ${item['account_name']}'
+                    ? '${_ngn(item['rate_kobo_per_msnw'])} per MSNW'
                     : '${_msnw(item['amount_micro'])} · ${item['state']}'),
               subtitle:Text(_tab==0
                 ? 'Available: ${_msnw(item['remaining_micro'])}  · '
                   'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])}'
                 : _tab==1
-                    ? 'Verified payment method'
+                    ? 'Remaining ${_msnw(item['remaining_micro'])} · ${item['state']}'
                     : 'Fiat ${_ngn(item['fiat_kobo'])}'),
               trailing:const Icon(Icons.chevron_right),
               onTap: _busy?null: () {
                 if(_tab==0) {_buy(item);}
+                if(_tab==1 && item['state']=='active') {
+                  _confirm('Close this offer', 'Existing escrow orders will not be affected.')
+                    .then((yes){if(yes)_act(()async{
+                      await _request('POST','/offers/${item['offer_id']}/close',{});
+                    });});
+                }
                 if(_tab==2) {_orderDetail('${item['order_id']}');}
               },
             )),
