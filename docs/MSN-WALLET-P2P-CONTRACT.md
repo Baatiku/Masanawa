@@ -2,6 +2,32 @@
 
 Status: authoritative target design; implementation and provider qualification remain to be verified.
 
+## Owner-approved MSNW identity — 15 October 2026
+
+**MSNW** is the single customer-facing Masanawa wallet credit and the name
+designated for its official cryptocurrency token. It supersedes the older
+MSN/Credits naming in the target product design. This file retains the original
+name and historical contract text for audit/compatibility; where older sections
+refer to a proposed spendable MSN, read it as a **target MSNW feature**, not
+as evidence that an MSNW ledger balance or token is deployed. Never expose
+Credits/Cr as a separate customer-facing wallet.
+
+Historical `customer-credit`, `amountCredits` and prior `MSN` balances are
+**not automatically equivalent** to MSNW. Preserve liabilities and exact
+records; migrate only through approved, reversible, exact-value, reconciled
+ledger transactions with verifiable ownership and backing. No silent rename,
+1:1 conversion, balance erasure or issuance.
+
+On-chain token readiness requires a verified network, token contract/mint
+identity, precision, issuance authority, custody, supply controls, chain
+reconciliation and actual withdrawal verification. No token address, available
+asset amount, minting, bank funding entitlement or provider balance is
+established by this name decision. MSNW Fund, Send, Receive, Convert, Withdraw
+and History must show unavailable/disabled states until the server-authorized
+contracts work and provider settlement is qualified.
+
+
+
 This document supersedes product instructions that describe a spendable NGN wallet, direct platform fiat withdrawals, credit-branded balances, or crypto sales through P2P. It does not assert that existing implementations are complete.
 
 ## 1. Implementation authority
