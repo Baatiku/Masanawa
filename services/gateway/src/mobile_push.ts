@@ -57,5 +57,5 @@ export function createMobilePushRegistrationService(input: {
 }
 
 
-export {createFcmPushSender} from "@masanawa/mobile-push";
+export {createFcmPushSender,mobilePushAndroidChannel} from "@masanawa/mobile-push";
 export type {MobilePushSender} from "@masanawa/mobile-push";
