@@ -68,7 +68,7 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
    const match=(item:AgentPresentation)=>
     item.displayName.trim().toLowerCase()===seed.displayName.toLowerCase() ||
     (seed.key==="gwani"&&(item.displayName==="Gwani"||item.displayName==="Mallam Gwani Bodi")) ||
-    (seed.key==="gwana"&&(item.displayName==="Gwana"||item.displayName==="Malamah Gwana Fora"));
+    (seed.key==="gwana"&&(item.displayName==="Gwana"||item.displayName==="Malamah Gwana Sulafat"||item.displayName==="Malamah Gwana Fora"));
    let presentation=all.find(match);
    if(presentation&&!presentation.visibleInUserApp)continue;
    if(!presentation){
