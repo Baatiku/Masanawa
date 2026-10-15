@@ -126,37 +126,31 @@ void main() {
             onBilling: (_) {},
           );
           expect(find.byType(MasanawaWordmark), findsOneWidget);
-          expect(find.text('9007199254740991'), findsOneWidget);
-          expect(find.text('Credits'), findsWidgets);
-          expect(find.textContaining('MSN'), findsWidgets);
+          expect(find.text('MSNW'), findsOneWidget);
+          expect(find.text('MSNW balance'), findsOneWidget);
+          expect(find.text('9007199254740991'), findsNothing);
+          expect(find.text('Credits'), findsNothing);
           expect(find.textContaining('₦'), findsNothing);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
-          expect(tester.takeException(), isNull);
-          await tester.scrollUntilVisible(find.text('Data bundle'), 180);
-          expect(find.text('+9007199254740991 Credits'), findsOneWidget);
-          expect(find.text('-75 Credits'), findsOneWidget);
-          expect(find.text('Oct 12 2026 · 13:42'), findsOneWidget);
-          expect(find.text('Oct 11 2026 · 09:05'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('Data bundles'), 180);
+          expect(find.text('MSNW history unavailable'), findsOneWidget);
+          expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
         });
       }
     }
   }
 
-  testWidgets('actual zero remains distinct from unavailable balance', (
+  testWidgets('legacy zero is not misrepresented as verified MSNW', (
     tester,
   ) async {
     await mount(tester, value: _view(amount: 0, empty: true));
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('No recent activity'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+    expect(find.text('— MSNW'), findsOneWidget);
     await mount(tester);
     expect(find.text('0'), findsNothing);
-    expect(
-      find.text('Activity unavailable'),
-      findsOneWidget,
-    );
-    expect(find.text('No recent activity'), findsNothing);
+    expect(find.text('MSNW history unavailable'), findsOneWidget);
   });
 
   testWidgets(
@@ -165,27 +159,22 @@ void main() {
       final intents = <String>[];
       final loading = _LoadingWallet();
       await mount(tester, controller: () => loading, onBilling: intents.add);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.text('0'), findsNothing);
       await tester.tap(find.text('Airtime'));
       expect(intents, ['airtime']);
     },
   );
 
-  testWidgets('outage retry restores actual balance and empty history', (
+  testWidgets('legacy wallet outage does not create an MSNW receipt', (
     tester,
   ) async {
     final controller = _RetryWallet();
     await mount(tester, controller: () => controller, onCrypto: () {});
-    expect(
-      find.text('Activity unavailable'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Retry'));
-    await tester.pumpAndSettle();
-    expect(find.text('42'), findsOneWidget);
-    expect(find.text('No recent activity'), findsOneWidget);
-    expect(controller.attempts, 1);
+    expect(find.text('— MSNW'), findsOneWidget);
+    expect(find.text('MSNW history unavailable'), findsOneWidget);
+    expect(find.text('42'), findsNothing);
+    expect(controller.attempts, 0);
     expect(tester.takeException(), isNull);
   });
 
@@ -259,4 +248,19 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('MSNW Send stays disabled without qualified host action', (
+    tester,
+  ) async {
+    await mount(
+      tester,
+      value: _view(amount: 1000, empty: true),
+    );
+    final sendButton = tester.widget<FilledButton>(
+      find.widgetWithIcon(FilledButton, Icons.north_east),
+    );
+    expect(sendButton.onPressed, isNull);
+    expect(find.byTooltip('Send Credits'), findsNothing);
+    expect(find.text('Credits'), findsNothing);
+  });
 }

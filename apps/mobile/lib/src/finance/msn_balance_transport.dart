@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../core/network/api_client.dart';
 
-/// Exact authenticated MSN micro-units; never pass through double or a guessed
+/// Exact authenticated MSNW micro-units; never pass through double or a guessed
 /// exchange rate. NGN is a funding rail, not a wallet balance.
 class MsnBalance {
   const MsnBalance._(this.spendableMicro);
@@ -11,10 +11,10 @@ class MsnBalance {
 
   factory MsnBalance.fromJson(Map<String, dynamic> json) {
     final value = json['spendableMicro'];
-    if (json['asset'] != 'MSN' ||
+    if (json['asset'] != 'MSNW' ||
         value is! String ||
         !RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(value)) {
-      throw const FormatException('Invalid MSN balance response');
+      throw const FormatException('Invalid MSNW balance response');
     }
     return MsnBalance._(value);
   }
@@ -50,11 +50,11 @@ class GatewayMsnBalanceTransport implements MsnBalanceTransport {
   Future<MsnBalance> read() async {
     final token = _readAccessToken()?.trim();
     if (token == null || token.isEmpty) {
-      throw const ApiException('Sign in to view MSN balance', statusCode: 401);
+      throw const ApiException('Sign in to view MSNW balance', statusCode: 401);
     }
     try {
       final response = await _dio.get<Map<String, dynamic>>(
-        '$_baseUrl/v1/wallet/msn',
+        '$_baseUrl/v1/wallet/msnw',
         options: Options(
           followRedirects: false,
           receiveTimeout: const Duration(seconds: 12),
@@ -63,27 +63,27 @@ class GatewayMsnBalanceTransport implements MsnBalanceTransport {
       );
       final value = response.data;
       if (value == null) {
-        throw const ApiException('MSN balance is unavailable');
+        throw const ApiException('MSNW balance is unavailable');
       }
       // The shared Dio client may rotate the bearer or switch users while
       // awaiting the response. Never accept a different principal's readback.
       if (_readAccessToken()?.trim() != token) {
-        throw const ApiException('MSN session changed', statusCode: 401);
+        throw const ApiException('MSNW session changed', statusCode: 401);
       }
       try {
         return MsnBalance.fromJson(value);
       } on FormatException {
-        throw const ApiException('MSN balance response is unavailable');
+        throw const ApiException('MSNW balance response is unavailable');
       }
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
         // The endpoint stays disabled until migration + composition qualify.
-        throw const ApiException('MSN balance is not available yet',
+        throw const ApiException('MSNW balance is not available yet',
             statusCode: 404);
       }
       if (error.response?.statusCode == 401 ||
           error.response?.statusCode == 403) {
-        throw const ApiException('Sign in again to view MSN balance',
+        throw const ApiException('Sign in again to view MSNW balance',
             statusCode: 401);
       }
       throw mapDioError(error);

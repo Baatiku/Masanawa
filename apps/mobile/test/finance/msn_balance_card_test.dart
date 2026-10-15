@@ -16,7 +16,7 @@ class _QueueTransport implements MsnBalanceTransport {
 }
 
 MsnBalance _balance(String amount) =>
-    MsnBalance.fromJson({'asset': 'MSN', 'spendableMicro': amount});
+    MsnBalance.fromJson({'asset': 'MSNW', 'spendableMicro': amount});
 
 Widget _screen(MsnBalanceTransport transport, String? session) => MaterialApp(
   home: Scaffold(
@@ -35,12 +35,11 @@ void main() {
     ]);
     await tester.pumpWidget(_screen(t, 'account-session-A'));
     await tester.pumpAndSettle();
-    expect(find.text('1.25 MSN'), findsOneWidget);
-    expect(find.textContaining('NGN deposits are funding'), findsOneWidget);
+    expect(find.text('1.25 MSNW'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Refresh MSN balance'));
+    await tester.tap(find.byTooltip('Refresh MSNW balance'));
     await tester.pumpAndSettle();
-    expect(find.text('2.500001 MSN'), findsOneWidget);
+    expect(find.text('2.500001 MSNW'), findsOneWidget);
     expect(t.calls, 2);
   });
 
@@ -55,11 +54,11 @@ void main() {
     await tester.pumpWidget(_screen(transport, 'session-B'));
     original.complete(_balance('91000000'));
     await tester.pump();
-    expect(find.text('91 MSN'), findsNothing);
+    expect(find.text('91 MSNW'), findsNothing);
     next.complete(_balance('1000000'));
     await tester.pumpAndSettle();
-    expect(find.text('1 MSN'), findsOneWidget);
-    expect(find.text('91 MSN'), findsNothing);
+    expect(find.text('1 MSNW'), findsOneWidget);
+    expect(find.text('91 MSNW'), findsNothing);
   });
 
   testWidgets('sign-out immediately clears previously visible money',
@@ -67,12 +66,12 @@ void main() {
     final transport = _QueueTransport([Future.value(_balance('10000000'))]);
     await tester.pumpWidget(_screen(transport, 'session-A'));
     await tester.pumpAndSettle();
-    expect(find.text('10 MSN'), findsOneWidget);
+    expect(find.text('10 MSNW'), findsOneWidget);
 
     await tester.pumpWidget(_screen(transport, null));
     await tester.pump();
-    expect(find.text('10 MSN'), findsNothing);
-    expect(find.text('Sign in to view your MSN balance.'), findsOneWidget);
+    expect(find.text('10 MSNW'), findsNothing);
+    expect(find.text('Sign in to view your MSNW balance.'), findsOneWidget);
     expect(transport.calls, 1);
   });
 
@@ -86,7 +85,7 @@ void main() {
     ]);
     await tester.pumpWidget(_screen(transport, 'session-A'));
     await tester.pumpAndSettle();
-    expect(find.text('MSN balance is not available yet.'), findsOneWidget);
-    expect(find.text('0 MSN'), findsNothing);
+    expect(find.text('MSNW balance is not available yet.'), findsOneWidget);
+    expect(find.text('0 MSNW'), findsNothing);
   });
 }
