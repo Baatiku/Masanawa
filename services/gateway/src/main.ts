@@ -2646,10 +2646,10 @@ export async function startGatewayService(
               async refund() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
             };
             const service = createP2pService(database.featurePool!, escrow);
+            const evidenceStorage=configuredP2pEvidenceStorage(env,service);
             return {
               service,
-              ...(configuredP2pEvidenceStorage(env,service)
-                ? { evidenceStorage: configuredP2pEvidenceStorage(env,service)! } : {}),
+              ...(evidenceStorage ? { evidenceStorage } : {}),
               ...(env.PAYSTACK_SECRET_KEY?.trim()
                 ? { bankMethods: createVerifiedP2pBankMethods({
                     pool: database.featurePool!,
