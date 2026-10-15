@@ -6,6 +6,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 
 - Repository: Baatiku/Masanawa; base main 1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4 (PR #19).
 - Completed PR #22: b542c7106987c46529516d96ff74a3e226dbc905 (Paystack customer/DVA onboarding and Billing fail-closed improvements).
+- Completed PR #37: ede2c890ffea0d0ce7d1560c0a5fc44e9a7168ab (Gateway/Worker/Flutter/PostgreSQL funding-obligation journal and recovery).
 - Completed PR #33: 11e5d145e1e2d5390f2f0b769629574f6668223f (signed Paystack KYC webhook recovery and revalidation).
 - Completed PR #29: 39842f458638ccc80928f80e791344a8a07ab9bf (phone-only enrollment and complete identity fields).
 - Completed PR #24: ced8df8a1a1d283f3fbbf45a2dd91f67a856bdbb (role-separated mint/burn controls, Foundry deployment config and source tests).
@@ -76,7 +77,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 Progress labels indicate incomplete journeys even when historic source fragments already exist. Only mark DONE after the full listed source slice is actually wired and tested; distinguish production from development merge.
 ## Source delivery increment 3
 
-- Implemented opt-in legal/contact identity fields on mobile for customers without a complete Paystack-ready profile; the Gateway preserves existing login identity and only accepts missing contact attributes or a separately recorded legal name. Added phone-only enrollment account-fencing test. Source branch feat/msnw-complete-contact-identity-20261015; merge SHA to be recorded after integration.
+- Implemented opt-in legal/contact identity fields on mobile for customers without a complete Paystack-ready profile; the Gateway preserves existing login identity and only accepts missing contact attributes or a separately recorded legal name. Added phone-only enrollment account-fencing test. Source branch feat/msnw-complete-contact-identity-20261015; merged as PR #29 at 39842f458638ccc80928f80e791344a8a07ab9bf.
 
 ## Source delivery increment 2
 
@@ -85,10 +86,10 @@ Progress labels indicate incomplete journeys even when historic source fragments
 
 ## Source delivery increment 4
 
-- Added `MsnwPaystackEnrollmentService.handleProviderIdentification`, dispatch from existing raw HMAC-protected Paystack finance webhook and compose same enrollment service instance in Gateway. Only matching customer id/code/email and independently observed Paystack `identified=true` can grant DVA identity. Failed verification returns to retryable enrollment without losing customer ID. Late failure never downgrades verified onboarding. Tests: services/gateway/src/msn_wallet/paystack_customer_enrollment.test.ts and paystack_identity_webhook.test.ts. No payment issuances or deployed contracts. Merge SHA to record once PR lands.
+- Added `MsnwPaystackEnrollmentService.handleProviderIdentification`, dispatch from existing raw HMAC-protected Paystack finance webhook and compose same enrollment service instance in Gateway. Only matching customer id/code/email and independently observed Paystack `identified=true` can grant DVA identity. Failed verification returns to retryable enrollment without losing customer ID. Late failure never downgrades verified onboarding. Tests: services/gateway/src/msn_wallet/paystack_customer_enrollment.test.ts and paystack_identity_webhook.test.ts. No payment issuances or deployed contracts. Merged as PR #33 at 11e5d145e1e2d5390f2f0b769629574f6668223f.
 
 ## Source delivery increment 5
 
 - New migration `packages/commerce/migrations/0125_msnw_funding_obligations.sql` and Gateway `msn_wallet/funding_obligations.ts` store only immutable NGN obligations created by SELECT from verified Paystack evidence. Owner/global ref conflicts fail closed, exact replay is idempotent, and there is no token issuance or user-provided rate.
 - Existing Paystack verification automatically registers the obligation. The canonical Worker (`services/worker/src/main.ts`, `jobs/msnw/funding_obligations.ts`) resumes interrupted registration through a bounded, non-overlapping scheduler. Flutter recent funding activity shows journal-recovery state versus registered-but-backing-pending.
-- Added Gateway/Worker regression tests in `funding_obligations.test.ts` and `jobs/msnw/funding_obligations.test.ts`. Source/auth/tests have not been executed against real PG/Paystack in this connector session; staged reserve/quote/mint/Send/Convert/escrow obligations remain IN PROGRESS, not DONE. PR and merged SHA to be recorded when integrated.
+- Added Gateway/Worker regression tests in `funding_obligations.test.ts` and `jobs/msnw/funding_obligations.test.ts`. Source/auth/tests have not been executed against real PG/Paystack in this connector session; staged reserve/quote/mint/Send/Convert/escrow obligations remain IN PROGRESS, not DONE. Integrated in PR #37 at ede2c890ffea0d0ce7d1560c0a5fc44e9a7168ab.
