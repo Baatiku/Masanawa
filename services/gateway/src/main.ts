@@ -171,6 +171,7 @@ import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
 import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
+import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2542,6 +2543,18 @@ export async function startGatewayService(
             chainId: env.MSNW_CHAIN_ID,
             contract: env.MSNW_TOKEN_CONTRACT,
             rpcUrl: env.MSNW_RPC_URL,
+          }) }
+        : {}),
+      // Paystack verification is independent of MSNW issuance. Verified fiat
+      // remains a pending obligation until custody/quote settlement.
+      ...(env.MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED === "true" &&
+          env.MASANAWA_MSNW_PAYSTACK_DVA_ENABLED === "true" &&
+          env.PAYSTACK_SECRET_KEY?.trim() &&
+          database.featurePool && msnBalanceAuthorizer
+        ? { msnwPaystackFiat: createMsnwPaystackFiatService({
+            pool: database.featurePool,
+            authorizer: msnBalanceAuthorizer,
+            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
         : {}),
       // A DVA is only a bank payment destination, never token issuance.
