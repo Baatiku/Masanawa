@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS msnw_p2p_events_order_idx
 -- Once a bank instruction is provider-verified, its recipient must NEVER be
 -- mutated behind an existing order. Reverification creates a new method ID.
 CREATE OR REPLACE FUNCTION commerce.msnw_p2p_freeze_payment_instructions()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF (OLD.tenant_id,OLD.owner_id,OLD.method_type,OLD.bank_name,
       OLD.account_name,OLD.account_number,OLD.verification_reference,OLD.verified_at)
@@ -114,7 +114,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS msnw_p2p_payment_instructions_immutable
   ON commerce.msnw_p2p_payment_methods;
 CREATE TRIGGER msnw_p2p_payment_instructions_immutable
@@ -123,11 +123,11 @@ CREATE TRIGGER msnw_p2p_payment_instructions_immutable
 
 -- Audit records are append-only; any repair must be a new linked event.
 CREATE OR REPLACE FUNCTION commerce.msnw_p2p_deny_audit_mutation()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'MSNW P2P evidence and audit events are immutable';
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS msnw_p2p_evidence_immutable
   ON commerce.msnw_p2p_evidence;
 CREATE TRIGGER msnw_p2p_evidence_immutable
