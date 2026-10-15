@@ -41,6 +41,35 @@ describe("connected Status canonical session and feature registration",()=>{
   const direct=await app.inject({method:"POST",url:"/v1/admin/feed/posts",headers:{authorization:"Bearer valid"},payload:{authorMasanaId:"masana",kind:"text",body:"bypass"}});
   expect(direct.statusCode).toBe(410);await app.close();
  });
+ it("makes signed-in fan comments visible instead of forcing all into pending staff review",async()=>{
+  const p=ports(),app=Fastify();
+  const comment=vi.fn(async()=>({state:"visible",body:"Study question"}));
+  await registerStatusRuntime(app,{...p.options,feed:{...p.options.feed,comment} as never});
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  const response=await app.inject({method:"POST",url:`/v1/posts/${id}/comments`,
+    headers:{authorization:"Bearer valid","idempotency-key":"comment-unique01"},
+    payload:{body:"Study question"}});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().state).toBe("visible");
+  expect(comment).toHaveBeenCalledWith(
+    expect.objectContaining({tenantId:"trusted_tenant",id:"trusted_user",kind:"fan"}),
+    id,"Study question","comment-unique01",false,null);
+  await app.close();
+ });
+ it("only the injected trusted risk policy can quarantine comments",async()=>{
+  const p=ports(),app=Fastify();
+  const comment=vi.fn(async()=>({state:"pending"}));
+  const risk=vi.fn(async()=>true);
+  await registerStatusRuntime(app,{...p.options,feed:{...p.options.feed,comment} as never,
+    isNewAccount:risk});
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  await app.inject({method:"POST",url:`/v1/posts/${id}/comments`,
+    headers:{authorization:"Bearer valid","idempotency-key":"comment-unique02"},
+    payload:{body:"Study question"}});
+  expect(risk).toHaveBeenCalledWith({tenantId:"trusted_tenant",userId:"trusted_user"});
+  expect(comment).toHaveBeenCalledWith(expect.anything(),id,"Study question","comment-unique02",true,null);
+  await app.close();
+ });
  it("disabled feature performs no session or storage work",async()=>{
   const p=ports(),app=Fastify();await registerStatusRuntime(app,{...p.options,enabled:()=>false});
   expect((await app.inject("/v1/feed")).statusCode).toBe(503);
