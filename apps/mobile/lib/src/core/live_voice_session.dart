@@ -21,6 +21,22 @@ enum LiveVoiceState {
   failed,
 }
 
+/// A grant expires for *establishing* Gemini media, not for continuing a
+/// healthy, already established conversation. Only explicit call admission
+/// deadlines and the consented duration may terminate a connected call.
+Duration? permittedConnectedCallDuration({
+  required DateTime now,
+  DateTime? endAt,
+  Duration? maxDuration,
+}) {
+  Duration? allowed = maxDuration;
+  if (endAt != null) {
+    final untilDeadline = endAt.difference(now);
+    if (allowed == null || untilDeadline < allowed) allowed = untilDeadline;
+  }
+  return allowed;
+}
+
 class LiveVoiceSession with WidgetsBindingObserver {
   LiveVoiceSession({
     required this.grant,
@@ -104,6 +120,9 @@ class LiveVoiceSession with WidgetsBindingObserver {
     if (_closed || _socket != null) return;
     _state.add(LiveVoiceState.connecting);
     try {
+      if (!DateTime.now().isBefore(grant.expiresAt)) {
+        throw StateError('Live voice connection permission has expired.');
+      }
       if (_ownsAudio) {
         if (!await _recorder!.hasPermission()) {
           final perm = await AppPermissions.request(AppPermission.microphone);
@@ -344,20 +363,17 @@ class LiveVoiceSession with WidgetsBindingObserver {
         }
         await _beginMicrophone(initialSetup: true);
         if (!_ready.isCompleted && !_closed) {
-          final now = DateTime.now();
-          final deadline = endAt;
-          final expiry = deadline != null && deadline.isBefore(grant.expiresAt)
-              ? deadline
-              : grant.expiresAt;
-          final remaining = expiry.difference(now);
-          final limit = maxDuration;
-          final allowed = limit != null && limit < remaining
-              ? limit
-              : remaining;
-          if (allowed <= Duration.zero) {
-            throw StateError('This call permission has expired.');
+          final allowed = permittedConnectedCallDuration(
+            now: DateTime.now(),
+            endAt: endAt,
+            maxDuration: maxDuration,
+          );
+          if (allowed != null) {
+            if (allowed <= Duration.zero) {
+              throw StateError('This call permission has expired.');
+            }
+            _durationTimer = Timer(allowed, () => unawaited(close()));
           }
-          _durationTimer = Timer(allowed, () => unawaited(close()));
           _ready.complete();
           if (!_connectedReported) {
             _connectedReported = true;
