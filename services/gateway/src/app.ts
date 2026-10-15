@@ -66,6 +66,8 @@ import { registerCreditTransferRoutes, registerGiftRoutes } from "./credit_trans
 import { registerMsnBalanceRoutes, type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
 import { registerMsnFundingStatusRoutes, type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
 import { registerMsnwPaystackDvaRoutes } from "./msn_wallet/paystack_dva_routes.js";
+import { registerMsnwPaystackEnrollmentRoutes } from "./msn_wallet/paystack_customer_enrollment_routes.js";
+import type { MsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { registerMsnwOnchainBalanceRoutes } from "./msn_wallet/msnw_onchain_routes.js";
 import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
@@ -175,6 +177,7 @@ export interface GatewayAppOptions {
   readonly msnFunding?: Readonly<{ authorizer: MsnBalanceAuthority; reader: MsnFundingStatusReader }>;
   /** Paystack DVA is consent and KYC gated; it does not credit MSNW. */
   readonly msnwPaystackDva?: MsnwPaystackDvaService;
+  readonly msnwPaystackEnrollment?: MsnwPaystackEnrollmentService;
   /** Finalized, identity-verified ERC20 MSNW customer balance (no legacy MSN). */
   readonly msnwOnchainBalance?: MsnwOnchainBalanceDependencies;
   /** Fiat verification journal only: no MSNW issuance permission. */
@@ -1637,6 +1640,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.msnwPaystackDva) {
     registerMsnwPaystackDvaRoutes(app, options.msnwPaystackDva);
+  }
+  if (options.msnwPaystackEnrollment) {
+    registerMsnwPaystackEnrollmentRoutes(app, options.msnwPaystackEnrollment);
   }
   if (options.msnwOnchainBalance) {
     registerMsnwOnchainBalanceRoutes(app, options.msnwOnchainBalance);

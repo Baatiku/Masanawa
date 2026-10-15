@@ -170,6 +170,7 @@ import { createGeminiLiveAudioRenderer } from "./native_audio.js";
 import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
 import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
+import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
@@ -2547,6 +2548,16 @@ export async function startGatewayService(
         ? { msnwPaystackFiat: createMsnwPaystackFiatService({
             pool: database.featurePool,
             authorizer: msnBalanceAuthorizer,
+            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+          }) }
+        : {}),
+      // Paystack customer creation and identity verification precede account assignment.
+      // This never issues MSNW; it only establishes provider-verified KYC.
+      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
+          database.featurePool && billingCustomerAuthorizer
+        ? { msnwPaystackEnrollment: createMsnwPaystackEnrollmentService({
+            pool: database.featurePool,
+            sessions: billingCustomerAuthorizer,
             paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
         : {}),
