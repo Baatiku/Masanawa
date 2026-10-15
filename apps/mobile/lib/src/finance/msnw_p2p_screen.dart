@@ -161,105 +161,132 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   Future<void> _verifySellerBank() async {
     late final List<Map<String,dynamic>> banks;
     try {
-      final payload=_json(await _request('GET','/banks'));
-      banks=(payload['items'] as List<dynamic>? ?? []).map(_json).toList();
-      if(banks.isEmpty)throw StateError('Bank directory unavailable.');
-    } catch(error) {
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('Bank verification unavailable: $error')));
-      return;
-    }
-    if(!mounted)return;
-    final number=TextEditingController();
-    String? code; bool consent=false;
-    try {
-      final details=await showDialog<Map<String,String>>(context:context,
-        builder:(dialog)=>StatefulBuilder(builder:(dialog,update)=>AlertDialog(
-          title:const Text('Verify seller bank'),
-          content:SingleChildScrollView(child:Column(
-            mainAxisSize:MainAxisSize.min,children:[
-              const Text('Your Paystack identity verification must be completed. '
-                'Only a bank account whose full holder name matches your verified '
-                'legal identity can receive P2P payments.'),
-              const SizedBox(height:16),
-              DropdownButtonFormField<String>(
-                isExpanded:true,initialValue:code,
-                decoration:const InputDecoration(labelText:'Nigerian bank'),
-                items:banks.map((b)=>DropdownMenuItem<String>(
-                  value:'${b['code']}',child:Text('${b['name']}',overflow:TextOverflow.ellipsis),
-                )).toList(),
-                onChanged:(value)=>update(()=>code=value),
-              ),
-              TextField(controller:number,keyboardType:TextInputType.number,
-                onChanged:(_)=>update((){}),
-                maxLength:10,decoration:const InputDecoration(
-                  labelText:'Your 10-digit account number')),
-              CheckboxListTile(
-                value:consent,onChanged:(v)=>update(()=>consent=v??false),
-                title:const Text('I consent to verifying these bank details '
-                  'with Paystack for P2P payment instructions.'),
-              ),
-            ])),
-          actions:[
-            TextButton(onPressed:()=>Navigator.pop(dialog),
-              child:const Text('Cancel')),
-            FilledButton(
-              onPressed:!consent||code==null||!RegExp(r'^[0-9]{10}
-    late final List<Map<String,dynamic>> methods;
-    try {
-      final json=_json(await _request('GET','/methods'));
-      methods=(json['items'] as List<dynamic>? ?? [])
-        .map((item)=>_json(item)).toList();
+      final payload = _json(await _request('GET', '/banks'));
+      banks = (payload['items'] as List<dynamic>? ?? [])
+        .map(_json).toList(growable:false);
+      if (banks.isEmpty) throw StateError('No banks available');
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('Verified bank methods unavailable: $error')));
+        SnackBar(content:Text('Bank directory unavailable: $error')));
       return;
     }
     if (!mounted) return;
-    if (methods.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:
-        Text('A verified bank payment method is required before selling MSNW.')));
-      return;
-    }
-    final rate = await _field(title: 'Create sell offer', label: 'NGN per 1 MSNW',
-      hint: 'e.g. 1500.00');
-    if (rate == null || !mounted) return;
-    final min = await _field(title: 'Minimum trade', label: 'Minimum MSNW',
-      hint: 'e.g. 1');
-    if (min == null || !mounted) return;
-    final max = await _field(title: 'Maximum trade', label: 'Maximum MSNW',
-      hint: 'e.g. 100');
-    if (max == null || !mounted) return;
-    final available = await _field(title: 'Offer inventory', label: 'MSNW inventory',
-      hint: 'e.g. 100');
-    if (available == null || !mounted) return;
-    late final String rateKobo, minMicro, maxMicro, inventoryMicro;
+    final number = TextEditingController();
+    String? selectedBank;
+    bool consent = false;
     try {
-      // Currency price accepts at most two NGN decimal places.
-      final text = rate.trim();
-      if (!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?$').hasMatch(text)) {
-        throw const FormatException('Enter a valid NGN rate.');
-      }
-      final parts = text.split('.');
-      rateKobo = (BigInt.parse(parts[0])*BigInt.from(100) +
-        BigInt.parse((parts.length>1?parts[1]:'').padRight(2,'0'))).toString();
-      minMicro=_micro(min);maxMicro=_micro(max);inventoryMicro=_micro(available);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      final request = await showDialog<Map<String,String>>(
+        context:context,
+        builder:(dialog) => StatefulBuilder(builder:(dialog, update) =>
+          AlertDialog(
+            title:const Text('Verify seller bank'),
+            content:SingleChildScrollView(child:Column(
+              mainAxisSize:MainAxisSize.min,
+              children:[
+                const Text('Your bank account must match your Paystack-verified '
+                  'legal identity. This is for receiving P2P payments.'),
+                const SizedBox(height:12),
+                DropdownButtonFormField<String>(
+                  isExpanded:true,
+                  decoration:const InputDecoration(labelText:'Nigerian bank'),
+                  items:[
+                    for(final bank in banks)
+                      DropdownMenuItem<String>(
+                        value:'${bank['code']}',
+                        child:Text('${bank['name']}',overflow:TextOverflow.ellipsis)),
+                  ],
+                  onChanged:(value)=>update(()=>selectedBank=value),
+                ),
+                TextField(controller:number,maxLength:10,
+                  keyboardType:TextInputType.number,
+                  onChanged:(_)=>update((){}),
+                  decoration:const InputDecoration(labelText:'10-digit bank account number')),
+                CheckboxListTile(
+                  value:consent,
+                  onChanged:(value)=>update(()=>consent=value??false),
+                  title:const Text('I consent to Paystack verifying my bank details.'),
+                ),
+              ])),
+            actions:[
+              TextButton(onPressed:()=>Navigator.pop(dialog),
+                child:const Text('Cancel')),
+              FilledButton(
+                onPressed:consent && selectedBank!=null &&
+                  RegExp(r'^[0-9]{10}$').hasMatch(number.text)
+                    ? ()=>Navigator.pop(dialog,{
+                        'bankCode':selectedBank!,
+                        'accountNumber':number.text,
+                      })
+                    : null,
+                child:const Text('Verify')),
+            ],
+          )),
+      );
+      if(request==null||!mounted)return;
+      await _act(() async {
+        final result = _json(await _request('POST','/methods/verify',
+          {...request,'consent':true}));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text('Verified ${result['bankName']} · ${result['accountName']}')));
+        _reload(1);
+      });
+    } finally {
+      number.dispose();
+    }
+  }
+
+  Future<void> _sell() async {
+    late final List<Map<String,dynamic>> methods;
+    try {
+      final payload=_json(await _request('GET','/methods'));
+      methods=(payload['items'] as List<dynamic>? ?? []).map(_json).toList();
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('Payment methods unavailable: $error')));
       return;
     }
-    if (!await _confirm('Publish MSNW offer',
-      'Price ${_ngn(rateKobo)} per MSNW. '
-      'Only a buyer order can reserve your verified available MSNW.')) return;
+    if(!mounted)return;
+    if(methods.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Verify your bank account before creating an offer.')));
+      return;
+    }
+    final rate=await _field(title:'Sell MSNW',label:'NGN per MSNW',hint:'e.g. 1500.00');
+    if(rate==null||!mounted)return;
+    final minimum=await _field(title:'Minimum purchase',label:'MSNW amount',hint:'e.g. 1');
+    if(minimum==null||!mounted)return;
+    final maximum=await _field(title:'Maximum purchase',label:'MSNW amount',hint:'e.g. 100');
+    if(maximum==null||!mounted)return;
+    final inventory=await _field(title:'Offer inventory',label:'MSNW amount',hint:'e.g. 100');
+    if(inventory==null||!mounted)return;
+    late final String rateKobo,minMicro,maxMicro,inventoryMicro;
+    try {
+      if(!RegExp(r'^[0-9]{1,10}(\\.[0-9]{1,2})?$').hasMatch(rate.trim()))
+        throw const FormatException('Enter a valid NGN price.');
+      final parts=rate.trim().split('.');
+      rateKobo=(BigInt.parse(parts.first)*BigInt.from(100)+
+        BigInt.parse((parts.length==2?parts[1]:'').padRight(2,'0'))).toString();
+      minMicro=_micro(minimum);maxMicro=_micro(maximum);
+      inventoryMicro=_micro(inventory);
+    } catch(error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('Invalid offer: $error')));
+      return;
+    }
+    if(!await _confirm('Publish sell offer',
+      'Price ${_ngn(rateKobo)} per MSNW. Your available MSNW will only '
+      'be reserved when a buyer creates a funded escrow order.'))return;
     await _act(() async {
       await _request('POST','/offers',{
         'paymentMethodId':methods.first['method_id'],
-        'rateKoboPerMsnw':rateKobo,'minMicro':minMicro,
-        'maxMicro':maxMicro,'inventoryMicro':inventoryMicro,
+        'rateKoboPerMsnw':rateKobo,
+        'minMicro':minMicro,'maxMicro':maxMicro,
+        'inventoryMicro':inventoryMicro,
       });
       _reload(0);
     });
   }
+
   Future<void> _orderDetail(String id) async {
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute<void>(
