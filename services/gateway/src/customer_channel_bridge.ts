@@ -36,6 +36,7 @@ export interface CustomerChannelResult {
   readonly handled: boolean;
   readonly duplicate: boolean;
   readonly reply: string | null;
+  readonly audio?: Readonly<{ mimeType: string; dataBase64: string }>;
   readonly requestContact: boolean;
   readonly shouldDeliver: boolean;
 }
@@ -46,6 +47,25 @@ export interface CustomerChannelBridge {
     channel: CustomerChannel;
     messageId: string;
   }>): Promise<void>;
+}
+
+/** Provider voice is optional: only forward already rendered, bounded and
+ * recognized audio. An unsupported native PCM stream stays on the regular
+ * text channel rather than sending unplayable/fabricated media. */
+export function customerChannelAudioResponse(
+  audioBase64: string | undefined,
+  audioMimeType: string | undefined,
+): Readonly<{ mimeType: string; dataBase64: string }> | undefined {
+  const mimeType = audioMimeType?.trim().toLowerCase() ?? "";
+  const base = mimeType.split(";")[0]?.trim() ?? "";
+  if (!["audio/ogg", "audio/mpeg", "audio/mp4", "audio/m4a",
+        "audio/wav", "audio/x-wav"].includes(base)) return undefined;
+  if (!audioBase64 || audioBase64.length > 11_184_812 ||
+      audioBase64.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/u.test(audioBase64)) return undefined;
+  const bytes = Buffer.from(audioBase64, "base64");
+  if (bytes.length < 1 || bytes.length > 8 * 1024 * 1024) return undefined;
+  return Object.freeze({ mimeType, dataBase64: audioBase64 });
 }
 
 function instant(offsetMs = 0): string {
@@ -527,6 +547,9 @@ export function createCustomerChannelBridge(input: Readonly<{
           handled: true,
           duplicate: false,
           reply: result.reply,
+          ...(customerChannelAudioResponse(result.audioBase64, result.audioMimeType)
+            ? { audio: customerChannelAudioResponse(result.audioBase64, result.audioMimeType) }
+            : {}),
           requestContact: false,
           shouldDeliver: true,
         });
