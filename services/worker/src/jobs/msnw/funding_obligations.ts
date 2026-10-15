@@ -5,10 +5,25 @@
  * independent Paystack verification, never from a customer request.
  */
 export function createMsnwFundingObligationRecovery(pool: Readonly<{
-  query(sql: string): Promise<{ rowCount: number | null }>;
+  query(sql: string): Promise<{ rowCount: number | null; rows?: Record<string, unknown>[] }>;
 }>) {
   return Object.freeze({
     async runOnce(): Promise<Readonly<{ registered: number }>> {
+      const audit = await pool.query(
+        "SELECT count(*)::text AS mismatches " +
+        "FROM commerce.msnw_funding_obligations o " +
+        "LEFT JOIN commerce.msnw_paystack_fiat_evidence e " +
+        "ON e.reference=o.reference " +
+        "WHERE e.reference IS NULL OR e.tenant_id IS DISTINCT FROM o.tenant_id " +
+        "OR e.user_id IS DISTINCT FROM o.user_id " +
+        "OR e.amount_kobo IS DISTINCT FROM o.amount_kobo " +
+        "OR e.provider_evidence_sha256 IS DISTINCT FROM o.paystack_evidence_sha256",
+      );
+      const mismatches = audit.rows?.[0]?.mismatches;
+      if (typeof mismatches !== "string" || !/^[0-9]+$/.test(mismatches))
+        throw new Error("msnw.obligation.audit_unavailable");
+      if (BigInt(mismatches) !== 0n)
+        throw new Error("msnw.obligation.evidence_mismatch");
       const result = await pool.query(
         "WITH missing AS (" +
         " SELECT e.reference,e.tenant_id,e.user_id,e.amount_kobo," +
