@@ -106,7 +106,7 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     const paidAt = payment.paid_at;
     if (payment.reference !== reference || payment.status !== "success" ||
         payment.domain !== environment || payment.currency !== "NGN" ||
-        payment.channel !== "bank_transfer" ||
+        !["bank_transfer", "dedicated_nuban"].includes(String(payment.channel)) ||
         authorization?.channel !== "dedicated_nuban" ||
         typeof authorization.receiver_bank_account_number !== "string" ||
         !/^[0-9]{10}$/.test(authorization.receiver_bank_account_number) ||
@@ -162,7 +162,7 @@ export function createMsnwPaystackFiatService(input: Readonly<{
           paystack_customer_id,amount_kobo,funding_account_number,
           provider_evidence_sha256,provider_paid_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (reference) DO NOTHING
+         ON CONFLICT DO NOTHING
          RETURNING reference,amount_kobo::text,provider_paid_at`,
         [reference, proof.transactionId, tenantId, userId,
          owner.customerId, proof.amountKobo, owner.accountNumber,

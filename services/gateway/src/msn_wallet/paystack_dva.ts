@@ -191,7 +191,30 @@ export function createMsnwPaystackDvaService(input: Readonly<{
   return Object.freeze({
     authorizer,
     async read(tenantId: string, userId: string) {
-      return status(await row(tenantId, userId));
+      const enrollment = await row(tenantId, userId);
+      if (enrollment?.state === "requested") {
+        // Dedicated-account assignment can finish asynchronously. GET must
+        // reconcile automatically: users should not POST consent again just
+        // to recover a bank number created by Paystack.
+        return reconcile(tenantId, userId, enrollment.customerId);
+      }
+      if (enrollment?.state === "assigned") {
+        const id = enrollment.providerId;
+        if (!id || !/^[1-9][0-9]*$/.test(id)) {
+          throw new DvaError("funding.provider_account_unavailable", 503);
+        }
+        // Do not display an account that Paystack subsequently deactivated,
+        // unassigned or reassigned to a different customer.
+        const live = await paystack("/dedicated_account/" + encodeURIComponent(id));
+        const account = qualifiedAccount(live, enrollment.customerId);
+        if (!account || account.providerId !== id ||
+            account.accountNumber !== enrollment.accountNumber ||
+            account.bankName !== enrollment.bankName ||
+            account.accountName !== enrollment.accountName) {
+          throw new DvaError("funding.provider_account_changed", 503);
+        }
+      }
+      return status(enrollment);
     },
     async request(tenantId: string, userId: string, consent: boolean) {
       if (consent !== true) throw new DvaError("funding.explicit_consent_required", 400);
