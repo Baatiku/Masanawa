@@ -19,7 +19,7 @@ export function prepareChannelReplyAudio(
   const bytes = Buffer.from(dataBase64, "base64");
   if (bytes.length === 0 || bytes.length > maxAudioBytes) return null;
   const mime = mimeType.toLowerCase().trim();
-  if (mime.startsWith("audio/pcm") || mime.startsWith("audio/l16")) {
+  if (mime.startsWith("audio/pcm")) {
     const match = /(?:^|;)\s*rate=(\d{4,6})/iu.exec(mime);
     const rate = match ? Number(match[1]) : 24000;
     if (!Number.isSafeInteger(rate) || rate < 8000 || rate > 48000 ||
