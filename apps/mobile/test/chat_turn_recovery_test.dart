@@ -30,12 +30,12 @@ void main() {
   });
 
   test('do not silently retry legacy sends lacking canonical request IDs', () {
-    for (final status in ['sending', 'sent']) {
-      expect(recoveredChatDeliveryStatus(message(
-        status,
-        requestId: null,
-      )), 'failed');
-    }
+    expect(recoveredChatDeliveryStatus(
+      message('sending', requestId: null),
+    ), 'failed');
+    expect(recoveredChatDeliveryStatus(
+      message('sent', requestId: null),
+    ), 'sent', reason: 'Historical sent messages must not be falsified');
   });
 
   test('never replay already read, delivered, pending or failed operations', () {
