@@ -1571,8 +1571,8 @@ export async function startGatewayService(
       authorizer: financialAuthorizer,
       crypto: database.crypto,
       nowPayments: payments,
-      nowPaymentsCustody: custody,
-      nowPaymentsPayout: payout,
+      ...(custody ? { nowPaymentsCustody: custody } : {}),
+      ...(payout ? { nowPaymentsPayout: payout } : {}),
       ...(payoutsConfigured ? { withdrawalEvidence: runtimeEvidence } : {}),
       ...(conversionsConfigured ? { conversionEvidence: runtimeEvidence } : {}),
       ...(payoutFeeMode === undefined
