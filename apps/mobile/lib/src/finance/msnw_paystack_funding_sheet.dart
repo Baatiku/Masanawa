@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Bank transfer only. Paystack DVA assignment does not issue MSNW tokens.
+const bool kMsnwPaystackVerifyEnabled = bool.fromEnvironment(
+  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: false,
+);
+
 class MsnwPaystackFundingSheet extends StatefulWidget {
   const MsnwPaystackFundingSheet({
     super.key,
@@ -26,6 +30,57 @@ class MsnwPaystackFundingSheet extends StatefulWidget {
 class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
   bool _busy = false;
   bool _consent = false;
+  bool _verifying = false;
+  String? _verificationResult;
+  final _reference = TextEditingController();
+
+  @override
+  void dispose() {
+    _reference.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verifyTransfer() async {
+    if (_verifying || !mounted || _busy ||
+        widget.currentUserId() != widget.expectedUserId) return;
+    final ref = _reference.text.trim();
+    if (!RegExp(r'^[A-Za-z0-9_.:-]{1,128}$').hasMatch(ref)) {
+      setState(() => _verificationResult = 'Enter a valid Paystack transaction reference.');
+      return;
+    }
+    final token = widget.accessToken()?.trim();
+    if (token == null || token.isEmpty) return;
+    setState(() { _verifying = true; _verificationResult = null; });
+    try {
+      final url = '${widget.baseUrl.replaceFirst(RegExp(r"/$"), "")}'
+          '/v1/wallet/msnw/funding/verify';
+      final response = await widget.dio.post<dynamic>(
+        url,
+        data: {'reference': ref},
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          followRedirects: false,
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      if (!mounted || widget.currentUserId() != widget.expectedUserId ||
+          widget.accessToken()?.trim() != token) return;
+      final raw = response.data;
+      if (raw is! Map || raw['reference'] != ref ||
+          raw['state'] != 'fiat_verified_backing_pending' ||
+          raw['amountKobo'] is! String) {
+        throw const FormatException('Unverified transfer');
+      }
+      setState(() => _verificationResult =
+        'Bank payment verified. MSNW issuance is pending treasury '
+        'backing and settlement; no tokens have been credited yet.');
+    } catch (_) {
+      if (mounted) setState(() => _verificationResult =
+        'Could not independently verify this transfer yet. Check the reference and retry.');
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
   String? _error;
   Map<String, dynamic>? _status;
 
@@ -155,6 +210,25 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
                     ClipboardData(text: account['accountNumber'] as String)),
                 ),
               ]),
+            ],
+            if (account != null && kMsnwPaystackVerifyEnabled) ...[
+              const Divider(height: 24),
+              const Text('Already transferred funds? Verify the transaction '
+                'reference with Paystack. Verification does not issue MSNW.'),
+              TextField(
+                controller: _reference,
+                maxLength: 128,
+                decoration: const InputDecoration(
+                  labelText: 'Paystack transaction reference',
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _busy || _verifying ? null : _verifyTransfer,
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('Verify bank transfer'),
+              ),
+              if (_verifying) const LinearProgressIndicator(),
+              if (_verificationResult != null) Text(_verificationResult!),
             ],
             const SizedBox(height: 14),
             OutlinedButton.icon(
