@@ -14,7 +14,8 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
  beforeAll(async()=>{
   pool=new Pool({connectionString:url});
   await runMigrations(pool,platformProductMigrationRoots());
-  tenant=randomUUID();seller=randomUUID();buyer=randomUUID();methodId=randomUUID();
+  tenant="tenant_"+randomUUID();seller="user_"+randomUUID();
+  buyer="user_"+randomUUID();methodId=randomUUID();
   for(const [user,name] of [[seller,"Escrow Seller"],[buyer,"Escrow Buyer"]]){
     await pool.query(`INSERT INTO security.platform_user_profiles
       (tenant_id,user_id,display_name,email,locale,created_at,updated_at)
