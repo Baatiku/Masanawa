@@ -5,8 +5,8 @@ import 'package:masanawa_admin/src/screens/whatsapp_channel_page.dart';
 
 void main() {
   const onePixelPng =
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
-      'AAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==';
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe'
+      'AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC';
 
   test('rejects invalid and oversized pairing QR payloads', () {
     expect(decodeWhatsAppPairingQr('https://example.com/qr'), isNull);
@@ -53,7 +53,7 @@ void main() {
     expect(find.text('WhatsApp linked'), findsOneWidget);
     expect(find.text('The dedicated Gwani phone is now connected.'),
         findsOneWidget);
-    await tester.tap(find.text('Done'));
-    await tester.pump();
+    // Dispose the dialog to verify polling does not leave a live timer.
+    await tester.pumpWidget(const SizedBox());
   });
 }
