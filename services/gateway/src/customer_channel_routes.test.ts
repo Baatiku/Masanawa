@@ -202,7 +202,7 @@ describe("customer channel webhook routes", () => {
     expect(response.statusCode).toBe(200);
     expect(channelBridge.handle).toHaveBeenCalledWith({
       channel: "telegram",
-      messageId: "9",
+      messageId: "456:9",
       externalUserId: "123",
       chatId: "456",
       text: "Teach me algebra",
@@ -247,7 +247,7 @@ describe("customer channel webhook routes", () => {
     expect(channelBridge.handle).toHaveBeenCalledTimes(1);
     expect(channelBridge.handle.mock.calls[0]![0]).toEqual({
       channel: "telegram",
-      messageId: "10",
+      messageId: "123:10",
       externalUserId: "123",
       chatId: "123",
       text: "Connect this number",
@@ -344,10 +344,106 @@ describe("customer channel webhook routes", () => {
     });
     expect(channelBridge.delivered).toHaveBeenCalledWith({
       channel: "telegram",
-      messageId: "12",
+      messageId: "123:12",
     });
     vi.unstubAllGlobals();
     await app.close();
   });
+
+  it("keeps provider retries distinct across Telegram private chats", async () => {
+    const app = Fastify();
+    const channelBridge = bridge();
+    registerCustomerChannelRoutes(app, {
+      bridge: channelBridge,
+      telegram: { botToken: "bot-token", webhookSecret: "telegram-secret" },
+    });
+    for (const chatId of [101, 202]) {
+      const result = await app.inject({
+        method: "POST",
+        url: "/channels/telegram/webhook",
+        headers: { "x-telegram-bot-api-secret-token": "telegram-secret" },
+        payload: {
+          update_id: chatId,
+          message: {
+            message_id: 1,
+            from: { id: chatId },
+            chat: { id: chatId, type: "private" },
+            text: "Hello",
+          },
+        },
+      });
+      expect(result.statusCode).toBe(200);
+    }
+    expect(channelBridge.handle.mock.calls[0]![0]).toMatchObject({
+      messageId: "101:1",
+    });
+    expect(channelBridge.handle.mock.calls[1]![0]).toMatchObject({
+      messageId: "202:1",
+    });
+    await app.close();
+  });
+
+  it.each([
+    ["audio", "audio/mpeg", "lesson.mp3"],
+    ["video", "video/mp4", "lesson.mp4"],
+  ])("downloads Telegram %s to the existing authenticated media conversation", async (
+    type, mimeType, name,
+  ) => {
+    const app = Fastify();
+    const channelBridge = bridge();
+    const bytes = Buffer.from("sample-media-content");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/getFile?")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          result: { file_path: `uploads/${name}` },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/file/bot")) {
+        return new Response(bytes, { status: 200 });
+      }
+      throw new Error("Unexpected Telegram URL");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      registerCustomerChannelRoutes(app, {
+        bridge: channelBridge,
+        telegram: { botToken: "bot-token", webhookSecret: "telegram-secret" },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/channels/telegram/webhook",
+        headers: { "x-telegram-bot-api-secret-token": "telegram-secret" },
+        payload: {
+          update_id: 100,
+          message: {
+            message_id: 45,
+            from: { id: 123 },
+            chat: { id: 123, type: "private" },
+            caption: "Explain this",
+            [type]: { file_id: "provider-file", mime_type: mimeType, file_name: name },
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(channelBridge.handle).toHaveBeenCalledWith({
+        channel: "telegram",
+        messageId: "123:45",
+        externalUserId: "123",
+        chatId: "123",
+        text: "Explain this",
+        media: {
+          mimeType,
+          name,
+          dataBase64: bytes.toString("base64"),
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      await app.close();
+    }
+  });
+
 
 });
