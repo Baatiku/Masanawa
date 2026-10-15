@@ -113,4 +113,55 @@ void main() {
     }
   });
 
+  test('Gemini reply audio survives app temporary-file eviction', () async {
+    final root = await Directory.systemTemp.createTemp('masanawa_reply_test_');
+    try {
+      final ownerFolder = Directory('${root.path}/private_account_a');
+      final retained = await retainAgentReplyAudio(
+        ownerFolder: ownerFolder,
+        requestId: 'turn-19',
+        extension: 'wav',
+        bytes: [82, 73, 70, 70, 0, 1, 2, 3],
+      );
+      expect(retained.path, contains('private_account_a'));
+      expect(retained.path, endsWith('.wav'));
+      expect(await retained.readAsBytes(), [82, 73, 70, 70, 0, 1, 2, 3]);
+
+      // The same account's saved media remains playable until explicit
+      // account cleanup, rather than depending on temporary-file retention.
+      expect(await retained.exists(), isTrue);
+      await ownerFolder.delete(recursive: true);
+      expect(await retained.exists(), isFalse);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('Gemini audio cache rejects invalid or unbounded data', () async {
+    final root = await Directory.systemTemp.createTemp('masanawa_reply_limit_');
+    try {
+      await expectLater(
+        retainAgentReplyAudio(
+          ownerFolder: root,
+          requestId: 'bad-audio',
+          extension: '../mp3',
+          bytes: [1],
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        retainAgentReplyAudio(
+          ownerFolder: root,
+          requestId: 'empty-audio',
+          extension: 'wav',
+          bytes: const [],
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(await root.list().length, 0);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
 }
