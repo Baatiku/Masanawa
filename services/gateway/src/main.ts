@@ -3,6 +3,7 @@ import { RoomError } from "@masanawa/rooms";
 import {
   PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgFeedMediaAuthorization, createPostgresVideoStore,
+  createPostgresYouTubeSourceAdminStore,
   createPgRoomsRepository, createPgRoomDiscussionRepository,
   createPgRoomBookmarkStore, createPgRoomMembershipRepository,
   createMasanaInboxRepository,
@@ -53,6 +54,7 @@ import type {
 } from "@masanawa/commerce";
 import {
   parseCanonicalId,
+  createCanonicalId,
   readRequiredEnv,
   type TenantId,
 } from "@masanawa/contracts";
@@ -170,6 +172,7 @@ import { createGeminiLiveAudioRenderer } from "./native_audio.js";
 import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
 import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
+import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
@@ -1771,9 +1774,9 @@ export async function startGatewayService(
         ? { userPreferences: database.userAgentPreferences }
         : {}),
       conversation: composedConversation,
-      ...(twinProduction
-        ? { twinDirectory: twinProduction.twinDirectory }
-        : {}),
+      // Use the same authenticated, tenant-scoped, published Masana directory
+      // as the Flutter app. Retired user-created Twins are not channel targets.
+      ...(composedDirectory ? { directory: composedDirectory } : {}),
     });
 
     if (whatsappEnabled) {
@@ -2381,6 +2384,36 @@ export async function startGatewayService(
     } : undefined);
 
 
+  // Sources are persisted with the existing external_videos tables and audited
+  // in events.audit_events. The same server-owned editorial resolver authorizes
+  // both manual video review and channel management.
+  const videoSources: GatewayAppOptions["videoSources"] =
+    options.appOptions?.videoSources ??
+    (database.featurePool && videos ? {
+      store: createPostgresYouTubeSourceAdminStore(
+        database.featurePool,
+        async (client, entry) => {
+          await client.query(`
+            INSERT INTO events.audit_events
+              (audit_event_id,tenant_id,event_type,schema_version,
+               aggregate_type,aggregate_id,occurred_at,actor,authority_ref,
+               correlation_id,sensitivity,payload)
+            VALUES ($1,$2,$3,1,'external_video_source',$4,
+                    clock_timestamp(),$5::jsonb,NULL,$6,'internal',$7::jsonb)
+          `, [
+            createCanonicalId("audit-event"),
+            entry.tenantId,
+            "external_videos.source." + entry.action,
+            entry.sourceId,
+            JSON.stringify({kind:"staff",id:entry.actorId}),
+            createCanonicalId("correlation"),
+            JSON.stringify({action:entry.action}),
+          ]);
+        },
+      ),
+      resolvePrincipal: videos.resolvePrincipal,
+    } : undefined);
+
   // One canonical signed-in fan and tenant authority, shared with Status and
   // Videos. Feature flags default OFF; no Room paid/subscription activation.
   const featurePool = database.featurePool;
@@ -2479,6 +2512,7 @@ export async function startGatewayService(
     app = appFactory({
       ...(status ? {status} : {}),
       ...(videos ? {videos} : {}),
+      ...(videoSources ? {videoSources} : {}),
       ...(rooms ? {rooms} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
@@ -2548,6 +2582,16 @@ export async function startGatewayService(
         ? { msnwPaystackFiat: createMsnwPaystackFiatService({
             pool: database.featurePool,
             authorizer: msnBalanceAuthorizer,
+            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+          }) }
+        : {}),
+      // Paystack customer creation and identity verification precede account assignment.
+      // This never issues MSNW; it only establishes provider-verified KYC.
+      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
+          database.featurePool && billingCustomerAuthorizer
+        ? { msnwPaystackEnrollment: createMsnwPaystackEnrollmentService({
+            pool: database.featurePool,
+            sessions: billingCustomerAuthorizer,
             paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
         : {}),

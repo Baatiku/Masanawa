@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/billing_models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
-import '../../state/wallet_state.dart';
+import '../../state/session_state.dart';
+import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../theme/masanawa_theme.dart';
 
 BillCategory? billingCategoryForHomeService(
@@ -212,7 +212,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   List<BillItem> get filteredItems {
-    if (items.isEmpty) return _fallbackItemsForNetwork(selectedNetwork);
+    if (items.isEmpty) return <BillItem>[];
     if (selectedFilter == 'All') return items;
     return items.where((i) {
       final text = i.name.toLowerCase();
@@ -227,19 +227,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }).toList(growable: false);
   }
 
-  List<BillItem> _fallbackItemsForNetwork(NigerianNetwork network) {
-    final net = network.label;
-    return [
-      BillItem(billerCode: 'BIL108', itemCode: '1GB_1D', name: '$net 1GB Daily Plan', amount: '350', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '2GB_2D', name: '$net 2.5GB 2-Day Plan', amount: '600', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '1.5GB_30D', name: '$net 1.5GB Monthly Plan', amount: '1200', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '3GB_30D', name: '$net 3GB Monthly Plan', amount: '1500', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '5GB_30D', name: '$net 5GB Monthly Plan', amount: '2000', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '10GB_30D', name: '$net 10GB Monthly Plan', amount: '3500', currency: 'NGN', labelName: null),
-      BillItem(billerCode: 'BIL108', itemCode: '20GB_30D', name: '$net 20GB Monthly Plan', amount: '6000', currency: 'NGN', labelName: null),
-    ];
-  }
-
   void onSelectBundle(BillItem selected) {
     final phone = customer.text.trim();
     if (phone.length < 10) {
@@ -252,290 +239,65 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     _showPurchaseConfirmation(selected);
   }
 
+  /// Old NGN/Credits holdings cannot authorize MSNW-funded billing.
   Future<void> _showPurchaseConfirmation(BillItem selected) async {
-    final wallet = ref.read(walletProvider).value;
-    final availableNgnKobo = wallet?.ngnBalanceKobo ?? ((wallet?.spendableCredits ?? 0) * 100);
-    final priceNgn = num.tryParse(selected.amount) ?? 0;
-    final priceKobo = (priceNgn * 100).toInt();
-    final hasEnough = availableNgnKobo >= priceKobo;
-    final shortfallNgn = (priceKobo - availableNgnKobo) / 100;
-
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (ctx, setSheetState) {
-          final u = context.masanawa;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: u.structuralBorder,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Confirm Data Purchase',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: u.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: u.surfaceMuted,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      _ConfirmRow('Package', selected.name),
-                      const SizedBox(height: 8),
-                      _ConfirmRow('Recipient', customer.text.trim()),
-                      const SizedBox(height: 8),
-                      _ConfirmRow('Network', selectedNetwork.label),
-                      const Divider(height: 16),
-                      _ConfirmRow('Total Price', '₦${selected.amount}', isBold: true),
-                      const SizedBox(height: 8),
-                      _ConfirmRow(
-                        'Wallet Balance',
-                        '₦${(availableNgnKobo / 100).toStringAsFixed(2)}',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (!hasEnough) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3CD),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFFEEBA)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: Color(0xFF856404), size: 22),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Insufficient balance. You need ₦${shortfallNgn.toStringAsFixed(0)} more.',
-                            style: const TextStyle(color: Color(0xFF856404), fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: u.brand,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      _showFundingSheet();
-                    },
-                    icon: const Icon(Icons.account_balance),
-                    label: const Text('Fund Wallet via Bank Transfer'),
-                  ),
-                ] else ...[
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: u.brand,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            Navigator.pop(sheetContext);
-                            await _executePurchase(selected);
-                          },
-                    child: busy
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text('Confirm & Pay ₦${selected.amount}'),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Confirm billing service',
+                style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              _ConfirmRow('Package', selected.name),
+              _ConfirmRow('Recipient', customer.text.trim()),
+              _ConfirmRow('Flutterwave price', 'NGN ' + selected.amount),
+              const SizedBox(height: 14),
+              const Text('MSNW bill payments require authorized, backed '
+                'token settlement. Legacy Credits and NGN balances cannot '
+                'be charged as MSNW.'),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  _showFundingSheet();
+                },
+                icon: const Icon(Icons.account_balance),
+                label: const Text('Fund MSNW Wallet'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   void _showFundingSheet() {
-    final wallet = ref.read(walletProvider).value;
-    final bankName = wallet?.bankName ?? 'Wema Bank (Paystack)';
-    final accNumber = wallet?.accountNumber ?? '9928374610';
-    final accHolder = wallet?.accountHolderName ?? 'Masanawa Customer';
-
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sign in for a verified MSNW funding account.')));
+      return;
+    }
+    final expected = session.user.id;
     showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Fund Wallet via Bank Transfer',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Make a direct transfer from any Nigerian banking app to your dedicated account below:',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFDCFCE7)),
-              ),
-              child: Column(
-                children: [
-                  _ConfirmRow('Bank Name', bankName),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Account Number', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                      Row(
-                        children: [
-                          Text(accNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          IconButton(
-                            icon: const Icon(Icons.copy_rounded, size: 18),
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: accNumber));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Account number copied to clipboard!')),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  _ConfirmRow('Account Name', accHolder),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => Navigator.pop(sheetContext),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _executePurchase(BillItem selected) async {
-    setState(() { busy = true; error = null; });
-    try {
-      final selectedCategory = category ?? categories.first;
-      final selectedBiller = biller ?? billers.first;
-
-      final view = await api.createBillingQuote(
-        categoryCode: selectedCategory.code,
-        billerCode: selectedBiller.billerCode,
-        itemCode: selected.itemCode,
-        customerId: customer.text.trim(),
-        amount: selected.amount,
-      );
-
-      final purchaseResult = await api.confirmBillingFromWallet(
-        quoteId: view.quote.quoteId,
-        quoteRevision: view.quote.revision,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        current = view;
-        walletAction = purchaseResult;
-      });
-      await ref.read(walletProvider.notifier).refresh();
-      _showReceipt(view, selected);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(safeError(e, 'Purchase completed. Updating wallet status...'))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  void _showReceipt(BillingCheckoutView view, BillItem selected) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Color(0xFF25D366), size: 28),
-            SizedBox(width: 10),
-            Text('Data Purchased!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Package: ${selected.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text('Recipient: ${customer.text.trim()}'),
-            const SizedBox(height: 6),
-            Text('Amount: ₦${selected.amount}'),
-            const SizedBox(height: 6),
-            Text('Reference: ${view.quote.quoteId.substring(0, 14)}...'),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Done'),
-          ),
-        ],
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => MsnwPaystackFundingSheet(
+        dio: ref.read(dioProvider),
+        baseUrl: kApiBaseUrl,
+        expectedUserId: expected,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id,
+          _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
       ),
     );
   }
@@ -543,8 +305,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    final wallet = ref.watch(walletProvider).value;
-    final availableNgnKobo = wallet?.ngnBalanceKobo ?? ((wallet?.spendableCredits ?? 0) * 100);
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -580,11 +340,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Wallet Balance',
+                          'MSNW Wallet',
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         Text(
-                          '₦${(availableNgnKobo / 100).toStringAsFixed(2)}',
+                          'Fund with Paystack',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 20,
@@ -724,6 +484,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             // Bundle Cards List
             if (loading)
               const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+            else if (filteredItems.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(error ??
+                  'No verified Flutterwave bundles are available. '
+                  'Pull down to refresh.'),
+              )
             else
               ...filteredItems.map((pkg) => _BundleCard(
                     item: pkg,

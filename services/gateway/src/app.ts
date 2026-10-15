@@ -1,5 +1,7 @@
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
+import { registerYouTubeSourceAdminRoutes } from "./modules/youtube_websub/source_admin_routes.js";
+import type { AdminYouTubeSourceStore } from "./modules/youtube_websub/source_admin.js";
 import { registerRoomsRoutes, type RoomsRoutePorts } from "./modules/rooms/routes.js";
 import { registerRoomDiscussionRoutes, type DiscussionRoutePorts } from "./modules/rooms/discussion_routes.js";
 import { registerRoomBookmarkRoutes, type RoomBookmarkPorts } from "./modules/rooms/bookmark_routes.js";
@@ -66,6 +68,8 @@ import { registerCreditTransferRoutes, registerGiftRoutes } from "./credit_trans
 import { registerMsnBalanceRoutes, type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
 import { registerMsnFundingStatusRoutes, type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
 import { registerMsnwPaystackDvaRoutes } from "./msn_wallet/paystack_dva_routes.js";
+import { registerMsnwPaystackEnrollmentRoutes } from "./msn_wallet/paystack_customer_enrollment_routes.js";
+import type { MsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { registerMsnwOnchainBalanceRoutes } from "./msn_wallet/msnw_onchain_routes.js";
 import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
@@ -126,6 +130,10 @@ export interface GatewayAppOptions {
     store: VideoStore;
     resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
   };
+  readonly videoSources?: {
+    store: AdminYouTubeSourceStore;
+    resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
+  };
   readonly callHistory?: CallHistoryService;
   readonly groupCalls?: GroupCallService;
   readonly incomingCalls?: IncomingCallService;
@@ -176,6 +184,7 @@ export interface GatewayAppOptions {
   readonly msnFunding?: Readonly<{ authorizer: MsnBalanceAuthority; reader: MsnFundingStatusReader }>;
   /** Paystack DVA is consent and KYC gated; it does not credit MSNW. */
   readonly msnwPaystackDva?: MsnwPaystackDvaService;
+  readonly msnwPaystackEnrollment?: MsnwPaystackEnrollmentService;
   /** Finalized, identity-verified ERC20 MSNW customer balance (no legacy MSN). */
   readonly msnwOnchainBalance?: MsnwOnchainBalanceDependencies;
   /** Fiat verification journal only: no MSNW issuance permission. */
@@ -1557,6 +1566,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.videos) {
     app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });
   }
+  if (options.videoSources) {
+    app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
+  }
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
   if (options.rooms) {
     registerRoomsRoutes(app, options.rooms.routes);
@@ -1639,6 +1651,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.msnwPaystackDva) {
     registerMsnwPaystackDvaRoutes(app, options.msnwPaystackDva);
+  }
+  if (options.msnwPaystackEnrollment) {
+    registerMsnwPaystackEnrollmentRoutes(app, options.msnwPaystackEnrollment);
   }
   if (options.msnwOnchainBalance) {
     registerMsnwOnchainBalanceRoutes(app, options.msnwOnchainBalance);

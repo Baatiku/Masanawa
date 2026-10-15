@@ -8,14 +8,16 @@ import {AccessControlDefaultAdminRules} from
 
 /**
  * MSNW: six-decimal ERC20, one official customer wallet asset.
- * Each mint requires a unique SHA-256 settlement reference admitted by
- * the server-controlled, independently reconciled custody worker.
+ * Mint/burn each require a unique SHA-256 settlement reference admitted by
+ * the independently reconciled custody worker. Burn can only destroy
+ * tokens already held by the authorized custodian, never user balances.
  *
  * This contract is SOURCE ONLY. Nothing is deployed or issued by merging it.
  * Governance should use an audited multisig, not an operator hot wallet.
  */
 contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
     bytes32 public constant MINTER_ROLE = keccak256("MSNW_MINTER_ROLE");
+    bytes32 public constant BURNER_ROLE = keccak256("MSNW_BURNER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("MSNW_PAUSER_ROLE");
     mapping(bytes32 => bool) public settledReference;
 
@@ -24,15 +26,18 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
     error DuplicateSettlement();
 
     event SettledMint(bytes32 indexed settlementReference, address indexed recipient, uint256 amount);
+    event SettledBurn(bytes32 indexed settlementReference, address indexed custodian, uint256 amount);
 
-    constructor(address governance, address settlementMinter, address emergencyPauser)
+    constructor(address governance, address settlementMinter, address settlementBurner, address emergencyPauser)
         ERC20("Masanawa Wallet", "MSNW")
         AccessControlDefaultAdminRules(2 days, governance)
     {
         if (governance == address(0) ||
             settlementMinter == address(0) ||
+            settlementBurner == address(0) ||
             emergencyPauser == address(0)) revert InvalidAccount();
         _grantRole(MINTER_ROLE, settlementMinter);
+        _grantRole(BURNER_ROLE, settlementBurner);
         _grantRole(PAUSER_ROLE, emergencyPauser);
     }
 
@@ -52,6 +57,24 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
         settledReference[settlementReference] = true;
         _mint(recipient, amountMicro);
         emit SettledMint(settlementReference, recipient, amountMicro);
+    }
+
+    /**
+     * Irreversibly destroy ONLY tokens held by the authorized custodian.
+     * Cannot confiscate end-user balances or burn from third-party wallets.
+     * The same global settlement reference cannot mint and burn twice.
+     * Fiat refund/payment reconciliation happens off-chain before this call.
+     */
+    function burnSettled(
+        uint256 amountMicro,
+        bytes32 settlementReference
+    ) external onlyRole(BURNER_ROLE) {
+        if (amountMicro == 0) revert InvalidAmount();
+        if (settlementReference == bytes32(0) ||
+            settledReference[settlementReference]) revert DuplicateSettlement();
+        settledReference[settlementReference] = true;
+        _burn(msg.sender, amountMicro);
+        emit SettledBurn(settlementReference, msg.sender, amountMicro);
     }
 
     function pause() external onlyRole(PAUSER_ROLE) {
