@@ -9,8 +9,10 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import { createPostgresServiceDependency, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
+import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
+import {createFcmPushSender} from "@masanawa/mobile-push";
+import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
@@ -110,6 +112,7 @@ export async function startWorkerService(
   let roomReview: ReturnType<typeof createRoomTeacherRuntime> | undefined;
   let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
@@ -176,6 +179,26 @@ export async function startWorkerService(
         },
       });
     }
+    // Answer notifications are an existing durable notifications.rooms outbox.
+    // Missing FCM authority leaves the outbox queued, not falsely ACKed.
+    if(env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON?.trim()){
+      const notices=createRoomReplyNoticeRuntime({
+        pool:database.pool,
+        sender:createFcmPushSender({
+          serviceAccountJson:env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON,
+          repository:createPostgresMobilePushRepository(database.pool),
+        }),
+        workerId:env.MASANAWA_ROOM_NOTICE_WORKER_ID ?? "rooms-notify-"+process.pid,
+      });
+      roomNotices=createYouTubeOutboxScheduler({
+        runOnce:notices.runOnce,
+        enabled:()=>!drain.isDraining(),
+        intervalMs:10_000,
+        onError:()=>{process.stderr.write(JSON.stringify({
+          event:"rooms.notifications.retry",reason:"batch_failed",
+        })+"\n");},
+      });
+    }
     app = appFactory({
       ...(options.appOptions ?? {}),
       readinessChecks: [
@@ -204,6 +227,7 @@ export async function startWorkerService(
         await youtubeOutbox?.stop();
         await feedPublisher?.stop();
         await msnwObligationRecovery?.stop();
+        await roomNotices?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -215,10 +239,12 @@ export async function startWorkerService(
     youtubeOutbox?.start();
     feedPublisher?.start();
     msnwObligationRecovery?.start();
+    roomNotices?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
     await msnwObligationRecovery?.stop();
+    await roomNotices?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
