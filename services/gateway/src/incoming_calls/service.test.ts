@@ -158,6 +158,78 @@ describe("incoming authorization and explicit media", () => {
     });
     expect(pushSender.send).toHaveBeenCalledTimes(1);
   });
+  it("drains multiple independent call invitations in one bounded sweep", async () => {
+    const h = harness();
+    const jobs = Array.from({ length: 5 }, (_, i) => ({
+      tenantId: "tenant",
+      userId: "user",
+      call: {
+        ...call,
+        callId: `01999999-0000-7000-8000-${String(i + 1).padStart(12, "0")}`,
+      },
+      leaseId: `lease-${i + 1}`,
+    }));
+    const queue = [...jobs];
+    vi.mocked(h.repository.claimPush).mockImplementation(async () =>
+      queue.shift() ?? null,
+    );
+    const pushSender = {
+      send: vi.fn(async () => ({ attempted: 1, delivered: 1 })),
+    };
+    const service = createIncomingCallService({
+      repository: h.repository,
+      authorizer: { authorize: h.authorize },
+      serverAuthorizer: { authorize: async () => {} },
+      liveVoiceTokens: { mint: h.mint },
+      pushSender,
+    });
+    await service.recover();
+    expect(pushSender.send).toHaveBeenCalledTimes(5);
+    expect(h.repository.finishPush).toHaveBeenCalledTimes(5);
+    for (const job of jobs) {
+      expect(h.repository.finishPush).toHaveBeenCalledWith({
+        callId: job.call.callId,
+        leaseId: job.leaseId,
+        delivered: true,
+      });
+    }
+    expect(h.repository.claimPush).toHaveBeenCalledTimes(8);
+  });
+
+  it("keeps failed calls retryable while acknowledging successful siblings", async () => {
+    const h = harness();
+    const jobs = [
+      { tenantId: "tenant", userId: "user", call, leaseId: "lease-1" },
+      {
+        tenantId: "tenant", userId: "user",
+        call: { ...call, callId: "01999999-0000-7000-8000-000000000002" },
+        leaseId: "lease-2",
+      },
+    ];
+    const queue = [...jobs];
+    vi.mocked(h.repository.claimPush).mockImplementation(async () =>
+      queue.shift() ?? null,
+    );
+    const send = vi.fn(async (request: { data: { callId: string } }) =>
+      request.data.callId === call.callId
+        ? { attempted: 1, delivered: 1 }
+        : { attempted: 1, delivered: 0 },
+    );
+    const service = createIncomingCallService({
+      repository: h.repository,
+      authorizer: { authorize: h.authorize },
+      serverAuthorizer: { authorize: async () => {} },
+      liveVoiceTokens: { mint: h.mint },
+      pushSender: { send: send as never },
+    });
+    await service.recover();
+    expect(h.repository.finishPush).toHaveBeenCalledWith({
+      callId: call.callId, leaseId: "lease-1", delivered: true,
+    });
+    expect(h.repository.finishPush).toHaveBeenCalledWith({
+      callId: jobs[1]!.call.callId, leaseId: "lease-2", delivered: false,
+    });
+  });
   it("HTTP wraps calls and rejects history injection", async () => {
     const h = harness();
     const app = Fastify();
