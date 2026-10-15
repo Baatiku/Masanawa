@@ -2,6 +2,20 @@
 
 Updated 2026-10-12. This is the active entry point. Older freezes, repeated launch prompts and live-Talk-first instructions have been retired from the active reading path; their exact originals are preserved in [the archive](docs/archive/20261009/README.md).
 
+## Current production recovery status — 2026-10-15
+
+**Priorities 1–2 are NOT complete or end-to-end qualified.** The Gateway/Worker
+on Railway still point to the previous GitHub repository; current private
+Baatiku/Masanawa repo access for Railway failed. GitHub Actions jobs fail
+before running steps, and tests/APK are not verified. Production PostgreSQL
+volume remains attached and was not replaced. The MSNW balance route,
+Paystack dedicated-bank funding, NOWPayments deposits/conversions/withdrawals,
+and MSNW on-chain contract are not qualified. Do not advertise an MSNW
+balance, mint/swap/withdraw, or chat/voice-call success without provider,
+authenticated client and persistent-readback evidence. Preserve draft PR #2,
+but do not merge UI that disables supported operations until functional
+replacements and executable test coverage exist.
+
 ## UI audit integrated into continuing windows — 2026-10-12
 
 The owner's UI audit is now a tracked implementation queue, not an optional
@@ -77,11 +91,15 @@ The Wallet covers billing, crypto and services. Personal Twins are retired.
 
 Confirmed bottom navigation: **Chats · Status · Wallet · Calls · Rooms**.
 **Chats is the default tab** on ordinary authenticated app launch. There is
-no Agents/Twins bottom tab. MSN is the platform currency; confirmed fiat
-funding buys MSN automatically. Crypto can be held or converted with MSN
-where qualified. P2P exchanges MSN only against counterparty fiat, with
-escrow; there is no direct platform fiat withdrawal. Rooms are audio-focused
-groups.
+no Agents/Twins bottom tab. **MSNW** is the sole customer-facing wallet
+credit and designated official crypto-token name (owner decision, 2026-10-15).
+No separate MSN or Credits wallet is permitted. Historical MSN/Cr balances
+cannot be assumed to equal MSNW; independently audited migration, token
+identity and financial qualification are required. Verified fiat funding may
+acquire MSNW after custody, issuance and reconciliation pass the production
+gate. MSNW-to-crypto conversion and MSNW-only P2P against counterparty fiat
+remain planned rather than production-qualified. There is no direct platform
+fiat withdrawal. Rooms are audio-focused groups.
 
 ## Historical recovery note — inspect fresh main first
 
