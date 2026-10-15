@@ -233,12 +233,15 @@ export function createIncomingCallService(input: {
     async recover() {
       await input.repository.expire();
       if (!input.pushSender) return;
-      for (let i = 0; i < 1; i++) {
+      // One job per second previously stranded new incoming calls behind a
+      // burst. Claim a bounded parallel batch; PostgreSQL SKIP LOCKED leases
+      // still guarantee one delivery attempt per call/outbox row.
+      const workers = Array.from({ length: 8 }, async () => {
         const job = await input.repository.claimPush();
-        if (!job) break;
+        if (!job) return;
         let delivered = false;
         try {
-          const result = await input.pushSender.send({
+          const result = await input.pushSender!.send({
             scope: {
               tenantId: job.tenantId as never,
               userId: job.userId as never,
@@ -252,16 +255,22 @@ export function createIncomingCallService(input: {
               deepLink: "masanawa://calls/incoming/" + job.call.callId,
             },
           });
-          delivered =
-            result.attempted > 0 && result.attempted === result.delivered;
+          delivered = result.attempted > 0 &&
+            result.attempted === result.delivered;
         } catch {
-          /* durable retry */
+          // A failed provider attempt is retried by the leased SQL outbox.
         }
         await input.repository.finishPush({
           callId: job.call.callId,
           leaseId: job.leaseId,
           delivered,
         });
+      });
+      // Await every receipt, even if a single SQL finish fails, so shutdown
+      // cannot abandon already-claimed sibling leases mid-settlement.
+      const results = await Promise.allSettled(workers);
+      if (results.some((item) => item.status === "rejected")) {
+        throw new Error("incoming.push_recovery_incomplete");
       }
     },
   });
