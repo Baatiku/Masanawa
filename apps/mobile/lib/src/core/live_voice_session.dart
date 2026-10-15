@@ -190,7 +190,11 @@ class LiveVoiceSession with WidgetsBindingObserver {
         );
       }
       _foregroundCallActive = true;
-      if (_closed) return;
+      if (_closed) {
+        _foregroundCallActive = false;
+        await LiveCallForeground.stop();
+        return;
+      }
       await _connectSocket();
     } catch (error) {
       _fail(
