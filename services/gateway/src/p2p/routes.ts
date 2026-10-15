@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { P2pError, type P2pActor, type P2pService } from "./service.js";
+import type { VerifiedP2pBankMethods } from "./bank_methods.js";
 
 export interface P2pRoutesDependencies {
   readonly service: P2pService;
+  readonly bankMethods?: VerifiedP2pBankMethods;
   /** Existing platform session authorizer, same identity authority as MSNW Wallet. */
   readonly authorize: (authorizationHeader: string | undefined) => Promise<P2pActor>;
   /** An operator session must be independently role-checked; never trust client roles. */
@@ -49,6 +51,21 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try {return await deps.service.closeOffer(await actor(req.headers.authorization),
       (req.params as {offerId:string}).offerId);}
     catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/banks",async(req,reply)=>{
+    try{
+      await actor(req.headers.authorization);
+      if(!deps.bankMethods)throw new P2pError("p2p.bank_verification_unavailable",503);
+      return {items:await deps.bankMethods.banks()};
+    }catch(error){return respond(error,reply);}
+  });
+  app.post("/v1/wallet/msnw/p2p/methods/verify",{bodyLimit:2048},async(req,reply)=>{
+    try{
+      const owner=await actor(req.headers.authorization);
+      if(!deps.bankMethods)throw new P2pError("p2p.bank_verification_unavailable",503);
+      const method=await deps.bankMethods.verify(owner,req.body);
+      return reply.code(201).send(method);
+    }catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/methods", async (req,reply) => {
     try { return {items:await deps.service.methods(await actor(req.headers.authorization))}; }
