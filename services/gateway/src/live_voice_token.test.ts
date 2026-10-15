@@ -21,8 +21,8 @@ const authorizer: AgentConversationAuthorizer = {
 
 describe("Gemini Live ephemeral token compatibility", () => {
   for (const [requestedVoice, expectedLiveVoice] of [
-    ["Bodi", "Achird"],
-    ["Sulafat", "Sulafat"],
+    ["Bodi", "Bodi"],
+    ["Fora", "Fora"],
   ] as const) {
     it(`issues documented minimal constraints for ${requestedVoice} without leaking server key`, async () => {
       const sent: Array<{ url: string; init: RequestInit }> = [];
