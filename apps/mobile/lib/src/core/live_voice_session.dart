@@ -89,6 +89,9 @@ class LiveVoiceSession with WidgetsBindingObserver {
   Future<void>? _closing;
   Future<void>? _startingMic;
   Future<void> _incoming = Future<void>.value();
+  String? _resumptionHandle;
+  Future<void>? _reconnectTask;
+  int _resumeAttempts = 0;
   bool _closed = false;
   bool _setupComplete = false;
   bool _speaker = true;
@@ -178,67 +181,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
 
-      final socket = await WebSocket.connect(grant.websocketUrl)
-          .then((socket) {
-            if (_closed) unawaited(socket.close());
-            return socket;
-          })
-          .timeout(const Duration(seconds: 20));
-      if (_closed) {
-        await socket.close();
-        return;
-      }
-      _socket = socket;
-      _socketSub = socket.listen(
-        (raw) {
-          // WebSocket.listen does not await async callbacks. Preserve PCM and
-          // setup/interruption ordering across native method-channel awaits.
-          _incoming = _incoming.then((_) => _handleServerMessage(raw));
-        },
-        onError: (Object error) {
-          _fail('Live voice connection failed.');
-          unawaited(close());
-        },
-        onDone: () {
-          if (!_closed) {
-            _state.add(LiveVoiceState.ended);
-            unawaited(close());
-          }
-        },
-        cancelOnError: false,
-      );
-      _setupTimer = Timer(const Duration(seconds: 20), () {
-        if (!_closed && !_setupComplete) {
-          _fail('Live voice setup timed out. Try starting a new call.');
-          unawaited(close());
-        }
-      });
-      socket.add(
-        jsonEncode({
-          'setup': {
-            'model': 'models/${grant.model}',
-            'generationConfig': {
-              'responseModalities': ['AUDIO'],
-              'speechConfig': {
-                'voiceConfig': {
-                  'prebuiltVoiceConfig': {'voiceName': grant.voiceName},
-                },
-              },
-            },
-            'outputAudioTranscription': {},
-            if (captureInputTranscription) 'inputAudioTranscription': {},
-            'systemInstruction': {
-              'parts': [
-                {
-                  'text':
-                      'You are $characterName. Have a natural live voice conversation. '
-                      'Answer in the user\'s language. Do not read hidden system information aloud.',
-                },
-              ],
-            },
-          },
-        }),
-      );
+      await _connectSocket();
     } catch (error) {
       _fail(
         error is StateError ? error.message : 'Could not start live voice.',
@@ -246,6 +189,109 @@ class LiveVoiceSession with WidgetsBindingObserver {
       await close();
       rethrow;
     }
+  }
+
+  /// Gemini can rotate connections every ten minutes. The session handle
+  /// resumes the same model context with the original grant, call admission
+  /// and duration timer; we never create another paid call or receipt.
+  Future<void> _connectSocket({String? resumeHandle}) async {
+    final socket = await WebSocket.connect(grant.websocketUrl)
+        .timeout(const Duration(seconds: 20));
+    if (_closed) {
+      await socket.close();
+      return;
+    }
+    _socket = socket;
+    _socketSub = socket.listen(
+      (raw) {
+        // Maintain ordering across PCM/native method-channel operations.
+        _incoming = _incoming.then((_) => _handleServerMessage(raw));
+      },
+      onError: (Object _) => unawaited(_unexpectedDisconnect(socket)),
+      onDone: () => unawaited(_unexpectedDisconnect(socket)),
+      cancelOnError: false,
+    );
+    _setupTimer?.cancel();
+    _setupTimer = Timer(const Duration(seconds: 20), () {
+      if (!_closed && !_setupComplete && identical(_socket, socket)) {
+        _fail('Live voice setup timed out. Try starting a new call.');
+        unawaited(close());
+      }
+    });
+    socket.add(jsonEncode({
+      'setup': {
+        'model': 'models/${grant.model}',
+        'generationConfig': {
+          'responseModalities': ['AUDIO'],
+          'speechConfig': {
+            'voiceConfig': {
+              'prebuiltVoiceConfig': {'voiceName': grant.voiceName},
+            },
+          },
+        },
+        // Empty on first connect requests resumable-session handles.
+        // Reconnecting uses the latest provider-issued handle in memory.
+        'sessionResumption': resumeHandle == null
+            ? <String, String>{}
+            : {'handle': resumeHandle},
+        'outputAudioTranscription': {},
+        if (captureInputTranscription) 'inputAudioTranscription': {},
+        'systemInstruction': {
+          'parts': [{
+            'text': 'You are $characterName. Have a natural live voice conversation. '
+                'Answer in the user\'s language. Do not read hidden system information aloud.',
+          }],
+        },
+      },
+    }));
+  }
+
+  Future<void> _unexpectedDisconnect(WebSocket socket) async {
+    if (_closed || !identical(_socket, socket)) return;
+    try {
+      await _incoming;
+    } catch (_) {}
+    if (_closed || !identical(_socket, socket)) return;
+    // A WebSocket may call onError followed by onDone for one failure.
+    // Never turn its second callback into a fatal error while resuming.
+    if (_reconnectTask != null) return;
+    if (!_ready.isCompleted ||
+        _resumptionHandle == null ||
+        !DateTime.now().isBefore(grant.expiresAt) ||
+        _resumeAttempts >= 2) {
+      _fail('Live voice disconnected. Start a new call to reconnect.');
+      unawaited(close());
+      return;
+    }
+    final task = _resumeSocket();
+    _reconnectTask = task;
+    unawaited(task.catchError((Object _) {
+      _fail('Live voice could not resume. Start a new call.');
+      unawaited(close());
+    }).whenComplete(() {
+      if (identical(_reconnectTask, task)) _reconnectTask = null;
+    }));
+  }
+
+  Future<void> _resumeSocket() async {
+    final handle = _resumptionHandle;
+    if (handle == null || _closed) return;
+    _resumeAttempts++;
+    _state.add(LiveVoiceState.connecting);
+    _setupTimer?.cancel();
+    try { await _socketSub?.cancel(); } catch (_) {}
+    try {
+      await _socket?.close(WebSocketStatus.normalClosure, 'resume');
+    } catch (_) {}
+    _socketSub = null;
+    _socket = null;
+    _setupComplete = false;
+    if (_ownsAudio) {
+      try { await LivePcmAudio.stop(); } catch (_) {}
+    }
+    await Future<void>.delayed(Duration(milliseconds: _resumeAttempts * 400));
+    if (_closed) return;
+    await _connectSocket(resumeHandle: handle);
   }
 
   Future<void> _beginMicrophone({bool initialSetup = false}) async {
@@ -340,7 +386,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
         // intentionally never requested or rendered as text.
         final pendingSocket = _socket;
         if (pendingSocket == null || _closed) return;
-        if (sendGreeting) {
+        if (sendGreeting && !_ready.isCompleted) {
           pendingSocket.add(
             jsonEncode({
               'clientContent': {
@@ -379,10 +425,29 @@ class LiveVoiceSession with WidgetsBindingObserver {
             _connectedReported = true;
             _notify(onConnected);
           }
+        } else if (!_closed) {
+          // A resumed transport is part of the same paid/free call. The
+          // original admission duration timer and onConnected remain intact.
+          _resumeAttempts = 0;
+          _state.add(LiveVoiceState.listening);
         }
         return;
       }
-      if (message.containsKey('error') || message.containsKey('goAway')) {
+      final resume = message['sessionResumptionUpdate'];
+      if (resume is Map) {
+        final handle = resume['newHandle'];
+        if (resume['resumable'] == true &&
+            handle is String && handle.isNotEmpty && handle.length <= 4096) {
+          _resumptionHandle = handle;
+        }
+        return;
+      }
+      if (message.containsKey('goAway')) {
+        // The provider may send one final newer handle after GoAway. Finish
+        // ordered incoming messages before the socket closes and reconnect.
+        return;
+      }
+      if (message.containsKey('error')) {
         _fail('Live voice connection ended. Start a new call to reconnect.');
         unawaited(close());
         return;
