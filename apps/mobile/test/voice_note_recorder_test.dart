@@ -99,4 +99,18 @@ void main() {
     expect(await File(output).exists(), false);
     expect(recorder.state, VoiceNoteState.idle);
   });
+  test('unsubmitted recording stays ready to retry until user cancels', () async {
+    await recorder.start();
+    final note = await recorder.stop();
+    expect(recorder.state, VoiceNoteState.ready);
+    expect(note, isNotNull);
+    expect(await File(note!.path).exists(), isTrue);
+    // A failed queue/upload must not force the recorder to be retained or
+    // discarded. The composer can show the same preview and try again.
+    expect(recorder.note?.path, note.path);
+    expect(await File(note.path).readAsBytes(), [1, 2, 3, 4]);
+    await recorder.cancel();
+    expect(await File(note.path).exists(), isFalse);
+  });
+
 }
