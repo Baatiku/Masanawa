@@ -60,7 +60,11 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
         ? await widget.dio.post<dynamic>(url,
             data: {'consent': true, 'bvn': bvn.text.trim(),
               'accountNumber': bankAccount.text.trim(),
-              'bankCode': bankCode.text.trim()}, options: options)
+              'bankCode': bankCode.text.trim(),
+              if (legalName.text.trim().isNotEmpty) 'legalName': legalName.text.trim(),
+              if (email.text.trim().isNotEmpty) 'email': email.text.trim(),
+              if (phone.text.trim().isNotEmpty) 'phone': phone.text.trim(),
+            }, options: options)
         : await widget.dio.get<dynamic>(url, options: options);
       if (!mounted || widget.currentUserId() != widget.expectedUserId ||
           widget.accessToken()?.trim() != token) return;
