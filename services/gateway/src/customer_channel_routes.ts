@@ -427,7 +427,20 @@ export function registerCustomerChannelRoutes(
         (typeof message.text === "string" && message.text.trim()) ||
         (typeof message.caption === "string" && message.caption.trim()) ||
         (phone ? "Connect my Telegram account." : "");
-      const media = await telegramMedia(config, message);
+      let media: CustomerChannelInbound["media"];
+      try {
+        media = await telegramMedia(config, message);
+      } catch (error) {
+        if (error instanceof RangeError && error.message === "channels.media_too_large") {
+          await sendTelegram(
+            config, chatId,
+            "That file is too large. Please send a file smaller than 8 MB.",
+            false,
+          );
+          return { received: true };
+        }
+        throw error;
+      }
       if (!text && !media && !phone) return { received: true };
       // Telegram message_id is unique only within its chat. Scope the durable
       // idempotency/receipt key to prevent different customers colliding.
