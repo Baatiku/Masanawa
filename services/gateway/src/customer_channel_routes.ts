@@ -5,6 +5,7 @@ import type {
   CustomerChannelInbound,
   CustomerChannelResult,
 } from "./customer_channel_bridge.js";
+import type { ChannelReplyAudio } from "./channel_reply_audio.js";
 
 export interface CustomerChannelBridge {
   handle(request: CustomerChannelInbound): Promise<CustomerChannelResult>;
@@ -217,6 +218,31 @@ async function sendTelegram(
       },
     );
   }
+}
+
+/** Send a generated audio reply as a binary document. WAV/PCM is not an
+ * Opus Telegram voice note; never label it as one. A failed optional audio
+ * delivery cannot undo the already committed canonical text conversation. */
+export async function sendTelegramReplyAudio(
+  config: TelegramChannelConfig,
+  chatId: string,
+  audio: ChannelReplyAudio,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const body = new FormData();
+  body.append("chat_id", chatId);
+  body.append(
+    "document",
+    new Blob([new Uint8Array(audio.bytes)], { type: audio.mimeType }),
+    audio.fileName,
+  );
+  const response = await fetchImpl(
+    `https://api.telegram.org/bot${config.botToken}/sendDocument`,
+    { method: "POST", body, signal: AbortSignal.timeout(20_000) },
+  );
+  if (!response.ok) throw new Error(`channels.telegram_audio_http_${response.status}`);
+  const provider = await response.json().catch(() => ({})) as { ok?: unknown };
+  if (provider.ok !== true) throw new Error("channels.telegram_audio_rejected");
 }
 
 async function telegramMedia(
@@ -454,13 +480,18 @@ export function registerCustomerChannelRoutes(
         text: text || "Please help me with this attachment.",
         ...(media ? { media } : {}),
       });
-      if (result.shouldDeliver && result.reply) {
-        await sendTelegram(
-          config,
-          chatId,
-          result.reply,
-          result.requestContact,
-        );
+      if (result.shouldDeliver && (result.reply || result.audio)) {
+        if (result.reply) {
+          await sendTelegram(config, chatId, result.reply, result.requestContact);
+        }
+        if (result.audio) {
+          try {
+            await sendTelegramReplyAudio(config, chatId, result.audio);
+          } catch (_) {
+            // Optional audio never re-executes a completed turn or resends
+            // already-delivered text. Text remains the durable fallback.
+          }
+        }
         await options.bridge.delivered({
           channel: "telegram",
           messageId: durableMessageId,
