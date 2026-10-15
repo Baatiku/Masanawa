@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { platformProductMigrationRoots, runMigrations } from "../migrations.js";
+import { runMigrations } from "../migrations.js";
+import { platformProductMigrationRoots } from "../readiness.js";
 import { createMsnwCustodyService } from "../../../../../services/gateway/src/msn_wallet/custody_send.js";
 
 const connection = process.env.MASANAWA_TEST_DATABASE_URL;
