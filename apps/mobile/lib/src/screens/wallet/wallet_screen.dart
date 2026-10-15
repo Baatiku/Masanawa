@@ -107,9 +107,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     return Scaffold(
       backgroundColor: u.surfaceCard,
       appBar: widget.embeddedInShell ? null : masanawaMainHeader(context),
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(walletProvider.notifier).refresh(),
-        child: ListView(
+      body: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
           children: [
@@ -166,7 +164,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             const _WalletSection(label: 'Recent activity'),
             const ListTile(title: Text('MSNW history unavailable')),
           ],
-        ),
       ),
     );
   }
