@@ -89,6 +89,10 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       }));
     } catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/notifications",async(req,reply)=>{
+    try {return {items:await deps.service.notifications(await actor(req.headers.authorization))};}
+    catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/orders",async(req,reply)=>{
     try { return {items:await deps.service.orders(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
