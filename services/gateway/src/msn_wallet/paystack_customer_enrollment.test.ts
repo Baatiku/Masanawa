@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { PlatformSessionIdentity } from "@masanawa/security";
+import type { PlatformCustomerSessionAuthorizer } from "../customer_auth.js";
 import { createMsnwPaystackEnrollmentService } from "./paystack_customer_enrollment.js";
 
 const owner = {
@@ -9,7 +11,7 @@ const owner = {
     email: "owner@example.com", phone: "+2348012345678",
     name: "Amina Yusuf", locale: "en", createdAt: new Date().toISOString(),
   },
-} as const;
+} as unknown as PlatformSessionIdentity;
 const details = {
   consent: true, bvn: "22222222222",
   accountNumber: "0123456789", bankCode: "007",
@@ -89,7 +91,7 @@ function scenario() {
     },
   };
   const service = createMsnwPaystackEnrollmentService({
-    pool, sessions, paystackSecretKey: "sk_test_testing123",
+    pool, sessions: sessions as unknown as PlatformCustomerSessionAuthorizer, paystackSecretKey: "sk_test_testing123",
     fetchImpl: fetchImpl as typeof fetch,
   });
   return { service, calls, queries, setIdentified: (v: boolean) => { identified = v; } };
