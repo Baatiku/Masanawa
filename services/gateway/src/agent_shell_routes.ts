@@ -114,10 +114,28 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
 
     app.get("/agent/events/stream", async (request, reply) => {
       const query = request.query as Record<string, unknown>;
-      const characterId = text(query.characterId, "characterId", 160);
-      const limit = query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 100);
+      let characterId: string;
+      let limit: number;
+      try {
+        characterId = text(query.characterId, "characterId", 160);
+        limit = query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 100);
+      } catch {
+        reply.code(400);
+        return { error: "events.invalid_request" };
+      }
       let cursor =
         typeof query.after === "string" && query.after ? query.after.slice(0, 64) : undefined;
+
+      // Authorize the caller and read the first batch BEFORE sending 200 or
+      // hijacking Fastify's error handler. Expired/foreign sessions must
+      // receive the proper HTTP auth failure, not a false successful stream.
+      // Reuse this first batch below so no cursor is skipped or duplicated.
+      let initialEvents: Awaited<ReturnType<typeof shell.events>> | null = await shell.events({
+        authorizationHeader: request.headers.authorization,
+        characterId,
+        ...(cursor ? { after: cursor } : {}),
+        limit,
+      });
 
       reply.hijack();
       reply.raw.statusCode = 200;
@@ -130,24 +148,36 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
         closed = true;
       });
       const until = Date.now() + 25_000;
-      while (!closed && Date.now() < until) {
-        const events = await shell.events({
-          authorizationHeader: request.headers.authorization,
-          characterId,
-          ...(cursor ? { after: cursor } : {}),
-          limit,
-        });
-        for (const event of events) {
-          cursor = event.cursor;
-          if (!reply.raw.destroyed && !reply.raw.writableEnded) {
-            reply.raw.write(JSON.stringify(event) + "\n");
+      try {
+        while (!closed && Date.now() < until) {
+          let events: Awaited<ReturnType<typeof shell.events>>;
+          try {
+            events = initialEvents ?? await shell.events({
+              authorizationHeader: request.headers.authorization,
+              characterId,
+              ...(cursor ? { after: cursor } : {}),
+              limit,
+            });
+            initialEvents = null;
+          } catch {
+            // Authorization may expire or the event store may fail during an
+            // already-accepted stream. End it so the mobile client's session
+            // recovery/reconnect path can fetch a new authenticated response.
+            break;
+          }
+          for (const event of events) {
+            cursor = event.cursor;
+            if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+              reply.raw.write(JSON.stringify(event) + "\n");
+            }
+          }
+          if (events.length === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 750));
           }
         }
-        if (events.length === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 750));
-        }
+      } finally {
+        if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
       }
-      if (!reply.raw.writableEnded) reply.raw.end();
     });
 
     app.post("/agent/sessions/:characterSessionId/actions", async (request) => {
