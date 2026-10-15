@@ -743,6 +743,10 @@ class AiChatController extends Notifier<AiChatState> {
           _setDelivery(characterId, message.id, 'processing');
         } else if (status.state == 'failed') {
           _setDelivery(characterId, message.id, 'failed');
+        } else if (status.state == 'missing' &&
+            message.deliveryStatus != 'failed') {
+          _setDelivery(characterId, message.id, 'queued');
+          unawaited(_flushQueuedMessages());
         }
       } catch (_) {}
     }
@@ -1774,6 +1778,13 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     if (_disposed) return;
     final thread = threadOf(characterId);
+    if (requestId != null && thread.messages.any(
+      (message) => !message.isUser && message.requestId == requestId,
+    )) {
+      // SSE, HTTP receipt and restarted-queue reconciliation may all observe
+      // one completed run. Render it once, without duplicate unread badges.
+      return;
+    }
     final isOpen = state.openThreadId == characterId;
     final msg = AiChatMessage(
       id: _newId(),
@@ -2238,10 +2249,28 @@ class AiChatController extends Notifier<AiChatState> {
           list.isEmpty) {
         return;
       }
+      final recovered = [
+        for (final thread in list)
+          thread.copyWith(
+            messages: List.unmodifiable([
+              for (final message in thread.messages)
+                message.copyWith(
+                  deliveryStatus: recoveredChatDeliveryStatus(message),
+                ),
+            ]),
+          ),
+      ];
       state = state.copyWith(
-        threads: {for (final t in list) t.characterId: t, ...state.threads},
+        threads: {
+          for (final thread in recovered) thread.characterId: thread,
+          ...state.threads,
+        },
       );
       MasanawaStartupMetrics.mark('cached_threads_ready');
+      // Retried sends check canonical turn status first. Any completed server
+      // operation is rendered from its receipt, not executed a second time.
+      unawaited(_save());
+      unawaited(_flushQueuedMessages());
     } catch (_) {
       // Corrupt/missing cache never prevents the user from opening chat.
     }
