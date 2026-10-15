@@ -2,6 +2,20 @@
 
 Status: authoritative target design; implementation and provider qualification remain to be verified.
 
+## Owner decision — MSNW token identity (15 October 2026)
+
+**MSNW** is the sole customer-facing Masanawa wallet credit and the name of the intended official crypto token. Do not create, show or transfer a second "Credits" customer balance. Do not treat the previously proposed **MSN** ledger asset as a second customer currency. This decision supersedes older UI and copy using MSN, Cr or Credits as separate customer wallet products.
+
+**Critical migration boundary:** historical `customer-credit` / `amountCredits` records and preexisting `MSN` atomic ledger amounts are *not* automatically MSNW token units. Preserve the original records, precision and liabilities until an audited, reversible migration determines ownership, rate/denomination, matching issuance, double-entry postings and readback. No silent 1:1 rename, conversion or balance import is permitted.
+
+An MSNW crypto token must have a confirmed blockchain, immutable contract/mint identity, network, token decimals, issuance authority, custody/treasury model, on-chain reconciliations and safe withdrawals before claiming on-chain readiness. No address, supply, rate, network or circulating balance is established by this naming decision. Unqualified Fund, Send, Convert, Receive and Withdraw remain unavailable rather than targeting historical Credits or MSN endpoints. Existing provider and ledger risk controls remain mandatory.
+
+The `/v1/wallet/msnw` contract must return `asset: "MSNW"` and exact integer atomic units for a verified MSNW holding; a legacy `asset: "MSN"` or a Credits projection must fail closed instead of being relabeled. Existing `/v1/wallet/msn` and historical records remain separate compatibility/reconciliation inputs until a reviewed migration.
+
+The remainder of this document describes the **previous MSN implementation design**. Read its financial safeguards as applicable, but substitute MSNW as the target brand and do not use its historical MSN issuance model as evidence that the on-chain token exists.
+
+
+
 This document supersedes product instructions that describe a spendable NGN wallet, direct platform fiat withdrawals, credit-branded balances, or crypto sales through P2P. It does not assert that existing implementations are complete.
 
 ## 1. Implementation authority
