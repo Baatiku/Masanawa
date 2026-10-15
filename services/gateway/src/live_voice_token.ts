@@ -99,6 +99,13 @@ export function createGeminiLiveTokenService(input: {
         profile.voiceName.trim()
           ? profile.voiceName.trim()
           : voiceName;
+      // Google Gemini Live exposes a fixed prebuilt-voice roster. Bodi is a
+      // separate speech voice, not a supported Gemini Live session voice;
+      // preserve the persona while selecting the supported male Live voice.
+      // Sulafat is supported in both contexts and is preserved unchanged.
+      const liveVoiceName = selectedVoiceName.toLowerCase() === "bodi"
+        ? "Achird"
+        : selectedVoiceName;
       if (input.callHistory && !profile) {
         throw new CallHistoryError("calls.masana_unavailable", 403);
       }
@@ -129,15 +136,13 @@ export function createGeminiLiveTokenService(input: {
               liveConnectConstraints: {
                 model: "models/" + model,
                 config: {
+                  // Ephemeral-token constraints only lock the documented
+                  // model and modality. Persona voice, transcripts and
+                  // instructions are sent at WebSocket setup by Flutter.
+                  // Embedding every optional setup field here has produced
+                  // HTTP 400 on the live production token provider.
                   sessionResumption: {},
                   responseModalities: ["AUDIO"],
-                  outputAudioTranscription: {},
-                  ...(twinSetup ? { inputAudioTranscription: {} } : {}),
-                  speechConfig: {
-                    voiceConfig: {
-                      prebuiltVoiceConfig: { voiceName: selectedVoiceName },
-                    },
-                  },
                 },
               },
             }),
@@ -146,13 +151,25 @@ export function createGeminiLiveTokenService(input: {
         awaitingProviderResponse = false;
         issuanceStarted = response.ok;
         if (!response.ok) {
-          console.error(
-            JSON.stringify({
-              event: "agent.live_token_failed",
-              stage: "provider",
-              status: response.status,
-            }),
-          );
+          // Never log provider response messages: upstream diagnostics can
+          // contain user, key or request details. Keep only known status codes
+          // needed to diagnose an unsupported model or a bad configuration.
+          let providerCode = "UNKNOWN";
+          try {
+            const failure = await response.json() as { error?: { status?: unknown } };
+            const status = failure?.error?.status;
+            if (typeof status === "string" && [
+              "INVALID_ARGUMENT", "FAILED_PRECONDITION", "NOT_FOUND",
+              "UNAUTHENTICATED", "PERMISSION_DENIED", "RESOURCE_EXHAUSTED",
+            ].includes(status)) providerCode = status;
+          } catch { /* Upstream may not return a JSON error. */ }
+          console.error(JSON.stringify({
+            event: "agent.live_token_failed",
+            stage: "provider",
+            status: response.status,
+            providerCode,
+            model,
+          }));
           throw new Error("Gemini Live token provisioning failed");
         }
         const payload = (await response.json()) as { name?: unknown };
@@ -201,7 +218,7 @@ export function createGeminiLiveTokenService(input: {
             "BidiGenerateContentConstrained?access_token=" +
             encodeURIComponent(payload.name),
           model,
-          voiceName: selectedVoiceName,
+          voiceName: liveVoiceName,
           expiresAt: expiresAt.toISOString(),
         });
       } catch (error) {
