@@ -1509,8 +1509,6 @@ export async function startGatewayService(
     database.crypto &&
     nowPaymentsApiKey &&
     nowPaymentsIpnSecret &&
-    nowPaymentsEmail &&
-    nowPaymentsPassword &&
     nowPaymentsRelayToken &&
     publicBaseUrl
   ) {
@@ -1520,32 +1518,40 @@ export async function startGatewayService(
       relayToken: nowPaymentsRelayToken,
     };
     const payments = new NowPaymentsClient(sharedProviderOptions);
-    const custody = new NowPaymentsCustodyClient({
-      ...sharedProviderOptions,
-      email: nowPaymentsEmail,
-      password: nowPaymentsPassword,
-    });
-    const payout = new NowPaymentsPayoutClient({
-      ...sharedProviderOptions,
-      email: nowPaymentsEmail,
-      password: nowPaymentsPassword,
-    });
+    // Basic provider operations must not depend on withdrawal credentials.
+    // Custody and payout only become available with their own real secrets.
+    const custody = nowPaymentsEmail && nowPaymentsPassword
+      ? new NowPaymentsCustodyClient({
+          ...sharedProviderOptions,
+          email: nowPaymentsEmail,
+          password: nowPaymentsPassword,
+        })
+      : undefined;
+    const payout = nowPaymentsEmail && nowPaymentsPassword
+      ? new NowPaymentsPayoutClient({
+          ...sharedProviderOptions,
+          email: nowPaymentsEmail,
+          password: nowPaymentsPassword,
+        })
+      : undefined;
+    const conversionsConfigured = Boolean(
+      custody && conversionProviderCodes.length >= 2,
+    );
+    const payoutsConfigured = Boolean(
+      payout && payoutFeeMode && withdrawalProviderCodes.length > 0 &&
+      withdrawalAllowlist.size > 0 &&
+      env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE?.trim(),
+    );
 
-    const runtimeEvidence = () =>
-      collectNowPaymentsRuntimeEvidence({
+    const runtimeEvidence = () => {
+      if (!custody) throw new Error("nowpayments.custody.credentials_missing");
+      return collectNowPaymentsRuntimeEvidence({
         payments,
         custody,
-        payout,
+        ...(payout ? { payout } : {}),
         config: {
-          conversionEnabled:
-            (env.NOWPAYMENTS_CONVERSIONS_ENABLED === "true" ||
-              env.NOWPAYMENTS_CONVERSION_ENABLED === "true") &&
-            env.NOWPAYMENTS_CUSTODY_ENABLED === "true",
-          payoutEnabled:
-            (env.NOWPAYMENTS_PAYOUTS_ENABLED === "true" ||
-              env.NOWPAYMENTS_PAYOUT_ENABLED === "true") &&
-            env.NOWPAYMENTS_CUSTODY_ENABLED === "true" &&
-            env.NOWPAYMENTS_PAYOUT_2FA_READY === "true",
+          conversionEnabled: conversionsConfigured,
+          payoutEnabled: payoutsConfigured,
           ipWhitelistSatisfied:
             env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true",
           payoutDestinationWhitelistSatisfied:
@@ -1555,6 +1561,7 @@ export async function startGatewayService(
         },
         signal: AbortSignal.timeout(15_000),
       });
+    };
 
     const fiatCurrencies = readCsvEnv(env.NOWPAYMENTS_FIAT_CURRENCIES);
     const settlementProviderCode =
@@ -1566,18 +1573,8 @@ export async function startGatewayService(
       nowPayments: payments,
       nowPaymentsCustody: custody,
       nowPaymentsPayout: payout,
-      ...((env.NOWPAYMENTS_PAYOUTS_ENABLED === "true" ||
-          env.NOWPAYMENTS_PAYOUT_ENABLED === "true") &&
-        env.NOWPAYMENTS_CUSTODY_ENABLED === "true" &&
-        env.NOWPAYMENTS_PAYOUT_2FA_READY === "true" &&
-        payoutFeeMode !== undefined
-          ? { withdrawalEvidence: runtimeEvidence }
-          : {}),
-      ...((env.NOWPAYMENTS_CONVERSIONS_ENABLED === "true" ||
-          env.NOWPAYMENTS_CONVERSION_ENABLED === "true") &&
-        env.NOWPAYMENTS_CUSTODY_ENABLED === "true"
-          ? { conversionEvidence: runtimeEvidence }
-          : {}),
+      ...(payoutsConfigured ? { withdrawalEvidence: runtimeEvidence } : {}),
+      ...(conversionsConfigured ? { conversionEvidence: runtimeEvidence } : {}),
       ...(payoutFeeMode === undefined
         ? {}
         : { withdrawalNetworkFeeMode: payoutFeeMode }),
@@ -1591,9 +1588,7 @@ export async function startGatewayService(
               env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE!.trim(),
           }
         : {}),
-      ...(env.NOWPAYMENTS_FIAT_ONRAMP_ENABLED === "true" &&
-      fiatCurrencies.length > 0 &&
-      settlementProviderCode
+      ...(custody && fiatCurrencies.length > 0 && settlementProviderCode
         ? {
             fiatOnRamp: {
               enabled: true as const,
