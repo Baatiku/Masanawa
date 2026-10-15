@@ -47,3 +47,8 @@ Initial commits: schema `9a0c24ae`, engine `5e96ada4`, routes `2c6d3f69`, tests 
 - **Still not payment confirmation:** matching a name verifies bank destination eligibility, not actual NGN transfer, screenshot provenance or final beneficiary controls. Escrow release still needs independent bank settlement confirmation and qualified canonical MSNW custody adapter.
 
 **Checklist status changes:** item 1 seller method creation is now source-implemented subject to Paystack provider responses/KYC; items 2, 4–6 and 8 remain partial as described. Financial settlement/custody scope remains blocked, never simulated.
+
+## Wallet activity follow-on
+
+Source: `apps/mobile/lib/src/finance/msnw_p2p_activity.dart` and
+`apps/mobile/lib/src/screens/wallet/wallet_screen.dart`. Wallet Recent Activity now reads authenticated persisted P2P orders and shows directional Buy/Sell labels, exact MSNW amount, transaction state and receipt reference (if settled). Account isolation is rechecked after the network response. This is **not** a substitute for canonical completed ledger activity; P2P open orders are not token balances.
