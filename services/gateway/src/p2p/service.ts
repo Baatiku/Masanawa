@@ -155,21 +155,22 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     },
     // Only a trusted server-side KYC/payment verification integration can call this.
     async recordVerifiedMethod(actor: P2pActor, input: {
-      methodId: string; bankName: string; accountName: string;
+      methodId: string; bankName: string; bankCode: string; accountName: string;
       accountNumber: string; verificationReference: string;
     }) {
-      if (!/^[0-9]{10}$/.test(input.accountNumber) ||
+      if (!/^[0-9]{3,6}$/.test(input.bankCode) ||
+          !/^[0-9]{10}$/.test(input.accountNumber) ||
           input.bankName.trim().length < 2 || input.bankName.length > 120 ||
           input.accountName.trim().length < 2 || input.accountName.length > 150 ||
           !/^[A-Za-z0-9_.:-]{8,128}$/.test(input.verificationReference)) {
         throw new P2pError("p2p.method_invalid", 422);
       }
       await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods
-        (method_id,tenant_id,owner_id,method_type,bank_name,account_name,
+        (method_id,tenant_id,owner_id,method_type,bank_name,bank_code,account_name,
           account_number,verification_reference,verified_at)
-        VALUES ($1,$2,$3,'ng_bank_transfer',$4,$5,$6,$7,statement_timestamp())
+        VALUES ($1,$2,$3,'ng_bank_transfer',$4,$5,$6,$7,$8,statement_timestamp())
         ON CONFLICT DO NOTHING`, [id(input.methodId),actor.tenantId,actor.userId,
-        input.bankName.trim(),input.accountName.trim(),input.accountNumber,
+        input.bankName.trim(),input.bankCode,input.accountName.trim(),input.accountNumber,
         input.verificationReference]);
     },
     async closeOffer(actor: P2pActor, offerId: string) {
