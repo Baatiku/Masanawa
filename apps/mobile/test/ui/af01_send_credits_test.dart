@@ -8,6 +8,7 @@ import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/wallet/send_credits_sheet.dart';
 import 'package:masanawa/src/screens/wallet/wallet_receipt_sheet.dart';
 import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
+import 'package:masanawa/src/finance/msnw_custody_send.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/state/wallet_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
@@ -172,7 +173,7 @@ void main() {
     expect(find.textContaining('Account changed'), findsOneWidget);
   });
 
-  testWidgets('mounted Wallet connects Send to existing controller, then receipt',
+  testWidgets('Wallet Send does not invoke legacy Credits controller',
       (tester) async {
     final wallet = _Wallet();
     await tester.pumpWidget(ProviderScope(
@@ -188,18 +189,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Send'));
     await tester.tap(find.text('Send'));
-    await tester.pumpAndSettle();
-    await enterDetails(tester);
+    await tester.pump();
+    expect(find.byType(MsnwCustodySendSheet), findsOneWidget);
+    expect(find.byType(SendCreditsSheet), findsNothing);
     expect(wallet.sends, 0);
-    await tester.tap(find.text('Confirm and send'));
-    await tester.pumpAndSettle();
-    expect(wallet.sends, 1);
-    expect(find.byType(WalletReceiptSheet), findsOneWidget);
-    expect(find.text('Reference: canonical-ledger-ref'), findsOneWidget);
-    expect(find.text('Sent to fan-b.'), findsOneWidget);
   });
 
-  testWidgets('disabled and signed-out mounted wallets never expose Send',
+  testWidgets('legacy build flag cannot restore Credits Send',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -212,7 +208,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Send'), findsNothing);
+    expect(find.text('Send'), findsOneWidget);
 
     // Different provider container: signed-out account, enabled build flag.
     await tester.pumpWidget(ProviderScope(
@@ -227,6 +223,6 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Send'), findsNothing);
+    expect(find.text('Send'), findsOneWidget);
   });
 }
