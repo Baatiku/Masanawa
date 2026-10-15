@@ -119,6 +119,17 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
       let cursor =
         typeof query.after === "string" && query.after ? query.after.slice(0, 64) : undefined;
 
+      // Authorize the caller and read the first batch BEFORE sending 200 or
+      // hijacking Fastify's error handler. Expired/foreign sessions must
+      // receive the proper HTTP auth failure, not a false successful stream.
+      // Reuse this first batch below so no cursor is skipped or duplicated.
+      let initialEvents = await shell.events({
+        authorizationHeader: request.headers.authorization,
+        characterId,
+        ...(cursor ? { after: cursor } : {}),
+        limit,
+      });
+
       reply.hijack();
       reply.raw.statusCode = 200;
       reply.raw.setHeader("content-type", "application/x-ndjson; charset=utf-8");
@@ -131,12 +142,13 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
       });
       const until = Date.now() + 25_000;
       while (!closed && Date.now() < until) {
-        const events = await shell.events({
+        const events = initialEvents ?? await shell.events({
           authorizationHeader: request.headers.authorization,
           characterId,
           ...(cursor ? { after: cursor } : {}),
           limit,
         });
+        initialEvents = null;
         for (const event of events) {
           cursor = event.cursor;
           if (!reply.raw.destroyed && !reply.raw.writableEnded) {
