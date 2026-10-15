@@ -90,6 +90,32 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
      expect.objectContaining({stage:"release",count:3,net:"0"}),
    ]));
  });
+ it("automatically expires unpaid orders once, refunding custody with audit and customer events",async()=>{
+   const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
+   const before=await account(seller);
+   const order=await service().createOrder(actor,{
+     offerId,amountMicro:"250000",idempotencyKey:randomUUID(),
+   });
+   await pool.query(`UPDATE commerce.msnw_p2p_orders
+     SET payment_deadline=statement_timestamp()-interval '1 minute'
+     WHERE tenant_id=$1 AND order_id=$2`,[tenant,order.orderId]);
+   const result=await pool.query<{expired:number}>(`
+     SELECT commerce.msnw_p2p_expire_due_batch(25) AS expired`);
+   expect(result.rows[0]?.expired).toBeGreaterThanOrEqual(1);
+   expect(await account(seller)).toEqual(before);
+   const status=await pool.query(`SELECT state,receipt_reference
+     FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND order_id=$2`,
+     [tenant,order.orderId]);
+   expect(status.rows[0]).toMatchObject({
+     state:"expired",receipt_reference:"msnw-p2p:"+order.orderId+":refund",
+   });
+   const inbox=await pool.query(`SELECT user_id FROM commerce.msnw_p2p_notifications
+     WHERE tenant_id=$1 AND order_id=$2 AND action='expired'`,
+     [tenant,order.orderId]);
+   expect(inbox.rows.map(r=>r.user_id).sort()).toEqual([buyer,seller].sort());
+   expect((await pool.query<{expired:number}>(`SELECT commerce.msnw_p2p_expire_due_batch(25) AS expired`))
+     .rows[0]?.expired).toBe(0);
+ });
  it("refunds unpaid cancellation with zero fees and immutable receipts",async()=>{
    const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
    const old=await account(seller);
