@@ -13,7 +13,8 @@ function decode(payload:unknown){
     !/^[0-9a-f-]{36}$/i.test(p.orderId)||
     !/^[0-9a-f-]{36}$/i.test(p.sourceEventId))
     throw new TypeError("invalid_p2p_notice");
-  parseCanonicalId("user",p.userId);
+  try { parseCanonicalId("user",p.userId); }
+  catch { throw new TypeError("invalid_p2p_notice"); }
   return {userId:p.userId,orderId:p.orderId};
 }
 
