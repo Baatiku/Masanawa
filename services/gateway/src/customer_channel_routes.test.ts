@@ -401,7 +401,7 @@ describe("customer channel webhook routes", () => {
         }), { status: 200, headers: { "content-type": "application/json" } });
       }
       if (url.includes("/file/bot")) {
-        return new Response(bytes, { status: 200 });
+        return new Response("sample-media-content", { status: 200 });
       }
       throw new Error("Unexpected Telegram URL");
     });
