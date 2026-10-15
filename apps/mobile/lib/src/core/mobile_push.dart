@@ -41,10 +41,84 @@ FirebaseOptions get _firebaseOptions => const FirebaseOptions(
   projectId: _firebaseProjectId,
 );
 
+const _incomingCallChannel = AndroidNotificationChannel(
+  'masanawa_calls',
+  'Incoming Masana calls',
+  description: 'Ringing invitations from your Masana contacts',
+  importance: Importance.max,
+  playSound: true,
+);
+
+const _workChannel = AndroidNotificationChannel(
+  'masanawa_work',
+  'Masanawa updates',
+  description: 'Agent replies, approvals and completed work',
+  importance: Importance.high,
+);
+
+const _callNotificationDetails = NotificationDetails(
+  android: AndroidNotificationDetails(
+    'masanawa_calls',
+    'Incoming Masana calls',
+    channelDescription: 'Ringing invitations from your Masana contacts',
+    category: AndroidNotificationCategory.call,
+    importance: Importance.max,
+    priority: Priority.max,
+    playSound: true,
+  ),
+  iOS: DarwinNotificationDetails(presentSound: true),
+);
+
+const _workNotificationDetails = NotificationDetails(
+  android: AndroidNotificationDetails(
+    'masanawa_work',
+    'Masanawa updates',
+    channelDescription: 'Agent replies, approvals and completed work',
+    importance: Importance.high,
+    priority: Priority.high,
+  ),
+  iOS: DarwinNotificationDetails(),
+);
+
+bool isIncomingCallPush(Map<String, dynamic> data) {
+  if (data['type'] != 'incoming_call' || data['callId'] is! String) {
+    return false;
+  }
+  final callId = data['callId'] as String;
+  final uri = Uri.tryParse(
+    'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
+  );
+  return uri != null &&
+      shellDeepLinkRoute(uri)?.startsWith('/calls/incoming/') == true;
+}
+
 @pragma('vm:entry-point')
 Future<void> masanawaFirebaseBackgroundMessage(RemoteMessage message) async {
   if (!firebasePushConfigured) return;
   await Firebase.initializeApp(options: _firebaseOptions);
+  // Notification-bearing FCM messages are already displayed by Android
+  // while backgrounded. Only show data-only call invitations here.
+  if (!isIncomingCallPush(message.data) || message.notification != null) {
+    return;
+  }
+  final notifications = FlutterLocalNotificationsPlugin();
+  await notifications.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+  final android = notifications.resolvePlatformSpecificImplementation<
+      AndroidFlutterLocalNotificationsPlugin>();
+  await android?.createNotificationChannel(_incomingCallChannel);
+  final callId = message.data['callId'] as String;
+  await notifications.show(
+    id: callId.hashCode,
+    title: 'Incoming Masana call',
+    body: 'Open Calls to respond',
+    notificationDetails: _callNotificationDetails,
+    payload: 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
+  );
 }
 
 class MobilePushService {
@@ -129,6 +203,14 @@ class MobilePushService {
       },
     );
 
+    // FCM background notification payloads reference these exact channel IDs.
+    // Register them before token registration; otherwise Android may silently
+    // fall back to a generic system channel for incoming calls.
+    final channels = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await channels?.createNotificationChannel(_workChannel);
+    await channels?.createNotificationChannel(_incomingCallChannel);
+
     final launch = await _notifications.getNotificationAppLaunchDetails();
     final localPayload = launch?.notificationResponse?.payload;
     if (launch?.didNotificationLaunchApp == true && localPayload != null) {
@@ -147,24 +229,21 @@ class MobilePushService {
           _incomingHints.add(uri);
         }
       }
+      final isCall = isIncomingCallPush(message.data);
       final notification = message.notification;
-      if (notification == null) return;
+      if (notification == null && !isCall) return;
       await _notifications.show(
-        id:
-            message.messageId?.hashCode ??
-            DateTime.now().millisecondsSinceEpoch,
-        title: notification.title ?? 'Masanawa',
-        body: notification.body,
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'masanawa_work',
-            'Masanawa updates',
-            channelDescription: 'Agent replies, approvals and completed work',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
+        id: isCall
+            ? (message.data['callId'] as String).hashCode
+            : (message.messageId?.hashCode ??
+                DateTime.now().millisecondsSinceEpoch),
+        title: notification?.title ??
+            (isCall ? 'Incoming Masana call' : 'Masanawa'),
+        body: notification?.body ??
+            (isCall ? 'Open Calls to respond' : null),
+        notificationDetails: isCall
+            ? _callNotificationDetails
+            : _workNotificationDetails,
         payload: _linkFor(message),
       );
     });
