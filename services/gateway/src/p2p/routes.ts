@@ -130,6 +130,11 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
         objectRef,sha256,verifiedOwnerId:stored.verifiedOwnerId}));
     }catch(error){return respond(error,reply);}
   });
+  app.get("/v1/admin/msnw/p2p/disputes/:orderId",async(req,reply)=>{
+    try { return await deps.service.caseFile(await operator(req.headers.authorization),
+      (req.params as {orderId:string}).orderId); }
+    catch(error){ return respond(error,reply); }
+  });
   app.get("/v1/admin/msnw/p2p/disputes",async(req,reply)=>{
     try{return {items:await deps.service.disputes(await operator(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
