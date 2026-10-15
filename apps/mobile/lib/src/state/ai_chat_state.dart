@@ -185,6 +185,35 @@ Future<List<ChatAttachment>> retainOutgoingChatMedia({
   }
 }
 
+ 
+/// Durable private local playback for an agent's PCM/WAV/audio response.
+/// Provider output remains authoritative; this file contains no user IDs.
+Future<File> retainAgentReplyAudio({
+  required Directory ownerFolder,
+  required String requestId,
+  required String extension,
+  required List<int> bytes,
+}) async {
+  if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+    throw const ApiException('Audio reply exceeds local cache limit',
+        code: 'ATTACHMENT_TOO_LARGE');
+  }
+  if (!RegExp(r'^[a-zA-Z0-9]{1,8}$').hasMatch(extension)) {
+    throw const ApiException('Invalid audio reply format',
+        code: 'ATTACHMENT_INVALID');
+  }
+  final token = base64Url.encode(utf8.encode(requestId)).replaceAll('=', '');
+  await ownerFolder.create(recursive: true);
+  final file = File('${ownerFolder.path}/${token}_assistant_reply.$extension');
+  try {
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  } catch (_) {
+    try { await file.delete(); } catch (_) {}
+    rethrow;
+  }
+}
+
 class AiChatMessage {
   const AiChatMessage({
     required this.id,
@@ -927,6 +956,12 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
+  Future<Directory> _mediaFolderForOwner(String owner) async {
+    final support = await getApplicationSupportDirectory();
+    final ownerKey = base64Url.encode(utf8.encode(owner)).replaceAll('=', '');
+    return Directory('${support.path}/masanawa_chat_media_$ownerKey');
+  }
+
   Future<List<ChatAttachment>> _retainMediaForOwner(
     String? owner,
     String requestId,
@@ -935,10 +970,9 @@ class AiChatController extends Notifier<AiChatState> {
     if (owner == null || owner.isEmpty) {
       throw const ApiException('Sign in to send media', code: 'AUTH_REQUIRED');
     }
-    final support = await getApplicationSupportDirectory();
-    final ownerKey = base64Url.encode(utf8.encode(owner)).replaceAll('=', '');
+    final folder = await _mediaFolderForOwner(owner);
     return retainOutgoingChatMedia(
-      ownerFolder: Directory('${support.path}/masanawa_chat_media_$ownerKey'),
+      ownerFolder: folder,
       requestId: requestId,
       attachments: attachments,
     );
@@ -1251,13 +1285,30 @@ class AiChatController extends Notifier<AiChatState> {
             audio,
             mimeType: result.audioMimeType,
           );
-          final dir = await getTemporaryDirectory();
-          final path =
-              '${dir.path}/masanawa_reply_${DateTime.now().microsecondsSinceEpoch}.${playable.extension}';
-          await File(path).writeAsBytes(playable.bytes, flush: true);
+          final owner = _cacheOwnerId;
+          final generation = _cacheGeneration;
+          if (owner == null || owner.isEmpty) {
+            throw StateError('Account changed before audio reply was saved');
+          }
+          final folder = await _mediaFolderForOwner(owner);
+          if (_disposed || owner != _cacheOwnerId ||
+              generation != _cacheGeneration) {
+            throw StateError('Account changed before audio reply was saved');
+          }
+          final retained = await retainAgentReplyAudio(
+            ownerFolder: folder,
+            requestId: userMsg.requestId ?? createRequestId(),
+            extension: playable.extension,
+            bytes: playable.bytes,
+          );
+          if (_disposed || owner != _cacheOwnerId ||
+              generation != _cacheGeneration) {
+            try { await retained.delete(); } catch (_) {}
+            throw StateError('Account changed while audio reply was saved');
+          }
           replyAudio = ChatAttachment(
             kind: 'voice',
-            path: path,
+            path: retained.path,
             durationMs: result.audioDurationMs,
             sizeBytes: playable.bytes.length,
             waveform: playable.isWav
