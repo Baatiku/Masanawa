@@ -2,12 +2,12 @@ import {describe,it,expect,vi} from "vitest";
 import Fastify from "fastify";
 import {registerRoomDiscussionRoutes} from "./discussion_routes.js";
 const actor={tenantId:"tenant_a",userId:"fan_1",roles:[]};
-function setup(enabled=true){
+function setup(enabled=true,roles:readonly string[]=[]){
  const app=Fastify();
  const store={list:vi.fn(async()=>({items:[],nextCursor:null})),
  create:vi.fn(async()=>({replyId:"room-reply_12345678",state:"held"})),
  staffQueue:vi.fn(async()=>[]),decide:vi.fn(async()=>{})};
- const authorize=vi.fn(async()=>actor);
+ const authorize=vi.fn(async()=>({...actor,roles}));
  registerRoomDiscussionRoutes(app,{store:store as any,authorize,enabled:()=>enabled});
  return {app,store,authorize};
 }
@@ -29,6 +29,25 @@ describe("Room discussion routes deny privilege and replay abuse",()=>{
   const x=setup();
   const r=await x.app.inject({method:"GET",url:"/v1/admin/rooms/discussion"});
   expect(r.statusCode).toBe(403);expect(x.store.staffQueue).not.toHaveBeenCalled();
+ });
+ it("permits only server-issued room editor authority to review held replies",async()=>{
+  const x=setup(true,["rooms_editor"]);
+  const list=await x.app.inject({method:"GET",url:"/v1/admin/rooms/discussion",
+    headers:{"x-role":"fan","x-tenant":"forged"}});
+  expect(list.statusCode).toBe(200);
+  expect(list.json()).toEqual({items:[]});
+  const reviewed=await x.app.inject({method:"POST",
+    url:"/v1/admin/rooms/discussion/room-reply_12345678/review",
+    payload:{decision:"approve",role:"fan"}});
+  expect(reviewed.statusCode).toBe(200);
+  expect(x.store.decide).toHaveBeenCalledWith(
+    expect.objectContaining({roles:["rooms_editor"]}),"room-reply_12345678","approve");
+  const bad=await x.app.inject({method:"POST",
+    url:"/v1/admin/rooms/discussion/room-reply_12345678/review",
+    payload:{decision:"publish_everything"}});
+  expect(bad.statusCode).toBe(422);
+  expect(x.store.decide).toHaveBeenCalledTimes(1);
+  await x.app.close();
  });
  it("accepts a held reply but never renders it as approved",async()=>{
   const x=setup();

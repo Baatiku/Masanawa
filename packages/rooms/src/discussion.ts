@@ -33,7 +33,7 @@ export function validateDiscussionCursor(raw: unknown): DiscussionCursor | null 
   return {before,beforeId};
 }
 export function requireDiscussionModerator(roles:readonly string[]):void {
-  if (!roles.some(r=>["platform_admin","rooms_moderator","moderator","room_manager","super_admin"].includes(r)))
+  if (!roles.some(r=>["platform_admin","rooms_editor","rooms_moderator","moderator","room_manager","super_admin"].includes(r)))
     throw new RoomError(403,"room_moderator_required");
 }
 export { validateIdempotencyKey };
