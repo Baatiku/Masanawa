@@ -22,5 +22,7 @@ describe("C39 moderated discussion canonical contracts",()=>{
   expect(()=>requireDiscussionModerator(["fan"])).toThrow(RoomError);
   expect(()=>requireDiscussionModerator(["content_editor"])).toThrow(RoomError);
   expect(()=>requireDiscussionModerator(["moderator"])).not.toThrow();
+  // Server-issued rooms_editor is trusted for both lessons and held discussions.
+  expect(()=>requireDiscussionModerator(["rooms_editor"])).not.toThrow();
  });
 });
