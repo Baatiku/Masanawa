@@ -22,7 +22,7 @@ const bool kWalletCreditSendEnabled = bool.fromEnvironment(
 /// MSNW is the canonical customer-facing token and credit. This readback
 /// is permitted only when Gateway returns asset MSNW, not legacy MSN.
 const bool kWalletMsnBalanceEnabled = bool.fromEnvironment(
-  'MASANAWA_MSNW_ONCHAIN_BALANCE_ENABLED', defaultValue: false,
+  'MASANAWA_MSNW_ONCHAIN_BALANCE_ENABLED', defaultValue: true,
 );
 
 /// Legacy MSN funding journal remains internal until reconciled. An old
@@ -31,13 +31,13 @@ const bool kWalletMsnFundingStatusEnabled = bool.fromEnvironment(
   'MASANAWA_MSN_FUNDING_READBACK_ENABLED', defaultValue: false,
 );
 
-/// Explicit opt-in only when Paystack is live, KYC-backed and staged schema installed.
+/// Funding opens by default; Gateway checks qualified provider/KYC availability.
 const bool kWalletPaystackDvaEnabled = bool.fromEnvironment(
-  'MASANAWA_MSNW_PAYSTACK_DVA_ENABLED', defaultValue: false,
+  'MASANAWA_MSNW_PAYSTACK_DVA_ENABLED', defaultValue: true,
 );
 
 const bool kWalletVerifiedFundingActivityEnabled = bool.fromEnvironment(
-  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: false,
+  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: true,
 );
 
 class WalletScreen extends ConsumerStatefulWidget {
