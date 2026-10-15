@@ -10,7 +10,7 @@
 - [PR #30](https://github.com/Baatiku/Masanawa/pull/30), `d2a56cc62e8a51c55102bda4b46eb240374b96ef`: immediately visible authenticated fan Status comments rather than all being forced into pending staff review.
 - [PR #34](https://github.com/Baatiku/Masanawa/pull/34), `40ca3759788f004ce39e4c919c98a75727d59558`: Android admin Room drafts, approved-teacher publication and lessons.
 - [PR #39](https://github.com/Baatiku/Masanawa/pull/39), `a398edabf90b8bd191542875340f90a7356a8012`: Gateway Masana profiles, signed private portraits, rights-checked existing-media revisions, and Android admin Masana editor.
-- **Current scoped branch, not yet merged:** shared original Firebase sender extracted from Gateway into `packages/mobile-push/`; `services/worker/src/jobs/rooms/notifications_runtime.ts` consumes the existing `notifications.rooms` outbox with entitlement and account checks and FCM retry/receipt settlement; wired into the Worker when `MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON` is configured.
+- [PR #43](https://github.com/Baatiku/Masanawa/pull/43), `24167e960d51d91bd4eef884fe9e8513c008b323`: canonical Room notification outbox consumer, shared original Firebase sender in `packages/mobile-push/`, account/Room/entitlement checks, retries and clean Worker shutdown. Preserves simultaneous incoming-call Firebase channel behavior.
 
 Status: **DONE (source)** means a specific implementation was committed and merged, not that the full customer journey, providers or device acceptance were qualified. **IN PROGRESS** means real source exists but the listed integration remains unfinished. **BLOCKED** is reserved for a genuine external prerequisite or another owner-held financial authority.
 
@@ -57,7 +57,7 @@ Status: **DONE (source)** means a specific implementation was committed and merg
 | Membership, invitations, MSNW subscriptions, renewals/cancellation/expiry | IN PROGRESS | `services/gateway/src/modules/rooms/membership_routes.ts`, subscription modules; **paid use still depends on WS1 MSNW**; no fake Play→MSNW mapping |
 | Extend existing admin mobile + Ops, no separate app | DONE (source) | **PRs #21/#26/#34 merged** under `apps/admin_mobile/lib/src/screens/`; Ops and Gateway existing authority reused |
 | Admin profiles/portraits/skills/schedules/social/posts/videos/Rooms/subscriptions/finance | IN PROGRESS | **PR #21 Status; PR #26 Videos; PR #34 Rooms; this branch Masana profiles and media**. Remaining schedules/social handles/subscription/finance admin are not finished |
-| Firebase notifications for calls, Room replies, financial/service events | IN PROGRESS | Canonical `services/gateway/src/mobile_push.ts`; this branch wires `services/worker/src/jobs/rooms/notifications_runtime.ts` to Firebase Room reply delivery. Financial/service notices and live device permission checks remain open |
+| Firebase notifications for calls, Room replies, financial/service events | IN PROGRESS | Canonical `services/gateway/src/mobile_push.ts`; **PR #43 merged** `services/worker/src/jobs/rooms/notifications_runtime.ts` with canonical Firebase Room reply delivery. Financial/service notices and live device permission checks remain open |
 | Remove obsolete Twins, human controls, Credits, fake placeholders, dead actions | IN PROGRESS | Shell removed legacy Twins UX; backend compatibility modules persist, paid legacy amounts not silently rewritten; audit remaining UI needed |
 
 ## Workstream 4 — MSNW P2P escrow
