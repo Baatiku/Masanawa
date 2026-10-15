@@ -74,7 +74,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   }
   Future<List<Map<String, dynamic>>> _load() async {
     final path = switch (_tab) {
-      0 => '/offers', 1 => '/my-offers', _ => '/orders',
+      0 => '/offers',1 => '/my-offers',2 => '/orders',_ => '/notifications',
     };
     final json = _json(await _request('GET', path));
     return (json['items'] as List<dynamic>? ?? [])
@@ -307,6 +307,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         ButtonSegment(value:0,label:Text('Buy')),
         ButtonSegment(value:1,label:Text('Sell')),
         ButtonSegment(value:2,label:Text('My orders')),
+        ButtonSegment(value:3,label:Text('Updates')),
       ],selected:{_tab},onSelectionChanged: (v)=>_reload(v.first)),
       Expanded(child: FutureBuilder<List<Map<String,dynamic>>>(future:_list,
         builder:(context,snapshot) {
@@ -340,13 +341,15 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                   ? '${_ngn(item['rate_kobo_per_msnw'])} / MSNW'
                   : _tab==1
                     ? '${_ngn(item['rate_kobo_per_msnw'])} per MSNW'
-                    : '${_msnw(item['amount_micro'])} · ${item['state']}'),
+                    : _tab==2 ? '${_msnw(item['amount_micro'])} · ${item['state']}'
+                    : 'Order ${item['state'] ?? 'updated'}'),
               subtitle:Text(_tab==0
                 ? 'Available: ${_msnw(item['remaining_micro'])}  · '
                   'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])}'
                 : _tab==1
                     ? 'Remaining ${_msnw(item['remaining_micro'])} · ${item['state']}'
-                    : 'Fiat ${_ngn(item['fiat_kobo'])}'),
+                    : _tab==2 ? 'Fiat ${_ngn(item['fiat_kobo'])}'
+                    : '${item['action'] ?? 'State change'} · ${item['created_at'] ?? ''}'),
               trailing:const Icon(Icons.chevron_right),
               onTap: _busy?null: () {
                 if(_tab==0) {_buy(item);}
@@ -356,7 +359,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                       await _request('POST','/offers/${item['offer_id']}/close',{});
                     });});
                 }
-                if(_tab==2) {_orderDetail('${item['order_id']}');}
+                if(_tab==2||_tab==3) {_orderDetail('${item['order_id']}');}
               },
             )),
           ]));
