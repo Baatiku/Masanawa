@@ -105,7 +105,7 @@ export function createMsnwOnchainBalanceReader(input: Readonly<{
       const binding = result.rows[0];
       const walletAddress = binding?.wallet_address;
       if (typeof walletAddress !== "string" || !hexAddress.test(walletAddress) ||
-          typeof binding.proof_sha256 !== "string" ||
+          typeof binding?.proof_sha256 !== "string" ||
           !/^[0-9a-f]{64}$/.test(binding.proof_sha256)) {
         // A missing binding is not a verified zero balance.
         throw new MsnwOnchainError("msnw.verified_wallet_unavailable");
