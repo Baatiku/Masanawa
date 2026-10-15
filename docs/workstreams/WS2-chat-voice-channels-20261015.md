@@ -33,6 +33,8 @@ This record distinguishes **committed source** from provider, live-device and re
 
 - **Admin WhatsApp QR pairing continuation — IMPLEMENTED_UNVERIFIED:** `apps/admin_mobile/lib/src/screens/whatsapp_channel_page.dart` now uses a self-refreshing QR dialog polling the authenticated status/QR endpoints every five seconds, invalidates expired/unavailable challenges, shows connected completion, supports manual retries and disposes polling when closed. QR bytes are bounded and never written to disk. `apps/admin_mobile/test/whatsapp_pairing_dialog_test.dart` adds QR validation and connection state tests. Actual Railway auth-directory persistence and a paired physical phone still require acceptance.
 
+- **Telegram receipt correction — IMPLEMENTED_UNVERIFIED:** `services/gateway/src/customer_channel_routes.ts` now requires Telegram's application-level `ok:true` rather than HTTP 200 alone before sending `delivered` to the canonical message receipt ledger. Explicit `ok:false` fails the webhook for retry instead of silently losing a reply. `customer_channel_routes.test.ts` asserts 200/`ok:false` never acknowledges the receipt. Live provider/network qualification remains separate.
+
 ## Exact Workstream 2 checklist
 
 - [ ] **IN PROGRESS — Authenticated Masana text, persistence, streaming, retry and history.** Existing `apps/mobile/lib/src/state/ai_chat_state.dart` has history merge, event streaming, offline queue and retries; `services/gateway/src/agent_conversation.ts` handles turns/media. Local message saves are now captured and serialized per account to prevent account-switched JSON cache contamination. Live two-account and provider qualification are outstanding. This branch does not claim end-to-end completion.
