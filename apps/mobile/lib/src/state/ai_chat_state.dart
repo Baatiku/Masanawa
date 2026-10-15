@@ -422,6 +422,7 @@ class AiChatController extends Notifier<AiChatState> {
   String? _cacheOwnerId;
   int _cacheGeneration = 0;
   Future<Directory?>? _documentsDirectoryFuture;
+  Future<void> _previousCacheSave = Future<void>.value();
 
   @override
   AiChatState build() {
@@ -2011,17 +2012,29 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save() {
     final ownerId = _cacheOwnerId;
-    if (ownerId == null || ownerId.isEmpty) return;
-    try {
-      final file = await _threadsFile(ownerId);
-      if (file == null) return;
-      final list = state.threads.values.map((t) => t.toJson()).toList();
-      await file.writeAsString(jsonEncode(list));
-    } catch (_) {
-      // Local cache is best-effort. Server session/run truth is canonical.
-    }
+    if (ownerId == null || ownerId.isEmpty) return Future<void>.value();
+    // Capture identity and content before the first await. A save started for
+    // account A must never write account B's thread data after a logout.
+    final generation = _cacheGeneration;
+    final payload = jsonEncode(
+      state.threads.values.map((thread) => thread.toJson()).toList(),
+    );
+    final next = _previousCacheSave.catchError((_) {}).then((_) async {
+      if (_disposed || ownerId != _cacheOwnerId ||
+          generation != _cacheGeneration) return;
+      try {
+        final file = await _threadsFile(ownerId);
+        if (file == null || _disposed || ownerId != _cacheOwnerId ||
+            generation != _cacheGeneration) return;
+        await file.writeAsString(payload, flush: true);
+      } catch (_) {
+        // Local cache is best-effort. Server history is canonical.
+      }
+    });
+    _previousCacheSave = next;
+    return next;
   }
 }
 
