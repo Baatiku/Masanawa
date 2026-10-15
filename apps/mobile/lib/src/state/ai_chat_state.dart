@@ -342,8 +342,12 @@ String recoveredChatDeliveryStatus(AiChatMessage message) {
       !{'sending', 'sent'}.contains(message.deliveryStatus)) {
     return message.deliveryStatus;
   }
-  // Legacy messages without an idempotency key cannot be safely replayed.
-  return message.requestId == null ? 'failed' : 'queued';
+  // Legacy messages lack the original idempotency key: do not replay, and
+  // do not relabel their historically visible 'sent' status as a failure.
+  if (message.requestId == null) {
+    return message.deliveryStatus == 'sending' ? 'failed' : 'sent';
+  }
+  return 'queued';
 }
 
 enum ChatQueuedTurnResolution { resend, delivered, processing, failed, wait }
@@ -1782,8 +1786,13 @@ class AiChatController extends Notifier<AiChatState> {
     if (requestId != null && thread.messages.any(
       (message) => !message.isUser && message.requestId == requestId,
     )) {
-      // SSE, HTTP receipt and restarted-queue reconciliation may all observe
-      // one completed run. Render it once, without duplicate unread badges.
+      // HTTP, SSE and restarted queue recovery may finish the same turn.
+      // Clear any stale spinner even when its assistant reply already exists.
+      if (state.sendingIn.contains(characterId)) {
+        state = state.copyWith(
+          sendingIn: {...state.sendingIn}..remove(characterId),
+        );
+      }
       return;
     }
     final isOpen = state.openThreadId == characterId;
