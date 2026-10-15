@@ -521,6 +521,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         await _cancelInlineRecording();
         return;
       }
+      // The user may have cancelled the preview during a slow disk copy.
+      // In that case the send controller has already accepted its own copy;
+      // never attempt to retain a recorder that has been closed.
+      if (!identical(_inlineRecorder, recorder)) return;
       recorder.retain();
       recorder.removeListener(_onInlineRecorderChanged);
       _inlineRecorder = null;
