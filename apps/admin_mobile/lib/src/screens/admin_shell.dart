@@ -6,6 +6,7 @@ import 'platform_pages.dart';
 import 'whatsapp_channel_page.dart';
 import 'admin_agents_page.dart';
 import 'decision_center_page.dart';
+import 'status_editorial_page.dart';
 
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.api, required this.onSignOut});
@@ -33,6 +34,7 @@ class _AdminShellState extends State<AdminShell> {
     _AdminSection('Agents', Icons.smart_toy_outlined),
     _AdminSection('Skills', Icons.extension_outlined),
     _AdminSection('Runtime', Icons.timeline_outlined),
+    _AdminSection('Status', Icons.article_outlined),
     _AdminSection('Commerce', Icons.account_balance_wallet_outlined),
     _AdminSection('Operations', Icons.rule_outlined),
     _AdminSection('Providers', Icons.hub_outlined),
@@ -50,6 +52,7 @@ class _AdminShellState extends State<AdminShell> {
         AgentsPage(api: widget.api),
         SkillsPage(api: widget.api),
         RuntimeAdminPage(api: widget.api),
+        StatusEditorialPage(api: widget.api),
         CommerceAdminPage(api: widget.api),
         OperationsAdminPage(api: widget.api),
         ProvidersAdminPage(api: widget.api),

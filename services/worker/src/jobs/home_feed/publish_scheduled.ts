@@ -4,6 +4,7 @@
  */
 export interface ScheduledPost {
  id:string;tenantId:string;authorMasanaId:string;media:readonly string[];
+ kind?:"text"|"image"|"audio";
  revision:number;scheduledAt:string|null;state:string;
 }
 export interface ScheduledPosts {
@@ -12,7 +13,7 @@ export interface ScheduledPosts {
 }
 export interface ReleaseVerifier {
  verifiedAuthor(tenant:string,authorMasanaId:string):Promise<boolean>;
- verifiedMedia(tenant:string,authorMasanaId:string,mediaRef:string):Promise<boolean>;
+ verifiedMedia(tenant:string,authorMasanaId:string,mediaRef:string,kind?:"text"|"image"|"audio"):Promise<boolean>;
 }
 export function makeScheduledFeedPublisher(repo:ScheduledPosts,verifier:ReleaseVerifier,
   enabled:()=>boolean=()=>false){
@@ -28,7 +29,7 @@ export function makeScheduledFeedPublisher(repo:ScheduledPosts,verifier:ReleaseV
    if(!await verifier.verifiedAuthor(tenant,post.authorMasanaId)){deferred++;continue}
    let eligible=true;
    for(const media of post.media){
-    if(!await verifier.verifiedMedia(tenant,post.authorMasanaId,media)){eligible=false;break}
+    if(!await verifier.verifiedMedia(tenant,post.authorMasanaId,media,post.kind)){eligible=false;break}
    }
    if(!eligible){deferred++;continue}
    // PG transaction checks state, revision, due time and author approval again.
