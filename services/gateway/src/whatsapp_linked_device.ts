@@ -237,8 +237,25 @@ export function createLinkedWhatsAppController(
       ...(media ? { media } : {}),
     });
 
-    if (result.shouldDeliver && result.reply) {
-      await sock.sendMessage(remoteJid, { text: result.reply });
+    if (result.shouldDeliver && (result.reply || result.audio)) {
+      if (result.reply) {
+        await sock.sendMessage(remoteJid, { text: result.reply });
+      }
+      if (result.audio) {
+        try {
+          const bytes = Buffer.from(result.audio.dataBase64, "base64");
+          if (bytes.length > 0 && bytes.length <= 8 * 1024 * 1024) {
+            await sock.sendMessage(remoteJid, {
+              audio: bytes,
+              mimetype: result.audio.mimeType,
+              ptt: result.audio.mimeType.startsWith("audio/ogg"),
+            });
+          }
+        } catch {
+          // The canonical turn and text are already persisted/delivered.
+          // An optional voice attachment must never replay financial actions.
+        }
+      }
       await options.bridge.delivered({
         channel: "whatsapp",
         messageId: durableMessageId,
