@@ -6,6 +6,9 @@ export interface MsnwOnchainBalanceDependencies {
   read(tenantId: string, userId: string): Promise<Readonly<{
     asset: "MSNW";
     spendableMicro: string;
+    receiveAddress: string;
+    chainId: string;
+    tokenContract: string;
   }>>;
 }
 
@@ -45,11 +48,12 @@ export function createMsnwOnchainBalanceReader(input: Readonly<{
 
   async function rpc(method: string, params: unknown[]): Promise<unknown> {
     let response: Response;
+    const requestId = ++nextRequestId;
     try {
       response = await fetchImpl(rpcUrl.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: ++nextRequestId, method, params }),
+        body: JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params }),
         redirect: "error",
         signal: AbortSignal.timeout(10000),
       });
@@ -59,7 +63,9 @@ export function createMsnwOnchainBalanceReader(input: Readonly<{
     try { payload = await response.json(); }
     catch { throw new MsnwOnchainError("msnw.rpc_unavailable"); }
     if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
-        "error" in payload || !("result" in payload)) {
+        "error" in payload || !("result" in payload) ||
+        (payload as { id?: unknown }).id !== requestId ||
+        (payload as { jsonrpc?: unknown }).jsonrpc !== "2.0") {
       throw new MsnwOnchainError("msnw.rpc_unavailable");
     }
     return (payload as { result: unknown }).result;
@@ -146,6 +152,9 @@ export function createMsnwOnchainBalanceReader(input: Readonly<{
       return Object.freeze({
         asset: "MSNW" as const,
         spendableMicro: amount.toString(),
+        receiveAddress: walletAddress,
+        chainId,
+        tokenContract: contract,
       });
     },
   });
