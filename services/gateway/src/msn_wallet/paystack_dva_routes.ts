@@ -33,13 +33,13 @@ export function registerMsnwPaystackDvaRoutes(
   });
   app.post("/v1/wallet/msnw/funding/account", async (request, reply) => {
     try {
+      const owner = await principal(request.headers.authorization);
       const body = request.body;
       if (!body || typeof body !== "object" || Array.isArray(body) ||
           Object.keys(body).length !== 1 ||
           (body as { consent?: unknown }).consent !== true) {
         throw new DvaError("funding.explicit_consent_required", 400);
       }
-      const owner = await principal(request.headers.authorization);
       const value = await deps.request(owner.tenantId, owner.userId, true);
       reply.code(value.state === "pending" ? 202 : 200);
       return value;
