@@ -170,6 +170,7 @@ import { createGeminiLiveAudioRenderer } from "./native_audio.js";
 import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
 import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
+import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2527,6 +2528,21 @@ export async function startGatewayService(
             authorizer: msnBalanceAuthorizer,
             reader: createMsnFundingJournal(database.featurePool),
           } }
+        : {}),
+      // Only the explicit, verified MSNW contract and finalized chain state
+      // can back a customer-facing MSNW balance. Never rename legacy MSN.
+      ...(env.MASANAWA_MSNW_ONCHAIN_BALANCE_ENABLED === "true" &&
+          env.MSNW_CHAIN_ID?.trim() &&
+          env.MSNW_TOKEN_CONTRACT?.trim() &&
+          env.MSNW_RPC_URL?.trim() &&
+          database.featurePool && msnBalanceAuthorizer
+        ? { msnwOnchainBalance: createMsnwOnchainBalanceReader({
+            pool: database.featurePool,
+            authorizer: msnBalanceAuthorizer,
+            chainId: env.MSNW_CHAIN_ID,
+            contract: env.MSNW_TOKEN_CONTRACT,
+            rpcUrl: env.MSNW_RPC_URL,
+          }) }
         : {}),
       // A DVA is only a bank payment destination, never token issuance.
       // Requires the separately reviewed 0113 staged schema, qualified KYC,

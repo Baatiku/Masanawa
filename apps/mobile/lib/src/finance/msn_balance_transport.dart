@@ -5,9 +5,14 @@ import '../core/network/api_client.dart';
 /// Exact authenticated MSNW micro-units; never pass through double or a guessed
 /// exchange rate. NGN is a funding rail, not a wallet balance.
 class MsnBalance {
-  const MsnBalance._(this.spendableMicro);
+  const MsnBalance._(this.spendableMicro, this.receiveAddress,
+      this.chainId, this.tokenContract);
 
   final String spendableMicro;
+  /// A verified deposit address is optional and must be proved by Gateway.
+  final String? receiveAddress;
+  final String? chainId;
+  final String? tokenContract;
 
   factory MsnBalance.fromJson(Map<String, dynamic> json) {
     final value = json['spendableMicro'];
@@ -16,7 +21,21 @@ class MsnBalance {
         !RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(value)) {
       throw const FormatException('Invalid MSNW balance response');
     }
-    return MsnBalance._(value);
+    final address = json['receiveAddress'];
+    final network = json['chainId'];
+    final contract = json['tokenContract'];
+    final hasMetadata = address != null || network != null || contract != null;
+    if (hasMetadata &&
+        (address is! String ||
+         !RegExp(r'^0x[0-9a-f]{40}$').hasMatch(address) ||
+         network is! String ||
+         !RegExp(r'^[1-9][0-9]*$').hasMatch(network) ||
+         contract is! String ||
+         !RegExp(r'^0x[0-9a-f]{40}$').hasMatch(contract))) {
+      throw const FormatException('Invalid MSNW receive binding');
+    }
+    return MsnBalance._(value, address as String?,
+        network as String?, contract as String?);
   }
 
   String get displayAmount {
