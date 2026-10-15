@@ -25,38 +25,12 @@ class GatewayWalletTransport implements WalletTransport {
 
   @override
   Future<WalletView> load() async {
-    Map<String, dynamic> base = {};
-    Map<String, dynamic> ngn = {};
-    Map<String, dynamic> funding = {};
-
-    try {
-      final res = await api.dio.get<dynamic>('/v1/wallet');
-      base = _map(res.data);
-    } catch (_) {}
-
-    try {
-      final res = await api.dio.get<dynamic>('/v1/wallet/ngn');
-      ngn = _map(res.data);
-    } catch (_) {}
-
-    try {
-      final res = await api.dio.get<dynamic>('/v1/wallet/msn/funding');
-      funding = _map(res.data);
-    } catch (_) {}
-
-    final spendable = (base['spendableCredits'] as num?)?.toInt() ?? 0;
-    final ngnKobo = (ngn['balanceKobo'] as num?)?.toInt() ??
-        (base['ngnBalanceKobo'] as num?)?.toInt() ??
-        (spendable * 100);
-
-    return WalletView.fromJson({
-      ...base,
-      'ngnBalanceKobo': ngnKobo,
-      'ngnBalance': ngn['balance'],
-      'bankName': funding['bankName'] ?? ngn['bankName'] ?? 'Wema Bank',
-      'accountNumber': funding['accountNumber'] ?? ngn['accountNumber'],
-      'accountHolderName': funding['accountName'] ?? ngn['accountHolderName'],
-    });
+    // The canonical endpoint returns Credits and their history only. A failed
+    // authenticated read must remain an error, never an invented zero balance.
+    // MSNW, fiat funding and provider-issued bank accounts need separate,
+    // independently verified contracts; legacy Credits are not NGN or MSNW.
+    final response = await api.dio.get<dynamic>('/v1/wallet');
+    return WalletView.fromJson(_map(response.data));
   }
 
   @override
