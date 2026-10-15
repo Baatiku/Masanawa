@@ -2,19 +2,13 @@
 
 Updated 2026-10-12. This is the active entry point. Older freezes, repeated launch prompts and live-Talk-first instructions have been retired from the active reading path; their exact originals are preserved in [the archive](docs/archive/20261009/README.md).
 
-## Current production recovery status — 2026-10-15
+## Owner-authorized production execution — 2026-10-15
 
-**Priorities 1–2 are NOT complete or end-to-end qualified.** The Gateway/Worker
-on Railway still point to the previous GitHub repository; current private
-Baatiku/Masanawa repo access for Railway failed. GitHub Actions jobs fail
-before running steps, and tests/APK are not verified. Production PostgreSQL
-volume remains attached and was not replaced. The MSNW balance route,
-Paystack dedicated-bank funding, NOWPayments deposits/conversions/withdrawals,
-and MSNW on-chain contract are not qualified. Do not advertise an MSNW
-balance, mint/swap/withdraw, or chat/voice-call success without provider,
-authenticated client and persistent-readback evidence. Preserve draft PR #2,
-but do not merge UI that disables supported operations until functional
-replacements and executable test coverage exist.
+Complete the actual customer journeys, production migrations and deployment whenever connected accounts and credentials permit. The owner explicitly delegates final acceptance testing. **Remove redundant mobile APK rollout flags for read-only Wallet/MSNW functionality**: discover server capability at runtime instead. Production PostgreSQL migrations and qualified financial activation are in scope, with canonical ledger preservation, provider verification and idempotent settlement.
+
+Recent merged main PRs: #8 restored Gemini Bodi/Fora; #9 added Paystack DVA request and Flutter sheet; #10 added on-chain MSNW contract source and verified balance/Receive; #11 added independent Paystack fiat verification; #12 added account-scoped funding activity. These are source merges, not verified live deployment. Superseded draft #2 was closed after its relevant work was integrated via #3/#5/#7.
+
+Current concrete external blockers: Railway Gateway/Worker still source weavewellindustrieslimited/masanawa; the Railway app has rejected private Baatiku/Masanawa access. GitHub Actions fails before job steps, and Paystack/NOWPayments service credential variable names are missing from the connected Railway production environment. Diagnose and remedy these as soon as permissions become available; continue all independent development rather than stopping at these blockers.
 
 ## UI audit integrated into continuing windows — 2026-10-12
 

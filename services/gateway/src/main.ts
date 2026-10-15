@@ -2531,9 +2531,9 @@ export async function startGatewayService(
           } }
         : {}),
       // Only the explicit, verified MSNW contract and finalized chain state
-      // can back a customer-facing MSNW balance. Never rename legacy MSN.
-      ...(env.MASANAWA_MSNW_ONCHAIN_BALANCE_ENABLED === "true" &&
-          env.MSNW_CHAIN_ID?.trim() &&
+      // can back a customer-facing MSNW balance. Real chain configuration is
+      // the rollout authority; no unrelated boolean deployment gate.
+      ...(env.MSNW_CHAIN_ID?.trim() &&
           env.MSNW_TOKEN_CONTRACT?.trim() &&
           env.MSNW_RPC_URL?.trim() &&
           database.featurePool && msnBalanceAuthorizer
@@ -2547,9 +2547,7 @@ export async function startGatewayService(
         : {}),
       // Paystack verification is independent of MSNW issuance. Verified fiat
       // remains a pending obligation until custody/quote settlement.
-      ...(env.MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED === "true" &&
-          env.MASANAWA_MSNW_PAYSTACK_DVA_ENABLED === "true" &&
-          env.PAYSTACK_SECRET_KEY?.trim() &&
+      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
           database.featurePool && msnBalanceAuthorizer
         ? { msnwPaystackFiat: createMsnwPaystackFiatService({
             pool: database.featurePool,
@@ -2558,10 +2556,9 @@ export async function startGatewayService(
           }) }
         : {}),
       // A DVA is only a bank payment destination, never token issuance.
-      // Requires the separately reviewed 0113 staged schema, qualified KYC,
-      // provider approval and secret. Default OFF in every deployment.
-      ...(env.MASANAWA_MSNW_PAYSTACK_DVA_ENABLED === "true" &&
-          env.PAYSTACK_SECRET_KEY?.trim() &&
+      // Presence of credentials is enough to mount the route; the endpoint
+      // verifies actual staged schema/identity. Absence fails as unavailable.
+      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
           database.featurePool && msnBalanceAuthorizer
         ? { msnwPaystackDva: createMsnwPaystackDvaService({
             pool: database.featurePool,

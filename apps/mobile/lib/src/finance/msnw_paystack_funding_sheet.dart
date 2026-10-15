@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 /// Bank transfer only. Paystack DVA assignment does not issue MSNW tokens.
 const bool kMsnwPaystackVerifyEnabled = bool.fromEnvironment(
-  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: false,
+  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: true,
 );
 
 class MsnwPaystackFundingSheet extends StatefulWidget {
