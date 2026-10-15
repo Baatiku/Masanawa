@@ -4,6 +4,15 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+String? parseMsnwMicro(String value) {
+    final trimmed = value.trim();
+    if (!RegExp(r'^[0-9]{1,18}(\.[0-9]{1,6})?$').hasMatch(trimmed)) return null;
+    final parts = trimmed.split('.');
+    final atomic = BigInt.parse(parts[0]) * BigInt.from(1000000) +
+      BigInt.parse(parts.length == 2 ? parts[1].padRight(6, '0') : '0');
+    return atomic > BigInt.zero ? atomic.toString() : null;
+  }
+
 /// Platform-custodied MSNW only. External self-custodied on-chain tokens and
 /// fiat funding awaiting backing are never counted as available Send funds.
 class MsnwCustodySendSheet extends StatefulWidget {
@@ -55,14 +64,6 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       preview = null; receipt = null; key = null; error = null;
     });
   }
-  String? micro(String value) {
-    final trimmed = value.trim();
-    if (!RegExp(r'^[0-9]{1,18}(\.[0-9]{1,6})?$').hasMatch(trimmed)) return null;
-    final parts = trimmed.split('.');
-    final atomic = BigInt.parse(parts[0]) * BigInt.from(1000000) +
-      BigInt.parse(parts.length == 2 ? parts[1].padRight(6, '0') : '0');
-    return atomic > BigInt.zero ? atomic.toString() : null;
-  }
   String operationKey() =>
     base64UrlEncode(List<int>.generate(24, (_) => random.nextInt(256)))
       .replaceAll('=', '');
@@ -76,7 +77,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
 
   Future<void> check() async {
     if (busy || widget.currentUserId() != widget.expectedUserId) return;
-    final atomic = micro(quantity.text);
+    final atomic = parseMsnwMicro(quantity.text);
     if (atomic == null || recipient.text.trim().isEmpty) {
       setState(() => error = 'Enter a recipient email or +234 phone and a positive '
         'MSNW amount with up to six decimal places.');
