@@ -168,4 +168,51 @@ void main() {
     expect(requestIds[1], isNot(requestIds[0]));
   });
 
+
+  test('Wallet read surfaces real authenticated 503 instead of fake zero', () async {
+    final paths = <String>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'));
+    dio.httpClientAdapter = _Adapter((options) async {
+      paths.add(options.path);
+      return ResponseBody.fromString('{"error":"backend_unavailable"}', 503,
+          headers: {Headers.contentTypeHeader: ['application/json']});
+    });
+    final transport = GatewayWalletTransport(api: ApiClient(dio: dio));
+    await expectLater(transport.load(), throwsA(isA<DioException>()));
+    expect(paths, ['/v1/wallet']);
+  });
+
+  test('Wallet uses canonical Credits only; no NGN/bank fabrication', () async {
+    final paths = <String>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'));
+    dio.httpClientAdapter = _Adapter((options) async {
+      paths.add(options.path);
+      return ResponseBody.fromString(
+        '{"spendableCredits":27,"pendingEarningsCredits":0,'
+        '"availableEarningsCredits":0,"entries":[]}', 200,
+        headers: {Headers.contentTypeHeader: ['application/json']});
+    });
+    final wallet = await GatewayWalletTransport(
+      api: ApiClient(dio: dio),
+    ).load();
+    expect(paths, ['/v1/wallet']);
+    expect(wallet.spendableCredits, 27);
+    expect(wallet.ngnBalanceKobo, isNull);
+    expect(wallet.ngnBalanceLabel, 'Unavailable');
+    expect(wallet.bankName, isNull);
+    expect(wallet.accountNumber, isNull);
+    expect(wallet.entries, isEmpty);
+  });
+
+  test('Malformed successful Wallet projection fails rather than reports zero', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'));
+    dio.httpClientAdapter = _Adapter((options) async {
+      return ResponseBody.fromString(
+        '{"pendingEarningsCredits":0,"availableEarningsCredits":0,'
+        '"entries":[]}', 200,
+        headers: {Headers.contentTypeHeader: ['application/json']});
+    });
+    final transport = GatewayWalletTransport(api: ApiClient(dio: dio));
+    await expectLater(transport.load(), throwsFormatException);
+  });
 }
