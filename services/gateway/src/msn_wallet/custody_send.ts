@@ -1,0 +1,173 @@
+import { randomUUID } from "node:crypto";
+import type { Pool } from "@masanawa/postgres";
+
+export class MsnwCustodyError extends Error {
+  constructor(readonly code: string, readonly statusCode = 503) { super(code); }
+}
+type Owner = Readonly<{ tenantId: string; userId: string }>;
+const amountPattern = /^[1-9][0-9]{0,23}$/;
+const keyPattern = /^[A-Za-z0-9:_-]{16,128}$/;
+function amount(value: unknown): string {
+  if (typeof value !== "string" || !amountPattern.test(value))
+    throw new MsnwCustodyError("msnw.amount_invalid",400);
+  return value;
+}
+function decimal(raw: unknown): string {
+  const value = String(raw ?? "");
+  if (!/^(0|[1-9][0-9]{0,77})$/.test(value))
+    throw new MsnwCustodyError("msnw.ledger_corrupt");
+  return value;
+}
+function at(raw: unknown): string {
+  const value = raw instanceof Date ? raw.toISOString() : raw;
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value)))
+    throw new MsnwCustodyError("msnw.receipt_corrupt");
+  return value;
+}
+function recipient(raw: unknown) {
+  if (typeof raw !== "string") throw new MsnwCustodyError("msnw.recipient_invalid",400);
+  const value = raw.trim();
+  if (value.includes("@")) {
+    const email = value.toLowerCase();
+    if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      throw new MsnwCustodyError("msnw.recipient_invalid",400);
+    return { email, phone: null };
+  }
+  if (!/^\+[1-9][0-9]{6,14}$/.test(value))
+    throw new MsnwCustodyError("msnw.recipient_invalid",400);
+  return { email: null, phone: value };
+}
+
+export function createMsnwCustodyService(pool: Pool) {
+  async function resolve(owner: Owner, value: unknown) {
+    const identifier = recipient(value);
+    const r = await pool.query(
+      "SELECT user_id,display_name FROM security.platform_user_profiles " +
+      "WHERE tenant_id=$1 AND (($2::text IS NOT NULL AND email=$2) OR " +
+      "($3::text IS NOT NULL AND phone=$3)) LIMIT 2",
+      [owner.tenantId,identifier.email,identifier.phone]);
+    if (r.rowCount !== 1) throw new MsnwCustodyError("msnw.recipient_not_found",404);
+    const userId = r.rows[0]?.user_id, displayName = r.rows[0]?.display_name;
+    if (typeof userId !== "string" || typeof displayName !== "string")
+      throw new MsnwCustodyError("msnw.recipient_invalid",409);
+    if (userId === owner.userId) throw new MsnwCustodyError("msnw.send_to_self",400);
+    return { userId, displayName };
+  }
+  async function balance(owner: Owner) {
+    const r = await pool.query(
+      "SELECT available_micro::text,reserved_micro::text FROM " +
+      "commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2",
+      [owner.tenantId,owner.userId]);
+    return Object.freeze({ asset: "MSNW" as const,
+      scope: "platform_custody" as const,
+      availableMicro: decimal(r.rows[0]?.available_micro ?? "0"),
+      reservedMicro: decimal(r.rows[0]?.reserved_micro ?? "0") });
+  }
+  async function preview(owner: Owner, identifier: unknown, rawAmount: unknown) {
+    const micro = amount(rawAmount), target = await resolve(owner,identifier);
+    const current = await balance(owner);
+    if (BigInt(current.availableMicro) < BigInt(micro))
+      throw new MsnwCustodyError("msnw.insufficient_available",409);
+    return Object.freeze({ asset: "MSNW" as const, recipientUserId: target.userId,
+      recipientName: target.displayName, amountMicro: micro, feeMicro: "0" as const });
+  }
+  async function send(owner: Owner, input: Readonly<{
+    recipient: unknown; recipientUserId: unknown;
+    amountMicro: unknown; idempotencyKey: unknown;
+  }>) {
+    const micro = amount(input.amountMicro);
+    if (typeof input.idempotencyKey !== "string" ||
+        !keyPattern.test(input.idempotencyKey) ||
+        typeof input.recipientUserId !== "string")
+      throw new MsnwCustodyError("msnw.confirmation_invalid",400);
+    const target = await resolve(owner,input.recipient);
+    if (target.userId !== input.recipientUserId)
+      throw new MsnwCustodyError("msnw.recipient_changed",409);
+    const db = await pool.connect();
+    let began = false;
+    try {
+      await db.query("BEGIN"); began = true;
+      // A replay and an original request serialize on the same identity/key.
+      await db.query("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
+        [owner.tenantId + ":" + owner.userId,input.idempotencyKey]);
+      const replay = await db.query(
+        "SELECT operation_id::text,recipient_user_id,amount_micro::text,created_at " +
+        "FROM commerce.msnw_custody_operations WHERE tenant_id=$1 " +
+        "AND actor_user_id=$2 AND idempotency_key=$3 FOR UPDATE",
+        [owner.tenantId,owner.userId,input.idempotencyKey]);
+      if (replay.rowCount) {
+        const item = replay.rows[0]!;
+        if (item.recipient_user_id !== target.userId || item.amount_micro !== micro)
+          throw new MsnwCustodyError("msnw.idempotency_conflict",409);
+        await db.query("COMMIT"); began = false;
+        return Object.freeze({ operationId: String(item.operation_id),
+          recipientUserId: target.userId, amountMicro: micro, feeMicro: "0" as const,
+          asset: "MSNW" as const, state: "completed" as const,
+          createdAt: at(item.created_at) });
+      }
+      // Creating an empty receiving account is not issuance.
+      await db.query(
+        "INSERT INTO commerce.msnw_custody_accounts (tenant_id,user_id) " +
+        "VALUES ($1,$2) ON CONFLICT DO NOTHING", [owner.tenantId,target.userId]);
+      const users = [owner.userId,target.userId].sort();
+      const held = await db.query(
+        "SELECT user_id,available_micro::text FROM commerce.msnw_custody_accounts " +
+        "WHERE tenant_id=$1 AND user_id=ANY($2::text[]) ORDER BY user_id FOR UPDATE",
+        [owner.tenantId,users]);
+      const source = held.rows.find(row => row.user_id === owner.userId);
+      if (!source || BigInt(decimal(source.available_micro)) < BigInt(micro))
+        throw new MsnwCustodyError("msnw.insufficient_available",409);
+      if (!held.rows.find(row => row.user_id === target.userId))
+        throw new MsnwCustodyError("msnw.recipient_unavailable");
+      const operationId = randomUUID();
+      const debit = await db.query(
+        "UPDATE commerce.msnw_custody_accounts " +
+        "SET available_micro=available_micro-$3::numeric,updated_at=statement_timestamp() " +
+        "WHERE tenant_id=$1 AND user_id=$2 AND available_micro >= $3::numeric",
+        [owner.tenantId,owner.userId,micro]);
+      if (debit.rowCount !== 1)
+        throw new MsnwCustodyError("msnw.insufficient_available",409);
+      const credit = await db.query(
+        "UPDATE commerce.msnw_custody_accounts " +
+        "SET available_micro=available_micro+$3::numeric,updated_at=statement_timestamp() " +
+        "WHERE tenant_id=$1 AND user_id=$2",
+        [owner.tenantId,target.userId,micro]);
+      if (credit.rowCount !== 1)
+        throw new MsnwCustodyError("msnw.recipient_unavailable");
+      const op = await db.query(
+        "INSERT INTO commerce.msnw_custody_operations " +
+        "(operation_id,tenant_id,actor_user_id,recipient_user_id,kind,idempotency_key,amount_micro) " +
+        "VALUES ($1,$2,$3,$4,'send',$5,$6::numeric) RETURNING created_at",
+        [operationId,owner.tenantId,owner.userId,target.userId,input.idempotencyKey,micro]);
+      await db.query(
+        "INSERT INTO commerce.msnw_custody_entries " +
+        "(operation_id,entry_number,tenant_id,user_id,available_delta_micro) " +
+        "VALUES ($1,1,$2,$3,-$5::numeric),($1,2,$2,$4,$5::numeric)",
+        [operationId,owner.tenantId,owner.userId,target.userId,micro]);
+      await db.query("COMMIT"); began = false;
+      return Object.freeze({ operationId, recipientUserId: target.userId,
+        amountMicro: micro, feeMicro: "0" as const, asset: "MSNW" as const,
+        state: "completed" as const, createdAt: at(op.rows[0]?.created_at) });
+    } catch (error) {
+      if (began) await db.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { db.release(); }
+  }
+  async function history(owner: Owner) {
+    const r = await pool.query(
+      "SELECT operation_id::text,actor_user_id,recipient_user_id,amount_micro::text,created_at " +
+      "FROM commerce.msnw_custody_operations WHERE tenant_id=$1 " +
+      "AND (actor_user_id=$2 OR recipient_user_id=$2) " +
+      "ORDER BY created_at DESC,operation_id DESC LIMIT 100",
+      [owner.tenantId,owner.userId]);
+    return Object.freeze(r.rows.map(row => Object.freeze({
+      operationId: String(row.operation_id),
+      direction: row.actor_user_id === owner.userId ? "sent" as const : "received" as const,
+      counterpartyUserId: row.actor_user_id === owner.userId
+        ? String(row.recipient_user_id) : String(row.actor_user_id),
+      amountMicro: decimal(row.amount_micro), createdAt: at(row.created_at),
+      asset: "MSNW" as const, state: "completed" as const,
+    })));
+  }
+  return Object.freeze({ balance, preview, send, history });
+}
