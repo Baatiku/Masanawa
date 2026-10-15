@@ -20,7 +20,7 @@ const bool kWalletCreditSendEnabled = bool.fromEnvironment(
 /// MSNW is the canonical customer-facing token and credit. This readback
 /// is permitted only when Gateway returns asset MSNW, not legacy MSN.
 const bool kWalletMsnBalanceEnabled = bool.fromEnvironment(
-  'MASANAWA_MSN_BALANCE_ENABLED', defaultValue: false,
+  'MASANAWA_MSNW_ONCHAIN_BALANCE_ENABLED', defaultValue: false,
 );
 
 /// Legacy MSN funding journal remains internal until reconciled. An old
