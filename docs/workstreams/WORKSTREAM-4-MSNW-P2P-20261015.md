@@ -35,3 +35,15 @@ Initial commits: schema `9a0c24ae`, engine `5e96ada4`, routes `2c6d3f69`, tests 
 
 **Customer behavior delivered now:** authenticated offer discovery, seller offer drafting/management (only with verified methods), authenticated order drafts, source implementation for transactional escrow, buyer payment claim, dispute initiation, operator case-file inspection, and a safe rejection when real MSNW authority is missing.
 **Customer behavior not delivered yet:** actual funded escrow, successful payment-confirmed release/refund, seller method provisioning, provider confirmation, expiry job scheduling and notification/Wallet accounting integration.
+
+## Follow-on milestone — verified seller bank onboarding
+
+**Source implementation added:** `packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql`, `services/gateway/src/p2p/bank_methods.ts`, `bank_methods.test.ts`, updated `service.ts` and `routes.ts`, Gateway `main.ts` composition, mobile `msnw_p2p_screen.dart`.
+
+- Paystack-supported Nigerian banks list is fetched server-side.
+- An authenticated seller grants explicit account-verification consent and supplies bank code/number. Paystack resolves the recipient name. The server compares **all** normalized legal-name tokens with the independent Paystack-verified identity from `commerce.msnw_paystack_customer_onboarding`; no customer-supplied account-holder name is accepted.
+- A bank method is recorded with an immutable bank code, account number, verified beneficiary and verification reference. Duplicate active methods return their existing identity.
+- Source tests cover consent, mismatch, matching and injection rejection; they were **authored but not run** in this connector-only development environment.
+- **Still not payment confirmation:** matching a name verifies bank destination eligibility, not actual NGN transfer, screenshot provenance or final beneficiary controls. Escrow release still needs independent bank settlement confirmation and qualified canonical MSNW custody adapter.
+
+**Checklist status changes:** item 1 seller method creation is now source-implemented subject to Paystack provider responses/KYC; items 2, 4–6 and 8 remain partial as described. Financial settlement/custody scope remains blocked, never simulated.
