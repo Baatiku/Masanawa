@@ -58,8 +58,15 @@ void main() {
     },
   );
 
-  test('backgrounding ends the call and releases microphone custody', () async {
+  test('without a native foreground service, pausing safely ends the call', () async {
     session.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await session.close();
+    verify(() => recorder.stop()).called(1);
+    verify(() => recorder.dispose()).called(1);
+  });
+
+  test('detaching always closes and releases microphone custody', () async {
+    session.didChangeAppLifecycleState(AppLifecycleState.detached);
     await session.close();
     verify(() => recorder.stop()).called(1);
     verify(() => recorder.dispose()).called(1);

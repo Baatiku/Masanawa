@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../agents/agent_shell.dart';
 import 'app_permissions.dart';
 import 'live_pcm_audio.dart';
+import 'live_call_foreground.dart';
 
 enum LiveVoiceState {
   idle,
@@ -97,6 +98,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
   bool _speaker = true;
   bool _muted = false;
   bool _observing = false;
+  bool _foregroundCallActive = false;
 
   Stream<LiveVoiceState> get states => _state.stream;
   Stream<String> get errors => _errors.stream;
@@ -181,6 +183,18 @@ class LiveVoiceSession with WidgetsBindingObserver {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
 
+      if (!await LiveCallForeground.start()) {
+        throw StateError(
+          'Background microphone service is unavailable. '
+          'Allow microphone access and retry the call.',
+        );
+      }
+      _foregroundCallActive = true;
+      if (_closed) {
+        _foregroundCallActive = false;
+        await LiveCallForeground.stop();
+        return;
+      }
       await _connectSocket();
     } catch (error) {
       _fail(
@@ -548,8 +562,12 @@ class LiveVoiceSession with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.detached ||
+        (state == AppLifecycleState.paused &&
+            (!Platform.isAndroid || !_foregroundCallActive))) {
+      // Native Android foreground service keeps a customer-authorized live
+      // call visible when they lock the phone or switch apps. Standalone
+      // notes and unsupported platforms retain the conservative close path.
       unawaited(close());
     }
   }
@@ -614,6 +632,10 @@ class LiveVoiceSession with WidgetsBindingObserver {
       await _socket?.close(WebSocketStatus.normalClosure, 'ended');
     } catch (_) {}
     _socket = null;
+    if (_foregroundCallActive) {
+      _foregroundCallActive = false;
+      await LiveCallForeground.stop();
+    }
     try {
       if (_ownsAudio) {
         final audioSession = await AudioSession.instance;

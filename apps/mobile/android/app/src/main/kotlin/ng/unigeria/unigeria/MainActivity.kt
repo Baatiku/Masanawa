@@ -1,6 +1,9 @@
 package ng.unigeria.unigeria
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.media.AudioAttributes
 import android.net.Uri
 import android.media.AudioFormat
@@ -15,6 +18,7 @@ class MainActivity : FlutterActivity() {
     private var liveAudioTrack: AudioTrack? = null
     private var liveSampleRate: Int? = null
     private var deepLinkChannel: MethodChannel? = null
+    private var callForegroundChannel: MethodChannel? = null
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -32,6 +36,46 @@ class MainActivity : FlutterActivity() {
                     intent?.data = null
                 } else {
                     result.notImplemented()
+                }
+            }
+        }
+
+        callForegroundChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "masanawa/live_call",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                            != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            result.success(false)
+                        } else {
+                            try {
+                                val service = Intent(this, MasanawaCallService::class.java).apply {
+                                    action = MasanawaCallService.ACTION_START
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    startForegroundService(service)
+                                } else {
+                                    startService(service)
+                                }
+                                result.success(true)
+                            } catch (_: SecurityException) {
+                                result.success(false)
+                            } catch (_: RuntimeException) {
+                                result.success(false)
+                            }
+                        }
+                    }
+
+                    "stop" -> {
+                        stopService(Intent(this, MasanawaCallService::class.java))
+                        result.success(true)
+                    }
+
+                    else -> result.notImplemented()
                 }
             }
         }
@@ -205,6 +249,9 @@ class MainActivity : FlutterActivity() {
         restoreAudioRoute()
         deepLinkChannel?.setMethodCallHandler(null)
         deepLinkChannel = null
+        callForegroundChannel?.setMethodCallHandler(null)
+        callForegroundChannel = null
+        stopService(Intent(this, MasanawaCallService::class.java))
         super.onDestroy()
     }
 
