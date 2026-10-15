@@ -446,4 +446,54 @@ describe("customer channel webhook routes", () => {
   });
 
 
+  it("acknowledges oversized Telegram media with a useful retry instruction", async () => {
+    const app = Fastify();
+    const channelBridge = bridge();
+    const oversizedBytes = new Uint8Array(8 * 1024 * 1024 + 1);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/getFile?")) {
+        return new Response(JSON.stringify({
+          ok: true, result: { file_path: "uploads/big.mp4" },
+        }), { status: 200 });
+      }
+      if (url.includes("/file/bot")) {
+        return new Response(oversizedBytes, { status: 200 });
+      }
+      if (url.includes("/sendMessage")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      throw new Error("Unexpected URL");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      registerCustomerChannelRoutes(app, {
+        bridge: channelBridge,
+        telegram: { botToken: "bot-token", webhookSecret: "telegram-secret" },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/channels/telegram/webhook",
+        headers: { "x-telegram-bot-api-secret-token": "telegram-secret" },
+        payload: {
+          message: {
+            message_id: 1,
+            from: { id: 77 },
+            chat: { id: 77, type: "private" },
+            video: { file_id: "large", mime_type: "video/mp4" },
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(channelBridge.handle).not.toHaveBeenCalled();
+      const sent = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendMessage"));
+      expect(sent).toBeDefined();
+      const payload = JSON.parse(String((sent![1] as RequestInit).body));
+      expect(payload.text).toContain("smaller than 8 MB");
+    } finally {
+      vi.unstubAllGlobals();
+      await app.close();
+    }
+  });
+
 });
