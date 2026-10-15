@@ -77,8 +77,11 @@ The Wallet covers billing, crypto and services. Personal Twins are retired.
 
 Confirmed bottom navigation: **Chats · Status · Wallet · Calls · Rooms**.
 **Chats is the default tab** on ordinary authenticated app launch. There is
-no Agents/Twins bottom tab. MSN is the platform currency; confirmed fiat
-funding buys MSN automatically. Crypto can be held or converted with MSN
+no Agents/Twins bottom tab. The owner renamed the platform wallet credit and intended official crypto token
+to **MSNW** (2026-10-15); no separate Credits customer balance. Historical
+MSN/Cr amounts remain unreconciled legacy records, not MSNW tokens. Verified
+funding may issue MSNW only after qualified custody, token identity and
+settlement; earlier MSN funding flows are not proof of such issuance. Crypto can be held or converted with MSN
 where qualified. P2P exchanges MSN only against counterparty fiat, with
 escrow; there is no direct platform fiat withdrawal. Rooms are audio-focused
 groups.
