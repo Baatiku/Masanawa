@@ -13,7 +13,7 @@ describe("approved Masana media grants",()=>{
     expect(query).not.toHaveBeenCalled();
   });
   it("issues expiring signed links only after rights-cleared matching approved revisions",async()=>{
-    const query=vi.fn(async()=>({rows:[{object_key:"masana/portrait.png"}]}));
+    const query=vi.fn(async (..._args:unknown[])=>({rows:[{object_key:"masana/portrait.png"}]}));
     const statObject=vi.fn(async()=>({contentType:"image/png",bytes:450}));
     const presignGet=vi.fn(async()=>({url:"https://status.example/masana/portrait.png?sig=ok",
       expiresAt:new Date(Date.now()+120000).toISOString()}));
@@ -28,7 +28,7 @@ describe("approved Masana media grants",()=>{
     expect(presignGet).toHaveBeenCalledWith("masana/portrait.png",120);
   });
   it("rejects revoked media, incompatible MIME, and untrusted signed origins",async()=>{
-    const query=vi.fn(async()=>({rows:[{object_key:"masana/portrait.png"}]}));
+    const query=vi.fn(async (..._args:unknown[])=>({rows:[{object_key:"masana/portrait.png"}]}));
     const config={
       objects:{
         statObject:vi.fn(async()=>({contentType:"audio/mpeg",bytes:100})),
