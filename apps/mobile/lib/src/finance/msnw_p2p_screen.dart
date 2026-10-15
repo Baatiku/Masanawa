@@ -154,6 +154,290 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       await _orderDetail('${res['orderId']}');
     });
   }
+  Future<void> _verifySellerBank() async {
+    late final List<Map<String,dynamic>> banks;
+    try {
+      final payload=_json(await _request('GET','/banks'));
+      banks=(payload['items'] as List<dynamic>? ?? []).map(_json).toList();
+      if(banks.isEmpty)throw StateError('Bank directory unavailable.');
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('Bank verification unavailable: $error')));
+      return;
+    }
+    if(!mounted)return;
+    final number=TextEditingController();
+    String? code; bool consent=false;
+    try {
+      final details=await showDialog<Map<String,String>>(context:context,
+        builder:(dialog)=>StatefulBuilder(builder:(dialog,update)=>AlertDialog(
+          title:const Text('Verify seller bank'),
+          content:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,children:[
+              const Text('Your Paystack identity verification must be completed. '
+                'Only a bank account whose full holder name matches your verified '
+                'legal identity can receive P2P payments.'),
+              const SizedBox(height:16),
+              DropdownButtonFormField<String>(
+                isExpanded:true,initialValue:code,
+                decoration:const InputDecoration(labelText:'Nigerian bank'),
+                items:banks.map((b)=>DropdownMenuItem<String>(
+                  value:'${b['code']}',child:Text('${b['name']}',overflow:TextOverflow.ellipsis),
+                )).toList(),
+                onChanged:(value)=>update(()=>code=value),
+              ),
+              TextField(controller:number,keyboardType:TextInputType.number,
+                maxLength:10,decoration:const InputDecoration(
+                  labelText:'Your 10-digit account number')),
+              CheckboxListTile(
+                value:consent,onChanged:(v)=>update(()=>consent=v??false),
+                title:const Text('I consent to verifying these bank details '
+                  'with Paystack for P2P payment instructions.'),
+              ),
+            ])),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(dialog),
+              child:const Text('Cancel')),
+            FilledButton(
+              onPressed:!consent||code==null||!RegExp(r'^[0-9]{10}
+    late final List<Map<String,dynamic>> methods;
+    try {
+      final json=_json(await _request('GET','/methods'));
+      methods=(json['items'] as List<dynamic>? ?? [])
+        .map((item)=>_json(item)).toList();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('Verified bank methods unavailable: $error')));
+      return;
+    }
+    if (!mounted) return;
+    if (methods.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:
+        Text('A verified bank payment method is required before selling MSNW.')));
+      return;
+    }
+    final rate = await _field(title: 'Create sell offer', label: 'NGN per 1 MSNW',
+      hint: 'e.g. 1500.00');
+    if (rate == null || !mounted) return;
+    final min = await _field(title: 'Minimum trade', label: 'Minimum MSNW',
+      hint: 'e.g. 1');
+    if (min == null || !mounted) return;
+    final max = await _field(title: 'Maximum trade', label: 'Maximum MSNW',
+      hint: 'e.g. 100');
+    if (max == null || !mounted) return;
+    final available = await _field(title: 'Offer inventory', label: 'MSNW inventory',
+      hint: 'e.g. 100');
+    if (available == null || !mounted) return;
+    late final String rateKobo, minMicro, maxMicro, inventoryMicro;
+    try {
+      // Currency price accepts at most two NGN decimal places.
+      final text = rate.trim();
+      if (!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?$').hasMatch(text)) {
+        throw const FormatException('Enter a valid NGN rate.');
+      }
+      final parts = text.split('.');
+      rateKobo = (BigInt.parse(parts[0])*BigInt.from(100) +
+        BigInt.parse((parts.length>1?parts[1]:'').padRight(2,'0'))).toString();
+      minMicro=_micro(min);maxMicro=_micro(max);inventoryMicro=_micro(available);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
+    if (!await _confirm('Publish MSNW offer',
+      'Price ${_ngn(rateKobo)} per MSNW. '
+      'Only a buyer order can reserve your verified available MSNW.')) return;
+    await _act(() async {
+      await _request('POST','/offers',{
+        'paymentMethodId':methods.first['method_id'],
+        'rateKoboPerMsnw':rateKobo,'minMicro':minMicro,
+        'maxMicro':maxMicro,'inventoryMicro':inventoryMicro,
+      });
+      _reload(0);
+    });
+  }
+  Future<void> _orderDetail(String id) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (ctx) => _P2pOrderDetail(
+        load: () async => _json(await _request('GET','/orders/$id')),
+        act: (action, [reason]) => _act(() async {
+          await _request('POST','/orders/$id/$action',
+            reason == null ? {} : {'reason': reason});
+        }),
+        userId: widget.expectedUserId,
+      )));
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('MSNW P2P')),
+    body: Column(children: [
+      const Padding(padding: EdgeInsets.fromLTRB(16,12,16,4),
+        child: Text('Trade MSNW directly with another member. '
+          'Only verified escrow protects MSNW; bank transfers remain subject to confirmation.')),
+      SegmentedButton<int>(segments: const [
+        ButtonSegment(value:0,label:Text('Buy')),
+        ButtonSegment(value:1,label:Text('Sell')),
+        ButtonSegment(value:2,label:Text('My orders')),
+      ],selected:{_tab},onSelectionChanged: (v)=>_reload(v.first)),
+      Expanded(child: FutureBuilder<List<Map<String,dynamic>>>(future:_list,
+        builder:(context,snapshot) {
+          if(snapshot.connectionState!=ConnectionState.done) {
+            return const Center(child:CircularProgressIndicator());
+          }
+          if(snapshot.hasError) return Center(child:Padding(
+            padding:const EdgeInsets.all(20),
+            child:Column(mainAxisSize:MainAxisSize.min,children:[
+              Text('P2P is unavailable: ${snapshot.error}',textAlign:TextAlign.center),
+              TextButton(onPressed:()=>_reload(),child:const Text('Retry')),
+            ])));
+          }
+          final items=snapshot.data ?? [];
+          return RefreshIndicator(onRefresh:()async{
+            _reload();await _list;
+          },child:ListView(children:[
+            if(_tab==1) Padding(padding:const EdgeInsets.all(12),
+              child:Wrap(spacing:8,runSpacing:8,children:[
+                OutlinedButton.icon(onPressed:_busy?null:_verifySellerBank,
+                  icon:const Icon(Icons.account_balance_outlined),
+                  label:const Text('Verify bank')),
+                FilledButton.icon(onPressed:_busy?null:_sell,
+                  icon:const Icon(Icons.add),label:const Text('Create sell offer')),
+              ])),
+            if(items.isEmpty) const Padding(padding:EdgeInsets.all(28),
+              child:Text('Nothing here yet. Pull down to refresh.',
+                textAlign:TextAlign.center)),
+            for(final item in items) Card(child:ListTile(
+              title:Text(_tab==0
+                  ? '${_ngn(item['rate_kobo_per_msnw'])} / MSNW'
+                  : _tab==1
+                    ? '${_ngn(item['rate_kobo_per_msnw'])} per MSNW'
+                    : '${_msnw(item['amount_micro'])} · ${item['state']}'),
+              subtitle:Text(_tab==0
+                ? 'Available: ${_msnw(item['remaining_micro'])}  · '
+                  'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])}'
+                : _tab==1
+                    ? 'Remaining ${_msnw(item['remaining_micro'])} · ${item['state']}'
+                    : 'Fiat ${_ngn(item['fiat_kobo'])}'),
+              trailing:const Icon(Icons.chevron_right),
+              onTap: _busy?null: () {
+                if(_tab==0) {_buy(item);}
+                if(_tab==1 && item['state']=='active') {
+                  _confirm('Close this offer', 'Existing escrow orders will not be affected.')
+                    .then((yes){if(yes)_act(()async{
+                      await _request('POST','/offers/${item['offer_id']}/close',{});
+                    });});
+                }
+                if(_tab==2) {_orderDetail('${item['order_id']}');}
+              },
+            )),
+          ]));
+        })),
+    ]),
+  );
+}
+
+class _P2pOrderDetail extends StatefulWidget {
+  const _P2pOrderDetail({required this.load,required this.act,required this.userId});
+  final Future<Map<String,dynamic>> Function() load;
+  final Future<void> Function(String action,[String? reason]) act;
+  final String userId;
+  @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
+}
+class _P2pOrderDetailState extends State<_P2pOrderDetail> {
+  late Future<Map<String,dynamic>> _future=widget.load();
+  void _refresh()=>setState(()=>_future=widget.load());
+  Future<void> _perform(String action,{bool reasonRequired=false}) async {
+    String? reason;
+    if(reasonRequired) {
+      final input=TextEditingController();
+      try {
+        reason=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
+          title:const Text('Explain the dispute'),content:TextField(
+            controller:input,maxLines:3,decoration:const InputDecoration(
+              hintText:'What happened? Give transaction reference, not passwords.')),
+          actions:[TextButton(onPressed:()=>Navigator.pop(ctx),
+            child:const Text('Back')),
+            FilledButton(onPressed:()=>Navigator.pop(ctx,input.text),
+              child:const Text('Submit'))]));
+      } finally {input.dispose();}
+      if(reason==null||reason.trim().length<10)return;
+    } else {
+      final yes=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+        title:const Text('Confirm this action'),
+        content:Text(action=='claim'
+          ? 'Mark payment sent? A claim is not bank settlement proof.'
+          : 'Cancel only if payment was not sent. Funds return to the seller.'),
+        actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Back')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Confirm'))]));
+      if(yes!=true)return;
+    }
+    await widget.act(action,reason);
+    if(mounted)_refresh();
+  }
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('P2P order'),actions:[
+      IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh)),
+    ]),
+    body:FutureBuilder<Map<String,dynamic>>(future:_future,builder:(context,s){
+      if(!s.hasData)return Center(child:s.hasError?Text('Could not read order: ${s.error}')
+        :const CircularProgressIndicator());
+      final o=s.data!;
+      final buyer=o['buyer_id']==widget.userId;
+      final state='${o['state']}';
+      final p=o['payment'] is Map?_json(o['payment']):<String,dynamic>{};
+      return ListView(padding:const EdgeInsets.all(18),children:[
+        Text('Status: $state',style:Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height:12),
+        Text('MSNW: ${_msnw(o['amount_micro'])}'),
+        Text('Seller fee: ${_msnw(o['fee_micro'])}'),
+        Text('Fiat payment: ${_ngn(o['fiat_kobo'])}'),
+        const Divider(height:32),
+        const Text('Pay only to these order-bound bank details:'),
+        SelectableText('${p['bank_name']??'Unavailable'}\n'
+          '${p['account_name']??'Unavailable'}\n'
+          '${p['account_number']??'Unavailable'}'),
+        const SizedBox(height:12),
+        Text('Deadline: ${o['payment_deadline']}'),
+        if(buyer&&state=='awaiting_payment') ...[
+          FilledButton(onPressed:()=>_perform('claim'),child:const Text('I have paid')),
+          TextButton(onPressed:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
+        ],
+        if(state=='awaiting_payment'||state=='payment_claimed') ...[
+          OutlinedButton(onPressed:()=>_perform('dispute',reasonRequired:true),
+            child:const Text('Open dispute')),
+        ],
+        if(!buyer&&state=='payment_claimed') const ListTile(
+          title:Text('Seller confirmation pending'),
+          subtitle:Text('Release requires authenticated bank receipt confirmation. '
+            'Use the secure settlement confirmation process; screenshots do not qualify.')),
+        if(state=='disputed')const ListTile(
+          title:Text('Escrow frozen'),
+          subtitle:Text('An authorized operator must resolve this dispute.')),
+        if(state=='completed')Text('Receipt: ${o['receipt_reference']??'Pending'}'),
+      ]);
+    }),
+  );
+}
+).hasMatch(number.text)
+                ? null : ()=>Navigator.pop(dialog,{
+                    'bankCode':code!,'accountNumber':number.text,
+                  }),
+              child:const Text('Verify with Paystack')),
+          ],
+        )));
+      if(details==null||!mounted)return;
+      await _act(()async{
+        final result=_json(await _request('POST','/methods/verify',{
+          ...details,'consent':true,
+        }));
+        if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:Text('Verified ${result['bankName']} · ${result['accountName']}')));
+        _reload(1);
+      });
+    } finally {
+      number.dispose();
+    }
+  }
+
   Future<void> _sell() async {
     late final List<Map<String,dynamic>> methods;
     try {
