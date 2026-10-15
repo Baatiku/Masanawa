@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'msnw_identity_enrollment.dart';
 
 /// Bank transfer only. Paystack DVA assignment does not issue MSNW tokens.
 const bool kMsnwPaystackVerifyEnabled = bool.fromEnvironment(
@@ -156,7 +157,7 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
     final account = state == 'assigned'
         ? (_status!['account'] as Map).cast<String, dynamic>() : null;
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(child: Padding(
         padding: EdgeInsets.fromLTRB(
           20, 12, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
@@ -173,8 +174,13 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
             if (_error != null) Text(_error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (state == 'identity_verification_required')
-              const Text('Account verification is required before '
-                'a dedicated bank account can be assigned.'),
+              MsnwIdentityEnrollment(
+                dio: widget.dio, baseUrl: widget.baseUrl,
+                expectedUserId: widget.expectedUserId,
+                currentUserId: widget.currentUserId,
+                accessToken: widget.accessToken,
+                onQualified: () => _reload(),
+              ),
             if (state == 'pending')
               const Text('Your dedicated account request is pending. '
                 'Refresh to check for verified assignment.'),
@@ -238,7 +244,7 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }
