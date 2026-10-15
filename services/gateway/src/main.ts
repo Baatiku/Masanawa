@@ -177,7 +177,8 @@ import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
-import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
+import { createP2pService } from "./p2p/service.js";
+import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
 import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
@@ -2640,11 +2641,9 @@ export async function startGatewayService(
       // refund adapter. Never turn an on-chain balance read into a debit.
       ...(database.featurePool && msnBalanceAuthorizer
         ? { p2p: options.appOptions?.p2p ?? (() => {
-            const escrow: MsnwEscrowAuthority = {
-              async reserve() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-              async release() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-              async refund() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-            };
+            // Reuse the same zero-initialized custody accounts as MSNW Send.
+            // No balances are manufactured and no legacy MSN is admitted.
+            const escrow=createMsnwP2pCustodyEscrow();
             const service = createP2pService(database.featurePool!, escrow);
             const evidenceStorage=configuredP2pEvidenceStorage(env,service);
             return {
