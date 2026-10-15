@@ -113,7 +113,8 @@ export function createMsnwFinalityVerifier(input: Readonly<{
         hexBigInt(receipt.status) !== 1n)
       throw new MsnwFinalityError("msnw.finality_unconfirmed");
     const block = row(await rpc("eth_getBlockByNumber",[blockNumber,false]));
-    if (String(block.hash ?? "").toLowerCase() !== blockHash)
+    if (hexBigInt(block.number) !== BigInt(blockNumber) ||
+        String(block.hash ?? "").toLowerCase() !== blockHash)
       throw new MsnwFinalityError("msnw.finality_chain_reorg");
     const [codeRaw,custodyAmountRaw] = await Promise.all([
       rpc("eth_getCode",[contract,blockNumber]),
