@@ -63,11 +63,28 @@ async function download(
   if (Number.isFinite(length) && length > maxBytes) {
     throw new RangeError("channels.media_too_large");
   }
-  const data = Buffer.from(await response.arrayBuffer());
-  if (data.length < 1 || data.length > maxBytes) {
-    throw new RangeError("channels.media_too_large");
+  // Check actual streamed bytes as well as Content-Length: Telegram/other
+  // providers may omit or misstate the header. Never buffer an unbounded file.
+  if (!response.body) throw new Error("channels.media_body_missing");
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new RangeError("channels.media_too_large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
   }
-  return data;
+  if (received === 0) throw new RangeError("channels.media_too_large");
+  return Buffer.concat(chunks, received);
 }
 
 function splitText(value: string, max = 3500): readonly string[] {
