@@ -58,6 +58,10 @@ void main() {
       throwsFormatException,
     );
     expect(
+      () => MsnBalance.fromJson({'asset': 'MSN', 'spendableMicro': '1000000'}),
+      throwsFormatException,
+    );
+    expect(
       MsnBalance.fromJson({'asset': 'MSNW', 'spendableMicro': '0'}).displayAmount,
       '0',
     );
