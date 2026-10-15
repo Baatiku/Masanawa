@@ -1,5 +1,5 @@
-import type { Pool, PoolClient } from "@masanawa/postgres";
-import { withTransaction } from "@masanawa/postgres";
+import type { Pool, PoolClient } from "pg";
+import { withTransaction } from "../transaction.js";
 /** Storage-only structural contract; gateway owns the public API DTO. */
 interface AdminYouTubeSource {
   readonly id:string;readonly channelId:string;readonly channelName:string;
