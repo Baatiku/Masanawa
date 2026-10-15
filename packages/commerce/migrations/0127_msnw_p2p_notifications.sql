@@ -35,6 +35,26 @@ BEGIN
  VALUES(NEW.event_id,NEW.tenant_id,buyer,NEW.order_id,NEW.action,NEW.to_state,NEW.created_at),
        (NEW.event_id,NEW.tenant_id,seller,NEW.order_id,NEW.action,NEW.to_state,NEW.created_at)
  ON CONFLICT DO NOTHING;
+ -- Publish to the EXISTING leased events.outbox, not a second delivery
+ -- queue. This trigger shares the order transaction and is rolled back if
+ -- the escrow state change fails. The inbox projection above is permanent.
+ INSERT INTO events.outbox (
+   outbox_event_id,tenant_id,event_id,event_type,schema_version,
+   aggregate_type,aggregate_id,correlation_id,causation_id,
+   destination,payload
+ )
+ SELECT
+   'outbox-event_' || replace(gen_random_uuid()::text,'-',''),
+   NEW.tenant_id,
+   'event_' || replace(gen_random_uuid()::text,'-',''),
+   'p2p.order.transition',1,
+   'msnw_p2p_order',NEW.order_id::text,
+   'correlation_' || replace(gen_random_uuid()::text,'-',''),NULL,
+   'notifications.p2p',
+   jsonb_build_object('userId',recipient.user_id,
+     'orderId',NEW.order_id::text,'transition',NEW.action,
+     'state',NEW.to_state,'sourceEventId',NEW.event_id::text)
+ FROM (VALUES(buyer),(seller)) AS recipient(user_id);
  RETURN NEW;
 END;
 $$;
