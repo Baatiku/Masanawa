@@ -45,6 +45,7 @@ export function createMsnwPaystackFiatService(input: Readonly<{
   authorizer: MsnBalanceAuthority;
   paystackSecretKey: string;
   fetchImpl?: typeof fetch;
+  onCustomerIdentification?: (eventName: "customeridentification.success" | "customeridentification.failed", data: unknown) => Promise<boolean>;
 }>): MsnwPaystackFiatService {
   const secret = input.paystackSecretKey.trim();
   if (!/^sk_(?:live|test)_[A-Za-z0-9]+$/.test(secret)) {
@@ -216,6 +217,13 @@ export function createMsnwPaystackFiatService(input: Readonly<{
         throw new PaystackEvidenceError("funding.webhook_payload_invalid", 400);
       }
       const event = parsed as Record<string, unknown>;
+      if (event.event === "customeridentification.success" ||
+          event.event === "customeridentification.failed") {
+        const recorded = input.onCustomerIdentification
+          ? await input.onCustomerIdentification(event.event, event.data)
+          : false;
+        return Object.freeze({ accepted: true as const, recorded });
+      }
       if (event.event !== "charge.success") {
         return Object.freeze({ accepted: true as const, recorded: false });
       }
