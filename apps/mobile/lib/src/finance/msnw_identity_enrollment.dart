@@ -18,6 +18,9 @@ class MsnwIdentityEnrollment extends StatefulWidget {
 }
 
 class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
+  final legalName = TextEditingController();
+  final email = TextEditingController();
+  final phone = TextEditingController();
   final bvn = TextEditingController();
   final bankAccount = TextEditingController();
   final bankCode = TextEditingController();
@@ -29,7 +32,7 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
   @override
   void initState() { super.initState(); refresh(); }
   @override
-  void dispose() { bvn.dispose(); bankAccount.dispose(); bankCode.dispose(); super.dispose(); }
+  void dispose() { legalName.dispose(); email.dispose(); phone.dispose(); bvn.dispose(); bankAccount.dispose(); bankCode.dispose(); super.dispose(); }
 
   Future<void> refresh() async => request(false);
 
