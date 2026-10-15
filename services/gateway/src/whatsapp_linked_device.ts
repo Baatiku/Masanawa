@@ -67,21 +67,31 @@ function textFromMessage(message: Record<string, unknown>): string {
   return (conversation || extendedText || imageCaption || videoCaption).trim();
 }
 
-function mediaKind(message: Record<string, unknown>): "audio" | "image" | "document" | null {
+export function linkedWhatsAppMediaKind(
+  message: Record<string, unknown>,
+): "audio" | "image" | "video" | "document" | null {
   if (message.audioMessage) return "audio";
   if (message.imageMessage) return "image";
+  if (message.videoMessage) return "video";
   if (message.documentMessage) return "document";
   return null;
 }
 
-function mimeFor(message: Record<string, unknown>, kind: "audio" | "image" | "document"): string {
-  const key = kind === "audio" ? "audioMessage" : kind === "image" ? "imageMessage" : "documentMessage";
+export function linkedWhatsAppMimeFor(
+  message: Record<string, unknown>,
+  kind: "audio" | "image" | "video" | "document",
+): string {
+  const key = kind === "audio" ? "audioMessage" :
+    kind === "image" ? "imageMessage" :
+    kind === "video" ? "videoMessage" : "documentMessage";
   const node = message[key];
   if (node && typeof node === "object" && !Array.isArray(node)) {
     const mime = (node as Record<string, unknown>).mimetype;
     if (typeof mime === "string" && mime.trim()) return mime.trim();
   }
-  return kind === "audio" ? "audio/ogg" : kind === "image" ? "image/jpeg" : "application/octet-stream";
+  return kind === "audio" ? "audio/ogg" :
+    kind === "image" ? "image/jpeg" :
+    kind === "video" ? "video/mp4" : "application/octet-stream";
 }
 
 function nameFor(message: Record<string, unknown>): string | undefined {
@@ -89,6 +99,25 @@ function nameFor(message: Record<string, unknown>): string | undefined {
   if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
   const name = (node as Record<string, unknown>).fileName;
   return typeof name === "string" && name.trim() ? name.trim().slice(0, 240) : undefined;
+}
+
+/** Stream in the decrypted bytes with a hard limit. Baileys documents
+ * 'stream' downloads; the previous 'buffer' mode could allocate the entire
+ * incoming video/document before checking its size. */
+export async function readBoundedLinkedWhatsAppMedia(
+  stream: AsyncIterable<Uint8Array | string>,
+  maxBytes = 8 * 1024 * 1024,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const part of stream) {
+    const chunk = Buffer.from(part);
+    total += chunk.byteLength;
+    if (total > maxBytes) throw new RangeError("channels.media_too_large");
+    chunks.push(chunk);
+  }
+  if (total === 0) throw new RangeError("channels.media_empty");
+  return Buffer.concat(chunks, total);
 }
 
 export function createLinkedWhatsAppController(
@@ -103,6 +132,7 @@ export function createLinkedWhatsAppController(
   let stopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
+  const pendingByChat = new Map<string, Promise<void>>();
   let snapshot: LinkedWhatsAppSnapshot = Object.freeze({
     mode: "linked-device",
     status: "offline",
@@ -131,33 +161,46 @@ export function createLinkedWhatsAppController(
         ? raw.message as Record<string, unknown>
         : {};
     const text = textFromMessage(message);
-    const kind = mediaKind(message);
+    const kind = linkedWhatsAppMediaKind(message);
 
     let media: CustomerChannelInbound["media"] | undefined;
     if (kind) {
-      const bytes = await downloadMediaMessage(
+      const downloaded = await downloadMediaMessage(
         raw,
-        "buffer",
+        "stream",
         {},
         {
           logger,
           reuploadRequest: sock.updateMediaMessage,
         },
       );
-      if (Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 8 * 1024 * 1024) {
+      try {
+        const bytes = await readBoundedLinkedWhatsAppMedia(downloaded);
         media = Object.freeze({
-          mimeType: mimeFor(message, kind),
+          mimeType: linkedWhatsAppMimeFor(message, kind),
           dataBase64: bytes.toString("base64"),
           ...(nameFor(message) ? { name: nameFor(message)! } : {}),
         });
+      } catch (error) {
+        downloaded.destroy();
+        if (error instanceof RangeError && error.message === "channels.media_too_large") {
+          await sock.sendMessage(remoteJid, {
+            text: "That file is too large. Please send a file smaller than 8 MB.",
+          });
+          return;
+        }
+        throw error;
       }
     }
 
     if (!text && !media) return;
 
+    // Scope provider IDs to the chat, as with Telegram. A linked-device
+    // message ID must not collide with a different customer's receipt.
+    const durableMessageId = `${remoteJid}:${messageId}`;
     const result = await options.bridge.handle({
       channel: "whatsapp",
-      messageId,
+      messageId: durableMessageId,
       externalUserId: phone,
       chatId: remoteJid,
       phone,
@@ -167,7 +210,10 @@ export function createLinkedWhatsAppController(
 
     if (result.shouldDeliver && result.reply) {
       await sock.sendMessage(remoteJid, { text: result.reply });
-      await options.bridge.delivered({ channel: "whatsapp", messageId });
+      await options.bridge.delivered({
+        channel: "whatsapp",
+        messageId: durableMessageId,
+      });
     }
   }
 
@@ -216,7 +262,17 @@ export function createLinkedWhatsAppController(
     sock.ev.on("messages.upsert", ({ messages, type }) => {
       if (type !== "notify") return;
       for (const message of messages) {
-        void processMessage(message, sock).catch(() => undefined);
+        const jid = String(message.key?.remoteJid ?? "");
+        // Keep each sender's persistent conversation/session turns ordered,
+        // while unrelated customers can still be processed independently.
+        const prior = pendingByChat.get(jid) ?? Promise.resolve();
+        const task = prior.catch(() => undefined).then(() => processMessage(message, sock));
+        pendingByChat.set(jid, task);
+        void task.catch(() => {
+          update({ lastEvent: "message-processing-failed" });
+        }).finally(() => {
+          if (pendingByChat.get(jid) === task) pendingByChat.delete(jid);
+        });
       }
     });
     sock.ev.on("connection.update", (event) => {
