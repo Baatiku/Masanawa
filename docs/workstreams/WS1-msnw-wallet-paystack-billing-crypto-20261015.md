@@ -6,6 +6,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 
 - Repository: Baatiku/Masanawa; base main 1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4 (PR #19).
 - Completed PR #22: b542c7106987c46529516d96ff74a3e226dbc905 (Paystack customer/DVA onboarding and Billing fail-closed improvements).
+- Completed PR #40: ac3749eb65ce89ddffbed35f377569a90543ff7f (DB evidence integrity and Worker mismatch detection).
 - Completed PR #37: ede2c890ffea0d0ce7d1560c0a5fc44e9a7168ab (Gateway/Worker/Flutter/PostgreSQL funding-obligation journal and recovery).
 - Completed PR #33: 11e5d145e1e2d5390f2f0b769629574f6668223f (signed Paystack KYC webhook recovery and revalidation).
 - Completed PR #29: 39842f458638ccc80928f80e791344a8a07ab9bf (phone-only enrollment and complete identity fields).
@@ -98,4 +99,4 @@ Progress labels indicate incomplete journeys even when historic source fragments
 
 - `packages/commerce/migrations/0126_msnw_settlement_integrity.sql` rejects any funding obligation whose owner, amount or proof differs from immutable verified Paystack evidence. It serializes append-only settlement events under a row lock and rejects absent or mismatched prior reserve/quote/contract/amount/transaction-hash stages.
 - `services/worker/src/jobs/msnw/funding_obligations.ts` audits all existing registered obligations against original evidence before its next recovery batch and refuses to continue on mismatch (no claimed money or token supply). Regression tests: `services/worker/src/jobs/msnw/funding_obligations.test.ts` and `packages/commerce/src/msnw_settlement_integrity.test.ts`.
-- This schema validates internal evidence consistency, **not** bank reserve sufficiency or chain finality. It neither creates mint authority nor supplies a real contract address. Real custodian, quotes, chain workers, withdrawals, Send, Convert and service settlement still remain NOT DONE. PR and final integration SHA to be recorded after merge.
+- This schema validates internal evidence consistency, **not** bank reserve sufficiency or chain finality. It neither creates mint authority nor supplies a real contract address. Real custodian, quotes, chain workers, withdrawals, Send, Convert and service settlement still remain NOT DONE. Integrated as PR #40, merge SHA ac3749eb65ce89ddffbed35f377569a90543ff7f.
