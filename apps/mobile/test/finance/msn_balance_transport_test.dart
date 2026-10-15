@@ -13,7 +13,7 @@ void main() {
         handler.resolve(Response<Map<String, dynamic>>(
           requestOptions: options,
           statusCode: 200,
-          data: {'asset': 'MSN', 'spendableMicro': '12345678901234567890123456789'},
+          data: {'asset': 'MSNW', 'spendableMicro': '12345678901234567890123456789'},
         ));
       },
     ));
@@ -25,7 +25,7 @@ void main() {
     expect(balance.spendableMicro, '12345678901234567890123456789');
     expect(balance.displayAmount, '12345678901234567890123.456789');
     expect(sent, hasLength(1));
-    expect(sent.single.uri.toString(), 'https://gateway.example/v1/wallet/msn');
+    expect(sent.single.uri.toString(), 'https://gateway.example/v1/wallet/msnw');
     expect(sent.single.headers['Authorization'], 'Bearer scoped-session');
     expect(sent.single.followRedirects, isFalse);
     expect(sent.single.method, 'GET');
@@ -50,7 +50,7 @@ void main() {
 
   test('rejects fabricated, imprecise and misleading balance payloads', () {
     for (final value in <dynamic>['001', '-1', '1e6', '2.000001', 1000000, null]) {
-      expect(() => MsnBalance.fromJson({'asset': 'MSN', 'spendableMicro': value}),
+      expect(() => MsnBalance.fromJson({'asset': 'MSNW', 'spendableMicro': value}),
           throwsFormatException);
     }
     expect(
@@ -58,11 +58,11 @@ void main() {
       throwsFormatException,
     );
     expect(
-      MsnBalance.fromJson({'asset': 'MSN', 'spendableMicro': '0'}).displayAmount,
+      MsnBalance.fromJson({'asset': 'MSNW', 'spendableMicro': '0'}).displayAmount,
       '0',
     );
     expect(
-      MsnBalance.fromJson({'asset': 'MSN', 'spendableMicro': '1230000'}).displayAmount,
+      MsnBalance.fromJson({'asset': 'MSNW', 'spendableMicro': '1230000'}).displayAmount,
       '1.23',
     );
   });
@@ -76,7 +76,7 @@ void main() {
         handler.resolve(Response<Map<String, dynamic>>(
           requestOptions: options,
           statusCode: 200,
-          data: {'asset': 'MSN', 'spendableMicro': '9000000'},
+          data: {'asset': 'MSNW', 'spendableMicro': '9000000'},
         ));
       },
     ));
@@ -88,7 +88,7 @@ void main() {
       (e) => e.statusCode, 'statusCode', 401)));
   });
 
-  test('fails closed when MSN route is not mounted', () async {
+  test('fails closed when MSNW route is not mounted', () async {
     final dio = Dio();
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) => handler.reject(DioException(
