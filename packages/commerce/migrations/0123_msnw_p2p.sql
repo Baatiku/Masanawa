@@ -100,6 +100,24 @@ CREATE TABLE IF NOT EXISTS commerce.msnw_p2p_events (
 );
 CREATE INDEX IF NOT EXISTS msnw_p2p_events_order_idx
   ON commerce.msnw_p2p_events (tenant_id,order_id,created_at);
+-- Audit records are append-only; any repair must be a new linked event.
+CREATE OR REPLACE FUNCTION commerce.msnw_p2p_deny_audit_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+  RAISE EXCEPTION 'MSNW P2P evidence and audit events are immutable';
+END;
+$;
+DROP TRIGGER IF EXISTS msnw_p2p_evidence_immutable
+  ON commerce.msnw_p2p_evidence;
+CREATE TRIGGER msnw_p2p_evidence_immutable
+  BEFORE UPDATE OR DELETE ON commerce.msnw_p2p_evidence
+  FOR EACH ROW EXECUTE FUNCTION commerce.msnw_p2p_deny_audit_mutation();
+DROP TRIGGER IF EXISTS msnw_p2p_events_immutable
+  ON commerce.msnw_p2p_events;
+CREATE TRIGGER msnw_p2p_events_immutable
+  BEFORE UPDATE OR DELETE ON commerce.msnw_p2p_events
+  FOR EACH ROW EXECUTE FUNCTION commerce.msnw_p2p_deny_audit_mutation();
+
 -- No direct access by customer DB roles; only authenticated API transactions.
 REVOKE ALL ON commerce.msnw_p2p_payment_methods FROM PUBLIC;
 REVOKE ALL ON commerce.msnw_p2p_offers FROM PUBLIC;
