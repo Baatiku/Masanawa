@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { P2pError, type P2pActor, type P2pPool } from "./service.js";
+import { P2pError, type P2pActor, type P2pPool, type P2pService } from "./service.js";
 
 type Bank = Readonly<{ code: string; name: string }>;
 export interface VerifiedP2pBankMethods {
@@ -18,6 +18,7 @@ function normalizedName(name: string): string {
 }
 export function createVerifiedP2pBankMethods(input: Readonly<{
   pool: P2pPool;
+  service: P2pService;
   paystackSecretKey: string;
   fetchImpl?: typeof fetch;
 }>): VerifiedP2pBankMethods {
@@ -106,13 +107,11 @@ export function createVerifiedP2pBankMethods(input: Readonly<{
       [actor.tenantId,actor.userId,body.bankCode,body.accountNumber,
         resolved.data.account_name,kyc.rows[0]?.customer_id].join("|"),"utf8").digest("hex");
     const newId=randomUUID();
-    await input.pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods
-      (method_id,tenant_id,owner_id,method_type,bank_name,bank_code,
-       account_name,account_number,verification_reference,verified_at)
-      VALUES ($1,$2,$3,'ng_bank_transfer',$4,$5,$6,$7,$8,statement_timestamp())
-      ON CONFLICT DO NOTHING`,
-      [newId,actor.tenantId,actor.userId,bank.name,bank.code,
-        resolved.data.account_name,body.accountNumber,reference]);
+    await input.service.recordVerifiedMethod(actor,{
+      methodId:newId,bankName:bank.name,bankCode:bank.code,
+      accountName:resolved.data.account_name,accountNumber:body.accountNumber,
+      verificationReference:reference,
+    });
     const row=await input.pool.query(`SELECT method_id,bank_name,account_name,account_number,
       verification_reference,verified_at FROM commerce.msnw_p2p_payment_methods
       WHERE tenant_id=$1 AND owner_id=$2 AND bank_code=$3
