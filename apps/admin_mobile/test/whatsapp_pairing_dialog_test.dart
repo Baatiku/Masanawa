@@ -11,7 +11,7 @@ void main() {
   test('rejects invalid and oversized pairing QR payloads', () {
     expect(decodeWhatsAppPairingQr('https://example.com/qr'), isNull);
     expect(decodeWhatsAppPairingQr('data:image/png;base64,###'), isNull);
-    expect(decodeWhatsAppPairingQr('x' * (1024 * 1024 + 1)), isNull);
+    expect(decodeWhatsAppPairingQr(List.filled(1024 * 1024 + 1, 'x').join()), isNull);
     expect(
       decodeWhatsAppPairingQr('data:image/png;base64,$onePixelPng'),
       isNotNull,
@@ -33,7 +33,7 @@ void main() {
         );
     Future<WhatsAppQr> qr() async {
       qrCount++;
-      return const WhatsAppQr(
+      return WhatsAppQr(
         dataUrl: 'data:image/png;base64,$onePixelPng',
         status: 'qr',
       );
