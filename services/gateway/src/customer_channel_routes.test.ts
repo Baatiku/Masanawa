@@ -449,8 +449,8 @@ describe("customer channel webhook routes", () => {
   it("acknowledges oversized Telegram media with a useful retry instruction", async () => {
     const app = Fastify();
     const channelBridge = bridge();
-    const oversizedBytes = new Uint8Array(8 * 1024 * 1024 + 1);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const oversizedBytes = "x".repeat(8 * 1024 * 1024 + 1);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/getFile?")) {
         return new Response(JSON.stringify({
