@@ -109,6 +109,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   LiveVoiceState _inlineVoiceState = LiveVoiceState.idle;
   bool _inlineVoiceClosing = false;
   bool _voiceNoteSheetOpen = false;
+  bool _voiceNoteSending = false;
   VoiceNoteRecorder? _inlineRecorder;
   AudioPlayer? _inlinePreviewPlayer;
   bool _inlinePreviewPlaying = false;
@@ -463,6 +464,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _sendInlineVoiceNote() async {
+    if (_voiceNoteSending) return;
     final recorder = _inlineRecorder;
     if (recorder == null) return;
     final session = ref.read(sessionProvider);
@@ -476,43 +478,68 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final active = ref.read(sessionProvider);
       return active is SessionSignedIn && active.user.id == accountId;
     }
-
     if (!sameAccount() ||
         ref.read(aiChatProvider).sendingIn.contains(widget.characterId)) {
       return;
     }
 
-    HapticFeedback.mediumImpact();
-    ChatAttachment? note;
-    if (recorder.state == VoiceNoteState.recording) {
-      note = await recorder.stop();
-    } else if (recorder.state == VoiceNoteState.ready) {
-      note = recorder.note;
-    }
-
-    if (note == null || !sameAccount()) {
-      await _cancelInlineRecording();
-      return;
-    }
-
+    setState(() => _voiceNoteSending = true);
     try {
+      HapticFeedback.mediumImpact();
+      ChatAttachment? note;
+      if (recorder.state == VoiceNoteState.recording) {
+        note = await recorder.stop();
+      } else if (recorder.state == VoiceNoteState.ready) {
+        note = recorder.note;
+      }
+      if (note == null || !sameAccount()) {
+        await _cancelInlineRecording();
+        return;
+      }
+
+      // The chat controller copies into owner-scoped durable media storage
+      // before accepting the turn. Do not detach, retain or dispose the
+      // recorder first: a revoked file/low-storage failure must leave the
+      // current voice note ready to retry rather than silently losing it.
+      try {
+        await ref.read(aiChatProvider.notifier)
+            .sendAttachment(widget.characterId, note);
+      } catch (_) {
+        if (!sameAccount()) {
+          await _cancelInlineRecording();
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Could not keep this voice note for sending. Free some storage and retry.',
+          )),
+        );
+        return;
+      }
+
+      if (!sameAccount()) {
+        await _cancelInlineRecording();
+        return;
+      }
+      // The user may have cancelled the preview during a slow disk copy.
+      // In that case the send controller has already accepted its own copy;
+      // never attempt to retain a recorder that has been closed.
+      if (!identical(_inlineRecorder, recorder)) return;
       recorder.retain();
-    } catch (_) {}
-
-    recorder.removeListener(_onInlineRecorderChanged);
-    _inlineRecorder = null;
-    try {
-      await _inlinePreviewPlayer?.stop();
-      await _inlinePreviewPlayer?.dispose();
-    } catch (_) {}
-    _inlinePreviewPlayer = null;
-    _inlinePreviewPlaying = false;
-    setState(() {});
-
-    await ref
-        .read(aiChatProvider.notifier)
-        .sendAttachment(widget.characterId, note);
-    await recorder.close();
+      recorder.removeListener(_onInlineRecorderChanged);
+      _inlineRecorder = null;
+      try {
+        await _inlinePreviewPlayer?.stop();
+        await _inlinePreviewPlayer?.dispose();
+      } catch (_) {}
+      _inlinePreviewPlayer = null;
+      _inlinePreviewPlaying = false;
+      if (mounted) setState(() {});
+      await recorder.close();
+    } finally {
+      _voiceNoteSending = false;
+      if (mounted) setState(() {});
+    }
   }
 
   /// Record a local voice message, without starting a paid LiveKit/Gemini call.
