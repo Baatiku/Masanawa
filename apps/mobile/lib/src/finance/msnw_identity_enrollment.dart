@@ -102,6 +102,13 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
       if (state == 'identity_validation_pending')
         const Text('Paystack is checking your bank identity. Refresh after verification.'),
       if (enterDetails) ...[
+        const Text('Provide missing legal and contact details. Leave details already present in your profile blank.'),
+        TextField(controller: legalName, textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Legal full name (if different)')),
+        TextField(controller: email, keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email (if missing)')),
+        TextField(controller: phone, keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'Phone in +234 format (if missing)')),
         TextField(controller: bvn, keyboardType: TextInputType.number,
           obscureText: true, maxLength: 11, enableSuggestions: false,
           decoration: const InputDecoration(labelText: 'BVN (11 digits)')),
