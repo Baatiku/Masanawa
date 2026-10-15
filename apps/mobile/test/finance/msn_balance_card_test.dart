@@ -36,7 +36,6 @@ void main() {
     await tester.pumpWidget(_screen(t, 'account-session-A'));
     await tester.pumpAndSettle();
     expect(find.text('1.25 MSNW'), findsOneWidget);
-    expect(find.text('1.25 MSNW'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Refresh MSNW balance'));
     await tester.pumpAndSettle();
