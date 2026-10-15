@@ -149,6 +149,13 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.action(a,orderId,"confirm",{releaseAuthorized:true});
     }catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/orders/:orderId/evidence",async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      return {items:await deps.service.listEvidence(a,
+        (req.params as {orderId:string}).orderId)};
+    } catch(error){return respond(error,reply);}
+  });
   // Private object uploaded by Gateway using bounded bytes and signed digest.
   // Mobile never sees S3 credentials or selects another order's storage path.
   app.post("/v1/wallet/msnw/p2p/orders/:orderId/evidence/upload",
