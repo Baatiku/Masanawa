@@ -123,7 +123,7 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
       // hijacking Fastify's error handler. Expired/foreign sessions must
       // receive the proper HTTP auth failure, not a false successful stream.
       // Reuse this first batch below so no cursor is skipped or duplicated.
-      let initialEvents = await shell.events({
+      let initialEvents: Awaited<ReturnType<typeof shell.events>> | null = await shell.events({
         authorizationHeader: request.headers.authorization,
         characterId,
         ...(cursor ? { after: cursor } : {}),
