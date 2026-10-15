@@ -8,6 +8,7 @@ import '../../finance/crypto_wallet_screen.dart';
 import '../../finance/msn_balance_card.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
+import '../../finance/msnw_verified_funding_activity.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
@@ -33,6 +34,10 @@ const bool kWalletMsnFundingStatusEnabled = bool.fromEnvironment(
 /// Explicit opt-in only when Paystack is live, KYC-backed and staged schema installed.
 const bool kWalletPaystackDvaEnabled = bool.fromEnvironment(
   'MASANAWA_MSNW_PAYSTACK_DVA_ENABLED', defaultValue: false,
+);
+
+const bool kWalletVerifiedFundingActivityEnabled = bool.fromEnvironment(
+  'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED', defaultValue: false,
 );
 
 class WalletScreen extends ConsumerStatefulWidget {
@@ -250,7 +255,19 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               onOpenBillingService: widget.onOpenBillingService),
             const SizedBox(height: 24),
             const _WalletSection(label: 'Recent activity'),
-            const ListTile(title: Text('MSNW history unavailable')),
+            if (kWalletVerifiedFundingActivityEnabled && accountId != null)
+              MsnwVerifiedFundingActivity(
+                sessionIdentity: accountId,
+                dio: ref.watch(dioProvider),
+                baseUrl: kApiBaseUrl,
+                currentUserId: () => switch (ref.read(sessionProvider)) {
+                  SessionSignedIn(:final user) => user.id,
+                  _ => null,
+                },
+                accessToken: () => ref.read(apiClientProvider).accessToken,
+              )
+            else
+              const ListTile(title: Text('MSNW history unavailable')),
           ],
       ),
     );
