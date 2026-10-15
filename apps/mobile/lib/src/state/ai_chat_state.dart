@@ -1111,6 +1111,7 @@ class AiChatController extends Notifier<AiChatState> {
             case ChatQueuedTurnResolution.resend:
               _setDelivery(characterId, message.id, 'sending');
               await _dispatchUserMessage(characterId, message, retry: true);
+              continue;
           }
         }
       }
