@@ -9,6 +9,7 @@ import '../../finance/msn_balance_card.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../finance/msnw_verified_funding_activity.dart';
+import '../../finance/msnw_p2p_screen.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
@@ -78,6 +79,28 @@ class WalletScreen extends ConsumerStatefulWidget {
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   bool _crypto = false;
+
+  void _openP2p() {
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sign in to trade MSNW.')));
+      return;
+    }
+    final expectedId = session.user.id;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => MsnwP2pScreen(
+        dio: ref.read(dioProvider),
+        baseUrl: kApiBaseUrl,
+        expectedUserId: expectedId,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id,
+          _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
+      ),
+    ));
+  }
 
   void _openCrypto() {
     final navigate = widget.onOpenCrypto;
@@ -223,6 +246,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 onTap: _fund),
               _WalletShortcut(label: 'Receive', icon: Icons.south_west,
                 onTap: widget.walletMsnBalanceEnabled ? _receive : null),
+              _WalletShortcut(label: 'P2P', icon: Icons.people_alt_outlined,
+                onTap: accountId != null ? _openP2p : null),
             ]),
             const SizedBox(height: 24),
             _WalletSection(label: 'My assets', action: 'View crypto',
