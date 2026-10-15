@@ -36,7 +36,8 @@ describe("P2P order push delivery",()=>{
   expect(query).toHaveBeenCalledWith(expect.stringContaining("identity.users"),
     [item.tenantId,item.payload.orderId,item.payload.userId]);
   expect(send).toHaveBeenCalledWith(expect.objectContaining({
-    data:{type:"p2p_order",orderId:item.payload.orderId,eventId:item.outboxEventId},
+    data:{type:"p2p_order",orderId:item.payload.orderId,
+      eventId:item.outboxEventId,deepLink:"masanawa://wallet"},
   }));
   expect(settleOutboxClaim).toHaveBeenCalledWith(expect.anything(),
     expect.objectContaining({fence:3,state:"acknowledged"}));
