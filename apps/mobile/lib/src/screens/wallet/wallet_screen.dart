@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
 import '../../finance/msn_balance_card.dart';
 import '../../finance/msn_balance_transport.dart';
+import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
@@ -28,6 +29,11 @@ const bool kWalletMsnFundingStatusEnabled = bool.fromEnvironment(
   'MASANAWA_MSN_FUNDING_READBACK_ENABLED', defaultValue: false,
 );
 
+/// Explicit opt-in only when Paystack is live, KYC-backed and staged schema installed.
+const bool kWalletPaystackDvaEnabled = bool.fromEnvironment(
+  'MASANAWA_MSNW_PAYSTACK_DVA_ENABLED', defaultValue: false,
+);
+
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({
     super.key,
@@ -41,6 +47,7 @@ class WalletScreen extends ConsumerStatefulWidget {
     this.walletCreditSendEnabled = kWalletCreditSendEnabled,
     this.walletMsnBalanceEnabled = kWalletMsnBalanceEnabled,
     this.walletMsnFundingStatusEnabled = kWalletMsnFundingStatusEnabled,
+    this.walletPaystackDvaEnabled = kWalletPaystackDvaEnabled,
   });
 
   final VoidCallback? onAddMoney;
@@ -57,6 +64,7 @@ class WalletScreen extends ConsumerStatefulWidget {
   final bool walletCreditSendEnabled;
   final bool walletMsnBalanceEnabled;
   final bool walletMsnFundingStatusEnabled;
+  final bool walletPaystackDvaEnabled;
 
   @override
   ConsumerState<WalletScreen> createState() => _WalletScreenState();
@@ -77,11 +85,29 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       qualified();
       return;
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    final session = ref.read(sessionProvider);
+    if (!widget.walletPaystackDvaEnabled || session is! SessionSignedIn) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('MSNW funding is not available yet.'),
       ));
+      return;
     }
+    final userId = session.user.id;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => MsnwPaystackFundingSheet(
+        dio: ref.read(dioProvider),
+        baseUrl: kApiBaseUrl,
+        expectedUserId: userId,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id,
+          _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
+      ),
+    );
   }
 
   @override Widget build(BuildContext context) {
