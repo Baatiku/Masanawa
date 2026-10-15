@@ -50,6 +50,12 @@ async function fetchJson(url: string, init: RequestInit): Promise<Record<string,
   if (!response.ok) {
     throw new Error(`channels.provider_http_${response.status}`);
   }
+  // Telegram can return HTTP 200 with {ok:false}; failing to inspect its
+  // application status would mark a message delivered without sending it.
+  // The webhook must retry an unacknowledged canonical receipt instead.
+  if (url.startsWith("https://api.telegram.org/") && body.ok !== true) {
+    throw new Error("channels.telegram_delivery_rejected");
+  }
   return body;
 }
 

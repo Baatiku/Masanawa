@@ -496,4 +496,49 @@ describe("customer channel webhook routes", () => {
     }
   });
 
+  it("does not mark a Telegram reply delivered when provider returns HTTP 200 ok:false", async () => {
+    const app = Fastify();
+    const channelBridge = bridge();
+    channelBridge.handle.mockResolvedValueOnce({
+      duplicate: false,
+      reply: "The canonical reply",
+      shouldDeliver: true,
+      requestContact: false,
+    });
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: false, description: "chat unavailable" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      registerCustomerChannelRoutes(app, {
+        bridge: channelBridge,
+        telegram: { botToken: "bot-token", webhookSecret: "telegram-secret" },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/channels/telegram/webhook",
+        headers: { "x-telegram-bot-api-secret-token": "telegram-secret" },
+        payload: {
+          message: {
+            message_id: 501,
+            from: { id: 123 },
+            chat: { id: 123, type: "private" },
+            text: "Hi",
+          },
+        },
+      });
+      expect(response.statusCode).toBe(500);
+      expect(channelBridge.handle).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: "123:501" }),
+      );
+      expect(channelBridge.delivered).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await app.close();
+    }
+  });
+
 });
