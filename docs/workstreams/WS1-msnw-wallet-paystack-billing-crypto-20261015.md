@@ -6,7 +6,7 @@ This file is the single durable checklist for the owner's October 15 four-workst
 
 - Repository: Baatiku/Masanawa; base main 1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4 (PR #19).
 - Completed PR #22: b542c7106987c46529516d96ff74a3e226dbc905 (Paystack customer/DVA onboarding and Billing fail-closed improvements).
-- Current additional feature branch: feat/msnw-governed-mint-burn-deployment-20261015 (contract supply controls and explicit chain deployment configuration).
+- Completed PR #24: ced8df8a1a1d283f3fbbf45a2dd91f67a856bdbb (role-separated mint/burn controls, Foundry deployment config and source tests).
 - Main advanced independently to ad940610b66c7f8817add88a3bd4ac1ad8aa50cd (chat/WS2, no changed-file overlap) while this branch was being developed.
 - Source commits include 7a63d6c (enrollment migration), 8a8f9fb and 295d2a9 (Paystack service), e89f2c4 (routes), 179dec0 and 537309d (Gateway app/startup), 07e6cd1 and 1d39611 (Flutter funding), 7c44cb8/c641e50 (Gateway test), de7a698 (Billing fake-data/unsafe-debit removal).
 - PR #22 merged source; provider/device/Flutter/PostgreSQL tests not executed in the connector-only runtime. Production issuance qualification still PENDING. Solidity/Foundry test suite is source only until dependencies and forge are installed. Do not interpret source additions as actual issued MSNW.
