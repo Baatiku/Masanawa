@@ -165,6 +165,17 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         input.bankName.trim(),input.accountName.trim(),input.accountNumber,
         input.verificationReference]);
     },
+    async closeOffer(actor: P2pActor, offerId: string) {
+      // No existing order or its reserved funds are affected; only future
+      // bookings are paused. All order resolution routes remain available.
+      const updated = await pool.query(`UPDATE commerce.msnw_p2p_offers
+        SET state='closed',updated_at=statement_timestamp()
+        WHERE tenant_id=$1 AND offer_id=$2 AND seller_id=$3
+          AND state IN ('active','paused') RETURNING offer_id`,
+        [actor.tenantId,id(offerId),actor.userId]);
+      if (!updated.rowCount) throw new P2pError("p2p.offer_not_found",404);
+      return {offerId,state:"closed"};
+    },
     async createOffer(actor: P2pActor, input: {
       paymentMethodId: string; rateKoboPerMsnw: string;
       minMicro: string; maxMicro: string; inventoryMicro: string;
@@ -283,7 +294,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
             await setState(tx,actor,order,"disputed","dispute_opened",reason(options.explanation));
             break;
           case "cancel":
-            if (!member || order.state!=="awaiting_payment")
+            // A seller must not unilaterally cancel an order while the buyer
+            // may be transferring bank funds. Seller requests use dispute.
+            if (actor.userId!==order.buyer_id || order.state!=="awaiting_payment")
               throw new P2pError("p2p.cancel_denied",403);
             await refund(tx,actor,order,"cancelled");
             break;
