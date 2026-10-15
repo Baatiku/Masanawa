@@ -13,6 +13,7 @@ import { createPostgresServiceDependency, createPgTeacherQueue, platformProductM
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
+import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
   createWorkerApp,
@@ -107,6 +108,7 @@ export async function startWorkerService(
   // "disabled" customer feature that can accept questions without answers.
   let roomReview: ReturnType<typeof createRoomTeacherRuntime> | undefined;
   let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -124,6 +126,22 @@ export async function startWorkerService(
       }),
       workerId: env.MASANAWA_ROOMS_TEACHER_WORKER_ID ?? "rooms-ai-" + process.pid,
       enabled: () => !drain.isDraining(),
+    });
+    // Durable scheduled posts use the canonical feed editorial CAS and audit.
+    // Polling needs no new queue or manual feature enablement.
+    const feed = createScheduledFeedRuntime({
+      pool: database.pool,
+      enabled: () => !drain.isDraining(),
+    });
+    feedPublisher = createYouTubeOutboxScheduler({
+      runOnce: feed.runOnce,
+      enabled: () => !drain.isDraining(),
+      intervalMs: 15_000,
+      onError: () => {
+        process.stderr.write(JSON.stringify({
+          event: "status_scheduled.retry", reason: "batch_failed",
+        }) + "\\n");
+      },
     });
     // Consume the existing authorized YouTube reconciliation outbox with the
     // existing PostgreSQL fence/lease/quota controls. Without credentials,
@@ -171,6 +189,7 @@ export async function startWorkerService(
       // shared PostgreSQL pool shuts down; do not abandon in-flight claims.
       onAfterClose: async () => {
         await youtubeOutbox?.stop();
+        await feedPublisher?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -180,8 +199,10 @@ export async function startWorkerService(
     });
     roomReview?.start();
     youtubeOutbox?.start();
+    feedPublisher?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
+    await feedPublisher?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
