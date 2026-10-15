@@ -396,10 +396,16 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       if(!result.rowCount)throw new P2pError("p2p.evidence_forbidden",403);
     },
     async listEvidence(actor:P2pActor,orderId:string) {
-      await this.assertEvidenceAllowed(actor,orderId);
-      const evidence=await pool.query(`SELECT evidence_id,submitted_by,sha256,created_at
-        FROM commerce.msnw_p2p_evidence WHERE tenant_id=$1 AND order_id=$2
-        ORDER BY created_at ASC LIMIT 100`,[actor.tenantId,orderId]);
+      // Keep historical evidence readable to either participant even after a
+      // completed/refunded dispute. The upload permission is stricter.
+      const evidence=await pool.query(`SELECT e.evidence_id,e.submitted_by,e.sha256,e.created_at
+        FROM commerce.msnw_p2p_evidence e
+        JOIN commerce.msnw_p2p_orders o
+          ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
+        WHERE o.tenant_id=$1 AND o.order_id=$2
+          AND (o.seller_id=$3 OR o.buyer_id=$3)
+        ORDER BY e.created_at ASC LIMIT 100`,
+        [actor.tenantId,id(orderId),actor.userId]);
       return evidence.rows;
     },
     async evidenceFor(actor:P2pActor,orderId:string,evidenceId:string,operator=false) {
