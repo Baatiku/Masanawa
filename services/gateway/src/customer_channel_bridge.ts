@@ -414,8 +414,8 @@ export function createCustomerChannelBridge(input: Readonly<{
                 const choices = candidates
                   .slice(0, 8)
                   .map((item) => item.displayName)
-                  .join("\\n");
-                return `Several Masana match. Choose one by full name:\\n${choices}`;
+                  .join("\n");
+                return `Several Masana match. Choose one by full name:\n${choices}`;
               }
               const selected = candidates[0]!;
               if (link.characterSessionId) {
