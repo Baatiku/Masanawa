@@ -843,7 +843,7 @@ export async function startGatewayService(
     nativeAudio = createGeminiLiveAudioRenderer({
       apiKey: alphaGeminiApiKey,
       model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
-      voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Kore",
+      voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
     liveVoiceTokens = createGeminiLiveTokenService({
       apiKey: alphaGeminiApiKey,
@@ -851,7 +851,7 @@ export async function startGatewayService(
       ...(database.callHistory ? { callHistory: database.callHistory } : {}),
       ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
       model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
-      voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Kore",
+      voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
   }
 
