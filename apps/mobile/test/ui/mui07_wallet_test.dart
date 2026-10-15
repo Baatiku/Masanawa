@@ -133,7 +133,7 @@ void main() {
           expect(find.textContaining('₦'), findsNothing);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
-          await tester.scrollUntilVisible(find.text('Data bundle'), 180);
+          await tester.scrollUntilVisible(find.text('Data bundles'), 180);
           expect(find.text('MSNW history unavailable'), findsOneWidget);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
