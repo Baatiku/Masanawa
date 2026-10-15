@@ -179,6 +179,7 @@ import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balanc
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
 import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
+import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2647,6 +2648,8 @@ export async function startGatewayService(
             const service = createP2pService(database.featurePool!, escrow);
             return {
               service,
+              ...(configuredP2pEvidenceStorage(env,service)
+                ? { evidenceStorage: configuredP2pEvidenceStorage(env,service)! } : {}),
               ...(env.PAYSTACK_SECRET_KEY?.trim()
                 ? { bankMethods: createVerifiedP2pBankMethods({
                     pool: database.featurePool!,
