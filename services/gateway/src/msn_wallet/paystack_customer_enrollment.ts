@@ -18,16 +18,38 @@ export interface MsnwPaystackEnrollmentService {
   read(identity: Identity): Promise<EnrollmentStatus>;
   submit(identity: Identity, body: unknown): Promise<EnrollmentStatus>;
 }
-function identityDetails(identity: Identity) {
-  const email = identity.profile.email?.trim().toLowerCase() ?? "";
-  const phone = identity.profile.phone?.trim() ?? "";
-  const name = identity.profile.name.trim().replace(/\s+/g, " ");
+function identityDetails(identity: Identity, extras?: Record<string, unknown>) {
+  const emailFromSession = identity.profile.email?.trim().toLowerCase() ?? "";
+  const phoneFromSession = identity.profile.phone?.trim() ?? "";
+  const extraEmail = typeof extras?.email === "string"
+    ? extras.email.trim().toLowerCase() : "";
+  const extraPhone = typeof extras?.phone === "string"
+    ? extras.phone.trim() : "";
+  const email = emailFromSession || extraEmail;
+  const phone = phoneFromSession || extraPhone;
+  const name = (typeof extras?.legalName === "string" &&
+    extras.legalName.trim() ? extras.legalName : identity.profile.name)
+    .trim().replace(/\s+/g, " ");
+  if ((emailFromSession && extraEmail && emailFromSession !== extraEmail) ||
+      (phoneFromSession && extraPhone && phoneFromSession !== extraPhone)) {
+    throw new MsnwEnrollmentError("funding.profile_contact_mismatch", 409);
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.length > 320 ||
       !/^\+[1-9][0-9]{6,14}$/.test(phone) ||
       name.length > 160 || name.split(" ").length < 2)
     throw new MsnwEnrollmentError("funding.identity_details_required", 409);
   return { email, phone, name, firstName: name.split(" ")[0]!,
     lastName: name.split(" ").slice(1).join(" ") };
+}
+function assertStoredIdentity(identity: Identity, record: Row): void {
+  const currentEmail = identity.profile.email?.trim().toLowerCase();
+  const currentPhone = identity.profile.phone?.trim();
+  // Canonical session claims always override unverified customer-entered
+  // contact details. Do not rewrite KYC rows when the account changes.
+  if ((currentEmail && currentEmail !== record.email) ||
+      (currentPhone && currentPhone !== record.phone))
+    throw new MsnwEnrollmentError("funding.identity_changed", 409);
 }
 function customer(raw: unknown, email: string): Customer {
   if (!raw || typeof raw !== "object" || Array.isArray(raw))
@@ -135,10 +157,7 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
   async function read(identity: Identity): Promise<EnrollmentStatus> {
     const record = await load(identity);
     if (!record) return { state: "identity_details_required" };
-    const info = identityDetails(identity);
-    if (record.email !== info.email || record.phone !== info.phone ||
-        record.legal_name !== info.name)
-      throw new MsnwEnrollmentError("funding.identity_changed", 409);
+    assertStoredIdentity(identity, record);
     if (record.state === "preparing") return { state: "creating_customer" };
     if (record.state === "creating") {
       // Recover timed-out customer creation by lookup; NEVER repeat the POST.
@@ -149,7 +168,7 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
     }
     if (record.state === "created") return { state: "awaiting_bank_identity" };
     if (record.state === "validating" || record.state === "verified")
-      return qualify(identity, record, info.email);
+      return qualify(identity, record, record.email);
     throw new MsnwEnrollmentError("funding.onboarding_data_invalid");
   }
 
@@ -159,14 +178,30 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
       if (!supplied || typeof supplied !== "object" || Array.isArray(supplied))
         throw new MsnwEnrollmentError("funding.bank_identity_invalid", 400);
       const body = supplied as Record<string, unknown>;
-      if (Object.keys(body).sort().join(",") !== "accountNumber,bankCode,bvn,consent" ||
+      if (Object.keys(body).some(key =>
+          !["accountNumber","bankCode","bvn","consent","email","phone","legalName"].includes(key)) ||
           body.consent !== true ||
+          (body.email !== undefined && typeof body.email !== "string") ||
+          (body.phone !== undefined && typeof body.phone !== "string") ||
+          (body.legalName !== undefined && typeof body.legalName !== "string") ||
           typeof body.accountNumber !== "string" || !/^[0-9]{10}$/.test(body.accountNumber) ||
           typeof body.bankCode !== "string" || !/^[0-9]{3,6}$/.test(body.bankCode) ||
           typeof body.bvn !== "string" || !/^[0-9]{11}$/.test(body.bvn))
         throw new MsnwEnrollmentError("funding.bank_identity_invalid", 400);
-      const info = identityDetails(identity);
       let row = await load(identity);
+      if (row) assertStoredIdentity(identity, row);
+      const providedIdentity = row
+        ? { email: row.email, phone: row.phone, legalName: row.legal_name }
+        : body;
+      const info = identityDetails(identity, providedIdentity);
+      if (row && (
+        (typeof body.email === "string" && body.email.trim() &&
+          body.email.trim().toLowerCase() !== row.email) ||
+        (typeof body.phone === "string" && body.phone.trim() &&
+          body.phone.trim() !== row.phone) ||
+        (typeof body.legalName === "string" && body.legalName.trim() &&
+          body.legalName.trim().replace(/\s+/g," ") !== row.legal_name)))
+        throw new MsnwEnrollmentError("funding.identity_conflict", 409);
       if (!row) {
         await input.pool.query(
           "INSERT INTO commerce.msnw_paystack_customer_onboarding " +

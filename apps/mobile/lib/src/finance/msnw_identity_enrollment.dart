@@ -18,6 +18,9 @@ class MsnwIdentityEnrollment extends StatefulWidget {
 }
 
 class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
+  final legalName = TextEditingController();
+  final email = TextEditingController();
+  final phone = TextEditingController();
   final bvn = TextEditingController();
   final bankAccount = TextEditingController();
   final bankCode = TextEditingController();
@@ -29,7 +32,7 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
   @override
   void initState() { super.initState(); refresh(); }
   @override
-  void dispose() { bvn.dispose(); bankAccount.dispose(); bankCode.dispose(); super.dispose(); }
+  void dispose() { legalName.dispose(); email.dispose(); phone.dispose(); bvn.dispose(); bankAccount.dispose(); bankCode.dispose(); super.dispose(); }
 
   Future<void> refresh() async => request(false);
 
@@ -57,7 +60,11 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
         ? await widget.dio.post<dynamic>(url,
             data: {'consent': true, 'bvn': bvn.text.trim(),
               'accountNumber': bankAccount.text.trim(),
-              'bankCode': bankCode.text.trim()}, options: options)
+              'bankCode': bankCode.text.trim(),
+              if (legalName.text.trim().isNotEmpty) 'legalName': legalName.text.trim(),
+              if (email.text.trim().isNotEmpty) 'email': email.text.trim(),
+              if (phone.text.trim().isNotEmpty) 'phone': phone.text.trim(),
+            }, options: options)
         : await widget.dio.get<dynamic>(url, options: options);
       if (!mounted || widget.currentUserId() != widget.expectedUserId ||
           widget.accessToken()?.trim() != token) return;
@@ -95,6 +102,13 @@ class _MsnwIdentityEnrollmentState extends State<MsnwIdentityEnrollment> {
       if (state == 'identity_validation_pending')
         const Text('Paystack is checking your bank identity. Refresh after verification.'),
       if (enterDetails) ...[
+        const Text('Provide missing legal and contact details. Leave details already present in your profile blank.'),
+        TextField(controller: legalName, textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Legal full name (if different)')),
+        TextField(controller: email, keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email (if missing)')),
+        TextField(controller: phone, keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'Phone in +234 format (if missing)')),
         TextField(controller: bvn, keyboardType: TextInputType.number,
           obscureText: true, maxLength: 11, enableSuggestions: false,
           decoration: const InputDecoration(labelText: 'BVN (11 digits)')),

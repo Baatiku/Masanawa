@@ -138,4 +138,25 @@ describe("MSNW Paystack customer identity enrollment", () => {
       ...owner, profile: { ...owner.profile, email: "changed@example.com" },
     })).rejects.toMatchObject({ code: "funding.identity_changed" });
   });
+
+  it("enrolls a phone-only profile with consented contact identity, without changing login claims", async () => {
+    const test = scenario();
+    const phoneOnly = {
+      ...owner, profile: { ...owner.profile, email: null, name: "Guest" },
+    } as PlatformSessionIdentity;
+    const value = await test.service.submit(phoneOnly, {
+      ...details, email: "owner@example.com", legalName: "Amina Yusuf",
+    });
+    expect(value).toEqual({ state: "identity_validation_pending" });
+    expect(test.calls.filter(x => x === "POST /customer")).toHaveLength(1);
+    expect(await test.service.read(phoneOnly))
+      .toEqual({ state: "identity_validation_pending" });
+    test.setIdentified(true);
+    expect(await test.service.read(phoneOnly))
+      .toEqual({ state: "ready_for_bank_account" });
+    await expect(test.service.read({
+      ...phoneOnly,
+      profile: { ...phoneOnly.profile, email: "other@example.com" },
+    })).rejects.toMatchObject({ code: "funding.identity_changed" });
+  });
 });
