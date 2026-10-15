@@ -7,6 +7,8 @@ on:
       - "packages/commerce/migrations/0123_msnw_p2p.sql"
       - "packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql"
       - "apps/mobile/lib/src/finance/msnw_p2p_screen.dart"
+      - "services/worker/src/jobs/msnw/p2p_notifications*"
+      - "packages/commerce/migrations/0127_msnw_p2p_notifications.sql"
       - ".github/workflows/msnw-p2p.yml"
   push:
     branches: [main]
@@ -48,12 +50,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: P2P Gateway and storage source tests
         run: pnpm exec vitest run services/gateway/src/p2p services/gateway/src/modules/home_feed/object_store.test.ts
-      - name: Gateway production compilation and TypeScript
+      - name: Gateway and Worker P2P source tests
+        run: pnpm exec vitest run services/worker/src/jobs/msnw/p2p_notifications.test.ts
+      - name: Gateway and Worker production compilation and TypeScript
         run: |
           pnpm --filter @masanawa/gateway-service... build
+          pnpm --filter @masanawa/worker-service... build
           pnpm --filter @masanawa/gateway-service typecheck
+          pnpm --filter @masanawa/worker-service typecheck
       - name: Forward-only PostgreSQL escrow schema
         run: |
+          psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/events/migrations/0001_event_foundation.sql
           psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/commerce/migrations/0123_msnw_p2p.sql
           psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql
+          psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -f packages/commerce/migrations/0127_msnw_p2p_notifications.sql
           psql -h 127.0.0.1 -U postgres -d p2p_test -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM commerce.msnw_p2p_orders"
