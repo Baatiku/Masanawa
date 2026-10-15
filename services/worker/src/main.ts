@@ -17,6 +17,8 @@ import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
 import { createMsnwFundingObligationRecovery } from "./jobs/msnw/funding_obligations.js";
+import { createMsnwFinalityVerifier } from "./jobs/msnw/chain_finality.js";
+import { createMsnwCustodyIssuanceRuntime } from "./jobs/msnw/custody_issuance.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
   createWorkerApp,
@@ -114,6 +116,7 @@ export async function startWorkerService(
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -159,6 +162,26 @@ export async function startWorkerService(
         event: "msnw_funding_obligations.retry", reason: "batch_failed",
       }) + "\n"),
     });
+    // Finalized MSNW issuance can be read without a mint private key. Full
+    // verified chain configuration is mandatory before starting the job.
+    const msnwChainSettings = [env.MSNW_CHAIN_ID,env.MSNW_TOKEN_CONTRACT,
+      env.MSNW_RPC_URL,env.MSNW_CUSTODY_ADDRESS,
+      env.MSNW_TOKEN_BYTECODE_SHA256];
+    if (msnwChainSettings.every(value => value?.trim())) {
+      const verifier = createMsnwFinalityVerifier({
+        chainId: env.MSNW_CHAIN_ID!,contract: env.MSNW_TOKEN_CONTRACT!,
+        custody: env.MSNW_CUSTODY_ADDRESS!,rpcUrl: env.MSNW_RPC_URL!,
+        bytecodeSha256: env.MSNW_TOKEN_BYTECODE_SHA256!,
+      });
+      const issuer = createMsnwCustodyIssuanceRuntime({pool:database.pool,verifier});
+      msnwFinality = createYouTubeOutboxScheduler({
+        runOnce: issuer.runOnce,enabled:() => !drain.isDraining(),
+        intervalMs: 30000,
+        onError: () => process.stderr.write(JSON.stringify({
+          event: "msnw_issuance.recovery_pending",reason:"verification_or_ledger_failed",
+        }) + "\n"),
+      });
+    }
     // Consume the existing authorized YouTube reconciliation outbox with the
     // existing PostgreSQL fence/lease/quota controls. Without credentials,
     // the feature is unavailable, not a fake successful synchronization.
@@ -227,6 +250,8 @@ export async function startWorkerService(
         await youtubeOutbox?.stop();
         await feedPublisher?.stop();
         await msnwObligationRecovery?.stop();
+    await msnwFinality?.stop();
+        await msnwFinality?.stop();
         await roomNotices?.stop();
         await roomReview?.stop();
         await database.close();
@@ -239,6 +264,7 @@ export async function startWorkerService(
     youtubeOutbox?.start();
     feedPublisher?.start();
     msnwObligationRecovery?.start();
+    msnwFinality?.start();
     roomNotices?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
