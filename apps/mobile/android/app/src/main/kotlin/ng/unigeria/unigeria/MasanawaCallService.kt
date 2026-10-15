@@ -42,13 +42,16 @@ class MasanawaCallService : Service() {
         try {
             createChannel()
             val notification = createNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Android 14+ enforces the declared microphone FGS type.
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
                 )
             } else {
+                // Android 7-13 use the compatible 2-argument API; the
+                // microphone type was not consistently supported on 10-13.
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (_: SecurityException) {
