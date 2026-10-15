@@ -19,6 +19,7 @@ class MainActivity : FlutterActivity() {
     private var liveSampleRate: Int? = null
     private var deepLinkChannel: MethodChannel? = null
     private var callForegroundChannel: MethodChannel? = null
+    private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -52,26 +53,42 @@ class MainActivity : FlutterActivity() {
                         ) {
                             result.success(false)
                         } else {
-                            try {
-                                val service = Intent(this, MasanawaCallService::class.java).apply {
-                                    action = MasanawaCallService.ACTION_START
+                            // Group calls share one microphone with several
+                            // independent Masana Live sessions. Keep the
+                            // service until the *last* session releases it.
+                            val ready = if (activeCallOwners > 0) {
+                                true
+                            } else {
+                                try {
+                                    val service = Intent(
+                                        this, MasanawaCallService::class.java
+                                    ).apply {
+                                        action = MasanawaCallService.ACTION_START
+                                    }
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        startForegroundService(service)
+                                    } else {
+                                        startService(service)
+                                    }
+                                    true
+                                } catch (_: SecurityException) {
+                                    false
+                                } catch (_: RuntimeException) {
+                                    false
                                 }
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    startForegroundService(service)
-                                } else {
-                                    startService(service)
-                                }
-                                result.success(true)
-                            } catch (_: SecurityException) {
-                                result.success(false)
-                            } catch (_: RuntimeException) {
-                                result.success(false)
                             }
+                            if (ready) activeCallOwners++
+                            result.success(ready)
                         }
                     }
 
                     "stop" -> {
-                        stopService(Intent(this, MasanawaCallService::class.java))
+                        if (activeCallOwners > 0) {
+                            activeCallOwners--
+                            if (activeCallOwners == 0) {
+                                stopService(Intent(this, MasanawaCallService::class.java))
+                            }
+                        }
                         result.success(true)
                     }
 
@@ -251,6 +268,7 @@ class MainActivity : FlutterActivity() {
         deepLinkChannel = null
         callForegroundChannel?.setMethodCallHandler(null)
         callForegroundChannel = null
+        activeCallOwners = 0
         stopService(Intent(this, MasanawaCallService::class.java))
         super.onDestroy()
     }
