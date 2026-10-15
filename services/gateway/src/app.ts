@@ -65,6 +65,8 @@ import { registerWalletProjectionRoutes } from "./wallet_projection_routes.js";
 import { registerCreditTransferRoutes, registerGiftRoutes } from "./credit_transfer_routes.js";
 import { registerMsnBalanceRoutes, type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
 import { registerMsnFundingStatusRoutes, type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
+import { registerMsnwPaystackDvaRoutes } from "./msn_wallet/paystack_dva_routes.js";
+import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { registerTwinAttributionRoutes, registerCommissionPolicyAdminRoutes } from "./twin_attribution_routes.js";
 import { registerProviderValuationAdminRoutes } from "./provider_valuation_admin_routes.js";
 import { registerPaidVoiceRoutes, registerPaidVoiceSettlementRoutes } from "./paid_voice_routes.js";
@@ -167,6 +169,8 @@ export interface GatewayAppOptions {
   readonly msnBalance?: Readonly<{ authorizer: MsnBalanceAuthority; ledger: MsnBalanceReader }>;
   /** Funding-status read only, intentionally OFF until the staged schema is installed. */
   readonly msnFunding?: Readonly<{ authorizer: MsnBalanceAuthority; reader: MsnFundingStatusReader }>;
+  /** Paystack DVA is consent and KYC gated; it does not credit MSNW. */
+  readonly msnwPaystackDva?: MsnwPaystackDvaService;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -1622,6 +1626,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.msnFunding) {
     registerMsnFundingStatusRoutes(app, options.msnFunding);
+  }
+  if (options.msnwPaystackDva) {
+    registerMsnwPaystackDvaRoutes(app, options.msnwPaystackDva);
   }
 
   if (options.twinProduction) {
