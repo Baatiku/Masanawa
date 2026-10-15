@@ -44,7 +44,7 @@ describe("connected Status canonical session and feature registration",()=>{
  it("makes signed-in fan comments visible instead of forcing all into pending staff review",async()=>{
   const p=ports(),app=Fastify();
   const comment=vi.fn(async()=>({state:"visible",body:"Study question"}));
-  await registerStatusRuntime(app,{...p.options,feed:{...p.options.feed,comment} as never});
+  await registerStatusRuntime(app,{...p.options,feed:{list:p.list,comment} as never});
   const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
   const response=await app.inject({method:"POST",url:`/v1/posts/${id}/comments`,
     headers:{authorization:"Bearer valid","idempotency-key":"comment-unique01"},
@@ -60,7 +60,7 @@ describe("connected Status canonical session and feature registration",()=>{
   const p=ports(),app=Fastify();
   const comment=vi.fn(async()=>({state:"pending"}));
   const risk=vi.fn(async()=>true);
-  await registerStatusRuntime(app,{...p.options,feed:{...p.options.feed,comment} as never,
+  await registerStatusRuntime(app,{...p.options,feed:{list:p.list,comment} as never,
     isNewAccount:risk});
   const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
   await app.inject({method:"POST",url:`/v1/posts/${id}/comments`,
