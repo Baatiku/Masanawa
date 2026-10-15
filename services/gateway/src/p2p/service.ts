@@ -16,7 +16,7 @@ export interface P2pPool extends P2pQuery { connect(): Promise<P2pClient> }
  * Never implement these methods using legacy MSN, Credits or a P2P balance.
  */
 export interface MsnwEscrowAuthority {
-  reserve(tx: P2pQuery, input: { tenantId: string; sellerId: string; orderId: string; amountMicro: string }): Promise<void>;
+  reserve(tx: P2pQuery, input: { tenantId: string; sellerId: string; buyerId: string; orderId: string; amountMicro: string; feeMicro: string }): Promise<void>;
   release(tx: P2pQuery, input: { tenantId: string; sellerId: string; buyerId: string; orderId: string; amountMicro: string; feeMicro: string }): Promise<string>;
   refund(tx: P2pQuery, input: { tenantId: string; sellerId: string; orderId: string; amountMicro: string }): Promise<string>;
 }
@@ -273,7 +273,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         // The wallet authority MUST reserve confirmed MSNW in this transaction.
         // If absent, throw; no order or fabricated escrow survives.
         await escrow.reserve(tx,{tenantId:actor.tenantId,sellerId:String(offer.seller_id),
-          orderId,amountMicro:amounts.reservedMicro});
+          buyerId:actor.userId,orderId,amountMicro:amounts.amountMicro,feeMicro:amounts.feeMicro});
         await tx.query(`INSERT INTO commerce.msnw_p2p_orders
           (order_id,tenant_id,offer_id,seller_id,buyer_id,payment_method_id,
             amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key)
