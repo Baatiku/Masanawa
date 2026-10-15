@@ -2,8 +2,24 @@
 
 Date: 2026-10-15. Branch: `feat/msnw-p2p-escrow-20261015`.
 Baseline: `1d6d47fbd8065aa0ba6ee4d2cd94a3cfc4d338f4`.
-Status: **PARTIAL_IMPLEMENTATION**; P2P **must not** be advertised as funded, money-movable or provider-qualified until Workstream 1 supplies tested atomic MSNW custody/ledger authority.
+Status: **IMPLEMENTED_UNVERIFIED (source)** for canonical custody reservations/releases/refunds, private evidence, automatic escrow expiry, Wallet and notifications. **Real funded customer acceptance remains blocked by Workstream 1's qualified custody issuance and provider/chain finality.** Historical checklist below was the earlier baseline; latest authoritative statuses follow.
 This window owns P2P source only. Workstreams 1–3 remain with their independent owners. Legacy MSN/Cr/Credits are never a source of MSNW escrow.
+
+## Current owner checklist — authoritative 2026-10-15
+
+| Requirement | Current status | Source and remaining dependency |
+|---|---|---|
+| Offers, pricing, limits, payment methods | **IMPLEMENTED_UNVERIFIED** | Paystack verified seller beneficiary, account holder KYC match, exact BigInt price/fee, offer management: `p2p/bank_methods.ts`, `service.ts`, mobile Sell. Provider live acceptance remains external. |
+| Authenticated discovery, order creation, reservation and escrow | **IMPLEMENTED_UNVERIFIED** | Canonical `commerce.msnw_custody_accounts` available→reserved atomic transfer in `p2p/custody_escrow.ts` and `0128_msnw_p2p_custody.sql`. Real spendable funding still requires WS1 independently backed issuance. |
+| Buyer instructions, payment claims, live order status | **IMPLEMENTED_UNVERIFIED** | Verified account instructions, 30-minute deadline, owner/order-scoped claims and status, Flutter My Orders. Buyer screenshot/claim **never** releases custody. |
+| Authorized private evidence | **IMPLEMENTED_UNVERIFIED** | `p2p/evidence_storage.ts`, `ReplayObjectStore.putObject`, authenticated 2 MB media inspection, SHA-256, immutable reference, participant/admin 60-second links; Flutter attach/view; **requires dedicated configured private S3 bucket**. Does not verify buyer fiat receipt. |
+| Release, cancellation, expiry, refunds, disputes, admin adjudication | **IMPLEMENTED_UNVERIFIED** | Seller explicit confirmation, role-fenced admin release/refund; shared canonical SQL refund `0129_msnw_p2p_expiry.sql`; Worker auto polls bounded SKIP LOCKED overdue unpaid reservations, fails safely without funded reserve. Actual fiat receipt still depends seller's independently confirmed bank state or authorized admin evidence review. |
+| Fees, receipts, idempotency, ledger entries, recovery | **IMPLEMENTED_UNVERIFIED** | `0128_msnw_p2p_custody.sql` exact conservation/deferred stage posting assertions, platform fee liabilities, append-only journal/receipts, order idempotency and terminal fencing. Worker expiry and notifications retry. Requires real PG/provider qualification and reconciliation against WS1 issuance/chain supply. |
+| Customer mobile screens and admin dispute screens | **IMPLEMENTED_UNVERIFIED** | Mobile Buy/Sell/My Orders/Updates, payment evidence/receipts, admin operator evidence review and resolution, repaired pre-existing malformed Dart Sell section. No APK claimed. |
+| Wallet balances/activity/history/notifications | **IMPLEMENTED_UNVERIFIED** | Uses same canonical custody accounts as WS1 Send; authenticated P2P activity & inbox plus Worker FCM `notifications.p2p` outbox/Wallet deep link; no duplicate customer credit. Provider settlement/chain finality and live device notifications not qualified. |
+| Forward-only migrations, tests, operational recovery | **IN PROGRESS** | New PG18 integration `adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts`, Gateway/Worker Vitest, CI `.github/workflows/msnw-p2p.yml`. Source authored; CI runner has not supplied successful executable results. Financial records preserved. |
+
+**Dependency boundary:** live funded escrow requires Workstream 1 to prove genuine MSNW custody-backed issuance, on-chain configuration and reconciliation. Neither Paystack account verification nor buyer receipt image supplies fiat settlement proof. Staff may resolve a dispute only after human verification; no automated fiat payment claim issues or releases MSNW.
 
 ## Complete owner checklist
 
@@ -84,3 +100,13 @@ does not substitute for them. New source tests are authored but not executed.
 - Admin: `apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart` lets privileged dispute reviewers retrieve a private evidence URL for 60 seconds; raw S3 credentials/keys are not displayed.
 - Tests written: `services/gateway/src/p2p/evidence_storage.test.ts` checks valid upload, MIME spoof rejection, orphan cleanup and authorized download; `.github/workflows/msnw-p2p.yml` runs Gateway P2P Vitest, TypeScript/build and PostgreSQL 18 migration in PR CI.
 - **Status:** evidence upload/display source **implemented, execution pending CI**. To activate at runtime configure the dedicated private S3 bucket with server-only credentials and verified storage policy. Canonical reserve/release/refund and automatic Worker expiry still depend on actually backed MSNW custody; fiat claims/screenshots still must never release assets.
+
+## Latest source increment — canonical custody escrow, Worker expiry and notifications
+
+- Integrates directly with Workstream 1 `0127_msnw_custody_send.sql` and `msnw_custody_accounts`, not legacy MSN/Cr. Existing unfunded accounts begin at zero; P2P never seeds them. Corrects a malformed PL/pgSQL dollar-quote in WS1's new custody migration (otherwise unexecutable).
+- P2P custody migration `0128_msnw_p2p_custody.sql` adds seller available→reserved journaling and stage-specific deferred double-entry constraints; on release credits buyer available minus seller reserved and records platform fee liability; release cannot happen twice. `services/gateway/src/p2p/custody_escrow.ts` wires reserve/release into the established P2P transaction.
+- Shared PostgreSQL `commerce.msnw_p2p_refund_custody` in `0129_msnw_p2p_expiry.sql` is used by BOTH Gateway cancellations/disputes and automatic Worker expiry, preventing competing refund semantics. `commerce.msnw_p2p_expire_due_batch` locks overdue unpaid orders with SKIP LOCKED and atomically refunds/resets inventory, marks expired and emits immutable events. `services/worker/src/jobs/msnw/p2p_expiry.ts` runs every 20s through the existing scheduler.
+- `0127_msnw_p2p_notifications.sql` inserts tenant/customer-specific transition history plus canonical leased `events.outbox` records in the same order transaction. `services/worker/src/jobs/msnw/p2p_notifications.ts` uses existing FCM sender, customer membership and retries, and mobile Wallet routes notifications to its P2P Updates tab.
+- `adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts` seeds **isolated test-only** MSNW balances, verifies exact reservation, replay fencing, seller acknowledgment (buyer cannot confirm), conserved release and fee liability, refund and automatic expiry with buyer/seller outbox. No production data is seeded and no real funding is claimed.
+- User must qualify payment provider/live wallet mint custody, real PostgreSQL schema application, Android builds/devices and financial/FCM notifications before describing this as VERIFIED_E2E. Newly delivered source has not independently executed those external checks.
+
