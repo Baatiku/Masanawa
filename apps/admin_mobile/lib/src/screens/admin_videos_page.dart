@@ -17,6 +17,7 @@ class _AdminVideosPageState extends State<AdminVideosPage> {
   final List<AdminVideoItem> _items=[];
   String? _provider;
   String? _cursor;
+  bool _hasMore=true;
   bool _busy=false;
 
   void _notice(Object text){
@@ -27,6 +28,7 @@ class _AdminVideosPageState extends State<AdminVideosPage> {
     if(!mounted)return;
     setState((){
       _cursor=null;
+      _hasMore=true;
       _items.clear();
       _page=_api.list(provider:_provider);
       _sources=_api.listYouTubeSources();
@@ -42,6 +44,7 @@ class _AdminVideosPageState extends State<AdminVideosPage> {
       setState((){
         _items.addAll(next.items);
         _cursor=next.nextCursor;
+        _hasMore=next.nextCursor!=null;
       });
     }catch(e){_notice(e);}
     finally{if(mounted)setState(()=>_busy=false);}
@@ -204,7 +207,6 @@ class _AdminVideosPageState extends State<AdminVideosPage> {
         // Materialize only the current stable Future; do not append during
         // every rebuild or regenerate the continuation cursor.
         final first=snapshot.requireData;
-        final knownIds={for(final item in _items)item.id};
         final list=[...first.items,
           ..._items.where((item)=>!first.items.any((f)=>f.id==item.id))];
         if(list.isEmpty)return const Center(child:Text('No videos submitted.'));
@@ -237,7 +239,7 @@ class _AdminVideosPageState extends State<AdminVideosPage> {
                   ],
                 ),
               )),
-              if(first.nextCursor!=null||_cursor!=null)TextButton.icon(
+              if(_hasMore&&(first.nextCursor!=null||_cursor!=null))TextButton.icon(
                 onPressed:_busy?null:(){
                   if(_cursor==null)_cursor=first.nextCursor;
                   _more();
