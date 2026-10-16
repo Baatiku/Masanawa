@@ -652,19 +652,44 @@ class AiChatController extends Notifier<AiChatState> {
       state = state.copyWith(
         shellConfigs: {...state.shellConfigs, characterId: config},
       );
-      Map<String, List<ChatAttachment>> remoteMedia = const {};
+      // Message text, order and pending receipts must display immediately.
+      // Binary vault downloads (up to 32 MB) run independently of the chat's
+      // first paint, server turn reconciliation, and live event subscription.
+      _mergeServerHistory(characterId, history);
       if (transport is MasanawaAgentTransport) {
-        try {
-          remoteMedia = await _restorePrivateHistoryMedia(
-            characterId, history, transport,
-          );
-        } catch (_) {
-          // A broken/offline media vault must not hide text history.
-        }
+        final owner = _cacheOwnerId;
+        final ownerGeneration = _cacheGeneration;
+        unawaited(_restorePrivateHistoryMedia(
+          characterId, history, transport,
+        ).then((remoteMedia) {
+          if (_disposed || owner != _cacheOwnerId ||
+              ownerGeneration != _cacheGeneration ||
+              generation != _connectionGeneration ||
+              threadGeneration != (_threadGenerations[characterId] ?? 0) ||
+              remoteMedia.isEmpty) return;
+          final current = threadOf(characterId);
+          state = state.copyWith(threads: {
+            ...state.threads,
+            characterId: current.copyWith(messages: [
+              for (final message in current.messages)
+                if (message.isUser && message.requestId != null &&
+                    remoteMedia.containsKey(message.requestId))
+                  message.copyWith(
+                    attachment: remoteMedia[message.requestId]!.length == 1
+                        ? remoteMedia[message.requestId]!.first
+                        : message.attachment,
+                    attachments: remoteMedia[message.requestId]!.length > 1
+                        ? remoteMedia[message.requestId]!
+                        : message.attachments,
+                  )
+                else message,
+            ]),
+          });
+          unawaited(_save());
+        }).catchError((Object _) {
+          // Network failures leave text history and retryable media intact.
+        }));
       }
-      if (_disposed || generation != _connectionGeneration ||
-          threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
-      _mergeServerHistory(characterId, history, remoteMedia: remoteMedia);
       await _reconcilePendingTurns(characterId, transport);
       if (_disposed || generation != _connectionGeneration ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
