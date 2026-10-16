@@ -180,6 +180,7 @@ import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_eviden
 import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
 import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
+import { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
 import { createP2pService } from "./p2p/service.js";
 import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
 import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
@@ -1527,6 +1528,7 @@ export async function startGatewayService(
       ? env.NOWPAYMENTS_PAYOUT_FEE_MODE
       : undefined;
 
+  let composedMsnwConversion = options.appOptions?.msnwConversion;
   let composedFinancial = options.appOptions?.financial;
   if (
     !composedFinancial &&
@@ -1567,6 +1569,28 @@ export async function startGatewayService(
       withdrawalAllowlist.size > 0 &&
       env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE?.trim(),
     );
+
+    // Only qualified provider 2FA, fixed egress and a verified prefunded
+    // stablecoin treasury can buy crypto with existing custodied MSNW.
+    const msnwRate = env.MSNW_CONVERT_USD_MICRO_PER_MSNW?.trim();
+    if (!composedMsnwConversion && database.featurePool && msnBalanceAuthorizer &&
+        payout && custody && msnwRate &&
+        env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true" &&
+        env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true" &&
+        payoutFeeMode === "sender" && withdrawalAllowlist.size > 0 &&
+        env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE?.trim()) {
+      composedMsnwConversion = {
+        authorizer: msnBalanceAuthorizer,
+        service: createMsnwUsdtConversion({
+          pool: database.featurePool, payout, custody,
+          rateUsdMicroPerMsnw: msnwRate,
+          verificationCode: env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE.trim(),
+          enabledRoutes: withdrawalProviderCodes,
+          approvedDestination: (owner, route, address) =>
+            withdrawalAllowlist.has(owner.userId + "|" + route + "|" + address),
+        }),
+      };
+    }
 
     const runtimeEvidence = () => {
       if (!custody) throw new Error("nowpayments.custody.credentials_missing");
@@ -2591,6 +2615,7 @@ export async function startGatewayService(
         : {}),
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
+      ...(composedMsnwConversion ? {msnwConversion:composedMsnwConversion} : {}),
       ...(composedCustomerChannels
         ? { customerChannels: composedCustomerChannels }
         : {}),
