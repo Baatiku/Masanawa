@@ -66,6 +66,29 @@ export function createMsnwBillingFunding(input: Readonly<{
     });
   }
 
+  async function reservation(owner: Owner, quoteId: string) {
+    const result = await input.pool.query(
+      "SELECT fulfillment_reference,rate_kobo_per_msnw::text," +
+      "reserved_micro::text,state FROM commerce.msnw_billing_reservations " +
+      "WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3",
+      [owner.tenantId,owner.userId,quoteId],
+    );
+    const row=result.rows[0];
+    if(!row) return null;
+    if(typeof row.fulfillment_reference!=="string" ||
+       typeof row.rate_kobo_per_msnw!=="string" ||
+       typeof row.reserved_micro!=="string" ||
+       !atomic.test(row.reserved_micro) ||
+       !["reserved","fulfilled","refunded"].includes(row.state))
+      throw new MsnwBillingError("msnw.billing.reservation_corrupt",503);
+    return Object.freeze({
+      reference:row.fulfillment_reference,
+      rateKoboPerMsnw:row.rate_kobo_per_msnw,
+      amountMicro:row.reserved_micro,
+      state:row.state as "reserved" | "fulfilled" | "refunded",
+    });
+  }
+
   const funding: BillingFundingAuthority = {
     async reserveConfirmedBill(request) {
       if (!request.fulfillmentReference.startsWith("msnw-bill-") ||
@@ -220,5 +243,5 @@ export function createMsnwBillingFunding(input: Readonly<{
       } finally{ db.release(); }
     },
   };
-  return Object.freeze({funding,preview,ownedQuote});
+  return Object.freeze({funding,preview,ownedQuote,reservation});
 }
