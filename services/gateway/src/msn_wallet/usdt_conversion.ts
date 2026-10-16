@@ -162,6 +162,27 @@ export function createMsnwUsdtConversion(input: Readonly<{
     const idem=parameters.idempotencyKey;
     if(typeof idem!=="string" || !keyPattern.test(idem))
       throw new MsnwConversionError("msnw.convert.idempotency_invalid",400);
+    // Recover the original immutable order BEFORE requesting a fresh quote:
+    // a changed provider fee, expired quote or drained provider liquidity must
+    // never trigger another POST when an earlier withdrawal may exist.
+    const previous=await input.pool.query(
+      "SELECT conversion_id::text,provider_code,destination_address," +
+      "source_micro::text,target_micro::text,fee_estimate_micro::text," +
+      "rate_usd_micro_per_msnw::text FROM commerce.msnw_usdt_payouts " +
+      "WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3",
+      [owner.tenantId,owner.userId,idem],
+    );
+    if(previous.rowCount===1){
+      const item=previous.rows[0]!;
+      if(item.provider_code!==parameters.providerCode ||
+         item.destination_address!==parameters.destinationAddress ||
+         item.source_micro!==parameters.amountMicro ||
+         item.target_micro!==parameters.expectedTargetMicro ||
+         item.fee_estimate_micro!==parameters.expectedFeeMicro ||
+         item.rate_usd_micro_per_msnw!==parameters.expectedRateUsdMicroPerMsnw)
+        throw new MsnwConversionError("msnw.convert.idempotency_conflict",409);
+      return {conversionId:text(item.conversion_id),claimed:false};
+    }
     const quoted=await quote(owner,parameters);
     if(quoted.targetMicro!==parameters.expectedTargetMicro ||
        quoted.feeEstimateMicro!==parameters.expectedFeeMicro ||
@@ -200,12 +221,12 @@ export function createMsnwUsdtConversion(input: Readonly<{
         "AND state IN ('reserved','submitting','awaiting_verification','processing','manual_review')",
         [quoted.providerCode],
       );
-      if(parseStableMicro(stableDecimal(BigInt(text(outstanding.rows[0]?.queued))))<0n){
+      const queued = text(outstanding.rows[0]?.queued);
+      if(!/^(0|[1-9][0-9]*)$/.test(queued))
         throw new MsnwConversionError("msnw.convert.pending_liquidity_invalid",503);
-      }
       // In addition to the preflight provider quote, serialize provider
       // treasury commitments and reject overcommitment across requests.
-      if(BigInt(text(outstanding.rows[0]?.queued)) +
+      if(BigInt(queued) +
          BigInt(quoted.targetMicro)+BigInt(quoted.feeEstimateMicro) >
          parseStableMicro((await input.custody.readBalances())
            .find(x=>x.currency===quoted.providerCode)?.available??"0"))
