@@ -1,3 +1,4 @@
+import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import { RoomError } from "@masanawa/rooms";
 import {
@@ -865,6 +866,11 @@ export async function startGatewayService(
       apiKey: alphaGeminiApiKey,
       model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
+      fallback: createGeminiRecordedLiveAudioRenderer({
+        apiKey: alphaGeminiApiKey,
+        model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
+        voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
+      }),
     });
     liveVoiceTokens = createGeminiLiveTokenService({
       apiKey: alphaGeminiApiKey,
@@ -1345,6 +1351,11 @@ export async function startGatewayService(
         apiKey: liveApiKey,
         model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
         voiceName: liveVoice,
+        fallback: createGeminiRecordedLiveAudioRenderer({
+          apiKey: liveApiKey,
+          model: liveModel,
+          voiceName: liveVoice,
+        }),
       });
       if (conversationAuthorizer) {
         liveVoiceTokens = createGeminiLiveTokenService({
