@@ -83,7 +83,7 @@ async function post(tx:P2pQuery, input:{
   return receiptRef;
 }
 export function createMsnwP2pCustodyEscrow():MsnwEscrowAuthority {
-  return Object.freeze({
+  return Object.freeze<MsnwEscrowAuthority>({
     async reserve(tx,input) {
       guard(input.orderId,input.tenantId,input.sellerId,input.buyerId);
       const principal=micros(input.amountMicro),fee=micros(input.feeMicro,true);

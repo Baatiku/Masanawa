@@ -175,7 +175,10 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
 
   return Object.freeze({
     sessions: input.sessions, read,
-    async handleProviderIdentification(eventName, data) {
+    async handleProviderIdentification(
+      eventName: "customeridentification.success" | "customeridentification.failed",
+      data: unknown,
+    ): Promise<boolean> {
       if (!data || typeof data !== "object" || Array.isArray(data))
         throw new MsnwEnrollmentError("funding.identity_event_invalid", 400);
       const detail = data as Record<string, unknown>;
@@ -211,14 +214,15 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
           (identification as { type?: unknown }).type !== "bank_account")
         throw new MsnwEnrollmentError("funding.identity_event_invalid", 400);
       if (owner.state !== "validating" && owner.state !== "verified") return false;
-      await qualify({ tenantId: owner.tenant_id, userId: owner.user_id }, {
+      await qualify({ tenantId: owner.tenant_id as Identity["tenantId"],
+        userId: owner.user_id as Identity["userId"] }, {
         state: owner.state as string, email: owner.email as string,
         phone: owner.phone as string, legal_name: owner.legal_name as string,
         customer_id: id, customer_code: code,
       }, owner.email as string);
       return true;
     },
-    async submit(identity: Identity, supplied: unknown) {
+    async submit(identity: Identity, supplied: unknown): Promise<EnrollmentStatus> {
       if (!supplied || typeof supplied !== "object" || Array.isArray(supplied))
         throw new MsnwEnrollmentError("funding.bank_identity_invalid", 400);
       const body = supplied as Record<string, unknown>;

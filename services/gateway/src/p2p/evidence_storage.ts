@@ -24,7 +24,7 @@ export function createP2pEvidenceStorage(input:{
   readonly service:P2pService;
 }):P2pEvidenceStorage {
   if(!input.objects.putObject)throw new P2pError("p2p.evidence_storage_unavailable",503);
-  return Object.freeze({
+  return Object.freeze<P2pEvidenceStorage>({
     async upload(actor,orderId,payload){
       if(!payload||typeof payload!=="object"||Array.isArray(payload))
         throw new P2pError("p2p.evidence_invalid",422);
