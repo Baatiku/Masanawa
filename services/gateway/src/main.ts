@@ -177,10 +177,11 @@ import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
+import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import { createP2pService } from "./p2p/service.js";
 import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
-import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
+import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import type {
@@ -2608,6 +2609,15 @@ export async function startGatewayService(
             rpcUrl: env.MSNW_RPC_URL,
           }) }
         : {}),
+      // Custodied MSNW transfers are enabled by the installed, zero-initial
+      // custody ledger; no legacy NGN/Cr/MSN source is accepted. A missing
+      // provider-backed issuance leaves every new account at zero available.
+      ...(database.featurePool && msnBalanceAuthorizer
+        ? { msnwCustody: {
+            authorizer: msnBalanceAuthorizer,
+            ledger: createMsnwCustodyService(database.featurePool),
+          } }
+        : {}),
       // Paystack verification is independent of MSNW issuance. Verified fiat
       // remains a pending obligation until custody/quote settlement.
       ...(env.PAYSTACK_SECRET_KEY?.trim() &&
@@ -2641,8 +2651,8 @@ export async function startGatewayService(
       // refund adapter. Never turn an on-chain balance read into a debit.
       ...(database.featurePool && msnBalanceAuthorizer
         ? { p2p: options.appOptions?.p2p ?? (() => {
-            // Reuse the same zero-initialized custody accounts as MSNW Send.
-            // No balances are manufactured and no legacy MSN is admitted.
+            // Reuse WS1's custody accounts and immutable MSNW backing proof.
+            // Escrow can only reserve genuinely available customer balances.
             const escrow=createMsnwP2pCustodyEscrow();
             const service = createP2pService(database.featurePool!, escrow);
             const evidenceStorage=configuredP2pEvidenceStorage(env,service);
