@@ -81,7 +81,7 @@ export function createMsnwBillingService(input: Readonly<{
     });
   }
   async function read(request:Readonly<{
-    authorizationHeader?:string; reference:string;
+    authorizationHeader?: string | undefined; reference:string;
   }>) {
     await owner(request.authorizationHeader);
     if(!/^msnw-bill-[A-Za-z0-9_-]{5,128}$/.test(request.reference))
