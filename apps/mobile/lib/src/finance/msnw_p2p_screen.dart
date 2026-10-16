@@ -283,7 +283,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     }
     if(chosenId==null||!mounted)return;
     final chosen=methods.where((item)=>'${item['method_id']}'==chosenId);
-    if(chosen.length!=1)throw StateError('Verified bank selection unavailable');
+    if(chosen.length!=1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Selected bank is no longer available. Refresh to retry.')));
+      return;
+    }
     final payment=chosen.single;
     final rate=await _field(title:'Sell MSNW',label:'NGN per MSNW',hint:'e.g. 1500.00');
     if(rate==null||!mounted)return;
@@ -310,8 +314,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     if(!await _confirm('Publish sell offer',
       'Buyer payments will go to ${payment['bank_name']} '
       '(${payment['account_name']}). '
-      'Price ${_ngn(rateKobo)} per MSNW. Your available MSNW will only '
-      'be reserved when a buyer creates a funded escrow order.'))return;
+      'Price ${_ngn(rateKobo)} per MSNW. Platform escrow fee: 0.5% of '
+      'MSNW sold, reserved with the principal and returned if cancelled. '
+      'Your available MSNW will only be reserved when a buyer '
+      'creates a funded escrow order.'))return;
     await _act(() async {
       await _request('POST','/offers',{
         'paymentMethodId':chosenId,
