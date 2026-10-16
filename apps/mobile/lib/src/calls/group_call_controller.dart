@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import '../agents/agent_shell.dart';
@@ -422,10 +423,20 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> accountChanged() => end();
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.detached) {
       unawaited(end());
+      return;
+    }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // Android's explicit foreground microphone service owns the ongoing
+      // call notification while the screen is locked. Native Masana member
+      // sessions stop their service at hangup. Non-Android/test/fake sessions
+      // retain conservative release behavior.
+      if (!Platform.isAndroid ||
+          !_sessions.values.any((session) => session is _NativeMember)) {
+        unawaited(end());
+      }
     }
   }
 
