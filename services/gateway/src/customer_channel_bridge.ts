@@ -1,5 +1,6 @@
 import {
   createCanonicalId,
+  parseCanonicalId,
   type CharacterId,
 } from "@masanawa/contracts";
 import type {
@@ -271,6 +272,12 @@ export function createCustomerChannelBridge(input: Readonly<{
       observedAt: instant(),
     }).catch(() => null);
 
+    // Phone lookup is supplementary, never authority to replace the linked
+    // account (for example after a phone reassignment or stale cache entry).
+    if (profile && (profile.tenantId !== link.tenantId || profile.userId !== link.userId)) {
+      throw new Error("channels.link_identity_mismatch");
+    }
+
     // Channel links are already foreign-keyed to an existing platform profile.
     // Resolve the durable profile directly from the link when a phone lookup is
     // unavailable by using a tiny synthetic identity only for issuing this
@@ -454,7 +461,9 @@ export function createCustomerChannelBridge(input: Readonly<{
           });
         }
 
-        const requestId = createCanonicalId("request");
+        // A provider retry must reconcile the original canonical turn, even
+        // when inference/spending finished before completeMessage persisted.
+        const requestId = parseCanonicalId("request", claim.requestId);
         const correlationId = createCanonicalId("correlation");
 
         const result = await withInternalSession(link, async (authorizationHeader) => {
@@ -558,3 +567,4 @@ export function createCustomerChannelBridge(input: Readonly<{
     },
   });
 }
+

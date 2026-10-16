@@ -121,7 +121,7 @@ describe("Customer channel bridge", () => {
     let link: any = null;
     const channels = {
       async claimMessage() {
-        return { state: "claimed" as const };
+        return { state: "claimed" as const, requestId: createCanonicalId("request") };
       },
       async readLink() {
         return null;
@@ -230,7 +230,7 @@ describe("Customer channel bridge", () => {
     } as unknown as PlatformSessionRepository;
     let link: any = null;
     const channels = {
-      async claimMessage() { return { state: "claimed" as const }; },
+      async claimMessage() { return { state: "claimed" as const, requestId: createCanonicalId("request") }; },
       async readLink() { return null; },
       async putLink(value: unknown) { link = value; },
       async setCharacterSession(value: unknown) { link = { ...link, ...(value as object) }; },
@@ -279,3 +279,4 @@ describe("Customer channel bridge", () => {
   });
 
 });
+

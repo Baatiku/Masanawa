@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { createCanonicalId, parseCanonicalId } from "@masanawa/contracts";
 import { withTransaction } from "../transaction.js";
 import {
   normalizeCustomerChannelLink,
@@ -102,31 +103,39 @@ export function createPostgresCustomerChannelRepository(
     async claimMessage(input: ClaimMessageInput) {
       const inserted = await pool.query(
         `INSERT INTO security.customer_channel_messages(
-           channel,message_id,external_user_id,state,reply,received_at,updated_at
-         ) VALUES ($1,$2,$3,'processing',NULL,$4,$4)
+           channel,message_id,external_user_id,state,reply,received_at,updated_at,request_id
+         ) VALUES ($1,$2,$3,'processing',NULL,$4,$4,$5)
          ON CONFLICT (channel,message_id) DO NOTHING
-         RETURNING message_id`,
-        [input.channel,input.messageId,input.externalUserId,input.receivedAt],
+         RETURNING request_id`,
+        [input.channel,input.messageId,input.externalUserId,input.receivedAt,createCanonicalId("request")],
       );
       if (inserted.rowCount === 1) {
-        return Object.freeze({ state: "claimed" as const, reply: null });
+        return Object.freeze({ state: "claimed" as const, reply: null,
+          requestId:parseCanonicalId("request",inserted.rows[0]!.request_id) });
       }
-      const existing = await pool.query<{ state: string; reply: string | null }>(
-        `SELECT state,reply FROM security.customer_channel_messages
+      const existing = await pool.query<{ state: string; reply: string | null; external_user_id:string;request_id:string|null }>(
+        `SELECT state,reply,external_user_id,request_id FROM security.customer_channel_messages
           WHERE channel=$1 AND message_id=$2`,
         [input.channel,input.messageId],
       );
       const row = existing.rows[0];
+      if (!row || row.external_user_id !== input.externalUserId)
+        throw new Error("customer_channel.message_owner_mismatch");
       if (row?.state === "failed") {
+        // Old failed receipts may already have executed a financial turn.
+        // Never invent a replacement identity for an unknown legacy outcome.
+        if (!row.request_id) throw new Error("customer_channel.legacy_request_requires_reconciliation");
+        parseCanonicalId("request",row.request_id);
         const reclaimed = await pool.query(
           `UPDATE security.customer_channel_messages
               SET state='processing',reply=NULL,updated_at=$3
-            WHERE channel=$1 AND message_id=$2 AND state='failed'
-            RETURNING message_id`,
-          [input.channel,input.messageId,input.receivedAt],
+            WHERE channel=$1 AND message_id=$2 AND state='failed' AND external_user_id=$4
+            RETURNING request_id`,
+          [input.channel,input.messageId,input.receivedAt,input.externalUserId],
         );
         if (reclaimed.rowCount === 1) {
-          return Object.freeze({ state: "claimed" as const, reply: null });
+          return Object.freeze({ state: "claimed" as const, reply: null,
+            requestId:parseCanonicalId("request",reclaimed.rows[0]!.request_id) });
         }
       }
       return Object.freeze({
@@ -168,3 +177,4 @@ export function createPostgresCustomerChannelRepository(
     },
   });
 }
+

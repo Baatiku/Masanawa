@@ -19,10 +19,14 @@ export interface CustomerChannelLink {
   readonly updatedAt: string;
 }
 
-export interface CustomerChannelMessageClaim {
-  readonly state: "claimed" | "completed" | "delivered" | "processing";
-  readonly reply: string | null;
-}
+export type CustomerChannelMessageClaim = Readonly<{
+  state: "claimed";
+  reply: null;
+  requestId: import("@masanawa/contracts").CanonicalId<"request">;
+}> | Readonly<{
+  state: "completed" | "delivered" | "processing";
+  reply: string | null;
+}>;
 
 export interface CustomerChannelRepository {
   readLink(input: Readonly<{
@@ -92,3 +96,4 @@ export function normalizeCustomerChannelLink(
     updatedAt: input.updatedAt,
   });
 }
+
