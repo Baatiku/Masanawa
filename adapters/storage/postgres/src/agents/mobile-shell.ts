@@ -95,7 +95,10 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
             row.kind !== input.kind ||
             row.user_text !== input.userText ||
             row.payload_hash !== input.payloadHash) {
-          throw new Error("mobile turn request conflict");
+          throw Object.assign(new Error("mobile turn request conflict"), {
+            statusCode: 409,
+            code: "agents.turn_request_conflict",
+          });
         }
         return Object.freeze({ state: "existing" as const, command: command(row) });
       });
@@ -420,3 +423,4 @@ export function createPostgresMobileAgentActivityRepository(
     },
   });
 }
+

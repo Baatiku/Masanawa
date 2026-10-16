@@ -52,3 +52,18 @@ describe("safe Gemini connection failures", () => {
     }
   });
 });
+
+// Provider rejection diagnostics must use a fixed vocabulary, never raw text.
+it.each([
+  ['Unknown name "voice" at generation_config.speech_config: private-key', 'UNKNOWN_FIELD', 'voice'],
+  ['Voice Bodi is not supported. secret-prompt', 'UNSUPPORTED', 'voice'],
+  ['Model does not support audio output. secret-prompt', 'UNSUPPORTED', 'audio'],
+])('classifies rejected speech safely: %s', async (message, kind, field) => {
+  const log=vi.spyOn(console,'error').mockImplementation(()=>{});
+  try {
+    await geminiFailure(Response.json({error:{status:'INVALID_ARGUMENT',message}},{status:400}),'speech');
+    const entry=JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(entry.rejection).toEqual({kind,field});
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-key|secret-prompt|Bodi/);
+  } finally {log.mockRestore();}
+});
