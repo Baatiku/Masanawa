@@ -442,7 +442,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
     required Uint8List bytes,
   }) async {
     if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024 ||
-        slot < 0 || slot > 7) {
+        slot < 0 || slot > 8) {
       throw const ApiException('Attachment exceeds the private media limit');
     }
     await _client.post('/agent/media/${Uri.encodeComponent(requestId)}/$slot', {
