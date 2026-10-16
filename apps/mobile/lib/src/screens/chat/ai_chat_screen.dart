@@ -2058,6 +2058,27 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       session = LiveVoiceSession(
         grant: grant,
         characterName: agent.displayName,
+        renewConnectionGrant: () async {
+          final active = reporter.captureOwner();
+          if (!mounted || active?.accountId != owner.accountId ||
+              (paidAdmission != null &&
+               !DateTime.now().isBefore(paidAdmission.expiresAt))) {
+            throw StateError('The original call admission is no longer active.');
+          }
+          // A new short-lived connection grant is NOT another call. Retain
+          // the original paid admission, account and history lifecycle.
+          return shellTransport is MasanawaAgentTransport
+              ? shellTransport.mintLiveVoiceGrantPinned(
+                  agent.characterId,
+                  accessToken: active!.accessToken,
+                  admissionId: paidAdmission?.admissionId,
+                )
+              : shellTransport.mintLiveVoiceGrant(
+                  agent.characterId,
+                  admissionId: paidAdmission?.admissionId,
+                  purpose: 'conversation',
+                );
+        },
         onConnected: history.connected,
         onClosed: history.closed,
         captureInputTranscription: false,
@@ -2284,6 +2305,27 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       session = LiveVoiceSession(
         grant: grant,
         characterName: agent.displayName,
+        renewConnectionGrant: () async {
+          final active = reporter.captureOwner();
+          if (!mounted || active?.accountId != owner.accountId ||
+              (paidAdmission != null &&
+               !DateTime.now().isBefore(paidAdmission.expiresAt))) {
+            throw StateError('The original call admission is no longer active.');
+          }
+          // A new short-lived connection grant is NOT another call. Retain
+          // the original paid admission, account and history lifecycle.
+          return shellTransport is MasanawaAgentTransport
+              ? shellTransport.mintLiveVoiceGrantPinned(
+                  agent.characterId,
+                  accessToken: active!.accessToken,
+                  admissionId: paidAdmission?.admissionId,
+                )
+              : shellTransport.mintLiveVoiceGrant(
+                  agent.characterId,
+                  admissionId: paidAdmission?.admissionId,
+                  purpose: 'conversation',
+                );
+        },
         onConnected: history.connected,
         onClosed: history.closed,
         endAt: paidAdmission?.expiresAt,
