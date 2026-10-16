@@ -10,6 +10,22 @@ const inbound = {
   receivedAt: "2026-10-16T00:00:00.000Z",
 };
 describe("durable channel request identity", () => {
+  it("recovers an expired processing lease with the same original request identity",async()=>{
+    const requestId=createCanonicalId("request");
+    const query=vi.fn().mockResolvedValueOnce({rowCount:0,rows:[]})
+      .mockResolvedValueOnce({rowCount:1,rows:[{state:"processing",reply:null,external_user_id:"123",request_id:requestId}]})
+      .mockResolvedValueOnce({rowCount:1,rows:[{request_id:requestId}]});
+    const repository=createPostgresCustomerChannelRepository({query} as unknown as Pool);
+    expect(await repository.claimMessage(inbound)).toEqual({state:"claimed",reply:null,requestId});
+  });
+  it("does not reclaim a processing lease that the database reports still active",async()=>{
+    const requestId=createCanonicalId("request");
+    const query=vi.fn().mockResolvedValueOnce({rowCount:0,rows:[]})
+      .mockResolvedValueOnce({rowCount:1,rows:[{state:"processing",reply:null,external_user_id:"123",request_id:requestId}]})
+      .mockResolvedValueOnce({rowCount:0,rows:[]});
+    const repository=createPostgresCustomerChannelRepository({query} as unknown as Pool);
+    expect(await repository.claimMessage(inbound)).toEqual({state:"processing",reply:null});
+  });
   it("requires reconciliation for legacy failed receipts with unknown turn identity",async()=>{
     const query=vi.fn().mockResolvedValueOnce({rowCount:0,rows:[]}).mockResolvedValueOnce({rowCount:1,rows:[{state:"failed",reply:null,external_user_id:"123",request_id:null}]});
     const repository=createPostgresCustomerChannelRepository({query} as unknown as Pool);

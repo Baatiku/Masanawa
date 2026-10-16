@@ -121,7 +121,7 @@ export function createPostgresCustomerChannelRepository(
       const row = existing.rows[0];
       if (!row || row.external_user_id !== input.externalUserId)
         throw new Error("customer_channel.message_owner_mismatch");
-      if (row?.state === "failed") {
+      if (row.state === "failed" || (row.state === "processing" && row.request_id)) {
         // Old failed receipts may already have executed a financial turn.
         // Never invent a replacement identity for an unknown legacy outcome.
         if (!row.request_id) throw new Error("customer_channel.legacy_request_requires_reconciliation");
@@ -129,7 +129,9 @@ export function createPostgresCustomerChannelRepository(
         const reclaimed = await pool.query(
           `UPDATE security.customer_channel_messages
               SET state='processing',reply=NULL,updated_at=$3
-            WHERE channel=$1 AND message_id=$2 AND state='failed' AND external_user_id=$4
+            WHERE channel=$1 AND message_id=$2 AND external_user_id=$4
+              AND (state='failed' OR (state='processing'
+                AND updated_at<=clock_timestamp()-interval '5 minutes'))
             RETURNING request_id`,
           [input.channel,input.messageId,input.receivedAt,input.externalUserId],
         );
