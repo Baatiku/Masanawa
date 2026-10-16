@@ -111,10 +111,7 @@ import {
   CustomerAuthError,
   type CustomerAuthService,
 } from "./customer_auth.js";
-import {
-  admitTelemetryCorrelation,
-  injectCorrelationHeaders,
-} from "@masanawa/telemetry";
+import { registerGatewayRequestCorrelation } from "./request_correlation.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Type from "typebox";
 import { registerCallHistoryRoutes } from "./call_history/routes.js";
@@ -438,27 +435,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     });
   });
 
-  app.addHook("onRequest", async (request, reply) => {
-    const correlation = admitTelemetryCorrelation({
-      carrier: {
-        ...(request.headers.traceparent !== undefined
-          ? { traceparent: request.headers.traceparent }
-          : {}),
-        ...(request.headers["x-request-id"] !== undefined
-          ? { "x-request-id": request.headers["x-request-id"] }
-          : {}),
-        ...(request.headers["x-correlation-id"] !== undefined
-          ? { "x-correlation-id": request.headers["x-correlation-id"] }
-          : {}),
-      },
-    });
-    const headers = injectCorrelationHeaders(correlation);
-
-    request.headers.traceparent = headers.traceparent;
-    request.headers["x-request-id"] = headers["x-request-id"];
-    request.headers["x-correlation-id"] = headers["x-correlation-id"];
-    reply.headers(headers);
-  });
+  registerGatewayRequestCorrelation(app);
 
 
   if (options.accountDeletion) {
