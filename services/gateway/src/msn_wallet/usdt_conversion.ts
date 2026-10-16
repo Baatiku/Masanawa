@@ -26,6 +26,8 @@ export function parseStableMicro(value: unknown, rounding: "down"|"up" = "down")
   if (typeof value !== "string" || !/^(?:0|[1-9][0-9]{0,23})(?:\.[0-9]{1,18})?$/.test(value))
     throw new MsnwConversionError("msnw.convert.provider_amount_invalid",503);
   const [whole = "0",fraction = ""] = value.split(".");
+  if (/[1-9]/.test(fraction.slice(6)) && rounding === "down")
+    throw new MsnwConversionError("msnw.convert.provider_precision_invalid",503);
   const exact = BigInt(whole)*1000000n+BigInt((fraction.slice(0,6)).padEnd(6,"0")||"0");
   return rounding === "up" && /[1-9]/.test(fraction.slice(6)) ? exact+1n : exact;
 }
