@@ -8,6 +8,7 @@ on:
       - "packages/commerce/migrations/0124_msnw_p2p_bank_verification.sql"
       - "apps/mobile/lib/src/finance/msnw_p2p_screen.dart"
       - "services/worker/src/jobs/msnw/p2p_notifications*"
+      - "services/worker/src/jobs/msnw/p2p_reconciliation*"
       - "packages/commerce/migrations/0127_msnw_p2p_notifications.sql"
       - "packages/commerce/migrations/0127_msnw_custody_send.sql"
       - "packages/commerce/migrations/0128_msnw_p2p_custody.sql"
@@ -54,7 +55,7 @@ jobs:
       - name: P2P Gateway and storage source tests
         run: pnpm exec vitest run services/gateway/src/p2p services/gateway/src/modules/home_feed/object_store.test.ts
       - name: Gateway and Worker P2P source tests
-        run: pnpm exec vitest run services/worker/src/jobs/msnw/p2p_notifications.test.ts
+        run: pnpm exec vitest run services/worker/src/jobs/msnw/p2p_notifications.test.ts services/worker/src/jobs/msnw/p2p_reconciliation.test.ts
       - name: Gateway and Worker production compilation and TypeScript
         run: |
           pnpm --filter @masanawa/gateway-service... build

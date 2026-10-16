@@ -15,6 +15,7 @@ import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
 import { createP2pNoticeRuntime } from "./jobs/msnw/p2p_notifications.js";
 import { createP2pExpiryRuntime } from "./jobs/msnw/p2p_expiry.js";
+import { createP2pCustodyReconciliation } from "./jobs/msnw/p2p_reconciliation.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
@@ -120,6 +121,7 @@ export async function startWorkerService(
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pExpiry: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let p2pAudit: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwMerchantSettlements: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
@@ -273,6 +275,25 @@ export async function startWorkerService(
         event:"p2p.expiry.retry",reason:"batch_failed",
       })+"\n"),
     });
+    // A financial mismatch must be visible to operations, never silently
+    // repaired by creating balances or retrying completed payouts.
+    const audit=createP2pCustodyReconciliation(database.pool);
+    p2pAudit=createYouTubeOutboxScheduler({
+      runOnce:async()=>{
+        const result=await audit.runOnce();
+        if(result.inconsistentOrders>0 || result.underReservedSellers>0 ||
+            result.undeliveredDeadLetters>0){
+          process.stderr.write(JSON.stringify({
+            event:"p2p.custody_reconciliation.alert",...result,
+          })+"\\n");
+        }
+      },
+      enabled:()=>!drain.isDraining(),
+      intervalMs:60000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"p2p.custody_reconciliation.retry",reason:"audit_unavailable",
+      })+"\\n"),
+    });
     app = appFactory({
       ...(options.appOptions ?? {}),
       readinessChecks: [
@@ -306,6 +327,7 @@ export async function startWorkerService(
         await roomNotices?.stop();
         await p2pNotices?.stop();
         await p2pExpiry?.stop();
+        await p2pAudit?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -322,6 +344,7 @@ export async function startWorkerService(
     roomNotices?.start();
     p2pNotices?.start();
     p2pExpiry?.start();
+    p2pAudit?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
@@ -329,6 +352,9 @@ export async function startWorkerService(
     await msnwMerchantSettlements?.stop();
     await msnwFinality?.stop();
     await roomNotices?.stop();
+    await p2pNotices?.stop();
+    await p2pExpiry?.stop();
+    await p2pAudit?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
