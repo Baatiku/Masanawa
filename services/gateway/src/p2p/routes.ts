@@ -111,6 +111,12 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return reply.code(result.replay?200:201).send(result);
     }catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/orders/:orderId/receipt",async(req,reply)=>{
+    try {
+      return await deps.service.receipt(await actor(req.headers.authorization),
+        (req.params as {orderId:string}).orderId);
+    } catch(error) { return respond(error,reply); }
+  });
   app.get("/v1/wallet/msnw/p2p/orders/:orderId",async(req,reply)=>{
     try{
       const a=await actor(req.headers.authorization);
