@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/admin_api.dart';
 import '../core/admin_auth_api.dart';
@@ -32,6 +33,22 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       .map((e)=>Map<String,dynamic>.from(e as Map)).toList();
   }
   void _reload()=>setState(()=>_disputes=_load());
+  Future<void> _copyPrivateEvidenceLink(String orderId,String evidenceId) async {
+    try {
+      final response=await _dio.get<dynamic>(
+        '$_base/v1/admin/msnw/p2p/disputes/$orderId/evidence/$evidenceId',
+        options:_auth);
+      final data=Map<String,dynamic>.from(response.data as Map);
+      final url='${data['url'] ?? ''}';
+      if(!url.startsWith('https://'))throw StateError('Evidence not available');
+      await Clipboard.setData(ClipboardData(text:url));
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Private evidence link copied; it expires in 60 seconds.')));
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Unable to access evidence: $error')));
+    }
+  }
   Future<void> _inspect(Map<String,dynamic> order) async {
     final id='${order['order_id']}';
     await showModalBottomSheet<void>(context:context,isScrollControlled:true,
@@ -61,8 +78,14 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
               if(evidence.isEmpty)const Text('No evidence attached.'),
               for(final entry in evidence)
                 ListTile(leading:const Icon(Icons.attachment_outlined),
-                  title:Text('${(entry as Map)['object_ref']}'),
-                  subtitle:Text('Submitted by ${entry['submitted_by']}\nSHA-256: ${entry['sha256']}')),
+                  title:Text('Evidence ${(entry as Map)['evidence_id']}'),
+                  subtitle:Text('Submitted by ${entry['submitted_by']}\\nSHA-256: ${entry['sha256']}'),
+                  trailing:IconButton(
+                    icon:const Icon(Icons.copy_outlined),
+                    tooltip:'Copy 60-second private evidence link',
+                    onPressed:()=>_copyPrivateEvidenceLink(
+                      id,'${entry['evidence_id']}')),
+                ),
               const SizedBox(height:12),
               Text('Audit events (${events.length})',
                 style:Theme.of(ctx).textTheme.titleMedium),

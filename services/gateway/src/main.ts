@@ -178,7 +178,9 @@ import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_custo
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
-import { createP2pService, P2pError, type MsnwEscrowAuthority } from "./p2p/service.js";
+import { createP2pService } from "./p2p/service.js";
+import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
+import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
 import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
@@ -2649,14 +2651,14 @@ export async function startGatewayService(
       // refund adapter. Never turn an on-chain balance read into a debit.
       ...(database.featurePool && msnBalanceAuthorizer
         ? { p2p: options.appOptions?.p2p ?? (() => {
-            const escrow: MsnwEscrowAuthority = {
-              async reserve() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-              async release() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-              async refund() { throw new P2pError("p2p.msnw_custody_not_configured",503); },
-            };
+            // Reuse WS1's custody accounts and immutable MSNW backing proof.
+            // Escrow can only reserve genuinely available customer balances.
+            const escrow=createMsnwP2pCustodyEscrow();
             const service = createP2pService(database.featurePool!, escrow);
+            const evidenceStorage=configuredP2pEvidenceStorage(env,service);
             return {
               service,
+              ...(evidenceStorage ? { evidenceStorage } : {}),
               ...(env.PAYSTACK_SECRET_KEY?.trim()
                 ? { bankMethods: createVerifiedP2pBankMethods({
                     pool: database.featurePool!,

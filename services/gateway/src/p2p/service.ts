@@ -16,7 +16,7 @@ export interface P2pPool extends P2pQuery { connect(): Promise<P2pClient> }
  * Never implement these methods using legacy MSN, Credits or a P2P balance.
  */
 export interface MsnwEscrowAuthority {
-  reserve(tx: P2pQuery, input: { tenantId: string; sellerId: string; orderId: string; amountMicro: string }): Promise<void>;
+  reserve(tx: P2pQuery, input: { tenantId: string; sellerId: string; buyerId: string; orderId: string; amountMicro: string; feeMicro: string }): Promise<void>;
   release(tx: P2pQuery, input: { tenantId: string; sellerId: string; buyerId: string; orderId: string; amountMicro: string; feeMicro: string }): Promise<string>;
   refund(tx: P2pQuery, input: { tenantId: string; sellerId: string; orderId: string; amountMicro: string }): Promise<string>;
 }
@@ -220,6 +220,17 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         WHERE tenant_id=$1 AND order_id=$2)`, [actor.tenantId,orderId]));
       return { ...order, payment: method };
     },
+    async notifications(actor:P2pActor) {
+      // The outbox is durable and tenant/user-scoped; processing push attempts
+      // must never delete a customer's in-app order notification.
+      const result=await pool.query(`SELECT event_id,order_id,action,state,created_at,
+        processed_at,delivered
+        FROM commerce.msnw_p2p_notifications
+        WHERE tenant_id=$1 AND user_id=$2
+        ORDER BY created_at DESC,event_id DESC LIMIT 50`,
+        [actor.tenantId,actor.userId]);
+      return result.rows;
+    },
     async orders(actor: P2pActor) {
       const r = await pool.query(`SELECT order_id,offer_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,
@@ -262,7 +273,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         // The wallet authority MUST reserve confirmed MSNW in this transaction.
         // If absent, throw; no order or fabricated escrow survives.
         await escrow.reserve(tx,{tenantId:actor.tenantId,sellerId:String(offer.seller_id),
-          orderId,amountMicro:amounts.reservedMicro});
+          buyerId:actor.userId,orderId,amountMicro:amounts.amountMicro,feeMicro:amounts.feeMicro});
         await tx.query(`INSERT INTO commerce.msnw_p2p_orders
           (order_id,tenant_id,offer_id,seller_id,buyer_id,payment_method_id,
             amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key)
@@ -376,6 +387,39 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         if(changed) expired++;
       }
       return {expired};
+    },
+    async assertEvidenceAllowed(actor:P2pActor, orderId:string) {
+      const result=await pool.query(`SELECT 1 FROM commerce.msnw_p2p_orders
+        WHERE tenant_id=$1 AND order_id=$2 AND (seller_id=$3 OR buyer_id=$3)
+          AND state IN ('payment_claimed','disputed')`,
+        [actor.tenantId,id(orderId),actor.userId]);
+      if(!result.rowCount)throw new P2pError("p2p.evidence_forbidden",403);
+    },
+    async listEvidence(actor:P2pActor,orderId:string) {
+      // Keep historical evidence readable to either participant even after a
+      // completed/refunded dispute. The upload permission is stricter.
+      const evidence=await pool.query(`SELECT e.evidence_id,e.submitted_by,e.sha256,e.created_at
+        FROM commerce.msnw_p2p_evidence e
+        JOIN commerce.msnw_p2p_orders o
+          ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
+        WHERE o.tenant_id=$1 AND o.order_id=$2
+          AND (o.seller_id=$3 OR o.buyer_id=$3)
+        ORDER BY e.created_at ASC LIMIT 100`,
+        [actor.tenantId,id(orderId),actor.userId]);
+      return evidence.rows;
+    },
+    async evidenceFor(actor:P2pActor,orderId:string,evidenceId:string,operator=false) {
+      const value=await pool.query(`SELECT e.object_ref,e.sha256,e.submitted_by,
+          o.order_id,o.state
+        FROM commerce.msnw_p2p_evidence e JOIN commerce.msnw_p2p_orders o
+         ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
+        WHERE o.tenant_id=$1 AND o.order_id=$2 AND e.evidence_id=$3
+        AND ($5::boolean OR o.seller_id=$4 OR o.buyer_id=$4)`,
+        [actor.tenantId,id(orderId),id(evidenceId),actor.userId,operator]);
+      const row=take<Record<string,unknown>>(value);
+      if(typeof row.object_ref!=="string"||!row.object_ref.startsWith("p2p/"))
+        throw new P2pError("p2p.evidence_unavailable",503);
+      return {objectRef:row.object_ref,sha256:row.sha256};
     },
     async recordEvidence(actor:P2pActor, orderId:string, evidence:{
       objectRef:string; sha256:string; verifiedOwnerId:string;

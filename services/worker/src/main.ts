@@ -13,6 +13,8 @@ import { createPostgresServiceDependency, createPostgresMobilePushRepository, cr
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
+import { createP2pNoticeRuntime } from "./jobs/msnw/p2p_notifications.js";
+import { createP2pExpiryRuntime } from "./jobs/msnw/p2p_expiry.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
 import { createYouTubeOutboxScheduler } from "./jobs/youtube_websub/scheduler.js";
 import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js";
@@ -115,6 +117,8 @@ export async function startWorkerService(
   let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let p2pNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let p2pExpiry: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
@@ -222,6 +226,37 @@ export async function startWorkerService(
         })+"\n");},
       });
     }
+    // Existing Firebase sender and canonical leased outbox: no extra queue.
+    // Without FCM credentials, in-app history remains available and the
+    // delivery records stay queued for eventual recovery.
+    if(env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON?.trim()) {
+      const notices=createP2pNoticeRuntime({
+        pool:database.pool,
+        sender:createFcmPushSender({
+          serviceAccountJson:env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON,
+          repository:createPostgresMobilePushRepository(database.pool),
+        }),
+        workerId:env.MASANAWA_P2P_NOTICE_WORKER_ID ?? "p2p-notify-"+process.pid,
+      });
+      p2pNotices=createYouTubeOutboxScheduler({
+        runOnce:notices.runOnce,enabled:()=>!drain.isDraining(),
+        intervalMs:10000,
+        onError:()=>process.stderr.write(JSON.stringify({
+          event:"p2p.notifications.retry",reason:"batch_failed",
+        })+"\n"),
+      });
+    }
+    // No separate escrow scheduler authority: the canonical PG function
+    // takes bounded SKIP LOCKED order claims and performs refund+event
+    // postings in the same transaction. No backend feature flag.
+    const expiry=createP2pExpiryRuntime(database.pool);
+    p2pExpiry=createYouTubeOutboxScheduler({
+      runOnce:expiry.runOnce,enabled:()=>!drain.isDraining(),
+      intervalMs:20000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"p2p.expiry.retry",reason:"batch_failed",
+      })+"\n"),
+    });
     app = appFactory({
       ...(options.appOptions ?? {}),
       readinessChecks: [
@@ -253,6 +288,8 @@ export async function startWorkerService(
     await msnwFinality?.stop();
         await msnwFinality?.stop();
         await roomNotices?.stop();
+        await p2pNotices?.stop();
+        await p2pExpiry?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -266,6 +303,8 @@ export async function startWorkerService(
     msnwObligationRecovery?.start();
     msnwFinality?.start();
     roomNotices?.start();
+    p2pNotices?.start();
+    p2pExpiry?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
