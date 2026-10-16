@@ -66,6 +66,9 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
             final file=snapshot.data!;
             final events=(file['events'] as List<dynamic>? ?? []);
             final evidence=(file['evidence'] as List<dynamic>? ?? []);
+            final late=file['latePayment'] is Map
+              ? Map<String,dynamic>.from(file['latePayment'] as Map)
+              : <String,dynamic>{};
             return ListView(padding:const EdgeInsets.all(18),children:[
               Text('Escrow audit • $id',style:Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height:8),
@@ -73,6 +76,19 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
               const Text('Payment is not provider-verified. A screenshot or buyer '
                 'claim alone must never authorize a release.'),
               const SizedBox(height:12),
+              if(late.isNotEmpty) ...[
+                Text('Late-payment appeal: ${late['state']}',
+                  style:Theme.of(ctx).textTheme.titleMedium),
+                Text('Buyer report: ${late['buyer_reason']}'),
+                if(late['operator_note']!=null)
+                  Text('Operator note: ${late['operator_note']}'),
+                for(final item in (late['events'] as List<dynamic>? ?? []))
+                  ListTile(
+                    leading:const Icon(Icons.history_outlined),
+                    title:Text('${(item as Map)['action']}'),
+                    subtitle:Text('${item['explanation']}')),
+                const SizedBox(height:16),
+              ],
               Text('Evidence references (${evidence.length})',
                 style:Theme.of(ctx).textTheme.titleMedium),
               if(evidence.isEmpty)const Text('No evidence attached.'),
@@ -128,6 +144,64 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
         content:Text('Escrow recovery unavailable: '
           '${e.response?.data is Map?(e.response!.data as Map)['error']:e.message}')));
     } finally {
+      if(mounted)setState(()=>_submitting=false);
+    }
+  }
+  Future<void> _resolveLate(Map<String,dynamic> order) async {
+    if(_submitting)return;
+    final id='${order['order_id']}';
+    final note=TextEditingController();
+    String resolution='escalate';
+    try{
+      final decision=await showDialog<Map<String,String>>(context:context,
+        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>AlertDialog(
+          title:const Text('Late bank-payment support case'),
+          content:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text('Order: $id'),
+              Text('Escrow status: ${order['state']}'),
+              Text('Buyer report: ${order['late_case_reason'] ?? 'Unavailable'}'),
+              const SizedBox(height:12),
+              const Text('Escrow was already refunded to the seller. '
+                'This support action must never create or release MSNW. '
+                'Check bank statements independently and arrange an '
+                'appropriate customer-support resolution.'),
+              RadioListTile<String>(
+                title:const Text('Escalate for further review'),
+                value:'escalate',groupValue:resolution,
+                onChanged:(v)=>update(()=>resolution=v??'escalate')),
+              RadioListTile<String>(
+                title:const Text('Close after documented resolution'),
+                value:'close',groupValue:resolution,
+                onChanged:(v)=>update(()=>resolution=v??'close')),
+              TextField(controller:note,maxLines:3,
+                decoration:const InputDecoration(
+                  labelText:'Documented outcome and bank reference')),
+            ])),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),
+            FilledButton(onPressed:()=>Navigator.pop(ctx,{
+              'resolution':resolution,'reason':note.text.trim(),
+            }),child:const Text('Record outcome')),
+          ],
+        )));
+      if(decision==null||!mounted)return;
+      if((decision['reason']??'').length<10){
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Document a detailed reason before proceeding.')));
+        return;
+      }
+      setState(()=>_submitting=true);
+      await _dio.post<dynamic>(
+        '$_base/v1/admin/msnw/p2p/late-payments/$id/resolve',
+        data:decision,options:_auth);
+      if(mounted)_reload();
+    } catch(error){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Late-payment case unavailable: $error')));
+    } finally{
+      note.dispose();
       if(mounted)setState(()=>_submitting=false);
     }
   }
@@ -244,8 +318,11 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
               IconButton(tooltip:'Review audit and evidence',
                 onPressed:()=>_inspect(o),
                 icon:const Icon(Icons.folder_open_outlined)),
-              FilledButton(onPressed:_submitting?null:()=>_resolve(o),
-                child:const Text('Resolve')),
+              FilledButton(onPressed:_submitting?null:
+                ()=>(o['late_case_state']!=null && o['state']!='disputed')
+                  ?_resolveLate(o):_resolve(o),
+                child:Text(o['late_case_state']!=null && o['state']!='disputed'
+                  ? 'Review appeal':'Resolve')),
             ]),
           ));
         });
