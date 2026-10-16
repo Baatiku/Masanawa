@@ -356,6 +356,91 @@ void main() {
     }
   });
 
+  test('expired ephemeral permission is refreshed before one admitted call resumes',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final resumed = Completer<void>();
+    final mic = StreamController<Uint8List>.broadcast();
+    final peers = <WebSocket>[];
+    var sockets = 0;
+    var connectedCalls = 0;
+    var renewedGrants = 0;
+    final listener = server.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      peers.add(socket);
+      final index = ++sockets;
+      socket.listen((raw) {
+        if (raw is! String) return;
+        final msg = jsonDecode(raw);
+        if (msg is! Map || msg['setup'] is! Map) return;
+        final setup = msg['setup'] as Map;
+        expect(setup['model'], 'models/test');
+        final voice = ((setup['generationConfig'] as Map)['speechConfig']
+            as Map)['voiceConfig']['prebuiltVoiceConfig']['voiceName'];
+        expect(voice, 'Fora');
+        if (index == 1) {
+          expect(setup['sessionResumption'], isEmpty);
+          socket.add(jsonEncode({'setupComplete': {}}));
+          socket.add(jsonEncode({
+            'sessionResumptionUpdate': {
+              'resumable': true,
+              'newHandle': 'original-call-handle',
+            },
+          }));
+          Future<void>.delayed(const Duration(milliseconds: 650), () {
+            unawaited(socket.close());
+          });
+        } else {
+          expect(setup['sessionResumption'], {
+            'handle': 'original-call-handle',
+          });
+          socket.add(jsonEncode({'setupComplete': {}}));
+          if (!resumed.isCompleted) resumed.complete();
+        }
+      });
+    });
+    final original = AgentLiveVoiceGrant(
+      token: 'original',
+      websocketUrl: 'ws://127.0.0.1:${server.port}',
+      model: 'test',
+      voiceName: 'Fora',
+      expiresAt: DateTime.now().add(const Duration(milliseconds: 300)),
+    );
+    final live = LiveVoiceSession(
+      grant: original,
+      characterName: 'Malamah Gwana',
+      sharedMicrophone: mic.stream,
+      sendGreeting: false,
+      renewConnectionGrant: () async {
+        renewedGrants++;
+        return AgentLiveVoiceGrant(
+          token: 'renewal-for-original-admission',
+          websocketUrl: 'ws://127.0.0.1:${server.port}',
+          model: 'test',
+          voiceName: 'Fora',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+        );
+      },
+      onConnected: () { connectedCalls++; },
+    );
+    try {
+      await live.start();
+      await live.ready.timeout(const Duration(seconds: 2));
+      await resumed.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(renewedGrants, 1);
+      expect(connectedCalls, 1,
+          reason: 'Reissued Gemini token must not register another paid call');
+      expect(sockets, 2);
+    } finally {
+      await live.close();
+      for (final peer in peers) { await peer.close(); }
+      await mic.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
   for (final useDeadline in [false, true]) {
     test(
       useDeadline
