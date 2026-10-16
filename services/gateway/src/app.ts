@@ -32,6 +32,8 @@ import type {
 import { registerAgentShellRoutes } from "./agent_shell_routes.js";
 import { registerBillingRoutes } from "./billing_routes.js";
 import { registerMsnwBillingRoutes } from "./msn_wallet/billing_routes.js";
+import { registerMsnwUsdtConversionRoutes } from "./msn_wallet/usdt_conversion_routes.js";
+import type { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
 import type { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { registerTalkRoutes } from "./talk_routes.js";
 import { registerTalkReplayRoutes } from "./talk_replay_routes.js";
@@ -176,6 +178,10 @@ export interface GatewayAppOptions {
   readonly billingFinancial?: BillingFinancialService;
   readonly billingWallet?: BillingWalletService;
   readonly msnwBilling?: ReturnType<typeof createMsnwBillingService>;
+  readonly msnwConversion?: {
+    authorizer: MsnBalanceAuthority;
+    service: ReturnType<typeof createMsnwUsdtConversion>;
+  };
   readonly financial?: FinancialService;
   readonly customerChannels?: CustomerChannelOptions;
   readonly linkedWhatsApp?: Readonly<{
@@ -1644,6 +1650,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   if (options.msnwBilling) {
     registerMsnwBillingRoutes(app, options.msnwBilling);
+  }
+  if (options.msnwConversion) {
+    registerMsnwUsdtConversionRoutes(app, options.msnwConversion);
   }
   registerBillingRoutes(app, {
     ...(options.billingCheckout ? { billingCheckout: options.billingCheckout } : {}),
