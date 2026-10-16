@@ -33,18 +33,6 @@ function normalizedSet(values: readonly string[]): ReadonlySet<string> {
   return new Set(values.map(code));
 }
 
-function assertConfiguredRoutesExist(
-  configured: ReadonlySet<string>,
-  available: ReadonlySet<string>,
-  operation: "conversion" | "withdrawal",
-): void {
-  for (const providerCode of configured) {
-    if (!available.has(providerCode)) {
-      throw new Error(`nowpayments.runtime_evidence.${operation}_route.unavailable`);
-    }
-  }
-}
-
 export async function collectNowPaymentsRuntimeEvidence(input: {
   readonly payments: NowPaymentsClient;
   readonly custody: NowPaymentsCustodyClient;
@@ -79,19 +67,31 @@ export async function collectNowPaymentsRuntimeEvidence(input: {
   }
 
   const available = new Set(baseRoutes.map((route) => route.providerCode));
-  assertConfiguredRoutesExist(conversionCodes, available, "conversion");
-  assertConfiguredRoutesExist(withdrawalCodes, available, "withdrawal");
+  // A disabled payout route must not poison internal conversions. Provider
+  // currency catalogs vary by account, so expose only currencies confirmed by
+  // this account rather than failing all capabilities on one unsupported code.
+  // Never infer a payout capability from a successful conversion probe.
+  const supportedConversionCodes = new Set(
+    [...conversionCodes].filter((route) => available.has(route)),
+  );
+  const supportedWithdrawalCodes = new Set(
+    [...withdrawalCodes].filter((route) => available.has(route)),
+  );
+  const conversionEnabled =
+    input.config.conversionEnabled && supportedConversionCodes.size >= 2;
+  const payoutEnabled =
+    input.config.payoutEnabled && supportedWithdrawalCodes.size > 0;
 
   const routes = baseRoutes.map((route) => {
     let enriched = withRouteEvidence(route, {
       operation: "convert",
       operationAvailable:
-        input.config.conversionEnabled && conversionCodes.has(route.providerCode),
+        conversionEnabled && supportedConversionCodes.has(route.providerCode),
     });
     enriched = withRouteEvidence(enriched, {
       operation: "withdraw",
       operationAvailable:
-        input.config.payoutEnabled && withdrawalCodes.has(route.providerCode),
+        payoutEnabled && supportedWithdrawalCodes.has(route.providerCode),
     });
     return enriched;
   });
@@ -100,8 +100,8 @@ export async function collectNowPaymentsRuntimeEvidence(input: {
     account: Object.freeze({
       custodyEnabled: true,
       customerManagementEnabled: null,
-      conversionEnabled: input.config.conversionEnabled,
-      payoutEnabled: input.config.payoutEnabled,
+      conversionEnabled,
+      payoutEnabled,
       ipWhitelistSatisfied: input.config.ipWhitelistSatisfied,
       payoutDestinationWhitelistSatisfied:
         input.config.payoutDestinationWhitelistSatisfied,
