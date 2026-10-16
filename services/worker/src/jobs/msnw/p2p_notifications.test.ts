@@ -4,7 +4,8 @@ import {createP2pNoticeRuntime} from "./p2p_notifications.js";
 vi.mock("@masanawa/postgres",()=>({
   claimOutboxBatch:vi.fn(),
   settleOutboxClaim:vi.fn(async()=>undefined),
-  withTransaction:vi.fn(async(_pool:unknown,fn:(c:unknown)=>Promise<unknown>)=>fn({})),
+  withTransaction:vi.fn(async(_pool:unknown,fn:(c:unknown)=>Promise<unknown>)=>
+    fn({query:vi.fn(async()=>({rowCount:1}))})),
 }));
 const item={
  outboxEventId:"outbox-event_demo-p2p",
@@ -41,6 +42,9 @@ describe("P2P order push delivery",()=>{
   }));
   expect(settleOutboxClaim).toHaveBeenCalledWith(expect.anything(),
     expect.objectContaining({fence:3,state:"acknowledged"}));
+  const {withTransaction}=await import("@masanawa/postgres");
+  const work=vi.mocked(withTransaction).mock.calls[0]?.[1];
+  expect(work).toBeTypeOf("function");
  });
  it("never pushes to an unauthorized, disabled or non-participant account",async()=>{
   const {runtime,send}=setup(false);
