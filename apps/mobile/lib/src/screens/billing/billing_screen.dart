@@ -172,7 +172,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     try {
       final next = await api.billingBillers(value.code);
       if (mounted) {
-        setState(() => billers = next);
+        // Release the category fetch guard before loading the selected biller.
+        setState(() { billers = next; busy = false; });
         if (value.code == 'AIRTIME' || value.code == 'MOBILEDATA') {
           _matchBillerForNetwork(selectedNetwork);
         } else if (next.isNotEmpty) {
@@ -474,7 +475,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             const SizedBox(height: 16),
 
             if (!mobileCategory && billers.isNotEmpty) DropdownButtonFormField<String>(
-              initialValue: biller?.billerCode,
+              value: biller?.billerCode,
               items: billers.map((entry) => DropdownMenuItem(
                 value: entry.billerCode, child: Text(entry.name))).toList(),
               onChanged: busy ? null : (code) {
