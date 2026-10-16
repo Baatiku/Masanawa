@@ -15,7 +15,7 @@ function decode(payload:unknown){
     throw new TypeError("invalid_p2p_notice");
   try { parseCanonicalId("user",p.userId); }
   catch { throw new TypeError("invalid_p2p_notice"); }
-  return {userId:p.userId,orderId:p.orderId};
+  return {userId:p.userId,orderId:p.orderId,sourceEventId:p.sourceEventId};
 }
 
 /** P2P notifications are independent of the custody money movement.
@@ -36,10 +36,13 @@ export function createP2pNoticeRuntime(input:Readonly<{
       for(const event of claims) {
         let state:"acknowledged"|"retry-scheduled"|"dead-letter"="acknowledged";
         let safeErrorCode:string|undefined;
+        let source:ReturnType<typeof decode>|undefined;
+        let deliveredNow=false;
         try {
           if(event.eventType!=="p2p.order.transition")
             throw new TypeError("invalid_p2p_notice");
           const p=decode(event.payload);
+          source=p;
           // No cross-tenant disclosure. A disabled or unrelated account never
           // receives push; in-app historical entries remain for later audit.
           const check=await input.pool.query<{allowed:boolean}>(`
@@ -59,6 +62,7 @@ export function createP2pNoticeRuntime(input:Readonly<{
                 deepLink:"masanawa://wallet"},
             });
             stats.delivered+=sent.delivered;
+            deliveredNow=sent.delivered>0;
             if(sent.attempted>0&&sent.delivered<sent.attempted)
               throw new Error("p2p_push_partial_delivery");
           }
@@ -67,15 +71,29 @@ export function createP2pNoticeRuntime(input:Readonly<{
           safeErrorCode=invalid?"invalid_p2p_notice":"p2p_notice_failed";
           state=invalid||event.attempt>=8?"dead-letter":"retry-scheduled";
         }
-        await withTransaction(input.pool,client=>settleOutboxClaim(client,{
-          outboxEventId:event.outboxEventId,workerId:input.workerId,
-          fence:event.fence,state,
-          ...(safeErrorCode?{safeErrorCode}:{}),
-          ...(state==="retry-scheduled"?{
-            availableAt:new Date(Date.now()+Math.min(3600000,30000*2**Math.min(event.attempt,7)))
-              .toISOString() as NonNullable<Parameters<typeof settleOutboxClaim>[1]["availableAt"]>,
-          }:{}),
-        }));
+        await withTransaction(input.pool,async client=>{
+          // Advance the customer-visible inbox only when the canonical
+          // leased outbox acknowledgement succeeds in the SAME transaction.
+          // Delivery cannot be claimed on a failed/partial FCM attempt.
+          if(state==="acknowledged" && source){
+            await client.query(`UPDATE commerce.msnw_p2p_notifications
+              SET processed_at=statement_timestamp(),
+                  delivered=delivered OR $5::boolean
+              WHERE event_id=$1::uuid AND tenant_id=$2
+                AND user_id=$3 AND order_id=$4::uuid`,
+              [source.sourceEventId,event.tenantId,source.userId,
+                source.orderId,deliveredNow]);
+          }
+          await settleOutboxClaim(client,{
+            outboxEventId:event.outboxEventId,workerId:input.workerId,
+            fence:event.fence,state,
+            ...(safeErrorCode?{safeErrorCode}:{}),
+            ...(state==="retry-scheduled"?{
+              availableAt:new Date(Date.now()+Math.min(3600000,30000*2**Math.min(event.attempt,7)))
+                .toISOString() as NonNullable<Parameters<typeof settleOutboxClaim>[1]["availableAt"]>,
+            }:{}),
+          });
+        });
         if(state==="acknowledged")stats.acknowledged++;
         else if(state==="retry-scheduled")stats.retried++;
         else stats.deadLetter++;
