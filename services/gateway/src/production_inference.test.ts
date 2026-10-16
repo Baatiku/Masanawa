@@ -96,3 +96,18 @@ it("recovers one temporary Gemini 503 before any reply has reached the app",asyn
  expect(calls).toBe(2);
  }finally{log.mockRestore();}
 });
+
+it('sends canonical earlier messages as user/model roles before the current message',async()=>{
+ const fetchImpl=vi.fn<typeof fetch>(async(_url,init)=>{
+ const body=JSON.parse(String(init?.body));
+ expect(body.contents).toEqual([{role:'user',parts:[{text:'Remember mango'}]},{role:'model',parts:[{text:'I remember mango'}]},{role:'user',parts:[{text:'Which fruit?'}]}]);
+ return Response.json({candidates:[{content:{parts:[{text:'Mango'}]}}]});});
+ const provider=createGeminiCredentialPoolInferenceProvider({pool:{apiKeys:['key'],models:['gemini-3.8-flash']},fetchImpl});
+ expect(await provider.generate({systemInstructions:[],input:{kind:'text',text:'Which fruit?'},conversationHistory:[{role:'user',text:'Remember mango'},{role:'assistant',text:'I remember mango'}]})).toEqual({text:'Mango'});
+});
+
+it('uses documented low thinking for latency-sensitive Gemini 3.8 Flash chat',async()=>{
+ const fetchImpl=vi.fn<typeof fetch>(async(_url,init)=>{expect(JSON.parse(String(init?.body)).generationConfig.thinkingConfig).toEqual({thinkingLevel:'LOW'});return Response.json({candidates:[{content:{parts:[{text:'Hello'}]}}]});});
+ const provider=createGeminiCredentialPoolInferenceProvider({pool:{apiKeys:['key'],models:['gemini-3.8-flash']},fetchImpl});
+ await provider.generate({systemInstructions:[],input:{kind:'text',text:'Hello'}});
+});

@@ -1,4 +1,5 @@
 import { observeSessionOpen } from "./agent_session_diagnostics.js";
+import { compileConversationHistory } from "./conversation_history.js";
 import { createHash } from "node:crypto";
 import {
   PlatformError,
@@ -130,6 +131,11 @@ export function createAgentConversationService(input: {
     } catch { return undefined; }
   }
 
+  async function conversationHistory(scope: import("@masanawa/agents").CharacterSessionScope, requestId:string) {
+    if(!input.mobileShell) return Object.freeze([]);
+    return compileConversationHistory(await input.mobileShell.listHistory({scope,limit:16}),requestId);
+  }
+
   const service: AgentConversationService = {
     async open(request) {
       const characterId = parseCanonicalId("character", request.characterId);
@@ -247,6 +253,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
@@ -451,6 +458,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
@@ -644,6 +652,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
