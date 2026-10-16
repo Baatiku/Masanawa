@@ -3,6 +3,7 @@ import { claimOutboxBatch,settleOutboxClaim,withTransaction,type Pool } from "@m
 import type { MobilePushSender } from "@masanawa/mobile-push";
 
 const destination="notifications.p2p";
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Stats={claimed:number;acknowledged:number;delivered:number;retried:number;deadLetter:number};
 function decode(payload:unknown){
   if(!payload||typeof payload!=="object"||Array.isArray(payload))
@@ -10,8 +11,7 @@ function decode(payload:unknown){
   const p=payload as Record<string,unknown>;
   if(typeof p.userId!=="string"||typeof p.orderId!=="string"||
     typeof p.state!=="string"||typeof p.sourceEventId!=="string"||
-    !/^[0-9a-f-]{36}$/i.test(p.orderId)||
-    !/^[0-9a-f-]{36}$/i.test(p.sourceEventId))
+    !uuid.test(p.orderId)||!uuid.test(p.sourceEventId))
     throw new TypeError("invalid_p2p_notice");
   try { parseCanonicalId("user",p.userId); }
   catch { throw new TypeError("invalid_p2p_notice"); }
