@@ -71,6 +71,13 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    const done=await service().action({tenantId:tenant,userId:seller},
      first.orderId,"confirm",{releaseAuthorized:true});
    expect(done.state).toBe("completed");
+   const buyerReceipt=await service().receipt(actor,first.orderId);
+   expect(buyerReceipt).toMatchObject({
+     status:"completed",stage:"release",direction:"buy",
+     amountMicro:"1000000",feeMicro:"5000",
+     receiptReference:"msnw-p2p:"+first.orderId+":release",
+   });
+   expect(buyerReceipt.postings).toHaveLength(3);
    await expect(service().action({tenantId:tenant,userId:seller},
      first.orderId,"confirm",{releaseAuthorized:true}))
      .rejects.toMatchObject({code:"p2p.already_terminal"});
@@ -172,6 +179,12 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect(await account(seller)).toMatchObject({reserved_micro:"502500"});
    await service().action(actor,value.orderId,"cancel");
    expect(await account(seller)).toEqual(old);
+   const sellerReceipt=await service().receipt({tenantId:tenant,userId:seller},value.orderId);
+   expect(sellerReceipt).toMatchObject({
+     status:"cancelled",stage:"refund",direction:"sell",
+     receiptReference:"msnw-p2p:"+value.orderId+":refund",
+   });
+   expect(sellerReceipt.postings).toHaveLength(2);
    const receipt=await pool.query(`SELECT receipt_ref,stage FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1 AND order_id=$2`,[tenant,value.orderId]);
    expect(receipt.rows.map(r=>r.stage).sort()).toEqual(["refund","reserve"]);
    await expect(pool.query(`DELETE FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1 AND order_id=$2`,[tenant,value.orderId]))
