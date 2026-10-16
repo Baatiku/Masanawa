@@ -223,7 +223,7 @@ export function createLinkedWhatsAppController(
     snapshot = Object.freeze({ ...snapshot, ...patch });
   };
 
-  async function processMessage(raw: any, sock: WASocket): Promise<void> {
+  async function processMessage(raw: any, sock: WASocket, isActive: () => boolean): Promise<void> {
     const key = raw?.key;
     const remoteJid = typeof key?.remoteJid === "string" ? key.remoteJid : "";
     const messageId = typeof key?.id === "string" ? key.id : "";
@@ -276,7 +276,7 @@ export function createLinkedWhatsAppController(
       }
     }
 
-    if (!text && !media) return;
+    if (!isActive() || (!text && !media)) return;
 
     // Scope provider IDs to the chat, as with Telegram. A linked-device
     // message ID must not collide with a different customer's receipt.
@@ -291,8 +291,10 @@ export function createLinkedWhatsAppController(
       ...(media ? { media } : {}),
     });
 
+    if (!isActive()) return;
     if (result.shouldDeliver && (result.reply || result.audio)) {
       if (result.reply) await sock.sendMessage(remoteJid, { text: result.reply });
+      if (!isActive()) return;
       if (result.audio) {
         try {
           // WAV is valid as a file attachment, not as an Opus voice note.
@@ -302,11 +304,13 @@ export function createLinkedWhatsAppController(
             mimetype: result.audio.mimeType,
             fileName: result.audio.fileName,
           });
-        } catch (_) {
+        } catch (error) {
           // Text is the durable fallback; optional audio must not replay a
           // completed conversation or create duplicate text on retry.
+          if (!result.reply) throw error;
         }
       }
+      if (!isActive()) return;
       await options.bridge.delivered({
         channel: "whatsapp",
         messageId: durableMessageId,
@@ -334,8 +338,11 @@ export function createLinkedWhatsAppController(
   async function connect(): Promise<void> {
     const myGeneration = ++generation;
     await mkdir(authDir, { recursive: true });
+    if (stopped || myGeneration !== generation) return;
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    if (stopped || myGeneration !== generation) return;
     const { version } = await fetchLatestBaileysVersion();
+    if (stopped || myGeneration !== generation) return;
 
     update({
       status: "connecting",
@@ -354,18 +361,23 @@ export function createLinkedWhatsAppController(
       logger,
     });
     socket = sock;
+    let qrRevision = 0;
 
     sock.ev.on("creds.update", saveCreds);
     sock.ev.on("messages.upsert", ({ messages, type }) => {
-      if (type !== "notify") return;
+      if (stopped || myGeneration !== generation || type !== "notify") return;
       for (const message of messages) {
         const jid = String(message.key?.remoteJid ?? "");
         // Keep each sender's persistent conversation/session turns ordered,
         // while unrelated customers can still be processed independently.
         const prior = pendingByChat.get(jid) ?? Promise.resolve();
-        const task = prior.catch(() => undefined).then(() => processMessage(message, sock));
+        const task = prior.catch(() => undefined).then(() => {
+          if (stopped || myGeneration !== generation) return;
+          return processMessage(message, sock, () => !stopped && myGeneration === generation);
+        });
         pendingByChat.set(jid, task);
         void task.catch(() => {
+          if (stopped || myGeneration !== generation) return;
           update({ lastEvent: "message-processing-failed" });
         }).finally(() => {
           if (pendingByChat.get(jid) === task) pendingByChat.delete(jid);
@@ -375,8 +387,9 @@ export function createLinkedWhatsAppController(
     sock.ev.on("connection.update", (event) => {
       if (stopped || myGeneration !== generation) return;
       if (event.qr) {
+        const renderingRevision = ++qrRevision;
         void QRCode.toDataURL(event.qr).then((qrDataUrl) => {
-          if (stopped || myGeneration !== generation) return;
+          if (stopped || myGeneration !== generation || renderingRevision !== qrRevision) return;
           update({
             status: "qr",
             connected: false,
@@ -387,6 +400,7 @@ export function createLinkedWhatsAppController(
       }
 
       if (event.connection === "open") {
+        qrRevision += 1;
         const id = String(sock.user?.id ?? "");
         update({
           status: "connected",
@@ -399,6 +413,7 @@ export function createLinkedWhatsAppController(
       }
 
       if (event.connection === "close") {
+        qrRevision += 1;
         socket = null;
         const code = new Boom(event.lastDisconnect?.error).output.statusCode;
         if (code === DisconnectReason.loggedOut) {
@@ -415,14 +430,23 @@ export function createLinkedWhatsAppController(
     });
   }
 
+  async function start(): Promise<void> {
+    if (!stopped) return;
+    stopped = false;
+    const startingGeneration = generation + 1;
+    try { await connect(); }
+    catch (error) {
+      if (generation === startingGeneration && !stopped) {
+        stopped = true;
+        update({status:"offline",connected:false,qrDataUrl:null,lastEvent:"connection-failed"});
+      }
+      throw error;
+    }
+  }
+
   return Object.freeze({
     snapshot: () => snapshot,
-
-    async start() {
-      if (!stopped) return;
-      stopped = false;
-      await connect();
-    },
+    start,
 
     async stop() {
       stopped = true;
@@ -457,8 +481,8 @@ export function createLinkedWhatsAppController(
         lastEvent: "session-reset",
         reconnectAttempt: 0,
       });
-      stopped = false;
-      await connect();
+      await start();
     },
   });
 }
+
