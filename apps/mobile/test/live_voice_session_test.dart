@@ -58,8 +58,15 @@ void main() {
     },
   );
 
-  test('backgrounding ends the call and releases microphone custody', () async {
+  test('without a native foreground service, pausing safely ends the call', () async {
     session.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await session.close();
+    verify(() => recorder.stop()).called(1);
+    verify(() => recorder.dispose()).called(1);
+  });
+
+  test('detaching always closes and releases microphone custody', () async {
+    session.didChangeAppLifecycleState(AppLifecycleState.detached);
     await session.close();
     verify(() => recorder.stop()).called(1);
     verify(() => recorder.dispose()).called(1);
@@ -224,6 +231,126 @@ void main() {
       await live.close();
       expect(closed, 1);
       await microphone.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
+  test('provider rotation resumes the same call, voice and transcript stream',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final secondSetup = Completer<Map<String, dynamic>>();
+    final microphone = StreamController<Uint8List>.broadcast();
+    final peers = <WebSocket>[];
+    var connected = 0;
+    var closed = 0;
+    var connections = 0;
+    final listener = server.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      peers.add(socket);
+      final number = ++connections;
+      socket.listen((raw) {
+        if (raw is! String) return;
+        final data = jsonDecode(raw);
+        if (data is! Map || data['setup'] is! Map) return;
+        final setup = (data['setup'] as Map).cast<String, dynamic>();
+        expect(setup['model'], 'models/test');
+        expect(
+          ((setup['generationConfig'] as Map)['speechConfig'] as Map)
+              ['voiceConfig']['prebuiltVoiceConfig']['voiceName'],
+          'Fora',
+        );
+        if (number == 1) {
+          expect(setup['sessionResumption'], isEmpty);
+          socket.add(jsonEncode({'setupComplete': {}}));
+          socket.add(jsonEncode({
+            'sessionResumptionUpdate': {
+              'resumable': true,
+              'newHandle': 'provider-handle-1',
+            },
+          }));
+          Future<void>.delayed(const Duration(milliseconds: 75), () {
+            unawaited(socket.close());
+          });
+        } else {
+          expect(setup['sessionResumption'], {'handle': 'provider-handle-1'});
+          if (!secondSetup.isCompleted) secondSetup.complete(setup);
+          socket.add(jsonEncode({'setupComplete': {}}));
+        }
+      });
+    });
+    final live = LiveVoiceSession(
+      grant: AgentLiveVoiceGrant(
+        token: 'ephemeral',
+        websocketUrl: 'ws://127.0.0.1:${server.port}',
+        model: 'test',
+        voiceName: 'Fora',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      ),
+      characterName: 'Malamah Gwana',
+      sharedMicrophone: microphone.stream,
+      sendGreeting: false,
+      onConnected: () { connected++; },
+      onClosed: () { closed++; },
+    );
+    try {
+      await live.start();
+      await live.ready.timeout(const Duration(seconds: 2));
+      await secondSetup.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(connected, 1, reason: 'Resumption must not bill a second call');
+      expect(closed, 0);
+      expect(connections, 2);
+    } finally {
+      await live.close();
+      expect(closed, 1);
+      for (final socket in peers) {
+        await socket.close();
+      }
+      await microphone.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
+  test('a disconnected call without provider resumption handle ends once',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final peer = Completer<WebSocket>();
+    var connections = 0;
+    final listener = server.listen((request) async {
+      connections++;
+      final socket = await WebSocketTransformer.upgrade(request);
+      peer.complete(socket);
+    });
+    final ended = Completer<void>();
+    final input = StreamController<Uint8List>.broadcast();
+    final live = LiveVoiceSession(
+      grant: AgentLiveVoiceGrant(
+        token: 'ephemeral',
+        websocketUrl: 'ws://127.0.0.1:${server.port}',
+        model: 'test',
+        voiceName: 'Bodi',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      ),
+      characterName: 'Mallam Gwani',
+      sharedMicrophone: input.stream,
+      sendGreeting: false,
+      onClosed: () {
+        if (!ended.isCompleted) ended.complete();
+      },
+    );
+    try {
+      await live.start();
+      final socket = await peer.future;
+      socket.add(jsonEncode({'setupComplete': {}}));
+      await live.ready.timeout(const Duration(seconds: 2));
+      await socket.close();
+      await ended.future.timeout(const Duration(seconds: 2));
+      expect(connections, 1, reason: 'Never start a new session as the same paid call');
+    } finally {
+      await live.close();
+      await input.close();
       await listener.cancel();
       await server.close(force: true);
     }

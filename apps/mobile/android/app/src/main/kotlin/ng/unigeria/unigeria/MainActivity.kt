@@ -1,6 +1,9 @@
 package ng.unigeria.unigeria
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.media.AudioAttributes
 import android.net.Uri
 import android.media.AudioFormat
@@ -15,6 +18,8 @@ class MainActivity : FlutterActivity() {
     private var liveAudioTrack: AudioTrack? = null
     private var liveSampleRate: Int? = null
     private var deepLinkChannel: MethodChannel? = null
+    private var callForegroundChannel: MethodChannel? = null
+    private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -32,6 +37,62 @@ class MainActivity : FlutterActivity() {
                     intent?.data = null
                 } else {
                     result.notImplemented()
+                }
+            }
+        }
+
+        callForegroundChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "masanawa/live_call",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                            != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            result.success(false)
+                        } else {
+                            // Group calls share one microphone with several
+                            // independent Masana Live sessions. Keep the
+                            // service until the *last* session releases it.
+                            val ready = if (activeCallOwners > 0) {
+                                true
+                            } else {
+                                try {
+                                    val service = Intent(
+                                        this, MasanawaCallService::class.java
+                                    ).apply {
+                                        action = MasanawaCallService.ACTION_START
+                                    }
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        startForegroundService(service)
+                                    } else {
+                                        startService(service)
+                                    }
+                                    true
+                                } catch (_: SecurityException) {
+                                    false
+                                } catch (_: RuntimeException) {
+                                    false
+                                }
+                            }
+                            if (ready) activeCallOwners++
+                            result.success(ready)
+                        }
+                    }
+
+                    "stop" -> {
+                        if (activeCallOwners > 0) {
+                            activeCallOwners--
+                            if (activeCallOwners == 0) {
+                                stopService(Intent(this, MasanawaCallService::class.java))
+                            }
+                        }
+                        result.success(true)
+                    }
+
+                    else -> result.notImplemented()
                 }
             }
         }
@@ -205,6 +266,10 @@ class MainActivity : FlutterActivity() {
         restoreAudioRoute()
         deepLinkChannel?.setMethodCallHandler(null)
         deepLinkChannel = null
+        callForegroundChannel?.setMethodCallHandler(null)
+        callForegroundChannel = null
+        activeCallOwners = 0
+        stopService(Intent(this, MasanawaCallService::class.java))
         super.onDestroy()
     }
 

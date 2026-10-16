@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -49,41 +50,14 @@ class _WhatsAppChannelPageState extends State<WhatsAppChannelPage> {
   }
 
   Future<void> _showQr() async {
-    try {
-      final qr = await _api.qr();
-      if (!mounted) return;
-      final bytes = _decodeDataUrl(qr.dataUrl);
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Link Gwani WhatsApp'),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('On the dedicated Gwani phone open WhatsApp or WhatsApp Business → Linked devices → Link a device, then scan this code.'),
-                const SizedBox(height: 16),
-                if (bytes != null)
-                  ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(bytes, width: 280, height: 280, fit: BoxFit.contain))
-                else
-                  const Text('The server returned an invalid QR image.'),
-              ],
-            ),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close'))],
-        ),
-      );
-      if (mounted) _refresh();
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
-    }
-  }
-
-  Uint8List? _decodeDataUrl(String value) {
-    final match = RegExp(r'^data:image\/png;base64,(.+)$').firstMatch(value);
-    if (match == null) return null;
-    try { return base64Decode(match.group(1)!); } catch (_) { return null; }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => WhatsAppPairingDialog(
+        loadStatus: _api.status,
+        loadQr: _api.qr,
+      ),
+    );
+    if (mounted) _refresh();
   }
 
   @override
@@ -175,5 +149,150 @@ class _Detail extends StatelessWidget {
       SizedBox(width: 135, child: Text(label, style: TextStyle(color: context.masanawa.textMuted))),
       Expanded(child: Text(value)),
     ]),
+  );
+}
+
+ 
+/// Scan data stays in memory, never in preferences, logs, or an external URL.
+Uint8List? decodeWhatsAppPairingQr(String raw) {
+  if (raw.length > 1024 * 1024) return null;
+  final match = RegExp(r'^data:image/png;base64,([A-Za-z0-9+/=]+)$')
+      .firstMatch(raw);
+  if (match == null) return null;
+  try {
+    final bytes = base64Decode(match.group(1)!);
+    return bytes.isEmpty ? null : Uint8List.fromList(bytes);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// A live pairing QR, rather than a stale one-time screenshot. While the
+/// Gateway rotates QR challenges, the admin sees the latest value and an
+/// immediate success state when the linked phone connects.
+class WhatsAppPairingDialog extends StatefulWidget {
+  const WhatsAppPairingDialog({
+    super.key,
+    required this.loadStatus,
+    required this.loadQr,
+  });
+
+  final Future<WhatsAppChannelStatus> Function() loadStatus;
+  final Future<WhatsAppQr> Function() loadQr;
+
+  @override
+  State<WhatsAppPairingDialog> createState() => _WhatsAppPairingDialogState();
+}
+
+class _WhatsAppPairingDialogState extends State<WhatsAppPairingDialog> {
+  Timer? _poll;
+  Uint8List? _qrBytes;
+  bool _busy = false;
+  bool _connected = false;
+  String? _problem;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshQr());
+    _poll = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => unawaited(_refreshQr()),
+    );
+  }
+
+  Future<void> _refreshQr() async {
+    if (_busy || _connected || !mounted) return;
+    _busy = true;
+    try {
+      final status = await widget.loadStatus();
+      if (!mounted) return;
+      if (status.connected) {
+        _poll?.cancel();
+        setState(() {
+          _connected = true;
+          _qrBytes = null;
+          _problem = null;
+        });
+        return;
+      }
+      if (!status.qrReady) {
+        setState(() {
+          _qrBytes = null;
+          _problem = 'Waiting for a new pairing QR from the Gateway.';
+        });
+        return;
+      }
+      final qr = await widget.loadQr();
+      if (!mounted) return;
+      final image = decodeWhatsAppPairingQr(qr.dataUrl);
+      setState(() {
+        _qrBytes = image;
+        _problem = image == null
+            ? 'The Gateway returned an invalid QR. Refresh to try again.'
+            : null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _qrBytes = null;
+        _problem = 'Could not refresh the pairing QR. Check the connection.';
+      });
+    } finally {
+      _busy = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(_connected ? 'WhatsApp linked' : 'Link Gwani WhatsApp'),
+    content: SizedBox(
+      width: 300,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_connected) ...[
+            const Icon(Icons.check_circle, size: 54, color: Colors.green),
+            const SizedBox(height: 12),
+            const Text('The dedicated Gwani phone is now connected.'),
+          ] else ...[
+            const Text(
+              'On the dedicated phone, open WhatsApp → Linked devices → '
+              'Link a device, then scan this QR. It refreshes automatically.',
+            ),
+            const SizedBox(height: 16),
+            if (_qrBytes != null)
+              Image.memory(_qrBytes!, width: 260, height: 260, gaplessPlayback: true)
+            else
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Icon(Icons.qr_code_2, size: 100),
+              ),
+            if (_problem != null) ...[
+              const SizedBox(height: 12),
+              Text(_problem!, textAlign: TextAlign.center),
+            ],
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      if (!_connected)
+        TextButton.icon(
+          onPressed: _busy ? null : _refreshQr,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Refresh QR'),
+        ),
+      FilledButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: Text(_connected ? 'Done' : 'Close'),
+      ),
+    ],
   );
 }

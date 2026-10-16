@@ -33,6 +33,39 @@ class AdminRoom {
     memberCount:x['memberCount'] as int? ?? 0,
   );
 }
+
+class AdminRoomDiscussionReply {
+  const AdminRoomDiscussionReply({
+    required this.replyId,
+    required this.roomId,
+    required this.parentKind,
+    required this.parentId,
+    required this.parentReplyId,
+    required this.body,
+    required this.state,
+    required this.createdAt,
+  });
+  final String replyId;
+  final String roomId;
+  final String parentKind;
+  final String parentId;
+  final String? parentReplyId;
+  final String body;
+  final String state;
+  final String createdAt;
+  factory AdminRoomDiscussionReply.fromJson(Map<String, dynamic> json) =>
+      AdminRoomDiscussionReply(
+        replyId: json['replyId'] as String,
+        roomId: json['roomId'] as String,
+        parentKind: json['parentKind'] as String,
+        parentId: json['parentId'] as String,
+        parentReplyId: json['parentReplyId'] as String?,
+        body: json['body'] as String,
+        state: json['state'] as String,
+        createdAt: json['createdAt'] as String,
+      );
+}
+
 class AdminRoomsException implements Exception {
   const AdminRoomsException(this.message);
   final String message;
@@ -108,4 +141,29 @@ class AdminRoomsApi {
       options:_auth,
       data:{'body':body.trim(),'kind':announcement?'announcement':'lesson'}));
   }
+  /// Staff moderation only. Ordinary Room questions go directly to Gemini;
+  /// this reads exclusively held fan discussion replies.
+  Future<List<AdminRoomDiscussionReply>> heldDiscussion() async {
+    final response = await _request(() => _dio.get<dynamic>(
+      '/v1/admin/rooms/discussion', options: _auth,
+    ));
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return (data['items'] as List<dynamic>).map((item) =>
+      AdminRoomDiscussionReply.fromJson(
+        Map<String, dynamic>.from(item as Map),
+      ),
+    ).toList(growable: false);
+  }
+
+  Future<void> reviewDiscussion(String replyId, String decision) async {
+    if (!const {'approve','hide','remove'}.contains(decision)) {
+      throw const AdminRoomsException('Invalid moderation action.');
+    }
+    await _request(() => _dio.post<dynamic>(
+      '/v1/admin/rooms/discussion/${Uri.encodeComponent(replyId)}/review',
+      options: _auth,
+      data: {'decision': decision},
+    ));
+  }
+
 }
