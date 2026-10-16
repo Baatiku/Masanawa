@@ -130,16 +130,17 @@ export function createGeminiLiveTokenService(input: {
               uses: 1,
               expireTime: expiresAt.toISOString(),
               newSessionExpireTime: newSessionExpireTime.toISOString(),
-              liveConnectConstraints: {
+              // liveConnectConstraints is an SDK input, not an AuthToken REST
+              // field. Lock top-level generation config while allowing client
+              // persona/transcription and session-resumption setup to merge.
+              fieldMask: "model,generationConfig",
+              bidiGenerateContentSetup: {
                 model: "models/" + model,
-                config: {
-                  // Ephemeral-token constraints only lock the documented
-                  // model and modality. Persona voice, transcripts and
-                  // instructions are sent at WebSocket setup by Flutter.
-                  // Embedding every optional setup field here has produced
-                  // HTTP 400 on the live production token provider.
-                  sessionResumption: {},
+                generationConfig: {
                   responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: {voiceName:selectedVoiceName} },
+                  },
                 },
               },
             }),
