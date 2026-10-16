@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Exact six-decimal MSNW amounts: UI never uses floating point for financial input.
 String _micro(String text) {
@@ -297,6 +298,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             reason == null ? {} : {'reason': reason});
         }),
         userId: widget.expectedUserId,
+        loadReceipt: () async => _json(await _request('GET','/orders/$id/receipt')),
         listEvidence: () async {
           final data=_json(await _request('GET','/orders/$id/evidence'));
           return (data['items'] as List<dynamic>? ?? []).map(_json).toList();
@@ -398,10 +400,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
 class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
-    required this.uploadEvidence,required this.openEvidence,required this.userId});
+    required this.uploadEvidence,required this.openEvidence,
+    required this.loadReceipt,required this.userId});
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
   final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
+  final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(Map<String,dynamic>) uploadEvidence;
   final Future<void> Function(String) openEvidence;
@@ -415,6 +419,52 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     _future=widget.load();
     _evidence=widget.listEvidence();
   });
+  Future<void> _showReceipt() async {
+    try {
+      final receipt=await widget.loadReceipt();
+      if(!mounted)return;
+      final ref='${receipt['receiptReference'] ?? ''}';
+      final postings=receipt['postings'] is List
+        ? receipt['postings'] as List<dynamic> : const <dynamic>[];
+      await showDialog<void>(context:context,builder:(dialog)=>AlertDialog(
+        title:const Text('Verified MSNW escrow receipt'),
+        content:SingleChildScrollView(child:Column(
+          mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
+          children:[
+            Text('Reference: $ref'),
+            Text('Status: ${receipt['status']}'),
+            Text('Settlement: ${receipt['stage']}'),
+            Text('MSNW principal: ${_msnw(receipt['amountMicro'])}'),
+            Text('MSNW fee: ${_msnw(receipt['feeMicro'])}'),
+            Text('NGN consideration: ${_ngn(receipt['fiatKobo'])}'),
+            Text('Posted: ${receipt['recordedAt']}'),
+            const SizedBox(height:12),
+            const Text('Custody postings',style:TextStyle(fontWeight:FontWeight.bold)),
+            for(final posting in postings)
+              Text('${(posting as Map)['bucket']}: '
+                '${posting['deltaMicro']} micro-MSNW'
+                ' (${posting['ownerKind']})'),
+            const SizedBox(height:12),
+            const Text('Only finalized release or refund postings produce '
+              'this receipt. A payment claim or screenshot is not settlement.'),
+          ])),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialog),
+            child:const Text('Close')),
+          TextButton.icon(onPressed:(){
+            Clipboard.setData(ClipboardData(text:ref));
+            Navigator.pop(dialog);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:Text('Receipt reference copied')));
+          },icon:const Icon(Icons.copy_outlined),
+            label:const Text('Copy reference')),
+        ],
+      ));
+    }catch(error){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Receipt unavailable: $error')));
+    }
+  }
   Future<void> _uploadEvidence() async {
     try {
       final selection=await FilePicker.platform.pickFiles(
@@ -610,7 +660,15 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         if(state=='disputed')const ListTile(
           title:Text('Escrow frozen'),
           subtitle:Text('An authorized operator must resolve this dispute.')),
-        if(state=='completed')Text('Receipt: ${o['receipt_reference']??'Pending'}'),
+        if((state=='completed'||state=='expired'||state=='cancelled') &&
+            o['receipt_reference']!=null)
+          ListTile(
+            leading:const Icon(Icons.receipt_long_outlined),
+            title:const Text('View verified MSNW receipt'),
+            subtitle:Text('${o['receipt_reference']}'),
+            trailing:const Icon(Icons.chevron_right),
+            onTap:_showReceipt,
+          ),
       ]);
     }),
   );
