@@ -177,3 +177,8 @@ does not substitute for them. New source tests are authored but not executed.
 - Existing `apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart` provides the owner with a refreshable read-only financial audit view (three counts, investigation warning and no mutating controls).
 - Tests added/updated: `services/gateway/src/p2p/reconciliation_health.test.ts`, `services/worker/src/jobs/msnw/p2p_reconciliation.test.ts`, real PostgreSQL `adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts`. `.github/workflows/msnw-p2p.yml` source paths now cover these checks.
 - This operational audit does NOT verify bank receipt independently and is NOT a substitute for chain/provider finality. Never manually compensate against unverified evidence; escalate mismatches with original immutable MSNW receipts.
+
+## Seller multi-bank offer control (2026-10-16)
+- **Source DONE; Android device validation pending.** In `apps/mobile/lib/src/finance/msnw_p2p_screen.dart`, Sellers with more than one verified payment method must explicitly select the receiving bank before publishing a sale offer. The chosen `paymentMethodId` is sent to the existing verified, authenticated offer endpoint; the previous silent `methods.first` choice is removed.
+- The bank selector displays verified bank/account-holder name and only masked last four account digits. Confirmation repeats the destination and explains the current default **0.5%** MSNW seller escrow fee, reserved with principal and refunded if an unpaid order is cancelled.
+- Backend KYC and method ownership remain enforced by `services/gateway/src/p2p/service.ts`. No new bank provider, separate currency or P2P ledger was introduced.
