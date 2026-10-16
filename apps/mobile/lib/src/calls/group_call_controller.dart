@@ -65,6 +65,14 @@ class _NativeMember implements GroupMemberSession {
   }
   final LiveVoiceSession _session;
   late final StreamSubscription<void> _turns;
+
+  /// Called before start; the renewed token is for the same group member,
+  /// original paid admission and same microphone/assistant voice.
+  void bindRenewConnectionGrant(
+    Future<AgentLiveVoiceGrant> Function() refresh,
+  ) {
+    _session.renewConnectionGrant = refresh;
+  }
   @override
   Future<void> start() async {
     await _session.start();
@@ -299,6 +307,27 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
           if (_valid && !_removed.contains(id)) unawaited(_failed(id));
         },
       );
+      if (session is _NativeMember) {
+        // Each AI participant renews its own ephemeral Gemini permission.
+        // Group membership, user identity and charged admission remain
+        // unchanged; this does not enroll or bill a new member.
+        session.bindRenewConnectionGrant(() async {
+          if (!_valid || _removed.contains(id) ||
+              currentAccountKey() != accountKey ||
+              group?.groupId == null) {
+            throw StateError('Group call is no longer authorized.');
+          }
+          final admission = _admissions[id];
+          if (admission == null || admission.remaining <= Duration.zero) {
+            throw StateError('Group member admission has expired.');
+          }
+          return transport.token(
+            group!.groupId,
+            id,
+            admissionId: admission.admissionId,
+          );
+        });
+      }
       _sessions[id] = session;
       await session.start();
       if (!_valid ||
