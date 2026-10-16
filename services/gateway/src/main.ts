@@ -181,6 +181,7 @@ import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
 import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
+import { probeNowPaymentsReadOnly } from "./nowpayments_readonly_probe.js";
 import { createP2pService } from "./p2p/service.js";
 import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
 import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
@@ -1578,6 +1579,27 @@ export async function startGatewayService(
           password: nowPaymentsPassword,
         })
       : undefined;
+    if (env.NOWPAYMENTS_READONLY_PROBE_ON_START === "true") {
+      // Independent READ ONLY provider diagnostics. No payment, payout,
+      // balance mutation, currency amount, credential or provider response
+      // body is logged. Never block Gateway readiness on external providers.
+      void probeNowPaymentsReadOnly({
+        payments,
+        custody,
+        proposedConversionCodes: conversionProviderCodes,
+        signal: AbortSignal.timeout(20_000),
+      }).then((result) => {
+        process.stdout.write(JSON.stringify({
+          event: "nowpayments.readonly_probe",
+          ...result,
+        }) + "\n");
+      }).catch(() => {
+        process.stderr.write(JSON.stringify({
+          event: "nowpayments.readonly_probe",
+          error: "provider_probe_unavailable",
+        }) + "\n");
+      });
+    }
     const conversionsConfigured = Boolean(
       custody && conversionProviderCodes.length >= 2,
     );
