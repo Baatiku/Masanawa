@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS commerce.msnw_p2p_custody_postings (
 CREATE OR REPLACE FUNCTION commerce.msnw_p2p_assert_custody_postings()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE posting_count integer; net numeric(78,0); valid_count integer;
-DECLARE total numeric(78,0);
+total numeric(78,0);
 BEGIN
  total:=NEW.amount_micro+NEW.fee_micro;
  SELECT count(*),COALESCE(sum(delta_micro),0) INTO posting_count,net
