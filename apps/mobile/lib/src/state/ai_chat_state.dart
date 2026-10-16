@@ -1472,6 +1472,11 @@ class AiChatController extends Notifier<AiChatState> {
     final thread = threadOf(characterId);
     final users = thread.messages.where((m) => m.id == messageId && m.isUser);
     if (users.isEmpty) return;
+    final user = users.first;
+    // Manual retry must obey the same server-first, original-ID policy as
+    // crash/offline recovery. A request without an ID cannot be safely
+    // replayed, even if a user taps Retry.
+    if (user.requestId == null || user.requestId!.isEmpty) return;
     final failures = thread.messages.where(
       (m) => m.parts.any(
         (p) =>
@@ -1491,7 +1496,11 @@ class AiChatController extends Notifier<AiChatState> {
         ),
       },
     );
-    await _dispatchUserMessage(characterId, users.first, retry: true);
+    _setDelivery(characterId, user.id, 'queued');
+    // If offline or if the status endpoint is unavailable, the original
+    // durable queue remains visible and retries on the next connection.
+    await _save();
+    await _flushQueuedMessages();
   }
 
   Future<AgentTurnResult> _sendMediaViaTransport(
