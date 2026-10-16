@@ -68,17 +68,17 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(second.changed).toBe(false);
    expect(f.identity.provision).toHaveBeenCalledTimes(26);
  });
- it("upgrades existing Gwani/Gwana without replacing their canonical identifiers",async()=>{
+ it.each([["Gwani","Gwana"],["Mallam Gwani Bodi","Malamah Gwana Sulafat"],["Gwani","Malamah Gwana Fora"]])("upgrades existing %s/%s without replacing their canonical identifiers",async(gwaniName,gwanaName)=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
    const gwani=createCanonicalId("character"),gwana=createCanonicalId("character");
-   for(const [id,name] of [[gwani,"Gwani"],[gwana,"Gwana"]] as const){
+   for(const [id,name] of [[gwani,gwaniName],[gwana,gwanaName]] as const){
      f.presentations.push({schemaVersion:1,tenantId:tenant,characterId:id,
        characterVersionId:createCanonicalId("character-version"),
        displayName:name,roleLabel:"Masanawa Support",about:"Existing",greeting:null,
        visibleInUserApp:true,sortOrder:0,revision:1});
      f.profiles.push({schemaVersion:1,tenantId:tenant,characterId:id,
-       supportAgent:true,defaultForNewUsers:name==="Gwani",
-       voiceProvider:"gemini",voiceName:name==="Gwani"?"Bodi":"Sulafat",revision:1});
+       supportAgent:true,defaultForNewUsers:id===gwani,
+       voiceProvider:"gemini",voiceName:id===gwani?"Bodi":"Sulafat",revision:1});
    }
    const result=await run(f,tenant);
    expect(result.characterIds[0]).toBe(gwani);

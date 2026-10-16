@@ -163,11 +163,14 @@ describe("Alpha conversation service", () => {
       },
     };
 
+    const render=vi.fn(async()=>({dataBase64:"AAAAAA==",mimeType:"audio/pcm;rate=24000",durationMs:1}));
     const service = createAgentConversationService({
       sessions,
       runs,
       authorizer,
       strategy,
+      nativeAudio:{render},
+      voiceForCharacter:async(scope)=>{expect(scope).toEqual(f.scope);return "Fora";},
       sessionDurationMs: 60_000,
     });
 
@@ -212,6 +215,9 @@ describe("Alpha conversation service", () => {
       correlationId: createCanonicalId("correlation"),
     });
     expect(mediaSet.reply).toBe("I reviewed both attachments.");
+    expect(render).toHaveBeenNthCalledWith(1,"Text: hello",undefined,undefined,{voiceName:"Fora"});
+    expect(render).toHaveBeenNthCalledWith(2,"I heard the voice note.",undefined,undefined,{voiceName:"Fora"});
+    expect(render).toHaveBeenNthCalledWith(3,"I reviewed both attachments.",undefined,undefined,{voiceName:"Fora"});
 
     await service.close({
       authorizationHeader: "Bearer alpha",

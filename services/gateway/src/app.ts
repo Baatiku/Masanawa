@@ -1,3 +1,4 @@
+import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
 import { registerYouTubeSourceAdminRoutes } from "./modules/youtube_websub/source_admin_routes.js";
@@ -389,6 +390,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   const checks = options.readinessChecks ?? [];
 
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof GeminiProviderError) {
+      void reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
+      return;
+    }
     if (error instanceof IncomingCallError) {
       void reply.code(error.statusCode).send({ error: { code: error.code, message: "Incoming call request could not be completed" } });
       return;

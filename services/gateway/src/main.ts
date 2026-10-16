@@ -860,7 +860,7 @@ export async function startGatewayService(
     });
     nativeAudio = createGeminiLiveAudioRenderer({
       apiKey: alphaGeminiApiKey,
-      model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
+      model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
     liveVoiceTokens = createGeminiLiveTokenService({
@@ -1340,7 +1340,7 @@ export async function startGatewayService(
         "Bodi";
       nativeAudio ??= createGeminiLiveAudioRenderer({
         apiKey: liveApiKey,
-        model: liveModel,
+        model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
         voiceName: liveVoice,
       });
       if (conversationAuthorizer) {
@@ -1850,6 +1850,10 @@ export async function startGatewayService(
           authorizer: conversationAuthorizer,
           strategy,
           ...(nativeAudio ? { nativeAudio } : {}),
+          voiceForCharacter: async (scope) => {
+            const profile = await database.platformAgentProfiles?.readForCharacter(scope);
+            return profile?.voiceProvider.toLowerCase() === "gemini" ? profile.voiceName : undefined;
+          },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(twinConversationObserver ? { twinObserver: twinConversationObserver } : {}),
           ...(composedBillingAssistant ? { billingAssistant: composedBillingAssistant } : {}),
