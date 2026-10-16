@@ -347,6 +347,71 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           action==="claim"?"payment_claimed":"disputed"};
       });
     },
+    async reportLatePayment(actor:P2pActor,orderId:string, explanation:string){
+      const note=reason(explanation);
+      return transact(async tx=>{
+        const order=await orderForUpdate(tx,actor,orderId);
+        // A late bank claim does not undo a committed MSNW refund, and only
+        // the original buyer can open a case for the original order.
+        if(actor.userId!==order.buyer_id||
+           !["expired","cancelled"].includes(order.state))
+          throw new P2pError("p2p.late_payment_denied",403);
+        const existing=await tx.query(`SELECT case_id,state
+          FROM commerce.msnw_p2p_late_payment_cases
+          WHERE tenant_id=$1 AND order_id=$2 FOR UPDATE`,
+          [actor.tenantId,order.order_id]);
+        if(existing.rows[0]){
+          return {caseId:String(existing.rows[0].case_id),
+            state:String(existing.rows[0].state),replay:true};
+        }
+        const caseId=randomUUID();
+        await tx.query(`INSERT INTO commerce.msnw_p2p_late_payment_cases
+          (case_id,tenant_id,order_id,buyer_id,buyer_reason)
+          VALUES($1,$2,$3,$4,$5)`,
+          [caseId,actor.tenantId,order.order_id,actor.userId,note]);
+        await tx.query(`INSERT INTO commerce.msnw_p2p_late_payment_case_events
+          (event_id,case_id,actor_id,action,explanation)
+          VALUES($1,$2,$3,'reported',$4)`,
+          [randomUUID(),caseId,actor.userId,note]);
+        await event(tx,actor,order.order_id,"late_payment_reported",
+          order.state,order.state);
+        return {caseId,state:"open",replay:false};
+      });
+    },
+    async resolveLatePayment(actor:P2pActor,orderId:string,
+      decision:"escalate"|"close",explanation:string) {
+      const note=reason(explanation);
+      if(!["escalate","close"].includes(decision))
+        throw new P2pError("p2p.late_case_action_invalid",422);
+      return transact(async tx=>{
+        const order=await orderForUpdate(tx,actor,orderId);
+        if(!["expired","cancelled"].includes(order.state))
+          throw new P2pError("p2p.late_case_state_invalid",409);
+        const result=await tx.query(`SELECT case_id,state
+          FROM commerce.msnw_p2p_late_payment_cases
+          WHERE tenant_id=$1 AND order_id=$2 FOR UPDATE`,
+          [actor.tenantId,order.order_id]);
+        const prior=take<{case_id:string;state:string}>(result);
+        if(prior.state==="closed")
+          throw new P2pError("p2p.late_case_already_closed",409);
+        const target=decision==="close"?"closed":"escalated";
+        if(prior.state===target)
+          return {caseId:prior.case_id,state:target,replay:true};
+        await tx.query(`UPDATE commerce.msnw_p2p_late_payment_cases
+          SET state=$3,operator_note=$4,updated_at=statement_timestamp(),
+              closed_at=CASE WHEN $3='closed' THEN statement_timestamp() ELSE NULL END
+          WHERE tenant_id=$1 AND order_id=$2`,
+          [actor.tenantId,order.order_id,target,note]);
+        await tx.query(`INSERT INTO commerce.msnw_p2p_late_payment_case_events
+          (event_id,case_id,actor_id,action,explanation)
+          VALUES($1,$2,$3,$4,$5)`,
+          [randomUUID(),prior.case_id,actor.userId,target,note]);
+        await event(tx,actor,order.order_id,"late_payment_"+target,
+          order.state,order.state);
+        // Never calls escrow.release/refund: the terminal receipt is immutable.
+        return {caseId:prior.case_id,state:target,replay:false};
+      });
+    },
     async caseFile(actor: P2pActor, orderId: string) {
       // Gateway must authorize this caller as a finance/dispute operator.
       const order = take<P2pOrder>(await pool.query(`SELECT order_id,tenant_id,offer_id,seller_id,
