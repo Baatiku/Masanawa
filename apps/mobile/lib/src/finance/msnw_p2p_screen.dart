@@ -252,6 +252,33 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         content:Text('Verify your bank account before creating an offer.')));
       return;
     }
+    // A seller may verify more than one bank; never silently publish an
+    // offer against the first (most recently created) account.
+    String? chosenId;
+    if(methods.length==1){
+      chosenId='${methods.single['method_id']}';
+    } else {
+      chosenId=await showDialog<String>(context:context,builder:(dialog)=>
+        SimpleDialog(
+          title:const Text('Choose bank for buyer payments'),
+          children:[
+            for(final method in methods)
+              SimpleDialogOption(
+                onPressed:()=>Navigator.pop(dialog,'${method['method_id']}'),
+                child:ListTile(
+                  leading:const Icon(Icons.account_balance_outlined),
+                  title:Text('${method['bank_name']}'),
+                  subtitle:Text('${method['account_name']} · ending '
+                    '${'${method['account_number']}'.length>=4 ? '${method['account_number']}'.substring('${method['account_number']}'.length-4) : '****'}'),
+                ),
+              ),
+          ],
+        ));
+    }
+    if(chosenId==null||!mounted)return;
+    final chosen=methods.where((item)=>'${item['method_id']}'==chosenId);
+    if(chosen.length!=1)throw StateError('Verified bank selection unavailable');
+    final payment=chosen.single;
     final rate=await _field(title:'Sell MSNW',label:'NGN per MSNW',hint:'e.g. 1500.00');
     if(rate==null||!mounted)return;
     final minimum=await _field(title:'Minimum purchase',label:'MSNW amount',hint:'e.g. 1');
@@ -275,11 +302,13 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       return;
     }
     if(!await _confirm('Publish sell offer',
+      'Buyer payments will go to ${payment['bank_name']} '
+      '(${payment['account_name']}). '
       'Price ${_ngn(rateKobo)} per MSNW. Your available MSNW will only '
       'be reserved when a buyer creates a funded escrow order.'))return;
     await _act(() async {
       await _request('POST','/offers',{
-        'paymentMethodId':methods.first['method_id'],
+        'paymentMethodId':chosenId,
         'rateKoboPerMsnw':rateKobo,
         'minMicro':minMicro,'maxMicro':maxMicro,
         'inventoryMicro':inventoryMicro,
