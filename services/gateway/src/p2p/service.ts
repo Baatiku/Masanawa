@@ -243,6 +243,48 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         [actor.tenantId,actor.userId]);
       return r.rows;
     },
+    async receipt(actor:P2pActor,orderId:string) {
+      // Only a completed or refunded immutable custody journal can become a
+      // receipt. A buyer payment claim/screenshot never qualifies.
+      const order=take<Record<string,unknown>>(await pool.query(`SELECT
+          o.order_id,o.seller_id,o.buyer_id,o.state,
+          o.amount_micro::text AS amount_micro,
+          o.fee_micro::text AS fee_micro,
+          o.fiat_kobo::text AS fiat_kobo,
+          o.receipt_reference,j.operation_id,j.receipt_ref,
+          j.stage,j.created_at
+        FROM commerce.msnw_p2p_orders o
+        JOIN commerce.msnw_p2p_custody_journal j
+          ON j.tenant_id=o.tenant_id AND j.order_id=o.order_id
+          AND j.stage=CASE WHEN o.state='completed' THEN 'release'
+                           WHEN o.state IN ('cancelled','expired') THEN 'refund'
+                           ELSE 'never_issued' END
+          AND j.receipt_ref=o.receipt_reference
+        WHERE o.tenant_id=$1 AND o.order_id=$2
+          AND (o.seller_id=$3 OR o.buyer_id=$3)`,
+        [actor.tenantId,id(orderId),actor.userId]));
+      const entries=await pool.query(`SELECT p.owner_kind,p.user_id,
+          p.bucket,p.delta_micro::text AS delta_micro
+        FROM commerce.msnw_p2p_custody_postings p
+        WHERE p.operation_id=$1
+        ORDER BY p.posting_index`,[order.operation_id]);
+      if(entries.rows.length<2||entries.rows.length>3 ||
+          entries.rows.some(row=>typeof row.delta_micro!=="string" ||
+            !/^-?[0-9]+$/.test(row.delta_micro)) ||
+          entries.rows.reduce((sum,row)=>sum+BigInt(String(row.delta_micro)),0n)!==0n)
+        throw new P2pError("p2p.receipt_postings_inconsistent",503);
+      return {
+        orderId:order.order_id,status:order.state,
+        receiptReference:order.receipt_ref,stage:order.stage,
+        amountMicro:order.amount_micro,feeMicro:order.fee_micro,
+        fiatKobo:order.fiat_kobo,recordedAt:order.created_at,
+        direction:order.seller_id===actor.userId?"sell":"buy",
+        postings:entries.rows.map(row=>({
+          ownerKind:row.owner_kind,userId:row.user_id,
+          bucket:row.bucket,deltaMicro:row.delta_micro,
+        })),
+      };
+    },
     async createOrder(actor: P2pActor, input: { offerId: string; amountMicro: string; idempotencyKey: string }) {
       const orderKey = key(input.idempotencyKey), offerId = id(input.offerId);
       return transact(async tx => {
