@@ -525,6 +525,37 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     onTap: () => onSelectBundle(pkg),
                   )),
             const SizedBox(height: 20),
+            if (history.isNotEmpty) ...[
+              Text('Recent bill receipts',
+                style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final entry in history.take(8))
+                ListTile(
+                  leading: const Icon(Icons.receipt_long),
+                  title: Text(entry.quote.itemName),
+                  subtitle: Text('Status: '+entry.phase+
+                    ' · ₦'+entry.quote.totalAmount+
+                    ' · '+entry.quote.customerId),
+                  trailing: const Icon(Icons.refresh),
+                  onTap: () async {
+                    try {
+                      final updated = await api.billingQuote(entry.quote.quoteId);
+                      if (!mounted) return;
+                      setState(() {
+                        history = history.map((old) =>
+                          old.quote.quoteId == updated.quote.quoteId
+                            ? updated : old).toList(growable: false);
+                      });
+                    } catch (_) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(
+                          'Bill provider confirmation is still unavailable. '
+                          'The existing order has not been duplicated.')),
+                      );
+                    }
+                  },
+                ),
+            ],
           ],
         ),
       ),
