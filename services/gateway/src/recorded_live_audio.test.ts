@@ -4,7 +4,7 @@ import {
   type RecordedLiveSocket,
 } from "./recorded_live_audio.js";
 class Socket extends EventTarget {
-  binaryType: BinaryType = "blob";
+  binaryType: RecordedLiveSocket["binaryType"] = "blob";
   sent: Record<string, any>[] = [];
   close = vi.fn();
   send(data: string) {

@@ -121,7 +121,15 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
             ) {
               if (data.byteLength > 2 * 1024 * 1024)
                 throw new Error("Invalid frame");
-              frame = new TextDecoder("utf-8", { fatal: true }).decode(data);
+              frame = new TextDecoder("utf-8", { fatal: true }).decode(
+                data instanceof ArrayBuffer
+                  ? new Uint8Array(data)
+                  : new Uint8Array(
+                      data.buffer,
+                      data.byteOffset,
+                      data.byteLength,
+                    ),
+              );
             } else {
               throw new Error("Invalid frame");
             }
