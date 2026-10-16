@@ -36,7 +36,10 @@ export function registerMsnwUsdtConversionRoutes(
     try{
       const who=await owner(request.headers.authorization);
       const value=assert(request.body,["amountMicro","providerCode","destinationAddress"]);
-      return await input.service.quote(who,value);
+      return await input.service.quote(who, {
+        amountMicro:value.amountMicro,providerCode:value.providerCode,
+        destinationAddress:value.destinationAddress,
+      });
     }catch(e){return failed(reply,e);}
   });
   app.post("/v1/wallet/msnw/convert",{bodyLimit:2048},async(request,reply)=>{
@@ -44,7 +47,14 @@ export function registerMsnwUsdtConversionRoutes(
       const who=await owner(request.headers.authorization);
       const value=assert(request.body,["amountMicro","providerCode","destinationAddress",
         "expectedTargetMicro","expectedFeeMicro","expectedRateUsdMicroPerMsnw","idempotencyKey"]);
-      return await input.service.confirm(who,value);
+      return await input.service.confirm(who, {
+        amountMicro:value.amountMicro,providerCode:value.providerCode,
+        destinationAddress:value.destinationAddress,
+        expectedTargetMicro:value.expectedTargetMicro,
+        expectedFeeMicro:value.expectedFeeMicro,
+        expectedRateUsdMicroPerMsnw:value.expectedRateUsdMicroPerMsnw,
+        idempotencyKey:value.idempotencyKey,
+      });
     }catch(e){return failed(reply,e);}
   });
   app.get("/v1/wallet/msnw/convert/history",async(request,reply)=>{
