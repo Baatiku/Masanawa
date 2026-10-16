@@ -5,9 +5,87 @@ import {
   linkedWhatsAppPhoneFromJid,
   resolveLinkedWhatsAppSenderPhone,
   readBoundedLinkedWhatsAppMedia,
+  unwrapLinkedWhatsAppMessage,
+  linkedWhatsAppTextFromMessage,
 } from "./whatsapp_linked_device.js";
 
 describe("linked-device WhatsApp media transport", () => {
+  it("unwraps normal disappearing messages for voice, photos and captions", () => {
+    const wrapper = {
+      ephemeralMessage: {
+        message: {
+          documentWithCaptionMessage: {
+            message: { documentMessage: {
+              mimetype: "application/pdf",
+              caption: "Please summarize this assignment",
+            } },
+          },
+        },
+      },
+    };
+    const parsed = unwrapLinkedWhatsAppMessage(wrapper);
+    expect(parsed).toEqual({ documentMessage: {
+      mimetype: "application/pdf",
+      caption: "Please summarize this assignment",
+    } });
+    expect(linkedWhatsAppMediaKind(parsed!)).toBe("document");
+    expect(linkedWhatsAppTextFromMessage(parsed!))
+      .toBe("Please summarize this assignment");
+    const ephemeralAudio = unwrapLinkedWhatsAppMessage({
+      ephemeralMessage: { message: { audioMessage: {
+        mimetype: "audio/ogg; codecs=opus",
+      } } },
+    });
+    expect(linkedWhatsAppMediaKind(ephemeralAudio!)).toBe("audio");
+  });
+
+  it("never opens view-once envelopes, even behind normal disappearing wrappers", () => {
+    expect(unwrapLinkedWhatsAppMessage({
+      ephemeralMessage: { message: {
+        viewOnceMessageV2: { message: {
+          imageMessage: { url: "provider-secret" },
+        } },
+      } },
+    })).toBeNull();
+    expect(unwrapLinkedWhatsAppMessage({
+      viewOnceMessage: { message: { audioMessage: {} } },
+    })).toBeNull();
+    expect(unwrapLinkedWhatsAppMessage({
+      viewOnceMessageV2Extension: { message: { videoMessage: {} } },
+    })).toBeNull();
+  });
+
+  it("bounds nested provider wrappers and rejects malformed content", () => {
+    let nested: unknown = { conversation: "Hello" };
+    for (let i = 0; i < 8; i++) {
+      nested = { ephemeralMessage: { message: nested } };
+    }
+    expect(unwrapLinkedWhatsAppMessage(nested)).toBeNull();
+    expect(unwrapLinkedWhatsAppMessage({ ephemeralMessage: { message: [] } }))
+      .toBeNull();
+    expect(unwrapLinkedWhatsAppMessage(undefined)).toBeNull();
+  });
+
+  it("uses displayed interactive text, never hidden IDs or response payloads", () => {
+    expect(linkedWhatsAppTextFromMessage({
+      buttonsResponseMessage: {
+        selectedButtonId: "charge-wallet-now",
+        selectedDisplayText: "Show current bill quote",
+      },
+    })).toBe("Show current bill quote");
+    expect(linkedWhatsAppTextFromMessage({
+      listResponseMessage: { title: "Talk to Dr. Amina Yusuf", singleSelectReply: {
+        selectedRowId: "withdraw-all-funds",
+      } },
+    })).toBe("Talk to Dr. Amina Yusuf");
+    expect(linkedWhatsAppTextFromMessage({
+      templateButtonReplyMessage: { selectedDisplayText: "Cancel bill" },
+    })).toBe("Cancel bill");
+    expect(linkedWhatsAppTextFromMessage({
+      buttonsResponseMessage: { selectedButtonId: "billing.confirm" },
+    })).toBe("");
+  });
+
   it("recognizes customer videos in addition to audio, photos and documents", () => {
     const video = { videoMessage: { mimetype: "video/mp4", caption: "Explain this" } };
     expect(linkedWhatsAppMediaKind(video)).toBe("video");
