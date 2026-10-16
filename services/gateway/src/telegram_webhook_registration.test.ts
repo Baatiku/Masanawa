@@ -9,6 +9,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("Telegram webhook registration", () => {
+  it("bounds both registration and verification provider requests",async()=>{
+    const signals:AbortSignal[]=[];
+    const fetchImpl=vi.fn<typeof fetch>(async(url,init)=>{
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      signals.push(init!.signal!);
+      return jsonResponse({ok:true,result:String(url).endsWith("setWebhook")?true:{url:"https://example.com/channels/telegram/webhook"}});
+    });
+    await registerAndVerifyTelegramWebhook({botToken:"123:token",webhookSecret:"secret",webhookUrl:"https://example.com/channels/telegram/webhook"},{fetchImpl});
+    expect(signals).toHaveLength(2);
+    expect(signals[0]).not.toBe(signals[1]);
+  });
   it("registers the canonical webhook and verifies Telegram reports the same URL", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -89,3 +100,4 @@ describe("Telegram webhook registration", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
