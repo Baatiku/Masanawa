@@ -29,6 +29,7 @@ export type CustomerChannelMessageClaim = Readonly<{
 }>;
 
 export interface CustomerChannelRepository {
+  readonly delivery?: CustomerChannelDeliveryRepository;
   readLink(input: Readonly<{
     channel: CustomerChannel;
     externalUserId: string;
@@ -56,6 +57,7 @@ export interface CustomerChannelRepository {
     messageId: string;
     reply: string;
     completedAt: string;
+    delivery?: Readonly<{ chatId: string; tenantId: string | null; userId: string | null; requestContact: boolean }>;
   }>): Promise<void>;
 
   markDelivered(input: Readonly<{
@@ -69,6 +71,20 @@ export interface CustomerChannelRepository {
     messageId: string;
     failedAt: string;
   }>): Promise<void>;
+}
+
+export interface CustomerChannelDelivery {
+  readonly channel: CustomerChannel;
+  readonly messageId: string;
+  readonly chatId: string;
+  readonly reply: string;
+  readonly requestContact: boolean;
+  readonly token: string;
+}
+
+export interface CustomerChannelDeliveryRepository {
+  claim(input: Readonly<{channel: CustomerChannel; messageId?: string}>): Promise<CustomerChannelDelivery | null>;
+  settle(input: Readonly<{token: string; delivered: boolean}>): Promise<void>;
 }
 
 export function normalizeCustomerChannelLink(

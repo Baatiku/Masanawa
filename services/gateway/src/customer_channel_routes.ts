@@ -6,8 +6,10 @@ import type {
   CustomerChannelResult,
 } from "./customer_channel_bridge.js";
 import type { ChannelReplyAudio } from "./channel_reply_audio.js";
+import { deliverCustomerChannelReply, type createCustomerChannelDeliveryService } from "./customer_channel_delivery.js";
 
 export interface CustomerChannelBridge {
+  readonly delivery?: ReturnType<typeof createCustomerChannelDeliveryService>;
   handle(request: CustomerChannelInbound): Promise<CustomerChannelResult>;
   delivered(input: Readonly<{
     channel: "whatsapp" | "telegram";
@@ -119,11 +121,13 @@ async function sendWhatsApp(
   to: string,
   text: string,
 ): Promise<void> {
+  const signal = AbortSignal.timeout(60_000);
   for (const chunk of splitText(text)) {
     await fetchJson(
       `https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/${encodeURIComponent(config.phoneNumberId)}/messages`,
       {
         method: "POST",
+        signal,
         headers: {
           authorization: `Bearer ${config.accessToken}`,
           "content-type": "application/json",
@@ -186,18 +190,20 @@ function telegramReplyChoices(text: string): readonly string[] {
   return choices.length >= 2 ? Object.freeze(choices) : Object.freeze([]);
 }
 
-async function sendTelegram(
+export async function sendTelegram(
   config: TelegramChannelConfig,
   chatId: string,
   text: string,
   requestContact: boolean,
 ): Promise<void> {
   const chunks = splitText(text, 3900);
+  const signal=AbortSignal.timeout(60_000);
   for (let index = 0; index < chunks.length; index += 1) {
     await fetchJson(
       `https://api.telegram.org/bot${config.botToken}/sendMessage`,
       {
         method: "POST",
+        signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
@@ -405,11 +411,10 @@ export function registerCustomerChannelRoutes(
                 ...(media ? { media } : {}),
               });
               if (result.shouldDeliver && result.reply) {
-                await sendWhatsApp(config, from, result.reply);
-                await options.bridge.delivered({
+                await deliverCustomerChannelReply(options.bridge, {
                   channel: "whatsapp",
                   messageId: id,
-                });
+                }, async (saved) => { await sendWhatsApp(config, saved?.chatId ?? from, saved?.reply ?? result.reply!); });
               }
             }
           }
@@ -491,22 +496,22 @@ export function registerCustomerChannelRoutes(
         ...(media ? { media } : {}),
       });
       if (result.shouldDeliver && (result.reply || result.audio)) {
-        if (result.reply) {
-          await sendTelegram(config, chatId, result.reply, result.requestContact);
-        }
-        if (result.audio) {
-          try {
-            await sendTelegramReplyAudio(config, chatId, result.audio);
-          } catch (error) {
-            // Optional audio never re-executes a completed turn or resends
-            // already-delivered text. Text remains the durable fallback.
-            // With no text fallback, retain the pending receipt for retry.
-            if (!result.reply) throw error;
+        await deliverCustomerChannelReply(options.bridge, {channel:"telegram",messageId:durableMessageId}, async(saved)=>{
+          const target=saved?.chatId??chatId;
+          const text=saved?.reply??result.reply;
+          if (text) {
+            await sendTelegram(config, target, text, saved?.requestContact??result.requestContact);
           }
-        }
-        await options.bridge.delivered({
-          channel: "telegram",
-          messageId: durableMessageId,
+          if (result.audio) {
+            try {
+              await sendTelegramReplyAudio(config, target, result.audio);
+            } catch (error) {
+              // Optional audio never re-executes a completed turn or resends
+              // already-delivered text. Text remains the durable fallback.
+              // With no text fallback, retain the pending receipt for retry.
+              if (!result.reply) throw error;
+            }
+          }
         });
       }
       return { received: true };

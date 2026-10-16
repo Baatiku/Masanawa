@@ -311,6 +311,7 @@ import {
   createMsnwAgentCryptoAssistant,
 } from "./agent_msnw_crypto_assistant.js";
 import type { CustomerChannelOptions } from "./customer_channel_routes.js";
+import { sendTelegram } from "./customer_channel_routes.js";
 import { registerAndVerifyTelegramWebhook } from "./telegram_webhook_registration.js";
 import {
   createLinkedWhatsAppController,
@@ -744,6 +745,8 @@ export async function startGatewayService(
   let ownerAccessSweepTenantId: TenantId | undefined;
   let incomingRecoveryTimer: ReturnType<typeof setInterval> | undefined;
   let incomingRecovery: Promise<void> | undefined;
+  let channelRecoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let channelRecovery: Promise<void> | undefined;
   let incomingCalls: IncomingCallService | undefined;
   let ownerAccessSweepTimer: ReturnType<typeof setInterval> | undefined;
   let ownerAccessSweepRunning = false;
@@ -2884,6 +2887,7 @@ export async function startGatewayService(
     onDraining: () => {
       drain.beginDraining();
       if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
+      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
       if (linkedWhatsAppController) {
         void linkedWhatsAppController.stop().catch(() => undefined);
       }
@@ -2899,6 +2903,8 @@ export async function startGatewayService(
     onAfterClose: async () => {
       if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
       await incomingRecovery;
+      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
+      await channelRecovery;
       if (linkedWhatsAppController) {
         await linkedWhatsAppController.stop().catch(() => undefined);
       }
@@ -2932,6 +2938,29 @@ export async function startGatewayService(
       // Durable invitations/outbox are retried by the next sweep or process.
     }).finally(() => { incomingRecovery = undefined; });
   };
+  const runChannelRecovery = () => {
+    const channels=composedCustomerChannels;
+    if(channelRecovery || drain.isDraining() || !channels?.bridge.delivery) return;
+    const work:Promise<void>[]=[];
+    if(channels.telegram) {
+      const config=channels.telegram;
+      work.push(channels.bridge.delivery.recover("telegram",async(saved)=>{
+        await sendTelegram(config,saved.chatId,saved.reply,saved.requestContact);
+      },()=>!drain.isDraining()));
+    }
+    if(linkedWhatsAppController?.snapshot().connected && linkedWhatsAppController.sendReply) {
+      const controller=linkedWhatsAppController;
+      work.push(channels.bridge.delivery.recover("whatsapp",async(saved)=>{
+        await controller.sendReply!(saved.chatId,saved.reply);
+      },()=>!drain.isDraining()));
+    }
+    channelRecovery=Promise.allSettled(work).then(()=>undefined).finally(()=>{channelRecovery=undefined;});
+  };
+  if(composedCustomerChannels?.bridge.delivery) {
+    channelRecoveryTimer=setInterval(runChannelRecovery,5000);
+    channelRecoveryTimer.unref();
+    runChannelRecovery();
+  }
   if (incomingCalls) {
     incomingRecoveryTimer = setInterval(runIncomingRecovery, 1000);
     incomingRecoveryTimer.unref();

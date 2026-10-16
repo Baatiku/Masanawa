@@ -186,3 +186,15 @@ describe("personal WhatsApp lifecycle recovery", () => {
     expect(f.bridge.handle).not.toHaveBeenCalled();
   });
 });
+
+it("recovers only through the currently connected direct-message socket",async()=>{
+ const f=await fixture();
+ await expect(f.controller.sendReply!("2348012345678@s.whatsapp.net","Saved reply")).rejects.toThrow("not_connected");
+ await f.controller.start();
+ f.socket.ev.emit("connection.update",{connection:"open"});
+ await f.controller.sendReply!("2348012345678@s.whatsapp.net","Saved reply");
+ expect(f.socket.sendMessage).toHaveBeenCalledWith("2348012345678@s.whatsapp.net",{text:"Saved reply"});
+ await expect(f.controller.sendReply!("123@g.us","Private reply")).rejects.toThrow("not_connected");
+ await f.controller.stop();
+ await expect(f.controller.sendReply!("2348012345678@s.whatsapp.net","Saved reply")).rejects.toThrow("not_connected");
+});

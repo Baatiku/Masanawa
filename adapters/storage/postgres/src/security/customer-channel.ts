@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { createPostgresCustomerChannelDeliveryRepository } from "./customer-channel-delivery.js";
 import { createCanonicalId, parseCanonicalId } from "@masanawa/contracts";
 import { withTransaction } from "../transaction.js";
 import {
@@ -23,6 +24,7 @@ export function createPostgresCustomerChannelRepository(
   pool: Pool,
 ): CustomerChannelRepository {
   return Object.freeze({
+    delivery: createPostgresCustomerChannelDeliveryRepository(pool),
     async readLink(input: ReadLinkInput) {
       const result = await pool.query<{
         channel: "whatsapp" | "telegram";
@@ -153,10 +155,17 @@ export function createPostgresCustomerChannelRepository(
 
     async completeMessage(input: CompleteMessageInput) {
       await pool.query(
-        `UPDATE security.customer_channel_messages
+        `WITH completed AS (UPDATE security.customer_channel_messages
             SET state='completed',reply=$3,updated_at=$4
-          WHERE channel=$1 AND message_id=$2`,
-        [input.channel,input.messageId,input.reply,input.completedAt],
+          WHERE channel=$1 AND message_id=$2 AND state='processing'
+          RETURNING channel,message_id,external_user_id)
+         INSERT INTO security.customer_channel_delivery_outbox
+           (channel,message_id,external_user_id,chat_id,tenant_id,user_id,request_contact)
+         SELECT channel,message_id,external_user_id,$5,$6,$7,$8 FROM completed
+          WHERE $5::text IS NOT NULL AND length($3)>0
+         ON CONFLICT(channel,message_id) DO NOTHING`,
+        [input.channel,input.messageId,input.reply,input.completedAt,
+         input.delivery?.chatId??null,input.delivery?.tenantId??null,input.delivery?.userId??null,input.delivery?.requestContact??false],
       );
     },
 
@@ -173,7 +182,7 @@ export function createPostgresCustomerChannelRepository(
       await pool.query(
         `UPDATE security.customer_channel_messages
             SET state='failed',updated_at=$3
-          WHERE channel=$1 AND message_id=$2`,
+          WHERE channel=$1 AND message_id=$2 AND state='processing'`,
         [input.channel,input.messageId,input.failedAt],
       );
     },

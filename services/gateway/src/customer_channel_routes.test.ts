@@ -580,3 +580,16 @@ describe("customer channel webhook routes", () => {
 
 });
 
+
+it("does not bypass a recovery lease held by another worker",async()=>{
+ const app=Fastify();const channelBridge=bridge();
+ channelBridge.handle.mockResolvedValue({duplicate:false,reply:"Saved reply",shouldDeliver:true,requestContact:false});
+ const claimed=vi.fn(async()=>false);
+ const fetchImpl=vi.fn();vi.stubGlobal("fetch",fetchImpl);
+ try {
+ registerCustomerChannelRoutes(app,{bridge:{...channelBridge,delivery:{deliver:claimed,recover:async()=>{}}},telegram:{botToken:"bot-token",webhookSecret:"telegram-secret"}});
+ const result=await app.inject({method:"POST",url:"/channels/telegram/webhook",headers:{"x-telegram-bot-api-secret-token":"telegram-secret"},payload:{message:{message_id:502,from:{id:123},chat:{id:123,type:"private"},text:"Hi"}}});
+ expect(result.statusCode).toBe(200);expect(claimed).toHaveBeenCalled();
+ expect(fetchImpl).not.toHaveBeenCalled();expect(channelBridge.delivered).not.toHaveBeenCalled();
+ }finally{vi.unstubAllGlobals();await app.close();}
+});
