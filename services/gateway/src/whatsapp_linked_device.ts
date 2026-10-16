@@ -92,7 +92,7 @@ export function unwrapLinkedWhatsAppMessage(
   return null; // Never recursively parse attacker-supplied nested envelopes.
 }
 
-function textFromMessage(message: Record<string, unknown>): string {
+export function linkedWhatsAppTextFromMessage(message: Record<string, unknown>): string {
   const conversation = typeof message.conversation === "string" ? message.conversation : "";
   const extended = message.extendedTextMessage;
   const extendedText =
@@ -243,7 +243,7 @@ export function createLinkedWhatsAppController(
     }
     const message = unwrapLinkedWhatsAppMessage(raw?.message);
     if (!message) return; // Privacy-preserving view-once rejection.
-    const text = textFromMessage(message);
+    const text = linkedWhatsAppTextFromMessage(message);
     const kind = linkedWhatsAppMediaKind(message);
 
     let media: CustomerChannelInbound["media"] | undefined;
