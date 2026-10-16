@@ -64,6 +64,15 @@ export function createPrivateChatMediaService(input: Readonly<{
       await client.query("BEGIN"); transaction = true;
       // Serialize one message's 1-8 uploads across concurrent devices and
       // retries. Never allow storage that exceeds the 12 MB total envelope.
+      // Serialize storage quota across multiple simultaneous chat requests.
+      // A malicious client cannot fill PostgreSQL with arbitrary request IDs.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",
+        ["chat-media-user:" + who.tenantId + ":" + who.userId]);
+      await client.query(
+        "DELETE FROM agents.private_chat_media WHERE tenant_id=$1 " +
+        "AND user_id=$2 AND expires_at<=clock_timestamp()",
+        [who.tenantId,who.userId],
+      );
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",
         [who.tenantId + ":" + who.userId + ":" + verified.requestId]);
       const current = await client.query(
@@ -81,6 +90,15 @@ export function createPrivateChatMediaService(input: Readonly<{
         }
       } else {
         const total = current.rows.reduce((sum, row) => sum + Number(row.size), 0);
+        const usage = await client.query(
+          "SELECT COALESCE(SUM(octet_length(payload)),0)::text AS total " +
+          "FROM agents.private_chat_media WHERE tenant_id=$1 AND user_id=$2",
+          [who.tenantId,who.userId],
+        );
+        const used = BigInt(String(usage.rows[0]?.total ?? "0"));
+        if (used + BigInt(verified.data.length) > 128n * 1024n * 1024n) {
+          throw new RangeError("chat.media.account_quota_exceeded");
+        }
         if (total + verified.data.length > MAX_MESSAGE_MEDIA_BYTES) {
           throw new RangeError("chat.media.message_too_large");
         }
