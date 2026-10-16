@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 
@@ -144,6 +145,20 @@ class IncomingCallController extends ChangeNotifier
         admission,
         () => unawaited(end()),
       );
+      // The fresh ephemeral Gemini permission must be for the SAME accepted
+      // invitation, signed-in account and consented paid admission. A
+      // resumption is never a second inbound call or financial reservation.
+      session.renewConnectionGrant = () async {
+        if (!_valid || currentAccountKey() != accountKey ||
+            _admission?.admissionId != admission.admissionId ||
+            admission.remaining <= Duration.zero ||
+            call?.callId != callId || call?.state != 'accepted') {
+          throw StateError('The incoming call admission is no longer valid.');
+        }
+        return transport.token(
+          callId, admissionId: admission.admissionId,
+        );
+      };
       _session = session;
       await session.start();
       await session.ready;
@@ -223,10 +238,16 @@ class IncomingCallController extends ChangeNotifier
     _foreground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
       if (!ended) unawaited(refresh());
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
+    } else if (state == AppLifecycleState.detached) {
       if (busy || _session != null) unawaited(end());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // An accepted native Android call owns a visible foreground microphone
+      // notification and remains live on screen lock. Unanswered invitations,
+      // half-authorized calls and non-Android clients release conservatively.
+      if (!Platform.isAndroid || !active || _session == null) {
+        if (busy || _session != null) unawaited(end());
+      }
     }
   }
 
