@@ -80,6 +80,20 @@ function fixture() {
 }
 
 describe("private Masana cross-device media",()=>{
+  it.each([true, false])("keeps customer quota independent of reply upload order (%s)",async(replyFirst)=>{
+    const f=fixture();
+    const put=(slot:number,size:number)=>f.service.put("Bearer alice",{
+      characterId,requestId,slot,kind:"voice",mimeType:"audio/wav",
+      dataBase64:Buffer.alloc(size).toString("base64"),
+    });
+    if(replyFirst)await put(8,8*1024*1024);
+    await put(0,8*1024*1024);
+    await put(1,4*1024*1024);
+    if(!replyFirst)await put(8,8*1024*1024);
+    expect(f.rows).toHaveLength(3);
+    await expect(put(2,1)).rejects.toThrow("chat.media.message_too_large");
+    expect(f.rows).toHaveLength(3);
+  });
   it("restores exact original bytes and metadata to the authenticated owner",async()=>{
     const f=fixture();
     const saved=await f.file("hello from phone A");
@@ -155,3 +169,4 @@ describe("private Masana cross-device media",()=>{
       requestId,0)).rejects.toThrow("chat.media.character_denied");
   });
 });
+
