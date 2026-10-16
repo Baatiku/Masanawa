@@ -672,14 +672,19 @@ class AiChatController extends Notifier<AiChatState> {
             ...state.threads,
             characterId: current.copyWith(messages: [
               for (final message in current.messages)
-                if (message.isUser && message.requestId != null &&
-                    remoteMedia.containsKey(message.requestId))
+                if (message.requestId != null &&
+                    remoteMedia.containsKey(
+                        '${message.isUser ? 'user' : 'assistant'}:${message.requestId}'))
                   message.copyWith(
-                    attachment: remoteMedia[message.requestId]!.length == 1
-                        ? remoteMedia[message.requestId]!.first
+                    attachment: remoteMedia[
+                      '${message.isUser ? 'user' : 'assistant'}:${message.requestId}']!.length == 1
+                        ? remoteMedia[
+                          '${message.isUser ? 'user' : 'assistant'}:${message.requestId}']!.first
                         : message.attachment,
-                    attachments: remoteMedia[message.requestId]!.length > 1
-                        ? remoteMedia[message.requestId]!
+                    attachments: remoteMedia[
+                      '${message.isUser ? 'user' : 'assistant'}:${message.requestId}']!.length > 1
+                        ? remoteMedia[
+                          '${message.isUser ? 'user' : 'assistant'}:${message.requestId}']!
                         : message.attachments,
                   )
                 else message,
@@ -769,7 +774,7 @@ class AiChatController extends Notifier<AiChatState> {
         ownerGeneration == _cacheGeneration &&
         connectionGeneration == _connectionGeneration;
     final ids = history
-        .where((m) => m.direction == 'user' && m.requestId.isNotEmpty)
+        .where((m) => m.requestId.isNotEmpty)
         .map((m) => m.requestId)
         .toSet().toList();
     if (ids.isEmpty) return const {};
@@ -788,8 +793,8 @@ class AiChatController extends Notifier<AiChatState> {
     });
     final existingByRequest = {
       for (final message in threadOf(characterId).messages)
-        if (message.isUser && message.requestId != null)
-          message.requestId!: message.allAttachments,
+        if (message.requestId != null)
+          '${message.isUser ? 'user' : 'assistant'}:${message.requestId}': message.allAttachments,
     };
     final restored = <String, Map<int, ChatAttachment>>{};
     var fetchedBytes = 0;
@@ -797,9 +802,11 @@ class AiChatController extends Notifier<AiChatState> {
     for (final item in ordered) {
       if (!current()) return const {};
       ChatAttachment? local;
-      final previously = existingByRequest[item.requestId] ?? const [];
-      if (item.slot < previously.length) {
-        final entry = previously[item.slot];
+      final key = item.slot == 8 ? 'assistant:${item.requestId}' : 'user:${item.requestId}';
+      final previously = existingByRequest[key] ?? const [];
+      final localSlot = item.slot == 8 ? 0 : item.slot;
+      if (localSlot < previously.length) {
+        final entry = previously[localSlot];
         if (!entry.path.startsWith('masanawa-remote|')) {
           try {
             if (await File(entry.path).length() == item.sizeBytes) {
@@ -819,7 +826,7 @@ class AiChatController extends Notifier<AiChatState> {
           fetchedCount++;
         } catch (_) {}
       }
-      restored.putIfAbsent(item.requestId, () => {})[item.slot] =
+      restored.putIfAbsent(key, () => {})[item.slot] =
           local ?? ChatAttachment(
             kind: item.kind,
             path: chatRemoteMediaReference(
@@ -847,7 +854,7 @@ class AiChatController extends Notifier<AiChatState> {
     }
     final characterId = pieces[1], requestId = pieces[2];
     final slot = int.tryParse(pieces[3]);
-    if (slot == null || slot < 0 || slot > 7) {
+    if (slot == null || slot < 0 || slot > 8) {
       throw const ApiException('Invalid private media slot');
     }
     final owner = _cacheOwnerId;
@@ -880,7 +887,7 @@ class AiChatController extends Notifier<AiChatState> {
       ...state.threads,
       characterId: thread.copyWith(messages: [
         for (final message in thread.messages)
-          if (message.isUser && message.requestId == requestId)
+          if (message.isUser == (slot != 8) && message.requestId == requestId)
             message.copyWith(
               attachment: message.attachment?.path == reference
                   ? attachment : message.attachment,
@@ -1639,6 +1646,28 @@ class AiChatController extends Notifier<AiChatState> {
               generation != _cacheGeneration) {
             try { await retained.delete(); } catch (_) {}
             throw StateError('Account changed while audio reply was saved');
+          }
+          // Keep the user's message slots 0-7 untouched. An assistant
+          // voice response occupies reserved slot 8 for cross-device replay.
+          final mediaTransport = ref.read(agentTransportProvider);
+          if (mediaTransport is MasanawaAgentTransport &&
+              userMsg.requestId != null &&
+              playable.bytes.length <= 8 * 1024 * 1024) {
+            try {
+              await mediaTransport.savePrivateChatMedia(
+                characterId: characterId,
+                requestId: userMsg.requestId!,
+                slot: 8,
+                kind: 'voice',
+                mimeType: playable.isWav ? 'audio/wav'
+                    : 'audio/${playable.extension}',
+                name: 'masana-reply.${playable.extension}',
+                bytes: playable.bytes,
+              );
+            } catch (_) {
+              // Retain the already delivered chat and local audio. Media
+              // backup never causes inference or a charged turn to replay.
+            }
           }
           replyAudio = ChatAttachment(
             kind: 'voice',
