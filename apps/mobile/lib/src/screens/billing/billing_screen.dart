@@ -73,7 +73,6 @@ class BillingScreen extends ConsumerStatefulWidget {
 
 class _BillingScreenState extends ConsumerState<BillingScreen> {
   final customer = TextEditingController();
-  final amount = TextEditingController();
 
   List<BillCategory> categories = const [];
   List<BillBiller> billers = const [];
@@ -118,7 +117,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   void dispose() {
     customer.removeListener(_onPhoneChanged);
     customer.dispose();
-    amount.dispose();
     super.dispose();
   }
 
@@ -610,30 +608,6 @@ class _BundleCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ConfirmRow extends StatelessWidget {
-  const _ConfirmRow(this.label, this.value, {this.isBold = false});
-  final String label;
-  final String value;
-  final bool isBold;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-            fontSize: isBold ? 16 : 13.5,
-          ),
-        ),
-      ],
     );
   }
 }
