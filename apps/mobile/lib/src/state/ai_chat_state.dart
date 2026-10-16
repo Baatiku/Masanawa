@@ -334,6 +334,33 @@ class AiChatMessage {
   );
 }
 
+/// A process crash may interrupt a send between the local 'sent' status and
+/// the server receipt. Reconcile by the original requestId before resending;
+/// never generate a new financial/service operation on app restart.
+String recoveredChatDeliveryStatus(AiChatMessage message) {
+  if (!message.isUser ||
+      !{'sending', 'sent'}.contains(message.deliveryStatus)) {
+    return message.deliveryStatus;
+  }
+  // Legacy messages lack the original idempotency key: do not replay, and
+  // do not relabel their historically visible 'sent' status as a failure.
+  if (message.requestId == null) {
+    return message.deliveryStatus == 'sending' ? 'failed' : 'sent';
+  }
+  return 'queued';
+}
+
+enum ChatQueuedTurnResolution { resend, delivered, processing, failed, wait }
+
+ChatQueuedTurnResolution resolveChatQueuedTurn(AgentTurnStatus status) =>
+    switch (status.state) {
+      'missing' => ChatQueuedTurnResolution.resend,
+      'completed' => ChatQueuedTurnResolution.delivered,
+      'pending' => ChatQueuedTurnResolution.processing,
+      'failed' => ChatQueuedTurnResolution.failed,
+      _ => ChatQueuedTurnResolution.wait,
+    };
+
 /// One conversation per canonical Character.
 class ChatThread {
   ChatThread({
@@ -720,6 +747,10 @@ class AiChatController extends Notifier<AiChatState> {
           _setDelivery(characterId, message.id, 'processing');
         } else if (status.state == 'failed') {
           _setDelivery(characterId, message.id, 'failed');
+        } else if (status.state == 'missing' &&
+            message.deliveryStatus != 'failed') {
+          _setDelivery(characterId, message.id, 'queued');
+          unawaited(_flushQueuedMessages());
         }
       } catch (_) {}
     }
@@ -1008,18 +1039,84 @@ class AiChatController extends Notifier<AiChatState> {
 
   Future<void> _flushQueuedMessages() async {
     if (_flushingQueue || _disposed) return;
+    final transport = _shellTransport;
+    if (transport == null) return;
+    final owner = _cacheOwnerId;
+    final cacheGeneration = _cacheGeneration;
+    final connectionGeneration = _connectionGeneration;
     _flushingQueue = true;
+    bool stillCurrent() =>
+        !_disposed && owner != null && owner == _cacheOwnerId &&
+        cacheGeneration == _cacheGeneration &&
+        connectionGeneration == _connectionGeneration;
     try {
       for (final entry in state.threads.entries.toList()) {
         final characterId = entry.key;
         final queued = entry.value.messages
-            .where((m) => m.isUser && m.deliveryStatus == 'queued')
+            .where((message) => message.isUser &&
+                message.deliveryStatus == 'queued')
             .toList();
         for (final message in queued) {
-          if (_disposed) return;
+          if (!stillCurrent()) return;
           if (await _offlineNow()) return;
-          _setDelivery(characterId, message.id, 'sending');
-          await _dispatchUserMessage(characterId, message, retry: true);
+          if (!stillCurrent()) return;
+          if (state.sendingIn.contains(characterId)) break;
+          if (!threadOf(characterId).messages.any(
+            (current) => current.id == message.id &&
+                current.deliveryStatus == 'queued',
+          )) continue;
+
+          final requestId = message.requestId;
+          if (requestId == null || requestId.isEmpty) {
+            // Never replay a customer service/spending operation without
+            // the original idempotency key. Keep visible failed status.
+            _setDelivery(characterId, message.id, 'failed');
+            continue;
+          }
+
+          // A crash after server execution but before local receipt is
+          // indistinguishable from a lost request. Ask the canonical server
+          // first; only a *confirmed missing* turn may be retried with its
+          // original requestId and retained private attachment paths.
+          AgentTurnStatus status;
+          try {
+            status = await transport.turnStatus(characterId, requestId);
+          } catch (_) {
+            return; // Keep queued for next connectivity/history refresh.
+          }
+          if (!stillCurrent()) return;
+          switch (resolveChatQueuedTurn(status)) {
+            case ChatQueuedTurnResolution.delivered:
+              _setDelivery(characterId, message.id, 'delivered');
+              if (!threadOf(characterId).messages.any(
+                (item) => !item.isUser && item.requestId == requestId,
+              ) && ((status.reply ?? '').isNotEmpty ||
+                  status.parts.isNotEmpty)) {
+                await _appendAi(
+                  characterId,
+                  status.reply ?? '',
+                  parts: [
+                    for (final raw in status.parts)
+                      AgentMessagePart.fromJson(raw),
+                  ],
+                  agentRunId: status.agentRunId,
+                  requestId: requestId,
+                );
+              }
+              continue;
+            case ChatQueuedTurnResolution.processing:
+              _setDelivery(characterId, message.id, 'processing');
+              continue;
+            case ChatQueuedTurnResolution.failed:
+              _setDelivery(characterId, message.id, 'failed');
+              continue;
+            case ChatQueuedTurnResolution.wait:
+              return;
+            case ChatQueuedTurnResolution.resend:
+              _setDelivery(characterId, message.id, 'sending');
+              await _dispatchUserMessage(characterId, message, retry: true);
+              continue;
+          }
         }
       }
     } finally {
@@ -1375,6 +1472,11 @@ class AiChatController extends Notifier<AiChatState> {
     final thread = threadOf(characterId);
     final users = thread.messages.where((m) => m.id == messageId && m.isUser);
     if (users.isEmpty) return;
+    final user = users.first;
+    // Manual retry must obey the same server-first, original-ID policy as
+    // crash/offline recovery. A request without an ID cannot be safely
+    // replayed, even if a user taps Retry.
+    if (user.requestId == null || user.requestId!.isEmpty) return;
     final failures = thread.messages.where(
       (m) => m.parts.any(
         (p) =>
@@ -1394,7 +1496,11 @@ class AiChatController extends Notifier<AiChatState> {
         ),
       },
     );
-    await _dispatchUserMessage(characterId, users.first, retry: true);
+    _setDelivery(characterId, user.id, 'queued');
+    // If offline or if the status endpoint is unavailable, the original
+    // durable queue remains visible and retries on the next connection.
+    await _save();
+    await _flushQueuedMessages();
   }
 
   Future<AgentTurnResult> _sendMediaViaTransport(
@@ -1686,6 +1792,18 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     if (_disposed) return;
     final thread = threadOf(characterId);
+    if (requestId != null && thread.messages.any(
+      (message) => !message.isUser && message.requestId == requestId,
+    )) {
+      // HTTP, SSE and restarted queue recovery may finish the same turn.
+      // Clear any stale spinner even when its assistant reply already exists.
+      if (state.sendingIn.contains(characterId)) {
+        state = state.copyWith(
+          sendingIn: {...state.sendingIn}..remove(characterId),
+        );
+      }
+      return;
+    }
     final isOpen = state.openThreadId == characterId;
     final msg = AiChatMessage(
       id: _newId(),
@@ -2150,10 +2268,28 @@ class AiChatController extends Notifier<AiChatState> {
           list.isEmpty) {
         return;
       }
+      final recovered = [
+        for (final thread in list)
+          thread.copyWith(
+            messages: List.unmodifiable([
+              for (final message in thread.messages)
+                message.copyWith(
+                  deliveryStatus: recoveredChatDeliveryStatus(message),
+                ),
+            ]),
+          ),
+      ];
       state = state.copyWith(
-        threads: {for (final t in list) t.characterId: t, ...state.threads},
+        threads: {
+          for (final thread in recovered) thread.characterId: thread,
+          ...state.threads,
+        },
       );
       MasanawaStartupMetrics.mark('cached_threads_ready');
+      // Retried sends check canonical turn status first. Any completed server
+      // operation is rendered from its receipt, not executed a second time.
+      unawaited(_save());
+      unawaited(_flushQueuedMessages());
     } catch (_) {
       // Corrupt/missing cache never prevents the user from opening chat.
     }
