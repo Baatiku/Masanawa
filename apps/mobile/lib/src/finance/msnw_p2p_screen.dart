@@ -6,6 +6,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+String _maskedP2pAccount(Object? value) {
+  final number=value?.toString()??'';
+  return RegExp(r'^[0-9]{10}$').hasMatch(number)
+    ? '••••${number.substring(6)}' : '••••';
+}
+
 /// Exact six-decimal MSNW amounts: UI never uses floating point for financial input.
 String _micro(String text) {
   final value = text.trim();
@@ -268,8 +274,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                 child:ListTile(
                   leading:const Icon(Icons.account_balance_outlined),
                   title:Text('${method['bank_name']}'),
-                  subtitle:Text('${method['account_name']} · ending '
-                    '${'${method['account_number']}'.length>=4 ? '${method['account_number']}'.substring('${method['account_number']}'.length-4) : '****'}'),
+                  subtitle:Text('${method['account_name']} · '
+                    '${_maskedP2pAccount(method['account_number'])}'),
                 ),
               ),
           ],
