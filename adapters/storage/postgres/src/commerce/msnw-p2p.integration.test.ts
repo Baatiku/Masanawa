@@ -117,6 +117,52 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect((await pool.query<{expired:number}>(`SELECT commerce.msnw_p2p_expire_due_batch(25) AS expired`))
      .rows[0]?.expired).toBe(0);
  });
+ it("preserves refunded escrow while buyer reports late bank transfer and admin closes a case",async()=>{
+   const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
+   const beforeSeller=await account(seller),beforeBuyer=await account(buyer);
+   const item=await service().createOrder(actor,{
+     offerId,amountMicro:"150000",idempotencyKey:randomUUID(),
+   });
+   await pool.query(`UPDATE commerce.msnw_p2p_orders
+     SET payment_deadline=statement_timestamp()-interval '1 minute'
+     WHERE tenant_id=$1 AND order_id=$2`,[tenant,item.orderId]);
+   await pool.query(`SELECT commerce.msnw_p2p_expire_due_batch(25)`);
+   expect(await account(seller)).toEqual(beforeSeller);
+   expect(await account(buyer)).toEqual(beforeBuyer);
+   await expect(service().reportLatePayment({tenantId:tenant,userId:seller},
+     item.orderId,"Paid after deadline via my bank")).rejects
+       .toMatchObject({code:"p2p.late_payment_denied"});
+   const report=await service().reportLatePayment(actor,item.orderId,
+     "The transfer was sent before expiry, bank reference 0149876");
+   expect(report).toMatchObject({state:"open",replay:false});
+   expect(await service().reportLatePayment(actor,item.orderId,
+     "Duplicate bank transfer report")).toMatchObject({
+       caseId:report.caseId,replay:true,
+     });
+   await service().assertEvidenceAllowed(actor,item.orderId);
+   await expect(service().assertEvidenceAllowed(
+     {tenantId:tenant,userId:seller},item.orderId))
+     .rejects.toMatchObject({code:"p2p.evidence_forbidden"});
+   expect((await service().order(actor,item.orderId)).latePayment)
+     .toMatchObject({state:"open"});
+   const operator={tenantId:tenant,userId:"user_"+randomUUID()};
+   expect(await service().resolveLatePayment(operator,item.orderId,
+     "escalate","Bank verification referral for external dispute"))
+     .toMatchObject({state:"escalated"});
+   expect(await service().resolveLatePayment(operator,item.orderId,
+     "close","Resolved by external bank reversal, no MSNW transfer"))
+     .toMatchObject({state:"closed"});
+   await expect(service().assertEvidenceAllowed(actor,item.orderId))
+     .rejects.toMatchObject({code:"p2p.evidence_forbidden"});
+   expect(await account(seller)).toEqual(beforeSeller);
+   expect(await account(buyer)).toEqual(beforeBuyer);
+   const stages=await pool.query(`SELECT stage FROM commerce.msnw_p2p_custody_journal
+     WHERE tenant_id=$1 AND order_id=$2 ORDER BY stage`,[tenant,item.orderId]);
+   expect(stages.rows.map(x=>x.stage)).toEqual(["refund","reserve"]);
+   const audit=await service().caseFile(operator,item.orderId);
+   expect(audit.latePayment).toMatchObject({state:"closed"});
+   expect(audit.paymentVerified).toBe(false);
+ });
  it("refunds unpaid cancellation with zero fees and immutable receipts",async()=>{
    const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
    const old=await account(seller);

@@ -117,6 +117,17 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.order(a,(req.params as {orderId:string}).orderId);
     }catch(error){return respond(error,reply);}
   });
+  app.post("/v1/wallet/msnw/p2p/orders/:orderId/late-payment",
+    {bodyLimit:4096},async(req,reply)=>{
+    try{
+      const a=await actor(req.headers.authorization);
+      const body=req.body as {reason?:unknown}|null;
+      const value=await deps.service.reportLatePayment(a,
+        (req.params as {orderId:string}).orderId,
+        typeof body?.reason==="string"?body.reason:"");
+      return reply.code(value.replay?200:201).send(value);
+    }catch(error){return respond(error,reply);}
+  });
   app.post("/v1/wallet/msnw/p2p/orders/:orderId/claim",async(req,reply)=>{
     try{
       const a=await actor(req.headers.authorization);
@@ -219,6 +230,18 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
   app.get("/v1/admin/msnw/p2p/disputes",async(req,reply)=>{
     try{return {items:await deps.service.disputes(await operator(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
+  });
+  app.post("/v1/admin/msnw/p2p/late-payments/:orderId/resolve",
+    {bodyLimit:4096},async(req,reply)=>{
+    try{
+      const a=await operator(req.headers.authorization);
+      const body=req.body as {resolution?:unknown;reason?:unknown}|null;
+      if(body?.resolution!=="escalate"&&body?.resolution!=="close")
+        throw new P2pError("p2p.late_case_action_invalid",422);
+      return await deps.service.resolveLatePayment(a,
+        (req.params as {orderId:string}).orderId,body.resolution,
+        typeof body.reason==="string"?body.reason:"");
+    }catch(error){return respond(error,reply);}
   });
   app.post("/v1/admin/msnw/p2p/disputes/:orderId/resolve",async(req,reply)=>{
     try{

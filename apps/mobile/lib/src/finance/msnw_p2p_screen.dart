@@ -447,7 +447,9 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       final input=TextEditingController();
       try {
         reason=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
-          title:const Text('Explain the dispute'),content:TextField(
+          title:Text(action=='late-payment'
+            ? 'Report a bank transfer after expiry'
+            : 'Explain the dispute'),content:TextField(
             controller:input,maxLines:3,decoration:const InputDecoration(
               hintText:'What happened? Give transaction reference, not passwords.')),
           actions:[TextButton(onPressed:()=>Navigator.pop(ctx),
@@ -518,6 +520,9 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       final buyer=o['buyer_id']==widget.userId;
       final state='${o['state']}';
       final p=o['payment'] is Map?_json(o['payment']):<String,dynamic>{};
+      final late=o['latePayment'] is Map
+        ? _json(o['latePayment']) : <String,dynamic>{};
+      final lateOpen=['open','escalated'].contains(late['state']);
       return ListView(padding:const EdgeInsets.all(18),children:[
         Text('Status: $state',style:Theme.of(context).textTheme.titleLarge),
         const SizedBox(height:12),
@@ -539,6 +544,24 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           OutlinedButton(onPressed:()=>_perform('dispute',reasonRequired:true),
             child:const Text('Open dispute')),
         ],
+        if(buyer&&(state=='expired'||state=='cancelled')) ...[
+          const SizedBox(height:12),
+          const ListTile(
+            leading:Icon(Icons.warning_amber_outlined),
+            title:Text('Escrow already refunded to the seller'),
+            subtitle:Text('If you sent a bank transfer, report it for '
+              'operator review. This does not reopen the MSNW escrow.')),
+          if(late.isEmpty)
+            OutlinedButton.icon(
+              onPressed:()=>_perform('late-payment',reasonRequired:true),
+              icon:const Icon(Icons.report_outlined),
+              label:const Text('Report bank payment sent')),
+        ],
+        if(late.isNotEmpty)ListTile(
+          leading:const Icon(Icons.support_agent_outlined),
+          title:Text('Late-payment case: ${late['state']}'),
+          subtitle:const Text('A support case does not move MSNW. '
+            'Keep your bank transaction reference and evidence available.')),
         if(!buyer&&state=='payment_claimed') ...[
           const ListTile(
             title:Text('Seller confirmation pending'),
@@ -549,7 +572,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
             onPressed:()=>_sellerConfirm(o),
             child:const Text('I received the bank payment')),
         ],
-        if(state=='payment_claimed'||state=='disputed') ...[
+        if(state=='payment_claimed'||state=='disputed'||
+           (buyer&&lateOpen)) ...[
           const SizedBox(height:18),
           Text('Payment evidence',style:Theme.of(context).textTheme.titleMedium),
           const Text('Optional. Attach a bank receipt only to assist a dispute. '
