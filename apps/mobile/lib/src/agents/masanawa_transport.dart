@@ -88,7 +88,8 @@ class _GatewayClient {
         options: options(
           turn: path.endsWith('/turn') ||
               path.endsWith('/media-turn') ||
-              path.endsWith('/media-set-turn'),
+              path.endsWith('/media-set-turn') ||
+              path.startsWith('/agent/media/'),
           requestId: requestId,
         ),
         cancelToken: cancelToken,
@@ -214,7 +215,7 @@ class _GatewayClient {
     try {
       final res = await dio.get<Map<String, dynamic>>(
         '$baseUrl$path',
-        options: options(),
+        options: options(turn: path.startsWith('/agent/media/')),
       );
       final data = res.data;
       if (data == null) throw const ApiException('Empty response from server');
