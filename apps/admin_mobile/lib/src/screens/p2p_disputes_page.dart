@@ -117,6 +117,47 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       ));
   }
 
+  Future<void> _showReconciliation() async {
+    final result=_dio.get<dynamic>(
+      '$_base/v1/admin/msnw/p2p/reconciliation',options:_auth);
+    await showDialog<void>(context:context,builder:(dialog)=>AlertDialog(
+      title:const Text('MSNW P2P financial health'),
+      content:FutureBuilder<Response<dynamic>>(future:result,builder:(ctx,snapshot){
+        if(snapshot.connectionState!=ConnectionState.done)
+          return const SizedBox(height:90,child:Center(child:CircularProgressIndicator()));
+        if(snapshot.hasError)return Text('Could not load audit: ${snapshot.error}');
+        try{
+          final data=Map<String,dynamic>.from(snapshot.data!.data as Map);
+          final bad=(
+            (data['inconsistentOrders'] as num).toInt()+
+            (data['underReservedSellers'] as num).toInt()+
+            (data['undeliveredDeadLetters'] as num).toInt())>0;
+          return SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
+            children:[
+              const Text('Read-only reconciliation of immutable custody '
+                'postings, seller reserves and notification recovery.'),
+              const SizedBox(height:14),
+              Text('Inconsistent escrow orders: ${data['inconsistentOrders']}'),
+              Text('Under-reserved sellers: ${data['underReservedSellers']}'),
+              Text('Undelivered notification dead letters: '
+                '${data['undeliveredDeadLetters']}'),
+              const SizedBox(height:14),
+              Text(bad
+                ? 'Investigate these exceptions against the original MSNW '
+                  'posting, order receipt and authorized payment confirmation. '
+                  'Do not manually adjust available/reserved balances.'
+                : 'No exceptions detected in the current read-only snapshot. '
+                  'This does not replace chain/provider settlement verification.'),
+            ]));
+        }catch(error){
+          return Text('Audit response unavailable: $error');
+        }
+      }),
+      actions:[TextButton(onPressed:()=>Navigator.pop(dialog),
+        child:const Text('Close'))],
+    ));
+  }
   Future<void> _expireUnpaid() async {
     if(_submitting)return;
     final accepted=await showDialog<bool>(context:context,
@@ -287,6 +328,9 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       subtitle:const Text('Authorized resolutions only. Bank claims and screenshots '
         'do not automatically release escrow.'),
       trailing:Wrap(spacing:4,children:[
+        IconButton(tooltip:'Review P2P financial reconciliation',
+          onPressed:_submitting?null:_showReconciliation,
+          icon:const Icon(Icons.monitor_heart_outlined)),
         IconButton(tooltip:'Recover overdue unpaid orders',
           onPressed:_submitting?null:_expireUnpaid,
           icon:const Icon(Icons.history_toggle_off_outlined)),

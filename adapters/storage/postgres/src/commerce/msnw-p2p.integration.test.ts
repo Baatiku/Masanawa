@@ -170,6 +170,23 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect(audit.latePayment).toMatchObject({state:"closed"});
    expect(audit.paymentVerified).toBe(false);
  });
+ it("reconciles only the operator tenant and never treats another tenant as a financial obligation",async()=>{
+   const result=await pool.query(`SELECT inconsistent_orders::text,
+     under_reserved_sellers::text,undelivered_dead_letters::text
+     FROM commerce.msnw_p2p_reconciliation_counts($1::text)`,[tenant]);
+   expect(result.rows[0]).toMatchObject({
+     inconsistent_orders:"0",under_reserved_sellers:"0",
+     undelivered_dead_letters:"0",
+   });
+   const unrelated=await pool.query(`SELECT inconsistent_orders::text,
+     under_reserved_sellers::text,undelivered_dead_letters::text
+     FROM commerce.msnw_p2p_reconciliation_counts($1::text)`,
+     ["tenant_unrelated_read_only"]);
+   expect(unrelated.rows[0]).toMatchObject({
+     inconsistent_orders:"0",under_reserved_sellers:"0",
+     undelivered_dead_letters:"0",
+   });
+ });
  it("refunds unpaid cancellation with zero fees and immutable receipts",async()=>{
    const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
    const old=await account(seller);
