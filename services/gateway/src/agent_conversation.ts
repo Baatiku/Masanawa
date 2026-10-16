@@ -93,6 +93,7 @@ export function createAgentConversationService(input: {
   readonly authorizer: AgentConversationAuthorizer;
   readonly strategy: AgentStrategy;
   readonly nativeAudio?: NativeAudioRenderer;
+  readonly voiceForCharacter?: (scope: import("@masanawa/agents").CharacterSessionScope) => Promise<string | undefined>;
   readonly mobileShell?: MobileShellRepository;
   readonly twinObserver?: TwinConversationObserver;
   readonly billingAssistant?: AgentBillingAssistant;
@@ -109,19 +110,24 @@ export function createAgentConversationService(input: {
 
   async function renderAudio(
     reply: string,
+    scope: import("@masanawa/agents").CharacterSessionScope,
     signal?: AbortSignal,
     onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>,
   ) {
     if (!input.nativeAudio || signal?.aborted) return undefined;
-    return input.nativeAudio
+    try {
+      const voiceName = await input.voiceForCharacter?.(scope);
+      return await input.nativeAudio
       .render(
         reply,
         signal,
         onAudioPcmChunk
           ? async (chunk) => onAudioPcmChunk(chunk.toString("base64"))
           : undefined,
+        voiceName ? {voiceName} : undefined,
       )
       .catch(() => undefined);
+    } catch { return undefined; }
   }
 
   const service: AgentConversationService = {
@@ -316,6 +322,7 @@ export function createAgentConversationService(input: {
 
         const audio = await renderAudio(
           reply,
+          admission.scope,
           request.signal,
           request.onAudioPcmChunk,
         );
@@ -498,7 +505,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = await renderAudio(reply, request.signal);
+        const audio = await renderAudio(reply, admission.scope, request.signal);
         return Object.freeze({
           reply,
           agentRunId,
@@ -682,7 +689,7 @@ export function createAgentConversationService(input: {
           });
         }
 
-        const audio = await renderAudio(reply, request.signal);
+        const audio = await renderAudio(reply, admission.scope, request.signal);
         return Object.freeze({
           reply,
           agentRunId,

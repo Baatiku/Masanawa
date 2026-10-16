@@ -75,7 +75,7 @@ describe("Gemini Live ephemeral token compatibility", () => {
   it("exposes only a whitelisted rejection code, not upstream error details", async () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
     const fakeFetch = (async () => Response.json({
-      error: { status: "INVALID_ARGUMENT", message: "sensitive user information" },
+      error: { status: "INVALID_ARGUMENT", message: "sensitive user information", details: [{reason: "API_KEY_INVALID"}] },
     }, { status: 400 })) as typeof fetch;
     try {
       const service = createGeminiLiveTokenService({
@@ -83,9 +83,9 @@ describe("Gemini Live ephemeral token compatibility", () => {
       });
       await expect(service.mint({
         characterId, authorizationHeader: "Bearer valid-user",
-      })).rejects.toThrow("Gemini Live token provisioning failed");
+      })).rejects.toMatchObject({code:"agent.provider_unavailable", statusCode:503, providerStatus:400});
       const logged = stderr.mock.calls.map(([item]) => String(item)).join(" ");
-      expect(logged).toContain("INVALID_ARGUMENT");
+      expect(logged).toContain("API_KEY_INVALID");
       expect(logged).not.toContain("sensitive user information");
       expect(logged).not.toContain("server-secret-api-key");
     } finally {

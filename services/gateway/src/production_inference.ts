@@ -1,4 +1,5 @@
 import { createDecipheriv, createHash } from "node:crypto";
+import { geminiFailure, GeminiProviderError } from "./gemini_failure.js";
 import type {
   AgentInferenceControls,
   AgentInferenceProvider,
@@ -193,11 +194,11 @@ async function generateOnce(input: {
   const streaming = input.controls?.onTextDelta != null;
   const endpoint = streaming ? "streamGenerateContent?alt=sse" : "generateContent";
   const response = await input.fetchImpl(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:${endpoint}?key=${encodeURIComponent(input.apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:${endpoint}`,
     {
       method: "POST",
-      ...(input.controls?.signal ? { signal: input.controls.signal } : {}),
-      headers: { "content-type": "application/json" },
+      signal: input.controls?.signal ? AbortSignal.any([input.controls.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
+      headers: { "content-type": "application/json", "x-goog-api-key": input.apiKey },
       body: JSON.stringify({
         system_instruction: {
           parts: input.request.systemInstructions.map((text) => ({ text })),
@@ -210,11 +211,7 @@ async function generateOnce(input: {
     },
   );
   if (!response.ok) {
-    const error = new Error(`Gemini request failed with ${response.status}`) as Error & {
-      status?: number;
-    };
-    error.status = response.status;
-    throw error;
+    throw await geminiFailure(response,"inference");
   }
 
   if (!streaming) {
@@ -319,6 +316,14 @@ export function createGeminiCredentialPoolInferenceProvider(input: {
   const provider: AgentInferenceProvider = {
     async generate(request, controls) {
       let lastError: unknown;
+      let outputStarted = false;
+      const guardedControls = controls?.onTextDelta ? {
+        ...controls,
+        onTextDelta: async (delta: string) => {
+          outputStarted = true;
+          await controls.onTextDelta!(delta);
+        },
+      } : controls;
       for (const model of input.pool.models) {
         for (const apiKey of input.pool.apiKeys) {
           try {
@@ -326,14 +331,15 @@ export function createGeminiCredentialPoolInferenceProvider(input: {
               apiKey,
               model,
               request,
-              ...(controls ? { controls } : {}),
+              ...(guardedControls ? { controls: guardedControls } : {}),
               fetchImpl,
             });
           } catch (error) {
-            if (controls?.signal?.aborted) throw error;
+            if (controls?.signal?.aborted || outputStarted) throw error;
             lastError = error;
-            const status = (error as { status?: unknown }).status;
-            if (status === 400 || status === 403 || status === 404) {
+            const status = error instanceof GeminiProviderError ? error.providerStatus : (error as { status?: unknown }).status;
+            const keyFailure = error instanceof GeminiProviderError && error.providerReason.startsWith("API_KEY_");
+            if (!keyFailure && (status === 400 || status === 403 || status === 404)) {
               // Try another model before burning all keys on an invalid model.
               break;
             }

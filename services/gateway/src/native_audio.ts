@@ -1,3 +1,4 @@
+import { geminiFailure } from "./gemini_failure.js";
 export interface NativeAudioRenderResult {
   readonly dataBase64: string;
   readonly mimeType: string;
@@ -9,10 +10,19 @@ export interface NativeAudioRenderer {
     text: string,
     signal?: AbortSignal,
     onPcmChunk?: (chunk: Buffer) => void | Promise<void>,
+    context?: Readonly<{ voiceName?: string }>,
   ): Promise<NativeAudioRenderResult>;
 }
 
 interface GeminiAudioResponse {
+  readonly steps?: readonly {
+    readonly type?: string;
+    readonly content?: readonly {
+      readonly type?: string;
+      readonly mime_type?: unknown;
+      readonly data?: unknown;
+    }[];
+  }[];
   readonly candidates?: readonly {
     readonly content?: {
       readonly parts?: readonly {
@@ -33,6 +43,25 @@ function audioPart(payload: GeminiAudioResponse): {
   readonly mimeType: string;
   readonly dataBase64: string;
 } {
+  for (const step of [...(payload.steps ?? [])].reverse()) {
+    if (step.type !== "model_output") continue;
+    for (const part of [...(step.content ?? [])].reverse()) {
+      if (
+        part.type === "audio" &&
+        typeof part.data === "string" &&
+        typeof part.mime_type === "string" &&
+        part.data.length > 0
+      ) {
+        return {
+          dataBase64: part.data,
+          mimeType:
+            part.mime_type === "audio/l16"
+              ? "audio/l16;rate=24000"
+              : part.mime_type,
+        };
+      }
+    }
+  }
   for (const candidate of payload.candidates ?? []) {
     for (const part of candidate.content?.parts ?? []) {
       const inline = part.inlineData;
@@ -86,45 +115,86 @@ export function createGeminiLiveAudioRenderer(input: {
   const voiceName = input.voiceName.trim();
   if (!apiKey) throw new TypeError("Gemini API key is required");
   if (!model) throw new TypeError("Gemini native audio model is required");
+  if (/live/iu.test(model))
+    throw new TypeError("Recorded speech synthesis requires a TTS model");
   if (!voiceName) throw new TypeError("Gemini native audio voice is required");
   const fetchImpl = input.fetchImpl ?? fetch;
 
   const renderer: NativeAudioRenderer = {
-    async render(text, signal, onPcmChunk) {
+    async render(text, signal, onPcmChunk, context) {
       const prompt = text.trim();
       if (!prompt || prompt.length > 32_000) {
         throw new RangeError("Native audio text is invalid");
       }
 
+      const selectedVoice = context?.voiceName?.trim() || voiceName;
+      const interactions = /^gemini-3\./u.test(model);
+      const timeout = AbortSignal.timeout(30_000);
       const response = await fetchImpl(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        interactions
+          ? "https://generativelanguage.googleapis.com/v1beta/interactions"
+          : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
         {
           method: "POST",
-          ...(signal ? { signal } : {}),
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName },
+          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify(
+            interactions
+              ? {
+                  model,
+                  store: false,
+                  input: [
+                    {
+                      type: "user_input",
+                      content: [{ type: "text", text: prompt }],
+                    },
+                  ],
+                  response_format: {
+                    type: "audio",
+                    mime_type: "audio/l16",
+                    sample_rate: 24000,
+                  },
+                  generation_config: {
+                    speech_config: [{ voice: selectedVoice }],
+                  },
+                }
+              : {
+                  contents: [{ role: "user", parts: [{ text: prompt }] }],
+                  generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                      voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: selectedVoice },
+                      },
+                    },
+                  },
                 },
-              },
-            },
-          }),
+          ),
         },
       );
       if (!response.ok) {
-        throw new Error(`Gemini native audio request failed with ${response.status}`);
+        throw await geminiFailure(response, "speech");
       }
 
       const audio = audioPart((await response.json()) as GeminiAudioResponse);
       const buffer = Buffer.from(audio.dataBase64, "base64");
-      if (buffer.byteLength === 0 || buffer.byteLength > 32 * 1024 * 1024) {
+      if (
+        buffer.byteLength === 0 ||
+        buffer.byteLength > 8 * 1024 * 1024 ||
+        buffer.toString("base64") !== audio.dataBase64
+      ) {
         throw new Error("Gemini native audio payload is invalid");
       }
-      if (onPcmChunk) await onPcmChunk(buffer);
+      // Only raw PCM belongs on the native PCM stream; WAV/MP3 containers
+      // remain playable attachments, never noise sent to a PCM output device.
+      if (/^audio\/(?:pcm|l16)(?:;|$)/iu.test(audio.mimeType)) {
+        if (buffer.byteLength % 2 !== 0)
+          throw new Error("Gemini native PCM payload is invalid");
+        await onPcmChunk?.(buffer);
+      }
       return Object.freeze({
         dataBase64: audio.dataBase64,
         mimeType: audio.mimeType,

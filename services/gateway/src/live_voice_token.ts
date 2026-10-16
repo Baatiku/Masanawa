@@ -2,6 +2,7 @@ import type { AgentConversationAuthorizer } from "./agent_conversation_contract.
 import type { PlatformAgentProfileRepository } from "@masanawa/agents";
 import type { LiveVoiceTokenService } from "./agent_shell_contract.js";
 import { parseCanonicalId } from "@masanawa/contracts";
+import { geminiFailure } from "./gemini_failure.js";
 import {
   CallHistoryError,
   type CallHistoryRecorder,
@@ -147,26 +148,7 @@ export function createGeminiLiveTokenService(input: {
         awaitingProviderResponse = false;
         issuanceStarted = response.ok;
         if (!response.ok) {
-          // Never log provider response messages: upstream diagnostics can
-          // contain user, key or request details. Keep only known status codes
-          // needed to diagnose an unsupported model or a bad configuration.
-          let providerCode = "UNKNOWN";
-          try {
-            const failure = await response.json() as { error?: { status?: unknown } };
-            const status = failure?.error?.status;
-            if (typeof status === "string" && [
-              "INVALID_ARGUMENT", "FAILED_PRECONDITION", "NOT_FOUND",
-              "UNAUTHENTICATED", "PERMISSION_DENIED", "RESOURCE_EXHAUSTED",
-            ].includes(status)) providerCode = status;
-          } catch { /* Upstream may not return a JSON error. */ }
-          console.error(JSON.stringify({
-            event: "agent.live_token_failed",
-            stage: "provider",
-            status: response.status,
-            providerCode,
-            model,
-          }));
-          throw new Error("Gemini Live token provisioning failed");
+          throw await geminiFailure(response,"live-token");
         }
         const payload = (await response.json()) as { name?: unknown };
         if (typeof payload.name !== "string" || payload.name.length < 16) {

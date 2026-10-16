@@ -108,7 +108,7 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
      });
      all.push(presentation);changed=true;
    }else if((seed.key==="gwani"&&(presentation.displayName==="Gwani"||presentation.displayName==="Mallam Gwani Bodi")) ||
-              (seed.key==="gwana"&&(presentation.displayName==="Gwana"||presentation.displayName==="Malamah Gwana Fora"))){
+              (seed.key==="gwana"&&(presentation.displayName==="Gwana"||presentation.displayName==="Malamah Gwana Fora"||presentation.displayName==="Malamah Gwana Sulafat"))){
      // Single harmless alias upgrade for original stock profiles; never
      // rewrite profiles that an admin has already renamed.
      const at=all.indexOf(presentation);
@@ -160,3 +160,4 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
    catalog:Object.freeze(catalog),
  });
 }
+
