@@ -92,6 +92,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   String selectedFilter = 'All';
 
   ApiClient get api => ref.read(apiClientProvider);
+  bool get mobileCategory => category?.code == 'AIRTIME' ||
+    category?.code == 'MOBILEDATA';
 
   @override
   void initState() {
@@ -102,6 +104,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   void _onPhoneChanged() {
     final text = customer.text;
+    if (!mobileCategory) return;
     final detected = detectNetworkFromPhone(text);
     if (detected != null && detected != selectedNetwork) {
       setState(() {
@@ -170,7 +173,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       final next = await api.billingBillers(value.code);
       if (mounted) {
         setState(() => billers = next);
-        _matchBillerForNetwork(selectedNetwork);
+        if (value.code == 'AIRTIME' || value.code == 'MOBILEDATA') {
+          _matchBillerForNetwork(selectedNetwork);
+        } else if (next.isNotEmpty) {
+          await selectBiller(next.first);
+        }
       }
     } catch (value) {
       if (mounted) setState(() => error = safeError(value, 'Could not load providers.'));
@@ -230,9 +237,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   void onSelectBundle(BillItem selected) {
     final phone = customer.text.trim();
-    if (phone.length < 10) {
+    if (phone.isEmpty || (mobileCategory && phone.length < 10)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid Nigerian phone number first.')),
+        SnackBar(content: Text(mobileCategory
+          ? 'Please enter a valid Nigerian phone number.'
+          : 'Please enter the customer meter/card/reference number.')), 
       );
       return;
     }
@@ -305,7 +314,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
-        title: const Text('Data Bundles'),
+        title: Text(category?.name ?? 'Bills & Services'),
         backgroundColor: u.surfaceCard,
         foregroundColor: u.textPrimary,
         elevation: 0,
@@ -366,9 +375,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             const SizedBox(height: 18),
 
-            // Phone Input
+            // Category and live Flutterwave provider selection.
+            SingleChildScrollView(scrollDirection: Axis.horizontal,
+              child: Row(children: categories.map((entry) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(label: Text(entry.name),
+                  selected: category?.code == entry.code,
+                  onSelected: busy ? null : (_) => selectCategory(entry)),
+              )).toList())),
+            const SizedBox(height: 14),
             Text(
-              'Recipient Phone Number',
+              mobileCategory ? 'Recipient Phone Number' :
+                (category?.code == 'ELECTRICITY' ? 'Meter Number' :
+                  category?.code == 'CABLETV' ? 'Smartcard Number' :
+                  'Customer Reference'),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -380,7 +400,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               controller: customer,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
-                hintText: '0803 000 0000',
+                hintText: mobileCategory ? '0803 000 0000' : 'Customer account number',
                 prefixIcon: const Icon(Icons.phone_android),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -389,7 +409,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             const SizedBox(height: 16),
 
             // Network Selector
-            Text(
+            if (mobileCategory) Text(
               'Select Network',
               style: TextStyle(
                 fontSize: 14,
@@ -398,7 +418,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
+            if (mobileCategory) Row(
               children: NigerianNetwork.values.map((net) {
                 final isSelected = selectedNetwork == net;
                 return Expanded(
@@ -453,8 +473,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             const SizedBox(height: 16),
 
+            if (!mobileCategory && billers.isNotEmpty) DropdownButtonFormField<String>(
+              initialValue: biller?.billerCode,
+              items: billers.map((entry) => DropdownMenuItem(
+                value: entry.billerCode, child: Text(entry.name))).toList(),
+              onChanged: busy ? null : (code) {
+                for (final entry in billers) {
+                  if (entry.billerCode == code) {selectBiller(entry);break;}
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Verified Provider'),
+            ),
+            const SizedBox(height: 12),
             // Validity Filter Tabs
-            SingleChildScrollView(
+            if (mobileCategory) SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: ['All', 'Daily', 'Weekly', 'Monthly'].map((filter) {
