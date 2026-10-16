@@ -192,3 +192,85 @@ it("does not repeat an accepted speech generation when its audio payload is miss
   await expect(renderer.render("Hello")).rejects.toThrow();
   expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
+
+it.each([400, 404, 429])(
+  "uses one same-voice Live read-aloud fallback after explicit HTTP%s rejection",
+  async (status) => {
+    const fallback = {
+      render: vi.fn(async () => ({
+        dataBase64: "AQACAA==",
+        mimeType: "audio/l16;rate=24000",
+        durationMs: 1,
+      })),
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      Response.json({ error: { status: "INVALID_ARGUMENT" } }, { status }),
+    );
+    const renderer = createGeminiLiveAudioRenderer({
+      apiKey: "key",
+      model: "gemini-3.8-flash-tts",
+      voiceName: "Bodi",
+      fetchImpl,
+      fallback,
+    });
+    const onPcmChunk = vi.fn();
+    const context = { voiceName: "Fora" };
+    const result = await renderer.render(
+      "Hello",
+      undefined,
+      onPcmChunk,
+      context,
+    );
+    expect(result.dataBase64).toBe("AQACAA==");
+    expect(fallback.render).toHaveBeenCalledExactlyOnceWith(
+      "Hello",
+      expect.any(AbortSignal),
+      onPcmChunk,
+      context,
+    );
+  },
+);
+it.each([401, 403, 500, 503])(
+  "does not route HTTP%s failures through another audio provider request",
+  async (status) => {
+    const fallback = { render: vi.fn() };
+    const renderer = createGeminiLiveAudioRenderer({
+      apiKey: "key",
+      model: "gemini-3.8-flash-tts",
+      voiceName: "Bodi",
+      fetchImpl: async () => Response.json({}, { status }),
+      fallback,
+    });
+    await expect(renderer.render("Hello")).rejects.toThrow();
+    expect(fallback.render).not.toHaveBeenCalled();
+  },
+);
+it("does not synthesize again after accepted TTS audio is missing", async () => {
+  const fallback = { render: vi.fn() };
+  const renderer = createGeminiLiveAudioRenderer({
+    apiKey: "key",
+    model: "gemini-3.8-flash-tts",
+    voiceName: "Bodi",
+    fetchImpl: async () => Response.json({}),
+    fallback,
+  });
+  await expect(renderer.render("Hello")).rejects.toThrow();
+  expect(fallback.render).not.toHaveBeenCalled();
+});
+
+it("does not start Live fallback after the shared signal is cancelled", async () => {
+  const controller = new AbortController();
+  const fallback = { render: vi.fn() };
+  const renderer = createGeminiLiveAudioRenderer({
+    apiKey: "key",
+    model: "gemini-3.8-flash-tts",
+    voiceName: "Bodi",
+    fallback,
+    fetchImpl: async () => {
+      controller.abort();
+      return Response.json({}, { status: 429 });
+    },
+  });
+  await expect(renderer.render("Hello", controller.signal)).rejects.toThrow();
+  expect(fallback.render).not.toHaveBeenCalled();
+});

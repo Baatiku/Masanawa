@@ -109,6 +109,7 @@ export function createGeminiLiveAudioRenderer(input: {
   readonly model: string;
   readonly voiceName: string;
   readonly fetchImpl?: typeof fetch;
+  readonly fallback?: NativeAudioRenderer;
 }): NativeAudioRenderer {
   const apiKey = input.apiKey.trim();
   const model = input.model.trim();
@@ -193,7 +194,17 @@ export function createGeminiLiveAudioRenderer(input: {
         response = await requestAudio(false);
       }
       if (!response.ok) {
-        throw await geminiFailure(response, "speech");
+        const failure = await geminiFailure(response, "speech");
+        if (
+          input.fallback &&
+          [400, 404, 429].includes(response.status) &&
+          !requestSignal.aborted
+        ) {
+          return input.fallback.render(prompt, requestSignal, onPcmChunk, {
+            voiceName: selectedVoice,
+          });
+        }
+        throw failure;
       }
 
       const audio = audioPart((await response.json()) as GeminiAudioResponse);
