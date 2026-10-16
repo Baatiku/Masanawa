@@ -18,8 +18,9 @@ function base() {
   const aisha = createCanonicalId("character");
   const issueSession = vi.fn(async () => undefined);
   const revokeAccess = vi.fn(async () => undefined);
+  const resolveProfile = vi.fn(async () => null);
   const sessions = {
-    async resolveProfile() { return null; },
+    resolveProfile,
     issueSession,
     revokeAccess,
   } as unknown as PlatformSessionRepository;
@@ -36,8 +37,13 @@ function base() {
   const putLink = vi.fn(async (value: any) => { link = value; });
   const setCharacterSession = vi.fn(async (value: any) => { link = { ...link, ...value }; });
   const completeMessage = vi.fn(async () => undefined);
+  const requestIds = new Map<string,string>();
   const channels = {
-    async claimMessage() { return { state: "claimed" as const }; },
+    async claimMessage({messageId}:{messageId:string}) {
+      const requestId=requestIds.get(messageId)??createCanonicalId("request");
+      requestIds.set(messageId,requestId);
+      return { state: "claimed" as const,requestId };
+    },
     async readLink() { return link; },
     putLink,
     setCharacterSession,
@@ -89,11 +95,26 @@ function base() {
     });
   return {
     tenantId, userId, gwani, gwana, amina, aisha,
-    putLink, getLink: () => link, list, turn, send, issueSession, revokeAccess,
+    putLink, getLink: () => link, list, turn, send, issueSession, revokeAccess,completeMessage,resolveProfile,
   };
 }
 
 describe("canonical Masana channel routing", () => {
+  it("refuses to issue a session for a phone profile that differs from the durable channel owner",async()=>{
+    const x=base();
+    x.resolveProfile.mockResolvedValue({tenantId:x.tenantId,userId:createCanonicalId("user"),profile:{}} as never);
+    await expect(x.send("My balance")).rejects.toThrow("channels.link_identity_mismatch");
+    expect(x.issueSession).not.toHaveBeenCalled();
+    expect(x.turn).not.toHaveBeenCalled();
+  });
+  it("reuses the original agent request when receipt persistence fails after a turn",async()=>{
+    const x=base();x.completeMessage.mockRejectedValueOnce(new Error("temporary database failure"));
+    await expect(x.send("Confirm bill")).rejects.toThrow("temporary database failure");
+    await x.send("Confirm bill");
+    expect(x.turn).toHaveBeenCalledTimes(2);
+    const calls=x.turn.mock.calls as unknown as Array<[{requestId:string}]>;
+    expect(calls[1]![0].requestId).toBe(calls[0]![0].requestId);
+  });
   it("switches WhatsApp to the authorized named professional, preserving customer identity", async () => {
     const x = base();
     const result = await x.send("chat with Dr. Amina Yusuf");
@@ -164,3 +185,4 @@ describe("canonical Masana channel routing", () => {
     expect(x.getLink().characterId).toBe(x.gwana);
   });
 });
+
