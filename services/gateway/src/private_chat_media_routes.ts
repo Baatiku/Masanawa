@@ -8,7 +8,7 @@ function string(value: unknown, name: string, limit = 256): string {
 }
 function slot(value: unknown): number {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 0 || n > 7)
+  if (!Number.isInteger(n) || n < 0 || n > 8)
     throw new RangeError("chat.media.slot_invalid");
   return n;
 }
