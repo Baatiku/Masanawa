@@ -21,6 +21,7 @@ import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js
 import { createMsnwFundingObligationRecovery } from "./jobs/msnw/funding_obligations.js";
 import { createMsnwFinalityVerifier } from "./jobs/msnw/chain_finality.js";
 import { createMsnwCustodyIssuanceRuntime } from "./jobs/msnw/custody_issuance.js";
+import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_merchant_settlement.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
   createWorkerApp,
@@ -121,6 +122,7 @@ export async function startWorkerService(
   let p2pExpiry: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let msnwMerchantSettlements: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -166,6 +168,20 @@ export async function startWorkerService(
         event: "msnw_funding_obligations.retry", reason: "batch_failed",
       }) + "\n"),
     });
+    // Paystack merchant-payout proof is separate from initial user payment.
+    // Confirming that Paystack settled a payment does NOT mint an MSNW token.
+    if (env.PAYSTACK_SECRET_KEY?.trim()) {
+      const paystackSettlement = createMsnwMerchantSettlementRuntime({
+        pool: database.pool,paystackSecretKey: env.PAYSTACK_SECRET_KEY,
+      });
+      msnwMerchantSettlements = createYouTubeOutboxScheduler({
+        runOnce:paystackSettlement.runOnce,enabled:()=>!drain.isDraining(),
+        intervalMs:120000,
+        onError:()=>process.stderr.write(JSON.stringify({
+          event:"msnw_paystack_payout.retry",reason:"provider_or_database_unavailable",
+        })+"\n"),
+      });
+    }
     // Finalized MSNW issuance can be read without a mint private key. Full
     // verified chain configuration is mandatory before starting the job.
     const msnwChainSettings = [env.MSNW_CHAIN_ID,env.MSNW_TOKEN_CONTRACT,
@@ -285,7 +301,7 @@ export async function startWorkerService(
         await youtubeOutbox?.stop();
         await feedPublisher?.stop();
         await msnwObligationRecovery?.stop();
-    await msnwFinality?.stop();
+        await msnwMerchantSettlements?.stop();
         await msnwFinality?.stop();
         await roomNotices?.stop();
         await p2pNotices?.stop();
@@ -301,6 +317,7 @@ export async function startWorkerService(
     youtubeOutbox?.start();
     feedPublisher?.start();
     msnwObligationRecovery?.start();
+    msnwMerchantSettlements?.start();
     msnwFinality?.start();
     roomNotices?.start();
     p2pNotices?.start();
@@ -309,6 +326,8 @@ export async function startWorkerService(
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
     await msnwObligationRecovery?.stop();
+    await msnwMerchantSettlements?.stop();
+    await msnwFinality?.stop();
     await roomNotices?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);

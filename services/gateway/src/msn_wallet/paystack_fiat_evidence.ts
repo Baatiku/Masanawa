@@ -8,7 +8,9 @@ export interface VerifiedPaystackFunding {
   readonly amountKobo: string;
   readonly state: "fiat_verified_backing_pending";
   readonly paidAt: string;
-  readonly obligationState: "backing_pending" | "registration_pending";
+  readonly obligationState: "backing_pending" | "registration_pending" |
+    "merchant_payout_verified" | "msnw_issued";
+  readonly issuedMicro?: string;
 }
 export interface MsnwPaystackFiatService {
   readonly authorizer: MsnBalanceAuthority;
@@ -150,8 +152,12 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     return Object.freeze({
       reference: ref, amountKobo: amount,
       paidAt: timestamp, state: "fiat_verified_backing_pending" as const,
-      obligationState: record.obligation_state === "backing_pending"
-        ? "backing_pending" as const : "registration_pending" as const,
+      obligationState: record.obligation_state === "msnw_issued" ? "msnw_issued" as const
+        : record.obligation_state === "merchant_payout_verified" ? "merchant_payout_verified" as const
+        : record.obligation_state === "backing_pending" ? "backing_pending" as const
+        : "registration_pending" as const,
+      ...(typeof record.issued_micro === "string" && /^[1-9][0-9]*$/.test(record.issued_micro)
+        ? { issuedMicro: record.issued_micro } : {}),
     });
   }
 
@@ -277,10 +283,15 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     async list(tenantId: string, userId: string) {
       const result = await input.pool.query(
         `SELECT e.reference,e.amount_kobo::text,e.provider_paid_at,
-                CASE WHEN o.reference IS NOT NULL THEN 'backing_pending'
+                i.amount_micro::text AS issued_micro,
+                CASE WHEN i.reference IS NOT NULL THEN 'msnw_issued'
+                     WHEN p.reference IS NOT NULL THEN 'merchant_payout_verified'
+                     WHEN o.reference IS NOT NULL THEN 'backing_pending'
                      ELSE 'registration_pending' END AS obligation_state
            FROM commerce.msnw_paystack_fiat_evidence e
            LEFT JOIN commerce.msnw_funding_obligations o ON o.reference=e.reference
+           LEFT JOIN commerce.msnw_paystack_payout_matches p ON p.reference=e.reference
+           LEFT JOIN commerce.msnw_custody_issuances i ON i.reference=e.reference
           WHERE e.tenant_id=$1 AND e.user_id=$2
           ORDER BY e.created_at DESC,e.reference DESC LIMIT 30`,
         [tenantId, userId],
