@@ -1,4 +1,4 @@
-import type { BillingQuoteRepository } from "@masanawa/commerce";
+import { formatNgnKobo, type BillingQuoteRepository } from "@masanawa/commerce";
 import type { MsnBalanceAuthority } from "./routes.js";
 import type { BillingFinancialService } from "../financial_billing.js";
 import type { createMsnwBillingFunding } from "./billing_funding.js";
@@ -63,7 +63,7 @@ export function createMsnwBillingService(input: Readonly<{
       itemCode:approved.itemCode,
       itemName:approved.itemName,
       customerId:approved.customerId,
-      amount:String(approved.serviceAmountKobo / 100),
+      amount:formatNgnKobo(approved.serviceAmountKobo),
     });
   }
   async function read(request:Readonly<{
