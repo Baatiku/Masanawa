@@ -30,6 +30,8 @@ import type {
   LiveVoiceTokenService,
 } from "./agent_shell_contract.js";
 import { registerAgentShellRoutes } from "./agent_shell_routes.js";
+import { registerPrivateChatMediaRoutes } from "./private_chat_media_routes.js";
+import type { createPrivateChatMediaService } from "./private_chat_media.js";
 import { registerBillingRoutes } from "./billing_routes.js";
 import { registerMsnwBillingRoutes } from "./msn_wallet/billing_routes.js";
 import { registerMsnwUsdtConversionRoutes } from "./msn_wallet/usdt_conversion_routes.js";
@@ -157,6 +159,7 @@ export interface GatewayAppOptions {
   readonly commerceCatalog?: CommerceCatalogService;
   readonly commerceFulfillment?: CommerceFulfillmentService;
   readonly agentShell?: AgentShellService;
+  readonly privateChatMedia?: ReturnType<typeof createPrivateChatMediaService>;
   readonly liveVoiceTokens?: LiveVoiceTokenService;
   readonly mobilePush?: MobilePushRegistrationService;
   readonly customerAuth?: CustomerAuthService;
@@ -1598,6 +1601,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
   if (options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
   if (options.incomingCalls) registerIncomingCallRoutes(app, options.incomingCalls);
+  if (options.privateChatMedia) {
+    registerPrivateChatMediaRoutes(app, options.privateChatMedia);
+  }
   registerAgentShellRoutes(app, {
     ...(options.agentShell ? { agentShell: options.agentShell } : {}),
     ...(options.liveVoiceTokens
