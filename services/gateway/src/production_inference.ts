@@ -204,9 +204,16 @@ async function generateOnce(input: {
         system_instruction: {
           parts: input.request.systemInstructions.map((text) => ({ text })),
         },
-        contents: [{ role: "user", parts: userParts(input.request) }],
+        contents: [
+          ...(input.request.conversationHistory??[]).map(message=>({
+            role:message.role === "assistant" ? "model" : "user",
+            parts:[{text:message.text}],
+          })),
+          { role: "user", parts: userParts(input.request) },
+        ],
         generationConfig: {
           maxOutputTokens: input.controls?.maxOutputTokens ?? 2048,
+          ...(input.model === "gemini-3.8-flash" ? {thinkingConfig:{thinkingLevel:"LOW"}} : {}),
         },
       }),
     },

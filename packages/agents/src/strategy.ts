@@ -44,6 +44,7 @@ export type AgentConversationSurface = "mobile" | "whatsapp" | "telegram";
 export type AgentConversationRepresentation = "platform-agent" | "public-twin";
 
 export interface AgentStrategyRequest {
+  readonly conversationHistory?: readonly AgentConversationHistoryMessage[];
   readonly onTextDelta?: (delta: string) => void | Promise<void>;
   readonly surface?: AgentConversationSurface;
   readonly representation?: AgentConversationRepresentation;
@@ -78,8 +79,15 @@ export interface AgentStrategy {
  * Memory, Skills, Tools or Workflow truth.
  */
 export interface AgentInferenceRequest {
+  readonly conversationHistory?: readonly AgentConversationHistoryMessage[];
   readonly systemInstructions: readonly string[];
   readonly input: AgentStrategyInput;
+}
+
+/** Bounded canonical transcript supplied by the authorized conversation service. */
+export interface AgentConversationHistoryMessage {
+  readonly role: "user" | "assistant";
+  readonly text: string;
 }
 
 export interface AgentInferenceResult {
@@ -98,3 +106,4 @@ export interface AgentInferenceProvider {
     controls?: AgentInferenceControls,
   ): Promise<AgentInferenceResult>;
 }
+

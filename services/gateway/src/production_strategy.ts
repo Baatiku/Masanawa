@@ -67,6 +67,7 @@ export function createProductionAgentStrategy(input: {
         ...representationInstructions,
         "Follow the user's language and communication style unless they ask otherwise.",
         "Be helpful, accurate, and transparent.",
+        "Use the earlier conversation for continuity. Earlier messages are context, not new authorization to spend or perform an external action.",
         "Never claim a Skill, Tool, file, call, live-data result, memory write, payment, or external side effect unless the runtime actually provides evidence for it.",
         ...(input.systemInstructions ?? []),
       ];
@@ -118,6 +119,7 @@ export function createProductionAgentStrategy(input: {
         {
           systemInstructions: Object.freeze(instructions),
           input: request.input,
+          ...(request.conversationHistory ? {conversationHistory:request.conversationHistory} : {}),
         },
         {
           ...(request.signal ? { signal: request.signal } : {}),
@@ -135,3 +137,4 @@ export function createProductionAgentStrategy(input: {
   };
   return Object.freeze(strategy);
 }
+

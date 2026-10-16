@@ -146,9 +146,15 @@ describe("Alpha conversation service", () => {
       },
     };
 
+    const priorRequestId=createCanonicalId("request");
+    const listHistory=vi.fn(async(_input:{scope:CharacterSessionScope;limit:number})=>[
+      {requestId:priorRequestId,direction:"user",text:"Remember the fruit mango"},
+      {requestId:priorRequestId,direction:"assistant",text:"Mango is our fruit"},
+    ]);
     const strategy: AgentStrategy = {
       async execute(input) {
         expect(input.presentation.displayName).toBe("Amina");
+        expect(input.conversationHistory).toEqual([{role:"user",text:"Remember the fruit mango"},{role:"assistant",text:"Mango is our fruit"}]);
         expect(input.presentation.roleLabel).toBe("Research Assistant");
         if (input.input.kind === "text") {
           return { reply: `Text: ${input.input.text}`, parts: [] };
@@ -169,6 +175,7 @@ describe("Alpha conversation service", () => {
       runs,
       authorizer,
       strategy,
+      mobileShell:{listHistory,claimTurn:async()=>({state:"created"}),appendEvent:async()=>{},completeTurn:async()=>{},failTurn:async()=>{}} as never,
       nativeAudio:{render},
       voiceForCharacter:async(scope)=>{expect(scope).toEqual(f.scope);return "Fora";},
       sessionDurationMs: 60_000,
@@ -215,6 +222,8 @@ describe("Alpha conversation service", () => {
       correlationId: createCanonicalId("correlation"),
     });
     expect(mediaSet.reply).toBe("I reviewed both attachments.");
+    expect(listHistory).toHaveBeenCalledTimes(3);
+    for(const call of listHistory.mock.calls) expect(call[0]).toEqual({scope:f.scope,limit:16});
     expect(render).toHaveBeenNthCalledWith(1,"Text: hello",undefined,undefined,{voiceName:"Fora"});
     expect(render).toHaveBeenNthCalledWith(2,"I heard the voice note.",undefined,undefined,{voiceName:"Fora"});
     expect(render).toHaveBeenNthCalledWith(3,"I reviewed both attachments.",undefined,undefined,{voiceName:"Fora"});
