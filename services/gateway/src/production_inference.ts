@@ -1,4 +1,5 @@
 import { createDecipheriv, createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { geminiFailure, GeminiProviderError } from "./gemini_failure.js";
 import type {
   AgentInferenceControls,
@@ -317,6 +318,9 @@ export function createGeminiCredentialPoolInferenceProvider(input: {
     async generate(request, controls) {
       let lastError: unknown;
       let outputStarted = false;
+      let transientRetryUsed = false;
+      const deadline = AbortSignal.timeout(55_000);
+      const signal = controls?.signal ? AbortSignal.any([controls.signal, deadline]) : deadline;
       const guardedControls = controls?.onTextDelta ? {
         ...controls,
         onTextDelta: async (delta: string) => {
@@ -327,15 +331,24 @@ export function createGeminiCredentialPoolInferenceProvider(input: {
       for (const model of input.pool.models) {
         for (const apiKey of input.pool.apiKeys) {
           try {
-            return await generateOnce({
+            const attempt = () => generateOnce({
               apiKey,
               model,
               request,
-              ...(guardedControls ? { controls: guardedControls } : {}),
+              controls: {...guardedControls,signal},
               fetchImpl,
             });
+            try {
+              return await attempt();
+            } catch (error) {
+              if (transientRetryUsed || outputStarted || signal.aborted ||
+                  !(error instanceof GeminiProviderError) || error.providerStatus !== 503) throw error;
+              transientRetryUsed = true;
+              await delay(250, undefined, {signal});
+              return await attempt();
+            }
           } catch (error) {
-            if (controls?.signal?.aborted || outputStarted) throw error;
+            if (signal.aborted || outputStarted) throw error;
             lastError = error;
             const status = error instanceof GeminiProviderError ? error.providerStatus : (error as { status?: unknown }).status;
             const keyFailure = error instanceof GeminiProviderError && error.providerReason.startsWith("API_KEY_");

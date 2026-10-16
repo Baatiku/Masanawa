@@ -86,3 +86,13 @@ it("tries the next configured key when Google rejects a credential", async () =>
     log.mockRestore();
   }
 });
+
+it("recovers one temporary Gemini 503 before any reply has reached the app",async()=>{
+ const log=vi.spyOn(console,"error").mockImplementation(()=>{});let calls=0;
+ const fetchImpl=vi.fn<typeof fetch>(async()=>++calls===1?Response.json({error:{status:"UNAVAILABLE"}},{status:503}):Response.json({candidates:[{content:{parts:[{text:"Five"}]}}]}));
+ try {
+ const provider=createGeminiCredentialPoolInferenceProvider({pool:{apiKeys:["key"],models:["gemini-3.8-flash"]},fetchImpl});
+ expect(await provider.generate({systemInstructions:[],input:{kind:"text",text:"Two plus three?"}})).toEqual({text:"Five"});
+ expect(calls).toBe(2);
+ }finally{log.mockRestore();}
+});

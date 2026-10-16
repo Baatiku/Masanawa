@@ -56,19 +56,19 @@ describe("Gemini Live ephemeral token compatibility", () => {
       const body = JSON.parse(String(options.body));
       expect(body).toMatchObject({
         uses: 1,
-        liveConnectConstraints: {
-          model: "models/gemini-3.8-live",
-          config: {
-            sessionResumption: {},
-            responseModalities: ["AUDIO"],
+        fieldMask:"model,generationConfig",
+        bidiGenerateContentSetup: {
+          model:"models/gemini-3.8-live",
+          generationConfig:{
+            responseModalities:["AUDIO"],
+            speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:requestedVoice}}},
           },
         },
       });
-      expect(Object.keys(body.liveConnectConstraints.config).sort()).toEqual([
-        "responseModalities", "sessionResumption",
-      ]);
+      expect(body).not.toHaveProperty("liveConnectConstraints");
+      expect(body.bidiGenerateContentSetup).not.toHaveProperty("sessionResumption");
       expect(JSON.stringify(body)).not.toContain("server-secret-api-key");
-      expect(JSON.stringify(body)).not.toContain(requestedVoice);
+
     });
   }
 
