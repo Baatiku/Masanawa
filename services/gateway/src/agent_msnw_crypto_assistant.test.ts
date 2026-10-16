@@ -24,7 +24,18 @@ function harness(options?: { sufficient?: boolean; liquidity?: boolean }) {
     providerLiquidityQualified: options?.liquidity !== false,
     expiresAt: new Date(Date.now() + 120000).toISOString(),
   }));
-  const confirm = vi.fn(async () => ({
+  const confirm = vi.fn(async (
+    _owner: { tenantId: string; userId: string },
+    _parameters: {
+      amountMicro: string;
+      providerCode: string;
+      destinationAddress: string;
+      expectedTargetMicro: string;
+      expectedFeeMicro: string;
+      expectedRateUsdMicroPerMsnw: string;
+      idempotencyKey: string;
+    },
+  ) => ({
     conversionId: "b7115a19-c13b-4847-bc63-759ed1ea75a5",
     state: "processing",
   }));
