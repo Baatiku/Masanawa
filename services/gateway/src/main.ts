@@ -303,11 +303,11 @@ import {
   type AgentTeachingAssistant,
 } from "./agent_teaching_assistant.js";
 import { createCustomerChannelBridge } from "./customer_channel_bridge.js";
+import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
 import {
-  CRYPTO_AGENT_SYSTEM_INSTRUCTIONS,
-  createAgentCryptoAssistant,
-  type AgentCryptoAssistant,
-} from "./agent_crypto_assistant.js";
+  MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS,
+  createMsnwAgentCryptoAssistant,
+} from "./agent_msnw_crypto_assistant.js";
 import type { CustomerChannelOptions } from "./customer_channel_routes.js";
 import { registerAndVerifyTelegramWebhook } from "./telegram_webhook_registration.js";
 import {
@@ -1309,8 +1309,11 @@ export async function startGatewayService(
         guides: database.skillGuides,
         systemInstructions: Object.freeze([
           ...TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
-          ...(cryptoConversationConfigured
-            ? CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
+          ...(cryptoConversationConfigured &&
+               env.MSNW_CONVERT_USD_MICRO_PER_MSNW?.trim() &&
+               env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true" &&
+               env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true"
+            ? MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
             : []),
           ...(env.FLUTTERWAVE_BILLS_ENABLED === "true" &&
                env.MSNW_BILLING_RATE_KOBO_PER_MSNW?.trim()
@@ -1761,10 +1764,14 @@ export async function startGatewayService(
         })
       : undefined);
 
+  // Customer conversations are MSNW-only. Never mount the legacy crypto
+  // funds assistant that directly deposits/withdraws unrelated provider
+  // balances or converts currencies without MSNW custody authorization.
   const composedCryptoAssistant: AgentCryptoAssistant | undefined =
-    composedFinancial && database.cryptoChatActions
-      ? createAgentCryptoAssistant({
-          financial: composedFinancial,
+    composedMsnwConversion && database.cryptoChatActions
+      ? createMsnwAgentCryptoAssistant({
+          authorizer: composedMsnwConversion.authorizer,
+          service: composedMsnwConversion.service,
           pending: database.cryptoChatActions,
         })
       : undefined;
