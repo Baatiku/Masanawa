@@ -10,6 +10,7 @@ import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../finance/msnw_verified_funding_activity.dart';
 import '../../finance/msnw_custody_send.dart';
+import '../../finance/msnw_stablecoin_convert.dart';
 import '../../finance/msnw_p2p_screen.dart';
 import '../../finance/msnw_p2p_activity.dart';
 import '../../state/session_state.dart';
@@ -90,6 +91,24 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     await showModalBottomSheet<void>(
       context: context, isScrollControlled: true, showDragHandle: true,
       builder: (_) => MsnwCustodySendSheet(
+        dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
+        expectedUserId: expected,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id, _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
+        onCompleted: () { if (mounted) setState(() => _custodyRefresh++); },
+      ),
+    );
+  }
+
+  Future<void> _convertMsnw() async {
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final expected = session.user.id;
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true, showDragHandle: true,
+      builder: (_) => MsnwStablecoinConvertSheet(
         dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         expectedUserId: expected,
         currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -263,7 +282,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               _WalletShortcut(label: 'Send', icon: Icons.north_east,
                 onTap: accountId != null ? _sendMsnw : null),
               _WalletShortcut(label: 'Convert', icon: Icons.swap_horiz,
-                onTap: null),
+                onTap: accountId != null ? _convertMsnw : null),
               _WalletShortcut(label: 'Fund', icon: Icons.add,
                 onTap: _fund),
               _WalletShortcut(label: 'Receive', icon: Icons.south_west,
