@@ -56,7 +56,10 @@ export function registerMsnwCustodyRoutes(
           Object.keys(value).sort().join(",") !==
             "amountMicro,idempotencyKey,recipient,recipientUserId")
         throw new MsnwCustodyError("msnw.confirmation_invalid",400);
-      return await input.ledger.send(identity,value);
+      return await input.ledger.send(identity, {
+        recipient: value.recipient,recipientUserId:value.recipientUserId,
+        amountMicro:value.amountMicro,idempotencyKey:value.idempotencyKey,
+      });
     } catch (error) { return failed(reply,error); }
   });
 }
