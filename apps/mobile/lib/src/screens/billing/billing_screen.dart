@@ -5,6 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 import '../../state/session_state.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
+import '../../finance/msnw_billing_checkout.dart';
 import '../../theme/masanawa_theme.dart';
 
 BillCategory? billingCategoryForHomeService(
@@ -239,40 +240,35 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     _showPurchaseConfirmation(selected);
   }
 
-  /// Old NGN/Credits holdings cannot authorize MSNW-funded billing.
+  /// Qualified Flutterwave catalog and exact MSNW-only custody billing.
+  /// The user must explicitly review the rate, provider price and recipient.
   Future<void> _showPurchaseConfirmation(BillItem selected) async {
     if (!mounted) return;
+    final session = ref.read(sessionProvider);
+    final chosenCategory = category;
+    if (session is! SessionSignedIn || chosenCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sign in and select a bill category to pay with MSNW.'),
+      ));
+      return;
+    }
+    final expected = session.user.id;
     await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Confirm billing service',
-                style: Theme.of(sheetContext).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              _ConfirmRow('Package', selected.name),
-              _ConfirmRow('Recipient', customer.text.trim()),
-              _ConfirmRow('Flutterwave price', 'NGN ' + selected.amount),
-              const SizedBox(height: 14),
-              const Text('MSNW bill payments require authorized, backed '
-                'token settlement. Legacy Credits and NGN balances cannot '
-                'be charged as MSNW.'),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  _showFundingSheet();
-                },
-                icon: const Icon(Icons.account_balance),
-                label: const Text('Fund MSNW Wallet'),
-              ),
-            ],
-          ),
-        ),
+      context: context, isScrollControlled: true, showDragHandle: true,
+      builder: (sheet) => MsnwBillingCheckoutSheet(
+        api: api, dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
+        categoryCode: chosenCategory.code,
+        item: selected, customerId: customer.text.trim(),
+        expectedUserId: expected,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id,
+          _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
+        onFund: () {
+          Navigator.of(sheet).pop();
+          _showFundingSheet();
+        },
       ),
     );
   }
