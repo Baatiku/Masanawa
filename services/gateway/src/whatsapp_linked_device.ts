@@ -64,6 +64,34 @@ export async function resolveLinkedWhatsAppSenderPhone(
   return mapped ? linkedWhatsAppPhoneFromJid(mapped) : null;
 }
 
+/**
+ * WhatsApp commonly wraps direct messages in ephemeralMessage and
+ * documentWithCaptionMessage. Unwrap only normal customer-visible envelopes.
+ * View-once media must not be silently downloaded or replayed by an agent.
+ */
+export function unwrapLinkedWhatsAppMessage(
+  source: unknown,
+): Record<string, unknown> | null {
+  let item: unknown = source;
+  for (let depth = 0; depth < 4; depth++) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const message = item as Record<string, unknown>;
+    if (
+      message.viewOnceMessage ||
+      message.viewOnceMessageV2 ||
+      message.viewOnceMessageV2Extension
+    ) return null;
+    const wrapper = message.ephemeralMessage ??
+      message.documentWithCaptionMessage;
+    if (wrapper === undefined) return message;
+    if (!wrapper || typeof wrapper !== "object" || Array.isArray(wrapper)) {
+      return null;
+    }
+    item = (wrapper as Record<string, unknown>).message;
+  }
+  return null; // Never recursively parse attacker-supplied nested envelopes.
+}
+
 function textFromMessage(message: Record<string, unknown>): string {
   const conversation = typeof message.conversation === "string" ? message.conversation : "";
   const extended = message.extendedTextMessage;
@@ -84,7 +112,35 @@ function textFromMessage(message: Record<string, unknown>): string {
     typeof (video as Record<string, unknown>).caption === "string"
       ? String((video as Record<string, unknown>).caption)
       : "";
-  return (conversation || extendedText || imageCaption || videoCaption).trim();
+  const document = message.documentMessage;
+  const documentCaption = document && typeof document === "object" &&
+      !Array.isArray(document) &&
+      typeof (document as Record<string, unknown>).caption === "string"
+    ? String((document as Record<string, unknown>).caption)
+    : "";
+  const button = message.buttonsResponseMessage;
+  const buttonText = button && typeof button === "object" &&
+      !Array.isArray(button) &&
+      typeof (button as Record<string, unknown>).selectedDisplayText === "string"
+    ? String((button as Record<string, unknown>).selectedDisplayText)
+    : "";
+  const list = message.listResponseMessage;
+  const listTitle = list && typeof list === "object" && !Array.isArray(list) &&
+      typeof (list as Record<string, unknown>).title === "string"
+    ? String((list as Record<string, unknown>).title)
+    : "";
+  const template = message.templateButtonReplyMessage;
+  const templateText = template && typeof template === "object" &&
+      !Array.isArray(template) &&
+      typeof (template as Record<string, unknown>).selectedDisplayText === "string"
+    ? String((template as Record<string, unknown>).selectedDisplayText)
+    : "";
+  // IDs and native-flow params are not displayed customer text and must
+  // never be silently interpreted as financial confirmation commands.
+  return (
+    conversation || extendedText || imageCaption || videoCaption ||
+    documentCaption || buttonText || listTitle || templateText
+  ).trim().slice(0, 16_000);
 }
 
 export function linkedWhatsAppMediaKind(
@@ -185,10 +241,8 @@ export function createLinkedWhatsAppController(
       update({ lastEvent: "sender-phone-unresolved" });
       return;
     }
-    const message =
-      raw?.message && typeof raw.message === "object" && !Array.isArray(raw.message)
-        ? raw.message as Record<string, unknown>
-        : {};
+    const message = unwrapLinkedWhatsAppMessage(raw?.message);
+    if (!message) return; // Privacy-preserving view-once rejection.
     const text = textFromMessage(message);
     const kind = linkedWhatsAppMediaKind(message);
 
