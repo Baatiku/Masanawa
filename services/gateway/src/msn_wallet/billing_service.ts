@@ -53,6 +53,8 @@ export function createMsnwBillingService(input: Readonly<{
     });
     // The existing Flutterwave orchestration rechecks live catalog and
     // beneficiary, idempotently prepares and dispatches only AFTER reserve.
+    if (!input.billing.purchaseMsnwOwned)
+      throw new MsnwBillingError("msnw.billing.provider_unavailable",503);
     return input.billing.purchaseMsnwOwned({
       tenantId:who.tenantId,userId:who.userId,
       requestId:"msnw-bill-"+approved.quoteId,
