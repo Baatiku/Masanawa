@@ -52,7 +52,9 @@ class LiveVoiceSession with WidgetsBindingObserver {
     this.sendGreeting = true,
     this.maxDuration,
     this.endAt,
-  }) : _recorder =
+    this.renewConnectionGrant,
+  }) : _activeGrant = grant,
+       _recorder =
            recorder ?? (sharedMicrophone == null ? AudioRecorder() : null) {
     // Closing before a caller awaits readiness must not emit an unhandled
     // async error. Consumers awaiting ready still receive the failure.
@@ -60,6 +62,11 @@ class LiveVoiceSession with WidgetsBindingObserver {
   }
 
   final AgentLiveVoiceGrant grant;
+  AgentLiveVoiceGrant _activeGrant;
+  /// Refresh only the short-lived Gemini connection permission, not the
+  /// customer-paid call admission. The owner must fence identity and reuse the
+  /// same original admission ID when providing the replacement grant.
+  final Future<AgentLiveVoiceGrant> Function()? renewConnectionGrant;
   final String characterName;
   final bool captureInputTranscription;
   final AudioRecorder? _recorder;
@@ -209,7 +216,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
   /// resumes the same model context with the original grant, call admission
   /// and duration timer; we never create another paid call or receipt.
   Future<void> _connectSocket({String? resumeHandle}) async {
-    final socket = await WebSocket.connect(grant.websocketUrl)
+    final socket = await WebSocket.connect(_activeGrant.websocketUrl)
         .timeout(const Duration(seconds: 20));
     if (_closed) {
       await socket.close();
@@ -234,12 +241,12 @@ class LiveVoiceSession with WidgetsBindingObserver {
     });
     socket.add(jsonEncode({
       'setup': {
-        'model': 'models/${grant.model}',
+        'model': 'models/${_activeGrant.model}',
         'generationConfig': {
           'responseModalities': ['AUDIO'],
           'speechConfig': {
             'voiceConfig': {
-              'prebuiltVoiceConfig': {'voiceName': grant.voiceName},
+              'prebuiltVoiceConfig': {'voiceName': _activeGrant.voiceName},
             },
           },
         },
@@ -271,7 +278,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
     if (_reconnectTask != null) return;
     if (!_ready.isCompleted ||
         _resumptionHandle == null ||
-        !DateTime.now().isBefore(grant.expiresAt) ||
+        (_activeGrant.expiresAt.isBefore(DateTime.now()) &&
+            renewConnectionGrant == null) ||
         _resumeAttempts >= 2) {
       _fail('Live voice disconnected. Start a new call to reconnect.');
       unawaited(close());
@@ -304,6 +312,24 @@ class LiveVoiceSession with WidgetsBindingObserver {
       try { await LivePcmAudio.stop(); } catch (_) {}
     }
     await Future<void>.delayed(Duration(milliseconds: _resumeAttempts * 400));
+    if (_closed) return;
+    if (!DateTime.now().isBefore(_activeGrant.expiresAt)) {
+      final renew = renewConnectionGrant;
+      if (renew == null) {
+        throw StateError('Call connection permission has expired.');
+      }
+      final fresh = await renew().timeout(const Duration(seconds: 15));
+      if (_closed) return;
+      // Never let a refresh silently switch the professional, model or voice.
+      // The original admission, history and duration timer remain owned by
+      // the calling screen and do not get replaced or re-billed.
+      if (!DateTime.now().isBefore(fresh.expiresAt) ||
+          fresh.model != grant.model ||
+          fresh.voiceName != grant.voiceName) {
+        throw StateError('Refreshed permission does not match the ongoing call.');
+      }
+      _activeGrant = fresh;
+    }
     if (_closed) return;
     await _connectSocket(resumeHandle: handle);
   }
