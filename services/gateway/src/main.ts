@@ -291,11 +291,11 @@ import {
   createBillingWalletService,
   type BillingWalletService,
 } from "./billing_wallet.js";
+import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
 import {
-  BILLING_AGENT_SYSTEM_INSTRUCTIONS,
-  createAgentBillingAssistant,
-  type AgentBillingAssistant,
-} from "./agent_billing_assistant.js";
+  MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS,
+  createMsnwAgentBillingAssistant,
+} from "./agent_msnw_billing_assistant.js";
 import {
   TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
   createAgentTeachingAssistant,
@@ -1311,8 +1311,9 @@ export async function startGatewayService(
           ...(cryptoConversationConfigured
             ? CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
             : []),
-          ...(env.FLUTTERWAVE_BILLS_ENABLED === "true"
-            ? BILLING_AGENT_SYSTEM_INSTRUCTIONS
+          ...(env.FLUTTERWAVE_BILLS_ENABLED === "true" &&
+               env.MSNW_BILLING_RATE_KOBO_PER_MSNW?.trim()
+            ? MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS
             : []),
         ]),
       });
@@ -1484,11 +1485,24 @@ export async function startGatewayService(
     });
   }
 
-  if (billingEnabled && composedBillingCheckout && composedBillingFinancial && composedBillingWallet) {
-    composedBillingAssistant = createAgentBillingAssistant({
+  // The model-driven legacy NGN Wallet payment tool is retired. The app's
+  // customer-facing bill conversations use only MSNW custody, quoted price,
+  // and an explicit customer message through the canonical settlement rail.
+  const msnwBillingService = msnwBillingLedger && database.billingQuotes &&
+      composedBillingFinancial && msnBalanceAuthorizer
+    ? createMsnwBillingService({
+        authorizer: msnBalanceAuthorizer,
+        quotes: database.billingQuotes,
+        funding: msnwBillingLedger,
+        billing: composedBillingFinancial,
+      })
+    : undefined;
+  if (billingEnabled && composedBillingCheckout && composedBillingFinancial &&
+      msnwBillingService) {
+    composedBillingAssistant = createMsnwAgentBillingAssistant({
       checkout: composedBillingCheckout,
       billing: composedBillingFinancial,
-      wallet: composedBillingWallet,
+      msnw: msnwBillingService,
     });
   }
 
@@ -2582,13 +2596,7 @@ export async function startGatewayService(
       ...(composedDirectTwin ? { directTwin: composedDirectTwin } : {}),
       ...(composedBillingFinancial ? { billingFinancial: composedBillingFinancial } : {}),
       ...(composedBillingCheckout ? { billingCheckout: composedBillingCheckout } : {}),
-      ...(msnwBillingLedger && database.billingQuotes && composedBillingFinancial &&
-           msnBalanceAuthorizer
-        ? {msnwBilling: createMsnwBillingService({
-            authorizer:msnBalanceAuthorizer, quotes:database.billingQuotes,
-            funding:msnwBillingLedger,billing:composedBillingFinancial,
-          })}
-        : {}),
+      ...(msnwBillingService ? { msnwBilling: msnwBillingService } : {}),
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
       ...(composedCustomerChannels
