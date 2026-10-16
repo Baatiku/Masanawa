@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:mime/mime.dart';
 
 import '../agents/agent_session.dart';
+import '../agents/masanawa_transport.dart';
 import '../agents/agent_feedback.dart';
 import '../chat/chat_format.dart';
 import '../chat/message_parts.dart';
@@ -1521,6 +1522,23 @@ class AiChatController extends Notifier<AiChatState> {
     final mimeType = chatAttachmentMimeType(attachment, bytes);
 
     final transport = ref.read(agentTransportProvider);
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    if (transport is MasanawaAgentTransport && requestId != null) {
+      await transport.savePrivateChatMedia(
+        characterId: characterId,
+        requestId: requestId,
+        slot: 0,
+        kind: attachment.kind,
+        mimeType: mimeType,
+        name: attachment.name,
+        bytes: bytes,
+      );
+      if (_disposed || owner != _cacheOwnerId ||
+          ownerGeneration != _cacheGeneration) {
+        throw const ApiException('Account changed before media was sent');
+      }
+    }
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
     Future<AgentTurnResult> send() => transport.sendMediaTurn(
@@ -1587,6 +1605,26 @@ class AiChatController extends Notifier<AiChatState> {
       );
     }
     final transport = ref.read(agentTransportProvider);
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    if (transport is MasanawaAgentTransport && requestId != null) {
+      for (var index = 0; index < media.length; index++) {
+        final part = media[index];
+        await transport.savePrivateChatMedia(
+          characterId: characterId,
+          requestId: requestId,
+          slot: index,
+          kind: attachments[index].kind,
+          mimeType: part.mimeType,
+          name: part.name,
+          bytes: part.bytes,
+        );
+        if (_disposed || owner != _cacheOwnerId ||
+            ownerGeneration != _cacheGeneration) {
+          throw const ApiException('Account changed before media was sent');
+        }
+      }
+    }
     final binding = await _bindingFor(characterId, transport);
     return transport.sendMediaSetTurn(
       binding: binding,
