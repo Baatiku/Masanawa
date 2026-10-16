@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "@masanawa/postgres";
-import { formatNgnKobo, parseNgnKobo, type BillingFundingAuthority,
+import { parseNgnKobo, type BillingFundingAuthority,
   type BillingQuote, type BillingQuoteRepository } from "@masanawa/commerce";
 import type { QuoteId } from "@masanawa/contracts";
 
@@ -137,6 +137,12 @@ export function createMsnwBillingFunding(input: Readonly<{
             request.customerId,ngn,kobo,rate.toString(),micro],
         );
         await db.query(
+          "UPDATE commerce.billing_quotes " +
+          "SET fulfillment_reference=$4,state=\'reserved\',updated_at=statement_timestamp() " +
+          "WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3",
+          [request.tenantId,request.userId,request.quoteId,request.fulfillmentReference],
+        );
+        await db.query(
           "INSERT INTO commerce.msnw_billing_audit " +
           "(event_id,fulfillment_reference,stage,customer_available_delta," +
           "customer_reserved_delta,treasury_collected_delta) " +
@@ -189,6 +195,14 @@ export function createMsnwBillingFunding(input: Readonly<{
           "WHERE tenant_id=$1 AND user_id=$2 AND fulfillment_reference=$3",
           [request.tenantId,request.userId,request.fulfillmentReference,
             terminal,request.providerReference],
+        );
+        await db.query(
+          "UPDATE commerce.billing_quotes SET state=$4,settlement_state=$5," +
+          "bill_provider_reference=COALESCE($6,bill_provider_reference)," +
+          "updated_at=statement_timestamp() " +
+          "WHERE tenant_id=$1 AND user_id=$2 AND fulfillment_reference=$3",
+          [request.tenantId,request.userId,request.fulfillmentReference,
+            terminal==="fulfilled"?"succeeded":"refunded",request.state,request.providerReference],
         );
         await db.query(
           "INSERT INTO commerce.msnw_billing_audit " +
