@@ -1,6 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import { parseCanonicalId } from "@masanawa/contracts";
 import type { createPrivateChatMediaService } from "./private_chat_media.js";
 type Service = ReturnType<typeof createPrivateChatMediaService>;
+function id(value: unknown, kind: "character" | "request"): string {
+  try { return parseCanonicalId(kind, string(value, kind + "Id", 160)); }
+  catch { throw new RangeError("chat.media." + kind + "Id_invalid"); }
+}
 function string(value: unknown, name: string, limit = 256): string {
   if (typeof value !== "string" || !value || value.length > limit)
     throw new RangeError("chat.media." + name + "_invalid");
@@ -14,6 +19,7 @@ function slot(value: unknown): number {
 }
 export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Service): void {
   app.post("/agent/media/list", { bodyLimit: 16_384 }, async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
     try {
       const body=request.body as Record<string,unknown>;
       if (!body || typeof body !== "object" || !Array.isArray(body.requestIds) ||
@@ -22,7 +28,7 @@ export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Serv
         throw new RangeError("chat.media.manifest_invalid");
       }
       return { items: await media.list(request.headers.authorization,
-        string(body.characterId,"characterId",160),body.requestIds as string[]) };
+        id(body.characterId,"character"),body.requestIds.map(value=>id(value,"request"))) };
     } catch (error) {
       if (error instanceof RangeError) {
         reply.code(400);
@@ -33,14 +39,15 @@ export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Serv
   });
   app.post("/agent/media/:requestId/:slot", { bodyLimit: 12_000_000 },
     async (request, reply) => {
+      reply.header("cache-control", "private, no-store");
       try {
         const params=request.params as Record<string,unknown>;
         const body=request.body as Record<string,unknown>;
         if (!body || typeof body!=="object" || Array.isArray(body))
           throw new RangeError("chat.media.invalid");
         return await media.put(request.headers.authorization,{
-          characterId:string(body.characterId,"characterId",160),
-          requestId:string(params.requestId,"requestId",160),
+          characterId:id(body.characterId,"character"),
+          requestId:id(params.requestId,"request"),
           slot:slot(params.slot),
           kind:string(body.kind,"kind",24) as "voice"|"audio"|"image"|"video"|"doc",
           mimeType:string(body.mimeType,"mimeType",160),
@@ -56,13 +63,14 @@ export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Serv
       }
     });
   app.get("/agent/media/:requestId/:slot",async(request,reply)=>{
+    reply.header("cache-control", "private, no-store");
     try {
       const params=request.params as Record<string,unknown>;
       const query=request.query as Record<string,unknown>;
       const file=await media.get(
         request.headers.authorization,
-        string(query.characterId,"characterId",160),
-        string(params.requestId,"requestId",160),
+        id(query.characterId,"character"),
+        id(params.requestId,"request"),
         slot(params.slot),
       );
       if(!file){reply.code(404);return {error:"chat.media.not_found"};}
@@ -76,3 +84,4 @@ export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Serv
     }
   });
 }
+

@@ -27,7 +27,9 @@ function validateMedia(request: PrivateChatMediaInput) {
       request.mimeType.length > 160 ||
       (request.name !== undefined && request.name.length > 240) ||
       typeof request.dataBase64 !== "string" ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(request.dataBase64)) {
+      request.dataBase64.length > 4 * Math.ceil(MAX_CHAT_MEDIA_BYTES / 3) ||
+      request.dataBase64.length % 4 !== 0 ||
+      /[^A-Za-z0-9+/=]/u.test(request.dataBase64)) {
     throw new RangeError("chat.media.invalid");
   }
   const data = Buffer.from(request.dataBase64, "base64");
@@ -90,7 +92,10 @@ export function createPrivateChatMediaService(input: Readonly<{
           throw new Error("chat.media.idempotency_conflict");
         }
       } else {
-        const total = current.rows.reduce((sum, row) => sum + Number(row.size), 0);
+        // Customer inputs and the generated reply have independent envelopes.
+        // A reply restored first on another device must not consume input quota.
+        const total = current.rows.reduce((sum, row) =>
+          sum + (Number(row.slot) < 8 ? Number(row.size) : 0), 0);
         const usage = await client.query(
           "SELECT COALESCE(SUM(octet_length(payload)),0)::text AS total " +
           "FROM agents.private_chat_media WHERE tenant_id=$1 AND user_id=$2",
@@ -100,8 +105,7 @@ export function createPrivateChatMediaService(input: Readonly<{
         if (used + BigInt(verified.data.length) > 128n * 1024n * 1024n) {
           throw new RangeError("chat.media.account_quota_exceeded");
         }
-        if (total + verified.data.length > MAX_MESSAGE_MEDIA_BYTES +
-            (request.slot === 8 ? MAX_CHAT_MEDIA_BYTES : 0)) {
+        if (request.slot < 8 && total + verified.data.length > MAX_MESSAGE_MEDIA_BYTES) {
           throw new RangeError("chat.media.message_too_large");
         }
         await client.query(
@@ -170,3 +174,4 @@ export function createPrivateChatMediaService(input: Readonly<{
 
   return Object.freeze({put,get,list,owner});
 }
+
