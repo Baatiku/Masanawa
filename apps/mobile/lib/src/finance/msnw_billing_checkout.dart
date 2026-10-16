@@ -171,7 +171,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           if(quote==null)FilledButton(onPressed:busy?null:review,
             child:const Text('Get verified price')),
           if(quote!=null&&receipt==null&&!uncertain)
-            FilledButton(onPressed:busy||price?['sufficient']!=true?null:pay,
+            FilledButton(onPressed:(busy || price?['sufficient'] != true) ? null : pay,
               child:const Text('Review & pay MSNW')),
           if((uncertain||receipt!=null)&&quote!=null)
             OutlinedButton(onPressed:busy?null:recover,
