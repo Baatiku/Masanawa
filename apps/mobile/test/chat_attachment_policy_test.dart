@@ -4,6 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
 
 void main() {
+  test('remote media references stay opaque through message cache hydration', () {
+    final reference = chatRemoteMediaReference(
+      'character_opaque', 'request_opaque', 3,
+    );
+    expect(reference, 'masanawa-remote|character_opaque|request_opaque|3');
+    final media = ChatAttachment(
+      kind: 'voice',
+      path: reference,
+      name: 'lesson.ogg',
+      sizeBytes: 2048,
+    );
+    final restored = ChatAttachment.fromJson(media.toJson());
+    expect(restored.path, reference);
+    expect(restored.kind, 'voice');
+    expect(restored.name, 'lesson.ogg');
+    expect(restored.sizeBytes, 2048);
+  });
+
+
   ChatAttachment file(String name, int bytes, {String kind = 'doc'}) =>
       ChatAttachment(
         kind: kind,

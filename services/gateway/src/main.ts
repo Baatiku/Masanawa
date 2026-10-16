@@ -188,6 +188,7 @@ import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
 import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
+import { createPrivateChatMediaService } from "./private_chat_media.js";
 import type {
   AgentShellActionExecutor,
   LiveVoiceTokenService,
@@ -1805,6 +1806,15 @@ export async function startGatewayService(
         })
       : undefined;
 
+  const composedPrivateChatMedia =
+    options.appOptions?.privateChatMedia ??
+    (database.featurePool && conversationAuthorizer
+      ? createPrivateChatMediaService({
+          pool: database.featurePool,
+          authorizer: conversationAuthorizer,
+        })
+      : undefined);
+
   const composedConversation =
     options.appOptions?.agentConversation ??
     (conversationAuthorizer &&
@@ -2632,6 +2642,7 @@ export async function startGatewayService(
       ...(masana ? {masana} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
+      ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
       ...(accountDeletion ? { accountDeletion } : {}),
       ...(composedTalks ? { talks: composedTalks } : {}),

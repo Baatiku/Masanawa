@@ -88,7 +88,8 @@ class _GatewayClient {
         options: options(
           turn: path.endsWith('/turn') ||
               path.endsWith('/media-turn') ||
-              path.endsWith('/media-set-turn'),
+              path.endsWith('/media-set-turn') ||
+              path.startsWith('/agent/media/'),
           requestId: requestId,
         ),
         cancelToken: cancelToken,
@@ -214,7 +215,7 @@ class _GatewayClient {
     try {
       final res = await dio.get<Map<String, dynamic>>(
         '$baseUrl$path',
-        options: options(),
+        options: options(turn: path.startsWith('/agent/media/')),
       );
       final data = res.data;
       if (data == null) throw const ApiException('Empty response from server');
@@ -390,6 +391,29 @@ class MasanawaCreatorCloneTransport implements CreatorCloneTransport {
   }
 }
 
+class RemoteChatMedia {
+  const RemoteChatMedia({
+    required this.requestId,
+    required this.slot,
+    required this.kind,
+    required this.mimeType,
+    this.name,
+    required this.sizeBytes,
+  });
+  final String requestId, kind, mimeType;
+  final int slot, sizeBytes;
+  final String? name;
+  factory RemoteChatMedia.fromJson(Map<String, dynamic> data) =>
+      RemoteChatMedia(
+        requestId: data['requestId'] as String,
+        slot: (data['slot'] as num).toInt(),
+        kind: data['kind'] as String,
+        mimeType: data['mimeType'] as String,
+        name: data['name'] as String?,
+        sizeBytes: (data['sizeBytes'] as num).toInt(),
+      );
+}
+
 class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
   MasanawaAgentTransport({
     required Dio dio,
@@ -405,6 +429,65 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
 
   final _GatewayClient _client;
   final Map<String, CancelToken> _turnTokens = {};
+
+  /// Private, owner-scoped media is uploaded before the corresponding turn.
+  /// A retry uses exactly the same request ID, slot and byte checksum.
+  Future<void> savePrivateChatMedia({
+    required String characterId,
+    required String requestId,
+    required int slot,
+    required String kind,
+    required String mimeType,
+    String? name,
+    required Uint8List bytes,
+  }) async {
+    if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024 ||
+        slot < 0 || slot > 7) {
+      throw const ApiException('Attachment exceeds the private media limit');
+    }
+    await _client.post('/agent/media/${Uri.encodeComponent(requestId)}/$slot', {
+      'characterId': characterId,
+      'kind': kind,
+      'mimeType': mimeType,
+      if (name != null && name.isNotEmpty) 'name': name,
+      'dataBase64': base64Encode(bytes),
+    });
+  }
+
+  Future<List<RemoteChatMedia>> listPrivateChatMedia(
+    String characterId, List<String> requestIds,
+  ) async {
+    if (requestIds.isEmpty) return const [];
+    final response = await _client.post('/agent/media/list', {
+      'characterId': characterId,
+      'requestIds': requestIds.take(100).toList(),
+    });
+    return [
+      for (final entry in (response['items'] as List? ?? const []))
+        if (entry is Map)
+          RemoteChatMedia.fromJson(entry.cast<String, dynamic>()),
+    ];
+  }
+
+  Future<Uint8List> downloadPrivateChatMedia(
+    String characterId, String requestId, int slot,
+  ) async {
+    final path = '/agent/media/${Uri.encodeComponent(requestId)}/$slot'
+        '?characterId=${Uri.encodeQueryComponent(characterId)}';
+    final response = await _client.get(path);
+    final encoded = response['dataBase64'];
+    final size = response['sizeBytes'];
+    if (encoded is! String || size is! int || size < 1 ||
+        size > 8 * 1024 * 1024 || encoded.length > 11_200_000) {
+      throw const ApiException('Invalid private conversation media');
+    }
+    final bytes = base64Decode(encoded);
+    if (bytes.length != size) {
+      throw const ApiException('Private media size mismatch');
+    }
+    return bytes;
+  }
+
 
   @override
   Future<AgentSessionBinding> openSession(String characterId) async {

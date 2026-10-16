@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:mime/mime.dart';
 
 import '../agents/agent_session.dart';
+import '../agents/masanawa_transport.dart';
 import '../agents/agent_feedback.dart';
 import '../chat/chat_format.dart';
 import '../chat/message_parts.dart';
@@ -28,6 +29,12 @@ import 'session_state.dart';
 import 'agent_directory_state.dart';
 
 const String _kThreadsFile = 'masanawa_threads_v2.json';
+
+/// Opaque local placeholder, never an unauthenticated URL. The signed-in
+/// account must authorize every requested download from the Gateway.
+String chatRemoteMediaReference(String characterId, String requestId, int slot) =>
+    'masanawa-remote|$characterId|$requestId|$slot';
+
 
 /// A user-selected local attachment. Local paths are only upload/cache inputs;
 /// canonical agent-produced files arrive back as durable AgentFileRef parts.
@@ -645,7 +652,19 @@ class AiChatController extends Notifier<AiChatState> {
       state = state.copyWith(
         shellConfigs: {...state.shellConfigs, characterId: config},
       );
-      _mergeServerHistory(characterId, history);
+      Map<String, List<ChatAttachment>> remoteMedia = const {};
+      if (transport is MasanawaAgentTransport) {
+        try {
+          remoteMedia = await _restorePrivateHistoryMedia(
+            characterId, history, transport,
+          );
+        } catch (_) {
+          // A broken/offline media vault must not hide text history.
+        }
+      }
+      if (_disposed || generation != _connectionGeneration ||
+          threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
+      _mergeServerHistory(characterId, history, remoteMedia: remoteMedia);
       await _reconcilePendingTurns(characterId, transport);
       if (_disposed || generation != _connectionGeneration ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
@@ -659,10 +678,203 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
-  void _mergeServerHistory(
+  Future<ChatAttachment> _cacheOneRemoteMedia(
+    String characterId,
+    RemoteChatMedia item,
+    MasanawaAgentTransport transport,
+    String owner,
+    int ownerGeneration,
+    int connectionGeneration,
+  ) async {
+    bool current() => !_disposed && _cacheOwnerId == owner &&
+        _cacheGeneration == ownerGeneration &&
+        _connectionGeneration == connectionGeneration;
+    if (!current()) throw const ApiException('Conversation account changed');
+    final folder = await _mediaFolderForOwner(owner);
+    await folder.create(recursive: true);
+    if (!current()) throw const ApiException('Conversation account changed');
+    final safeId = item.requestId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
+    final suffix = RegExp(r'\.([a-zA-Z0-9]{1,10})$')
+            .firstMatch(item.name ?? '')?.group(1)?.toLowerCase() ??
+        (item.kind == 'voice' || item.kind == 'audio'
+            ? 'ogg' : item.kind == 'image' ? 'jpg'
+            : item.kind == 'video' ? 'mp4' : 'bin');
+    final file = File(
+      '${folder.path}/remote-$safeId-${item.slot}.$suffix',
+    );
+    if (!await file.exists() || await file.length() != item.sizeBytes) {
+      final bytes = await transport.downloadPrivateChatMedia(
+        characterId, item.requestId, item.slot,
+      );
+      if (!current()) throw const ApiException('Conversation account changed');
+      if (bytes.length != item.sizeBytes) {
+        throw const ApiException('Conversation attachment size mismatch');
+      }
+      final partial = File('${file.path}.partial');
+      try {
+        await partial.writeAsBytes(bytes, flush: true);
+        if (!current()) throw const ApiException('Conversation account changed');
+        if (await file.exists()) await file.delete();
+        await partial.rename(file.path);
+      } finally {
+        if (await partial.exists()) await partial.delete();
+      }
+    }
+    if (!current()) throw const ApiException('Conversation account changed');
+    return ChatAttachment(
+      kind: item.kind,
+      path: file.path,
+      name: item.name,
+      sizeBytes: item.sizeBytes,
+    );
+  }
+
+  /// Restores recent bytes eagerly and retains an authenticated, on-demand
+  /// placeholder for every older or temporarily unavailable attachment.
+  Future<Map<String, List<ChatAttachment>>> _restorePrivateHistoryMedia(
     String characterId,
     List<AgentHistoryMessage> history,
-  ) {
+    MasanawaAgentTransport transport,
+  ) async {
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    final connectionGeneration = _connectionGeneration;
+    if (owner == null || owner.isEmpty) return const {};
+    bool current() => !_disposed && owner == _cacheOwnerId &&
+        ownerGeneration == _cacheGeneration &&
+        connectionGeneration == _connectionGeneration;
+    final ids = history
+        .where((m) => m.direction == 'user' && m.requestId.isNotEmpty)
+        .map((m) => m.requestId)
+        .toSet().toList();
+    if (ids.isEmpty) return const {};
+    final manifest = await transport.listPrivateChatMedia(
+      characterId, ids.reversed.take(100).toList(),
+    );
+    if (!current()) return const {};
+    final historyRank = <String,int>{
+      for (var i = 0; i < history.length; i++)
+        history[i].requestId: i,
+    };
+    final ordered = [...manifest]..sort((a,b) {
+      final rank = (historyRank[b.requestId] ?? 0)
+          .compareTo(historyRank[a.requestId] ?? 0);
+      return rank != 0 ? rank : a.slot.compareTo(b.slot);
+    });
+    final existingByRequest = {
+      for (final message in threadOf(characterId).messages)
+        if (message.isUser && message.requestId != null)
+          message.requestId!: message.allAttachments,
+    };
+    final restored = <String, Map<int, ChatAttachment>>{};
+    var fetchedBytes = 0;
+    var fetchedCount = 0;
+    for (final item in ordered) {
+      if (!current()) return const {};
+      ChatAttachment? local;
+      final previously = existingByRequest[item.requestId] ?? const [];
+      if (item.slot < previously.length) {
+        final entry = previously[item.slot];
+        if (!entry.path.startsWith('masanawa-remote|')) {
+          try {
+            if (await File(entry.path).length() == item.sizeBytes) {
+              local = entry;
+            }
+          } catch (_) {}
+        }
+      }
+      if (local == null && fetchedCount < 24 &&
+          fetchedBytes + item.sizeBytes <= 32 * 1024 * 1024) {
+        try {
+          local = await _cacheOneRemoteMedia(
+            characterId, item, transport, owner,
+            ownerGeneration, connectionGeneration,
+          );
+          fetchedBytes += item.sizeBytes;
+          fetchedCount++;
+        } catch (_) {}
+      }
+      restored.putIfAbsent(item.requestId, () => {})[item.slot] =
+          local ?? ChatAttachment(
+            kind: item.kind,
+            path: chatRemoteMediaReference(
+              characterId, item.requestId, item.slot,
+            ),
+            name: item.name,
+            sizeBytes: item.sizeBytes,
+          );
+    }
+    return {
+      for (final entry in restored.entries)
+        entry.key: [
+          for (final slot in (entry.value.keys.toList()..sort()))
+            entry.value[slot]!,
+        ],
+    };
+  }
+
+  /// An older note/document is fetched only when the user taps it. The
+  /// original server identity remains authoritative for bytes and owner.
+  Future<void> downloadRemoteChatMedia(String reference) async {
+    final pieces = reference.split('|');
+    if (pieces.length != 4 || pieces[0] != 'masanawa-remote') {
+      throw const ApiException('Invalid private media reference');
+    }
+    final characterId = pieces[1], requestId = pieces[2];
+    final slot = int.tryParse(pieces[3]);
+    if (slot == null || slot < 0 || slot > 7) {
+      throw const ApiException('Invalid private media slot');
+    }
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    final connection = _connectionGeneration;
+    final transport = ref.read(agentTransportProvider);
+    if (owner == null || transport is! MasanawaAgentTransport) {
+      throw const ApiException('Sign in to download conversation media');
+    }
+    final manifest = await transport.listPrivateChatMedia(
+      characterId, [requestId],
+    );
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        connection != _connectionGeneration) return;
+    final selected = manifest.where((entry) =>
+      entry.requestId == requestId && entry.slot == slot);
+    if (selected.isEmpty) {
+      throw const ApiException('That attachment is no longer available');
+    }
+    final attachment = await _cacheOneRemoteMedia(
+      characterId, selected.first, transport, owner,
+      generation, connection,
+    );
+    if (_disposed || owner != _cacheOwnerId ||
+        generation != _cacheGeneration ||
+        connection != _connectionGeneration) return;
+    final thread = threadOf(characterId);
+    state = state.copyWith(threads: {
+      ...state.threads,
+      characterId: thread.copyWith(messages: [
+        for (final message in thread.messages)
+          if (message.isUser && message.requestId == requestId)
+            message.copyWith(
+              attachment: message.attachment?.path == reference
+                  ? attachment : message.attachment,
+              attachments: [
+                for (final part in message.attachments)
+                  part.path == reference ? attachment : part,
+              ],
+            )
+          else message,
+      ]),
+    });
+    await _save();
+  }
+
+  void _mergeServerHistory(
+    String characterId,
+    List<AgentHistoryMessage> history, {
+    Map<String, List<ChatAttachment>> remoteMedia = const {},
+  }) {
     final thread = threadOf(characterId);
     final local = [...thread.messages];
     final byKey = <String, AiChatMessage>{};
@@ -1521,6 +1733,23 @@ class AiChatController extends Notifier<AiChatState> {
     final mimeType = chatAttachmentMimeType(attachment, bytes);
 
     final transport = ref.read(agentTransportProvider);
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    if (transport is MasanawaAgentTransport && requestId != null) {
+      await transport.savePrivateChatMedia(
+        characterId: characterId,
+        requestId: requestId,
+        slot: 0,
+        kind: attachment.kind,
+        mimeType: mimeType,
+        name: attachment.name,
+        bytes: bytes,
+      );
+      if (_disposed || owner != _cacheOwnerId ||
+          ownerGeneration != _cacheGeneration) {
+        throw const ApiException('Account changed before media was sent');
+      }
+    }
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
     Future<AgentTurnResult> send() => transport.sendMediaTurn(
@@ -1587,6 +1816,26 @@ class AiChatController extends Notifier<AiChatState> {
       );
     }
     final transport = ref.read(agentTransportProvider);
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    if (transport is MasanawaAgentTransport && requestId != null) {
+      for (var index = 0; index < media.length; index++) {
+        final part = media[index];
+        await transport.savePrivateChatMedia(
+          characterId: characterId,
+          requestId: requestId,
+          slot: index,
+          kind: attachments[index].kind,
+          mimeType: part.mimeType,
+          name: part.name,
+          bytes: part.bytes,
+        );
+        if (_disposed || owner != _cacheOwnerId ||
+            ownerGeneration != _cacheGeneration) {
+          throw const ApiException('Account changed before media was sent');
+        }
+      }
+    }
     final binding = await _bindingFor(characterId, transport);
     return transport.sendMediaSetTurn(
       binding: binding,

@@ -3969,6 +3969,9 @@ class _AttachmentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (attachment.path.startsWith('masanawa-remote|')) {
+      return _RemoteChatMediaTile(attachment: attachment);
+    }
     switch (attachment.kind) {
       case 'image':
         return _ImageAttachment(
@@ -3984,6 +3987,62 @@ class _AttachmentView extends StatelessWidget {
       default:
         return _DocTile(attachment: attachment);
     }
+  }
+}
+
+/// Older media stays on the authenticated Gateway without an automatic
+/// expensive download. Tapping fetches its exact original bytes into this
+/// signed-in account's private cache; the usual player then replaces this tile.
+class _RemoteChatMediaTile extends ConsumerStatefulWidget {
+  const _RemoteChatMediaTile({required this.attachment});
+  final ChatAttachment attachment;
+
+  @override
+  ConsumerState<_RemoteChatMediaTile> createState() =>
+      _RemoteChatMediaTileState();
+}
+
+class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
+  bool _loading = false;
+
+  Future<void> _download() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(aiChatProvider.notifier)
+          .downloadRemoteChatMedia(widget.attachment.path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Unable to download this attachment. Check your connection or retry.',
+        )),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = widget.attachment.kind;
+    final label = widget.attachment.name ??
+        (kind == 'voice' || kind == 'audio' ? 'Voice note' :
+         kind == 'image' ? 'Photo' :
+         kind == 'video' ? 'Video' : 'Document');
+    return Semantics(
+      button: true,
+      label: 'Download $label securely',
+      child: OutlinedButton.icon(
+        onPressed: _loading ? null : _download,
+        icon: _loading
+            ? const SizedBox(width: 17, height: 17,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.download_for_offline_outlined),
+        label: Text(_loading ? 'Downloading...' : label,
+          maxLines: 2, overflow: TextOverflow.ellipsis),
+      ),
+    );
   }
 }
 
