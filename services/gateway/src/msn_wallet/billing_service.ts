@@ -24,13 +24,13 @@ export function createMsnwBillingService(input: Readonly<{
     }
   }
   async function preview(request: Readonly<{
-    authorizationHeader?: string; quoteId: string; quoteRevision: number;
+    authorizationHeader?: string | undefined; quoteId: string; quoteRevision: number;
   }>) {
     const who=await owner(request.authorizationHeader);
     return input.funding.preview(who,request.quoteId,request.quoteRevision);
   }
   async function execute(request: Readonly<{
-    authorizationHeader?: string;
+    authorizationHeader?: string | undefined;
     quoteId: string;
     quoteRevision: number;
     expectedAmountMicro: string;
