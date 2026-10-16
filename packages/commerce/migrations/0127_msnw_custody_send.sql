@@ -68,7 +68,7 @@ CREATE TRIGGER msnw_custody_entries_immutable
 -- Deferred commit gate: even a privileged partial writer cannot persist an
 -- operation unless exactly two opposite postings belong to the two owners.
 CREATE OR REPLACE FUNCTION commerce.msnw_custody_assert_balanced()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE posting_count integer;
 DECLARE net_micro numeric(78,0);
 DECLARE debit_user text;
@@ -88,7 +88,7 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$;
+$$;
 CREATE CONSTRAINT TRIGGER msnw_custody_balance_at_commit
  AFTER INSERT ON commerce.msnw_custody_operations
  DEFERRABLE INITIALLY DEFERRED
