@@ -151,3 +151,19 @@ Progress labels indicate incomplete journeys even when historic source fragments
 - The owner cannot activate provider payout IP whitelisting yet. Keep `NOWPAYMENTS_FIXED_EGRESS_CONFIRMED=false` and `NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED=false`; do not manufacture approved addresses or token exchange rates, and do not enable unqualified MSNW→stablecoin external payouts.
 - `services/gateway/src/nowpayments_readonly_probe.ts` and opt-in `NOWPAYMENTS_READONLY_PROBE_ON_START=true` can check the actual payment API status, supported payment currencies, configured conversion-route presence and authenticated custody balance read *without creating invoices, dispatching withdrawals, listing balances in logs or blocking API readiness*. Diagnostic labels say `reachable`, not unconditionally `authenticated`/withdrawal-qualified.
 - Existing production Postgres and financial records remain untouched. Follow Gateway deployment health and structured event `nowpayments.readonly_probe`; only then claim provider path reachability. A read-only positive check is **not** a proof of end-to-end IPN or a completed deposit.
+
+
+## 2026-10-16 internal NOWPayments custody conversion unblock
+
+Owner confirmed the Gateway now has API key, IPN secret, payout account credentials and relay token, but payout IP whitelisting is not available. NOWPayments explicitly separates **custody internal currency conversion** (no external transfer, 0.5% custody conversion service fee per published account guidance) from **external payouts**, which normally require IP and recipient address whitelisting.
+
+Corrections in this work:
+- `adapters/crypto/nowpayments/src/account.ts`: Require payout IP whitelisting **only for external payouts**; do not falsely block authenticated custody or internal conversion.
+- `adapters/crypto/nowpayments/src/runtime-evidence.ts`: Intersect configured conversion codes with this merchant account's real provider currency catalog, and independently intersect payout codes; never let an unsupported disabled payout code disable all swaps. A supported pair is still required before any conversion is qualified.
+- `services/gateway/src/nowpayments_readonly_probe.ts`: Independently attempt **authenticated account login** and `/balance`, check provider-supported conversion codes and count currently funded eligible source currencies; emit no balances, raw provider response, JWT, wallet addresses or secrets. The probe never dispatches a conversion or external payout.
+- `services/gateway/src/main.ts`: Safe startup composition diagnostic distinguishes *present* credentials, route counts and underlying auth/repository plumbing from *confirmed* provider reachability.
+- The original user-scoped balance/ledger authorization, exact preflight fee and provider-minimum requirements, immutable idempotency, conversion reconciliation, callback integrity and external payout whitelist checks are unchanged.
+
+**MSNW→external stablecoin payments are still an independent financial obligation, not an internal NOWPayments swap**. Do not turn on `MSNW_CONVERT_USD_MICRO_PER_MSNW` without governing MSNW price/verified custody, or either payout whitelist confirmation without actual provider authorization. Do not impersonate official on-chain MSNW issuance or invent a prefunded treasury.
+
+Qualification stage: code merged/pending integration as noted in PR, not an assertion that funded provider balances or real swaps exist. Real production log events: `nowpayments.configuration_readiness` and `nowpayments.readonly_probe` only if `NOWPAYMENTS_READONLY_PROBE_ON_START=true`. Treat an available route plus zero funded sources as **preflight-only**, not ready to execute a swap.

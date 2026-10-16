@@ -1547,6 +1547,24 @@ export async function startGatewayService(
       ? env.NOWPAYMENTS_PAYOUT_FEE_MODE
       : undefined;
 
+  if (env.NOWPAYMENTS_READONLY_PROBE_ON_START === "true") {
+    // Emit safe composition evidence even when the provider cannot be wired.
+    // Variable PRESENCE is not evidence of successful provider authentication.
+    process.stdout.write(JSON.stringify({
+      event: "nowpayments.configuration_readiness",
+      apiKeyConfigured: Boolean(nowPaymentsApiKey),
+      ipnConfigured: Boolean(nowPaymentsIpnSecret),
+      custodyCredentialsConfigured: Boolean(nowPaymentsEmail && nowPaymentsPassword),
+      relayConfigured: Boolean(nowPaymentsRelayToken),
+      publicCallbackConfigured: Boolean(publicBaseUrl),
+      cryptoStoreConfigured: Boolean(database.crypto),
+      userAuthorizerConfigured: Boolean(financialAuthorizer),
+      conversionRouteCount: conversionProviderCodes.length,
+      payoutWhitelistConfigured: withdrawalAllowlist.size > 0,
+      externalPayoutIpApproved: env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true",
+    }) + "\n");
+  }
+
   let composedMsnwConversion = options.appOptions?.msnwConversion;
   let composedFinancial = options.appOptions?.financial;
   if (

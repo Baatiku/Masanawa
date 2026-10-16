@@ -47,13 +47,10 @@ export function qualifyAccountCapability(
     reasons.push(available === false ? "capability.unavailable" : "capability.unverified");
   }
 
-  if (
-    (capability === "custody" ||
-      capability === "customer_management" ||
-      capability === "conversion" ||
-      capability === "payout") &&
-    evidence.ipWhitelistSatisfied !== true
-  ) {
+  // NOWPayments IP whitelisting guards external withdrawals only. Internal
+  // custody balance reads and custody-to-custody coin swaps never request a
+  // payout and therefore must not be blocked by payout IP policy.
+  if (capability === "payout" && evidence.ipWhitelistSatisfied !== true) {
     reasons.push(
       evidence.ipWhitelistSatisfied === false
         ? "security.ip_whitelist.unsatisfied"
