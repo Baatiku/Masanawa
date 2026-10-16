@@ -84,7 +84,7 @@ export async function probeNowPaymentsReadOnly(input: Readonly<{
       if (supportedCodes !== null) {
         fundedConversionSourceCount = balances.filter(
           (entry) => supportedCodes!.has(entry.currency.toUpperCase()) &&
-            /^[0-9]+(?:\\.[0-9]+)?$/u.test(entry.available) &&
+            /^[0-9]+(?:\.[0-9]+)?$/u.test(entry.available) &&
             /[1-9]/u.test(entry.available),
         ).length;
       }
