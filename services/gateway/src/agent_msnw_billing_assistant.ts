@@ -20,7 +20,7 @@ type Biller = Readonly<{ billerCode: string; name: string }>;
 type Item = Readonly<{ billerCode: string; itemCode: string; name: string; amount: string }>;
 
 const actionTag = /<masanawa_action>([\s\S]{1,4000}?)<\/masanawa_action>/u;
-const confirmPhrase = /^(?:yes|yeah|yep|confirm|confirmed|confirm bill|pay bill|proceed|proceed with bill|go ahead|do it|na am|naam|eh|e)$/iu;
+const confirmPhrase = /^(?:confirm bill|confirm payment for bill|pay the quoted bill|pay bill|proceed with bill|biya bill|na tabbatar da biyan bill)$/iu;
 const money = /^[1-9][0-9]*(?:\.[0-9]{1,2})?$/u;
 const codeFor = (service: Service): string => ({
   airtime: "AIRTIME",
