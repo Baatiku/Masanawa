@@ -57,7 +57,7 @@ export interface BillingFinancialService {
     amount: string;
     signal?: AbortSignal;
   }>): Promise<BillingFulfillmentRecord>;
-  purchaseMsnwOwned(input: Readonly<{
+  purchaseMsnwOwned?(input: Readonly<{
     tenantId: string;
     userId: string;
     requestId: string;
