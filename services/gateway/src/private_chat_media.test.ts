@@ -104,6 +104,28 @@ describe("private Masana cross-device media",()=>{
       .toEqual([]);
   });
 
+  it("stores the assistant voice at slot 8 without overwriting customer slot 0",async()=>{
+    const f=fixture();
+    await f.file("original customer voice");
+    const voice=Buffer.from("assistant response");
+    await f.service.put("Bearer alice",{
+      characterId,requestId,slot:8,kind:"voice",mimeType:"audio/wav",
+      name:"masana-reply.wav",dataBase64:voice.toString("base64"),
+    });
+    expect(f.rows).toHaveLength(2);
+    const reply=await f.service.get("Bearer alice",characterId,requestId,8);
+    expect(Buffer.from(reply!.dataBase64,"base64").toString())
+      .toBe("assistant response");
+    expect((await f.service.get("Bearer alice",characterId,requestId,0))?.kind)
+      .toBe("voice");
+    expect(await f.service.get("Bearer bob",characterId,requestId,8))
+      .toBeNull();
+    await expect(f.service.put("Bearer alice",{
+      characterId,requestId,slot:8,kind:"image",mimeType:"image/jpeg",
+      dataBase64:voice.toString("base64"),
+    })).rejects.toThrow("chat.media.invalid");
+  });
+
   it("retries identical media idempotently and blocks byte substitution",async()=>{
     const f=fixture();
     await f.file("same bytes");
