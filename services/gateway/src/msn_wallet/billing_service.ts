@@ -37,6 +37,18 @@ export function createMsnwBillingService(input: Readonly<{
     expectedRateKoboPerMsnw: string;
   }>) {
     const who=await owner(request.authorizationHeader);
+    const prior=await input.funding.reservation(who,request.quoteId);
+    if(prior) {
+      if(prior.amountMicro!==request.expectedAmountMicro ||
+         prior.rateKoboPerMsnw!==request.expectedRateKoboPerMsnw)
+        throw new MsnwBillingError("msnw.billing.idempotency_conflict",409);
+      // Provider may have accepted the first attempt before a timeout.
+      // Only reconcile the same existing fulfillment, NEVER dispatch again.
+      return input.billing.readPurchase({
+        authorizationHeader:request.authorizationHeader,
+        reference:prior.reference,refresh:true,
+      });
+    }
     const quote=await input.funding.preview(
       who,request.quoteId,request.quoteRevision);
     if(quote.amountMicro!==request.expectedAmountMicro ||
