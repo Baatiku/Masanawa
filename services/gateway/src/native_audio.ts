@@ -130,51 +130,68 @@ export function createGeminiLiveAudioRenderer(input: {
       const selectedVoice = context?.voiceName?.trim() || voiceName;
       const interactions = /^gemini-3\./u.test(model);
       const timeout = AbortSignal.timeout(30_000);
-      const response = await fetchImpl(
-        interactions
-          ? "https://generativelanguage.googleapis.com/v1beta/interactions"
-          : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        {
-          method: "POST",
-          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-          headers: {
-            "content-type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify(
-            interactions
-              ? {
-                  model,
-                  store: false,
-                  input: [
-                    {
-                      type: "user_input",
-                      content: [{ type: "text", text: prompt }],
+      const requestSignal = signal
+        ? AbortSignal.any([signal, timeout])
+        : timeout;
+      const requestAudio = (useInteractions: boolean) =>
+        fetchImpl(
+          useInteractions
+            ? "https://generativelanguage.googleapis.com/v1beta/interactions"
+            : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: "POST",
+            signal: requestSignal,
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": apiKey,
+            },
+            body: JSON.stringify(
+              useInteractions
+                ? {
+                    model,
+                    store: false,
+                    input: [
+                      {
+                        type: "user_input",
+                        content: [{ type: "text", text: prompt }],
+                      },
+                    ],
+                    response_format: {
+                      type: "audio",
+                      mime_type: "audio/l16",
+                      sample_rate: 24000,
                     },
-                  ],
-                  response_format: {
-                    type: "audio",
-                    mime_type: "audio/l16",
-                    sample_rate: 24000,
-                  },
-                  generation_config: {
-                    speech_config: [{ voice: selectedVoice }],
-                  },
-                }
-              : {
-                  contents: [{ role: "user", parts: [{ text: prompt }] }],
-                  generationConfig: {
-                    responseModalities: ["AUDIO"],
-                    speechConfig: {
-                      voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: selectedVoice },
+                    generation_config: {
+                      speech_config: [{ voice: selectedVoice }],
+                    },
+                  }
+                : {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                      responseModalities: ["AUDIO"],
+                      speechConfig: {
+                        voiceConfig: interactions
+                          ? { voice: selectedVoice }
+                          : {
+                              prebuiltVoiceConfig: { voiceName: selectedVoice },
+                            },
                       },
                     },
                   },
-                },
-          ),
-        },
-      );
+            ),
+          },
+        );
+      let response = await requestAudio(interactions);
+      if (
+        interactions &&
+        (response.status === 400 || response.status === 404) &&
+        !requestSignal.aborted
+      ) {
+        // This is an explicit rejected request, never an ambiguous accepted
+        // synthesis. Keep text/model/voice identical on the documented TTS rail.
+        await response.body?.cancel();
+        response = await requestAudio(false);
+      }
       if (!response.ok) {
         throw await geminiFailure(response, "speech");
       }
