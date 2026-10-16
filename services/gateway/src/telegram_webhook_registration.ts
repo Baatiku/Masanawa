@@ -35,7 +35,11 @@ async function apiJson(
   url: string,
   init?: RequestInit,
 ): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url, init);
+  const timeout = AbortSignal.timeout(20_000);
+  const response = await fetchImpl(url, {
+    ...init,
+    signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+  });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok || body.ok !== true) {
     throw new Error(`channels.telegram_webhook_http_${response.status}`);
@@ -101,3 +105,4 @@ export async function registerAndVerifyTelegramWebhook(
         : null,
   });
 }
+

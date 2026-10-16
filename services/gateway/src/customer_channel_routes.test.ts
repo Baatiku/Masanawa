@@ -37,6 +37,43 @@ function whatsappPayload() {
 }
 
 describe("customer channel webhook routes", () => {
+  it.each([false,true])("keeps failed audio-only replies retryable; text fallback=%s",async(hasText)=>{
+    const app=Fastify();const channelBridge=bridge();
+    channelBridge.handle.mockResolvedValue({duplicate:false,reply:hasText?"Voice transcript":"",shouldDeliver:true,requestContact:false,
+      audio:{bytes:Buffer.from("audio"),mimeType:"audio/wav",fileName:"reply.wav"}} as never);
+    vi.stubGlobal("fetch",vi.fn(async(input)=>new Response(JSON.stringify(
+      String(input).includes("sendDocument")?{ok:false}:{ok:true}),{status:200})));
+    try {
+      registerCustomerChannelRoutes(app,{bridge:channelBridge,telegram:{botToken:"bot-token",webhookSecret:"telegram-secret"}});
+      const result=await app.inject({method:"POST",url:"/channels/telegram/webhook",headers:{"x-telegram-bot-api-secret-token":"telegram-secret"},
+        payload:{message:{message_id:502,from:{id:123},chat:{id:123,type:"private"},text:"Hi"}}});
+      expect(result.statusCode).toBe(hasText?200:500);
+      expect(channelBridge.delivered).toHaveBeenCalledTimes(hasText?1:0);
+    } finally {vi.unstubAllGlobals();await app.close();}
+  });
+  it("aborts stalled provider delivery without acknowledging the receipt",async()=>{
+    const app=Fastify();const channelBridge=bridge();const controller=new AbortController();
+    channelBridge.handle.mockResolvedValue({duplicate:false,reply:"Pending reply",shouldDeliver:true,requestContact:false});
+    let entered!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;});
+    let signal:AbortSignal|undefined;
+    const deadline=vi.spyOn(AbortSignal,"timeout").mockReturnValue(controller.signal);
+    vi.stubGlobal("fetch",vi.fn(async(_url,init?:RequestInit)=>{
+      signal=init?.signal??undefined;entered();
+      if(!signal)return new Response("{}",{status:503});
+      return await new Promise<Response>((_resolve,reject)=>{
+        signal!.addEventListener("abort",()=>reject(new Error("provider timeout")),{once:true});
+      });
+    }));
+    try {
+      registerCustomerChannelRoutes(app,{bridge:channelBridge,telegram:{botToken:"bot-token",webhookSecret:"telegram-secret"}});
+      const response=app.inject({method:"POST",url:"/channels/telegram/webhook",headers:{"x-telegram-bot-api-secret-token":"telegram-secret"},payload:{message:{message_id:503,from:{id:123},chat:{id:123,type:"private"},text:"Hi"}}}).then(value=>value);
+      await started;controller.abort();
+      expect((await response).statusCode).toBe(500);
+      expect(signal?.aborted).toBe(true);
+      expect(deadline).toHaveBeenCalledWith(20_000);
+      expect(channelBridge.delivered).not.toHaveBeenCalled();
+    } finally {deadline.mockRestore();vi.unstubAllGlobals();await app.close();}
+  });
   it("verifies WhatsApp GET challenge with the configured token", async () => {
     const app = Fastify();
     const channelBridge = bridge();
@@ -542,3 +579,4 @@ describe("customer channel webhook routes", () => {
   });
 
 });
+

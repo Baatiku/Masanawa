@@ -45,7 +45,11 @@ function safeEqual(left: string, right: string): boolean {
 }
 
 async function fetchJson(url: string, init: RequestInit): Promise<Record<string, unknown>> {
-  const response = await fetch(url, init);
+  const timeout = AbortSignal.timeout(20_000);
+  const response = await fetch(url, {
+    ...init,
+    signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+  });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(`channels.provider_http_${response.status}`);
@@ -64,7 +68,7 @@ async function download(
   headers: Readonly<Record<string, string>>,
   maxBytes = 8 * 1024 * 1024,
 ): Promise<Buffer> {
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(20_000) });
   if (!response.ok) throw new Error(`channels.media_http_${response.status}`);
   const length = Number(response.headers.get("content-length") ?? "0");
   if (Number.isFinite(length) && length > maxBytes) {
@@ -493,9 +497,11 @@ export function registerCustomerChannelRoutes(
         if (result.audio) {
           try {
             await sendTelegramReplyAudio(config, chatId, result.audio);
-          } catch (_) {
+          } catch (error) {
             // Optional audio never re-executes a completed turn or resends
             // already-delivered text. Text remains the durable fallback.
+            // With no text fallback, retain the pending receipt for retry.
+            if (!result.reply) throw error;
           }
         }
         await options.bridge.delivered({
@@ -507,3 +513,4 @@ export function registerCustomerChannelRoutes(
     });
   }
 }
+
