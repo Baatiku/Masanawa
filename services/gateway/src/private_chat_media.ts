@@ -20,7 +20,8 @@ type Owner = Readonly<{ tenantId: string; userId: string; characterId: string }>
 function validateMedia(request: PrivateChatMediaInput) {
   const requestId = parseCanonicalId("request", request.requestId);
   const characterId = parseCanonicalId("character", request.characterId);
-  if (!Number.isSafeInteger(request.slot) || request.slot < 0 || request.slot > 7 ||
+  if (!Number.isSafeInteger(request.slot) || request.slot < 0 || request.slot > 8 ||
+      (request.slot === 8 && request.kind !== "voice") ||
       !["voice", "audio", "image", "video", "doc"].includes(request.kind) ||
       !/^[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;\s*[a-z0-9._+-]+=[a-z0-9._+-]+)?$/iu.test(request.mimeType) ||
       request.mimeType.length > 160 ||
@@ -99,7 +100,8 @@ export function createPrivateChatMediaService(input: Readonly<{
         if (used + BigInt(verified.data.length) > 128n * 1024n * 1024n) {
           throw new RangeError("chat.media.account_quota_exceeded");
         }
-        if (total + verified.data.length > MAX_MESSAGE_MEDIA_BYTES) {
+        if (total + verified.data.length > MAX_MESSAGE_MEDIA_BYTES +
+            (request.slot === 8 ? MAX_CHAT_MEDIA_BYTES : 0)) {
           throw new RangeError("chat.media.message_too_large");
         }
         await client.query(
@@ -148,7 +150,7 @@ export function createPrivateChatMediaService(input: Readonly<{
     characterId: string, requestId: string, slot: number) {
     const who=await owner(authorizationHeader,characterId);
     const id=parseCanonicalId("request",requestId);
-    if(!Number.isSafeInteger(slot)||slot<0||slot>7)
+    if(!Number.isSafeInteger(slot)||slot<0||slot>8)
       throw new RangeError("chat.media.slot_invalid");
     const r=await input.pool.query(
       "SELECT kind,mime_type,filename,payload,sha256 FROM agents.private_chat_media " +
