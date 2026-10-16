@@ -326,7 +326,7 @@ export function createCustomerChannelBridge(input: Readonly<{
 
   return Object.freeze({
     ...(input.channels.delivery ? {delivery:createCustomerChannelDeliveryService(input.channels.delivery)} : {}),
-    async handle(request) {
+    async handle(request: CustomerChannelInbound) {
       const messageId = request.messageId.trim();
       const externalUserId = request.externalUserId.trim();
       const chatId = request.chatId.trim();
@@ -565,7 +565,7 @@ export function createCustomerChannelBridge(input: Readonly<{
       }
     },
 
-    async delivered(delivery) {
+    async delivered(delivery: Parameters<CustomerChannelBridge["delivered"]>[0]) {
       await input.channels.markDelivered({
         channel: delivery.channel,
         messageId: delivery.messageId,
