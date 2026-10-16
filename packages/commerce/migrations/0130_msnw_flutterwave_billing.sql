@@ -72,5 +72,54 @@ CREATE TRIGGER msnw_billing_economics_immutable
  BEFORE UPDATE ON commerce.msnw_billing_reservations
  FOR EACH ROW EXECUTE FUNCTION commerce.msnw_billing_freeze_economics();
 
+CREATE OR REPLACE FUNCTION commerce.msnw_billing_verify_audit()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE r commerce.msnw_billing_reservations%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM commerce.msnw_billing_reservations
+  WHERE fulfillment_reference=NEW.fulfillment_reference;
+  IF NOT FOUND OR
+     (NEW.stage='reserved' AND (
+       NEW.customer_available_delta IS DISTINCT FROM -r.reserved_micro OR
+       NEW.customer_reserved_delta IS DISTINCT FROM r.reserved_micro OR
+       NEW.treasury_collected_delta IS DISTINCT FROM 0 OR
+       r.state IS DISTINCT FROM 'reserved')) OR
+     (NEW.stage='fulfilled' AND (
+       NEW.customer_available_delta IS DISTINCT FROM 0 OR
+       NEW.customer_reserved_delta IS DISTINCT FROM -r.reserved_micro OR
+       NEW.treasury_collected_delta IS DISTINCT FROM r.reserved_micro OR
+       r.state IS DISTINCT FROM 'fulfilled')) OR
+     (NEW.stage='refunded' AND (
+       NEW.customer_available_delta IS DISTINCT FROM r.reserved_micro OR
+       NEW.customer_reserved_delta IS DISTINCT FROM -r.reserved_micro OR
+       NEW.treasury_collected_delta IS DISTINCT FROM 0 OR
+       r.state IS DISTINCT FROM 'refunded')) THEN
+    RAISE EXCEPTION 'MSNW billing audit does not match reserved or settled custody'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER msnw_billing_audit_matches_custody
+ BEFORE INSERT ON commerce.msnw_billing_audit
+ FOR EACH ROW EXECUTE FUNCTION commerce.msnw_billing_verify_audit();
+
+CREATE OR REPLACE FUNCTION commerce.msnw_billing_audit_required()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS(SELECT 1 FROM commerce.msnw_billing_audit a
+    WHERE a.fulfillment_reference=NEW.fulfillment_reference
+      AND a.stage='reserved') THEN
+    RAISE EXCEPTION 'MSNW billing cannot reserve without balanced audit'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER msnw_billing_reservation_audited
+ AFTER INSERT ON commerce.msnw_billing_reservations
+ DEFERRABLE INITIALLY DEFERRED
+ FOR EACH ROW EXECUTE FUNCTION commerce.msnw_billing_audit_required();
+
 REVOKE ALL ON commerce.msnw_billing_reservations FROM PUBLIC;
 REVOKE ALL ON commerce.msnw_billing_audit FROM PUBLIC;
