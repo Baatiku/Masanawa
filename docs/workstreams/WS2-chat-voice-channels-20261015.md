@@ -124,3 +124,25 @@ No merged PR here establishes Android APK build, real Google/Firebase/LiveKit re
 ## Dependencies and next executable changes
 
 Continue the ten checklist items above rather than interpreting this media correction as WS2 completion. Prioritize: Gemini Live reconnection/resume with correct paid-call lifecycle; live-call Firebase/background handling; real linked-device QR/session recovery; server-backed 26-persona call/Room acceptance; MSNW paid-call integration after WS1 canonical financial contract is ready. Do not create a second ledger, new bot identity, fake provider receipt, or separate chat system.
+
+
+## 2026-10-16 continuation: executed recovery fixes
+
+- PR #83 merged `fe3f2bf39d8589335b0feadf2d168f51513a6a60`: valid large media no longer exhausts the base64 regex stack; original customer inputs retain their 12 MiB envelope independently of the 8 MiB generated reply. HTTP IDs are validated before storage and private manifests/missing media use no-store.
+- PR #84 merged `5103cde973f7f4684ba80b7c7e7d74812db70aca`: Telegram audio-only upload failures stay unacknowledged; successful text remains the fallback. Provider API/download and webhook registration waits are bounded.
+- PR #85 merged `d2f162e111cb1a6b053035b0f5f9b5d5a4e2d02b`: personal WhatsApp Start/Reset retry after initialization failure; Stop fences pending socket creation, queued messages and late deliveries; stale QR renders cannot replace the paired state. Audio-only failures are not falsely marked delivered.
+- PR #86 source `52fef06d7234ff892539c497b20b0305ab6d42a9`: additive security migration `0104_customer_channel_request_identity.sql` persists each provider receipt's original canonical agent request ID. Failed retries reuse it, and foreign-sender receipt access is rejected. Legacy failed receipts whose original turn is unknown require reconciliation rather than automatic financial replay. A supplementary phone profile cannot override the durable linked account when issuing an internal session.
+
+### Executed checks
+
+67 checked-in tests passed across media service/HTTP, Telegram routes/webhook registration, WhatsApp utility/lifecycle, channel bridge/Masana routing and receipt storage. New bug cases failed before their fixes. Two additional scratch acceptance harnesses passed on PostgreSQL 18.6 compiled to WASM via PGlite 0.5.10: media migrations 0010/0011, exact-byte persistence after database close/reopen, account isolation, idempotency and expiry; channel migrations 0101/0102/0104, original request identity after failure/reopen, completion/delivery readback, sender isolation and refusal to replay unknown legacy requests. These are executed SQL engine checks, not native server concurrency or production acceptance.
+
+Local command: `node ../test-runtime/node_modules/vitest/vitest.mjs run --config vitest.local.config.mjs` — **69 passed, 11 files**. The scratch config resolves actual recovered repository modules with installed Vitest 5.0.3, Fastify 5.12.5 and uuid 14.0.2; no replacement production implementations. Scoped strict TypeScript check of the customer-channel security contract, PostgreSQL repository and request tests passed using TypeScript 7.0.2. Full workspace build/typecheck, Flutter analysis/tests and Android compilation were not run. Native PostgreSQL startup was unavailable because the container cannot switch to an unprivileged user; WASM SQL checks do not establish multi-connection locking.
+
+### Production and remaining work
+
+Railway Gateway and Worker remain on successful deployment of `2f3ea835ed73ca3960d86ded54801f8a19fa1232` at the last exact deployment read. Main merges created **NEEDS_APPROVAL** deployments; no supported connector operation exposed approval of these queued GitHub deployments. They are not deployed fixes. PostgreSQL and the existing WhatsApp volume were preserved; no production SQL or credential changes were performed.
+
+Gateway source is correctly attached to Baatiku/Masanawa main. Its WhatsApp volume is mounted at `/data/whatsapp-auth`. Configured variable names do not include a WhatsApp enable flag/admin principal, Telegram bot/webhook credentials, or Firebase push credentials. Establish the actual app administrator identity, expose authenticated pairing, and have the owner scan the QR; configure the real Telegram bot and push credentials without inventing identity or secrets.
+
+**Workstream 2 remains incomplete.** Canonical MSNW paid-call reservation/settlement is still required; inspected voice runtime still uses legacy customer-credit transfers. Durable channel delivery recovery beyond provider redelivery, native/device Gemini/incoming/group-call acceptance, production media migration readback, all-26 live profile/Room/chat qualification, and full Flutter/Android builds remain. No APK was produced; no Flutter toolchain or handset is present. Continue these source/deployment requirements instead of treating this recovery batch or test count as whole-workstream completion.
