@@ -12,6 +12,7 @@ on:
       - "packages/commerce/migrations/0127_msnw_p2p_notifications.sql"
       - "packages/commerce/migrations/0127_msnw_custody_send.sql"
       - "packages/commerce/migrations/0128_msnw_p2p_custody.sql"
+      - "packages/commerce/migrations/0130_msnw_p2p_late_payment_cases.sql"
       - "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts"
       - ".github/workflows/msnw-p2p.yml"
   push:
