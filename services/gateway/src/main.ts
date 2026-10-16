@@ -1547,7 +1547,11 @@ export async function startGatewayService(
       ? env.NOWPAYMENTS_PAYOUT_FEE_MODE
       : undefined;
 
-  if (env.NOWPAYMENTS_READONLY_PROBE_ON_START === "true") {
+  if (env.NODE_ENV === "production") {
+    // Safe production diagnostics need no rollout switch. Never log secrets,
+    // exchange amounts, wallet addresses, passwords or custody balances.
+    // Emit readiness even when a missing Gateway auth dependency prevents
+    // NOWPayments client composition.
     // Emit safe composition evidence even when the provider cannot be wired.
     // Variable PRESENCE is not evidence of successful provider authentication.
     process.stdout.write(JSON.stringify({
@@ -1598,8 +1602,9 @@ export async function startGatewayService(
           password: nowPaymentsPassword,
         })
       : undefined;
-    if (env.NOWPAYMENTS_READONLY_PROBE_ON_START === "true") {
-      // Independent READ ONLY provider diagnostics. No payment, payout,
+    if (env.NODE_ENV === "production") {
+      // Independent READ ONLY provider diagnostics, automatically enabled
+      // once authenticated payments/custody have been configured. No payment, payout,
       // balance mutation, currency amount, credential or provider response
       // body is logged. Never block Gateway readiness on external providers.
       void probeNowPaymentsReadOnly({
