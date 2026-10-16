@@ -66,7 +66,9 @@ class LiveVoiceSession with WidgetsBindingObserver {
   /// Refresh only the short-lived Gemini connection permission, not the
   /// customer-paid call admission. The owner must fence identity and reuse the
   /// same original admission ID when providing the replacement grant.
-  final Future<AgentLiveVoiceGrant> Function()? renewConnectionGrant;
+  /// May be bound by a group-call controller after it constructs a member
+  /// session. It must preserve the original account and paid admission.
+  Future<AgentLiveVoiceGrant> Function()? renewConnectionGrant;
   final String characterName;
   final bool captureInputTranscription;
   final AudioRecorder? _recorder;

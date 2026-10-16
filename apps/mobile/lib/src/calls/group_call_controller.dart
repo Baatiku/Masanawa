@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import '../agents/agent_shell.dart';
@@ -65,6 +66,14 @@ class _NativeMember implements GroupMemberSession {
   }
   final LiveVoiceSession _session;
   late final StreamSubscription<void> _turns;
+
+  /// Called before start; the renewed token is for the same group member,
+  /// original paid admission and same microphone/assistant voice.
+  void bindRenewConnectionGrant(
+    Future<AgentLiveVoiceGrant> Function() refresh,
+  ) {
+    _session.renewConnectionGrant = refresh;
+  }
   @override
   Future<void> start() async {
     await _session.start();
@@ -299,6 +308,27 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
           if (_valid && !_removed.contains(id)) unawaited(_failed(id));
         },
       );
+      if (session is _NativeMember) {
+        // Each AI participant renews its own ephemeral Gemini permission.
+        // Group membership, user identity and charged admission remain
+        // unchanged; this does not enroll or bill a new member.
+        session.bindRenewConnectionGrant(() async {
+          if (!_valid || _removed.contains(id) ||
+              currentAccountKey() != accountKey ||
+              group?.groupId == null) {
+            throw StateError('Group call is no longer authorized.');
+          }
+          final admission = _admissions[id];
+          if (admission == null || admission.remaining <= Duration.zero) {
+            throw StateError('Group member admission has expired.');
+          }
+          return transport.token(
+            group!.groupId,
+            id,
+            admissionId: admission.admissionId,
+          );
+        });
+      }
       _sessions[id] = session;
       await session.start();
       if (!_valid ||
@@ -393,10 +423,20 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> accountChanged() => end();
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.detached) {
       unawaited(end());
+      return;
+    }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // Android's explicit foreground microphone service owns the ongoing
+      // call notification while the screen is locked. Native Masana member
+      // sessions stop their service at hangup. Non-Android/test/fake sessions
+      // retain conservative release behavior.
+      if (!Platform.isAndroid ||
+          !_sessions.values.any((session) => session is _NativeMember)) {
+        unawaited(end());
+      }
     }
   }
 
