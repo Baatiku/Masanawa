@@ -31,6 +31,8 @@ import type {
 } from "./agent_shell_contract.js";
 import { registerAgentShellRoutes } from "./agent_shell_routes.js";
 import { registerBillingRoutes } from "./billing_routes.js";
+import { registerMsnwBillingRoutes } from "./msn_wallet/billing_routes.js";
+import type { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { registerTalkRoutes } from "./talk_routes.js";
 import { registerTalkReplayRoutes } from "./talk_replay_routes.js";
 import type { TalkReplayService } from "./talk_replay/service.js";
@@ -173,6 +175,7 @@ export interface GatewayAppOptions {
   readonly billingCheckout?: BillingCheckoutService;
   readonly billingFinancial?: BillingFinancialService;
   readonly billingWallet?: BillingWalletService;
+  readonly msnwBilling?: ReturnType<typeof createMsnwBillingService>;
   readonly financial?: FinancialService;
   readonly customerChannels?: CustomerChannelOptions;
   readonly linkedWhatsApp?: Readonly<{
@@ -1639,6 +1642,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerDirectTwinRoutes(app, options.directTwin);
   }
 
+  if (options.msnwBilling) {
+    registerMsnwBillingRoutes(app, options.msnwBilling);
+  }
   registerBillingRoutes(app, {
     ...(options.billingCheckout ? { billingCheckout: options.billingCheckout } : {}),
     ...(options.billingFinancial ? { billingFinancial: options.billingFinancial } : {}),

@@ -57,6 +57,20 @@ export interface BillingFinancialService {
     amount: string;
     signal?: AbortSignal;
   }>): Promise<BillingFulfillmentRecord>;
+  purchaseMsnwOwned?(input: Readonly<{
+    tenantId: string;
+    userId: string;
+    requestId: string;
+    quoteId: string;
+    quoteRevision: number;
+    categoryCode?: string;
+    billerCode: string;
+    itemCode: string;
+    itemName: string;
+    customerId: string;
+    amount: string;
+    signal?: AbortSignal;
+  }>): Promise<BillingFulfillmentRecord>;
   readPurchase(input: Readonly<{
     authorizationHeader: string | undefined;
     reference: string;
@@ -109,6 +123,7 @@ export function createBillingFinancialService(input: Readonly<{
   flutterwaveRelayProtocol?: "bearer" | "dual-header";
   providerClient?: FlutterwaveBillsClient;
   billingFunding?: BillingFundingAuthority;
+  msnwBillingFunding?: BillingFundingAuthority;
 }>): BillingFinancialService {
   const secretKey = input.flutterwaveSecretKey.trim();
   const webhookHash = input.flutterwaveWebhookHash.trim();
@@ -150,8 +165,10 @@ export function createBillingFinancialService(input: Readonly<{
 
   async function settle(identity: Readonly<{ tenantId: string; userId: string }>, record: BillingFulfillmentRecord) {
     if (record.state === "succeeded" || record.state === "failed" || record.state === "reversed") {
-      if (!input.billingFunding) throw new Error("financial.billing.funding_unavailable");
-      await input.billingFunding.settleBill({ ...identity, fulfillmentReference: record.fulfillmentReference,
+      const funding = record.fulfillmentReference.startsWith("msnw-bill-")
+        ? input.msnwBillingFunding : input.billingFunding;
+      if (!funding) throw new Error("financial.billing.funding_unavailable");
+      await funding.settleBill({ ...identity, fulfillmentReference: record.fulfillmentReference,
         state: record.state, providerReference: record.providerReference });
     }
   }
@@ -188,8 +205,13 @@ export function createBillingFinancialService(input: Readonly<{
       amount: string;
       signal?: AbortSignal;
     }>,
+    rail: "NGN" | "MSNW" = "NGN",
   ): Promise<BillingFulfillmentRecord> {
-    if (!input.billingFunding) throw new Error("financial.billing.funding_unavailable");
+    const funding = rail === "MSNW" ? input.msnwBillingFunding : input.billingFunding;
+    if (!funding) throw new Error("financial.billing.funding_unavailable");
+    if (rail === "MSNW" && !request.requestId.startsWith("msnw-bill-") ||
+        rail === "NGN" && request.requestId.startsWith("msnw-bill-"))
+      throw new Error("financial.billing.funding_rail_conflict");
     if (!request.quoteId.trim() || !Number.isSafeInteger(request.quoteRevision) ||
         request.quoteRevision < 1) throw new Error("financial.billing.confirmed_quote_required");
     const items = await provider.listItems(request.billerCode, request.signal);
@@ -225,7 +247,7 @@ export function createBillingFinancialService(input: Readonly<{
       recipientValidation,
       ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
-    await input.billingFunding.reserveConfirmedBill({
+    await funding.reserveConfirmedBill({
       tenantId: identity.tenantId,
       userId: identity.userId,
       quoteId: request.quoteId,
@@ -296,6 +318,14 @@ export function createBillingFinancialService(input: Readonly<{
       return purchaseForIdentity(
         { tenantId: request.tenantId, userId: request.userId },
         request,
+      );
+    },
+
+    async purchaseMsnwOwned(request) {
+      return purchaseForIdentity(
+        { tenantId: request.tenantId, userId: request.userId },
+        request,
+        "MSNW",
       );
     },
 

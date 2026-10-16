@@ -178,6 +178,8 @@ import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_custo
 import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
+import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
+import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { createP2pService } from "./p2p/service.js";
 import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
 import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
@@ -1412,6 +1414,18 @@ export async function startGatewayService(
   const feeBasisPoints = Number(env.MASANAWA_BILLING_FEE_BPS ?? "0");
   const feeFixedKobo = Number(env.MASANAWA_BILLING_FEE_FIXED_KOBO ?? "0");
 
+  // MSNW billing is enabled only after the owner configures an exact
+  // positive NGN-kobo price per whole MSNW. No fabricated exchange rate,
+  // NGN wallet/Credits conversion, or unbacked custody issuance.
+  const msnwBillingRate = env.MSNW_BILLING_RATE_KOBO_PER_MSNW?.trim();
+  const msnwBillingLedger = billingEnabled && msnwBillingRate &&
+      database.featurePool && database.billingQuotes
+    ? createMsnwBillingFunding({
+        pool:database.featurePool, quotes:database.billingQuotes,
+        rateKoboPerMsnw:msnwBillingRate,
+      })
+    : undefined;
+
   if (billingEnabled && (!composedBillingFinancial || !composedBillingCheckout || !composedBillingWallet)) {
     if (!billingCustomerAuthorizer || !billingFinancialAuthorizer || !database.billingStore ||
         !database.billingQuotes || !database.billingWebhooks || !database.ngnWallet ||
@@ -1434,6 +1448,7 @@ export async function startGatewayService(
       flutterwaveWebhookUrl: webhookUrl,
       providerClient: flutterwaveBills,
       billingFunding: database.billingQuotes,
+      ...(msnwBillingLedger ? {msnwBillingFunding:msnwBillingLedger.funding} : {}),
       ...(flutterwaveRelayUrl ? { flutterwaveRelayUrl } : {}),
       ...(flutterwaveRelayToken ? { flutterwaveRelayToken } : {}),
       ...(flutterwaveRelayProtocol === "dual-header"
@@ -2567,6 +2582,13 @@ export async function startGatewayService(
       ...(composedDirectTwin ? { directTwin: composedDirectTwin } : {}),
       ...(composedBillingFinancial ? { billingFinancial: composedBillingFinancial } : {}),
       ...(composedBillingCheckout ? { billingCheckout: composedBillingCheckout } : {}),
+      ...(msnwBillingLedger && database.billingQuotes && composedBillingFinancial &&
+           msnBalanceAuthorizer
+        ? {msnwBilling: createMsnwBillingService({
+            authorizer:msnBalanceAuthorizer, quotes:database.billingQuotes,
+            funding:msnwBillingLedger,billing:composedBillingFinancial,
+          })}
+        : {}),
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
       ...(composedCustomerChannels

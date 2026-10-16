@@ -5,6 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 import '../../state/session_state.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
+import '../../finance/msnw_billing_checkout.dart';
 import '../../theme/masanawa_theme.dart';
 
 BillCategory? billingCategoryForHomeService(
@@ -72,7 +73,6 @@ class BillingScreen extends ConsumerStatefulWidget {
 
 class _BillingScreenState extends ConsumerState<BillingScreen> {
   final customer = TextEditingController();
-  final amount = TextEditingController();
 
   List<BillCategory> categories = const [];
   List<BillBiller> billers = const [];
@@ -91,6 +91,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   String selectedFilter = 'All';
 
   ApiClient get api => ref.read(apiClientProvider);
+  bool get mobileCategory => category?.code == 'AIRTIME' ||
+    category?.code == 'MOBILEDATA';
 
   @override
   void initState() {
@@ -101,6 +103,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   void _onPhoneChanged() {
     final text = customer.text;
+    if (!mobileCategory) return;
     final detected = detectNetworkFromPhone(text);
     if (detected != null && detected != selectedNetwork) {
       setState(() {
@@ -114,7 +117,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   void dispose() {
     customer.removeListener(_onPhoneChanged);
     customer.dispose();
-    amount.dispose();
     super.dispose();
   }
 
@@ -168,8 +170,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     try {
       final next = await api.billingBillers(value.code);
       if (mounted) {
-        setState(() => billers = next);
-        _matchBillerForNetwork(selectedNetwork);
+        // Release the category fetch guard before loading the selected biller.
+        setState(() { billers = next; busy = false; });
+        if (value.code == 'AIRTIME' || value.code == 'MOBILEDATA') {
+          _matchBillerForNetwork(selectedNetwork);
+        } else if (next.isNotEmpty) {
+          await selectBiller(next.first);
+        }
       }
     } catch (value) {
       if (mounted) setState(() => error = safeError(value, 'Could not load providers.'));
@@ -229,9 +236,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   void onSelectBundle(BillItem selected) {
     final phone = customer.text.trim();
-    if (phone.length < 10) {
+    if (phone.isEmpty || (mobileCategory && phone.length < 10)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid Nigerian phone number first.')),
+        SnackBar(content: Text(mobileCategory
+          ? 'Please enter a valid Nigerian phone number.'
+          : 'Please enter the customer meter/card/reference number.')), 
       );
       return;
     }
@@ -239,40 +248,35 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     _showPurchaseConfirmation(selected);
   }
 
-  /// Old NGN/Credits holdings cannot authorize MSNW-funded billing.
+  /// Qualified Flutterwave catalog and exact MSNW-only custody billing.
+  /// The user must explicitly review the rate, provider price and recipient.
   Future<void> _showPurchaseConfirmation(BillItem selected) async {
     if (!mounted) return;
+    final session = ref.read(sessionProvider);
+    final chosenCategory = category;
+    if (session is! SessionSignedIn || chosenCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sign in and select a bill category to pay with MSNW.'),
+      ));
+      return;
+    }
+    final expected = session.user.id;
     await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Confirm billing service',
-                style: Theme.of(sheetContext).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              _ConfirmRow('Package', selected.name),
-              _ConfirmRow('Recipient', customer.text.trim()),
-              _ConfirmRow('Flutterwave price', 'NGN ' + selected.amount),
-              const SizedBox(height: 14),
-              const Text('MSNW bill payments require authorized, backed '
-                'token settlement. Legacy Credits and NGN balances cannot '
-                'be charged as MSNW.'),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  _showFundingSheet();
-                },
-                icon: const Icon(Icons.account_balance),
-                label: const Text('Fund MSNW Wallet'),
-              ),
-            ],
-          ),
-        ),
+      context: context, isScrollControlled: true, showDragHandle: true,
+      builder: (sheet) => MsnwBillingCheckoutSheet(
+        api: api, dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
+        categoryCode: chosenCategory.code,
+        item: selected, customerId: customer.text.trim(),
+        expectedUserId: expected,
+        currentUserId: () => switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id,
+          _ => null,
+        },
+        accessToken: () => ref.read(apiClientProvider).accessToken,
+        onFund: () {
+          Navigator.of(sheet).pop();
+          _showFundingSheet();
+        },
       ),
     );
   }
@@ -309,7 +313,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
-        title: const Text('Data Bundles'),
+        title: Text(category?.name ?? 'Bills & Services'),
         backgroundColor: u.surfaceCard,
         foregroundColor: u.textPrimary,
         elevation: 0,
@@ -370,9 +374,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             const SizedBox(height: 18),
 
-            // Phone Input
+            // Category and live Flutterwave provider selection.
+            SingleChildScrollView(scrollDirection: Axis.horizontal,
+              child: Row(children: categories.map((entry) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(label: Text(entry.name),
+                  selected: category?.code == entry.code,
+                  onSelected: busy ? null : (_) => selectCategory(entry)),
+              )).toList())),
+            const SizedBox(height: 14),
             Text(
-              'Recipient Phone Number',
+              mobileCategory ? 'Recipient Phone Number' :
+                (category?.code == 'ELECTRICITY' ? 'Meter Number' :
+                  category?.code == 'CABLETV' ? 'Smartcard Number' :
+                  'Customer Reference'),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -384,7 +399,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               controller: customer,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
-                hintText: '0803 000 0000',
+                hintText: mobileCategory ? '0803 000 0000' : 'Customer account number',
                 prefixIcon: const Icon(Icons.phone_android),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -393,7 +408,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             const SizedBox(height: 16),
 
             // Network Selector
-            Text(
+            if (mobileCategory) Text(
               'Select Network',
               style: TextStyle(
                 fontSize: 14,
@@ -402,7 +417,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
+            if (mobileCategory) Row(
               children: NigerianNetwork.values.map((net) {
                 final isSelected = selectedNetwork == net;
                 return Expanded(
@@ -457,8 +472,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             const SizedBox(height: 16),
 
+            if (!mobileCategory && billers.isNotEmpty) DropdownButtonFormField<String>(
+              value: biller?.billerCode,
+              items: billers.map((entry) => DropdownMenuItem(
+                value: entry.billerCode, child: Text(entry.name))).toList(),
+              onChanged: busy ? null : (code) {
+                for (final entry in billers) {
+                  if (entry.billerCode == code) {selectBiller(entry);break;}
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Verified Provider'),
+            ),
+            const SizedBox(height: 12),
             // Validity Filter Tabs
-            SingleChildScrollView(
+            if (mobileCategory) SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: ['All', 'Daily', 'Weekly', 'Monthly'].map((filter) {
@@ -498,6 +525,37 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     onTap: () => onSelectBundle(pkg),
                   )),
             const SizedBox(height: 20),
+            if (history.isNotEmpty) ...[
+              Text('Recent bill receipts',
+                style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final entry in history.take(8))
+                ListTile(
+                  leading: const Icon(Icons.receipt_long),
+                  title: Text(entry.quote.itemName),
+                  subtitle: Text('Status: '+entry.phase+
+                    ' · ₦'+entry.quote.totalAmount+
+                    ' · '+entry.quote.customerId),
+                  trailing: const Icon(Icons.refresh),
+                  onTap: () async {
+                    try {
+                      final updated = await api.billingQuote(entry.quote.quoteId);
+                      if (!mounted) return;
+                      setState(() {
+                        history = history.map((old) =>
+                          old.quote.quoteId == updated.quote.quoteId
+                            ? updated : old).toList(growable: false);
+                      });
+                    } catch (_) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(
+                          'Bill provider confirmation is still unavailable. '
+                          'The existing order has not been duplicated.')),
+                      );
+                    }
+                  },
+                ),
+            ],
           ],
         ),
       ),
@@ -581,30 +639,6 @@ class _BundleCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ConfirmRow extends StatelessWidget {
-  const _ConfirmRow(this.label, this.value, {this.isBold = false});
-  final String label;
-  final String value;
-  final bool isBold;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-            fontSize: isBold ? 16 : 13.5,
-          ),
-        ),
-      ],
     );
   }
 }
