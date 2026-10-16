@@ -457,6 +457,29 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         return {caseId:prior.case_id,state:target,replay:false};
       });
     },
+    async reconciliationHealth(actor:P2pActor) {
+      // Scope comes solely from the independently authenticated operator,
+      // never the request query or a client-supplied staff/tenant claim.
+      const result=await pool.query(`SELECT inconsistent_orders::text,
+          under_reserved_sellers::text,undelivered_dead_letters::text
+        FROM commerce.msnw_p2p_reconciliation_counts($1::text)`,
+        [actor.tenantId]);
+      const raw=result.rows[0];
+      if(!raw)throw new P2pError("p2p.audit_unavailable",503);
+      function count(value:unknown):number {
+        if(typeof value!=="string" || !/^[0-9]+$/.test(value) ||
+            !Number.isSafeInteger(Number(value)))
+          throw new P2pError("p2p.audit_count_invalid",503);
+        return Number(value);
+      }
+      return {
+        inconsistentOrders:count(raw.inconsistent_orders),
+        underReservedSellers:count(raw.under_reserved_sellers),
+        undeliveredDeadLetters:count(raw.undelivered_dead_letters),
+        // This never implies a successful fiat confirmation or chain mint.
+        readOnly:true,
+      };
+    },
     async caseFile(actor: P2pActor, orderId: string) {
       // Gateway must authorize this caller as a finance/dispute operator.
       const order = take<P2pOrder>(await pool.query(`SELECT order_id,tenant_id,offer_id,seller_id,
