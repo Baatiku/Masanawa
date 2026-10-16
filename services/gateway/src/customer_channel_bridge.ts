@@ -19,6 +19,7 @@ import type { AgentConversationService } from "./agent_conversation_contract.js"
 import type { AgentDirectoryService } from "./agent_directory.js";
 import { PROFESSIONAL_MASANA_CATALOG } from "./platform_agent_bootstrap.js";
 import { prepareChannelReplyAudio, type ChannelReplyAudio } from "./channel_reply_audio.js";
+import { createCustomerChannelDeliveryService } from "./customer_channel_delivery.js";
 
 export interface CustomerChannelInbound {
   readonly channel: CustomerChannel;
@@ -47,6 +48,7 @@ export interface CustomerChannelResult {
 }
 
 export interface CustomerChannelBridge {
+  readonly delivery?: ReturnType<typeof createCustomerChannelDeliveryService>;
   handle(request: CustomerChannelInbound): Promise<CustomerChannelResult>;
   delivered(input: Readonly<{
     channel: CustomerChannel;
@@ -79,13 +81,7 @@ export function createCustomerChannelBridge(input: Readonly<{
   userPreferences?: UserAgentPreferenceRepository;
   conversation: AgentConversationService;
   directory?: Pick<AgentDirectoryService, "list">;
-}>): Readonly<{
-  handle(request: CustomerChannelInbound): Promise<CustomerChannelResult>;
-  delivered(input: Readonly<{
-    channel: CustomerChannel;
-    messageId: string;
-  }>): Promise<void>;
-}> {
+}>): Readonly<CustomerChannelBridge> {
   async function chooseCharacter(
     identity: Readonly<{ tenantId: string; userId: string }>,
     requested?: "gwani" | "gwana",
@@ -195,7 +191,14 @@ export function createCustomerChannelBridge(input: Readonly<{
       channel: request.channel,
       externalUserId: request.externalUserId,
     });
-    if (existing) return existing;
+    if (existing) {
+      if(existing.chatId === request.chatId) return existing;
+      // The provider-authenticated sender can acquire a new PN/LID chat JID.
+      // Preserve the linked owner while updating its current return address.
+      const current={...existing,chatId:request.chatId,updatedAt:instant()};
+      await input.channels.putLink(current);
+      return current;
+    }
 
     let phone: string | undefined;
     if (request.channel === "whatsapp") {
@@ -322,6 +325,7 @@ export function createCustomerChannelBridge(input: Readonly<{
   const requestPhoneCache = new Map<string, string>();
 
   return Object.freeze({
+    ...(input.channels.delivery ? {delivery:createCustomerChannelDeliveryService(input.channels.delivery)} : {}),
     async handle(request) {
       const messageId = request.messageId.trim();
       const externalUserId = request.externalUserId.trim();
@@ -375,6 +379,7 @@ export function createCustomerChannelBridge(input: Readonly<{
             messageId,
             reply,
             completedAt: instant(),
+            delivery: {chatId,tenantId:null,userId:null,requestContact:request.channel === "telegram"},
           });
           return Object.freeze({
             handled: true,
@@ -451,6 +456,7 @@ export function createCustomerChannelBridge(input: Readonly<{
             messageId,
             reply: navigationReply,
             completedAt: instant(),
+            delivery: {chatId,tenantId:link.tenantId,userId:link.userId,requestContact:false},
           });
           return Object.freeze({
             handled: true,
@@ -536,6 +542,7 @@ export function createCustomerChannelBridge(input: Readonly<{
           messageId,
           reply: result.reply,
           completedAt: instant(),
+          delivery: {chatId,tenantId:link.tenantId,userId:link.userId,requestContact:false},
         });
         const audio = prepareChannelReplyAudio(
           result.audioBase64, result.audioMimeType,

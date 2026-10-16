@@ -119,6 +119,7 @@ describe("Customer channel bridge", () => {
     } as unknown as PlatformSessionRepository;
 
     let link: any = null;
+    const completeMessage=vi.fn(async()=>{});
     const channels = {
       async claimMessage() {
         return { state: "claimed" as const, requestId: createCanonicalId("request") };
@@ -132,7 +133,7 @@ describe("Customer channel bridge", () => {
       async setCharacterSession(value: unknown) {
         link = { ...link, ...(value as object) };
       },
-      async completeMessage() {},
+      completeMessage,
       async failMessage() {},
     } as unknown as CustomerChannelRepository;
 
@@ -229,12 +230,13 @@ describe("Customer channel bridge", () => {
       async revokeAccess() {},
     } as unknown as PlatformSessionRepository;
     let link: any = null;
+    const completeMessage=vi.fn(async()=>{});
     const channels = {
       async claimMessage() { return { state: "claimed" as const, requestId: createCanonicalId("request") }; },
       async readLink() { return null; },
       async putLink(value: unknown) { link = value; },
       async setCharacterSession(value: unknown) { link = { ...link, ...(value as object) }; },
-      async completeMessage() {},
+      completeMessage,
       async failMessage() {},
     } as unknown as CustomerChannelRepository;
     const platformProfiles = {
@@ -276,7 +278,22 @@ describe("Customer channel bridge", () => {
     }));
     expect(link).toMatchObject({ userId, characterId, channel: "telegram" });
     expect(result.reply).toBe("Connected.");
+    expect(completeMessage).toHaveBeenCalledWith(expect.objectContaining({reply:"Connected.",delivery:{chatId:"123",tenantId,userId,requestContact:false}}));
   });
 
 });
 
+
+it("keeps the linked account when a provider-authenticated sender changes return JID",async()=>{
+ const tenantId=createCanonicalId("tenant"),userId=createCanonicalId("user"),characterId=createCanonicalId("character");
+ const link={channel:"whatsapp" as const,externalUserId:"+2348012345678",chatId:"123@lid",tenantId,userId,characterId,characterSessionId:createCanonicalId("character-session"),updatedAt:new Date().toISOString()};
+ const putLink=vi.fn(async()=>{}),completeMessage=vi.fn(async()=>{});
+ const bridge=createCustomerChannelBridge({tenantId,
+ sessions:{resolveProfile:async()=>null,issueSession:async()=>{},revokeAccess:async()=>{}} as unknown as PlatformSessionRepository,
+ channels:{readLink:async()=>link,putLink,claimMessage:async()=>({state:"claimed",requestId:createCanonicalId("request")}),completeMessage,failMessage:async()=>{}} as unknown as CustomerChannelRepository,
+ platformProfiles:{readForCharacter:async()=>({characterId})} as unknown as PlatformAgentProfileRepository,
+ conversation:{turn:async()=>({reply:"Reply",agentRunId:createCanonicalId("agent-run"),parts:[]})} as unknown as AgentConversationService});
+ await bridge.handle({channel:"whatsapp",externalUserId:link.externalUserId,messageId:"new-jid",chatId:"2348012345678@s.whatsapp.net",phone:link.externalUserId,text:"Hello"});
+ expect(putLink).toHaveBeenCalledWith(expect.objectContaining({tenantId,userId,chatId:"2348012345678@s.whatsapp.net"}));
+ expect(completeMessage).toHaveBeenCalledWith(expect.objectContaining({delivery:{tenantId,userId,chatId:"2348012345678@s.whatsapp.net",requestContact:false}}));
+});

@@ -10,6 +10,7 @@ import QRCode from "qrcode";
 import pino from "pino";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { deliverCustomerChannelReply } from "./customer_channel_delivery.js";
 import type {
   CustomerChannelBridge,
   CustomerChannelInbound,
@@ -26,6 +27,7 @@ export interface LinkedWhatsAppSnapshot {
 }
 
 export interface LinkedWhatsAppController {
+  sendReply?(chatId:string,text:string):Promise<void>;
   snapshot(): LinkedWhatsAppSnapshot;
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -293,27 +295,27 @@ export function createLinkedWhatsAppController(
 
     if (!isActive()) return;
     if (result.shouldDeliver && (result.reply || result.audio)) {
-      if (result.reply) await sock.sendMessage(remoteJid, { text: result.reply });
-      if (!isActive()) return;
-      if (result.audio) {
-        try {
-          // WAV is valid as a file attachment, not as an Opus voice note.
-          // Preserve the exact provider media type instead of faking a codec.
-          await sock.sendMessage(remoteJid, {
-            document: result.audio.bytes,
-            mimetype: result.audio.mimeType,
-            fileName: result.audio.fileName,
-          });
-        } catch (error) {
-          // Text is the durable fallback; optional audio must not replay a
-          // completed conversation or create duplicate text on retry.
-          if (!result.reply) throw error;
+      await deliverCustomerChannelReply(options.bridge,{channel:"whatsapp",messageId:durableMessageId},async(saved)=>{
+        if (!isActive()) throw new Error("channels.whatsapp_not_connected");
+        const target=saved?.chatId??remoteJid;
+        if (saved?.reply || result.reply) await sock.sendMessage(target, { text: saved?.reply??result.reply! });
+        if (!isActive()) throw new Error("channels.whatsapp_not_connected");
+        if (result.audio) {
+          try {
+            // WAV is valid as a file attachment, not as an Opus voice note.
+            // Preserve the exact provider media type instead of faking a codec.
+            await sock.sendMessage(target, {
+              document: result.audio.bytes,
+              mimetype: result.audio.mimeType,
+              fileName: result.audio.fileName,
+            }, {mediaUploadTimeoutMs:30_000});
+          } catch (error) {
+            // Text is the durable fallback; optional audio must not replay a
+            // completed conversation or create duplicate text on retry.
+            if (!result.reply) throw error;
+          }
         }
-      }
-      if (!isActive()) return;
-      await options.bridge.delivered({
-        channel: "whatsapp",
-        messageId: durableMessageId,
+        if (!isActive()) throw new Error("channels.whatsapp_not_connected");
       });
     }
   }
@@ -357,6 +359,7 @@ export function createLinkedWhatsAppController(
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: true,
+      defaultQueryTimeoutMs: 20_000,
       generateHighQualityLinkPreview: false,
       logger,
     });
@@ -447,6 +450,13 @@ export function createLinkedWhatsAppController(
   return Object.freeze({
     snapshot: () => snapshot,
     start,
+    async sendReply(chatId: string, text: string) {
+      const active=socket; const currentGeneration=generation;
+      if(stopped || !active || !snapshot.connected ||
+        !/^[0-9]+(?::[0-9]+)?@(?:s\.whatsapp\.net|lid)$/u.test(chatId)) throw new Error("channels.whatsapp_not_connected");
+      await active.sendMessage(chatId,{text});
+      if(stopped || socket!==active || generation!==currentGeneration) throw new Error("channels.whatsapp_not_connected");
+    },
 
     async stop() {
       stopped = true;
