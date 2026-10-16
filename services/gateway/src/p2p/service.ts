@@ -476,9 +476,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       return {expired};
     },
     async assertEvidenceAllowed(actor:P2pActor, orderId:string) {
-      const result=await pool.query(`SELECT 1 FROM commerce.msnw_p2p_orders
-        WHERE tenant_id=$1 AND order_id=$2 AND (seller_id=$3 OR buyer_id=$3)
-          AND state IN ('payment_claimed','disputed')`,
+      const result=await pool.query(`SELECT 1 FROM commerce.msnw_p2p_orders o
+        WHERE o.tenant_id=$1 AND o.order_id=$2
+          AND (o.seller_id=$3 OR o.buyer_id=$3)
+          AND (o.state IN ('payment_claimed','disputed')
+            OR (o.buyer_id=$3 AND o.state IN ('expired','cancelled')
+              AND EXISTS(SELECT 1 FROM commerce.msnw_p2p_late_payment_cases c
+                WHERE c.tenant_id=o.tenant_id AND c.order_id=o.order_id
+                  AND c.state IN ('open','escalated'))))`,
         [actor.tenantId,id(orderId),actor.userId]);
       if(!result.rowCount)throw new P2pError("p2p.evidence_forbidden",403);
     },
@@ -517,7 +522,18 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         throw new P2pError("p2p.evidence_not_verified",403);
       return transact(async tx => {
         const order=await orderForUpdate(tx,actor,orderId);
-        if(!owns(order,actor)||!["payment_claimed","disputed"].includes(order.state))
+        let lateEvidenceAllowed=false;
+        if(actor.userId===order.buyer_id &&
+           ["expired","cancelled"].includes(order.state)){
+          const appeal=await tx.query(`SELECT state
+            FROM commerce.msnw_p2p_late_payment_cases
+            WHERE tenant_id=$1 AND order_id=$2 FOR SHARE`,
+            [actor.tenantId,order.order_id]);
+          lateEvidenceAllowed=["open","escalated"].includes(String(appeal.rows[0]?.state));
+        }
+        if(!owns(order,actor)||
+           (!["payment_claimed","disputed"].includes(order.state) &&
+             !lateEvidenceAllowed))
           throw new P2pError("p2p.evidence_forbidden",403);
         const evidenceId=randomUUID();
         await tx.query(`INSERT INTO commerce.msnw_p2p_evidence
