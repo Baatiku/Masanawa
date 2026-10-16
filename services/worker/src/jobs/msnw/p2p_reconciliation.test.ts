@@ -24,7 +24,7 @@ describe("read-only P2P custody reconciliation",()=>{
     expect(sql[1]).toContain("reserved_micro");
     expect(sql[2]).toContain("notifications.p2p");
     for(const statement of sql){
-      expect(statement).not.toMatch(/\\b(?:INSERT|UPDATE|DELETE|TRUNCATE|CALL)\\b/i);
+      expect(statement).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE|CALL)\b/i);
     }
   });
   it("reports clean invariants without performing compensating money movements",async()=>{
