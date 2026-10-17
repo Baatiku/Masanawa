@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   createCanonicalId,
@@ -24,6 +24,7 @@ interface ProfileRow {
   tenant_id: string;
   user_id: string;
   display_name: string;
+  username?: string;
   email: string | null;
   phone: string | null;
   locale: string;
@@ -35,6 +36,7 @@ function profile(row: ProfileRow): PlatformAuthProfile {
     tenantId: parseCanonicalId("tenant", row.tenant_id),
     userId: parseCanonicalId("user", row.user_id),
     name: row.display_name,
+    ...(row.username ? {username:row.username} : {}),
     email: row.email,
     phone: row.phone,
     locale: row.locale,
@@ -59,12 +61,32 @@ async function loadProfile(
   userId: UserId,
 ): Promise<PlatformAuthProfile | null> {
   const result = await client.query<ProfileRow>(
-    `SELECT tenant_id,user_id,display_name,email,phone,locale,created_at
-       FROM security.platform_user_profiles
-      WHERE tenant_id=$1 AND user_id=$2`,
+    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.locale,p.created_at,h.handle AS username
+       FROM security.platform_user_profiles p
+       LEFT JOIN talks.public_profiles h ON h.tenant_id=p.tenant_id AND h.user_id=p.user_id
+      WHERE p.tenant_id=$1 AND p.user_id=$2`,
     [tenantId,userId],
   );
   return result.rows[0] ? profile(result.rows[0]) : null;
+}
+
+/** One durable, unique handle in the existing public profile authority. */
+export async function ensureSignupUsername(client: Pick<PoolClient,"query">, input: Readonly<{
+  tenantId: TenantId; userId: UserId; name: string;
+}>): Promise<string> {
+  const stem=input.name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/gu,"").slice(0,12) || "masanawa";
+  for(let attempt=0;attempt<8;attempt++) {
+    const suffix=createHash("sha256").update(`${input.tenantId}:${input.userId}:${attempt}`).digest("hex").slice(0,16);
+    const inserted=await client.query<{handle:string}>(
+      `INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name,bio,talks_json,updated_at)
+       VALUES($1,$2,$3,$4,'','[]'::jsonb,clock_timestamp()) ON CONFLICT DO NOTHING RETURNING handle`,
+      [input.tenantId,input.userId,`${stem}_${suffix}`,input.name]);
+    if(inserted.rows[0]) return inserted.rows[0].handle;
+    const existing=await client.query<{handle:string}>(
+      "SELECT handle FROM talks.public_profiles WHERE tenant_id=$1 AND user_id=$2",[input.tenantId,input.userId]);
+    if(existing.rows[0])return existing.rows[0].handle;
+  }
+  throw new Error("auth.username_allocation_failed");
 }
 
 function sameHash(left: string, right: string): boolean {
@@ -213,7 +235,8 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
             input.locale,input.createdAt,
           ],
         );
-        return profile(inserted.rows[0]!);
+        const username=await ensureSignupUsername(client,{tenantId:input.tenantId,userId,name});
+        return profile({...inserted.rows[0]!,username});
       });
     },
 

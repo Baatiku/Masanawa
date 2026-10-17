@@ -1100,7 +1100,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           elevation: 0,
           leadingWidth: 40,
           titleSpacing: 0,
-          leading: widget.embeddedInShell
+          leading: _showSearch
+              ? IconButton(tooltip: 'Close search', icon: const Icon(Icons.arrow_back),
+                  onPressed: () => setState(() { _showSearch=false; _search.clear(); }))
+              : widget.embeddedInShell
               ? IconButton(
                   tooltip: 'New chat',
                   icon: const Icon(Icons.smart_toy_outlined),
@@ -1121,6 +1124,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   autofocus: true,
                   decoration: const InputDecoration(
                     hintText: 'Search this chat',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
                     fillColor: Color(0xFFF1F4F3),
                     border: InputBorder.none,
@@ -1148,8 +1153,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         agent.displayName,
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: u.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1159,7 +1164,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: .82),
+                          color: u.textMuted,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w400,
                         ),
@@ -1170,7 +1175,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               ],
             ),
           ),
-          actions: [
+          actions: _showSearch ? const [] : [
             if (_selectedMessageIds.isNotEmpty) ...[
               IconButton(
                 tooltip: 'Copy selected',
@@ -1196,27 +1201,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 if (!_showSearch) _search.clear();
               }),
             ),
-            if (_showSearch && searchMatches.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Center(
-                  child: Text(
-                    '${_searchIndex + 1}/${searchMatches.length}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Previous result',
-                icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: () => _moveSearch(-1, searchMatches),
-              ),
-              IconButton(
-                tooltip: 'Next result',
-                icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: () => _moveSearch(1, searchMatches),
-              ),
-            ],
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 2),
               child: TextButton.icon(
@@ -1297,6 +1281,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               ],
             ),
           ],
+          bottom: _showSearch ? PreferredSize(
+            preferredSize: const Size.fromHeight(40),
+            child: SizedBox(height: 40, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              Text(searchMatches.isEmpty ? 'No matches' : '${_searchIndex + 1}/${searchMatches.length}'),
+              IconButton(tooltip:'Previous result',icon:const Icon(Icons.keyboard_arrow_up),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(-1,searchMatches)),
+              IconButton(tooltip:'Next result',icon:const Icon(Icons.keyboard_arrow_down),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(1,searchMatches)),
+            ])),
+          ) : null,
         ),
         body: Column(
           children: [

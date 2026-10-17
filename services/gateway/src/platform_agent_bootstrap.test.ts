@@ -59,10 +59,11 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.identity.provision).toHaveBeenCalledTimes(26);
    expect(f.presentations).toHaveLength(26);
    expect(f.profiles).toHaveLength(26);
+   expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(26);
    expect(f.assignments.size).toBe(26);
    expect(f.profiles.filter(p=>p.defaultForNewUsers)).toHaveLength(1);
    expect(f.profiles[0]).toMatchObject({supportAgent:true,voiceName:"Bodi"});
-   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Fora"});
+   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Fola"});
    expect(f.profiles.slice(2).every(p=>!p.supportAgent&&p.voiceProvider==="gemini")).toBe(true);
    const second=await run(f,tenant);
    expect(second.changed).toBe(false);
@@ -87,7 +88,7 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.presentations[1]?.displayName).toBe("Malamah Gwana");
    expect(f.identity.provision).toHaveBeenCalledTimes(24);
    expect(f.profiles).toHaveLength(26);
-   expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Fora");
+   expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Fola");
  });
  it("does not override hidden or administrator-customized characters",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");

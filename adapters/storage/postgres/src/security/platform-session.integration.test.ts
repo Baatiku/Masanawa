@@ -37,6 +37,10 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
           new URL("../../../../../packages/identity/migrations", import.meta.url),
         ),
       },
+      {
+        owner: "talks",
+        directory: fileURLToPath(new URL("../../../../../packages/talks/migrations", import.meta.url)),
+      },
     ]);
   });
 
@@ -69,6 +73,11 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
     ]);
 
     expect(left.userId).toBe(right.userId);
+    expect(left.username).toMatch(/^customer_[a-f0-9]{16}$/u);
+    expect(right.username).toBe(left.username);
+    const another = await repository.createProfile({tenantId,channel:"email",
+      identifier:`another-${tenantId.slice(-8)}@example.com`,name:"Customer",locale:"en-NG",createdAt});
+    expect(another.username).not.toBe(left.username);
     await expect(repository.resolveProfile({
       tenantId,
       channel: "email",

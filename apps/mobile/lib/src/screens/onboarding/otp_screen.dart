@@ -230,7 +230,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               // Size six code boxes to the padded form so that the 320px
               // viewport and increased text sizes do not clip an input.
               final boxWidth = ((constraints.maxWidth - 30) / 6)
-                  .clamp(36.0, 47.0)
+                  .clamp(28.0, 42.0)
                   .toDouble();
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -238,25 +238,33 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   for (var i = 0; i < 6; i++)
                     SizedBox(
                       width: boxWidth,
+                      height: 50,
                       child: TextField(
                         controller: _boxes[i],
                         focusNode: _boxFocus[i],
                         autofocus: i == 0,
                         keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        textDirection: TextDirection.ltr,
                         textAlign: TextAlign.center,
                         // No length limiter: multi-char input is a paste and is
                         // spread across boxes by _onBoxChanged.
                         inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
+                          TextInputFormatter.withFunction((oldValue, newValue) {
+                            final digits=normalizeInternationalDigits(newValue.text).replaceAll(RegExp(r'\D'),'');
+                            return TextEditingValue(text:digits,selection:TextSelection.collapsed(offset:digits.length));
+                          }),
                         ],
                         onChanged: (_) => _onBoxChanged(i),
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: Theme.of(context).colorScheme.onSurface,
                         ),
                         decoration: InputDecoration(
                           counterText: '',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
                           filled: true,
                           fillColor: Theme.of(context).colorScheme.surface,
                           border: OutlineInputBorder(
@@ -271,6 +279,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               );
             },
           ),
+          const SizedBox(height: 8),
+          TextButton.icon(icon: const Icon(Icons.content_paste), label: const Text('Paste code'),
+            onPressed: verifying ? null : () async {
+              final value=await Clipboard.getData(Clipboard.kTextPlain);
+              if (!context.mounted) return;
+              final digits=normalizeInternationalDigits(value?.text ?? '').replaceAll(RegExp(r'\D'),'');
+              if (digits.length != 6) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Copy the six-digit code, then tap Paste code.')));
+                return;
+              }
+              _boxes.first.text=digits;_onBoxChanged(0);
+            }),
           if (error != null) ...[
             const SizedBox(height: 12),
             Text(

@@ -86,6 +86,23 @@ void main() {
   expect(recorder.retained,isTrue);
   chats.response!.complete();await tester.pumpAndSettle();
  });
+ testWidgets('chat search uses the available header width and closes with its back arrow', (tester) async {
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Search'));
+  await tester.pumpAndSettle();
+  final search=find.byWidgetPredicate((widget)=>widget is TextField && widget.decoration?.hintText=='Search this chat');
+  expect(search, findsOneWidget);
+  expect(tester.getSize(search).width, greaterThan(600));
+  expect(find.byTooltip('Call'), findsNothing);
+  await tester.enterText(search, 'A long search phrase');
+  await tester.pump();
+  await tester.tap(find.byTooltip('Close search'));
+  await tester.pumpAndSettle();
+  expect(search, findsNothing);
+  expect(find.byTooltip('Call'), findsOneWidget);
+  expect(tester.takeException(), isNull);
+ });
  testWidgets('chat avatar opens this Masana profile callback', (tester) async {
   var opened=0;
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:AiChatScreen(characterId:'agent',onOpenProfile:()=>opened++))));

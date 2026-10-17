@@ -40,6 +40,18 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(6));
   });
 
+  testWidgets('normalizes pasted international digits without hiding them', (tester) async {
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '١٢٣');
+    await tester.pump();
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(tester.getSize(find.byType(TextField).first).height, 50);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('typing advances and paste spreads across boxes',
       (tester) async {
     await tester.pumpWidget(_app());

@@ -536,7 +536,7 @@ describe("customer authentication", () => {
     expect(signedIn.user).toMatchObject({
       name: "Amina",
       email: "user@example.com",
-      isNewUser: false,
+      isNewUser: true,
     });
 
     const authorizationNow = () => "2026-10-04T20:00:10.000Z";
@@ -799,4 +799,26 @@ describe("professional Masana first-contact and call token authority",()=>{
    expect(admission.scope).toMatchObject({tenantId,userId,characterId:professorId,relationshipId});
    expect(provisioned).toBe(1);
  });
+});
+
+describe('new account welcome delivery',()=>{
+  it('welcomes a verified email signup once and does not welcome a returning login',async()=>{
+    const repository=new MemorySessions();let code='';const welcomes:string[]=[];
+    const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
+      emailDelivery:{async send(input){code=input.code;},async sendWelcome(input){welcomes.push(input.identifier);}}});
+    await service.sendOtp({email:'welcome@example.com'});
+    const created=await service.verifyOtp({email:'welcome@example.com',code,name:'Amina'});
+    expect(created.user.isNewUser).toBe(true);
+    expect(welcomes).toEqual(['welcome@example.com']);
+    await service.sendOtp({email:'welcome@example.com'});
+    expect((await service.verifyOtp({email:'welcome@example.com',code})).user.isNewUser).toBe(false);
+    expect(welcomes).toHaveLength(1);
+  });
+  it('keeps signup usable when the welcome provider fails',async()=>{
+    const repository=new MemorySessions();let code='';
+    const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
+      emailDelivery:{async send(input){code=input.code;},async sendWelcome(){throw new Error('provider unavailable');}}});
+    await service.sendOtp({email:'welcome-fail@example.com'});
+    expect((await service.verifyOtp({email:'welcome-fail@example.com',code,name:'Amina'})).accessToken).toBeTruthy();
+  });
 });

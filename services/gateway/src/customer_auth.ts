@@ -1,3 +1,5 @@
+import { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
+export { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 import {
   createOtpCode,
   hashDevicePassword,
@@ -49,6 +51,7 @@ export class CustomerAuthError extends Error {
 
 export interface OtpDelivery {
   send(input: Readonly<{ identifier: string; code: string }>): Promise<void>;
+  sendWelcome?(input: Readonly<{identifier:string;name:string;username?:string;userId:string}>): Promise<void>;
 }
 
 export interface PlatformCustomerSessionAuthorizer {
@@ -105,6 +108,7 @@ export interface CustomerAuthService {
 export interface AuthUserView {
   readonly id: string;
   readonly name: string;
+  readonly username?: string;
   readonly phone: string | null;
   readonly email: string | null;
   readonly locale: string;
@@ -127,6 +131,7 @@ function authUser(profile: PlatformAuthProfile, isNewUser: boolean): AuthUserVie
   return Object.freeze({
     id: profile.userId,
     name: profile.name,
+    ...(profile.username ? {username:profile.username} : {}),
     phone: profile.phone,
     email: profile.email,
     locale: profile.locale,
@@ -331,6 +336,7 @@ export function createCustomerAuthService(input: Readonly<{
       if (consumed === "locked") throw new CustomerAuthError("OTP_LOCKED", 429);
       if (consumed !== "accepted") throw new CustomerAuthError("OTP_INVALID", 400);
 
+      const isNewUser = !profile;
       if (!profile) {
         profile = await input.repository.createProfile({
           tenantId: input.tenantId,
@@ -341,10 +347,17 @@ export function createCustomerAuthService(input: Readonly<{
           createdAt: verifiedAt,
         });
       }
-      return issueTokens(
+      const tokens=await issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
-        false,
+        isNewUser,
       );
+      if(isNewUser && profile.email && normalized.channel==="email") {
+        // Delivery failure must not undo a completed account/session. Resend
+        // deduplicates the stable account key; no welcome on ordinary logins.
+        await input.emailDelivery?.sendWelcome?.({identifier:profile.email,name:profile.name,
+          ...(profile.username?{username:profile.username}:{}),userId:profile.userId}).catch(()=>undefined);
+      }
+      return tokens;
     },
 
     async accountStatus(request) {
@@ -608,57 +621,11 @@ export function createPlatformSessionFinancialAuthorizer(input: Readonly<{
   });
 }
 
-export function renderMasanawaOtpEmail(code: string): Readonly<{
-  subject: string;
-  text: string;
-  html: string;
-}> {
-  if (!/^\d{6}$/u.test(code)) {
-    throw new TypeError("OTP code must contain exactly six digits");
-  }
-
-  const subject = "Your Masanawa sign-in code";
-  const text =
-    "Your Masanawa sign-in code is " +
-    code +
-    ". It expires in 10 minutes. If you did not request this code, you can safely ignore this email.";
-
-  const html = [
-    "<!doctype html>",
-    "<html lang=\"en\" dir=\"ltr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
-    "<title>" + subject + "</title></head>",
-    "<body style=\"margin:0;padding:0;background:#F0F2F5;font-family:Arial,Helvetica,sans-serif;color:#111B21;\">",
-    "<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"background:#F0F2F5;padding:24px 12px;\">",
-    "<tr><td align=\"center\">",
-    "<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"max-width:560px;background:#FFFFFF;border:1px solid #E9EDEF;border-radius:16px;border-top:6px solid #25D366;overflow:hidden;\">",
-    "<tr><td style=\"background:#075E54;padding:24px;text-align:center;\">",
-    "<div style=\"font-size:30px;font-weight:800;letter-spacing:-.6px;color:#FFFFFF;\">Masanawa</div>",
-    "<div style=\"margin-top:6px;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#E7FCEB;\">Secure sign-in</div>",
-    "</td></tr>",
-    "<tr><td style=\"padding:28px 24px 12px;text-align:center;\">",
-    "<h1 style=\"margin:0;font-size:26px;line-height:1.25;color:#111B21;\">Verify your email</h1>",
-    "<p style=\"margin:12px auto 0;max-width:420px;font-size:16px;line-height:1.65;color:#54656F;\">Use this one-time code to finish signing in to Masanawa.</p>",
-    "</td></tr>",
-    "<tr><td style=\"padding:12px 24px 20px;text-align:center;\">",
-    "<div style=\"padding:18px 8px;border-radius:16px;background:#E7FCEB;border:1px solid #25D366;font-family:Courier New,Courier,monospace;font-size:32px;line-height:1;font-weight:800;letter-spacing:6px;color:#075E54;\">" + code + "</div>",
-    "<p style=\"margin:14px 0 0;font-size:13px;line-height:1.5;color:#54656F;\">This code expires in 10 minutes.</p>",
-    "</td></tr>",
-    "<tr><td style=\"padding:8px 24px 28px;\">",
-    "<div style=\"border-radius:14px;background:#F0F2F5;padding:16px 18px;font-size:14px;line-height:1.6;color:#54656F;\"><strong style=\"color:#111B21;\">Security note:</strong> Masanawa will never ask you to share this code in chat or by phone. If you did not request it, no action is needed.</div>",
-    "</td></tr>",
-    "<tr><td style=\"border-top:1px solid #E9EDEF;padding:20px 24px;text-align:center;font-size:12px;line-height:1.6;color:#54656F;\">Masanawa · Chats, Calls and Rooms</td></tr>",
-    "</table>",
-    "</td></tr></table>",
-    "</body></html>",
-  ].join("");
-
-  return Object.freeze({ subject, text, html });
-}
-
 export function createResendOtpDelivery(input: Readonly<{
   apiKey: string;
   from: string;
   fetchImpl?: typeof fetch;
+  publicBaseUrl?: string;
 }>): OtpDelivery {
   const apiKey = input.apiKey.trim();
   const from = input.from.trim();
@@ -666,8 +633,9 @@ export function createResendOtpDelivery(input: Readonly<{
   const fetchImpl = input.fetchImpl ?? fetch;
   return Object.freeze({
     async send(request: Parameters<OtpDelivery["send"]>[0]) {
-      const message = renderMasanawaOtpEmail(request.code);
+      const message = renderMasanawaOtpEmail(request.code,input.publicBaseUrl);
       const response = await fetchImpl("https://api.resend.com/emails", {
+        signal: AbortSignal.timeout(8000),
         method: "POST",
         headers: {
           authorization: `Bearer ${apiKey}`,
@@ -684,6 +652,16 @@ export function createResendOtpDelivery(input: Readonly<{
         }),
       });
       if (!response.ok) throw new Error("auth.resend_delivery_failed");
+    },
+    async sendWelcome(request: Readonly<{identifier:string;name:string;username?:string;userId:string}>) {
+      const message=renderMasanawaWelcomeEmail(request,input.publicBaseUrl);
+      const response=await fetchImpl("https://api.resend.com/emails",{
+        method:"POST",signal:AbortSignal.timeout(5000),
+        headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json",
+          "idempotency-key":`masanawa-welcome-${request.userId}`},
+        body:JSON.stringify({from,to:[request.identifier],...message,tags:[{name:"category",value:"account_welcome"}]}),
+      });
+      if(!response.ok)throw new Error("auth.welcome_delivery_failed");
     },
   });
 }

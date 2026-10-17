@@ -1,3 +1,4 @@
+import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
 import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
@@ -443,6 +444,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.accountDeletion) {
     registerAccountDeletionRoutes(app, options.accountDeletion);
   }
+
+  registerAuthEmailRoutes(app);
 
   if (options.customerAuth) {
     const auth = options.customerAuth;

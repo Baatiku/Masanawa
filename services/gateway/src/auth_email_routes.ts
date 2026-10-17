@@ -1,0 +1,12 @@
+import { createHash } from "node:crypto";
+import type { FastifyInstance } from "fastify";
+import { MASANAWA_EMAIL_LOGO_BASE64 } from "./auth_email_brand.js";
+const script=`let code='';try{code=decodeURIComponent(location.hash.slice(1));}catch{}history.replaceState(null,'',location.pathname);const valid=/^\\d{6}$/.test(code);document.getElementById('code').textContent=valid?code:'Open this page from your sign-in email.';const button=document.getElementById('copy');button.disabled=!valid;button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);document.getElementById('status').textContent='Code copied. Return to Masanawa and tap Paste code.';}catch{document.getElementById('status').textContent='Your browser blocked copying. Enter the code shown above in Masanawa.';}});`;
+export function registerAuthEmailRoutes(app:FastifyInstance):void {
+  app.get('/brand/masanawa-logo.png',async(_request,reply)=>reply.type('image/png').header('Cache-Control','public, max-age=86400').send(Buffer.from(MASANAWA_EMAIL_LOGO_BASE64,'base64')));
+  app.get('/auth/code',async(_request,reply)=>reply.type('text/html; charset=utf-8')
+    .header('Cache-Control','no-store').header('Referrer-Policy','no-referrer')
+    .header('X-Content-Type-Options','nosniff')
+    .header('Content-Security-Policy',`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-${createHash('sha256').update(script).digest('base64')}'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`)
+    .send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Masanawa verification code</title></head><body style="font-family:system-ui;background:#F3F6F5;color:#111B21;margin:0;padding:24px"><main style="max-width:420px;margin:40px auto;background:white;padding:28px;border-radius:20px;text-align:center"><img src="/brand/masanawa-logo.png" width="64" height="64" alt="Masanawa"><h1>Your sign-in code</h1><p id="code" style="font-size:28px;font-weight:700;letter-spacing:4px"></p><button id="copy" style="padding:14px 28px;border:0;border-radius:10px;background:#075E54;color:white;font-size:17px">Copy code</button><p id="status" role="status">Copy the code, then return to the Masanawa app.</p><p style="font-size:13px">The code stays in your browser. This helper does not submit or verify it.</p></main><script>${script}</script></body></html>`));
+}

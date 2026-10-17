@@ -212,13 +212,13 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: masanawa.surfaceCard,
-      indicatorColor: Colors.transparent,
+      indicatorColor: masanawa.brand.withValues(alpha: .14),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           size: 24,
           color: states.contains(WidgetState.selected)
-              ? masanawa.brand
-              : masanawa.textPrimary,
+              ? masanawa.textPrimary
+              : masanawa.textMuted,
         ),
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
