@@ -730,6 +730,37 @@ describe("customer password authentication", () => {
       .resolves.toMatchObject({user:{phone}});
   });
 
+  it("does not offer SMS OTP as a password bypass, and recovery codes cannot sign in",async()=>{
+    const repository=new MemorySessions();
+    const tenantId=createCanonicalId("tenant");
+    const sent:Array<{code:string;purpose:string|undefined}>=[];
+    const auth=createCustomerAuthService({
+      repository,tenantId,otpPepper:"p".repeat(48),
+      smsDelivery:{async send(request){sent.push({
+        code:request.code,purpose:request.purpose,
+      });}},
+    });
+    const phone="+2348012345678";
+    await auth.passwordSetup({phone,deviceId,password:"123456",name:"Amina"});
+    expect(auth.capabilities()).toEqual({otpChannels:[]});
+    await expect(auth.sendOtp({phone}))
+      .rejects.toMatchObject({code:"PHONE_PASSWORD_REQUIRED",statusCode:409});
+    expect(sent).toHaveLength(0);
+    await auth.requestPasswordRecovery({phone});
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.purpose).toBe("password_recovery");
+    await expect(auth.verifyOtp({phone,code:sent[0]!.code}))
+      .rejects.toMatchObject({code:"PHONE_PASSWORD_REQUIRED",statusCode:409});
+    await expect(auth.completePasswordRecovery({
+      phone,code:sent[0]!.code,password:"654321",
+    })).resolves.toEqual({success:true});
+    await expect(auth.completePasswordRecovery({
+      phone,code:sent[0]!.code,password:"555555",
+    })).rejects.toMatchObject({code:"OTP_INVALID"});
+    await expect(auth.passwordVerify({phone,deviceId,password:"654321"}))
+      .resolves.toMatchObject({user:{phone}});
+  });
+
   it("never links unverified optional signup email; verifies ownership with OTP first", async () => {
     const repository = new MemorySessions();
     const tenantId=createCanonicalId("tenant");

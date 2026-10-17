@@ -26,6 +26,8 @@ abstract final class AuthErrorLocalizer {
         'Account recovery protection is active. Financial actions resume after the security hold.',
       'STEP_UP_EMAIL_REQUIRED' =>
         'Verify a linked email address in Account Security before this action.',
+      'PHONE_PASSWORD_REQUIRED' =>
+        'Phone sign-in requires your six-digit password. Use Forgot password if needed.',
       _ => switch (stage) {
         AuthFailureStage.capabilities => l10n.signInMethodsLoadFailed,
         AuthFailureStage.sendCode => l10n.authSendFailed,

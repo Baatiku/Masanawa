@@ -1222,6 +1222,7 @@ String? _legacyCode(String? value) {
     'OTP_RATE_LIMITED',
     'OTP_INVALID',
     'OTP_CHANNEL_UNAVAILABLE',
+    'PHONE_PASSWORD_REQUIRED',
     'OTP_DELIVERY_UNAVAILABLE',
     'NAME_REQUIRED_ON_SIGNUP',
     'SESSION_NOT_FOUND',
@@ -1281,6 +1282,8 @@ String _friendlyMessage({
       return "You've requested too many codes. Please wait a moment and try again.";
     case 'OTP_CHANNEL_UNAVAILABLE':
       return 'That sign-in method is not available right now. Choose another option.';
+    case 'PHONE_PASSWORD_REQUIRED':
+      return 'Use your six-digit password to sign in by phone, or choose Forgot password.';
     case 'OTP_DELIVERY_UNAVAILABLE':
       return 'We could not send the code right now. Please try again.';
     case 'NAME_REQUIRED_ON_SIGNUP':
