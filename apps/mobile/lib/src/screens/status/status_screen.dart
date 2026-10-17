@@ -159,7 +159,6 @@ class StatusScreen extends ConsumerWidget {
       ));
     }
     final account = session.user.id;
-    final directory = ref.watch(agentDirectoryProvider);
     final feed = ref.watch(statusFeedApiProvider);
     final api = ref.watch(apiClientProvider);
     String? currentAccount() {
@@ -173,7 +172,7 @@ class StatusScreen extends ConsumerWidget {
 
     void openMasanaProfile(String characterId) {
       if (currentAccount() != account) return;
-      final agent = directory.find(characterId);
+      final agent = ref.read(agentDirectoryProvider).find(characterId);
       if (agent == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('This Masana profile is currently unavailable.'),
