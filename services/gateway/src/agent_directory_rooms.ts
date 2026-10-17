@@ -50,7 +50,7 @@ export function createPgAgentMasanaIdentityReader(
   db:{query(sql:string,params:unknown[]):Promise<{rows:unknown[]}>},
 ):AgentMasanaIdentityReader {
   return Object.freeze({
-    async read({tenantId,userId,characterIds}) {
+    async read({tenantId,userId,characterIds}:Parameters<AgentMasanaIdentityReader["read"]>[0]) {
       if(characterIds.length===0) return new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       const found=await db.query(`
         SELECT revision.character_id, revision.profile->>'handle' AS handle,

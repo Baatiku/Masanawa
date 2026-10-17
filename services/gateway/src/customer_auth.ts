@@ -458,7 +458,7 @@ export function createCustomerAuthService(input: Readonly<{
       if(!isNewUser && !knownEmailDevice){
         await input.repository.recordAuthEvent?.({tenantId:profile.tenantId,
           userId:profile.userId,action:"new_device_signin",at:verifiedAt,
-          clientLabel:request.clientLabel}).catch(()=>undefined);
+          ...(request.clientLabel===undefined?{}:{clientLabel:request.clientLabel})}).catch(()=>undefined);
         await notifyNewDevice(profile,verifiedAt);
       }
       if(isNewUser && profile.email && normalized.channel==="email") {
@@ -534,15 +534,15 @@ export function createCustomerAuthService(input: Readonly<{
       if (result === "locked") {
         await input.repository.recordAuthEvent?.({
           tenantId:input.tenantId,userId:profile.userId,action:"password_locked",at,
-          clientLabel:request.clientLabel,
+          ...(request.clientLabel===undefined?{}:{clientLabel:request.clientLabel}),
         });
         throw new CustomerAuthError("PASSWORD_LOCKED", 429);
       }
       if (result !== "accepted") {
-        await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_failed",at,clientLabel:request.clientLabel});
+        await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_failed",at,...(request.clientLabel===undefined?{}:{clientLabel:request.clientLabel})});
         throw new CustomerAuthError("PASSWORD_INVALID",400);
       }
-      await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_accepted",at,clientLabel:request.clientLabel});
+      await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_accepted",at,...(request.clientLabel===undefined?{}:{clientLabel:request.clientLabel})});
       const known=await input.repository.isDeviceKnown({
         tenantId:input.tenantId,userId:profile.userId,deviceId,
       });
@@ -561,7 +561,7 @@ export function createCustomerAuthService(input: Readonly<{
       if(!known) {
         await input.repository.recordAuthEvent?.({
           tenantId:input.tenantId,userId:profile.userId,action:"new_device_signin",at,
-          clientLabel:request.clientLabel,
+          ...(request.clientLabel===undefined?{}:{clientLabel:request.clientLabel}),
         }).catch(()=>undefined);
         await notifyNewDevice(profile,at);
       }

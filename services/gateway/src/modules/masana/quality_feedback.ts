@@ -23,7 +23,7 @@ const baseCounts=():Record<MasanaQualityReason,number>=>({
 export function createMasanaQualityFeedbackPort(db:Pick<Pool,"query">):
   MasanaQualityFeedbackPort {
   return Object.freeze({
-    async submit({tenantId,fanId,characterId,reason}){
+    async submit({tenantId,fanId,characterId,reason}:Parameters<MasanaQualityFeedbackPort["submit"]>[0]){
       if(!MASANA_QUALITY_REASONS.includes(reason))
         throw new TypeError("invalid_quality_reason");
       await db.query(`
@@ -45,7 +45,7 @@ export function createMasanaQualityFeedbackPort(db:Pick<Pool,"query">):
       // no existence oracle, no user-specific feedback data in the response.
       return {accepted:true as const};
     },
-    async summary({tenantId,characterId}){
+    async summary({tenantId,characterId}:Parameters<MasanaQualityFeedbackPort["summary"]>[0]){
       const rows=await db.query(`
         SELECT reason,count(*)::int AS total
         FROM masana.professional_quality_feedback
