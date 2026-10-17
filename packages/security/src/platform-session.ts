@@ -72,6 +72,11 @@ export interface PlatformSessionRepository {
   attachIdentity(input: Readonly<{
     tenantId: TenantId; userId: UserId; channel: PlatformAuthChannel; identifier: string; linkedAt: string;
   }>): Promise<PlatformAuthProfile | null>;
+  replaceIdentity?(input: Readonly<{
+    tenantId: TenantId; userId: UserId; channel: PlatformAuthChannel;
+    previousIdentifier: string; nextIdentifier: string; at: string;
+  }>): Promise<PlatformAuthProfile>;
+
   issueSession(input: Readonly<{
     identity: PlatformSessionIdentity; accessHash: string; refreshHash: string;
     accessExpiresAt: string; refreshExpiresAt: string; issuedAt: string; deviceId?: string;
