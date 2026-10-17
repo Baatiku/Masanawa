@@ -24,7 +24,11 @@ class ConversationSearchField extends StatelessWidget {
     final colors = context.masanawa;
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide.none,
+      borderSide: BorderSide(color: colors.structuralBorder),
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: colors.brandStrong, width: 2),
     );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -60,7 +64,7 @@ class ConversationSearchField extends StatelessWidget {
                   ),
             border: border,
             enabledBorder: border,
-            focusedBorder: border,
+            focusedBorder: focusedBorder,
           ),
         ),
       ),
