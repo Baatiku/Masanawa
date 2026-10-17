@@ -525,17 +525,18 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         await client.query(
           `INSERT INTO security.platform_sessions(
              access_hash,refresh_hash,tenant_id,user_id,access_expires_at,
-             refresh_expires_at,revoked_at,created_at,updated_at,device_id
-           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7,$8)`,
+             refresh_expires_at,revoked_at,created_at,updated_at,device_id,client_label
+           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7,$8,$9)`,
           [
             input.accessHash,input.refreshHash,input.identity.tenantId,input.identity.userId,
             input.accessExpiresAt,input.refreshExpiresAt,input.issuedAt,input.deviceId ?? null,
+            input.clientLabel ?? null,
           ],
         );
         await client.query(
-          `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
-           VALUES($1,$2,'session_created',$3)`,
-          [input.identity.tenantId,input.identity.userId,input.issuedAt],
+          `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at,client_label)
+           VALUES($1,$2,'session_created',$3,$4)`,
+          [input.identity.tenantId,input.identity.userId,input.issuedAt,input.clientLabel ?? null],
         );
       });
     },
@@ -610,17 +611,17 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async listSessions(input) {
       const result=await pool.query<{
-        session_id:string;device_id:string|null;
+        session_id:string;device_id:string|null;client_label:string|null;
         created_at:Date|string;updated_at:Date|string;current:boolean;
       }>(
-        `SELECT session_id::text,device_id,created_at,updated_at,(access_hash=$3) AS current
+        `SELECT session_id::text,device_id,client_label,created_at,updated_at,(access_hash=$3) AS current
            FROM security.platform_sessions
           WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL AND refresh_expires_at>$4
           ORDER BY created_at DESC LIMIT 100`,
         [input.tenantId,input.userId,input.accessHash,input.at],
       );
       return result.rows.map(row=>Object.freeze({
-        sessionId:row.session_id,deviceId:row.device_id,
+        sessionId:row.session_id,deviceId:row.device_id,clientLabel:row.client_label,
         createdAt:(row.created_at instanceof Date ? row.created_at : new Date(row.created_at)).toISOString(),
         lastAccessAt:(row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at)).toISOString(),current:row.current,
       }));
@@ -642,20 +643,21 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       return result.rowCount??0;
     },
     async listAuthEvents(input) {
-      const result=await pool.query<{action:string;at:Date|string}>(
-        `SELECT action,at FROM security.platform_auth_events
+      const result=await pool.query<{action:string;at:Date|string;client_label:string|null}>(
+        `SELECT action,at,client_label FROM security.platform_auth_events
           WHERE tenant_id=$1 AND user_id=$2 ORDER BY at DESC LIMIT $3`,
         [input.tenantId,input.userId,input.limit],
       );
       return result.rows.map(row=>Object.freeze({
         action:row.action,at:(row.at instanceof Date ? row.at : new Date(row.at)).toISOString(),
+        clientLabel:row.client_label,
       }));
     },
     async recordAuthEvent(input) {
       await pool.query(
-        `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
-          VALUES($1,$2,$3,$4)`,
-        [input.tenantId,input.userId,input.action,input.at],
+        `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at,client_label)
+          VALUES($1,$2,$3,$4,$5)`,
+        [input.tenantId,input.userId,input.action,input.at,input.clientLabel ?? null],
       );
     },
     async issueActionGrant(input) {

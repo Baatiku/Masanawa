@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../api/models.dart';
 import '../api/billing_models.dart';
@@ -55,6 +56,13 @@ class ApiClient {
               return;
             }
           }
+          // Stable coarse client descriptor, never used for authorization.
+          options.headers['X-Masanawa-Client-Platform'] = kIsWeb ? 'web' :
+              switch(defaultTargetPlatform){
+                TargetPlatform.android => 'android',
+                TargetPlatform.iOS => 'ios',
+                _ => 'other',
+              };
           final token = accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -233,11 +241,14 @@ class ApiClient {
   }
 
   Future<AuthTokens> otpVerify(String code,
-      {String? phone, String? email, String? name}) async {
+      {String? phone, String? email, String? name, String? deviceId}) async {
     final data = await _post(
       '/auth/verify',
-      OtpVerifyRequest(phone: phone, email: email, code: code, name: name)
+      {
+        ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name)
           .toJson(),
+        if(deviceId!=null)'deviceId':deviceId,
+      },
     );
     return AuthTokens.fromJson(data);
   }

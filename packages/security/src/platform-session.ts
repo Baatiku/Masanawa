@@ -28,6 +28,7 @@ export type PasswordVerifyResult = "accepted" | "invalid" | "locked" | "missing"
 export interface PlatformSessionView {
   readonly sessionId: string;
   readonly deviceId: string | null;
+  readonly clientLabel?: string | null;
   readonly createdAt: string;
   readonly lastAccessAt: string;
   readonly current: boolean;
@@ -35,6 +36,7 @@ export interface PlatformSessionView {
 export interface PlatformAuthEventView {
   readonly action: string;
   readonly at: string;
+  readonly clientLabel?: string | null;
 }
 export interface PlatformSessionRepository {
   putOtpChallenge(input: Readonly<{
@@ -81,6 +83,7 @@ export interface PlatformSessionRepository {
   issueSession(input: Readonly<{
     identity: PlatformSessionIdentity; accessHash: string; refreshHash: string;
     accessExpiresAt: string; refreshExpiresAt: string; issuedAt: string; deviceId?: string;
+    clientLabel?: string;
   }>): Promise<void>;
   resolveAccess(input: Readonly<{ accessHash: string; at: string }>): Promise<PlatformSessionIdentity | null>;
   rotateRefresh(input: Readonly<{
@@ -94,7 +97,7 @@ export interface PlatformSessionRepository {
   revokeSession?(input: Readonly<{ tenantId: TenantId; userId: UserId; sessionId: string; revokedAt: string }>): Promise<boolean>;
   revokeAllSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; revokedAt: string }>): Promise<number>;
   listAuthEvents?(input: Readonly<{ tenantId: TenantId; userId: UserId; limit: number }>): Promise<readonly PlatformAuthEventView[]>;
-  recordAuthEvent?(input: Readonly<{ tenantId: TenantId; userId: UserId; action: string; at: string }>): Promise<void>;
+  recordAuthEvent?(input: Readonly<{ tenantId: TenantId; userId: UserId; action: string; at: string; clientLabel?: string }>): Promise<void>;
   issueActionGrant?(input: Readonly<{
     accessHash: string; grantHash: string; operation: string; fingerprint: string;
     issuedAt: string; expiresAt: string;
