@@ -38,8 +38,8 @@ export interface MobileAgentDirectoryEntry {
   readonly voiceName: string | null;
   readonly roomId?: string;
   readonly portraitKey?: string;
-  readonly following: boolean;
-  readonly conversationStarters: readonly string[];
+  readonly following?: boolean;
+  readonly conversationStarters?: readonly string[];
   readonly countryCode?: string | null;
   readonly countryName?: string | null;
 }
