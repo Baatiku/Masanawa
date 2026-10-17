@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/agent_directory.dart';
 import '../../core/providers.dart';
+import '../../core/status_audio_focus.dart';
 import '../../features/home_feed/feed_api.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
@@ -100,6 +101,10 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
             mediaIds: post.mediaIds,
             initialMediaId: mediaId,
             kind: post.kind,
+            onBeforeAudio: post.kind == 'audio'
+                ? () => StatusAudioFocus.prepare(
+                    isAccountCurrent: () => currentAccount() == account)
+                : null,
           );
         }),
       ));
