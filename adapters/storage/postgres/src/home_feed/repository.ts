@@ -23,13 +23,14 @@ const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_r
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following",before:Cursor,limit:number) {
+ async list(tenant:string,viewer:string|null,mode:"for_you"|"following",before:Cursor,limit:number,authorMasanaId?:string) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
    AND ($3::text='for_you' OR EXISTS (
      SELECT 1 FROM masana.follows f WHERE f.tenant_id=p.tenant_id AND f.fan_user_id=$2 AND f.character_id=p.author_masana_id))
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
+   AND ($7::text IS NULL OR p.author_masana_id=$7)
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,
-   [tenant,viewer,mode,before?.at??null,before?.id??null,limit]);
+   [tenant,viewer,mode,before?.at??null,before?.id??null,limit,authorMasanaId??null]);
   return rows.rows.map(item);
  }
  async find(tenant:string,viewer:string|null,id:string){
