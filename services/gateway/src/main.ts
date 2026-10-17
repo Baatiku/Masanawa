@@ -10,7 +10,7 @@ import {
   createMasanaInboxRepository,
   ensureMasanaCatalogProfilesAndRooms,withCatalogProvisionLock,
 } from "@masanawa/postgres";
-import {createPgAgentRoomDirectory} from "./agent_directory_rooms.js";
+import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -1735,6 +1735,10 @@ export async function startGatewayService(
           ...(database.mobileActivity
             ? { activity: database.mobileActivity }
             : {}),
+          ...(database.featurePool ? {
+            rooms: createPgAgentRoomDirectory(database.featurePool),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool),
+          } : {}),
         })
       : undefined);
 
