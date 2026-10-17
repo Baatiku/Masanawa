@@ -13,10 +13,13 @@ void main() {
   late _Recorder native;
   late VoiceNoteRecorder recorder;
   late String output;
-  setUpAll(() => registerFallbackValue(const RecordConfig()));
+  late StreamController<Amplitude> meter;
+  setUpAll(() {registerFallbackValue(const RecordConfig());registerFallbackValue(Duration.zero);});
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('voice-note-test-');
     native = _Recorder();
+    meter=StreamController<Amplitude>.broadcast();
+    when(()=>native.onAmplitudeChanged(any())).thenAnswer((_)=>meter.stream);
     when(() => native.hasPermission()).thenAnswer((_) async => true);
     when(() => native.start(any(), path: any(named: 'path'))).thenAnswer((call) async {
       output = call.namedArguments[#path] as String;
@@ -29,6 +32,7 @@ void main() {
   });
   tearDown(() async {
     await recorder.close();
+    await meter.close();
     await directory.delete(recursive: true);
   });
   test('records a real local file and hands off voice bytes without a call grant', () async {
@@ -42,6 +46,21 @@ void main() {
     recorder.retain();
     await recorder.close();
     expect(await File(note.path).exists(), true, reason: 'Offline/retry owns the sent file now.');
+  });
+  test('measured amplitude envelope survives stop and cancels with microphone custody', () async {
+    await recorder.start();
+    meter.add(Amplitude(current:-60,max:0));meter.add(Amplitude(current:-30,max:0));meter.add(Amplitude(current:0,max:0));
+    await Future<void>.delayed(Duration.zero);
+    expect(recorder.waveform,[0.0,0.5,1.0]);
+    final note=await recorder.stop();expect(note!.waveform,[0.0,0.5,1.0]);
+    meter.add(Amplitude(current:-10,max:0));await Future<void>.delayed(Duration.zero);
+    expect(recorder.waveform,[0.0,0.5,1.0]);
+    await recorder.cancel();expect(recorder.waveform,isEmpty);
+  });
+  test('unavailable amplitude stream never stops a successful recording', () async {
+    when(()=>native.onAmplitudeChanged(any())).thenThrow(StateError('meter unavailable'));
+    await recorder.start();expect(recorder.state,VoiceNoteState.recording);
+    expect((await recorder.stop())!.waveform,isEmpty);
   });
   test('cancel removes unfinished audio instead of submitting it', () async {
     await recorder.start();
@@ -130,4 +149,5 @@ void main() {
   });
 
 }
+
 

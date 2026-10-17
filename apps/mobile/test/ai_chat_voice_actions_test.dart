@@ -74,6 +74,20 @@ void main() {
   expect(find.text('Recording voice note'),findsNothing);
   expect(tester.takeException(),isNull);
  });
+ testWidgets('hold recording releases to preview and re-record keeps the note unsent at phone width',(tester)async{
+  tester.view.physicalSize=const Size(360,800);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  final recorder=_Recorder(),chats=_Chats();
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  final gesture=await tester.startGesture(tester.getCenter(find.bySemanticsLabel('Record voice note')));
+  await tester.pump(const Duration(milliseconds:600));await tester.pump();
+  expect(recorder.state,VoiceNoteState.recording);
+  await gesture.up();await tester.pumpAndSettle();
+  expect(recorder.state,VoiceNoteState.ready);expect(find.byTooltip('Play preview'),findsOneWidget);expect(chats.sent,isEmpty);
+  await tester.tap(find.byTooltip('Record again'));await tester.pumpAndSettle();
+  expect(recorder.state,VoiceNoteState.recording);expect(chats.sent,isEmpty);expect(tester.takeException(),isNull);
+ });
  testWidgets('accepted voice note closes recorder before the agent finishes', (tester) async {
   final chats=_Chats()..response=Completer<void>();final recorder=_Recorder();
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
@@ -141,4 +155,5 @@ void main() {
  });
 
 }
+
 

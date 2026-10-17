@@ -33,6 +33,7 @@ import '../../core/live_call_foreground.dart';
 import '../../core/live_voice_session.dart';
 import '../../core/call_recording.dart';
 import '../../ui/components/voice_note_composer.dart';
+import '../../ui/components/voice_note_hold_region.dart';
 import '../../core/voice_note_recorder.dart';
 import '../profile/masana_profile_screen.dart';
 import '../../core/app_permissions.dart';
@@ -115,6 +116,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   VoiceNoteRecorder? _inlineRecorder;
   AudioPlayer? _inlinePreviewPlayer;
   bool _inlinePreviewPlaying = false;
+  bool _voiceHoldActive = false, _recordingLocked = false;
 
   @override
   void initState() {
@@ -126,6 +128,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final previousId = previous is SessionSignedIn ? previous.user.id : null;
       final nextId = next is SessionSignedIn ? next.user.id : null;
       if (previousId != nextId) {
+        _pendingVoiceAutoplay = null;
         unawaited(_inlineVoiceSession?.close() ?? Future<void>.value());
         unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
       }
@@ -189,6 +192,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   @override
   void dispose() {
     _voiceAccountSubscription?.close();
+    _pendingVoiceAutoplay = null;
     unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
     _scrollPersistTimer?.cancel();
     _walletRefreshTimer?.cancel();
@@ -408,6 +412,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
 
     final recorder = ref.read(voiceNoteRecorderFactoryProvider)();
+    _recordingLocked = false;
     _inlineRecorder = recorder;
     recorder.addListener(_onInlineRecorderChanged);
     HapticFeedback.mediumImpact();
@@ -420,13 +425,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     if (recorder == null) return;
     recorder.removeListener(_onInlineRecorderChanged);
     _inlineRecorder = null;
+    _voiceHoldActive = false; _recordingLocked = false;
     try {
       await _inlinePreviewPlayer?.stop();
       await _inlinePreviewPlayer?.dispose();
     } catch (_) {}
     _inlinePreviewPlayer = null;
     _inlinePreviewPlaying = false;
-    setState(() {});
+    if(mounted)setState(() {});
     await recorder.cancel();
     await recorder.close();
   }
@@ -435,8 +441,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final recorder = _inlineRecorder;
     if (recorder == null) return;
     HapticFeedback.lightImpact();
-    setState(() {});
+    if(mounted)setState(() { _voiceHoldActive=false; _recordingLocked=false; });
     await recorder.stop();
+  }
+
+  Future<void> _rerecordInline() async {
+    await _cancelInlineRecording();
+    if(mounted)await _startInlineRecording();
   }
 
   Future<void> _toggleInlinePreview() async {
@@ -534,6 +545,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _prepareCallAudio() async {
+    _pendingVoiceAutoplay = null;
     await _cancelInlineRecording();
     await _activeVoiceBubble?._pauseFromAnotherBubble();
     await LivePcmAudio.stop();
@@ -1016,6 +1028,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       );
     }
 
+    ref.watch(voiceReplyAutoplayProvider);
     final workingLabel = !sending
         ? agent.presenceLabel
         : lastUser?.attachment?.kind == 'voice'
@@ -1067,8 +1080,18 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
 
     ref.listen(aiChatProvider, (prev, next) {
-      // Streaming PCM is the automatic response. The completed attachment is
-      // retained for explicit replay, never automatically played a second time.
+      // Only a fully finalized audio attachment may autoplay. Historical
+      // messages and partial generation never trigger playback.
+      final prior = prev?.threads[widget.characterId]?.messages ?? const <AiChatMessage>[];
+      for (final message in next.threads[widget.characterId]?.messages ?? const <AiChatMessage>[]) {
+        final wasGenerating = prior.any((m) => m.id == message.id && m.deliveryStatus == 'streaming');
+        final audio = message.attachment;
+        if (wasGenerating && message.deliveryStatus == 'delivered' && audio?.kind == 'voice' &&
+            ref.read(voiceReplyAutoplayProvider).asData?.value == true &&
+            _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
+          _pendingVoiceAutoplay = audio!.path;
+        }
+      }
       final before = prev?.threads[widget.characterId]?.messages.length ?? 0;
       final after = next.threads[widget.characterId]?.messages.length ?? 0;
       if (after > before) {
@@ -1546,9 +1569,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onMic: updateRequired
                     ? () {}
                     : () => unawaited(_startInlineRecording()),
-                onMicLongPress: updateRequired
-                    ? null
-                    : () => unawaited(_startInlineRecording()),
+                onHoldStart: updateRequired ? null : () async {
+                  _voiceHoldActive=true;
+                  await _startInlineRecording();
+                },
+                onHoldLock: () {if(mounted)setState(() { _recordingLocked=true; _voiceHoldActive=false; });},
+                holdActive:_voiceHoldActive,recordingLocked:_recordingLocked,
+                onReRecord:_rerecordInline,
                 onEmojiToggle: () {
                   if (_showEmoji) {
                     setState(() => _showEmoji = false);
@@ -2857,7 +2884,11 @@ class _Composer extends StatelessWidget {
     required this.focusNode,
     required this.emojiSelected,
     required this.onTextTap,
-    this.onMicLongPress,
+    this.onHoldStart,
+    this.onHoldLock,
+    this.onReRecord,
+    this.holdActive=false,
+    this.recordingLocked=false,
     this.recorder,
     this.onCancelRecording,
     this.onStopRecording,
@@ -2873,14 +2904,16 @@ class _Composer extends StatelessWidget {
   final VoidCallback onStop;
   final VoidCallback onAttach;
   final VoidCallback onMic;
-  final VoidCallback? onMicLongPress;
+  final Future<void> Function()? onHoldStart, onReRecord;
+  final VoidCallback? onHoldLock;
+  final bool holdActive,recordingLocked;
   final VoidCallback onEmojiToggle;
   final FocusNode focusNode;
   final bool emojiSelected;
   final VoidCallback onTextTap;
   final VoiceNoteRecorder? recorder;
-  final VoidCallback? onCancelRecording;
-  final VoidCallback? onStopRecording;
+  final Future<void> Function()? onCancelRecording;
+  final Future<void> Function()? onStopRecording;
   final VoidCallback? onSendVoiceNote;
   final VoidCallback? onTogglePreview;
   final bool previewPlaying;
@@ -2918,7 +2951,11 @@ class _Composer extends StatelessWidget {
               label: hasActiveVoice
                   ? 'Send voice note'
                   : (hasText ? 'Send message' : 'Record voice note'),
-              child: Material(
+              child: VoiceNoteHoldRegion(
+                enabled:!hasActiveVoice&&!sending&&!hasText&&onHoldStart!=null,
+                onStart:onHoldStart??()async{},onPreview:onStopRecording??()async{},
+                onCancel:onCancelRecording??()async{},onLock:onHoldLock??(){},
+                child: Material(
                 color: u.brand,
                 shape: const CircleBorder(),
                 clipBehavior: Clip.antiAlias,
@@ -2926,7 +2963,6 @@ class _Composer extends StatelessWidget {
                   onTap: hasActiveVoice
                       ? onSendVoiceNote
                       : (sending ? onStop : (hasText ? onSend : onMic)),
-                  onLongPress: hasActiveVoice || sending || hasText ? null : onMicLongPress,
                   child: SizedBox(
                     width: 48,
                     height: 48,
@@ -2947,6 +2983,7 @@ class _Composer extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
               ),
             ),
           ],
@@ -2976,14 +3013,17 @@ class _Composer extends StatelessWidget {
               fontSize: 15,
             ),
           ),
-          const Spacer(),
-          Text(
-            'Recording voice note',
+          const SizedBox(width:8),
+          Expanded(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(
+            recordingLocked?'Recording locked':holdActive?'Slide left to cancel · up to lock':'Recording voice note',
+            maxLines:1,overflow:TextOverflow.ellipsis,
             style: TextStyle(
               color: u.textMuted,
               fontSize: 12,
             ),
           ),
+          _VoiceWaveform(values:recorder!.waveform,progress:1,enabled:false,onSeek:(_){}),
+          ])),
           const SizedBox(width: 6),
           IconButton(
             icon: Icon(Icons.stop_circle_outlined, color: u.brand, size: 26),
@@ -3015,6 +3055,7 @@ class _Composer extends StatelessWidget {
             tooltip: previewPlaying ? 'Pause' : 'Play preview',
             onPressed: onTogglePreview,
           ),
+          IconButton(tooltip:'Record again',onPressed:onReRecord,icon:Icon(Icons.replay,color:u.textPrimary,size:22)),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
@@ -4296,14 +4337,6 @@ class _VoiceWaveform extends StatelessWidget {
   final bool enabled;
   final ValueChanged<double> onSeek;
 
-  List<double> _fallback() {
-    const bars = 34;
-    return List<double>.generate(bars, (index) {
-      final wave = ((index * 17 + 11) % 23) / 23;
-      return 0.2 + (wave * 0.8);
-    }, growable: false);
-  }
-
   void _seekFromDx(double dx, double width) {
     if (!enabled || width <= 0) return;
     onSeek((dx / width).clamp(0.0, 1.0).toDouble());
@@ -4312,7 +4345,11 @@ class _VoiceWaveform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    final bars = values.isEmpty ? _fallback() : values;
+    if(values.isEmpty)return SizedBox(height:34,child:Slider(
+      value:progress.clamp(0.0,1.0).toDouble(),onChanged:enabled?onSeek:null,
+      semanticFormatterCallback:(value)=>'${(value*100).round()} percent',
+    ));
+    final bars = values;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -4377,6 +4414,7 @@ class _VoiceWaveform extends StatelessWidget {
   }
 }
 
+String? _pendingVoiceAutoplay;
 _VoiceBubbleState? _activeVoiceBubble;
 double _sharedVoiceSpeed = 1.0;
 
@@ -4397,6 +4435,17 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   bool _speakerOn = true;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _pendingVoiceAutoplay == widget.attachment.path) {
+        _pendingVoiceAutoplay = null;
+        if (!LiveCallForeground.active) unawaited(_toggle());
+      }
+    });
+  }
 
   @override
   void dispose() {

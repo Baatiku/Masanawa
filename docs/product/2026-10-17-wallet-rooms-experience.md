@@ -208,16 +208,16 @@ Executed: five synthetic disk/WAV/account/error tests; 20 focused recording UI, 
 | Item | Source progress / next acceptance |
 | --- | --- |
 | 7.1 Native recording/microphone | Existing single-microphone source; transient-focus fix above; physical handset must retest >1 minute. |
-| 7.2 Immediate Gemini Live speech | Preserve existing Live streaming backend; mobile voice-note playback policy must be reconciled with owner's latest immediate-stream instruction, without duplicate replay or delayed TTS. |
+| 7.2 Completed voice-note replies | Owner's latest policy: no generation PCM playback in chat. Deliver completed audio and canonical transcript; only continuous calls play live streams. Gemini Live may generate the clip on the backend. |
 | 7.3 Complete final transcripts | Existing canonical response pipeline retained; test missing/partial provider transcription next. |
 | 7.4 Bodi/Fora and professional identity | Exact configured voices retained; real-device listening acceptance remains. |
-| 7.5 Hold/slide/lock gestures | Review/finish existing composer gestures next; do not replace recording foundations. |
-| 7.6 Preview/delete/re-record | Existing preview source retained; handset acceptance and any gesture integration next. |
-| 7.7 Waveform/progress | Existing sampled attachment waveform retained; verify recorded-message capture and long-note progress. |
+| 7.5 Hold/slide/lock gestures | Implemented stable hold region, slide-left cancellation, slide-up lock and release-to-preview; physical gesture acceptance remains. |
+| 7.6 Preview/delete/re-record | Preview/delete retained; explicit Record again added, with no accidental send on hold release. |
+| 7.7 Waveform/progress | Own voice notes now retain bounded measured amplitude envelopes; unavailable data shows a truthful seek control. Reply PCM waveforms and playback progress retained. |
 | 7.8 Playback rates | Existing voice-note rates retained; recording detail adds 1/1.5/2x. |
 | 7.9 Seeking | Existing voice-note slider retained; recording detail adds seek and 10-second jumps. |
 | 7.10 Background/interruptions | Continuous Android foreground service retained; temporary focus pauses rather than ending; headset, lock, Bluetooth device matrix outstanding. |
-| 7.11 Transcript/replay/autoplay preference | Read/replay retained; persistent disable-autoplay control is next source work. |
+| 7.11 Transcript/replay/autoplay preference | Canonical text/read/replay retained; secure per-account automatic completed-clip preference implemented. |
 | 7.12 Optional sequential playback | Not enabled; explicit stop-at-end remains default and must be qualified first. |
 | 8.1 Continuous calls | Existing bidirectional Live/session resumption preserved; no recorded-message loop introduced. |
 | 8.2 Incoming foreground/background/locked | Existing signaling/service retained; permissions/locked-device acceptance outstanding. |
@@ -232,12 +232,17 @@ Executed: five synthetic disk/WAV/account/error tests; 20 focused recording UI, 
 Owner numbering skips 8.9 and 8.11; no unrequested features invented for those gaps. “Complete” in supplied priorities is not taken as executed device evidence.
 
 
-## Immediate streamed reply and accessibility source — 2026-10-17
+## Completed voice-note clips, gestures and measured waveform — 2026-10-17
 
-Owner's latest immediate-speech instruction supersedes the earlier voice-note wait-until-finished policy. The same Gemini Live PCM callback now plays usable voice-note and text response chunks immediately when enabled. A secure, persistent per-account automatic-speech preference is available in the chat menu; loading/read failure defaults to silence. Turning it off stops only the automatic playback owner and never another live call. Completed audio remains explicit replay, preventing the previous streamed-then-attachment duplicate playback. Final canonical text wins over partial transcription; absent final text retains available stream text. Original request identity, media retry semantics, secure expiry-draft restoration and merged call recording controls are preserved.
+**Current owner instruction: voice-note generation must remain silent until the complete clip is ready; only calls stream live audio. Do not compile an APK during this source work.** This supersedes the earlier immediate-chat-speech interpretation.
 
-Executed 26 focused Flutter tests covering immediate playback before final completion, opt-out, active-call suppression, one canonical reply, preference owner races/errors, recorder acceptance, chat search/header/avatar, split streaming media, partial ASR and replay recovery. The 12 affected preference/playback/chat-action checks passed again after the final listener/context refinements. Analysis: 0 errors, 1 pre-existing unused remoteMedia parameter warning and 19 style infos. Physical provider/audio latency and preference/native playback acceptance remain device checks. No separate TTS pipeline, voice substitution or sequential autoplay was added. This advances 7.2/7.3/7.11; gesture and routing/incoming/group/history-detail work remains as listed above.
+Chat no longer sends generation PCM to native playback for either recorded-message or text-initiated audio replies. Voice-note response text stays behind the recording indicator until the finished audio and canonical transcript are delivered together as one message. Gemini Live generation/transport remains intact; no separate TTS pipeline is introduced. Only a finalized attachment can enter the optional automatic-play queue, guarded by the secure account-specific preference and call ownership; historical clips never start themselves. Stop-at-end remains explicit and sequential autoplay is not enabled. Final canonical text wins over partial ASR; absent final text retains available stream text. Request IDs, retry semantics, secure expiry drafts and call focus/recording controls are preserved.
 
+The composer now supports hold-to-record, slide left to cancel, slide up to lock and release to preview. The gesture region remains mounted when recording controls replace the microphone, including while native startup is pending. Locked capture keeps explicit Stop & review; tap-to-record stays accessible. Preview adds Record again. No release gesture silently sends a note.
+
+Own voice notes now sample amplitude from the existing recorder, keep at most 3000 measurements and retain a compressed measured envelope. Stop/cancel/account/lifecycle cleanup cancels metering; meter failure cannot fail recording or open another microphone. Missing waveform data uses an honest seek control instead of synthetic decorative bars. Existing reply PCM waveforms, speeds and seeking remain.
+
+Executed: 44 unique focused Flutter checks across buffered PCM silence/single final reply, preference races/errors, split UTF-8/media/partial ASR/retry, 12 recorder checks, 5 hold/cancel/lock/startup checks and 8 chat actions including preview/re-record at 360px. Final recorder/gesture/chat/PCM batch: 28 passed. Analysis: zero errors, one existing unused remoteMedia parameter warning, style infos. Concurrent main's Masana skeleton/wording and removal of legacy Credits gift dialogs are preserved. Physical handset audio/gesture/routing acceptance remains unverified. No APK compilation was run.
 
 ## P0 no-new-legacy-call-charge safeguard — 2026-10-17
 

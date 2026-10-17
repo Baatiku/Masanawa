@@ -16,7 +16,6 @@ import '../chat/chat_format.dart';
 import '../chat/message_parts.dart';
 import '../core/providers.dart';
 import '../core/live_pcm_audio.dart';
-import '../core/live_call_foreground.dart';
 import '../core/agent_audio_attachment.dart';
 import '../core/network/api_client.dart';
 import '../core/request_id.dart';
@@ -28,7 +27,6 @@ import '../chat/shell_action_journal.dart';
 import '../chat/shell_document.dart';
 import '../chat/shell_secure_storage.dart';
 import 'session_state.dart';
-import '../voice/voice_reply_playback_preference.dart';
 import 'agent_directory_state.dart';
 
 const String _kThreadsFile = 'masanawa_threads_v2.json';
@@ -550,17 +548,9 @@ class AiChatController extends Notifier<AiChatState> {
   int _cacheGeneration = 0;
   Future<Directory?>? _documentsDirectoryFuture;
   Future<void> _previousCacheSave = Future<void>.value();
-  int? _automaticPlaybackOwner;
 
   @override
   AiChatState build() {
-    ref.listen(voiceReplyAutoplayProvider, (previous,next) {
-      if(next.asData?.value==false){
-        final owner=_automaticPlaybackOwner;
-        _automaticPlaybackOwner=null;
-        if(owner!=null)unawaited(LivePcmAudio.stop(owner:owner));
-      }
-    });
     final initialSession = ref.read(sessionProvider);
     _cacheOwnerId =
         initialSession is SessionSignedIn ? initialSession.user.id : null;
@@ -1559,7 +1549,6 @@ class AiChatController extends Notifier<AiChatState> {
     _setDelivery(characterId, userMsg.id, 'sent');
     if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
       return;
-    int? playbackOwner;
     final audioOwner = _cacheOwnerId;
     final audioGeneration = _cacheGeneration;
     bool currentAudioOwner() => !_disposed && audioOwner == _cacheOwnerId && audioGeneration == _cacheGeneration && connectionGeneration == _connectionGeneration && threadGeneration == (_threadGenerations[characterId] ?? 0);
@@ -1567,10 +1556,7 @@ class AiChatController extends Notifier<AiChatState> {
       final attachment = userMsg.attachment;
       final attachmentSet = userMsg.attachments;
       final hasMedia = attachment != null || attachmentSet.isNotEmpty;
-      // Load the account preference before the first PCM chunk. Voice notes
-      // and text speech both use Gemini Live, never a delayed TTS pipeline.
-      await ref.read(voiceReplyAutoplayProvider.future);
-      if (!currentAudioOwner()) return;
+      final voiceReply = userMsg.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio');
       final streamMessageId = _beginAiStream(characterId, requestId: userMsg.requestId);
       final visiblePrompt = userMsg.replyPreview?.trim().isNotEmpty == true
           ? 'Replying to this earlier message:\n"${userMsg.replyPreview}"\n\n${userMsg.text}'
@@ -1580,33 +1566,14 @@ class AiChatController extends Notifier<AiChatState> {
               ? transportPrompt!.trim()
               : visiblePrompt;
       final mediaCaption = promptText;
-      var livePcmStarted = false;
-      DateTime? livePcmStartedAt;
-      var playbackSuppressed = false;
-      Future<void> playChunk(Uint8List chunk) async {
-        if (!currentAudioOwner() || playbackSuppressed) return;
-        if (ref.read(voiceReplyAutoplayProvider).asData?.value != true) {
-          playbackSuppressed=true;
-          if(playbackOwner!=null)await LivePcmAudio.stop(owner:playbackOwner);
-          return;
-        }
-        if (LiveCallForeground.active) {playbackSuppressed = true;return;}
-        playbackOwner ??= LivePcmAudio.acquirePlaybackOwner();
-        _automaticPlaybackOwner=playbackOwner;
-        if (!LivePcmAudio.isPlaybackOwner(playbackOwner!)) {playbackSuppressed = true;return;}
-        if (!livePcmStarted) {
-          livePcmStarted = await LivePcmAudio.start(sampleRate:24000,owner:playbackOwner);
-          if (livePcmStarted) livePcmStartedAt = DateTime.now();
-        }
-        if (!currentAudioOwner()) {await LivePcmAudio.stop(owner:playbackOwner);return;}
-        if (livePcmStarted) await LivePcmAudio.write(chunk,owner:playbackOwner);
-      }
+      // Recorded-message replies are completed clips. The transport can use
+      // Gemini Live to generate audio, but chat never plays generation PCM.
       var spokenTranscript = '';
       void textDelta(String delta) {
-        if (currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
+        if (!voiceReply && currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
-        if (!currentAudioOwner()) return;
+        if (voiceReply || !currentAudioOwner()) return;
         spokenTranscript += delta;
         _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
       }
@@ -1616,7 +1583,6 @@ class AiChatController extends Notifier<AiChatState> {
               promptText,
               onTextDelta: textDelta,
               requestId: userMsg.requestId,
-              onAudioPcmChunk: playChunk,
             )
           : attachmentSet.isNotEmpty
           ? await _sendMediaSetViaTransport(
@@ -1626,7 +1592,6 @@ class AiChatController extends Notifier<AiChatState> {
               caption: mediaCaption,
               requestId: userMsg.requestId,
               onTextDelta: textDelta,
-              onAudioPcmChunk: playChunk,
               onAudioTranscriptDelta: transcriptDelta,
             )
           : await _sendMediaViaTransport(
@@ -1636,22 +1601,8 @@ class AiChatController extends Notifier<AiChatState> {
               caption: mediaCaption,
               requestId: userMsg.requestId,
               onTextDelta: textDelta,
-              onAudioPcmChunk: playChunk,
               onAudioTranscriptDelta: transcriptDelta,
             );
-      if (livePcmStarted) {
-        final elapsedMs = livePcmStartedAt == null
-            ? 0
-            : DateTime.now().difference(livePcmStartedAt!).inMilliseconds;
-        final expectedMs = result.audioDurationMs ?? elapsedMs;
-        final drainMs = (expectedMs - elapsedMs + 220).clamp(220, 30000).toInt();
-        unawaited(
-          Future<void>.delayed(
-            Duration(milliseconds: drainMs),
-            () => LivePcmAudio.stop(owner:playbackOwner),
-          ),
-        );
-      }
       if (_disposed ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) {
         return;
@@ -1745,7 +1696,6 @@ class AiChatController extends Notifier<AiChatState> {
         );
 
     } catch (error) {
-      if (playbackOwner != null) unawaited(LivePcmAudio.stop(owner:playbackOwner));
       if (_disposed ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) {
         return;
