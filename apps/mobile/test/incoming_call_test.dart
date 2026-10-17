@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:masanawa/src/calls/call_outcome.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/calls/incoming_call_controller.dart';
@@ -187,6 +188,7 @@ void main() {
       final transport = MediaIncoming();
       FakeSession? session;
       var starts = 0, completions = 0, reports = 0;
+      final reasons=<CallEndReason?>[];
       final controller = IncomingCallController(
         callId: 'call',
         accountKey: 'a',
@@ -201,6 +203,7 @@ void main() {
             completions++;
           },
         ),
+        onOutcome:(_,reason)async=>reasons.add(reason),
         onConnected: (_) async {
           reports++;
         },
@@ -214,9 +217,14 @@ void main() {
       expect(transport.tokens, 1);
       expect(starts, 1);
       expect(reports, 1);
+      expect(controller.statusLabel,'Connected');
+      expect(controller.recording, isNotNull);
+      expect(controller.recording!.recording,isFalse);
+      session!.endReason=CallEndReason.connectionFailed;
       await controller.end();
       await controller.end();
       expect(session!.closes, 1);
+      expect(reasons,[CallEndReason.connectionFailed]);
       expect(completions, 1);
       controller.dispose();
     },

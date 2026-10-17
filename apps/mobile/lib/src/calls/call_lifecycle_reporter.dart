@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../agents/masanawa_transport.dart';
+import 'call_outcome.dart';
 import '../state/session_state.dart';
 
 class CallLifecycleOwner {
@@ -37,19 +38,21 @@ typedef CallLifecycleSend =
       String event,
     );
 
-/// Only account identifiers, call identifiers and lifecycle events reach disk.
+/// Only account/call identifiers, lifecycle events and bounded diagnostics reach disk.
 /// A private transport pins each request's bearer and has no auth interceptor.
 class CallLifecycleReporter {
   CallLifecycleReporter({
     required this.store,
     required this.readOwner,
     required this.send,
+    this.sendOutcome,
     this.onHistoryChanged,
     this.capacity = 128,
   });
   final CallLifecycleStore store;
   final CallLifecycleOwner? Function() readOwner;
   final CallLifecycleSend send;
+  final Future<void> Function(CallLifecycleOwner owner,String callId,String endReason)? sendOutcome;
   final void Function()? onHistoryChanged;
   final int capacity;
   final List<Map<String, String>> _queue = [];
@@ -93,6 +96,7 @@ class CallLifecycleReporter {
                 'accountId': item['accountId'],
                 'callId': item['callId'],
                 'event': item['event'],
+                if(item['event']=='end' && CallEndReason.parse(item['endReason'])!=null)'endReason':item['endReason'] as String,
                 'createdAt': item['createdAt'] is String
                     ? item['createdAt']
                     : _now(),
@@ -111,7 +115,7 @@ class CallLifecycleReporter {
   Future<void> report(
     CallLifecycleOwner owner,
     String callId,
-    String event,
+    String event, {CallEndReason? endReason}
   ) => _run(() async {
     await _load();
     if (!_valid(owner.accountId) || !_valid(callId)) return;
@@ -135,6 +139,7 @@ class CallLifecycleReporter {
         'callId': callId,
         'event': event,
         'createdAt': _now(),
+        if(event=='end'&&endReason!=null)'endReason':endReason.code,
       });
       await _save();
     }
@@ -155,11 +160,10 @@ class CallLifecycleReporter {
       if (index < 0) return;
       final event = _queue[index];
       try {
-        await send(
-          owner,
-          event['callId']!,
-          event['event']!,
-        ).timeout(const Duration(seconds: 15));
+        final reason=event['endReason'];
+        await (event['event']=='end'&&reason!=null&&sendOutcome!=null
+          ?sendOutcome!(owner,event['callId']!,reason)
+          :send(owner,event['callId']!,event['event']!)).timeout(const Duration(seconds:15));
       } on DioException catch (error) {
         final status = error.response?.statusCode;
         if (status != 403 && status != 404 && status != 410) return;
@@ -198,10 +202,10 @@ class CallLifecycleBinding {
     await _reporter.report(owner, callId!, 'connected');
   }
 
-  Future<void> closed() async {
+  Future<void> closed({CallEndReason? reason}) async {
     if (_closed || callId == null) return;
     _closed = true;
-    await _reporter.report(owner, callId!, 'end');
+    await _reporter.report(owner, callId!, 'end',endReason:reason);
   }
 }
 
@@ -236,6 +240,9 @@ final callLifecycleReporterProvider = Provider<CallLifecycleReporter>((ref) {
         ),
       );
     },
+    sendOutcome:(owner,callId,reason)async{
+      await dio.post('/v1/calls/${Uri.encodeComponent(callId)}/end',data:{'endReason':reason},options:Options(headers:{'Authorization':'Bearer ${owner.accessToken}'}));
+    },
     onHistoryChanged: () =>
         ref.read(callHistoryRevisionProvider.notifier).state++,
   );
@@ -267,3 +274,4 @@ class _ResumeObserver extends WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) unawaited(reporter.flush());
   }
 }
+

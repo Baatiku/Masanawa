@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:masanawa/src/calls/call_outcome.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -77,6 +78,33 @@ void main() {
   const a = CallLifecycleOwner('a', 'secret-a');
   const b = CallLifecycleOwner('b', 'secret-b');
 
+  test('final diagnostic survives restart once and waits for its own account', () async {
+    final store=MemoryStore();
+    CallLifecycleOwner? current=b;
+    final first=CallLifecycleReporter(store:store,readOwner:()=>current,send:(_,__,___)async{});
+    final binding=first.bind(a,'outcome-call');
+    await binding.closed(reason:CallEndReason.connectionFailed);
+    await binding.closed(reason:CallEndReason.userEnded);
+    final queued=jsonDecode(store.value!) as List;
+    expect(queued,hasLength(1));
+    expect(queued.single['endReason'],'connection_failed');
+    expect(store.value,isNot(contains('secret')));
+    final sent=<String>[];
+    final restored=CallLifecycleReporter(store:store,readOwner:()=>current,
+      send:(_,__,___)async=>fail('reason lost'),
+      sendOutcome:(owner,id,reason)async=>sent.add('${owner.accountId}/$id/$reason'));
+    await restored.flush();expect(sent,isEmpty);
+    current=a;await restored.flush();await restored.flush();
+    expect(sent,['a/outcome-call/connection_failed']);
+    expect(jsonDecode(store.value!),isEmpty);
+  });
+  test('unknown stored diagnostic is discarded without forwarding free text',()async{
+    final store=MemoryStore()..value=jsonEncode([{'accountId':'a','callId':'call','event':'end','endReason':'provider secret'}]);
+    final sent=<String>[];
+    final reporter=CallLifecycleReporter(store:store,readOwner:()=>a,
+      send:(_,__,event)async=>sent.add(event),sendOutcome:(_,__,___)async=>fail('unsafe reason'));
+    await reporter.flush();expect(sent,['end']);
+  });
   test(
     'terminal missing call drops its ordered events and continues healthy calls',
     () async {
