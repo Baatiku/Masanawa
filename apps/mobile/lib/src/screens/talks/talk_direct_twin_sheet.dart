@@ -45,8 +45,8 @@ class _DirectTwinSheetState extends State<_DirectTwinSheet> {
     try {
       final value=await widget.transport.set(talkId:widget.talkId,seatId:_seat.seatId,revision:_current?.revision??0,instruction:text);
       if(!mounted)return; setState((){_current=value;_controller.text=value.instruction??'';});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Twin direction updated.')));
-    } catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Couldn’t update your Twin right now.')));}
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Guidance updated.')));
+    } catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Couldn’t update the guidance right now.')));}
     finally{if(mounted)setState(()=>_busy=false);}
   }
   Future<void> _clear() async {
@@ -62,23 +62,23 @@ class _DirectTwinSheetState extends State<_DirectTwinSheet> {
     return Padding(
       padding:EdgeInsets.fromLTRB(18,16,18,18+MediaQuery.viewInsetsOf(context).bottom),
       child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-        const Text('Direct Twin',style:TextStyle(fontSize:19,fontWeight:FontWeight.w800)),
+        const Text('Private guidance',style:TextStyle(fontSize:19,fontWeight:FontWeight.w800)),
         const SizedBox(height:4),
-        const Text('Private guidance for your Twin’s next turns. It expires automatically.'),
+        const Text('Private instructions expire automatically.'),
         if(widget.seats.length>1)...[
           const SizedBox(height:12),
           DropdownButtonFormField<DirectTwinSeat>(
             value:_seat,
             items:[for(final seat in widget.seats) DropdownMenuItem(value:seat,child:Text(seat.personaId))],
             onChanged:_busy?null:(value){if(value!=null){setState(()=>_seat=value);_load();}},
-            decoration:const InputDecoration(labelText:'Twin Seat'),
+            decoration:const InputDecoration(labelText:'Participant'),
           ),
         ],
         const SizedBox(height:12),
         if(_error!=null) TextButton(onPressed:_load,child:const Text('Couldn’t load direction. Try again'))
         else Wrap(spacing:8,runSpacing:8,children:[for(final item in _quick) ActionChip(label:Text(item),onPressed:_busy?null:()=>_save(item))]),
         const SizedBox(height:12),
-        TextField(controller:_controller,maxLength:2000,maxLines:3,decoration:const InputDecoration(hintText:'Tell your Twin what to emphasize next')),
+        TextField(controller:_controller,maxLength:2000,maxLines:3,decoration:const InputDecoration(hintText:'Enter guidance for this session')),
         const SizedBox(height:8),
         FilledButton(onPressed:_busy?null:_save,child:Text(_busy?'Updating…':'Update direction')),
         if((_current?.instruction??'').isNotEmpty) TextButton(onPressed:_busy?null:_clear,child:const Text('Clear direction')),

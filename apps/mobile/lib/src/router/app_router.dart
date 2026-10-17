@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../finance/crypto_wallet_screen.dart';
-import '../screens/activity/activity_screen.dart';
 import '../screens/billing/billing_screen.dart';
 import '../screens/chat/ai_chat_screen.dart';
 import '../screens/onboarding/name_screen.dart';
@@ -12,13 +11,8 @@ import '../screens/onboarding/otp_screen.dart';
 import '../screens/onboarding/password_screen.dart';
 import '../screens/onboarding/phone_login_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
-import '../screens/profile/person_profile_screen.dart';
-import '../screens/profile/persona_profile_screen.dart';
-import '../screens/search/talk_search_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../core/startup_metrics.dart';
-import '../screens/talks/create_talk_screen.dart';
-import '../screens/talks/talk_screen.dart';
 import '../screens/chat/masana_list_screen.dart';
 import '../screens/rooms/rooms_screen.dart' show MasanaRoomDetailScreen;
 import '../screens/twin/shell_tab.dart';
@@ -26,7 +20,6 @@ import '../shell/five_tab_shell.dart';
 import '../shell/startup_gate.dart';
 import '../screens/wallet/wallet_screen.dart';
 import '../state/session_state.dart';
-import '../talks/talk_models.dart';
 
 /// The five canonical root destinations. These are navigation indices only,
 /// not a pricing, identity or task-authority contract.
@@ -35,8 +28,8 @@ int shellRootTabIndex(String? tab) =>
 
 /// Retired shell links land on their closest current tab.
 String? legacyShellDestination(String? tab) => switch (tab) {
-      'create' => '/talk/create',
-      'activity' => '/activity',
+      'create' => '/home?tab=status',
+      'activity' => '/home?tab=status',
       'agents' => '/home?tab=chats',
       'wallet' => '/home?tab=wallet',
       'talk' => '/home?tab=status',
@@ -154,68 +147,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-        path: '/activity',
-        builder: (context, _) => ActivityScreen(
-          onOpenTalk: (id) => context.push('/talk/' + Uri.encodeComponent(id)),
-          onOpenProfile: (handle) => context.push(
-            '/u/' + Uri.encodeComponent(handle)),
-        ),
-      ),
-      GoRoute(
-        path: '/search',
-        builder: (context, state) => TalkSearchScreen(
-          initialQuery: state.uri.queryParameters['q'],
-          onOpenTalk: (talk) => context.push(
-            '/talk/' + Uri.encodeComponent(talk.id),
-            extra: talk,
-          ),
-          onOpenPerson: (handle) => context.push(
-            '/u/' + Uri.encodeComponent(handle),
-          ),
-          onOpenPersona: (publicId) => context.push(
-            '/persona/' + Uri.encodeComponent(publicId),
-          ),
-        ),
-      ),
-      GoRoute(
-        path: '/talk/create',
-        builder: (context, _) => CreateTalkScreen(
-          onCreated: (talk) => context.go(
-            '/talk/' + Uri.encodeComponent(talk.id) + '?host=1',
-            extra: talk,
-          ),
-        ),
-      ),
-      GoRoute(
-        path: '/talk/:id',
-        builder: (context, state) {
-          final extra = state.extra;
-          final initialTalk = extra is TalkDiscoveryItem ? extra : null;
-          return TalkScreen(
-            talkId: state.pathParameters['id']!,
-            initialTalk: initialTalk,
-            isHost: state.uri.queryParameters['host'] == '1' ||
-                initialTalk?.viewerIsHost == true,
-          );
-        },
-      ),
-      GoRoute(
-        path: '/u/:handle',
-        builder: (context, state) => PersonProfileScreen(
-          handle: state.pathParameters['handle']!,
-          onOpenTalk: (talkId) => context.push('/talk/' + Uri.encodeComponent(talkId)),
-          onOpenTwin: (publicId) => context.push('/persona/' + Uri.encodeComponent(publicId)),
-        ),
-      ),
-      GoRoute(
-        path: '/persona/:publicId',
-        builder: (context, state) => PersonaProfileScreen(
-          publicId: state.pathParameters['publicId']!,
-          onOpenTalk: (talkId) => context.push('/talk/' + Uri.encodeComponent(talkId)),
-          onOpenOwner: (handle) => context.push('/u/' + Uri.encodeComponent(handle)),
-        ),
-      ),
+      // Legacy publishing, user-to-user Talks, human profiles and personal
+      // Twins are retired. Preserve inbound URLs without mounting forbidden
+      // workflows or implying that users may create content.
+      GoRoute(path: '/activity',
+        redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/search',
+        redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/talk/create',
+        redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/talk/:id',
+        redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/u/:handle',
+        redirect: (_, __) => '/masana'),
+      GoRoute(path: '/persona/:publicId',
+        redirect: (_, __) => '/masana'),
       GoRoute(
         path: '/wallet',
         builder: (context, _) => WalletScreen(

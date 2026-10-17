@@ -566,7 +566,7 @@ class _TalkParticipantTileState
             : switch (participant.kind) {
                 TalkParticipantKind.human => 'Human · Speaker',
                 TalkParticipantKind.expert => 'Masanawa Expert · AI',
-                TalkParticipantKind.twin => 'Twin · AI',
+                TalkParticipantKind.twin => 'Assistant',
               },
       ),
       trailing: trailing,
