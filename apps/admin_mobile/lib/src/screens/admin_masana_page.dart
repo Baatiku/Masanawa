@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/admin_api.dart';
 import '../core/admin_masana_api.dart';
+import 'admin_masana_forms.dart';
 
 class AdminMasanaPage extends StatefulWidget {
   const AdminMasanaPage({super.key,required this.api});
@@ -20,79 +21,22 @@ class _AdminMasanaPageState extends State<AdminMasanaPage> {
       SnackBar(content:Text(message.toString())));
   }
 
-  Future<void> _edit(AdminMasanaRevision current)async{
-    if(_busy)return;
-    final fields=<String,String>{
-      'displayName':'Display name','handle':'Handle',
-      'profession':'Profession','biography':'Biography',
-      'lifeStory':'Life story','languages':'Languages (comma-separated)',
-      'talents':'Skills / talents (comma-separated)',
-      'goals':'Goals (comma-separated)',
-    };
-    final p=current.profile;
-    final controllers=<String,TextEditingController>{
-      for(final entry in fields.entries)
-        entry.key:TextEditingController(
-          text:entry.key=='languages'||entry.key=='talents'||entry.key=='goals'
-            ?(p[entry.key] as List<dynamic>? ?? const [])
-                .map((x)=>x.toString()).join(', ')
-            :p[entry.key]?.toString()??'',
+  Future<void> _edit(AdminMasanaRevision current) async {
+    if (_busy) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        settings: const RouteSettings(name: '/admin/masana/revision'),
+        builder: (_) => AdminMasanaRevisionForm(
+          current: current,
+          onSave: (profile) async {
+            await _api.draft(current, profile);
+          },
         ),
-    };
-    try{
-      final form=await showDialog<Map<String,String>>(
-        context:context,
-        builder:(dialog)=>AlertDialog(
-          title:Text('New revision · ${p['displayName']??current.characterId}'),
-          content:SizedBox(width:540,child:SingleChildScrollView(
-            child:Column(mainAxisSize:MainAxisSize.min,children:[
-              for(final field in fields.entries)Padding(
-                padding:const EdgeInsets.only(bottom:10),
-                child:TextField(controller:controllers[field.key],
-                  maxLines:field.key=='lifeStory'?5:field.key=='biography'?3:1,
-                  maxLength:field.key=='lifeStory'?8000:
-                    field.key=='biography'?800:field.key=='displayName'?100:
-                    field.key=='profession'?100:field.key=='handle'?40:500,
-                  decoration:InputDecoration(labelText:field.value,
-                    border:const OutlineInputBorder())),
-              ),
-              const Text('Current rights-cleared portrait, banner and Room link '
-                'are preserved unless changed through an authenticated media revision.'),
-            ]),
-          )),
-          actions:[
-            TextButton(onPressed:()=>Navigator.pop(dialog),
-              child:const Text('Cancel')),
-            FilledButton(onPressed:(){
-              final data={for(final item in controllers.entries)
-                item.key:item.value.text.trim()};
-              if(['displayName','handle','profession','biography','lifeStory']
-                  .any((k)=>data[k]!.isEmpty))return;
-              Navigator.pop(dialog,data);
-            },child:const Text('Create draft')),
-          ],
-        ));
-      if(form==null||!mounted)return;
-      final profile=Map<String,dynamic>.from(p);
-      for(final field in fields.keys){
-        final value=form[field]!;
-        if(field=='languages'||field=='talents'||field=='goals'){
-          profile[field]=value.split(',')
-            .map((x)=>x.trim()).where((x)=>x.isNotEmpty).toList();
-        }else{profile[field]=value;}
-      }
-      setState(()=>_busy=true);
-      try{
-        await _api.draft(current,profile);
-        _refresh();
-        _notice('New immutable draft saved. Approve when rights and details are ready.');
-      }catch(e){_notice(e);}
-      finally{if(mounted)setState(()=>_busy=false);}
-    }finally{
-      WidgetsBinding.instance.addPostFrameCallback((_){
-        for(final controller in controllers.values){controller.dispose();}
-      });
-    }
+      ),
+    );
+    if (!mounted || saved != true) return;
+    _refresh();
+    _notice('New immutable draft saved. Approve when rights and details are ready.');
   }
 
   Future<void> _approve(AdminMasanaRevision entry)async{
@@ -119,59 +63,26 @@ class _AdminMasanaPageState extends State<AdminMasanaPage> {
 
   /// Link only an already tenant-owned, rights-cleared media catalogue ID.
   /// No fabricated image URL or arbitrary object-key upload.
-  Future<void> _attach(AdminMasanaRevision entry)async{
-    if(_busy)return;
-    final ref=TextEditingController();
-    final rights=TextEditingController();
-    String kind='portrait';
-    try{
-      final input=await showDialog<Map<String,String>>(context:context,
-        builder:(context)=>StatefulBuilder(builder:(context,setDialogState)=>
-          AlertDialog(
-            title:const Text('Attach existing verified media'),
-            content:SizedBox(width:500,child:Column(
-              mainAxisSize:MainAxisSize.min,children:[
-                const Text('The media must already exist in the private '
-                  'Masana storage catalogue with approved rights.'),
-                DropdownButtonFormField<String>(
-                  initialValue:kind,
-                  items:const[
-                    DropdownMenuItem(value:'portrait',child:Text('Portrait')),
-                    DropdownMenuItem(value:'banner',child:Text('Banner')),
-                  ],
-                  onChanged:(value){if(value!=null)setDialogState(()=>kind=value);},
-                ),
-                TextField(controller:ref,maxLength:150,
-                  decoration:const InputDecoration(labelText:'Verified media ID')),
-                TextField(controller:rights,maxLength:1024,
-                  decoration:const InputDecoration(labelText:'Rights / license reference')),
-              ],
-            )),
-            actions:[
-              TextButton(onPressed:()=>Navigator.pop(context),
-                child:const Text('Cancel')),
-              FilledButton(onPressed:(){
-                if(ref.text.trim().isEmpty||rights.text.trim().length<5)return;
-                Navigator.pop(context,{
-                  'kind':kind,'mediaId':ref.text.trim(),'rightsNote':rights.text.trim(),
-                });
-              },child:const Text('Attach')),
-            ],
-          )));
-      if(input==null||!mounted)return;
-      setState(()=>_busy=true);
-      try{
-        await _api.attachExistingMedia(entry,
-          mediaId:input['mediaId']!,kind:input['kind']!,
-          rightsNote:input['rightsNote']!);
-        _refresh();_notice('Verified media added in a new profile revision.');
-      }catch(e){_notice(e);}
-      finally{if(mounted)setState(()=>_busy=false);}
-    }finally{
-      WidgetsBinding.instance.addPostFrameCallback((_){
-        ref.dispose();rights.dispose();
-      });
-    }
+  Future<void> _attach(AdminMasanaRevision entry) async {
+    if (_busy) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        settings: const RouteSettings(name: '/admin/masana/media'),
+        builder: (_) => AdminMasanaMediaForm(
+          onSave: (kind, mediaId, rightsNote) async {
+            await _api.attachExistingMedia(
+              entry,
+              mediaId: mediaId,
+              kind: kind,
+              rightsNote: rightsNote,
+            );
+          },
+        ),
+      ),
+    );
+    if (!mounted || saved != true) return;
+    _refresh();
+    _notice('Verified media added in a new profile revision.');
   }
 
   @override Widget build(BuildContext context)=>Column(children:[
