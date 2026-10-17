@@ -272,16 +272,28 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
             new Date(row.locked_until).getTime() > Date.parse(input.at)) {
           return "locked" as const;
         }
-        if (row.attempts >= row.max_attempts) return "locked" as const;
+        if (row.attempts >= row.max_attempts) {
+          // Previous code made the five-attempt lock permanent.
+          if (row.locked_until === null ||
+              new Date(row.locked_until).getTime() > Date.parse(input.at)) return "locked" as const;
+          await client.query(
+            `UPDATE security.platform_device_passwords SET attempts=0,locked_until=NULL,updated_at=$3
+               WHERE tenant_id=$1 AND user_id=$2`,
+            [input.tenantId,input.userId,input.at],
+          );
+          row.attempts = 0;
+        }
         if (!sameHash(row.password_hash, input.passwordHash)) {
           await client.query(
             `UPDATE security.platform_device_passwords
                 SET attempts=attempts+1,updated_at=$3,
-                    locked_until=CASE WHEN attempts+1>=max_attempts THEN $4 ELSE NULL END
+                    locked_until=CASE WHEN attempts+1>=max_attempts THEN $4
+                         WHEN attempts+1>=3 THEN $5 ELSE NULL END
               WHERE tenant_id=$1 AND user_id=$2`,
             [
               input.tenantId,input.userId,input.at,
               new Date(Date.parse(input.at) + 15 * 60 * 1000).toISOString(),
+              new Date(Date.parse(input.at) + (row.attempts === 2 ? 10 : 60) * 1000).toISOString(),
             ],
           );
           const attempts = row.attempts + 1;
@@ -364,12 +376,17 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         await client.query(
           `INSERT INTO security.platform_sessions(
              access_hash,refresh_hash,tenant_id,user_id,access_expires_at,
-             refresh_expires_at,revoked_at,created_at,updated_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7)`,
+             refresh_expires_at,revoked_at,created_at,updated_at,device_id
+           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7,$8)`,
           [
             input.accessHash,input.refreshHash,input.identity.tenantId,input.identity.userId,
-            input.accessExpiresAt,input.refreshExpiresAt,input.issuedAt,
+            input.accessExpiresAt,input.refreshExpiresAt,input.issuedAt,input.deviceId ?? null,
           ],
+        );
+        await client.query(
+          `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
+           VALUES($1,$2,'session_created',$3)`,
+          [input.identity.tenantId,input.identity.userId,input.issuedAt],
         );
       });
     },
@@ -430,6 +447,56 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       });
     },
 
+    async listSessions(input) {
+      const result=await pool.query<{
+        session_id:string;device_id:string|null;
+        created_at:Date|string;updated_at:Date|string;current:boolean;
+      }>(
+        `SELECT session_id::text,device_id,created_at,updated_at,(access_hash=$3) AS current
+           FROM security.platform_sessions
+          WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL AND refresh_expires_at>$4
+          ORDER BY created_at DESC LIMIT 100`,
+        [input.tenantId,input.userId,input.accessHash,input.at],
+      );
+      return result.rows.map(row=>Object.freeze({
+        sessionId:row.session_id,deviceId:row.device_id,
+        createdAt:new Date(row.created_at).toISOString(),
+        lastAccessAt:new Date(row.updated_at).toISOString(),current:row.current,
+      }));
+    },
+    async revokeSession(input) {
+      const result=await pool.query(
+        `UPDATE security.platform_sessions SET revoked_at=$4,updated_at=$4
+          WHERE tenant_id=$1 AND user_id=$2 AND session_id=$3::uuid AND revoked_at IS NULL`,
+        [input.tenantId,input.userId,input.sessionId,input.revokedAt],
+      );
+      return (result.rowCount??0)>0;
+    },
+    async revokeAllSessions(input) {
+      const result=await pool.query(
+        `UPDATE security.platform_sessions SET revoked_at=$3,updated_at=$3
+          WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL`,
+        [input.tenantId,input.userId,input.revokedAt],
+      );
+      return result.rowCount??0;
+    },
+    async listAuthEvents(input) {
+      const result=await pool.query<{action:string;at:Date|string}>(
+        `SELECT action,at FROM security.platform_auth_events
+          WHERE tenant_id=$1 AND user_id=$2 ORDER BY at DESC LIMIT $3`,
+        [input.tenantId,input.userId,input.limit],
+      );
+      return result.rows.map(row=>Object.freeze({
+        action:row.action,at:new Date(row.at).toISOString(),
+      }));
+    },
+    async recordAuthEvent(input) {
+      await pool.query(
+        `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
+          VALUES($1,$2,$3,$4)`,
+        [input.tenantId,input.userId,input.action,input.at],
+      );
+    },
     async revokeAccess(input) {
       await pool.query(
         `UPDATE security.platform_sessions
