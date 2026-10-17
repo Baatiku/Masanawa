@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 export { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 import {
@@ -111,6 +112,9 @@ export interface CustomerAuthService {
   confirmEmailLink(input: Readonly<{authorizationHeader:string|undefined;email:string;code:string}>): Promise<Readonly<{email:string}>>;
   requestPasswordRecovery(input: Readonly<{phone:string}>): Promise<Readonly<{resendInSeconds:number}>>;
   completePasswordRecovery(input: Readonly<{phone:string;code:string;password:string}>): Promise<Readonly<{success:true}>>;
+  beginWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined}>): Promise<Readonly<{resendInSeconds:number;delivery:"email"}>>;
+  confirmWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined;code:string}>): Promise<Readonly<{stepUpToken:string;expiresInSeconds:number}>>;
+  consumeWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined;stepUpToken:string|undefined}>): Promise<void>;
 }
 
 export interface AuthUserView {
@@ -242,6 +246,21 @@ export function createCustomerAuthService(input: Readonly<{
     const identity=await input.repository.resolveAccess({accessHash,at:now()});
     if(!identity)throw new CustomerAuthError("UNAUTHORIZED",401);
     return {identity,accessHash};
+  }
+  type Withdrawal = Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}>;
+  function withdrawalFingerprint(request:Withdrawal):string {
+    if(!request.requestId || request.requestId.length>128 ||
+       !request.providerCode || request.providerCode.length>32 ||
+       !request.amount || request.amount.length>80 ||
+       !request.destinationAddress || request.destinationAddress.length>512)
+      throw new CustomerAuthError("VALIDATION_FAILED",400);
+    return createHash("sha256").update(JSON.stringify([
+      "crypto_withdrawal",request.requestId,request.providerCode,
+      request.amount,request.destinationAddress,
+    ])).digest("hex");
+  }
+  function stepUpChallengeKey(userId:string,fingerprint:string):string {
+    return "stepup:"+createHash("sha256").update(userId+":"+fingerprint).digest("hex");
   }
   const otpChannels = Object.freeze([
     ...(input.emailDelivery ? ["email" as const] : []),
@@ -642,6 +661,66 @@ export function createCustomerAuthService(input: Readonly<{
         throw error;
       }
       return {email};
+    },
+
+    async beginWithdrawalStepUp(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      const fingerprint=withdrawalFingerprint(request);
+      const email=identity.profile.email;
+      if(!email || !input.emailDelivery)throw new CustomerAuthError("STEP_UP_EMAIL_REQUIRED",409);
+      const key=stepUpChallengeKey(identity.userId,fingerprint);
+      const code=createOtpCode();
+      const at=now();
+      const codeHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:"email",identifier:key,code});
+      try {
+        await input.repository.putOtpChallenge({tenantId:identity.tenantId,
+          channel:"email",identifier:key,codeHash,createdAt:at,
+          expiresAt:plusSeconds(at,otpTtlSeconds),resendAfter:plusSeconds(at,resendSeconds),maxAttempts:5});
+      } catch(error) {
+        if(error instanceof Error && error.message==="auth.otp.cooldown")
+          throw new CustomerAuthError("OTP_RATE_LIMITED",429);
+        throw error;
+      }
+      try { await input.emailDelivery.send({identifier:email,code}); }
+      catch {
+        await input.repository.cancelOtpChallenge({tenantId:identity.tenantId,
+          channel:"email",identifier:key,codeHash}).catch(()=>undefined);
+        throw new CustomerAuthError("OTP_DELIVERY_UNAVAILABLE",503);
+      }
+      return {delivery:"email" as const,resendInSeconds:resendSeconds};
+    },
+    async confirmWithdrawalStepUp(request) {
+      const {identity,accessHash}=await requireSession(request.authorizationHeader);
+      const fingerprint=withdrawalFingerprint(request);
+      if(!/^\d{6}$/u.test(request.code))throw new CustomerAuthError("OTP_INVALID",400);
+      if(!identity.profile.email || !input.emailDelivery)
+        throw new CustomerAuthError("STEP_UP_EMAIL_REQUIRED",409);
+      const identifier=stepUpChallengeKey(identity.userId,fingerprint);
+      const at=now();
+      const codeHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:"email",identifier,code:request.code});
+      if(!input.repository.issueActionGrant)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const status=await input.repository.consumeOtpChallenge({
+        tenantId:identity.tenantId,channel:"email",identifier,codeHash,consumedAt:at});
+      if(status!=="accepted")throw new CustomerAuthError(status==="locked"?"OTP_LOCKED":
+        status==="expired"?"OTP_EXPIRED":"OTP_INVALID",status==="locked"?429:400);
+      const stepUpToken="stp_"+randomBytes(32).toString("base64url");
+      await input.repository.issueActionGrant({accessHash,
+        grantHash:createHash("sha256").update(stepUpToken).digest("hex"),
+        operation:"crypto_withdrawal",fingerprint,issuedAt:at,expiresAt:plusSeconds(at,300)});
+      return {stepUpToken,expiresInSeconds:300};
+    },
+    async consumeWithdrawalStepUp(request) {
+      const {accessHash}=await requireSession(request.authorizationHeader);
+      const fingerprint=withdrawalFingerprint(request);
+      if(!request.stepUpToken || !/^stp_[A-Za-z0-9_-]{43}$/u.test(request.stepUpToken))
+        throw new CustomerAuthError("STEP_UP_REQUIRED",403);
+      if(!input.repository.consumeActionGrant)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const valid=await input.repository.consumeActionGrant({
+        accessHash,grantHash:createHash("sha256").update(request.stepUpToken).digest("hex"),
+        operation:"crypto_withdrawal",fingerprint,at:now()});
+      if(!valid)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
     },
 
     async sessions(request) {
