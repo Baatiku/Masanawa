@@ -101,6 +101,8 @@ describe("gateway service bootstrap", () => {
       async beginWithdrawalStepUp() { throw new Error("unused"); },
       async confirmWithdrawalStepUp() { throw new Error("unused"); },
       async consumeWithdrawalStepUp() { throw new Error("unused"); },
+      async beginContactChange() { throw new Error("unused"); },
+      async completeContactChange() { throw new Error("unused"); },
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);

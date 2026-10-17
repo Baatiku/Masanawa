@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../state/session_state.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'verify_account_email_screen.dart';
+import 'change_account_contact_screen.dart';
 
 /// Server-authorized security controls. No locally invented devices or events.
 class AccountSecurityScreen extends ConsumerStatefulWidget {
@@ -148,6 +149,26 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                 MaterialPageRoute<void>(
                   builder:(_)=>const VerifyAccountEmailScreen(),
                 ),
+              ),
+            ),
+            ListTile(
+              key:const Key('security-change-email'),
+              leading:const Icon(Icons.mark_email_read_outlined),
+              title:const Text('Change linked email'),
+              subtitle:const Text('Verify the old and new inboxes'),
+              trailing:const Icon(Icons.chevron_right),
+              onTap:()=>Navigator.of(context).push(
+                MaterialPageRoute<void>(builder:(_)=>const ChangeAccountContactScreen(channel:'email')),
+              ),
+            ),
+            ListTile(
+              key:const Key('security-change-phone'),
+              leading:const Icon(Icons.phonelink_setup_outlined),
+              title:const Text('Change phone number'),
+              subtitle:const Text('Verify both numbers by SMS'),
+              trailing:const Icon(Icons.chevron_right),
+              onTap:()=>Navigator.of(context).push(
+                MaterialPageRoute<void>(builder:(_)=>const ChangeAccountContactScreen(channel:'sms')),
               ),
             ),
             const SizedBox(height:22),

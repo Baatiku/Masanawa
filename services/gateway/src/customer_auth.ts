@@ -53,6 +53,7 @@ export class CustomerAuthError extends Error {
 export interface OtpDelivery {
   send(input: Readonly<{ identifier: string; code: string }>): Promise<void>;
   sendWelcome?(input: Readonly<{identifier:string;name:string;username?:string;userId:string}>): Promise<void>;
+  sendSecurityAlert?(input: Readonly<{identifier:string;at:string}>): Promise<void>;
 }
 
 export interface PlatformCustomerSessionAuthorizer {
@@ -115,6 +116,8 @@ export interface CustomerAuthService {
   beginWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined}>): Promise<Readonly<{resendInSeconds:number;delivery:"email"}>>;
   confirmWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined;code:string}>): Promise<Readonly<{stepUpToken:string;expiresInSeconds:number}>>;
   consumeWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined;stepUpToken:string|undefined}>): Promise<void>;
+  beginContactChange(input: Readonly<{authorizationHeader:string|undefined;channel:PlatformAuthChannel;nextIdentifier:string}>): Promise<Readonly<{resendInSeconds:number}>>;
+  completeContactChange(input: Readonly<{authorizationHeader:string|undefined;channel:PlatformAuthChannel;nextIdentifier:string;oldCode:string;newCode:string}>): Promise<Readonly<{success:true}>>;
 }
 
 export interface AuthUserView {
@@ -261,6 +264,10 @@ export function createCustomerAuthService(input: Readonly<{
   }
   function stepUpChallengeKey(userId:string,fingerprint:string):string {
     return "stepup:"+createHash("sha256").update(userId+":"+fingerprint).digest("hex");
+  }
+  function changeKeys(userId:string,channel:PlatformAuthChannel,oldValue:string,newValue:string) {
+    const fingerprint=createHash("sha256").update(JSON.stringify([userId,channel,oldValue,newValue])).digest("hex");
+    return {oldKey:"contact-old:"+fingerprint,newKey:"contact-new:"+fingerprint};
   }
   const otpChannels = Object.freeze([
     ...(input.emailDelivery ? ["email" as const] : []),
@@ -459,23 +466,41 @@ export function createCustomerAuthService(input: Readonly<{
         at,
       });
       if (result === "missing") throw new CustomerAuthError("PASSWORD_NOT_SET", 409);
-      if (result === "locked") throw new CustomerAuthError("PASSWORD_LOCKED", 429);
+      if (result === "locked") {
+        await input.repository.recordAuthEvent?.({
+          tenantId:input.tenantId,userId:profile.userId,action:"password_locked",at,
+        });
+        throw new CustomerAuthError("PASSWORD_LOCKED", 429);
+      }
       if (result !== "accepted") {
         await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_failed",at});
         throw new CustomerAuthError("PASSWORD_INVALID",400);
       }
       await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_accepted",at});
+      const known=await input.repository.isDeviceKnown({
+        tenantId:input.tenantId,userId:profile.userId,deviceId,
+      });
       await input.repository.registerDevice({
         tenantId: input.tenantId,
         userId: profile.userId,
         deviceId,
         at,
       });
-      return issueTokens(
+      const tokens=await issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         false,
         deviceId,
       );
+      if(!known) {
+        await input.repository.recordAuthEvent?.({
+          tenantId:input.tenantId,userId:profile.userId,action:"new_device_signin",at,
+        }).catch(()=>undefined);
+        if(profile.email) {
+          await input.emailDelivery?.sendSecurityAlert?.({identifier:profile.email,at})
+            .catch(()=>undefined);
+        }
+      }
+      return tokens;
     },
 
     async passwordSetup(request) {
@@ -723,6 +748,108 @@ export function createCustomerAuthService(input: Readonly<{
       if(!valid)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
     },
 
+    async beginContactChange(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(request.channel!=="email" && request.channel!=="sms")
+        throw new CustomerAuthError("VALIDATION_FAILED",400);
+      let destination:string;
+      try {
+        const id=normalizePlatformAuthIdentifier(request.channel==="email"?
+          {email:request.nextIdentifier}:{phone:request.nextIdentifier});
+        destination=id.identifier;
+      }catch{throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      const current=request.channel==="email"?identity.profile.email:identity.profile.phone;
+      const sender=request.channel==="email"?input.emailDelivery:input.smsDelivery;
+      if(!current)throw new CustomerAuthError("CONTACT_NOT_LINKED",409);
+      if(!sender)throw new CustomerAuthError("OTP_CHANNEL_UNAVAILABLE",503);
+      if(current===destination)throw new CustomerAuthError("CONTACT_UNCHANGED",409);
+      const existing=await input.repository.resolveProfile({
+        tenantId:identity.tenantId,channel:request.channel,identifier:destination,observedAt:now(),
+      });
+      if(existing)throw new CustomerAuthError("CONTACT_ALREADY_USED",409);
+      const keys=changeKeys(identity.userId,request.channel,current,destination);
+      const at=now(),oldCode=createOtpCode(),newCode=createOtpCode();
+      const oldHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:request.channel,identifier:keys.oldKey,code:oldCode});
+      const newHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:request.channel,identifier:keys.newKey,code:newCode});
+      const common={tenantId:identity.tenantId,channel:request.channel,
+        createdAt:at,expiresAt:plusSeconds(at,600),
+        resendAfter:plusSeconds(at,60),maxAttempts:5};
+      try{
+        await input.repository.putOtpChallenge({...common,identifier:keys.oldKey,codeHash:oldHash});
+        await input.repository.putOtpChallenge({...common,identifier:keys.newKey,codeHash:newHash});
+      }catch(error){
+        if(error instanceof Error && error.message==="auth.otp.cooldown")
+          throw new CustomerAuthError("OTP_RATE_LIMITED",429);
+        throw error;
+      }
+      try{
+        await sender.send({identifier:current,code:oldCode});
+        await sender.send({identifier:destination,code:newCode});
+      }catch{
+        await Promise.all([
+          input.repository.cancelOtpChallenge({tenantId:identity.tenantId,
+            channel:request.channel,identifier:keys.oldKey,codeHash:oldHash}),
+          input.repository.cancelOtpChallenge({tenantId:identity.tenantId,
+            channel:request.channel,identifier:keys.newKey,codeHash:newHash}),
+        ].map(p=>p.catch(()=>undefined)));
+        throw new CustomerAuthError("OTP_DELIVERY_UNAVAILABLE",503);
+      }
+      return {resendInSeconds:60};
+    },
+    async completeContactChange(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(request.channel!=="email" && request.channel!=="sms")
+        throw new CustomerAuthError("VALIDATION_FAILED",400);
+      let destination:string;
+      try{
+        destination=normalizePlatformAuthIdentifier(request.channel==="email"?
+          {email:request.nextIdentifier}:{phone:request.nextIdentifier}).identifier;
+      }catch{throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      if(!/^\d{6}$/u.test(request.oldCode) || !/^\d{6}$/u.test(request.newCode))
+        throw new CustomerAuthError("OTP_INVALID",400);
+      const current=request.channel==="email"?identity.profile.email:identity.profile.phone;
+      if(!current || current===destination)throw new CustomerAuthError("CONTACT_UNCHANGED",409);
+      const keys=changeKeys(identity.userId,request.channel,current,destination);
+      const at=now();
+      const oldHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:request.channel,identifier:keys.oldKey,code:request.oldCode});
+      const newHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:request.channel,identifier:keys.newKey,code:request.newCode});
+      for(const [key,hash] of [[keys.oldKey,oldHash],[keys.newKey,newHash]] as const){
+        const result=await input.repository.consumeOtpChallenge({
+          tenantId:identity.tenantId,channel:request.channel,identifier:key,
+          codeHash:hash,consumedAt:at,consume:false,
+        });
+        if(result!=="accepted")throw new CustomerAuthError(
+          result==="locked"?"OTP_LOCKED":result==="expired"?"OTP_EXPIRED":"OTP_INVALID",
+          result==="locked"?429:400,
+        );
+      }
+      if(!input.repository.replaceIdentity)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      for(const [key,hash] of [[keys.oldKey,oldHash],[keys.newKey,newHash]] as const){
+        const result=await input.repository.consumeOtpChallenge({
+          tenantId:identity.tenantId,channel:request.channel,identifier:key,
+          codeHash:hash,consumedAt:at,
+        });
+        if(result!=="accepted")throw new CustomerAuthError("OTP_INVALID",400);
+      }
+      try{
+        await input.repository.replaceIdentity({
+          tenantId:identity.tenantId,userId:identity.userId,channel:request.channel,
+          previousIdentifier:current,nextIdentifier:destination,at,
+        });
+      }catch(error){
+        if(error instanceof Error && error.message==="auth.identity_taken")
+          throw new CustomerAuthError("CONTACT_ALREADY_USED",409);
+        if(error instanceof Error && error.message==="auth.contact_changed_since_verification")
+          throw new CustomerAuthError("CONTACT_CHANGED_RETRY",409);
+        throw error;
+      }
+      return {success:true as const};
+    },
+
     async sessions(request) {
       const {identity,accessHash}=await requireSession(request.authorizationHeader);
       if(!input.repository.listSessions)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
@@ -845,6 +972,18 @@ export function createResendOtpDelivery(input: Readonly<{
         }),
       });
       if (!response.ok) throw new Error("auth.resend_delivery_failed");
+    },
+    async sendSecurityAlert(request: Readonly<{identifier:string;at:string}>) {
+      const response=await fetchImpl("https://api.resend.com/emails",{
+        method:"POST",signal:AbortSignal.timeout(8000),
+        headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},
+        body:JSON.stringify({
+          from,to:[request.identifier],subject:"Masanawa security notice",
+          text:`A sign-in to your Masanawa account used a new device at ${request.at}. If this was not you, open Account Security and sign out of all devices.`,
+          tags:[{name:"category",value:"account_security"}],
+        }),
+      });
+      if(!response.ok)throw new Error("auth.security_notice_failed");
     },
     async sendWelcome(request: Readonly<{identifier:string;name:string;username?:string;userId:string}>) {
       const message=renderMasanawaWelcomeEmail(request,input.publicBaseUrl);

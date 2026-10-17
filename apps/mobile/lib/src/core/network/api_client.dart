@@ -374,6 +374,25 @@ class ApiClient {
         if(to!=null)'to':to,
       });
 
+  Future<void> startContactChange({
+    required String channel,required String nextIdentifier,
+  }) async {
+    await _post('/v1/auth/security/contacts/change/start',{
+      'channel':channel,'nextIdentifier':nextIdentifier,
+    });
+  }
+
+  Future<void> confirmContactChange({
+    required String channel,required String nextIdentifier,
+    required String oldCode,required String newCode,
+  }) async {
+    final response=await _post('/v1/auth/security/contacts/change/confirm',{
+      'channel':channel,'nextIdentifier':nextIdentifier,
+      'oldCode':oldCode,'newCode':newCode,
+    });
+    if(response['success']!=true)throw const ApiException('Could not update contact.');
+  }
+
   // ---- Account security: authenticated, server-owned sessions ----
 
   Future<List<Map<String, dynamic>>> securitySessions() async {
