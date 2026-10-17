@@ -53,7 +53,9 @@ class CallsScreen extends ConsumerWidget {
       ),
       body: session is SessionSignedIn
           ? _CallHistoryList(
-              key: ObjectKey(session.tokens),
+              // Token refresh must not reset call search and scroll state.
+              // An account switch still remounts the private history widget.
+              key: ValueKey<String>('calls-account-${session.user.id}'),
               accountId: session.user.id,
               sessionIdentity: session.tokens,
             )
@@ -227,6 +229,23 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     _request?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CallHistoryList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.sessionIdentity, widget.sessionIdentity)) {
+      // Keep this account's input and position, but fence results returned
+      // from requests made with the previous credential.
+      _generation++;
+      _debounce?.cancel();
+      _request?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _sameAccount) {
+          unawaited(_load(refresh: true));
+        }
+      });
+    }
   }
 
   void _searchChanged(String value) {

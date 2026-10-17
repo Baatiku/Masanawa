@@ -89,14 +89,6 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
           ),
         ),
       ),
-      floatingActionButton: switch (_index) {
-        0 => FloatingActionButton(
-          tooltip: 'New chat',
-          onPressed: () => context.push('/masana'),
-          child: const Icon(Icons.chat_rounded),
-        ),
-        _ => null,
-      },
       bottomNavigationBar: DecoratedBox(
         position: DecorationPosition.foreground,
         decoration: BoxDecoration(
