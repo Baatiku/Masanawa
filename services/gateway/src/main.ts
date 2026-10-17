@@ -15,6 +15,7 @@ import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modul
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
+import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
 import type { StatusRuntime } from "./modules/home_feed/runtime.js";
 import { VideoAdmissionError } from "./modules/external_videos/service.js";
 import { createIncomingCallService, type IncomingRepository, type IncomingCallService } from "./incoming_calls/service.js";
@@ -2660,6 +2661,7 @@ export async function startGatewayService(
         },
       },
       store:createMasanaPostgresStore(featurePool),
+      qualityFeedback:createMasanaQualityFeedbackPort(featurePool),
       validateProfile:validateMasanaProfile,
       ...createApprovedMasanaMediaPort(featurePool,mediaConfiguration),
     } : undefined);

@@ -1,3 +1,4 @@
+import {MASANA_QUALITY_REASONS, type MasanaQualityFeedbackPort, type MasanaQualityReason} from "./quality_feedback.js";
 import type { FastifyInstance } from "fastify";
 
 export interface MasanaActor {
@@ -35,7 +36,7 @@ function asText(v:unknown,max:number):string {
   return v.trim();
 }
 /** Inject existing authenticated tenant/role authority; registering these routes without it is impossible. */
-export function registerMasanaRoutes(app:FastifyInstance, deps:{auth:MasanaAuth;store:MasanaStore;validateProfile:(value:unknown)=>unknown; verifyMedia:(input:{tenantId:string;mediaId:string;kind:"portrait"|"banner";staffId:string})=>Promise<{objectKey:string}>; publicMediaUrl:(input:{tenantId:string;characterId:string;mediaId:string;kind:"portrait"|"banner"})=>Promise<string|null>}):void {
+export function registerMasanaRoutes(app:FastifyInstance, deps:{auth:MasanaAuth;store:MasanaStore;validateProfile:(value:unknown)=>unknown; verifyMedia:(input:{tenantId:string;mediaId:string;kind:"portrait"|"banner";staffId:string})=>Promise<{objectKey:string}>; publicMediaUrl:(input:{tenantId:string;characterId:string;mediaId:string;kind:"portrait"|"banner"})=>Promise<string|null>;qualityFeedback?:MasanaQualityFeedbackPort}):void {
   app.get("/v1/masana",async (request,reply)=>{
     const actor=await deps.auth.optional(request.headers.authorization);
     const query=params(request.query);
@@ -69,6 +70,26 @@ export function registerMasanaRoutes(app:FastifyInstance, deps:{auth:MasanaAuth;
       const id=characterId(params(request.params).id);
       const following=await deps.store.follow({tenantId:actor.tenantId,userId:actor.userId,characterId:id,active});
       return reply.code(200).send({characterId:id,following});
+    });
+  }
+  if(deps.qualityFeedback){
+    app.post("/v1/masana/:id/quality-feedback",async(request,reply)=>{
+      const actor=await deps.auth.fan(request.headers.authorization);
+      const id=characterId(params(request.params).id);
+      const body=params(request.body);
+      if(Object.keys(body).length!==1 ||
+         typeof body.reason!=="string" ||
+         !MASANA_QUALITY_REASONS.includes(body.reason as MasanaQualityReason))
+        return reply.code(422).send({code:"invalid_quality_reason"});
+      return deps.qualityFeedback!.submit({
+        tenantId:actor.tenantId,fanId:actor.userId,characterId:id,
+        reason:body.reason as MasanaQualityReason,
+      });
+    });
+    app.get("/v1/admin/masana/:id/quality-summary",async request=>{
+      const actor=await deps.auth.staff(request.headers.authorization,"content_editor");
+      const id=characterId(params(request.params).id);
+      return deps.qualityFeedback!.summary({tenantId:actor.tenantId,characterId:id});
     });
   }
   app.get("/v1/admin/masana",async request=>{
