@@ -59,8 +59,9 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="masanawa"/>
             </intent-filter>
-            <!-- Canonical public Twin share URLs. App-link verification becomes
-                 automatic once masanawa.com serves the release signing assetlinks. -->
+            <!-- Retain older shared profile and Talk URLs so the router can
+                 redirect them to current Masana/Status destinations.
+                 Verified app links still require release-signing assetlinks. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>

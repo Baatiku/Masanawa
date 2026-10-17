@@ -33,11 +33,18 @@ void main() {
     );
   });
 
-  test('owner request notification opens the Activity tab', () {
+  test('retired activity notifications use the active Status tab', () {
     expect(
       shellDeepLinkRoute(Uri.parse('masanawa://activity')),
-      '/home?tab=activity',
+      '/home?tab=status',
     );
+  });
+
+  test('modern Status and Masana links resolve and reject injected paths', () {
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://status')), '/home?tab=status');
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://masana')), '/masana');
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://status/?admin=1')), isNull);
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://masana/untrusted')), isNull);
   });
 
   test('retired owner-session links no longer resolve', () {
