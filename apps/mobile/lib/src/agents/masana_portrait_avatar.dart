@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'agent_directory.dart';
 
-/// Curated offline portraits, keyed by the server display label.
+/// Curated offline portraits. Server-approved identity keys take priority over labels.
 const _names = [
   "Mallam Gwani",
   "Malamah Gwana",
@@ -85,6 +85,21 @@ int _findNameIndex(String displayName) {
   return -1;
 }
 
+/// Never derive the bundled portrait of a server identity from its display name.
+/// A missing or unknown approved key deliberately yields no bundled image.
+String? portraitPhotoAssetForKey(String? key) {
+  final index = key == null ? -1 : _portraitKeys.indexOf(key);
+  return index < 0 ? null : 'assets/masana/portraits/${_portraitKeys[index]}.webp';
+}
+String? portraitAssetForKey(String? key) {
+  final index = key == null ? -1 : _portraitKeys.indexOf(key);
+  return index < 0 ? null : 'assets/masana/avatars/portrait_${index.toString().padLeft(2, '0')}.svg';
+}
+String? bannerAssetForKey(String? key) {
+  final index = key == null ? -1 : _portraitKeys.indexOf(key);
+  return index < 0 ? null : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
+}
+
 String? portraitPhotoAssetFor(String displayName) {
   final index = _findNameIndex(displayName);
   if (index >= 0 && index < _portraitKeys.length) {
@@ -120,8 +135,14 @@ class MasanaPortraitAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = (displayName ?? agent?.displayName ?? '').trim();
-    final photoAsset = portraitPhotoAssetFor(name);
-    final svgAsset = portraitAssetFor(name);
+    // Agent objects have server-owned canonical IDs and must never use fuzzy
+    // display-name matching, even when the stock portrait is unavailable.
+    final photoAsset = agent == null
+        ? portraitPhotoAssetFor(name)
+        : portraitPhotoAssetForKey(agent!.portraitKey);
+    final svgAsset = agent == null
+        ? portraitAssetFor(name)
+        : portraitAssetForKey(agent!.portraitKey);
     final url = avatarUrl ?? agent?.avatarUrl;
     final initial = agent?.initial ?? (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 
