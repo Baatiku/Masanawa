@@ -3,3 +3,7 @@
 ALTER TABLE security.platform_sessions
   ADD COLUMN IF NOT EXISTS client_label text
     CHECK (client_label IS NULL OR length(client_label) BETWEEN 3 AND 64);
+
+ALTER TABLE security.platform_auth_events
+  ADD COLUMN IF NOT EXISTS client_label text
+    CHECK (client_label IS NULL OR length(client_label) BETWEEN 3 AND 64);
