@@ -28,8 +28,13 @@ export interface P2pRoutesDependencies {
 function respond(error: unknown, reply: { code(n: number): any }) {
   if (error instanceof P2pError)
     return reply.code(error.status).send({ error: error.code });
-  if (error instanceof Error && "statusCode" in error && error.statusCode === 401)
-    return reply.code(401).send({ error: "p2p.authentication_required" });
+  if (error instanceof Error && "statusCode" in error) {
+    const status=(error as {statusCode?:unknown}).statusCode;
+    if(status===401)return reply.code(401).send({error:"p2p.authentication_required"});
+    if(status===403)return reply.code(403).send({error:"p2p.step_up_required"});
+    if(status===409)return reply.code(409).send({error:"p2p.verified_email_required"});
+    if(status===429)return reply.code(429).send({error:"p2p.verification_rate_limited"});
+  }
   return reply.code(503).send({ error: "p2p.unavailable" });
 }
 export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependencies): void {
