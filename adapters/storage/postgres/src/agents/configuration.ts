@@ -43,6 +43,8 @@ interface PresentationRow {
   role_label: string;
   about: string;
   greeting: string | null;
+  country_code: string | null;
+  country_name: string | null;
   visible_in_user_app: boolean;
   sort_order: number;
   revision: string;
@@ -83,6 +85,7 @@ function presentationFromRow(row: PresentationRow): AgentPresentation {
     roleLabel: row.role_label,
     about: row.about,
     greeting: row.greeting,
+    ...(row.country_code?{countryCode:row.country_code,countryName:row.country_name}:{}),
     visibleInUserApp: row.visible_in_user_app,
     sortOrder: row.sort_order,
     revision: Number(row.revision),
@@ -205,6 +208,7 @@ export function createPostgresAgentPresentationRepository(
           presentation.greeting,
           presentation.visibleInUserApp,
           presentation.sortOrder,
+          presentation.countryCode ?? null, presentation.countryName ?? null,
         ];
 
         const result =
@@ -212,9 +216,9 @@ export function createPostgresAgentPresentationRepository(
             ? await client.query<PresentationRow>(
                 `INSERT INTO agents.agent_presentations(
                    tenant_id, character_id, character_version_id, display_name,
-                   role_label, about, greeting, visible_in_user_app, sort_order, revision
+                   role_label, about, greeting, visible_in_user_app, sort_order, country_code, country_name, revision
                  )
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1)
                  ON CONFLICT DO NOTHING
                  RETURNING *`,
                 values,
@@ -228,12 +232,14 @@ export function createPostgresAgentPresentationRepository(
                         greeting = $7,
                         visible_in_user_app = $8,
                         sort_order = $9,
+                        country_code = CASE WHEN $13 THEN $10 ELSE country_code END,
+                        country_name = CASE WHEN $13 THEN $11 ELSE country_name END,
                         revision = revision + 1
                   WHERE tenant_id = $1
                     AND character_id = $2
-                    AND revision = $10
+                    AND revision = $12
                   RETURNING *`,
-                [...values, input.expectedRevision],
+                [...values, input.expectedRevision, presentation.countryCode !== undefined],
               );
 
         if (!result.rows[0]) {
@@ -449,3 +455,4 @@ export function createPostgresUserAgentPreferenceRepository(
     },
   });
 }
+

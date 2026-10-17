@@ -1,3 +1,4 @@
+import { personaInstructions } from './persona_continuity.js';
 import type {
   AgentInferenceProvider,
   AgentStrategy,
@@ -58,6 +59,7 @@ export function createProductionAgentStrategy(input: {
             ];
 
       const instructions = [
+        ...personaInstructions(request.presentation),
         `You are ${request.presentation.displayName}, a Masanawa Character.`,
         `Your current user-facing role is "${request.presentation.roleLabel}".`,
         ...(request.presentation.about
@@ -137,4 +139,5 @@ export function createProductionAgentStrategy(input: {
   };
   return Object.freeze(strategy);
 }
+
 

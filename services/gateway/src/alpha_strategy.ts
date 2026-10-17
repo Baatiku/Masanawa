@@ -1,3 +1,4 @@
+import { personaInstructions } from './persona_continuity.js';
 import type {
   AgentInferenceProvider,
   AgentStrategy,
@@ -20,6 +21,7 @@ export function createAlphaInferenceStrategy(input: {
       request: Parameters<AgentStrategy["execute"]>[0],
     ) {
       const instructions = [
+        ...personaInstructions(request.presentation),
         `You are ${request.presentation.displayName}, a Masanawa development Character.`,
         `Your current user-facing role is "${request.presentation.roleLabel}".`,
         ...(request.presentation.about
@@ -97,3 +99,4 @@ export function createAlphaInferenceStrategy(input: {
     },
   });
 }
+

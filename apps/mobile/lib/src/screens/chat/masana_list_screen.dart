@@ -143,7 +143,8 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
       if (_query.isEmpty) return true;
       return agent.displayName.toLowerCase().contains(_query) ||
           agent.roleLabel.toLowerCase().contains(_query) ||
-          agent.about.toLowerCase().contains(_query);
+          agent.about.toLowerCase().contains(_query) ||
+          agent.countrySearchText.contains(_query);
     }).toList(growable: false);
 
     return Column(
@@ -230,14 +231,10 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                       style: TextStyle(color: u.textMuted, fontSize: 14),
                     ),
                   ),
-                  trailing: agent.roomId == null
-                      ? Icon(Icons.chat_bubble_outline, color: u.brand)
-                      : IconButton(
-                          tooltip: 'Open ${agent.displayName} Room',
-                          icon: const Icon(Icons.school_outlined),
-                          color: u.brand,
-                          onPressed: () => context.push('/rooms/${Uri.encodeComponent(agent.roomId!)}'),
-                        ),
+                  trailing: Tooltip(message:agent.countryName??'Country not specified',
+                    child:Semantics(label:agent.countryName??'Country not specified',
+                      child:agent.countryFlag==null?Icon(Icons.public_outlined,color:u.textMuted):
+                        Text(agent.countryFlag!,style:const TextStyle(fontSize:25)))),
                   onTap: () {
                     ref
                         .read(aiChatProvider.notifier)
@@ -293,3 +290,4 @@ class _MasanaAvatar extends StatelessWidget {
     );
   }
 }
+

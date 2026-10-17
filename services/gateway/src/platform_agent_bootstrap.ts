@@ -14,6 +14,7 @@ import type {SkillDistributionRepository} from "@masanawa/skills";
  * NOT human degrees, registration, or a licensed doctor/lawyer. */
 export interface ProfessionalMasanaSeed {
  readonly key:string;readonly displayName:string;readonly roleLabel:string;
+ readonly countryCode:string;readonly countryName:string;
  readonly roomName:string;readonly expertise:readonly string[];
  readonly languages:readonly string[];readonly voiceName:string;
  readonly supportAgent:boolean;readonly illustrationIndex:number;
@@ -28,6 +29,8 @@ export const PROFESSIONAL_MASANA_CATALOG:readonly ProfessionalMasanaSeed[] =
    if(!voiceName)throw new Error(`Missing approved voice for Masana ${key}`);
    return Object.freeze({
      key,displayName,roleLabel,roomName,
+     countryCode:key==="asha"?"IN":key==="mei"?"CN":"NG",
+     countryName:key==="asha"?"India":key==="mei"?"China":"Nigeria",
      expertise:Object.freeze(expertise.split(", ")),
      languages:Object.freeze(languages.split(",")),
      voiceName,supportAgent:kind==="support",
@@ -104,6 +107,7 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
          displayName:seed.displayName,roleLabel:seed.roleLabel,
          about:"AI "+seed.roleLabel+" educator. "+seed.expertise.join("; ")+
            ". Fictional persona, not a licensed human practitioner.",
+         countryCode:seed.countryCode,countryName:seed.countryName,
          greeting:"Hello! I'm "+seed.displayName+", your Masanawa AI tutor. "+
            "What would you like to learn or discuss?",
          visibleInUserApp:true,sortOrder:seed.illustrationIndex,revision:1,
@@ -121,6 +125,14 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
          roleLabel:"Masanawa General Support",
          about:"Fictional AI support agent for Masanawa accounts and general help."},
      });
+     all[at]=presentation;changed=true;
+   }
+   // Explicit affiliation for the fictional stock catalog. Never replace an
+   // administrator's existing country or backfill an unrelated custom name.
+   if(presentation.countryCode==null && presentation.displayName===seed.displayName) {
+     const at=all.indexOf(presentation);
+     presentation=await input.presentations.put({expectedRevision:presentation.revision,
+       presentation:{...presentation,countryCode:seed.countryCode,countryName:seed.countryName}});
      all[at]=presentation;changed=true;
    }
    const assignment=await input.skillAssignments.readForCharacter({
@@ -161,4 +173,5 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
    catalog:Object.freeze(catalog),
  });
 }
+
 

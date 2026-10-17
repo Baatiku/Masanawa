@@ -133,7 +133,9 @@ class AgentLiveVoiceGrant {
     required this.voiceName,
     required this.expiresAt,
     this.callId,
+    this.systemInstruction,
   });
+  final String? systemInstruction;
   final String? callId;
   final String token;
   final String websocketUrl;
@@ -208,3 +210,4 @@ class TransportShellActionDispatcher implements ShellActionDispatcher {
         action: action,
       );
 }
+

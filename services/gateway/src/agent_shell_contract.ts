@@ -119,6 +119,8 @@ export interface LiveVoiceTokenService {
     readonly websocketUrl: string;
     readonly model: string;
     readonly voiceName: string;
+    readonly systemInstruction?: string;
     readonly expiresAt: string;
   }>;
 }
+

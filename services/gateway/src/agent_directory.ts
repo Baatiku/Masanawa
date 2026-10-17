@@ -35,6 +35,8 @@ export interface MobileAgentDirectoryEntry {
   readonly voiceProvider: string | null;
   readonly voiceName: string | null;
   readonly roomId?: string;
+  readonly countryCode?: string | null;
+  readonly countryName?: string | null;
 }
 
 export interface AgentRoomDirectoryReader {
@@ -142,6 +144,7 @@ export function createAgentDirectoryService(input: {
             roleLabel: presentation.roleLabel,
             about: presentation.about,
             greeting: presentation.greeting,
+            countryCode:presentation.countryCode??null,countryName:presentation.countryName??null,
             presence: currentActivity?.presence ?? ("unknown" as const),
             activeWorkCount: currentActivity?.activeWorkCount ?? 0,
             supportAgent: profile?.supportAgent ?? false,
@@ -198,3 +201,4 @@ export function createAgentDirectoryService(input: {
     },
   });
 }
+

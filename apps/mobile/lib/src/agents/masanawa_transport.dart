@@ -968,6 +968,10 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     final websocketUrl = data['websocketUrl'];
     final model = data['model'];
     final voiceName = data['voiceName'];
+    final systemInstruction=data['systemInstruction'];
+    if(systemInstruction!=null && (systemInstruction is! String || systemInstruction.length>32000)) {
+      throw const ApiException('Invalid live voice context');
+    }
     if (token is! String ||
         websocketUrl is! String ||
         model is! String ||
@@ -982,6 +986,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
       voiceName: voiceName,
       expiresAt: expiresAt,
       callId: data['callId'] is String ? data['callId'] as String : null,
+      systemInstruction:systemInstruction as String?,
     );
   }
 
@@ -1036,4 +1041,5 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     }
   }
 }
+
 

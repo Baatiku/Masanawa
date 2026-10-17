@@ -49,6 +49,8 @@ class AgentDirectoryEntry {
     this.voiceProvider,
     this.voiceName,
     this.roomId,
+    this.countryCode,
+    this.countryName,
   });
 
   final String characterId;
@@ -67,6 +69,15 @@ class AgentDirectoryEntry {
   final String? voiceProvider;
   final String? voiceName;
   final String? roomId;
+  final String? countryCode, countryName;
+
+  String get countrySearchText => [countryName ?? '', countryCode ?? '',
+    switch(countryCode){'NG'=>'Nigeria Najeriya Nijeriya','IN'=>'India Indiya Bharat','CN'=>'China Sin Zhongguo',_=>''}].join(' ').toLowerCase();
+  String? get countryFlag {
+    final code=countryCode;
+    if(code==null||!RegExp(r'^[A-Z]{2}$').hasMatch(code)||countryName==null)return null;
+    return String.fromCharCodes(code.codeUnits.map((unit)=>0x1F1E6+unit-65));
+  }
 
   /// Saved roster metadata is useful before refresh, but saved presence is
   /// historical. Never present it as a current runtime/voice availability check.
@@ -85,6 +96,7 @@ class AgentDirectoryEntry {
         voiceProvider: voiceProvider,
         voiceName: voiceName,
         roomId: roomId,
+        countryCode:countryCode,countryName:countryName,
       );
 
   String get initial =>
@@ -119,6 +131,8 @@ class AgentDirectoryEntry {
         if (voiceProvider != null) 'voiceProvider': voiceProvider,
         if (voiceName != null) 'voiceName': voiceName,
         if (roomId != null) 'roomId': roomId,
+        if(countryCode!=null) 'countryCode':countryCode,
+        if(countryName!=null) 'countryName':countryName,
       };
 
   factory AgentDirectoryEntry.fromJson(Map<String, dynamic> json) {
@@ -147,6 +161,8 @@ class AgentDirectoryEntry {
       defaultPlatformAgent: json['defaultPlatformAgent'] == true,
       voiceProvider: (json['voiceProvider'] as String?)?.trim(),
       voiceName: (json['voiceName'] as String?)?.trim(),
+      countryCode:json['countryCode'] is String && RegExp(r'^[A-Z]{2}$').hasMatch(json['countryCode'] as String)?json['countryCode'] as String:null,
+      countryName:json['countryName'] is String && (json['countryName'] as String).trim().isNotEmpty?(json['countryName'] as String).trim():null,
       roomId: (json['roomId'] is String && (json['roomId'] as String).trim().isNotEmpty)
           ? (json['roomId'] as String).trim() : null,
     );
@@ -175,3 +191,4 @@ class EmptyAgentDirectoryTransport implements AgentDirectoryTransport {
 class UnavailableAgentDirectoryTransport extends EmptyAgentDirectoryTransport {
   const UnavailableAgentDirectoryTransport();
 }
+
