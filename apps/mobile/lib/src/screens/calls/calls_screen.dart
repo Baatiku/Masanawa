@@ -19,6 +19,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
 import '../../ui/components/conversation_search_field.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
 
 class CallsScreen extends ConsumerWidget {
@@ -308,6 +309,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     return RefreshIndicator(
       onRefresh: () => _load(refresh: true),
       child: ListView(
+        key: PageStorageKey<String>('calls-history-${widget.accountId}'),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           ConversationSearchField(
@@ -321,7 +323,14 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
               padding: EdgeInsets.all(16),
               child: Text('Search must be 80 characters or fewer.'),
             ),
-          if (_loading) const LinearProgressIndicator(),
+          if (_loading && (_calls.isNotEmpty || _query.isNotEmpty))
+            const LinearProgressIndicator(minHeight: 2),
+          if (_loading && _calls.isEmpty && _query.isEmpty)
+            const MasanawaListSkeleton(
+              shrinkWrap: true,
+              itemCount: 5,
+              semanticLabel: 'Loading call history',
+            ),
           if (!_loading && !_failed && !_invalidQuery && _calls.isEmpty)
             Padding(
               padding: const EdgeInsets.all(32),
@@ -340,6 +349,14 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                         : 'Try a different name, state, or call identifier.',
                     textAlign: TextAlign.center,
                   ),
+                  if (_query.isEmpty) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/masana'),
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Choose a Masana'),
+                    ),
+                  ],
                 ],
               ),
             ),

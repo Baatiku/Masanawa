@@ -130,7 +130,7 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/brand/masanawa_agent_logo.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "#00DC52"
+  adaptive_icon_background: "#25D366"
   adaptive_icon_foreground: "assets/brand/masanawa_launcher_foreground.png"
   min_sdk_android: 21
   web:

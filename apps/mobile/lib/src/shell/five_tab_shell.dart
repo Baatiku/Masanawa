@@ -11,6 +11,7 @@ import '../screens/wallet/wallet_screen.dart';
 import '../screens/twin/shell_tab.dart';
 import '../ui/components/masanawa_main_header.dart';
 import '../theme/masanawa_theme.dart';
+import '../state/session_state.dart';
 
 /// Canonical five-tab root shell: Chats · Status · Wallet · Calls · Rooms.
 ///
@@ -27,6 +28,7 @@ class FiveTabShell extends ConsumerStatefulWidget {
 class _FiveTabShellState extends ConsumerState<FiveTabShell> {
   late int _index;
   late final Set<int> _visitedTabs;
+  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
 
   @override
   void initState() {
@@ -68,15 +70,23 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
+    final session = ref.watch(sessionProvider);
+    final accountKey = session is SessionSignedIn ? session.user.id : 'signed-out';
     return Scaffold(
       appBar: _index == 1 || _index == 2 ? masanawaMainHeader(context) : null,
-      body: IndexedStack(
-        index: _index,
-        children: List.generate(
-          5,
-          (index) => _visitedTabs.contains(index)
-              ? _page(index)
-              : const SizedBox.shrink(),
+      body: PageStorage(
+        bucket: _pageStorageBucket,
+        child: IndexedStack(
+          index: _index,
+          children: List.generate(
+            5,
+            (index) => _visitedTabs.contains(index)
+                ? KeyedSubtree(
+                    key: ValueKey<String>('shell-$accountKey-$index'),
+                    child: _page(index),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ),
       ),
       floatingActionButton: switch (_index) {
