@@ -364,6 +364,9 @@ class ApiClient {
   Future<Map<String,dynamic>> accountSummary() =>
       _get('/v1/account/summary');
 
+  Future<Map<String,dynamic>> exportPersonalAccountData() =>
+      _get('/v1/account/exports/profile');
+
   Future<Map<String,dynamic>> exportConversationPage({String? cursor}) =>
       _get('/v1/account/exports/conversations',
         queryParameters:cursor==null?const {}:{'cursor':cursor});
