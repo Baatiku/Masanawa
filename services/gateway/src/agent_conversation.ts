@@ -1,3 +1,4 @@
+import {recordMasanaQuality} from "./masana_quality_signals.js";
 import { observeSessionOpen } from "./agent_session_diagnostics.js";
 import { compileConversationHistory } from "./conversation_history.js";
 import { createHash } from "node:crypto";
@@ -292,6 +293,7 @@ export function createAgentConversationService(input: {
               generated;
         const reply = result.reply.trim();
         if (!reply) throw new Error("empty strategy reply");
+        recordMasanaQuality(admission.scope.characterId,reply);
 
         await input.runs.finish({
           authority: admission.authority,
@@ -481,6 +483,7 @@ export function createAgentConversationService(input: {
           })) ?? generated;
         const reply = result.reply.trim();
         if (!reply) throw new Error("empty strategy reply");
+        recordMasanaQuality(admission.scope.characterId,reply);
 
         await input.runs.finish({
           authority: admission.authority,
@@ -676,6 +679,7 @@ export function createAgentConversationService(input: {
           })) ?? generated;
         const reply = result.reply.trim();
         if (!reply) throw new Error("empty strategy reply");
+        recordMasanaQuality(admission.scope.characterId,reply);
 
         await input.runs.finish({
           authority: admission.authority,
