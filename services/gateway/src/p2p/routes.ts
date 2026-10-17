@@ -7,6 +7,10 @@ import type { P2pEvidenceStorage } from "./evidence_storage.js";
 export interface P2pRoutesDependencies {
   readonly service: P2pService;
   readonly bankMethods?: VerifiedP2pBankMethods;
+  readonly authorizeBankStepUp?: (input: Readonly<{
+    authorizationHeader:string|undefined;bankCode:string;accountNumber:string;
+    stepUpToken:string|undefined;
+  }>)=>Promise<void>;
   readonly evidenceStorage?: P2pEvidenceStorage;
   /** Existing platform session authorizer, same identity authority as MSNW Wallet. */
   readonly authorize: (authorizationHeader: string | undefined) => Promise<P2pActor>;
@@ -66,6 +70,15 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try{
       const owner=await actor(req.headers.authorization);
       if(!deps.bankMethods)throw new P2pError("p2p.bank_verification_unavailable",503);
+      if(!deps.authorizeBankStepUp)throw new P2pError("p2p.step_up_unavailable",503);
+      const body=req.body as Record<string,unknown>|null;
+      if(!body || typeof body.bankCode!=="string" || typeof body.accountNumber!=="string")
+        throw new P2pError("p2p.bank_input_invalid",422);
+      await deps.authorizeBankStepUp({
+        authorizationHeader:req.headers.authorization,
+        bankCode:body.bankCode,accountNumber:body.accountNumber,
+        stepUpToken:req.headers["x-masanawa-step-up"] as string|undefined,
+      });
       const method=await deps.bankMethods.verify(owner,req.body);
       return reply.code(201).send(method);
     }catch(error){return respond(error,reply);}
