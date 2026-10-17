@@ -23,7 +23,7 @@ export function validateMasanaSocialChannels(value:unknown):readonly MasanaSocia
     if(!raw||typeof raw!=="object"||Array.isArray(raw))
       throw new TypeError("invalid_socialChannel");
     const r=raw as Record<string,unknown>;
-    if(typeof r.platform!=="string"||!(r.platform in allowedChannels)||
+    if(typeof r.platform!=="string"||!Object.hasOwn(allowedChannels,r.platform)||
        typeof r.url!=="string"||r.url.length>256)
       throw new TypeError("invalid_socialChannel");
     const platform=r.platform as MasanaSocialPlatform;
