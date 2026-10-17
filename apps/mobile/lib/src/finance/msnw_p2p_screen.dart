@@ -384,7 +384,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           if(snapshot.connectionState!=ConnectionState.done) {
             return const Center(child:CircularProgressIndicator());
           }
-          if(snapshot.hasError) return Center(child:Padding(
+          if(snapshot.hasError) { return Center(child:Padding(
             padding:const EdgeInsets.all(20),
             child:Column(mainAxisSize:MainAxisSize.min,children:[
               Text('P2P is unavailable: ${snapshot.error}',textAlign:TextAlign.center),
@@ -508,13 +508,14 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   }
   Future<void> _uploadEvidence() async {
     try {
-      final selection=await FilePicker.platform.pickFiles(
-        type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf'],
-        withData:true,allowMultiple:false);
-      if(selection==null || selection.files.isEmpty)return;
-      final file=selection.files.single;
-      final bytes=file.bytes;
-      if(bytes==null||bytes.isEmpty||bytes.length>2*1024*1024)
+      final file=await FilePicker.pickFile(
+        type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf']);
+      if(file==null)return;
+      final length=await file.length();
+      if(length==null||length<=0||length>2*1024*1024)
+        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
+      final bytes=await file.readAsBytes();
+      if(bytes.isEmpty||bytes.length>2*1024*1024)
         throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
       final extension=(file.extension??'').toLowerCase();
       final contentType=switch(extension){
