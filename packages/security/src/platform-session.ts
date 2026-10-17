@@ -28,6 +28,7 @@ export type PasswordVerifyResult = "accepted" | "invalid" | "locked" | "missing"
 export interface PlatformSessionView {
   readonly sessionId: string;
   readonly deviceId: string | null;
+  readonly clientLabel?: string | null;
   readonly createdAt: string;
   readonly lastAccessAt: string;
   readonly current: boolean;
@@ -81,6 +82,7 @@ export interface PlatformSessionRepository {
   issueSession(input: Readonly<{
     identity: PlatformSessionIdentity; accessHash: string; refreshHash: string;
     accessExpiresAt: string; refreshExpiresAt: string; issuedAt: string; deviceId?: string;
+    clientLabel?: string;
   }>): Promise<void>;
   resolveAccess(input: Readonly<{ accessHash: string; at: string }>): Promise<PlatformSessionIdentity | null>;
   rotateRefresh(input: Readonly<{
