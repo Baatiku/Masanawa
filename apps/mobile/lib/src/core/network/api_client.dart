@@ -361,6 +361,19 @@ class ApiClient {
     return token;
   }
 
+  Future<Map<String,dynamic>> accountSummary() =>
+      _get('/v1/account/summary');
+
+  Future<Map<String,dynamic>> exportConversationPage({String? cursor}) =>
+      _get('/v1/account/exports/conversations',
+        queryParameters:cursor==null?const {}:{'cursor':cursor});
+
+  Future<Map<String,dynamic>> exportFinancialStatement({String? from,String? to}) =>
+      _get('/v1/account/exports/financial',queryParameters:{
+        if(from!=null)'from':from,
+        if(to!=null)'to':to,
+      });
+
   // ---- Account security: authenticated, server-owned sessions ----
 
   Future<List<Map<String, dynamic>>> securitySessions() async {
