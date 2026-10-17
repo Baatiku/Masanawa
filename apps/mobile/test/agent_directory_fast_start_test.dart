@@ -79,6 +79,22 @@ class _MemoryCache implements AgentDirectoryCache {
   }
 }
 
+/// A disk cache whose completion can be ordered after live success/denial.
+/// The Future snapshots old data to reproduce a real in-flight read.
+class _DelayedReadCache extends _MemoryCache {
+  _DelayedReadCache({super.ownerId, super.agents});
+
+  final readComplete = Completer<List<AgentDirectoryEntry>?>();
+
+  @override
+  Future<List<AgentDirectoryEntry>?> read(String ownerId) {
+    reads++;
+    return readComplete.future;
+  }
+
+  void complete(List<AgentDirectoryEntry>? value) => readComplete.complete(value);
+}
+
 class _PendingTransport implements AgentDirectoryTransport {
   final requests = <Completer<List<AgentDirectoryEntry>>>[];
 
@@ -209,6 +225,92 @@ void main() {
     if (!transport.requests.single.isCompleted) {
       transport.requests.single.complete(const []);
     }
+  });
+
+  test('live request starts without waiting for slow roster disk I/O', () async {
+    final cache = _DelayedReadCache(ownerId: _user.id, agents: const [_agent]);
+    final transport = _PendingTransport();
+    final container = ProviderContainer(overrides: [
+      agentDirectoryCacheProvider.overrideWithValue(cache),
+      agentDirectoryTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SessionController.new),
+    ]);
+    addTearDown(container.dispose);
+
+    container.read(agentDirectoryProvider);
+    await _settle();
+    expect(cache.reads, 1);
+    expect(transport.requests, hasLength(1));
+    cache.complete(const [_agent]);
+    await _settle();
+    expect(container.read(agentDirectoryProvider).agents.single.displayName, 'Gwani');
+
+    transport.requests.single.complete(const [_agent]);
+    await _settle();
+    expect(container.read(agentDirectoryProvider).loading, isFalse);
+  });
+
+  test('late disk cache cannot override empty authoritative live roster', () async {
+    final cache = _DelayedReadCache(ownerId: _user.id, agents: const [_agent]);
+    final transport = _PendingTransport();
+    final container = ProviderContainer(overrides: [
+      agentDirectoryCacheProvider.overrideWithValue(cache),
+      agentDirectoryTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SessionController.new),
+    ]);
+    addTearDown(container.dispose);
+    container.read(agentDirectoryProvider);
+    await _settle();
+    transport.requests.single.complete(const []);
+    await _settle();
+    cache.complete(const [_agent]);
+    await _settle();
+    expect(container.read(agentDirectoryProvider).agents, isEmpty);
+    expect(container.read(agentDirectoryProvider).loading, isFalse);
+  });
+
+  test('late disk cache cannot revive a denied account roster', () async {
+    final cache = _DelayedReadCache(ownerId: _user.id, agents: const [_agent]);
+    final transport = _PendingTransport();
+    final container = ProviderContainer(overrides: [
+      agentDirectoryCacheProvider.overrideWithValue(cache),
+      agentDirectoryTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SessionController.new),
+    ]);
+    addTearDown(container.dispose);
+    container.read(agentDirectoryProvider);
+    await _settle();
+    transport.requests.single.completeError(
+      const ApiException('denied', statusCode: 401),
+    );
+    await _settle();
+    cache.complete(const [_agent]);
+    await _settle();
+    expect(cache.clears, 1);
+    expect(container.read(agentDirectoryProvider).agents, isEmpty);
+  });
+
+  test('late disk cache still allows offline retry with saved identities', () async {
+    final cache = _DelayedReadCache(ownerId: _user.id, agents: const [_agent]);
+    final transport = _PendingTransport();
+    final container = ProviderContainer(overrides: [
+      agentDirectoryCacheProvider.overrideWithValue(cache),
+      agentDirectoryTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SessionController.new),
+    ]);
+    addTearDown(container.dispose);
+    container.read(agentDirectoryProvider);
+    await _settle();
+    transport.requests.single.completeError(
+      const ApiException('unavailable', statusCode: 503),
+    );
+    await _settle();
+    cache.complete(const [_agent]);
+    await _settle();
+    final state = container.read(agentDirectoryProvider);
+    expect(state.loading, isFalse);
+    expect(state.error, isNotNull);
+    expect(state.agents.single.presence, AgentPresence.unknown);
   });
 
   test('directory presentation JSON round-trips safely', () {
