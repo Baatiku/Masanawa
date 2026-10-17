@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/app_localizations.dart';
+import 'recover_phone_password_screen.dart';
 import '../../localization/auth_error_localizer.dart';
 import '../../localization/language_picker_button.dart';
 import '../../state/session_state.dart';
@@ -237,6 +238,17 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
             loading: _busy,
             onPressed: _busy || _joined.length != 6 ? null : _complete,
           ),
+          if (!widget.setup) ...[
+            const SizedBox(height:12),
+            TextButton(
+              onPressed:_busy ? null : () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder:(_)=>RecoverPhonePasswordScreen(phone:widget.phone),
+                ),
+              ),
+              child:const Text('Forgot your six-digit password?'),
+            ),
+          ],
         ],
       ),
     );
