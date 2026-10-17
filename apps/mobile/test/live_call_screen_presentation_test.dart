@@ -10,6 +10,7 @@ class _Session extends Mock implements LiveVoiceSession {}
 void main() {
   testWidgets('call fills the viewport and End closes the session and route', (tester) async {
     final session=_Session();
+    when(()=>session.audioInterrupted).thenReturn(false);
     when(()=>session.errors).thenAnswer((_)=>const Stream<String>.empty());
     when(()=>session.states).thenAnswer((_)=>Stream.value(LiveVoiceState.listening));
     when(()=>session.ready).thenAnswer((_)=>Future<void>.value());
@@ -33,3 +34,4 @@ void main() {
     expect(tester.takeException(),isNull);
   });
 }
+
