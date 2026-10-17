@@ -115,6 +115,7 @@ import {
 } from "./customer_auth.js";
 import { registerGatewayRequestCorrelation } from "./request_correlation.js";
 import { requiresFinancialCustomerState } from "./financial_mutation_guard.js";
+import { authClientLabel } from "./auth_client_label.js";
 import { AccountExportError, type AccountDataExports } from "./account_data_exports.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Type from "typebox";
@@ -566,6 +567,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
               code: Type.String({ minLength: 6, maxLength: 6 }),
               name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+              deviceId: Type.Optional(Type.String({minLength:32,maxLength:32})),
             },
             { additionalProperties: false },
           ),
@@ -584,6 +586,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             ...(request.body.name === undefined
               ? {}
               : { name: request.body.name }),
+            ...(request.body.deviceId===undefined?{}:{deviceId:request.body.deviceId}),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
           });
         } catch (error) {
           return authError(error, reply);
@@ -661,6 +668,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             phone: request.body.phone,
             deviceId: request.body.deviceId,
             password: request.body.password,
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
           });
         } catch (error) {
           return authError(error, reply);
@@ -694,6 +705,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             ...(request.body.email === undefined
               ? {}
               : { email: request.body.email }),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
           });
         } catch (error) {
           return authError(error, reply);
