@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/admin_api.dart';
 import '../theme/masanawa_theme.dart';
+import 'admin_record_detail_page.dart';
 
 class UsersAdminPage extends StatefulWidget {
   const UsersAdminPage({super.key, required this.api});
@@ -24,67 +25,26 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   }
 
   Future<void> _showRelationships(AdminUser user) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.72,
-        child: SafeArea(
-          child: FutureBuilder<List<AdminRelationship>>(
-            future: widget.api.userRelationships(user.userId),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(snapshot.error.toString(), textAlign: TextAlign.center),
-                  ),
-                );
-              }
-              final relationships =
-                  snapshot.data ?? const <AdminRelationship>[];
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: [
-                  Text(
-                    'User relationships',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    shortId(user.userId),
-                    style: TextStyle(color: context.masanawa.textMuted),
-                  ),
-                  const SizedBox(height: 12),
-                  if (relationships.isEmpty)
-                    const Card(
-                      child: ListTile(title: Text('No active relationships')),
-                    )
-                  else
-                    ...relationships.map(
-                      (relationship) => Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.link_outlined),
-                          title: Text(
-                            'Character ${shortId(relationship.characterId)}',
-                          ),
-                          subtitle: Text(
-                            '${shortId(relationship.relationshipId)} · '
-                            'rev ${relationship.revision}\n'
-                            'updated ${relationship.updatedAt}',
-                          ),
-                          isThreeLine: true,
-                          trailing: Chip(label: Text(relationship.state)),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/admin/users/relationships'),
+        builder: (_) => AdminRecordDetailPage<AdminRelationship>(
+          title: 'User relationships',
+          subtitle: shortId(user.userId),
+          emptyTitle: 'No active relationships',
+          load: () => widget.api.userRelationships(user.userId),
+          itemBuilder: (context, relationship) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.link_outlined),
+              title: Text('Character ${shortId(relationship.characterId)}'),
+              subtitle: Text(
+                '${shortId(relationship.relationshipId)} · '
+                'rev ${relationship.revision}\n'
+                'updated ${relationship.updatedAt}',
+              ),
+              isThreeLine: true,
+              trailing: Chip(label: Text(relationship.state)),
+            ),
           ),
         ),
       ),
@@ -739,70 +699,25 @@ class _OperationsAdminPageState extends State<OperationsAdminPage> {
       );
 
   Future<void> _showReceipts(AdminOperation operation) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.78,
-        child: SafeArea(
-          child: FutureBuilder<List<AdminExternalReceipt>>(
-            future: widget.api.operationReceipts(operation.operationId),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      snapshot.error.toString(),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-              final receipts = snapshot.data ?? const <AdminExternalReceipt>[];
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: [
-                  Text(
-                    'External receipts',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${operation.kind} · ${shortId(operation.operationId)}',
-                    style: TextStyle(color: context.masanawa.textMuted),
-                  ),
-                  const SizedBox(height: 12),
-                  if (receipts.isEmpty)
-                    const Card(
-                      child: ListTile(
-                        title: Text('No external receipts recorded'),
-                      ),
-                    )
-                  else
-                    ...receipts.map(
-                      (receipt) => Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.receipt_long_outlined),
-                          title: Text(
-                            '${receipt.provider} · ${receipt.normalizedStatus}',
-                          ),
-                          subtitle: Text(
-                            '${receipt.verificationMethod}\n'
-                            '${receipt.observedAt}'
-                            '${receipt.providerVersion == null ? '' : ' · ${receipt.providerVersion}'}',
-                          ),
-                          isThreeLine: true,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/admin/operations/receipts'),
+        builder: (_) => AdminRecordDetailPage<AdminExternalReceipt>(
+          title: 'External receipts',
+          subtitle: '${operation.kind} · ${shortId(operation.operationId)}',
+          emptyTitle: 'No external receipts recorded',
+          load: () => widget.api.operationReceipts(operation.operationId),
+          itemBuilder: (context, receipt) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: Text('${receipt.provider} · ${receipt.normalizedStatus}'),
+              subtitle: Text(
+                '${receipt.verificationMethod}\n'
+                '${receipt.observedAt}'
+                '${receipt.providerVersion == null ? '' : ' · ${receipt.providerVersion}'}',
+              ),
+              isThreeLine: true,
+            ),
           ),
         ),
       ),
