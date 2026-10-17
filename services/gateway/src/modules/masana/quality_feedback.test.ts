@@ -3,7 +3,7 @@ import {createMasanaQualityFeedbackPort} from "./quality_feedback.js";
 
 describe("Masana privacy-preserving quality reports",()=>{
  it("writes a category only for an active fan and approved active platform Masana",async()=>{
-   const query=vi.fn(async()=>({rows:[],rowCount:1}));
+   const query=vi.fn(async(_sql:string,_params:unknown[])=>({rows:[],rowCount:1}));
    const port=createMasanaQualityFeedbackPort({query} as never);
    expect(await port.submit({tenantId:"tenant_one",fanId:"fan_one",
      characterId:"character_one",reason:"factual_error"})).toEqual({accepted:true});
@@ -19,7 +19,7 @@ describe("Masana privacy-preserving quality reports",()=>{
    expect(sql).not.toContain("message_body");
  });
  it("reveals no identity information through duplicate or nonmatching reports",async()=>{
-   const query=vi.fn(async()=>({rows:[],rowCount:0}));
+   const query=vi.fn(async(_sql:string,_params:unknown[])=>({rows:[],rowCount:0}));
    const port=createMasanaQualityFeedbackPort({query} as never);
    expect(await port.submit({tenantId:"tenant",fanId:"fan",characterId:"missing",
      reason:"off_topic"})).toEqual({accepted:true});
@@ -32,7 +32,7 @@ describe("Masana privacy-preserving quality reports",()=>{
    expect(query).not.toHaveBeenCalled();
  });
  it("aggregates 30-day counts without exposing individual fans or private text",async()=>{
-   const query=vi.fn(async()=>({rows:[
+   const query=vi.fn(async(_sql:string,_params:unknown[])=>({rows:[
      {reason:"unhelpful",total:3},{reason:"repetition",total:2},
    ]}));
    const port=createMasanaQualityFeedbackPort({query} as never);
