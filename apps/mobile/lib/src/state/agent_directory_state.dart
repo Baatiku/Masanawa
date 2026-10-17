@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agents/agent_directory.dart';
 import '../agents/agent_directory_cache.dart';
+import '../agents/drift_directory_cache.dart';
 import '../agents/agent_feedback.dart';
 import '../agents/agent_shell.dart';
 import '../core/mobile_push.dart';
@@ -13,7 +14,9 @@ import '../core/network/api_client.dart';
 import 'session_state.dart';
 
 final agentDirectoryCacheProvider = Provider<AgentDirectoryCache>((ref) {
-  return const FileAgentDirectoryCache();
+  final cache = DriftAgentDirectoryCache();
+  ref.onDispose(() => unawaited(cache.close()));
+  return cache;
 });
 
 class AgentDirectoryState {
