@@ -311,6 +311,30 @@ class ApiClient {
     return _post('/auth/logout', const {});
   }
 
+  // ---- Account security: authenticated, server-owned sessions ----
+
+  Future<List<Map<String, dynamic>>> securitySessions() async {
+    final body = await _get('/v1/auth/security/sessions');
+    final value = body['sessions'];
+    if (value is! List) throw const ApiException('Could not load sessions.');
+    return value.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<void> revokeSecuritySession(String sessionId) async {
+    await _post('/v1/auth/security/sessions/${Uri.encodeComponent(sessionId)}/revoke', const {});
+  }
+
+  Future<void> securityLogoutAll() async {
+    await _post('/v1/auth/security/sessions/logout-all', const {});
+  }
+
+  Future<List<Map<String, dynamic>>> securityLoginHistory() async {
+    final body = await _get('/v1/auth/security/history');
+    final value = body['events'];
+    if (value is! List) throw const ApiException('Could not load sign-in history.');
+    return value.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
   // ---- Account deletion (R12) ----
 
   Future<AccountDeletionRequestView?> accountDeletionStatus() async {
