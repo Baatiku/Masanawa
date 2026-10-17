@@ -31,9 +31,9 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
   String? _owner;
 
   bool get _authorized {
+    if (!mounted || _owner == null) return false;
     final state = ref.read(sessionProvider);
-    return mounted && _owner != null &&
-        state is SessionSignedIn && state.user.id == _owner;
+    return state is SessionSignedIn && state.user.id == _owner;
   }
 
   @override
@@ -94,10 +94,16 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
       if (!_authorized) return;
       setState(() {
         _error = _friendlyError(error);
+        // A timeout can happen after persistence; require a canonical status
+        // read before the user can submit another deletion request.
+        _statusLoaded = false;
       });
       try {
         final request = await ref.read(apiClientProvider).accountDeletionStatus();
-        if (_authorized) setState(() => _request = request);
+        if (_authorized) setState(() {
+          _request = request;
+          _statusLoaded = true;
+        });
       } catch (_) {
         // Preserve the original failure; do not invent a final status.
       }
