@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 
 enum AppPermission {
@@ -34,5 +35,12 @@ class AppPermissions {
     );
   }
 
+  /// Never request Bluetooth access just to use the phone microphone.
+  static Future<bool> bluetoothConnectGranted() async {
+    if (!Platform.isAndroid) return false;
+    try {return await Permission.bluetoothConnect.isGranted;} catch (_) {return false;}
+  }
+
   static Future<void> openSettings() => openAppSettings();
 }
+

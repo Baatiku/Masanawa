@@ -44,12 +44,19 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
         let size = 0;
         let settled = false;
         let setup = false;
+        let transcript = "";
+        let transcriptFinished = false;
+        let audioComplete = false;
+        let completing = false;
+        let callbacks = Promise.resolve();
+        let transcriptionTimer: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(
           () => fail("Recorded speech deadline exceeded"),
           30_000,
         );
         function cleanup() {
           clearTimeout(timer);
+          clearTimeout(transcriptionTimer);
           signal?.removeEventListener("abort", onAbort);
           socket.removeEventListener("open", onOpen);
           socket.removeEventListener("message", onMessage);
@@ -67,7 +74,19 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
           cleanup();
           reject(new Error(message));
         }
-        function onFailure() {
+        function finish() {
+          if (settled || completing) return;
+          completing = true;
+          void callbacks.then(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            const buffer = Buffer.concat(chunks, size);
+            resolve(Object.freeze({dataBase64: buffer.toString("base64"), mimeType: "audio/l16;rate=24000", durationMs: Math.max(1,Math.round(size/48)), ...(transcript.trim() ? {transcript:transcript.trim()} : {})}));
+          });
+        }
+        function onFailure(event?: Event) {
+          if (event?.type === "close" && audioComplete) { finish(); return; }
           fail("Recorded speech connection failed");
         }
         function onAbort() {
@@ -179,28 +198,26 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
               ) {
                 throw new Error("Invalid audio");
               }
+              if (audioComplete) throw new Error("Audio after completion");
               chunks.push(bytes);
+              callbacks = callbacks.then(async () => { if (!settled) await onPcmChunk?.(bytes); }).catch(() => fail("Recorded speech delivery failed"));
             }
+            const transcription = content.outputTranscription;
+            if (typeof transcription?.text === "string" && transcription.text) {
+              if (transcript.length + transcription.text.length > 32_000) throw new Error("Invalid transcript");
+              const delta = transcription.text;
+              transcript += delta;
+              callbacks = callbacks.then(async () => { if (!settled) await context?.onTranscriptDelta?.(delta); }).catch(() => fail("Recorded speech delivery failed"));
+            }
+            if (transcription?.finished === true) transcriptFinished = true;
             if (content.turnComplete) {
               if (!size) throw new Error("Missing audio");
-              settled = true;
-              cleanup();
-              const buffer = Buffer.concat(chunks, size);
-              // Emit only a complete, validated reply. No partial replay on failure.
-              Promise.resolve()
-                .then(() => onPcmChunk?.(buffer))
-                .then(
-                  () =>
-                    resolve(
-                      Object.freeze({
-                        dataBase64: buffer.toString("base64"),
-                        mimeType: "audio/l16;rate=24000",
-                        durationMs: Math.max(1, Math.round(size / 48)),
-                      }),
-                    ),
-                  reject,
-                );
+              audioComplete = true;
+              // Live transcription is an independent stream and may finish
+              // just after the audio turn. Keep the socket briefly for it.
+              transcriptionTimer ??= setTimeout(finish, 3_000);
             }
+            if (audioComplete && transcriptFinished) finish();
           } catch {
             fail("Recorded speech response invalid");
           }

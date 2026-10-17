@@ -15,6 +15,7 @@ import '../chat/chat_format.dart';
 import '../chat/message_parts.dart';
 import '../core/providers.dart';
 import '../core/live_pcm_audio.dart';
+import '../core/live_call_foreground.dart';
 import '../core/agent_audio_attachment.dart';
 import '../core/network/api_client.dart';
 import '../core/request_id.dart';
@@ -105,6 +106,9 @@ String chatAttachmentMimeType(ChatAttachment attachment, List<int> headerBytes) 
 
 /// One preview-first draft for all pickers, bounded by the server media limit.
 /// Callers must show rejected selections rather than silently sending them.
+const maxChatAttachmentSetEncodedBytes = 16_000_000;
+int chatAttachmentEncodedBytes(int bytes) => ((bytes + 2) ~/ 3) * 4;
+
 class ChatAttachmentDraftSelection {
   const ChatAttachmentDraftSelection(this.attachments, this.rejectedCount);
 
@@ -117,7 +121,7 @@ ChatAttachmentDraftSelection selectChatDraftAttachments(
   List<ChatAttachment> selected,
 ) {
   const maxItemBytes = 8 * 1024 * 1024;
-  const maxTotalBytes = 12 * 1024 * 1024;
+  const maxTotalBytes = maxChatAttachmentSetEncodedBytes;
   const maxItems = 8;
   final accepted = <ChatAttachment>[];
   var bytes = 0;
@@ -128,12 +132,12 @@ ChatAttachmentDraftSelection selectChatDraftAttachments(
         size <= 0 ||
         size > maxItemBytes ||
         accepted.length >= maxItems ||
-        bytes + size > maxTotalBytes) {
+        bytes + chatAttachmentEncodedBytes(size) > maxTotalBytes) {
       rejected++;
       continue;
     }
     accepted.add(item);
-    bytes += size;
+    bytes += chatAttachmentEncodedBytes(size);
   }
   return ChatAttachmentDraftSelection(List.unmodifiable(accepted), rejected);
 }
@@ -161,11 +165,11 @@ Future<List<ChatAttachment>> retainOutgoingChatMedia({
       final source = File(attachment.path);
       final bytes = await source.length();
       if (bytes < 1 || bytes > 8 * 1024 * 1024 ||
-          total + bytes > 12 * 1024 * 1024) {
+          total + chatAttachmentEncodedBytes(bytes) > maxChatAttachmentSetEncodedBytes) {
         throw const ApiException('Attachments exceed allowed size',
             code: 'ATTACHMENT_TOO_LARGE');
       }
-      total += bytes;
+      total += chatAttachmentEncodedBytes(bytes);
       final suffix = RegExp(r'\.([a-zA-Z0-9]{1,8})$')
           .firstMatch(attachment.path)?.group(1)?.toLowerCase();
       final extension = suffix == null ? '' : '.$suffix';
@@ -1535,12 +1539,15 @@ class AiChatController extends Notifier<AiChatState> {
     _setDelivery(characterId, userMsg.id, 'sent');
     if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
       return;
+    int? playbackOwner;
+    final audioOwner = _cacheOwnerId;
+    final audioGeneration = _cacheGeneration;
+    bool currentAudioOwner() => !_disposed && audioOwner == _cacheOwnerId && audioGeneration == _cacheGeneration && connectionGeneration == _connectionGeneration;
     try {
       final attachment = userMsg.attachment;
       final attachmentSet = userMsg.attachments;
       final hasMedia = attachment != null || attachmentSet.isNotEmpty;
-      final streamMessageId =
-          !hasMedia ? _beginAiStream(characterId) : null;
+      final streamMessageId = _beginAiStream(characterId);
       final visiblePrompt = userMsg.replyPreview?.trim().isNotEmpty == true
           ? 'Replying to this earlier message:\n"${userMsg.replyPreview}"\n\n${userMsg.text}'
           : userMsg.text;
@@ -1551,27 +1558,35 @@ class AiChatController extends Notifier<AiChatState> {
       final mediaCaption = promptText;
       var livePcmStarted = false;
       DateTime? livePcmStartedAt;
+      var playbackSuppressed = false;
+      Future<void> playChunk(Uint8List chunk) async {
+        if (!currentAudioOwner() || playbackSuppressed) return;
+        if (LiveCallForeground.active) {playbackSuppressed = true;return;}
+        playbackOwner ??= LivePcmAudio.acquirePlaybackOwner();
+        if (!LivePcmAudio.isPlaybackOwner(playbackOwner!)) {playbackSuppressed = true;return;}
+        if (!livePcmStarted) {
+          livePcmStarted = await LivePcmAudio.start(sampleRate:24000,owner:playbackOwner);
+          if (livePcmStarted) livePcmStartedAt = DateTime.now();
+        }
+        if (!currentAudioOwner()) {await LivePcmAudio.stop(owner:playbackOwner);return;}
+        if (livePcmStarted) await LivePcmAudio.write(chunk,owner:playbackOwner);
+      }
+      var spokenTranscript = '';
+      void textDelta(String delta) {
+        if (currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
+      }
+      void transcriptDelta(String delta) {
+        if (!currentAudioOwner()) return;
+        spokenTranscript += delta;
+        _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
+      }
       final result = !hasMedia
           ? await _sendViaTransport(
               characterId,
               promptText,
-              onTextDelta: (delta) {
-                if (streamMessageId != null) {
-                  _appendAiDelta(characterId, streamMessageId, delta);
-                }
-              },
+              onTextDelta: textDelta,
               requestId: userMsg.requestId,
-              onAudioPcmChunk: (chunk) async {
-                if (!livePcmStarted) {
-                  livePcmStarted = await LivePcmAudio.start(sampleRate: 24000);
-                  if (livePcmStarted) {
-                    livePcmStartedAt = DateTime.now();
-                  }
-                }
-                if (livePcmStarted) {
-                  await LivePcmAudio.write(chunk);
-                }
-              },
+              onAudioPcmChunk: playChunk,
             )
           : attachmentSet.isNotEmpty
           ? await _sendMediaSetViaTransport(
@@ -1580,6 +1595,9 @@ class AiChatController extends Notifier<AiChatState> {
               attachmentSet,
               caption: mediaCaption,
               requestId: userMsg.requestId,
+              onTextDelta: textDelta,
+              onAudioPcmChunk: playChunk,
+              onAudioTranscriptDelta: transcriptDelta,
             )
           : await _sendMediaViaTransport(
               characterId,
@@ -1587,6 +1605,9 @@ class AiChatController extends Notifier<AiChatState> {
               attachment!,
               caption: mediaCaption,
               requestId: userMsg.requestId,
+              onTextDelta: textDelta,
+              onAudioPcmChunk: playChunk,
+              onAudioTranscriptDelta: transcriptDelta,
             );
       if (livePcmStarted) {
         final elapsedMs = livePcmStartedAt == null
@@ -1597,7 +1618,7 @@ class AiChatController extends Notifier<AiChatState> {
         unawaited(
           Future<void>.delayed(
             Duration(milliseconds: drainMs),
-            LivePcmAudio.stop,
+            () => LivePcmAudio.stop(owner:playbackOwner),
           ),
         );
       }
@@ -1683,28 +1704,18 @@ class AiChatController extends Notifier<AiChatState> {
           // unsupported format, is malformed, or cannot be cached locally.
         }
       }
-      if (streamMessageId != null) {
         await _finalizeAiStream(
           characterId,
           streamMessageId,
-          result.text,
+          result.audioTranscript?.trim().isNotEmpty == true ? result.audioTranscript! : result.text,
           parts: result.parts,
           attachment: replyAudio,
           agentRunId: result.agentRunId,
           requestId: userMsg.requestId,
         );
-      } else {
-        await _appendAi(
-          characterId,
-          result.text,
-          parts: result.parts,
-          attachment: replyAudio,
-          agentRunId: result.agentRunId,
-          requestId: userMsg.requestId,
-        );
-      }
+
     } catch (error) {
-      unawaited(LivePcmAudio.stop());
+      if (playbackOwner != null) unawaited(LivePcmAudio.stop(owner:playbackOwner));
       if (_disposed ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) {
         return;
@@ -1775,9 +1786,21 @@ class AiChatController extends Notifier<AiChatState> {
     ChatAttachment attachment, {
     required String caption,
     String? requestId,
+    void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,
   }) async {
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    void checkOwner() {
+      if (_disposed || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) {
+        throw const ApiException('Account changed before media was sent');
+      }
+    }
+    checkOwner();
     final file = File(attachment.path);
     final bytes = await file.readAsBytes();
+    checkOwner();
     if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
       throw const ApiException(
         'Attachment must be between 1 byte and 8 MB',
@@ -1787,8 +1810,7 @@ class AiChatController extends Notifier<AiChatState> {
     final mimeType = chatAttachmentMimeType(attachment, bytes);
 
     final transport = ref.read(agentTransportProvider);
-    final owner = _cacheOwnerId;
-    final ownerGeneration = _cacheGeneration;
+    checkOwner();
     if (transport is MasanawaAgentTransport && requestId != null) {
       await transport.savePrivateChatMedia(
         characterId: characterId,
@@ -1806,25 +1828,21 @@ class AiChatController extends Notifier<AiChatState> {
     }
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
-    Future<AgentTurnResult> send() => transport.sendMediaTurn(
-      binding: binding,
-      bytes: bytes,
-      mimeType: mimeType,
-      caption: caption,
-      requestId: requestId,
-      onUploadProgress: (sent, total) {
-        if (total <= 0) return;
-        _updateMessage(
-          characterId,
-          messageId,
-          (message) => message.copyWith(
-            deliveryStatus: sent >= total ? 'processing' : 'uploading',
-            uploadProgress: (sent / total).clamp(0.0, 1.0).toDouble(),
-          ),
-          persist: false,
-        );
-      },
-    );
+    void progress(int sent,int total) {
+      if (total <= 0 || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) return;
+      _updateMessage(characterId,messageId,(message)=>message.copyWith(
+        deliveryStatus:sent>=total?'processing':'uploading', uploadProgress:(sent/total).clamp(0.0,1.0).toDouble()),persist:false);
+    }
+    Future<AgentTurnResult> send() {
+      checkOwner();
+      if (transport is StreamingAgentMediaTransport) {
+        return (transport as StreamingAgentMediaTransport).sendMediaTurnStream(binding:binding,
+          bytes:bytes,mimeType:mimeType,caption:caption,requestId:requestId,
+          onTextDelta:onTextDelta,onAudioPcmChunk:onAudioPcmChunk,onAudioTranscriptDelta:onAudioTranscriptDelta,onUploadProgress:progress);
+      }
+      return transport.sendMediaTurn(binding:binding,bytes:bytes,mimeType:mimeType,caption:caption,
+        requestId:requestId,onUploadProgress:progress);
+    }
     try {
       return await send();
     } catch (error) {
@@ -1841,20 +1859,32 @@ class AiChatController extends Notifier<AiChatState> {
     List<ChatAttachment> attachments, {
     required String caption,
     String? requestId,
+    void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,
   }) async {
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    void checkOwner() {
+      if (_disposed || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) {
+        throw const ApiException('Account changed before media was sent');
+      }
+    }
+    checkOwner();
     final media = <AgentMediaInput>[];
     var totalBytes = 0;
     for (final attachment in attachments) {
       final file = File(attachment.path);
       final bytes = await file.readAsBytes();
+      checkOwner();
       if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
         throw const ApiException(
           'Each attachment must be between 1 byte and 8 MB',
           code: 'ATTACHMENT_TOO_LARGE',
         );
       }
-      totalBytes += bytes.length;
-      if (totalBytes > 12 * 1024 * 1024) {
+      totalBytes += chatAttachmentEncodedBytes(bytes.length);
+      if (totalBytes > maxChatAttachmentSetEncodedBytes) {
         throw const ApiException(
           'Combined attachments must be 12 MB or smaller',
           code: 'ATTACHMENT_TOO_LARGE',
@@ -1870,8 +1900,7 @@ class AiChatController extends Notifier<AiChatState> {
       );
     }
     final transport = ref.read(agentTransportProvider);
-    final owner = _cacheOwnerId;
-    final ownerGeneration = _cacheGeneration;
+    checkOwner();
     if (transport is MasanawaAgentTransport && requestId != null) {
       for (var index = 0; index < media.length; index++) {
         final part = media[index];
@@ -1891,30 +1920,21 @@ class AiChatController extends Notifier<AiChatState> {
       }
     }
     final binding = await _bindingFor(characterId, transport);
-    return transport.sendMediaSetTurn(
-      binding: binding,
-      media: media,
-      caption: caption,
-      requestId: requestId,
-      onUploadProgress: (sent, total) {
-        if (total <= 0) return;
-        _updateMessage(
-          characterId,
-          messageId,
-          (message) => message.copyWith(
-            deliveryStatus: sent >= total ? 'processing' : 'uploading',
-            uploadProgress: (sent / total).clamp(0.0, 1.0).toDouble(),
-          ),
-          persist: false,
-        );
-      },
-    );
+    checkOwner();
+    void progress(int sent,int total) {
+      if(total<=0 || owner!=_cacheOwnerId || ownerGeneration!=_cacheGeneration)return;
+      _updateMessage(characterId,messageId,(message)=>message.copyWith(deliveryStatus:sent>=total?'processing':'uploading',uploadProgress:(sent/total).clamp(0.0,1.0).toDouble()),persist:false);
+    }
+    if(transport is StreamingAgentMediaTransport){
+      return (transport as StreamingAgentMediaTransport).sendMediaSetTurnStream(binding:binding,media:media,
+        caption:caption,requestId:requestId,onTextDelta:onTextDelta,onAudioPcmChunk:onAudioPcmChunk,onAudioTranscriptDelta:onAudioTranscriptDelta,onUploadProgress:progress);
+    }
+    return transport.sendMediaSetTurn(binding:binding,media:media,caption:caption,requestId:requestId,onUploadProgress:progress);
   }
 
   bool _isStaleSessionError(Object error) =>
       error is ApiException &&
       (error.statusCode == 404 ||
-          error.statusCode == 409 ||
           error.code == 'agents.session_not_found' ||
           error.code == 'agents.session_closed');
 
@@ -2626,3 +2646,4 @@ class AiChatController extends Notifier<AiChatState> {
 final aiChatProvider = NotifierProvider<AiChatController, AiChatState>(
   AiChatController.new,
 );
+

@@ -154,6 +154,7 @@ class _GatewayClient {
     String path,
     Map<String, dynamic> body, {
     CancelToken? cancelToken,
+    void Function(int,int)? onSendProgress,
     String? requestId,
   }) async* {
     try {
@@ -164,6 +165,7 @@ class _GatewayClient {
           responseType: ResponseType.stream,
         ),
         cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
       );
       final bodyStream = res.data?.stream;
       if (bodyStream == null) {
@@ -414,7 +416,7 @@ class RemoteChatMedia {
       );
 }
 
-class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
+class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, StreamingAgentMediaTransport {
   MasanawaAgentTransport({
     required Dio dio,
     required String baseUrl,
@@ -533,7 +535,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
             final type = event['type'];
             // Any audio, text or completed response may already have executed
             // provider work. It must never be replayed as a new fallback turn.
-            if (type == 'delta' || type == 'audio' || type == 'done') {
+            if (type == 'delta' || type == 'audio' || type == 'audio-transcript' || type == 'done' || type == 'error') {
               receivedServerOutput = true;
             }
             if (type == 'delta') {
@@ -551,15 +553,16 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
               }
               continue;
             }
+            if (type == 'error') throw const ApiException('The reply was interrupted. Check message status before retrying.');
             if (type == 'done') done = event;
           }
-          if (done != null || streamedText.isNotEmpty) {
-            final finalReply = done?['reply'];
+          if (done != null) {
+            final finalReply = done['reply'];
             final reply = finalReply is String && finalReply.isNotEmpty
                 ? finalReply
                 : streamedText;
             if (reply.isNotEmpty) {
-              return _turnResultFromData(done ?? {}, reply: reply);
+              return _turnResultFromData(done, reply: reply);
             }
           }
           if (receivedServerOutput) throw const ApiException('Incomplete agent stream. Check message status before retrying.');
@@ -619,7 +622,93 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
           : null,
       audioMimeType: audioMimeType is String ? audioMimeType : null,
       audioDurationMs: audioDurationMs is num ? audioDurationMs.round() : null,
+      audioTranscript: data['audioTranscript'] is String ? data['audioTranscript'] as String : null,
     );
+  }
+
+
+  Future<AgentTurnResult> _streamMedia({
+    required AgentSessionBinding binding, required String route,
+    required Map<String,dynamic> body,
+    void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,
+    void Function(int,int)? onUploadProgress, String? requestId,
+    required Future<AgentTurnResult> Function() legacy,
+  }) async {
+    final token=CancelToken();
+    _turnTokens[binding.characterId]?.cancel('Superseded by a new turn');
+    _turnTokens[binding.characterId]=token;
+    var outputStarted=false;
+    var transcript='';
+    final audio=BytesBuilder(copy:false);
+    Map<String,dynamic>? done;
+    try {
+      try {
+        await for(final event in _client.postStream(route,body,cancelToken:token,
+          requestId:requestId,onSendProgress:onUploadProgress)) {
+          final type=event['type'];
+          if(const ['delta','audio','audio-transcript','done','error'].contains(type))outputStarted=true;
+          if(type=='error')throw const ApiException('The reply was interrupted. Check message status before retrying.');
+          if(type=='delta' && event['text'] is String)onTextDelta?.call(event['text'] as String);
+          if(type=='audio-transcript' && event['text'] is String){
+            final text=event['text'] as String;
+            if(transcript.length+text.length>32000)throw const ApiException('Invalid voice transcript');
+            transcript+=text;onAudioTranscriptDelta?.call(text);
+          }
+          if(type=='audio' && event['dataBase64'] is String){
+            final chunk=base64Decode(event['dataBase64'] as String);
+            if(chunk.length.isOdd || audio.length+chunk.length>8*1024*1024)throw const ApiException('Invalid voice response');
+            audio.add(chunk);await onAudioPcmChunk?.call(chunk);
+          }
+          if(type=='done')done=event;
+        }
+      } on ApiException catch(error) {
+        // Only an explicitly absent old-Gateway route can use its legacy rail.
+        // Timeouts, partial output and terminal server events never re-run work.
+        if(!outputStarted && !token.isCancelled && [404,405].contains(error.statusCode))return await legacy();
+        rethrow;
+      }
+      if(done==null || done['reply'] is! String || (done['reply'] as String).isEmpty){
+        throw const ApiException('Incomplete agent stream. Check message status before retrying.');
+      }
+      final result=_turnResultFromData(done,reply:done['reply'] as String);
+      final streamedAudio=audio.takeBytes();
+      return AgentTurnResult(text:result.text,parts:result.parts,agentRunId:result.agentRunId,
+        audioBytes:result.audioBytes ?? (streamedAudio.isNotEmpty ? streamedAudio : null),
+        audioMimeType:result.audioMimeType ?? (streamedAudio.isNotEmpty ? 'audio/l16;rate=24000' : null),
+        audioDurationMs:result.audioDurationMs,
+        audioTranscript:result.audioTranscript ?? (transcript.trim().isNotEmpty ? transcript.trim() : null));
+    } finally {
+      if(identical(_turnTokens[binding.characterId],token))_turnTokens.remove(binding.characterId);
+    }
+  }
+
+  @override
+  Future<AgentTurnResult> sendMediaTurnStream({
+    required AgentSessionBinding binding,required Uint8List bytes,required String mimeType,
+    required String caption,void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,void Function(String)? onAudioTranscriptDelta,
+    void Function(int,int)? onUploadProgress,String? requestId,
+  }) => _streamMedia(binding:binding,route:'/agent/sessions/${binding.characterSessionId}/media-turn-stream',
+    body:{'characterId':binding.characterId,'caption':caption,'mimeType':mimeType,'dataBase64':base64Encode(bytes)},
+    onTextDelta:onTextDelta,onAudioPcmChunk:onAudioPcmChunk,onAudioTranscriptDelta:onAudioTranscriptDelta,
+    onUploadProgress:onUploadProgress,requestId:requestId,
+    legacy:()=>sendMediaTurn(binding:binding,bytes:bytes,mimeType:mimeType,caption:caption,onUploadProgress:onUploadProgress,requestId:requestId));
+
+  @override
+  Future<AgentTurnResult> sendMediaSetTurnStream({
+    required AgentSessionBinding binding,required List<AgentMediaInput> media,required String caption,
+    void Function(String)? onTextDelta,Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,void Function(int,int)? onUploadProgress,String? requestId,
+  }) {
+    if(media.length<2 || media.length>8)throw const ApiException('Invalid attachment set');
+    return _streamMedia(binding:binding,route:'/agent/sessions/${binding.characterSessionId}/media-set-turn-stream',
+      body:{'characterId':binding.characterId,'caption':caption,'media':[
+        for(final item in media){'mimeType':item.mimeType,'dataBase64':base64Encode(item.bytes),if(item.name!=null)'name':item.name}]},
+      onTextDelta:onTextDelta,onAudioPcmChunk:onAudioPcmChunk,onAudioTranscriptDelta:onAudioTranscriptDelta,
+      onUploadProgress:onUploadProgress,requestId:requestId,
+      legacy:()=>sendMediaSetTurn(binding:binding,media:media,caption:caption,onUploadProgress:onUploadProgress,requestId:requestId));
   }
 
   @override
@@ -681,6 +770,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
           : null,
       audioMimeType: audioMimeType is String ? audioMimeType : null,
       audioDurationMs: audioDurationMs is num ? audioDurationMs.round() : null,
+      audioTranscript: data['audioTranscript'] is String ? data['audioTranscript'] as String : null,
     );
   }
 
@@ -946,3 +1036,4 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport {
     }
   }
 }
+
