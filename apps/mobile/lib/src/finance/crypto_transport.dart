@@ -36,6 +36,7 @@ abstract interface class CryptoWalletTransport {
     required String providerCode,
     required String amount,
     required String destinationAddress,
+    String? stepUpToken,
   });
 
   Future<CryptoIntent> refreshWithdrawal(String requestId);
@@ -97,13 +98,15 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
 
   Future<Map<String, dynamic>> _post(
     String path,
-    Map<String, dynamic> body,
+    Map<String, dynamic> body, {String? stepUpToken}
   ) async {
     try {
+      final options=_options();
+      if(stepUpToken!=null) options.headers?['X-Masanawa-Step-Up']=stepUpToken;
       final response = await _dio.post<Map<String, dynamic>>(
         '$_baseUrl$path',
         data: body,
-        options: _options(),
+        options: options,
       );
       final data = response.data;
       if (data == null) {
@@ -277,6 +280,7 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
     required String providerCode,
     required String amount,
     required String destinationAddress,
+    String? stepUpToken,
   }) async {
     return CryptoIntent.fromJson(
       await _post('/v1/financial/crypto/withdrawals', {
@@ -284,7 +288,7 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
         'providerCode': providerCode,
         'amount': amount,
         'destinationAddress': destinationAddress,
-      }),
+      },stepUpToken:stepUpToken),
     );
   }
 
