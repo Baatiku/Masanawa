@@ -761,6 +761,27 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       });}catch(error){return authError(error,reply);}
     });
 
+    const contactChangeBody={
+      channel:Type.Union([Type.Literal("email"),Type.Literal("sms")]),
+      nextIdentifier:Type.String({minLength:3,maxLength:320}),
+    };
+    app.post("/v1/auth/security/contacts/change/start",{
+      schema:{body:Type.Object(contactChangeBody,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/contacts/change/confirm",{
+      schema:{body:Type.Object({...contactChangeBody,
+        oldCode:Type.String({minLength:6,maxLength:6}),
+        newCode:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.completeContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
     app.get("/v1/auth/security/sessions", async (request, reply) => {
       try {return {sessions:await auth.sessions({authorizationHeader:request.headers.authorization})};}
       catch(error) {return authError(error,reply);}
