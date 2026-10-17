@@ -105,7 +105,6 @@ class _PersonProfileBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = context.masanawa;
     final avatar = profile.avatarUrl?.trim();
-    final twinId = profile.twinPublicId?.trim();
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -229,30 +228,6 @@ class _PersonProfileBody extends StatelessWidget {
                 ],
               ],
             ),
-            if (twinId != null && twinId.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Material(
-                color: u.surfaceCard,
-                borderRadius: BorderRadius.circular(14),
-                child: ListTile(
-                  onTap: onOpenTwin == null ? null : () => onOpenTwin!(twinId),
-                  leading: CircleAvatar(
-                    backgroundColor: u.surfaceMuted,
-                    child: Icon(Icons.auto_awesome_rounded, color: u.brandStrong),
-                  ),
-                  title: Text(
-                    profile.twinDisplayName?.trim().isNotEmpty == true
-                        ? profile.twinDisplayName!
-                        : 'Their Twin',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: const Text('Profile'),
-                  trailing: onOpenTwin == null
-                      ? null
-                      : Icon(Icons.chevron_right_rounded, color: u.textMuted),
-                ),
-              ),
-            ],
             const SizedBox(height: 20),
             Text(
               'Talks',
