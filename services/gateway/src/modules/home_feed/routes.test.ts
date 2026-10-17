@@ -65,4 +65,27 @@ describe("J06 HTTP cannot publish as fan or leak across tenant",()=>{
   await app.close();
  });
 
+ it("forwards an exact Masana author filter to the canonical feed service",async()=>{
+  const app=Fastify(),list=vi.fn(async()=>({items:[],nextCursor:null}));
+  await registerHomeFeedRoutes(app,{service:{list} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"trusted_fan"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const result=await app.inject({method:"GET",
+    url:"/v1/feed?mode=for_you&authorMasanaId=character_sadiq"});
+  expect(result.statusCode).toBe(200);
+  expect(list).toHaveBeenCalledWith("tenant","trusted_fan","for_you",undefined,"character_sadiq");
+  await app.close();
+ });
+ it("rejects a non-string profile filter without calling the feed",async()=>{
+  const app=Fastify(),list=vi.fn();
+  await registerHomeFeedRoutes(app,{service:{list} as never,
+   principal:async()=>null,tenant:()=>"tenant",
+   isNewAccount:async()=>false,enabled:()=>true});
+  const result=await app.inject({method:"GET",
+    url:"/v1/feed?authorMasanaId[0]=character_a"});
+  expect(result.statusCode).toBe(422);
+  expect(list).not.toHaveBeenCalled();
+  await app.close();
+ });
+
 });
