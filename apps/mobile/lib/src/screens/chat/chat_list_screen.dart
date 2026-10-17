@@ -16,6 +16,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
 import '../../ui/components/conversation_search_field.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
 
 class ChatListScreen extends ConsumerWidget {
@@ -165,7 +166,7 @@ class ChatListScreen extends ConsumerWidget {
           shrinkWrap: true,
           children: [
             const ListTile(
-              title: Text('Agent activity'),
+              title: Text('Masana activity'),
               subtitle: Text('Work, approvals and items needing attention'),
             ),
             for (final item in items)
@@ -183,7 +184,7 @@ class ChatListScreen extends ConsumerWidget {
                     ),
                     title: Text(
                       part.title ??
-                          (agent?.displayName ?? 'Agent') +
+                          (agent?.displayName ?? 'Masana') +
                               (part.kind == AgentMessagePartKind.approval
                                   ? ' needs approval'
                                   : ' is working'),
@@ -363,6 +364,7 @@ class ChatListScreen extends ConsumerWidget {
     final chat = ref.watch(aiChatProvider);
     final directory = ref.watch(agentDirectoryProvider);
     final session = ref.watch(sessionProvider);
+    final accountKey = session is SessionSignedIn ? session.user.id : 'signed-out';
     final userName = session is SessionSignedIn
         ? session.user.name
         : 'Masanawa';
@@ -467,11 +469,13 @@ class ChatListScreen extends ConsumerWidget {
               error: directory.error,
               hasAgents: directory.agents.isNotEmpty,
               onStart: () => context.push('/masana'),
+              onRetry: () => ref.read(agentDirectoryProvider.notifier).refresh(),
             )
           : RefreshIndicator(
               onRefresh: () =>
                   ref.read(agentDirectoryProvider.notifier).refresh(),
               child: ListView.separated(
+                key: PageStorageKey<String>('chats-scroll-$accountKey'),
                 itemCount: visibleThreads.length,
                 separatorBuilder: (_, _) =>
                     Divider(height: 1, indent: 76, color: u.structuralBorder),
@@ -914,18 +918,23 @@ class _EmptyChats extends StatelessWidget {
   const _EmptyChats({
     required this.loading,
     required this.onStart,
+    required this.onRetry,
     required this.hasAgents,
     this.error,
   });
 
   final bool loading;
   final VoidCallback onStart;
+  final VoidCallback onRetry;
   final bool hasAgents;
   final String? error;
 
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    if (loading && !hasAgents && error == null) {
+      return const MasanawaListSkeleton(semanticLabel: 'Loading Masana conversations');
+    }
     return Center(
       child: SingleChildScrollView(
         child: Padding(
@@ -938,11 +947,12 @@ class _EmptyChats extends StatelessWidget {
               const SizedBox(height: 18),
               Text(
                 loading && !hasAgents
-                    ? 'Loading your agents…'
-                    : error ??
-                          (hasAgents
-                              ? 'Talk to an agent'
-                              : 'No agents are available right now.'),
+                    ? 'Loading Masana conversations…'
+                    : error != null
+                        ? 'Could not load Masana contacts'
+                        : (hasAgents
+                            ? 'Start a Masana conversation'
+                            : 'No Masana contacts available right now.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: u.textPrimary,
@@ -952,17 +962,27 @@ class _EmptyChats extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                hasAgents
-                    ? 'Choose an agent to start a conversation.'
-                    : 'Your conversations are still here. Please try again shortly.',
+                error != null
+                    ? 'Check your connection and retry. Saved conversations are kept on this device.'
+                    : hasAgents
+                        ? 'Choose a Masana to start a conversation.'
+                        : 'Please try again shortly, or browse available Masana.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: u.textMuted, fontSize: 14, height: 1.5),
               ),
               const SizedBox(height: 20),
+              if (error != null) ...[
+                OutlinedButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry contacts'),
+                ),
+                const SizedBox(height: 8),
+              ],
               FilledButton.icon(
                 onPressed: loading && !hasAgents ? null : onStart,
                 icon: const Icon(Icons.groups_outlined),
-                label: Text(hasAgents ? 'Choose an agent' : 'View agents'),
+                label: Text(hasAgents ? 'Choose a Masana' : 'Browse Masana'),
               ),
             ],
           ),

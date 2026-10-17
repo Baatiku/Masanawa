@@ -180,6 +180,12 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+      ),
+    ),
     colorScheme: scheme,
     // Normal app surfaces are white in light mode; keep the canonical
     // muted background token for components that need secondary surfaces.
