@@ -18,6 +18,8 @@ import 'package:audio_session/audio_session.dart';
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../chat/chat_format.dart';
+import '../../chat/chat_emoji_panel.dart';
+import '../../chat/chat_text_editing.dart';
 import '../../chat/cafe_suggestions.dart';
 import '../../chat/message_parts.dart';
 import '../../chat/message_parts_view.dart';
@@ -76,6 +78,7 @@ class AiChatScreen extends ConsumerStatefulWidget {
 
 class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   final _input = TextEditingController();
+  final _composerFocus = FocusNode();
   final _scroll = ScrollController();
   final _imagePicker = ImagePicker();
   bool _showEmoji = false;
@@ -96,19 +99,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   LiveVoiceSession? _inlineVoiceSession;
   LiveVoiceSession? _modalVoiceSession;
   ProviderSubscription<SessionState>? _voiceAccountSubscription;
-  StreamSubscription<String>? _inlineTranscriptSub;
   StreamSubscription<LiveVoiceState>? _inlineVoiceStateSub;
-  StreamSubscription<void>? _inlineTurnSub;
   PaidVoiceAdmission? _inlinePaidAdmission;
   PaidVoiceController? _inlinePaidController;
   AgentShellTransport? _inlineShellTransport;
   String? _inlineVoiceCharacterId;
-  String _inlineTranscript = '';
-  String _inlineTranscriptHistory = '';
-  String _inlineCurrentTranscript = '';
   LiveVoiceState _inlineVoiceState = LiveVoiceState.idle;
   bool _inlineVoiceClosing = false;
-  bool _voiceNoteSheetOpen = false;
   bool _voiceNoteSending = false;
   VoiceNoteRecorder? _inlineRecorder;
   AudioPlayer? _inlinePreviewPlayer;
@@ -190,14 +187,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
     _scrollPersistTimer?.cancel();
     _walletRefreshTimer?.cancel();
-    _inlineTranscriptSub?.cancel();
     _inlineVoiceStateSub?.cancel();
-    _inlineTurnSub?.cancel();
     unawaited(_disposeInlineVoice());
     _inlineRecorder?.removeListener(_onInlineRecorderChanged);
     unawaited(_inlineRecorder?.close() ?? Future<void>.value());
     unawaited(_inlinePreviewPlayer?.dispose() ?? Future<void>.value());
     _input.dispose();
+    _composerFocus.dispose();
     _search.dispose();
     _scroll.dispose();
     try {
@@ -540,12 +536,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       _voiceNoteSending = false;
       if (mounted) setState(() {});
     }
-  }
-
-  /// Record a local voice message, without starting a paid LiveKit/Gemini call.
-  /// The existing chat controller retains offline queue/retry and receipts.
-  Future<void> _openVoiceNoteComposer() async {
-    await _startInlineRecording();
   }
 
   // ---- Attachments ---------------------------------------------------------
@@ -1516,7 +1506,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             if (_inlineVoiceSession != null)
               _InlineVoicePanel(
                 agentName: agent.displayName,
-                transcript: _inlineTranscript,
                 state: _inlineVoiceState,
                 onStop: () => unawaited(
                   _stopInlineLiveVoice(outcome: 'completed'),
@@ -1550,6 +1539,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               ),
             _Composer(
                 controller: _input,
+                focusNode: _composerFocus,
+                emojiSelected: _showEmoji,
+                onTextTap: () { if (_showEmoji) setState(() => _showEmoji = false); },
                 hasText: _hasText || _pendingAttachments.isNotEmpty,
                 sending: sending || updateRequired,
                 onSend: updateRequired ? () {} : _sendText,
@@ -1567,7 +1559,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onEmojiToggle: () {
                   if (_showEmoji) {
                     setState(() => _showEmoji = false);
-                    FocusScope.of(context).requestFocus(FocusNode());
+                    _composerFocus.requestFocus();
                   } else {
                     FocusScope.of(context).unfocus();
                     setState(() => _showEmoji = true);
@@ -1580,6 +1572,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onTogglePreview: _toggleInlinePreview,
                 previewPlaying: _inlinePreviewPlaying,
               ),
+            if (_showEmoji && _inlineRecorder == null)
+              ChatEmojiPanel(controller: _input, onClose: () {
+                setState(() => _showEmoji = false);
+                _composerFocus.requestFocus();
+              }),
 
           ],
         ),
@@ -1915,42 +1912,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     return (admission != null, admission, quote.estimatedSeconds);
   }
 
-  void _applyInlineTranscriptChunk(String chunk) {
-    final next = chunk.trim();
-    if (next.isEmpty || !mounted) return;
-    setState(() {
-      final current = _inlineCurrentTranscript;
-      if (current.isEmpty || next.startsWith(current)) {
-        _inlineCurrentTranscript = next;
-      } else if (!current.endsWith(next)) {
-        final separator =
-            current.endsWith(' ') || next.startsWith(' ') ? '' : ' ';
-        _inlineCurrentTranscript = current + separator + next;
-      }
-      _inlineTranscript = [
-        if (_inlineTranscriptHistory.trim().isNotEmpty)
-          _inlineTranscriptHistory.trim(),
-        if (_inlineCurrentTranscript.trim().isNotEmpty)
-          _inlineCurrentTranscript.trim(),
-      ].join('\n\n');
-    });
-  }
-
-  void _finishInlineTranscriptTurn() {
-    if (!mounted) return;
-    final current = _inlineCurrentTranscript.trim();
-    if (current.isEmpty) return;
-    setState(() {
-      _inlineTranscriptHistory = [
-        if (_inlineTranscriptHistory.trim().isNotEmpty)
-          _inlineTranscriptHistory.trim(),
-        current,
-      ].join('\n\n');
-      _inlineCurrentTranscript = '';
-      _inlineTranscript = _inlineTranscriptHistory;
-    });
-  }
-
   Future<void> _disposeInlineVoice() async {
     if (_inlineVoiceClosing) return;
     final session = _inlineVoiceSession;
@@ -1964,12 +1925,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ? null
         : ref.read(walletProvider.notifier);
     try {
-      await _inlineTranscriptSub?.cancel();
       await _inlineVoiceStateSub?.cancel();
-      await _inlineTurnSub?.cancel();
-      _inlineTranscriptSub = null;
       _inlineVoiceStateSub = null;
-      _inlineTurnSub = null;
       await session.close();
       if (admission != null && paidController != null) {
         await paidController
@@ -2090,14 +2047,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ),
       );
 
-      _inlineTranscriptSub?.cancel();
       _inlineVoiceStateSub?.cancel();
-      _inlineTurnSub?.cancel();
-      _inlineTranscriptSub =
-          session.transcripts.listen(_applyInlineTranscriptChunk);
-      _inlineTurnSub = session.turnCompletions.listen((_) {
-        _finishInlineTranscriptTurn();
-      });
       _inlineVoiceStateSub = session.states.listen((state) {
         if (!mounted) return;
         setState(() => _inlineVoiceState = state);
@@ -2112,9 +2062,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         _inlinePaidController = paidController;
         _inlineShellTransport = shellTransport;
         _inlineVoiceCharacterId = agent.characterId;
-        _inlineTranscript = '';
-        _inlineTranscriptHistory = '';
-        _inlineCurrentTranscript = '';
         _inlineVoiceState = LiveVoiceState.connecting;
       });
 
@@ -2171,12 +2118,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final shellTransport = _inlineShellTransport;
     final characterId = _inlineVoiceCharacterId;
     try {
-      await _inlineTranscriptSub?.cancel();
       await _inlineVoiceStateSub?.cancel();
-      await _inlineTurnSub?.cancel();
-      _inlineTranscriptSub = null;
       _inlineVoiceStateSub = null;
-      _inlineTurnSub = null;
       await session.close();
       if (admission != null) {
         await _inlinePaidController?.complete(
@@ -2786,13 +2729,11 @@ class _AttachOption extends StatelessWidget {
 class _InlineVoicePanel extends StatelessWidget {
   const _InlineVoicePanel({
     required this.agentName,
-    required this.transcript,
     required this.state,
     required this.onStop,
   });
 
   final String agentName;
-  final String transcript;
   final LiveVoiceState state;
   final VoidCallback onStop;
 
@@ -2835,13 +2776,9 @@ class _InlineVoicePanel extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.bottomLeft,
                   child: Text(
-                    transcript.trim().isEmpty
-                        ? '$agentName · $_status'
-                        : transcript.trim(),
+                    '$agentName · $_status',
                     style: TextStyle(
-                      color: transcript.trim().isEmpty
-                          ? u.textMuted
-                          : u.textPrimary,
+                      color: u.textMuted,
                       fontSize: 13,
                       height: 1.35,
                     ),
@@ -2916,6 +2853,9 @@ class _Composer extends StatelessWidget {
     required this.onAttach,
     required this.onMic,
     required this.onEmojiToggle,
+    required this.focusNode,
+    required this.emojiSelected,
+    required this.onTextTap,
     this.onMicLongPress,
     this.recorder,
     this.onCancelRecording,
@@ -2934,6 +2874,9 @@ class _Composer extends StatelessWidget {
   final VoidCallback onMic;
   final VoidCallback? onMicLongPress;
   final VoidCallback onEmojiToggle;
+  final FocusNode focusNode;
+  final bool emojiSelected;
+  final VoidCallback onTextTap;
   final VoiceNoteRecorder? recorder;
   final VoidCallback? onCancelRecording;
   final VoidCallback? onStopRecording;
@@ -3034,7 +2977,7 @@ class _Composer extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '‹ Slide or tap trash',
+            'Recording voice note',
             style: TextStyle(
               color: u.textMuted,
               fontSize: 12,
@@ -3092,10 +3035,15 @@ class _Composer extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        _ComposerIcon(tooltip: emojiSelected ? 'Keyboard' : 'Emoji',
+          icon: emojiSelected ? Icons.keyboard_rounded : Icons.emoji_emotions_outlined,
+          onPressed: onEmojiToggle),
 
         Expanded(
           child: TextField(
             controller: controller,
+            focusNode: focusNode,
+            onTap: onTextTap,
             minLines: 1,
             maxLines: 5,
             keyboardType: TextInputType.multiline,
@@ -3810,6 +3758,10 @@ class _RichMessageText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    if (isEmojiOnlyChatText(text)) {
+      return SelectableText(text, style: const TextStyle(fontSize: 38, height: 1.3,
+        fontFamilyFallback: ['Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji']));
+    }
     final chunks = text.split('```');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4762,3 +4714,4 @@ class _TypingBubble extends StatelessWidget {
     );
   }
 }
+

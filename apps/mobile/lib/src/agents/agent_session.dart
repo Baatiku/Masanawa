@@ -53,6 +53,7 @@ class AgentTurnResult {
     this.audioBytes,
     this.audioMimeType,
     this.audioDurationMs,
+    this.audioTranscript,
   });
 
   final String text;
@@ -61,6 +62,7 @@ class AgentTurnResult {
   final Uint8List? audioBytes;
   final String? audioMimeType;
   final int? audioDurationMs;
+  final String? audioTranscript;
 }
 
 abstract class AgentTransport {
@@ -160,4 +162,25 @@ class PreviewAgentTransport implements AgentTransport {
 
   @override
   Future<void> closeSession(AgentSessionBinding binding) async {}
+}
+
+
+
+/// Optional capability; older transports retain their existing single-reply API.
+abstract interface class StreamingAgentMediaTransport {
+  Future<AgentTurnResult> sendMediaTurnStream({
+    required AgentSessionBinding binding, required Uint8List bytes,
+    required String mimeType, required String caption,
+    void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,
+    void Function(int,int)? onUploadProgress, String? requestId,
+  });
+  Future<AgentTurnResult> sendMediaSetTurnStream({
+    required AgentSessionBinding binding, required List<AgentMediaInput> media,
+    required String caption, void Function(String)? onTextDelta,
+    Future<void> Function(Uint8List)? onAudioPcmChunk,
+    void Function(String)? onAudioTranscriptDelta,
+    void Function(int,int)? onUploadProgress, String? requestId,
+  });
 }

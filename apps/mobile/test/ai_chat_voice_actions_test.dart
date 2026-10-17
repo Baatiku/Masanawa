@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,14 @@ class _Recorder extends VoiceNoteRecorder {
 }
 class _Chats extends AiChatController {
  final sent=<ChatAttachment>[];
+ final texts=<String>[];
+ @override void setDraft(String characterId,String value) {}
+ @override void setDraftAttachments(String characterId,List<ChatAttachment> value) {}
+ @override Future<void> sendText(String characterId,String rawText,{String? replyToId,String? replyPreview,String? transportPrompt}) async {
+  texts.add(rawText);
+  state=AiChatState(threads:{characterId:ChatThread(characterId:characterId,messages:[AiChatMessage(id:'emoji',isUser:true,text:rawText,createdAt:DateTime.now(),deliveryStatus:'delivered')])});
+ }
+
  @override AiChatState build()=>const AiChatState();
  @override void openThread(String characterId) {}
  @override void closeThread() {}
@@ -46,6 +55,7 @@ class _Wallet extends WalletController {
  @override Future<void> refresh() async {}
 }
 void main() {
+ setUp(()=>SharedPreferences.setMockInitialValues({}));
  testWidgets('chat microphone records and sends a voice note, never requests a call permission', (tester) async {
   var callPermissionRequests=0;
   const channel=MethodChannel('flutter.baseflow.com/permissions/methods');
@@ -57,9 +67,23 @@ void main() {
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
   expect(find.text('Recording voice note'),findsOneWidget);
   expect(callPermissionRequests,0);
-  await tester.tap(find.text('Send voice note'));await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pumpAndSettle();
   expect(chats.sent,hasLength(1));expect(chats.sent.single.kind,'voice');expect(recorder.retained,true);
   expect(find.text('Recording voice note'),findsNothing);
   expect(tester.takeException(),isNull);
  });
+ testWidgets('emoji picker opens and an emoji-only message sends and renders without a crash',(tester)async{
+  final chats=_Chats();
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Emoji'));await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('chat-emoji-panel')),findsOneWidget);
+  await tester.tap(find.byTooltip('Return to keyboard'));await tester.pumpAndSettle();
+  const text='👍🏿 🇳🇬 👨‍👩‍👧‍👦';
+  await tester.enterText(find.byType(TextField).first,text);await tester.pump();
+  await tester.tap(find.bySemanticsLabel('Send message'));await tester.pumpAndSettle();
+  expect(chats.texts,[text]);expect(find.text(text),findsOneWidget);expect(tester.takeException(),isNull);
+ });
+
 }
+

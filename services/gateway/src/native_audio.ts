@@ -3,6 +3,7 @@ export interface NativeAudioRenderResult {
   readonly dataBase64: string;
   readonly mimeType: string;
   readonly durationMs: number;
+  readonly transcript?: string;
 }
 
 export interface NativeAudioRenderer {
@@ -10,7 +11,7 @@ export interface NativeAudioRenderer {
     text: string,
     signal?: AbortSignal,
     onPcmChunk?: (chunk: Buffer) => void | Promise<void>,
-    context?: Readonly<{ voiceName?: string }>,
+    context?: Readonly<{ voiceName?: string; onTranscriptDelta?: (text: string) => void | Promise<void> }>,
   ): Promise<NativeAudioRenderResult>;
 }
 

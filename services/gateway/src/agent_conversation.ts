@@ -114,6 +114,7 @@ export function createAgentConversationService(input: {
     scope: import("@masanawa/agents").CharacterSessionScope,
     signal?: AbortSignal,
     onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>,
+    onAudioTranscriptDelta?: (delta: string) => void | Promise<void>,
   ) {
     if (!input.nativeAudio || signal?.aborted) return undefined;
     try {
@@ -125,7 +126,7 @@ export function createAgentConversationService(input: {
         onAudioPcmChunk
           ? async (chunk) => onAudioPcmChunk(chunk.toString("base64"))
           : undefined,
-        voiceName ? {voiceName} : undefined,
+        { ...(voiceName ? {voiceName} : {}), ...(onAudioTranscriptDelta ? {onTranscriptDelta:onAudioTranscriptDelta} : {}) },
       )
       .catch(() => undefined);
     } catch { return undefined; }
@@ -332,6 +333,7 @@ export function createAgentConversationService(input: {
           admission.scope,
           request.signal,
           request.onAudioPcmChunk,
+          request.onAudioTranscriptDelta,
         );
         return Object.freeze({
           reply,
@@ -342,6 +344,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
+                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
               }
             : {}),
         });
@@ -462,6 +465,7 @@ export function createAgentConversationService(input: {
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
+          ...(request.onTextDelta ? {onTextDelta:request.onTextDelta} : {}),
           input: Object.freeze({
             kind: "media" as const,
             caption,
@@ -513,7 +517,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = await renderAudio(reply, admission.scope, request.signal);
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
         return Object.freeze({
           reply,
           agentRunId,
@@ -523,6 +527,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
+                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
               }
             : {}),
         });
@@ -656,6 +661,7 @@ export function createAgentConversationService(input: {
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
+          ...(request.onTextDelta ? {onTextDelta:request.onTextDelta} : {}),
           input: Object.freeze({
             kind: "media-set" as const,
             caption,
@@ -698,7 +704,7 @@ export function createAgentConversationService(input: {
           });
         }
 
-        const audio = await renderAudio(reply, admission.scope, request.signal);
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
         return Object.freeze({
           reply,
           agentRunId,
@@ -708,6 +714,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
+                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
               }
             : {}),
         });

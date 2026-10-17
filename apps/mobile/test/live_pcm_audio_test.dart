@@ -34,4 +34,17 @@ void main() {
     await LivePcmAudio.stop();
     expect(calls.last.method, 'stop');
   });
+  test('an old reply cannot stop or write over a newer reply or continuous call', () async {
+    final calls=<MethodCall>[];
+    messenger.setMockMethodCallHandler(channel,(call)async{calls.add(call);return true;});
+    final old=LivePcmAudio.acquirePlaybackOwner();await LivePcmAudio.start(owner:old);
+    await LivePcmAudio.start(); // A continuous call acquires the output device.
+    final before=calls.length;
+    await LivePcmAudio.stop(owner:old);
+    expect(await LivePcmAudio.write(Uint8List.fromList([1,0]),owner:old),false);
+    expect(calls.length,before);
+    await LivePcmAudio.release();
+  });
+
 }
+

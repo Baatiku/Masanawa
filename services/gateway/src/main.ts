@@ -171,7 +171,6 @@ import {
   createFinancialService,
   type FinancialAuthorizer,
 } from "./financial_service.js";
-import { createGeminiLiveAudioRenderer } from "./native_audio.js";
 import { createMsnLedgerStore } from "./msn_wallet/store.js";
 import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
 import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
@@ -862,15 +861,10 @@ export async function startGatewayService(
       skills: database.skills,
       guides: database.skillGuides,
     });
-    nativeAudio = createGeminiLiveAudioRenderer({
+    nativeAudio = createGeminiRecordedLiveAudioRenderer({
       apiKey: alphaGeminiApiKey,
-      model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
+      model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
-      fallback: createGeminiRecordedLiveAudioRenderer({
-        apiKey: alphaGeminiApiKey,
-        model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
-        voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
-      }),
     });
     liveVoiceTokens = createGeminiLiveTokenService({
       apiKey: alphaGeminiApiKey,
@@ -1347,15 +1341,10 @@ export async function startGatewayService(
         env.MASANAWA_GEMINI_LIVE_VOICE?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE?.trim() ||
         "Bodi";
-      nativeAudio ??= createGeminiLiveAudioRenderer({
+      nativeAudio ??= createGeminiRecordedLiveAudioRenderer({
         apiKey: liveApiKey,
-        model: env.MASANAWA_GEMINI_TTS_MODEL?.trim() || "gemini-3.8-flash-tts",
+        model: liveModel,
         voiceName: liveVoice,
-        fallback: createGeminiRecordedLiveAudioRenderer({
-          apiKey: liveApiKey,
-          model: liveModel,
-          voiceName: liveVoice,
-        }),
       });
       if (conversationAuthorizer) {
         liveVoiceTokens = createGeminiLiveTokenService({

@@ -6,18 +6,28 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../state/ai_chat_state.dart';
-import 'app_permissions.dart';
+import 'package:flutter/services.dart';
 import 'audio_failure.dart';
 import 'request_id.dart';
 
-enum VoiceNoteState { idle, starting, recording, stopping, ready, failed, closed }
+enum VoiceNoteState {
+  idle,
+  starting,
+  recording,
+  stopping,
+  ready,
+  failed,
+  closed,
+}
 
 /// Local recording only. The existing authenticated chat transport owns send,
 /// offline queue/retry and resulting message receipts.
 class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
-  VoiceNoteRecorder({AudioRecorder? recorder, Future<Directory> Function()? directory})
-      : _recorder = recorder ?? AudioRecorder(),
-        _directory = directory ?? getApplicationSupportDirectory;
+  VoiceNoteRecorder({
+    AudioRecorder? recorder,
+    Future<Directory> Function()? directory,
+  }) : _recorder = recorder ?? AudioRecorder(),
+       _directory = directory ?? getApplicationSupportDirectory;
 
   final AudioRecorder _recorder;
   final Future<Directory> Function() _directory;
@@ -44,42 +54,100 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
     _set(VoiceNoteState.starting);
     final opening = _start(generation);
     _opening = opening;
-    try { await opening; } finally { _opening = null; }
+    try {
+      await opening;
+    } finally {
+      _opening = null;
+    }
   }
 
-  bool _current(int generation) => generation == _generation && _closing == null && _isOwnerCurrent();
+  bool _current(int generation) =>
+      generation == _generation && _closing == null && _isOwnerCurrent();
 
   Future<void> _start(int generation) async {
     try {
+      // record owns the runtime microphone request; a second permission
+      // plugin request can mask denials or race the Android permission dialog.
       if (!await _recorder.hasPermission()) {
-        final perm = await AppPermissions.request(AppPermission.microphone);
-        if (!perm.granted && !await _recorder.hasPermission()) {
-          throw const AudioFailure('permission', 'Microphone permission was denied. Allow microphone access in Android settings to record.');
-        }
+        throw const AudioFailure(
+          'permission',
+          'Microphone permission was denied. Allow microphone access in Android settings to record.',
+        );
       }
-      if (!_current(generation)) { _set(VoiceNoteState.idle); return; }
+      if (!_current(generation)) {
+        _set(VoiceNoteState.idle);
+        return;
+      }
       final directory = await _directory();
-      if (!_current(generation)) { _set(VoiceNoteState.idle); return; }
+      if (!_current(generation)) {
+        _set(VoiceNoteState.idle);
+        return;
+      }
       final folder = Directory('${directory.path}/voice_notes');
       await folder.create(recursive: true);
-      if (!_current(generation)) { _set(VoiceNoteState.idle); return; }
+      if (!_current(generation)) {
+        _set(VoiceNoteState.idle);
+        return;
+      }
       _path = '${folder.path}/${createRequestId()}.m4a';
-      await _recorder.start(const RecordConfig(
-        encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000, numChannels: 1,
-      ), path: _path!);
-      if (!_current(generation)) { await _discard(); _set(VoiceNoteState.idle); return; }
-      _clock.reset(); _clock.start();
-      WidgetsBinding.instance.addObserver(this); _observing = true;
+      RecordConfig config({bool legacy = false}) => RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 64000,
+        sampleRate: 16000,
+        numChannels: 1,
+        androidConfig: AndroidRecordConfig(
+          manageBluetooth: false,
+          audioSource: AndroidAudioSource.mic,
+          useLegacy: legacy,
+        ),
+      );
+      try {
+        await _recorder
+            .start(config(), path: _path!)
+            .timeout(const Duration(seconds: 10));
+      } on PlatformException catch (failure) {
+        if (failure.code.toLowerCase().contains('permission')) rethrow;
+        try {
+          await _recorder.cancel().timeout(const Duration(seconds: 2));
+        } catch (_) {}
+        if (!_current(generation)) {
+          _set(VoiceNoteState.idle);
+          return;
+        }
+        // Explicitly rejected codec setup can use Android's stable recorder.
+        await _recorder
+            .start(config(legacy: true), path: _path!)
+            .timeout(const Duration(seconds: 10));
+      }
+      if (!_current(generation)) {
+        await _discard();
+        _set(VoiceNoteState.idle);
+        return;
+      }
+      _clock.reset();
+      _clock.start();
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
       _set(VoiceNoteState.recording);
       _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-        if (!_isOwnerCurrent()) { unawaited(cancel()); return; }
-        if (elapsed >= const Duration(minutes: 5)) { unawaited(stop()); return; }
+        if (!_isOwnerCurrent()) {
+          unawaited(cancel());
+          return;
+        }
+        if (elapsed >= const Duration(minutes: 5)) {
+          unawaited(stop());
+          return;
+        }
         notifyListeners();
       });
     } catch (failure) {
       await _discard();
       if (generation != _generation || _closing != null) return;
-      error = audioFailureMessage(failure, fallback: 'Recording could not start. Another app may be using audio. Close it and try again.');
+      error = audioFailureMessage(
+        failure,
+        fallback:
+            'Recording could not start. Another app may be using audio. Close it and try again.',
+      );
       _set(VoiceNoteState.failed, clearError: false);
     }
   }
@@ -93,29 +161,53 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
     _set(VoiceNoteState.stopping);
     final stopping = _stop(generation);
     _stopping = stopping;
-    try { return await stopping; } finally { _stopping = null; }
+    try {
+      return await stopping;
+    } finally {
+      _stopping = null;
+    }
   }
 
   Future<ChatAttachment?> _stop(int generation) async {
     try {
-      final path = await _recorder.stop();
-      if (!_current(generation)) { await _deleteFile(); return null; }
+      final path = await _recorder.stop().timeout(const Duration(seconds: 10));
+      if (!_current(generation)) {
+        await _deleteFile();
+        return null;
+      }
       if (path == null || path != _path) {
-        throw const AudioFailure('empty', 'No audio was recorded. Please record again.');
+        throw const AudioFailure(
+          'empty',
+          'No audio was recorded. Please record again.',
+        );
       }
       final bytes = await File(path).length();
-      if (!_current(generation)) { await _deleteFile(); return null; }
-      if (bytes == 0 || bytes > 8 * 1024 * 1024) {
-        throw const AudioFailure('size', 'The recording is empty or too large. Please record again.');
+      if (!_current(generation)) {
+        await _deleteFile();
+        return null;
       }
-      note = ChatAttachment(kind: 'voice', path: path, name: 'Voice note.m4a',
-          durationMs: elapsed.inMilliseconds, sizeBytes: bytes);
+      if (bytes == 0 || bytes > 8 * 1024 * 1024) {
+        throw const AudioFailure(
+          'size',
+          'The recording is empty or too large. Please record again.',
+        );
+      }
+      note = ChatAttachment(
+        kind: 'voice',
+        path: path,
+        name: 'Voice note.m4a',
+        durationMs: elapsed.inMilliseconds,
+        sizeBytes: bytes,
+      );
       _set(VoiceNoteState.ready);
       return note;
     } catch (failure) {
       await _deleteFile();
       if (generation != _generation || _closing != null) return null;
-      error = audioFailureMessage(failure, fallback: 'The recording could not be saved. Please record again.');
+      error = audioFailureMessage(
+        failure,
+        fallback: 'The recording could not be saved. Please record again.',
+      );
       _set(VoiceNoteState.failed, clearError: false);
       return null;
     }
@@ -124,7 +216,10 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   /// Called only after the current account has explicitly submitted the note.
   void retain() {
     if (state != VoiceNoteState.ready || !_isOwnerCurrent()) {
-      throw const AudioFailure('account', 'This recording belongs to a previous session.');
+      throw const AudioFailure(
+        'account',
+        'This recording belongs to a previous session.',
+      );
     }
     _retained = true;
   }
@@ -141,12 +236,21 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _stopClock() {
-    _timer?.cancel(); _timer = null; _clock.stop();
-    if (_observing) { WidgetsBinding.instance.removeObserver(this); _observing = false; }
+    _timer?.cancel();
+    _timer = null;
+    _clock.stop();
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
   }
 
   Future<void> _discard() async {
-    if (!_retained) { try { await _recorder.cancel(); } catch (_) {} }
+    if (!_retained) {
+      try {
+        await _recorder.cancel().timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
     await _deleteFile();
   }
 
@@ -154,20 +258,29 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
     final path = _path;
     if (path == null || _retained) return;
     _path = null;
-    try { await File(path).delete(); } on FileSystemException { /* Already removed. */ }
+    try {
+      await File(path).delete();
+    } on FileSystemException {
+      /* Already removed. */
+    }
   }
 
   Future<void> close() => _closing ??= _close();
   Future<void> _close() async {
     await cancel();
-    await _recorder.dispose();
+    try {
+      await _recorder.dispose().timeout(const Duration(seconds: 2));
+    } catch (_) {
+      /* Android may already have released the recorder. */
+    }
     _set(VoiceNoteState.closed);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
       unawaited(cancel());
     }
   }

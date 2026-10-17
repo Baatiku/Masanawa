@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
@@ -11,12 +10,17 @@ class LivePcmAudio {
 
   static const MethodChannel _channel = MethodChannel('masanawa/live_pcm');
 
-  static Future<bool> start({int sampleRate = 24000}) async {
+  static int _playbackOwner = 0;
+  static int acquirePlaybackOwner() => ++_playbackOwner;
+  static bool isPlaybackOwner(int owner) => owner == _playbackOwner;
+
+  static Future<bool> start({int sampleRate = 24000, int? owner}) async {
+    if (owner != null && !isPlaybackOwner(owner)) return false;
+    if (owner == null) ++_playbackOwner;
     try {
-      return await _channel.invokeMethod<bool>(
-            'start',
-            {'sampleRate': sampleRate},
-          ) ??
+      return await _channel.invokeMethod<bool>('start', {
+            'sampleRate': sampleRate,
+          }) ??
           false;
     } on MissingPluginException {
       return false;
@@ -25,10 +29,12 @@ class LivePcmAudio {
     }
   }
 
-  static Future<bool> write(Uint8List bytes) async {
+  static Future<bool> write(Uint8List bytes, {int? owner}) async {
+    if (owner != null && !isPlaybackOwner(owner)) return false;
     if (bytes.isEmpty) return true;
     try {
-      return await _channel.invokeMethod<bool>('write', {'bytes': bytes}) ?? false;
+      return await _channel.invokeMethod<bool>('write', {'bytes': bytes}) ??
+          false;
     } on MissingPluginException {
       // Buffered WAV playback remains available.
       return false;
@@ -40,10 +46,9 @@ class LivePcmAudio {
 
   static Future<bool> setSpeaker(bool enabled) async {
     try {
-      return await _channel.invokeMethod<bool>(
-            'speaker',
-            {'enabled': enabled},
-          ) ??
+      return await _channel.invokeMethod<bool>('speaker', {
+            'enabled': enabled,
+          }) ??
           false;
     } on MissingPluginException {
       return false;
@@ -52,7 +57,9 @@ class LivePcmAudio {
     }
   }
 
-  static Future<void> stop() async {
+  static Future<void> stop({int? owner}) async {
+    if (owner != null && !isPlaybackOwner(owner)) return;
+    ++_playbackOwner;
     try {
       await _channel.invokeMethod<void>('stop');
     } on MissingPluginException {
@@ -64,6 +71,7 @@ class LivePcmAudio {
 
   /// Ending a live call also restores Android's normal communication route.
   static Future<void> release() async {
+    ++_playbackOwner;
     try {
       await _channel.invokeMethod<void>('release');
     } on MissingPluginException {

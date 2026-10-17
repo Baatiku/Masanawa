@@ -49,6 +49,7 @@ export interface AgentConversationService {
     readonly representation?: AgentConversationRepresentation;
     readonly onTextDelta?: (delta: string) => void | Promise<void>;
     readonly onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>;
+    readonly onAudioTranscriptDelta?: (delta: string) => void | Promise<void>;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly reply: string;
@@ -57,6 +58,7 @@ export interface AgentConversationService {
     readonly audioBase64?: string;
     readonly audioMimeType?: string;
     readonly audioDurationMs?: number;
+    readonly audioTranscript?: string;
   }>;
 
   mediaTurn(input: {
@@ -70,6 +72,9 @@ export interface AgentConversationService {
     readonly correlationId: CorrelationId;
     readonly surface?: AgentConversationSurface;
     readonly representation?: AgentConversationRepresentation;
+    readonly onTextDelta?: (delta: string) => void | Promise<void>;
+    readonly onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>;
+    readonly onAudioTranscriptDelta?: (delta: string) => void | Promise<void>;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly reply: string;
@@ -78,6 +83,7 @@ export interface AgentConversationService {
     readonly audioBase64?: string;
     readonly audioMimeType?: string;
     readonly audioDurationMs?: number;
+    readonly audioTranscript?: string;
   }>;
 
   mediaSetTurn(input: {
@@ -94,6 +100,9 @@ export interface AgentConversationService {
     readonly correlationId: CorrelationId;
     readonly surface?: AgentConversationSurface;
     readonly representation?: AgentConversationRepresentation;
+    readonly onTextDelta?: (delta: string) => void | Promise<void>;
+    readonly onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>;
+    readonly onAudioTranscriptDelta?: (delta: string) => void | Promise<void>;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly reply: string;
@@ -102,6 +111,7 @@ export interface AgentConversationService {
     readonly audioBase64?: string;
     readonly audioMimeType?: string;
     readonly audioDurationMs?: number;
+    readonly audioTranscript?: string;
   }>;
 
   close(input: {

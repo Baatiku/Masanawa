@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
 import 'package:masanawa/src/core/voice_note_recorder.dart';
@@ -62,6 +63,21 @@ void main() {
     expect(recorder.state, VoiceNoteState.failed);
     expect(recorder.error, isNot(contains('permission')));
   });
+  test('rejected native codec retries once without Bluetooth and preserves the recording', () async {
+    final configs=<RecordConfig>[];
+    when(()=>native.start(any(),path:any(named:'path'))).thenAnswer((call) async {
+      final config=call.positionalArguments.first as RecordConfig;configs.add(config);
+      if(configs.length==1)throw PlatformException(code:'codec');
+      output=call.namedArguments[#path] as String;await File(output).writeAsBytes([1,2]);
+    });
+    await recorder.start();expect(recorder.state,VoiceNoteState.recording);
+    expect(configs.length,2);expect(configs.first.androidConfig.manageBluetooth,false);
+    expect(configs.last.androidConfig.useLegacy,true);expect((await recorder.stop())?.sizeBytes,2);
+  });
+  test('native disposal failure still closes the recording controller', () async {
+    when(()=>native.dispose()).thenThrow(StateError('already released'));
+    await recorder.close();expect(recorder.state,VoiceNoteState.closed);
+  });
   test('empty recording cannot be sent', () async {
     when(() => native.start(any(), path: any(named: 'path'))).thenAnswer((call) async {
       output = call.namedArguments[#path] as String;
@@ -114,3 +130,4 @@ void main() {
   });
 
 }
+

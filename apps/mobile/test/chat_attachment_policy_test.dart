@@ -43,7 +43,7 @@ void main() {
     expect(imported.label, isNot(contains('Voice note')));
   });
 
-  test('preview selections enforce the actual 8 MB / 12 MB upload limits', () {
+  test('preview selections enforce per-file and encoded request upload limits', () {
     final selection = selectChatDraftAttachments(
       [file('image1.jpg', 6 * 1024 * 1024, kind: 'image')],
       [
@@ -55,7 +55,7 @@ void main() {
 
     expect(selection.attachments.map((a) => a.name), [
       'image1.jpg',
-      'image2.jpg',
+      'overflow.png',
     ]);
     expect(selection.rejectedCount, 2);
   });
@@ -183,4 +183,12 @@ void main() {
     }
   });
 
+  test('aggregate size is measured as encoded JSON data, including per-file padding', () {
+    ChatAttachment file(String path,int bytes)=>ChatAttachment(kind:'doc',path:path,sizeBytes:bytes);
+    expect(selectChatDraftAttachments([], [file('a',6000000),file('b',6000000)]).attachments,hasLength(2));
+    expect(selectChatDraftAttachments([], [file('a',6000001),file('b',5999999)]).rejectedCount,1);
+    expect(selectChatDraftAttachments([], [file('a',6*1024*1024),file('b',6*1024*1024)]).rejectedCount,1);
+  });
+
 }
+

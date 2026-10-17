@@ -9,6 +9,8 @@ import 'package:flutter/widgets.dart';
 
 import '../agents/agent_shell.dart';
 import 'app_permissions.dart';
+import 'audio_failure.dart';
+import 'microphone_capture.dart';
 import 'live_pcm_audio.dart';
 import 'live_call_foreground.dart';
 
@@ -139,10 +141,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       }
       if (_ownsAudio) {
         if (!await _recorder!.hasPermission()) {
-          final perm = await AppPermissions.request(AppPermission.microphone);
-          if (!perm.granted && !await _recorder.hasPermission()) {
-            throw StateError('Microphone permission is required for live voice.');
-          }
+          throw const AudioFailure('permission', 'Microphone permission is required. Allow microphone access in Android settings, then try again.');
         }
         if (_closed) return;
         try {
@@ -192,12 +191,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
 
-      if (!await LiveCallForeground.start()) {
-        throw StateError(
-          'Background microphone service is unavailable. '
-          'Allow microphone access and retry the call.',
-        );
-      }
+      await LiveCallForeground.startOrThrow();
       _foregroundCallActive = true;
       if (_closed) {
         _foregroundCallActive = false;
@@ -207,7 +201,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       await _connectSocket();
     } catch (error) {
       _fail(
-        error is StateError ? error.message : 'Could not start live voice.',
+        audioFailureMessage(error, fallback: error is StateError ? error.message : 'Could not start live voice.'),
       );
       await close();
       rethrow;
@@ -354,21 +348,11 @@ class LiveVoiceSession with WidgetsBindingObserver {
   }
 
   Future<void> _startMicrophone({bool initialSetup = false}) async {
-    final stream =
-        sharedMicrophone ??
-        await _recorder!.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            sampleRate: 16000,
-            numChannels: 1,
-            echoCancel: true,
-            noiseSuppress: true,
-            autoGain: true,
-          ),
-        );
+    final stream = sharedMicrophone ?? await startCallMicrophone(
+      _recorder!, bluetoothGranted: await AppPermissions.bluetoothConnectGranted());
     if (_closed || (_muted && !initialSetup)) {
       try {
-        if (_ownsAudio) await _recorder!.stop();
+        if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
       } catch (_) {}
       return;
     }
@@ -428,6 +412,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
         // intentionally never requested or rendered as text.
         final pendingSocket = _socket;
         if (pendingSocket == null || _closed) return;
+        await _beginMicrophone(initialSetup: true);
+        if (_closed) return;
         if (sendGreeting && !_ready.isCompleted) {
           pendingSocket.add(
             jsonEncode({
@@ -449,7 +435,6 @@ class LiveVoiceSession with WidgetsBindingObserver {
             }),
           );
         }
-        await _beginMicrophone(initialSetup: true);
         if (!_ready.isCompleted && !_closed) {
           final allowed = permittedConnectedCallDuration(
             now: DateTime.now(),
@@ -558,8 +543,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
         _turnCompletions.add(null);
         _state.add(LiveVoiceState.listening);
       }
-    } catch (_) {
-      _fail('Live voice received an invalid audio event.');
+    } catch (error) {
+      _fail(audioFailureMessage(error, fallback:'Live voice received an invalid audio event.'));
       unawaited(close());
     }
   }
@@ -581,7 +566,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       } catch (_) {}
       _micSub = null;
       try {
-        if (_ownsAudio) await _recorder!.stop();
+        if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
       } catch (_) {}
     } else {
       await _beginMicrophone();
@@ -648,10 +633,10 @@ class LiveVoiceSession with WidgetsBindingObserver {
     } catch (_) {}
     _micSub = null;
     try {
-      if (_ownsAudio) await _recorder!.stop();
+      if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
     } catch (_) {}
     try {
-      if (_ownsAudio) await _recorder!.dispose();
+      if (_ownsAudio) await _recorder!.dispose().timeout(const Duration(seconds:2));
     } catch (_) {}
     try {
       if (_ownsAudio) await LivePcmAudio.release();
@@ -685,3 +670,4 @@ class LiveVoiceSession with WidgetsBindingObserver {
     unawaited(Future<void>.sync(callback).catchError((Object _) {}));
   }
 }
+

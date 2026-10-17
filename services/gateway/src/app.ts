@@ -1,3 +1,4 @@
+import { streamConversationReply } from "./conversation_stream.js";
 import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
@@ -362,6 +363,7 @@ const AgentTurnResponseSchema = Type.Object(
     audioBase64: Type.Optional(Type.String()),
     audioMimeType: Type.Optional(Type.String()),
     audioDurationMs: Type.Optional(Type.Number()),
+    audioTranscript: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -1096,6 +1098,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       parts: [...result.parts],
       ...(result.audioBase64 ? { audioBase64: result.audioBase64 } : {}),
       ...(result.audioMimeType ? { audioMimeType: result.audioMimeType } : {}),
+      ...(result.audioTranscript ? { audioTranscript: result.audioTranscript } : {}),
       ...(result.audioDurationMs !== undefined
         ? { audioDurationMs: result.audioDurationMs }
         : {}),
@@ -1163,64 +1166,43 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           body: AgentTurnBodySchema,
         },
       },
-      async (request, reply) => {
-        reply.hijack();
-        reply.raw.statusCode = 200;
-        reply.raw.setHeader("content-type", "application/x-ndjson; charset=utf-8");
-        reply.raw.setHeader("cache-control", "no-cache, no-transform");
-        reply.raw.setHeader("x-content-type-options", "nosniff");
-
-        const controller = new AbortController();
-        let finished = false;
-        const abort = () => {
-          if (!finished) controller.abort();
-        };
-        reply.raw.once("close", abort);
-        const emit = (event: Record<string, unknown>) => {
-          if (!reply.raw.destroyed && !reply.raw.writableEnded) {
-            reply.raw.write(JSON.stringify(event) + "\n");
-          }
-        };
-
-        try {
-          const result = await conversation.turn({
-            authorizationHeader: request.headers.authorization,
-            characterSessionId: request.params.characterSessionId,
-            characterId: request.body.characterId,
-            text: request.body.text,
-            requestId: parseCanonicalId(
-              "request",
-              request.headers["x-request-id"] as string,
-            ),
-            correlationId: parseCanonicalId(
-              "correlation",
-              request.headers["x-correlation-id"] as string,
-            ),
-            onTextDelta: async (delta) => {
-              if (delta) emit({ type: "delta", text: delta });
-            },
-            onAudioPcmChunk: async (dataBase64) => {
-              if (dataBase64) {
-                emit({
-                  type: "audio",
-                  mimeType: "audio/pcm;rate=24000",
-                  sampleRate: 24000,
-                  dataBase64,
-                });
-              }
-            },
-            signal: controller.signal,
-          });
-          emit({ type: "done", ...resultBody(result) });
-        } catch {
-          emit({ type: "error", code: "turn_failed" });
-        } finally {
-          finished = true;
-          reply.raw.off("close", abort);
-          if (!reply.raw.writableEnded) reply.raw.end();
-        }
-      },
+      async (request, reply) => streamConversationReply(reply, async (callbacks, signal) =>
+        resultBody(await conversation.turn({
+          authorizationHeader: request.headers.authorization,
+          characterSessionId: request.params.characterSessionId,
+          characterId: request.body.characterId,
+          text: request.body.text,
+          requestId: parseCanonicalId("request", request.headers["x-request-id"] as string),
+          correlationId: parseCanonicalId("correlation", request.headers["x-correlation-id"] as string),
+          ...callbacks, signal,
+        }))),
     );
+
+    app.post("/agent/sessions/:characterSessionId/media-turn-stream", {
+      bodyLimit: 13_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaTurnBodySchema},
+    }, async (request,reply) => streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      }))));
+
+    app.post("/agent/sessions/:characterSessionId/media-set-turn-stream", {
+      bodyLimit: 17_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaSetTurnBodySchema},
+    }, async (request,reply) => streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaSetTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      }))));
 
     app.post(
       "/agent/sessions/:characterSessionId/media-turn",

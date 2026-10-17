@@ -244,6 +244,28 @@ it("closes before surfacing a playback callback failure", async () => {
   f.socket.open();
   f.socket.receive({ setupComplete: {} });
   audioTurn(f.socket);
-  await expect(result).rejects.toThrow("Playback unavailable");
+  await expect(result).rejects.toThrow("Recorded speech delivery failed");
   expect(f.socket.close).toHaveBeenCalledOnce();
+});
+
+it('streams Live PCM before completion and returns the matching output transcript',async()=>{
+ const f=fixture();const chunks:Buffer[]=[];const deltas:string[]=[];
+ const result=f.renderer.render('Hello there',undefined,async bytes=>{chunks.push(bytes);},{onTranscriptDelta:async text=>{deltas.push(text);}});
+ f.socket.open();f.socket.receive({setupComplete:{}});
+ f.socket.receive({serverContent:{modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:audio.toString('base64')}}]},outputTranscription:{text:'Hello '}}});
+ await Promise.resolve();await Promise.resolve();expect(chunks).toHaveLength(1);
+ f.socket.receive({serverContent:{outputTranscription:{text:'there',finished:true},turnComplete:true}});
+ expect(await result).toMatchObject({transcript:'Hello there',dataBase64:audio.toString('base64')});expect(deltas.join('')).toBe('Hello there');
+});
+
+it('retains transcript fragments arriving after the completed audio turn', async()=>{
+ vi.useFakeTimers();try{
+  const f=fixture();const result=f.renderer.render('Hello there');f.socket.open();f.socket.receive({setupComplete:{}});audioTurn(f.socket);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.socket.receive({serverContent:{outputTranscription:{text:'Hello there',finished:true}}});
+  expect(await result).toMatchObject({transcript:'Hello there'});
+ }finally{vi.useRealTimers();}
+});
+it('preserves completed audio when the provider closes during transcript grace',async()=>{
+ const f=fixture();const result=f.renderer.render('Hello');f.socket.open();f.socket.receive({setupComplete:{}});audioTurn(f.socket);f.socket.dispatchEvent(new Event('close'));expect((await result).dataBase64).toBe(audio.toString('base64'));
 });
