@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/calls/group_call_controller.dart';
 import 'package:masanawa/src/calls/group_call_screen.dart';
 import 'package:masanawa/src/calls/group_call_transport.dart';
+import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
 import 'group_call_controller_test.dart' as fakes;
 
 void main() {
@@ -90,6 +91,13 @@ void main() {
       await tester.pump();
     },
   );
+  testWidgets('participants show identity, connection and current audible speaker',(tester)async{
+    final transport=fakes.Transport();final controller=_SpeakingController(transport);
+    await tester.pumpWidget(MaterialApp(home:GroupCallScreen(accountKey:'owner',currentAccountKey:()=>'owner',contacts:fakes.contacts,transport:transport,controller:controller)));
+    expect(find.byType(MasanaPortraitAvatar),findsNWidgets(2));expect(find.text('Speaking…'),findsOneWidget);expect(find.text('Connecting…'),findsOneWidget);
+    controller.audioPaused=true;controller.notifyListeners();await tester.pump();expect(find.text('Audio paused · Resume'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox());await tester.pump();expect(tester.takeException(),isNull);
+  });
   testWidgets(
     'changing signed-in owner signals account cleanup and shows ended state',
     (tester) async {
@@ -147,4 +155,10 @@ class _AccountController extends GroupCallController {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+}
+
+
+class _SpeakingController extends _AccountController {
+ _SpeakingController(super.transport){memberStates['a']='active';memberStates['b']='connecting';}
+ @override String? get speakingCharacterId=>'a';
 }

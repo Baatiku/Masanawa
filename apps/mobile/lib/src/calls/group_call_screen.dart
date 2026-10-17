@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../agents/agent_shell.dart';
+import '../agents/masana_portrait_avatar.dart';
 import 'group_call_controller.dart';
 import 'group_call_transport.dart';
 
@@ -67,6 +68,11 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
     super.dispose();
   }
 
+  String _memberLabel(String? state)=>switch(state){
+    'connecting'=>'Connecting…', 'active'=>'Connected', 'failed'=>'Could not join',
+    'left'=>'Left the call', _=>'Waiting to join',
+  };
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -106,6 +112,7 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                     ),
                   ),
                 ),
+              if(controller.audioPaused)TextButton.icon(onPressed:controller.resumeAudio,icon:const Icon(Icons.play_arrow),label:const Text('Audio paused · Resume')),
               if (controller.busy) const LinearProgressIndicator(),
               Expanded(
                 child: ListView(
@@ -113,6 +120,7 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                     for (final contact in widget.contacts)
                       if (!inCall)
                         CheckboxListTile(
+                          secondary:MasanaPortraitAvatar(displayName:contact.displayName,size:42),
                           title: Text(contact.displayName),
                           subtitle: Text(
                             contact.supportAgent
@@ -136,10 +144,14 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                         (p) => p.characterId == contact.characterId,
                       ))
                         ListTile(
+                          leading:Stack(alignment:Alignment.bottomRight,children:[
+                            MasanaPortraitAvatar(displayName:contact.displayName,size:48),
+                            if(controller.speakingCharacterId==contact.characterId)
+                              Container(padding:const EdgeInsets.all(3),decoration:BoxDecoration(color:Theme.of(context).colorScheme.primary,shape:BoxShape.circle),child:Icon(Icons.graphic_eq,size:14,color:Theme.of(context).colorScheme.onPrimary)),
+                          ]),
                           title: Text(contact.displayName),
                           subtitle: Text(
-                            controller.memberStates[contact.characterId] ??
-                                'selected',
+                            controller.speakingCharacterId==contact.characterId?'Speaking…':_memberLabel(controller.memberStates[contact.characterId]),
                           ),
                           trailing:
                               controller.ended ||
@@ -185,6 +197,9 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                               controller.muted ? Icons.mic_off : Icons.mic,
                             ),
                           ),
+                          IconButton(tooltip:controller.speakerEnabled?'Speaker':'Earpiece / headset',
+                            onPressed:controller.ended?null:()=>controller.setSpeaker(!controller.speakerEnabled),
+                            icon:Icon(controller.speakerEnabled?Icons.volume_up:Icons.hearing)),
                           FilledButton.icon(
                             onPressed: controller.ended ? null : controller.end,
                             icon: const Icon(Icons.call_end),
@@ -200,3 +215,4 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
     );
   }
 }
+

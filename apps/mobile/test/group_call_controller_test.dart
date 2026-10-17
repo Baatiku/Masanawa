@@ -80,6 +80,15 @@ class Microphone implements GroupMicrophone {
   }
 }
 
+class RecoverableMicrophone extends Microphone implements RecoverableGroupMicrophone {
+ @override bool paused=false;
+ @override void Function(bool)? onPauseChanged;
+ int resumes=0;
+ void interrupt(){paused=true;onPauseChanged?.call(true);}
+ @override Future<void> resume()async{resumes++;paused=false;onPauseChanged?.call(false);}
+ @override Future<void> setSpeaker(bool enabled)async{}
+}
+
 class Player implements GroupPcmPlayer {
   final writes = <int>[];
   int stops = 0;
@@ -164,6 +173,24 @@ void main() {
       controller.dispose();
     },
   );
+  test('focus pause drops shared input/output without re-enrolling or billing participants',()async{
+    final mic=RecoverableMicrophone(),transport=Transport(),player=Player();
+    final members=<Member>[];final outputs=<String,void Function(Uint8List)>{};
+    final controller=GroupCallController(accountKey:'o',currentAccountKey:()=>'o',transport:transport,contacts:contacts,microphone:mic,player:player,
+      sessionFactory:({required grant,required name,required microphone,required audio,required interrupted,required turnComplete,required closed}){
+        outputs[grant.callId!]=audio;final member=Member(microphone,closed);members.add(member);return member;
+      });
+    await controller.start(['a','b']);
+    expect(transport.tokens,['a','b']);mic.input.add(Uint8List.fromList([1,2]));
+    expect(members.map((m)=>m.frames.length),[1,1]);
+    outputs['a']!(Uint8List.fromList([1,2]));await Future<void>.delayed(const Duration(milliseconds:2));expect(controller.speakingCharacterId,'a');
+    mic.interrupt();await Future<void>.delayed(Duration.zero);expect(controller.audioPaused,isTrue);
+    final writes=player.writes.length;outputs['b']!(Uint8List.fromList([3,4]));await Future<void>.delayed(Duration.zero);expect(player.writes.length,writes);expect(controller.speakingCharacterId,isNull);
+    mic.input.add(Uint8List.fromList([3,4]));expect(members.map((m)=>m.frames.length),[1,1]);expect(controller.ended,isFalse);
+    await controller.resumeAudio();mic.input.add(Uint8List.fromList([5,6]));expect(members.map((m)=>m.frames.length),[2,2]);
+    expect(transport.tokens,['a','b']);expect(mic.starts,1);expect(mic.resumes,1);
+    await controller.end();controller.dispose();
+  });
   test(
     'unsupported paid voice and denied consent never request participant token',
     () async {
@@ -264,8 +291,10 @@ void main() {
     'PCM coordinator holds a turn, bounds pending audio and drops removed speaker',
     () async {
       final player = Player(), gates = <Completer<void>>[];
+      final activity=<String?>[];
       final coordinator = GroupPlaybackCoordinator(
         player: player,
+        onSpeakerChanged:activity.add,
         onFailure: (error) => fail('$error'),
         maxQueuedBytes: 8,
         wait: (_) {
@@ -291,6 +320,7 @@ void main() {
       expect(coordinator.queuedBytes, 0);
       gates.last.complete();
       await coordinator.close();
+      expect(activity.first,'a');expect(activity.last,isNull);
     },
   );
   test(
@@ -633,3 +663,4 @@ class _FailingStopPlayer extends Player {
     throw StateError('native stop failed');
   }
 }
+
