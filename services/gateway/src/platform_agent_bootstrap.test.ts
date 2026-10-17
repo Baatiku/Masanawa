@@ -38,8 +38,10 @@ function fixture(){
   skillsPort:{listForAudience:async()=>[{skillVersionId:createCanonicalId("skill-version"),installMode:"automatic"}]},
  };
 }
-function run(f:ReturnType<typeof fixture>,tenantId=createCanonicalId("tenant")){
+function run(f:ReturnType<typeof fixture>,tenantId=createCanonicalId("tenant"),
+ canonicalByHandle?:ReadonlyMap<string,import("@masanawa/contracts").CharacterId>){
  return ensureDefaultPlatformAgents({tenantId,identity:f.identity,
+   ...(canonicalByHandle?{canonicalByHandle}:{}),
    presentations:f.presentationsPort as never,profiles:f.profilesPort as never,
    skillAssignments:f.assignmentsPort as never,skillDistribution:f.skillsPort as never,
    now:()=>nowInstant()});
@@ -128,6 +130,21 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(next.changed).toBe(false);
    expect(f.profiles[2]?.voiceName).toBe("CustomStudioVoice");
    expect(f.presentations[2]?.greeting).toBe("My curated introduction");
+ });
+
+ it("keeps a renamed professional canonical identity and existing messages/Room",async()=>{
+   const f=fixture(),tenant=createCanonicalId("tenant");
+   const first=await run(f,tenant);
+   const approvedId=first.characterIds[2]!;
+   const existing=f.presentations.find(p=>p.characterId===approvedId)!;
+   const index=f.presentations.indexOf(existing);
+   f.presentations[index]={...existing,displayName:"Dr. Amina (curated name)"};
+   const mapped=new Map([["masana.amina",approvedId]]);
+   const again=await run(f,tenant,mapped);
+   expect(again.characterIds[2]).toBe(approvedId);
+   expect(f.presentations).toHaveLength(26);
+   expect(f.identity.provision).toHaveBeenCalledTimes(26);
+   expect(f.presentations[index]?.displayName).toBe("Dr. Amina (curated name)");
  });
 
 });
