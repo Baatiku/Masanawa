@@ -266,6 +266,7 @@ import {
   type GatewayAppOptions,
   type ReadinessCheck,
 } from "./app.js";
+import { createAccountDataExports } from "./account_data_exports.js";
 import {
   createCustomerAuthService,
   createHttpSmsOtpDelivery,
@@ -2706,6 +2707,9 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
+      ...(database.featurePool && sessions
+        ? { accountDataExports: createAccountDataExports(database.featurePool,sessions) }
+        : {}),
       ...(accountDeletion ? { accountDeletion } : {}),
       ...(composedTalks ? { talks: composedTalks } : {}),
       ...(composedTalkReplay ? { talkReplay: composedTalkReplay } : {}),
