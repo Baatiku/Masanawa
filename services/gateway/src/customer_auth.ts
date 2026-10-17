@@ -121,6 +121,7 @@ export interface CustomerAuthService {
   beginBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string}>): Promise<Readonly<{resendInSeconds:number}>>;
   confirmBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;code:string}>): Promise<Readonly<{stepUpToken:string}>>;
   consumeBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;stepUpToken:string|undefined}>): Promise<void>;
+  authorizeSensitiveMutation(input: Readonly<{authorizationHeader:string|undefined}>): Promise<void>;
 }
 
 export interface AuthUserView {
@@ -130,7 +131,7 @@ export interface AuthUserView {
   readonly phone: string | null;
   readonly email: string | null;
   readonly locale: string;
-  readonly status: "ACTIVE";
+  readonly status:"ACTIVE"|"RESTRICTED"|"RECOVERY";
   readonly role: "CITIZEN";
   readonly isNewUser: boolean;
   readonly communityId: null;
@@ -153,7 +154,8 @@ function authUser(profile: PlatformAuthProfile, isNewUser: boolean): AuthUserVie
     phone: profile.phone,
     email: profile.email,
     locale: profile.locale,
-    status: "ACTIVE" as const,
+    status: profile.accountState==="restricted"?"RESTRICTED" as const:
+      profile.accountState==="recovery"?"RECOVERY" as const:"ACTIVE" as const,
     role: "CITIZEN" as const,
     isNewUser,
     communityId: null,
@@ -231,8 +233,10 @@ export function createCustomerAuthService(input: Readonly<{
       });
     } catch (error) {
       if (error instanceof Error && error.message === "auth.account_inactive") {
-        throw new CustomerAuthError("ACCOUNT_INACTIVE", 403);
+        throw new CustomerAuthError("ACCOUNT_SUSPENDED", 403);
       }
+      if(error instanceof Error && error.message==="auth.account_suspended")
+        throw new CustomerAuthError("ACCOUNT_SUSPENDED",403);
       throw error;
     }
     return Object.freeze({
@@ -694,6 +698,18 @@ export function createCustomerAuthService(input: Readonly<{
         throw error;
       }
       return {email};
+    },
+
+    async authorizeSensitiveMutation(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(!input.repository.readAccountState)
+        throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const state=await input.repository.readAccountState({
+        tenantId:identity.tenantId,userId:identity.userId,at:now(),
+      });
+      if(state==="suspended")throw new CustomerAuthError("ACCOUNT_SUSPENDED",403);
+      if(state==="restricted")throw new CustomerAuthError("ACCOUNT_RESTRICTED",403);
+      if(state==="recovery")throw new CustomerAuthError("ACCOUNT_RECOVERY_HOLD",403);
     },
 
     async beginWithdrawalStepUp(request) {

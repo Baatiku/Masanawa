@@ -445,6 +445,23 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   });
 
   registerGatewayRequestCorrelation(app);
+  // Apply to all money-affecting HTTP writes regardless of the individual
+  // service's route registration. Reads and non-financial account recovery
+  // remain available for restricted customers. Refuse new financial actions
+  // during the first 24h after a password reset.
+  app.addHook("preHandler",async(request)=>{
+    if(!options.customerAuth || !["POST","PUT","PATCH","DELETE"].includes(request.method))
+      return;
+    const path=request.url.split("?")[0] ?? "";
+    if(path.startsWith("/v1/financial/") ||
+       path.startsWith("/v1/wallet/") ||
+       path.startsWith("/v1/commerce/bills/")) {
+      await options.customerAuth.authorizeSensitiveMutation({
+        authorizationHeader:request.headers.authorization,
+      });
+    }
+  });
+
 
 
   if (options.accountDeletion) {

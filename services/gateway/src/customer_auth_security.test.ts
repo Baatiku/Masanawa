@@ -158,3 +158,40 @@ describe("financial withdrawal step-up",()=>{
       stepUpToken:result.stepUpToken})).rejects.toMatchObject({code:"STEP_UP_REQUIRED"});
   });
 });
+
+describe("account lifecycle financial guards",()=>{
+  it("allows read-only account recovery but fails closed for sensitive wallet mutations",async()=>{
+    const tenantId=createCanonicalId("tenant"),userId=createCanonicalId("user");
+    const token=mintPlatformSessionToken("access");
+    const hash=hashPlatformSessionToken(token);
+    const identity:PlatformSessionIdentity={
+      tenantId,userId,profile:{tenantId,userId,name:"Amira",email:"amira@example.com",
+        phone:"+2348012345678",locale:"en-NG",createdAt:"2026-10-01T12:00:00.000Z"},
+    };
+    let state:"active"|"restricted"|"suspended"|"recovery"="restricted";
+    const repository={
+      async resolveAccess(input:{accessHash:string}){
+        return input.accessHash===hash?identity:null;
+      },
+      async readAccountState(input:{tenantId:string;userId:string}){
+        expect(input).toMatchObject({tenantId,userId});
+        return state;
+      },
+    } as unknown as PlatformSessionRepository;
+    const auth=createCustomerAuthService({repository,tenantId,otpPepper:"p".repeat(48)});
+    const authorizationHeader=`Bearer ${token}`;
+    await expect(auth.authorizeSensitiveMutation({authorizationHeader}))
+      .rejects.toMatchObject({code:"ACCOUNT_RESTRICTED",statusCode:403});
+    state="recovery";
+    await expect(auth.authorizeSensitiveMutation({authorizationHeader}))
+      .rejects.toMatchObject({code:"ACCOUNT_RECOVERY_HOLD",statusCode:403});
+    state="suspended";
+    await expect(auth.authorizeSensitiveMutation({authorizationHeader}))
+      .rejects.toMatchObject({code:"ACCOUNT_SUSPENDED",statusCode:403});
+    state="active";
+    await expect(auth.authorizeSensitiveMutation({authorizationHeader}))
+      .resolves.toBeUndefined();
+    await expect(auth.authorizeSensitiveMutation({authorizationHeader:undefined}))
+      .rejects.toMatchObject({code:"UNAUTHORIZED",statusCode:401});
+  });
+});

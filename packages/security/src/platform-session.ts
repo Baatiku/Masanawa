@@ -12,6 +12,7 @@ export interface PlatformAuthProfile {
   readonly phone: string | null;
   readonly locale: string;
   readonly createdAt: string;
+  readonly accountState?: "active" | "restricted" | "suspended" | "recovery";
 }
 
 export interface PlatformSessionIdentity {
@@ -87,6 +88,8 @@ export interface PlatformSessionRepository {
     accessExpiresAt: string; refreshExpiresAt: string; rotatedAt: string;
   }>): Promise<PlatformSessionIdentity | null>;
   revokeAccess(input: Readonly<{ accessHash: string; revokedAt: string }>): Promise<void>;
+  readAccountState?(input: Readonly<{tenantId:TenantId;userId:UserId;at:string}>):
+    Promise<"active" | "restricted" | "suspended" | "recovery">;
   listSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; accessHash: string; at: string }>): Promise<readonly PlatformSessionView[]>;
   revokeSession?(input: Readonly<{ tenantId: TenantId; userId: UserId; sessionId: string; revokedAt: string }>): Promise<boolean>;
   revokeAllSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; revokedAt: string }>): Promise<number>;

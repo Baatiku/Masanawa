@@ -106,6 +106,7 @@ describe("gateway service bootstrap", () => {
       async beginBankStepUp() { throw new Error("unused"); },
       async confirmBankStepUp() { throw new Error("unused"); },
       async consumeBankStepUp() { throw new Error("unused"); },
+      async authorizeSensitiveMutation() {},
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);

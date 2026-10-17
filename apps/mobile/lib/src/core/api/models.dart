@@ -163,7 +163,8 @@ class AuthUser {
   final String? stateId;
   final String createdAt;
 
-  bool get isActive => status == 'ACTIVE';
+  bool get isActive => status == 'ACTIVE' ||
+      status == 'RESTRICTED' || status == 'RECOVERY';
 
   Map<String, dynamic> toJson() => {
         'id': id,

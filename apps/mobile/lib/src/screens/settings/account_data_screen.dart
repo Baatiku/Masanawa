@@ -151,10 +151,17 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
         child:ListView(padding:const EdgeInsets.all(16),children:[
           Text('Account status',style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:8),
-          Text(status=='active'?'Active':status=='pending_deletion'?
-            'Account deletion requested — processing may depend on financial settlement':
-            status=='suspended'?'Suspended — contact support to restore access':
-            status=='archived'?'Archived':'Status unavailable'),
+          Text(status=='active'?'Active':
+            status=='restricted'?'Restricted — financial actions are unavailable. Contact support.':
+            status=='recovery'?'Account recovery — financial actions paused for security':
+            status=='pending_deletion'?
+              'Pending deletion — financial settlement and data-retention checks continue':
+            status=='suspended'?'Suspended — please contact support for reinstatement':
+            status=='archived'?'Archived — sign-in access may be unavailable':
+            'Status unavailable'),
+          if(_summary?['recoveryMessage'] is String)
+            Padding(padding:const EdgeInsets.only(top:8),
+              child:Text(_summary!['recoveryMessage'] as String)),
           if(_loading)const LinearProgressIndicator(),
           if(_error!=null) ...[
             const SizedBox(height:8),
