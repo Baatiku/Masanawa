@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -170,9 +171,14 @@ class StatusScreen extends ConsumerWidget {
       }
     }
 
-    void openMasanaProfile(String characterId) {
+    Future<void> openMasanaProfile(String characterId) async {
       if (currentAccount() != account) return;
-      final agent = ref.read(agentDirectoryProvider).find(characterId);
+      var agent = ref.read(agentDirectoryProvider).find(characterId);
+      if (agent == null) {
+        await ref.read(agentDirectoryProvider.notifier).refresh();
+        if (!context.mounted || currentAccount() != account) return;
+        agent = ref.read(agentDirectoryProvider).find(characterId);
+      }
       if (agent == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('This Masana profile is currently unavailable.'),
@@ -261,7 +267,7 @@ class StatusScreen extends ConsumerWidget {
               api: feed,
               accountKey: account,
               onOpenMedia: openMedia,
-              onMasanaProfile: openMasanaProfile,
+              onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
               audioPlaybackAvailable: true,
             ),
             ExternalVideosScreen(
