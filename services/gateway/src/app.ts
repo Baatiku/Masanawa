@@ -483,6 +483,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       try{return await exports.summary({authorizationHeader:request.headers.authorization});}
       catch(error){return fail(error,reply);}
     });
+    app.get("/v1/account/exports/profile",async(request,reply)=>{
+      try{return await exports.personalData({
+        authorizationHeader:request.headers.authorization,
+      });}catch(error){return fail(error,reply);}
+    });
     app.get("/v1/account/exports/conversations",{
       schema:{querystring:Type.Object({
         cursor:Type.Optional(Type.String({maxLength:512})),

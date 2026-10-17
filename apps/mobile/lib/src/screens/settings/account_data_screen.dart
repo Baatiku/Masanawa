@@ -56,6 +56,38 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
     }
   }
 
+  Future<void> _exportAccountDetails() async {
+    if(_exporting || !_sameAccount)return;
+    final owner=_owner;
+    setState(() {
+      _exporting=true;_error=null;_progress='Preparing personal account details…';
+    });
+    File? file;
+    try{
+      final result=await ref.read(apiClientProvider).exportPersonalAccountData();
+      if(!mounted||!_sameAccount||owner!=_owner)
+        throw StateError('Account changed');
+      final directory=await getTemporaryDirectory();
+      file=File('${directory.path}/masanawa-account-${DateTime.now().microsecondsSinceEpoch}.json');
+      await file.writeAsString(const JsonEncoder.withIndent('  ').convert(result),
+        flush:true);
+      if(!mounted||!_sameAccount||owner!=_owner)
+        throw StateError('Account changed');
+      await SharePlus.instance.share(ShareParams(
+        files:[XFile(file.path)],
+        text:'Masanawa private account details. Contains personal contact information.',
+      ));
+    }catch(_){
+      if(mounted&&_sameAccount)setState(()=>
+        _error='Account export failed. Check your connection and try again.');
+    }finally{
+      try{
+        if(file!=null&&await file.exists())await file.delete();
+      }catch(_){}
+      if(mounted)setState(() {_exporting=false;_progress=null;});
+    }
+  }
+
   Future<void> _export(bool financial) async {
     if(_exporting || !_sameAccount)return;
     final owner=_owner;
@@ -180,6 +212,20 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
             )).then((_)=>(_refresh()))),
           const SizedBox(height:24),
           Text('Request an account export',style:Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height:8),
+          const Text('Account details include your profile, verified contact details, '
+            'current signed-in devices and up to 100 recent security events. '
+            'Your PIN, codes and session tokens are excluded.'),
+          const SizedBox(height:12),
+          FilledButton.icon(
+            key:const Key('account-personal-data-export'),
+            onPressed:_exporting?null:_exportAccountDetails,
+            icon:const Icon(Icons.person_outline),
+            label:const Text('Export my account details (JSON)'),
+          ),
+          const SizedBox(height:24),
+          const Text('Conversation archive',
+            style:TextStyle(fontSize:17,fontWeight:FontWeight.w600)),
           const SizedBox(height:8),
           const Text('Conversation export contains text messages and replies; '
             'attached media files are not included. The export stays on your device '

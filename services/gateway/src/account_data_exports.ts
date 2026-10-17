@@ -90,6 +90,76 @@ export function createAccountDataExports(
         },
       };
     },
+    async personalData(input: Context) {
+      const owner=await sessions.authorize({authorizationHeader:input.authorizationHeader});
+      const profile=await pool.query<{
+        display_name:string;email:string|null;phone:string|null;locale:string;
+        created_at:Date|string;handle:string|null;bio:string|null;
+        avatar_url:string|null;state:string;deletion_phase:string|null;
+        account_control:string|null;
+      }>(
+        `SELECT p.display_name,p.email,p.phone,p.locale,p.created_at,
+                t.handle,t.bio,t.avatar_url,u.state,
+                d.phase AS deletion_phase,c.state AS account_control
+          FROM security.platform_user_profiles p
+          JOIN identity.users u
+            ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
+          LEFT JOIN talks.public_profiles t
+            ON t.tenant_id=p.tenant_id AND t.user_id=p.user_id
+          LEFT JOIN identity.account_deletion_requests d
+            ON d.tenant_id=p.tenant_id AND d.user_id=p.user_id
+          LEFT JOIN security.platform_account_controls c
+            ON c.tenant_id=p.tenant_id AND c.user_id=p.user_id
+              AND (c.until_at IS NULL OR c.until_at>clock_timestamp())
+          WHERE p.tenant_id=$1 AND p.user_id=$2`,
+        [owner.tenantId,owner.userId],
+      );
+      const row=profile.rows[0];
+      if(!row)throw new AccountExportError("ACCOUNT_NOT_FOUND",404);
+      // Audit event history is intentionally bounded, not a dump of
+      // credentials, password/PIN hashes, OTPs or private wallet ledgers.
+      const events=await pool.query<{action:string;at:Date|string}>(
+        `SELECT action,at FROM security.platform_auth_events
+           WHERE tenant_id=$1 AND user_id=$2 ORDER BY at DESC LIMIT 100`,
+        [owner.tenantId,owner.userId],
+      );
+      const devices=await pool.query<{
+        session_id:string;device_id:string|null;
+        created_at:Date|string;updated_at:Date|string;
+      }>(
+        `SELECT session_id::text,device_id,created_at,updated_at
+           FROM security.platform_sessions
+           WHERE tenant_id=$1 AND user_id=$2
+             AND revoked_at IS NULL AND refresh_expires_at>clock_timestamp()
+           ORDER BY updated_at DESC LIMIT 100`,
+        [owner.tenantId,owner.userId],
+      );
+      return {
+        kind:"personal_account_details" as const,formatVersion:1,
+        exportedAt:new Date().toISOString(),
+        profile:{
+          userId:owner.userId,displayName:row.display_name,
+          handle:row.handle,biography:row.bio,avatarUrl:row.avatar_url,
+          linkedPhone:row.phone,linkedEmail:row.email,locale:row.locale,
+          createdAt:new Date(row.created_at).toISOString(),
+          state:row.account_control??row.state,
+          deletionPhase:row.deletion_phase,
+        },
+        activeDevices:devices.rows.map(d=>({
+          sessionId:d.session_id,installationId:d.device_id,
+          createdAt:new Date(d.created_at).toISOString(),
+          lastAccessAt:new Date(d.updated_at).toISOString(),
+        })),
+        recentAccessEvents:events.rows.map(e=>({
+          action:e.action,at:new Date(e.at).toISOString(),
+        })),
+        notices:[
+          "Only your account profile and latest 100 security events/devices are included.",
+          "Your passwords, OTPs, access tokens, provider credentials and financial keys are never exported.",
+          "Conversation text and wallet transactions have separate exports.",
+        ],
+      };
+    },
     async conversations(input: Context & {cursor?:string}) {
       const owner=await sessions.authorize({authorizationHeader:input.authorizationHeader});
       const start=cursor(input.cursor);
