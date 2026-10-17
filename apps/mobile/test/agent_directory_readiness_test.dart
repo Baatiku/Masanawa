@@ -105,7 +105,7 @@ void main() {
       ...entryWithPresence('unknown'),
       'portraitKey': '../other/asset',
       'following': 'yes',
-      'conversationStarters': [9, '', 'Valid?', 'x' * 161],
+      'conversationStarters': [9, '', 'Valid?', List.filled(161, 'x').join()],
     });
     expect(entry.portraitKey, isNull);
     expect(entry.following, isFalse);
