@@ -68,6 +68,8 @@ describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL1
      const media=await pool.query("SELECT kind,object_key FROM masana.character_media WHERE tenant_id=$1 AND character_id=$2",[tenant,characterId]);
      expect(media.rows.map(x=>x.kind).sort()).toEqual(["banner","portrait"]);
      expect(media.rows.every(x=>x.object_key.includes("/apps/mobile/assets/masana/"))).toBe(true);
+     expect(media.rows.find(x=>x.kind==="portrait")?.object_key)
+       .toContain("/portraits/"+seed.key+".webp");
    }
    const repo=createPgRoomsRepository(pool);
    const fan={tenantId:tenant,userId:"fan_one",roles:[] as string[]};
@@ -82,6 +84,25 @@ describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL1
    expect(question.roomId).toBe(roster[4]!.seed.roomId);
    expect((await pool.query("SELECT count(*)::int AS n FROM events.outbox WHERE tenant_id=$1 AND aggregate_id=$2 AND destination='rooms.teacher'",[tenant,question.questionId])).rows[0].n).toBe(1);
    await expect(repo.questions({...fan,tenantId:other},roster[4]!.seed.roomId)).rejects.toMatchObject({status:404});
+ });
+ it("repairs only the legacy stock portrait and preserves curator media",async()=>{
+   const first=roster[0]!, second=roster[1]!;
+   await pool.query(`UPDATE masana.character_media SET object_key=$1
+       WHERE tenant_id=$2 AND media_id=$3`,[
+     "https://raw.githubusercontent.com/weavewellindustrieslimited/masanawa/main/apps/mobile/assets/masana/avatars/portrait_00.svg",
+     tenant,"masana_portrait_"+first.seed.key,
+   ]);
+   await pool.query(`UPDATE masana.character_media
+     SET object_key='approved/private/custom_portrait.webp',approved_by='approved-curator'
+     WHERE tenant_id=$1 AND media_id=$2`,[tenant,"masana_portrait_"+second.seed.key]);
+   expect(await ensureMasanaCatalogProfilesAndRooms({pool,tenantId:tenant,catalog:roster}))
+     .toEqual({approved:0,rooms:0});
+   const firstKey=(await pool.query(`SELECT object_key FROM masana.character_media
+     WHERE tenant_id=$1 AND media_id=$2`,[tenant,"masana_portrait_"+first.seed.key])).rows[0]?.object_key;
+   const secondKey=(await pool.query(`SELECT object_key FROM masana.character_media
+     WHERE tenant_id=$1 AND media_id=$2`,[tenant,"masana_portrait_"+second.seed.key])).rows[0]?.object_key;
+   expect(firstKey).toContain("/portraits/gwani.webp");
+   expect(secondKey).toBe("approved/private/custom_portrait.webp");
  });
  it("all 26 professional teachers ship distinct, substantive first lessons",()=>{
    expect(Object.keys(MASANA_INTRO_LESSONS)).toHaveLength(26);

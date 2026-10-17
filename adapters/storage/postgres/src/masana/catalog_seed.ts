@@ -40,22 +40,33 @@ export async function ensureMasanaCatalogProfilesAndRooms(input:{
      if(!allowed.rows.length)throw Error("catalog_seed_owner_invalid");
      const number=String(seed.illustrationIndex).padStart(2,"0");
      const portraitId="masana_portrait_"+seed.key, bannerId="masana_banner_"+seed.key;
-     const root="https://raw.githubusercontent.com/weavewellindustrieslimited/masanawa/main/apps/mobile/assets/masana/";
+     const root="https://raw.githubusercontent.com/Baatiku/Masanawa/main/apps/mobile/assets/masana/";
+     const legacyRoot="https://raw.githubusercontent.com/weavewellindustrieslimited/masanawa/main/apps/mobile/assets/masana/";
      const rights="Original Masanawa AI-generated illustrated character art, published as platform-owned static assets. Fictional likeness.";
      const rows=[
-       [portraitId,"portrait",root+"avatars/portrait_"+number+".svg"],
+       [portraitId,"portrait",root+"portraits/"+seed.key+".webp"],
        [bannerId,"banner",root+"banners/banner_"+number+".svg"],
      ] as const;
      for(const [mediaId,kind,url]of rows){
+       // Upgrade only exact legacy catalog entries; never overwrite curated
+       // administrator media or unrelated keys. This is an additive repair.
+       const oldUrl=kind==="portrait"
+         ?legacyRoot+"avatars/portrait_"+number+".svg"
+         :legacyRoot+"banners/banner_"+number+".svg";
        await c.query(`INSERT INTO masana.character_media
          (tenant_id,media_id,character_id,kind,object_key,rights_note,approved_by)
          VALUES ($1,$2,$3,$4,$5,$6,'masanawa-platform-catalog-v1')
-         ON CONFLICT (tenant_id,media_id) DO NOTHING`,
-         [input.tenantId,mediaId,characterId,kind,url,rights]);
-       const check=await c.query(`SELECT character_id,kind,object_key FROM masana.character_media
+         ON CONFLICT (tenant_id,media_id) DO UPDATE
+           SET object_key=EXCLUDED.object_key,updated_at=now()
+           WHERE masana.character_media.approved_by='masanawa-platform-catalog-v1'
+             AND masana.character_media.object_key=$7`,
+         [input.tenantId,mediaId,characterId,kind,url,rights,oldUrl]);
+       const check=await c.query(`SELECT character_id,kind,object_key,approved_by FROM masana.character_media
          WHERE tenant_id=$1 AND media_id=$2`,[input.tenantId,mediaId]);
        if(check.rows[0]?.character_id!==characterId||check.rows[0]?.kind!==kind||
-          check.rows[0]?.object_key!==url)throw Error("catalog_seed_media_conflict");
+          (check.rows[0]?.object_key!==url &&
+            check.rows[0]?.approved_by==="masanawa-platform-catalog-v1"))
+         throw Error("catalog_seed_media_conflict");
      }
      const profile={
        handle:seed.handle,displayName:seed.displayName,profession:seed.roleLabel,
