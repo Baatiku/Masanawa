@@ -114,6 +114,26 @@ extension MasanawaContext on BuildContext {
   MasanawaColors get masanawa => Theme.of(this).extension<MasanawaColors>()!;
 }
 
+/// Suppress route artwork animation when Android's reduced-motion preference
+/// is enabled. Default page Back/navigation semantics remain framework-owned.
+class MasanawaPageTransitionsBuilder extends PageTransitionsBuilder {
+  const MasanawaPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    return const FadeUpwardsPageTransitionsBuilder().buildTransitions<T>(
+      route, context, animation, secondaryAnimation, child,
+    );
+  }
+}
+
 ThemeData buildMasanawaTheme({required Brightness brightness}) {
   final colors =
       brightness == Brightness.dark ? MasanawaColors.dark() : MasanawaColors.light();
@@ -133,6 +153,16 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
   );
   return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.linux: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    splashFactory: InkRipple.splashFactory,
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.surfaceCard,

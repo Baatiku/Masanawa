@@ -228,6 +228,8 @@ class StatusScreen extends ConsumerWidget {
       key: ValueKey('status-account-$account'),
       child: DefaultTabController(
         length: 2,
+        animationDuration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero : const Duration(milliseconds: 250),
         child: Column(children: [
           const TabBar(tabs: [
             Tab(text: 'Updates', icon: Icon(Icons.article_outlined)),
