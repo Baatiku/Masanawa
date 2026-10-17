@@ -1,3 +1,5 @@
+import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
+import type { AgentMasanaIdentityReader } from "./agent_directory_rooms.js";
 import type {
   AgentPresentationRepository,
   PlatformAgentProfileRepository,
@@ -35,6 +37,9 @@ export interface MobileAgentDirectoryEntry {
   readonly voiceProvider: string | null;
   readonly voiceName: string | null;
   readonly roomId?: string;
+  readonly portraitKey?: string;
+  readonly following: boolean;
+  readonly conversationStarters: readonly string[];
   readonly countryCode?: string | null;
   readonly countryName?: string | null;
 }
@@ -70,6 +75,7 @@ export function createAgentDirectoryService(input: {
   readonly userPreferences?: UserAgentPreferenceRepository;
   readonly activity?: MobileAgentActivityRepository;
   readonly rooms?: AgentRoomDirectoryReader;
+  readonly identities?: AgentMasanaIdentityReader;
 }): AgentDirectoryService {
   return Object.freeze<AgentDirectoryService>({
     async list(
@@ -91,7 +97,7 @@ export function createAgentDirectoryService(input: {
       );
 
       const characterIds = visible.map((item) => item.characterId);
-      const [preference, profiles, activity, rooms] = await Promise.all([
+      const [preference, profiles, activity, rooms, identities] = await Promise.all([
         input.userPreferences?.readForUser({
           tenantId: authority.tenantId,
           userId: authority.userId,
@@ -115,6 +121,8 @@ export function createAgentDirectoryService(input: {
           : Promise.resolve([]),
         input.rooms ? input.rooms.readPublished({tenantId:authority.tenantId,characterIds})
           : Promise.resolve(new Map<CharacterId,string>()),
+        input.identities ? input.identities.read({tenantId:authority.tenantId,userId:authority.userId,characterIds})
+          : Promise.resolve(new Map()),
       ]);
       const profileByCharacter = new Map(
         profiles.map(({ characterId, profile }) => [characterId, profile]),
@@ -130,6 +138,8 @@ export function createAgentDirectoryService(input: {
           const currentActivity =
             activityByCharacter.get(presentation.characterId) ?? null;
           const roomId=rooms.get(presentation.characterId);
+          const identity=identities.get(presentation.characterId);
+          const design=identity?.portraitKey?MASANA_CHARACTER_DESIGNS[identity.portraitKey]:null;
           const defaultPlatformAgent =
             profile?.supportAgent === true &&
             (preference
@@ -152,6 +162,9 @@ export function createAgentDirectoryService(input: {
             voiceProvider: profile?.voiceProvider ?? null,
             voiceName: profile?.voiceName ?? null,
             ...(roomId ? {roomId} : {}),
+            ...(identity?.portraitKey ? {portraitKey:identity.portraitKey} : {}),
+            following:identity?.following??false,
+            conversationStarters:Object.freeze([...(design?.starters??[])]),
           });
         }),
       );
