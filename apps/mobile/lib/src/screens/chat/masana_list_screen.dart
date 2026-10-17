@@ -11,6 +11,7 @@ import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 
 import '../../ui/components/conversation_search_field.dart';
 
@@ -38,6 +39,16 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   Widget build(BuildContext context) {
     final u = context.masanawa;
     final directory = ref.watch(agentDirectoryProvider);
+    final session = ref.watch(sessionProvider);
+    final accountId = session is SessionSignedIn ? session.user.id : 'signed-out';
+    ref.listen<SessionState>(sessionProvider, (previous, next) {
+      final oldId = previous is SessionSignedIn ? previous.user.id : null;
+      final newId = next is SessionSignedIn ? next.user.id : null;
+      if (oldId != newId && mounted) {
+        _searchController.clear();
+        setState(() { _query = ''; _filter = 'all'; });
+      }
+    });
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -77,17 +88,18 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           ),
         ],
       ),
-      body: _body(context, directory),
+      body: _body(context, directory, accountId),
     );
   }
 
   Widget _body(
     BuildContext context,
     AgentDirectoryState directory,
+    String accountId,
   ) {
     final u = context.masanawa;
     if (directory.loading && directory.agents.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const MasanawaListSkeleton(semanticLabel: 'Loading Masana contacts');
     }
     if (directory.agents.isEmpty) {
       return Center(
@@ -220,8 +232,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                           onPressed: () => setState(() {
                             _searchController.clear();
                             _query = '';
+                            _filter = 'all';
                           }),
-                          child: const Text('Clear search'),
+                          child: const Text('Clear filters'),
                         ),
                       ],
                     ),
@@ -231,6 +244,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                   onRefresh: () =>
                       ref.read(agentDirectoryProvider.notifier).refresh(),
                   child: ListView.separated(
+                    key: PageStorageKey<String>('masana-contacts-$accountId-$_filter-$_query'),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: filtered.length,
                     separatorBuilder: (_, _) =>

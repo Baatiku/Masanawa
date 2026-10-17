@@ -49,6 +49,7 @@ import '../../voice/voice_reply_playback_preference.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 
 /// One Character conversation. Voice is the primary action while text,
 /// attachments and structured work results remain in the same timeline.
@@ -987,18 +988,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
     if (agent == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Agent')),
-        body: Center(
+        appBar: AppBar(title: const Text('Masana')),
+        body: directory.loading
+            ? const MasanawaListSkeleton(semanticLabel: 'Loading Masana conversation')
+            : Center(
           child: Padding(
             padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  directory.loading
-                      ? 'Loading agent…'
-                      : directory.error ??
-                            'This agent isn’t available right now.',
+                  directory.error ?? 'This Masana isn’t available right now.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -1240,7 +1240,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 if (value == 'pin') ctl.togglePin(widget.characterId);
                 if (value == 'archive') ctl.toggleArchive(widget.characterId);
                 if (value == 'rename') _renameConversation();
-                if (value == 'gift') await _sendTwinGift(agent);
                 if (value == 'block') await _blockAgent(agent);
                 if (value == 'report') await _reportAgent(agent);
               },
@@ -1262,7 +1261,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 const PopupMenuItem(value: 'archive', child: Text('Archive / unarchive')),
                 if (!agent.supportAgent) ...const [
                   PopupMenuDivider(),
-                  PopupMenuItem(value: 'gift', child: Text('Send gift')),
                   PopupMenuItem(value: 'block', child: Text('Block')),
                   PopupMenuItem(value: 'report', child: Text('Report')),
                 ],
@@ -1707,7 +1705,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           shrinkWrap: true,
           children: [
             const ListTile(
-              title: Text('Forward to agent'),
+              title: Text('Forward to Masana'),
               subtitle: Text('Choose a conversation'),
             ),
             for (final entry in agents)
@@ -1737,70 +1735,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         SnackBar(content: Text('Forwarded to ${target.displayName}')),
       );
     }
-  }
-
-  Future<void> _sendTwinGift(AgentDirectoryEntry agent) async {
-    final amountController = TextEditingController();
-    final amount = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Gift ${agent.displayName}'),
-        content: TextField(
-          controller: amountController,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Credits',
-            hintText: 'Enter amount',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = int.tryParse(amountController.text.trim());
-              if (value != null && value > 0) {
-                Navigator.of(dialogContext).pop(value);
-              }
-            },
-            child: const Text('Review gift'),
-          ),
-        ],
-      ),
-    );
-    amountController.dispose();
-    if (amount == null || !mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Send gift?'),
-        content: Text('Send $amount Credits as a gift? Gifts do not create referral commission.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Send'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final receipt = await ref.read(walletProvider.notifier).sendGift(
-      recipientCharacterId: agent.characterId,
-      amountCredits: amount,
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(receipt == null ? 'Could not send gift.' : 'Gift sent.'),
-      ),
-    );
   }
 
   Future<void> _blockAgent(AgentDirectoryEntry agent) async {
@@ -2392,7 +2326,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       widget.characterId,
       prompt,
       replyToId: message.id,
-      replyPreview: quoted.isEmpty ? 'Agent response' : quoted,
+      replyPreview: quoted.isEmpty ? 'Masana response' : quoted,
     );
   }
 
