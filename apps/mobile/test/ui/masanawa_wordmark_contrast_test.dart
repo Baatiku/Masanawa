@@ -4,6 +4,14 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 import 'package:masanawa/src/ui/components/masanawa_wordmark.dart';
 
 void main() {
+  test('light chat surface is white without changing outgoing bubble identity', () {
+    final colors = MasanawaColors.light();
+    expect(colors.chatBg, Colors.white);
+    expect(colors.surfaceBg, Colors.white);
+    expect(colors.surfaceCard, Colors.white);
+    expect(colors.bubbleOut, const Color(0xFFD9FDD3));
+  });
+
   testWidgets('wordmark on white uses the strong accessible brand green', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: buildMasanawaTheme(brightness: Brightness.light),
