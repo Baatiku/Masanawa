@@ -7,7 +7,7 @@ export interface Comment {id:string;postId:string;body:string;state:"pending"|"v
 export interface Publish {authorMasanaId:string;kind:PostKind;body:string;media?:readonly string[];transcript?:string|null;idempotencyKey:string}
 export class FeedError extends Error {constructor(readonly status:number,readonly code:string){super(code)}}
 export interface Repository {
- list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number):Promise<readonly Post[]>;
+ list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string):Promise<readonly Post[]>;
  find(tenant:string,viewer:string|null,id:string):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
@@ -30,11 +30,12 @@ export function decodeCursor(value?:string):{at:string;id:string}|null{
 export class FeedService {
  constructor(private readonly repo:Repository,private readonly approvedMasana:(tenant:string,id:string)=>Promise<boolean>,
   private readonly approvedMedia:(tenant:string,masana:string,mediaId:string,kind:PostKind)=>Promise<boolean> = async () => false){}
- async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string){
+ async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string,authorMasanaId?:string){
   requireId(tenant);if(viewer)requireId(viewer);
   if(mode!=="for_you"&&mode!=="following")throw new FeedError(422,"invalid_mode");
   if(mode==="following"&&!viewer)throw new FeedError(401,"authentication_required");
-  const rows=await this.repo.list(tenant,viewer,mode,decodeCursor(cursor),21);
+  if(authorMasanaId!==undefined)requireId(authorMasanaId);
+  const rows=await this.repo.list(tenant,viewer,mode,decodeCursor(cursor),21,authorMasanaId);
   const items=rows.slice(0,20);
   return {items,nextCursor:rows.length>20&&items.length>0?Buffer.from(JSON.stringify([items[items.length-1]!.publishedAt,items[items.length-1]!.id])).toString("base64url"):null};
  }
