@@ -335,6 +335,20 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           `auth:identity:${input.tenantId}:${input.channel}:${input.identifier}`,
         ]);
+        // Serialize verified email binding with any other identity mutation.
+        // Changing an existing email also needs proof for the OLD address;
+        // until that recovery contract exists, fail closed rather than silently
+        // leaving the old external login identity authorized.
+        if(input.channel==="email") {
+          const current=await client.query<{email:string|null}>(
+            `SELECT email FROM security.platform_user_profiles
+              WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
+            [input.tenantId,input.userId],
+          );
+          if(!current.rows[0])throw new Error("auth.profile_missing");
+          if(current.rows[0].email && current.rows[0].email !== input.identifier)
+            throw new Error("auth.email_change_requires_recovery");
+        }
         const external = subject(input.channel,input.identifier,input.linkedAt);
         const existing = await resolveUserByExternalIdentity(
           client,input.tenantId,external,
