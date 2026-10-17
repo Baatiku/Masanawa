@@ -32,4 +32,42 @@ void main() {
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('masana-media-id'))).controller!.text, 'verified_media_123');
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('masana-media-rights'))).controller!.text, 'Authorized license');
   });
+  testWidgets('failed revision creation retains text and does not mutate the prior revision', (tester) async {
+    final oldProfile = <String, dynamic>{
+      'displayName': 'Gwani',
+      'handle': 'gwani',
+      'profession': 'Support',
+      'biography': 'Original biography',
+      'lifeStory': 'Original story',
+      'languages': <String>['Hausa'],
+      'talents': <String>['Teaching'],
+      'goals': <String>['Help'],
+    };
+    final revision = AdminMasanaRevision(
+      characterId: 'character_gwani',
+      revision: 3,
+      state: 'approved',
+      profile: oldProfile,
+    );
+    Map<String, dynamic>? proposed;
+    await tester.pumpWidget(MaterialApp(
+      home: AdminMasanaRevisionForm(
+        current: revision,
+        onSave: (profile) async {
+          proposed = profile;
+          throw StateError('offline');
+        },
+      ),
+    ));
+    await tester.enterText(find.byKey(const ValueKey('masana-revision-biography')), 'New approved biography');
+    await tester.ensureVisible(find.byKey(const ValueKey('masana-revision-submit')));
+    await tester.tap(find.byKey(const ValueKey('masana-revision-submit')));
+    await tester.pumpAndSettle();
+    expect(proposed?['biography'], 'New approved biography');
+    expect(oldProfile['biography'], 'Original biography');
+    expect(find.textContaining('Revision not confirmed'), findsOneWidget);
+    expect(tester.widget<TextFormField>(find.byKey(const ValueKey('masana-revision-biography'))).controller!.text,
+      'New approved biography');
+  });
+
 }
