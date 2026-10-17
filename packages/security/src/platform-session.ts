@@ -36,6 +36,7 @@ export interface PlatformSessionView {
 export interface PlatformAuthEventView {
   readonly action: string;
   readonly at: string;
+  readonly clientLabel?: string | null;
 }
 export interface PlatformSessionRepository {
   putOtpChallenge(input: Readonly<{
@@ -96,7 +97,7 @@ export interface PlatformSessionRepository {
   revokeSession?(input: Readonly<{ tenantId: TenantId; userId: UserId; sessionId: string; revokedAt: string }>): Promise<boolean>;
   revokeAllSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; revokedAt: string }>): Promise<number>;
   listAuthEvents?(input: Readonly<{ tenantId: TenantId; userId: UserId; limit: number }>): Promise<readonly PlatformAuthEventView[]>;
-  recordAuthEvent?(input: Readonly<{ tenantId: TenantId; userId: UserId; action: string; at: string }>): Promise<void>;
+  recordAuthEvent?(input: Readonly<{ tenantId: TenantId; userId: UserId; action: string; at: string; clientLabel?: string }>): Promise<void>;
   issueActionGrant?(input: Readonly<{
     accessHash: string; grantHash: string; operation: string; fingerprint: string;
     issuedAt: string; expiresAt: string;
