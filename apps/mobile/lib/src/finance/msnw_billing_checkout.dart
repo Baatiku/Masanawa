@@ -1,3 +1,4 @@
+import 'wallet_flow_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../core/api/billing_models.dart';
@@ -83,8 +84,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     final v=price,q=quote;
     if(busy||token==null||!same(token)||v==null||q==null||
         v['sufficient']!=true)return;
-    final choice=await showDialog<bool>(context:context,
-      builder:(ctx)=>AlertDialog(
+    final choice=await openWalletPage<bool>(context:context,
+      builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm MSNW bill'),
         content:Text('Pay '+units(v['amountMicro'] as String)+' MSNW to '+
           q.customerId+' for '+q.itemName+
@@ -190,3 +191,4 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     ),
   );
 }
+

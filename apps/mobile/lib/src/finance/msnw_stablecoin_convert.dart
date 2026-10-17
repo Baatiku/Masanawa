@@ -1,3 +1,4 @@
+import 'wallet_flow_page.dart';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -106,8 +107,8 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
     final token=widget.accessToken()?.trim(),v=price,id=key;
     if(busy||token==null||!same(token)||v==null||id==null||
        v['sufficient']!=true||v['providerLiquidityQualified']!=true)return;
-    final proceed=await showDialog<bool>(context:context,
-      builder:(ctx)=>AlertDialog(
+    final proceed=await openWalletPage<bool>(context:context,
+      builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm MSNW to crypto'),
         content:Text('Reserve '+unit(v['sourceMicro'] as String)+
           ' MSNW and pay '+unit(v['targetMicro'] as String)+' '+providerCode+
@@ -176,9 +177,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
           Text('Convert MSNW to crypto',
             style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:8),
-          const Text('Only confirmed MSNW held in platform custody can be '
-            'converted. Payout requires a verified, prefunded crypto treasury '
-            'and an approved withdrawal address.'),
+          const Text('Choose your crypto asset and network, then review the amount and fees.'),
           const SizedBox(height:10),
           DropdownButtonFormField<String>(
             value:providerCode,
@@ -240,3 +239,4 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
     ),
   );
 }
+

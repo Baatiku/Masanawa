@@ -1,3 +1,4 @@
+import 'wallet_flow_page.dart';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -116,8 +117,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       String? hint, String? initial}) async {
     final controller = TextEditingController(text: initial);
     try {
-      return await showDialog<String>(context: context,
-        builder: (ctx) => AlertDialog(title: Text(title), content: TextField(
+      return await openWalletPage<String>(context: context,
+        builder: (ctx) => WalletReviewContent(title: Text(title), content: TextField(
           controller: controller, autofocus: true,
           decoration: InputDecoration(labelText: label, hintText: hint),
         ), actions: [
@@ -128,8 +129,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     } finally { controller.dispose(); }
   }
   Future<bool> _confirm(String title, String details) async {
-    return await showDialog<bool>(context: context,
-      builder: (ctx) => AlertDialog(title: Text(title), content: Text(details),
+    return await openWalletPage<bool>(context: context,
+      builder: (ctx) => WalletReviewContent(title: Text(title), content: Text(details),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx,false),
           child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx,true),
@@ -182,10 +183,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     String? selectedBank;
     bool consent = false;
     try {
-      final request = await showDialog<Map<String,String>>(
+      final request = await openWalletPage<Map<String,String>>(
         context:context,
         builder:(dialog) => StatefulBuilder(builder:(dialog, update) =>
-          AlertDialog(
+          WalletReviewContent(
             title:const Text('Verify seller bank'),
             content:SingleChildScrollView(child:Column(
               mainAxisSize:MainAxisSize.min,
@@ -264,8 +265,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     if(methods.length==1){
       chosenId='${methods.single['method_id']}';
     } else {
-      chosenId=await showDialog<String>(context:context,builder:(dialog)=>
-        SimpleDialog(
+      chosenId=await openWalletPage<String>(context:context,builder:(dialog)=>
+        WalletChoiceContent(
           title:const Text('Choose bank for buyer payments'),
           children:[
             for(final method in methods)
@@ -464,7 +465,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       final ref='${receipt['receiptReference'] ?? ''}';
       final postings=receipt['postings'] is List
         ? receipt['postings'] as List<dynamic> : const <dynamic>[];
-      await showDialog<void>(context:context,builder:(dialog)=>AlertDialog(
+      await openWalletPage<void>(context:context,builder:(dialog)=>WalletReviewContent(
         title:const Text('Verified MSNW escrow receipt'),
         content:SingleChildScrollView(child:Column(
           mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
@@ -535,7 +536,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     if(reasonRequired) {
       final input=TextEditingController();
       try {
-        reason=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
+        reason=await openWalletPage<String>(context:context,builder:(ctx)=>WalletReviewContent(
           title:Text(action=='late-payment'
             ? 'Report a bank transfer after expiry'
             : 'Explain the dispute'),content:TextField(
@@ -548,7 +549,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       } finally {input.dispose();}
       if(reason==null||reason.trim().length<10)return;
     } else {
-      final yes=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      final yes=await openWalletPage<bool>(context:context,builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm this action'),
         content:Text(action=='claim'
           ? 'Mark payment sent? A claim is not bank settlement proof.'
@@ -563,8 +564,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
     final typed=TextEditingController();
     try {
-      final accepted=await showDialog<bool>(context:context,
-        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>AlertDialog(
+      final accepted=await openWalletPage<bool>(context:context,
+        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>WalletReviewContent(
           title:const Text('Confirm bank payment received'),
           content:SingleChildScrollView(child:Column(
             mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
@@ -712,3 +713,4 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     }),
   );
 }
+
