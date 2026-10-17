@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 
 import '../agents/agent_shell.dart';
 import '../core/live_voice_session.dart';
+import '../core/call_recording.dart';
+import 'call_outcome.dart';
 import 'group_call_controller.dart';
 import 'incoming_call_transport.dart';
 
@@ -26,6 +28,7 @@ class IncomingCallController extends ChangeNotifier
     required this.authorize,
     this.onConnected,
     this.onClosed,
+    this.onOutcome,
     IncomingSessionFactory? sessionFactory,
     this.pollInterval = const Duration(seconds: 5),
   }) : _sessionFactory = sessionFactory ?? _nativeSession {
@@ -51,11 +54,21 @@ class IncomingCallController extends ChangeNotifier
   final IncomingCallTransport transport;
   final Future<GroupAdmission?> Function(IncomingCallRecord) authorize;
   final Future<void> Function(AgentLiveVoiceGrant)? onConnected, onClosed;
+  final Future<void> Function(AgentLiveVoiceGrant,CallEndReason?)? onOutcome;
   final IncomingSessionFactory _sessionFactory;
   final Duration pollInterval;
   Timer? _poll;
   IncomingCallRecord? call;
   LiveVoiceSession? _session;
+  StreamSubscription<LiveVoiceState>? _states;
+  Timer? _elapsedTick;
+  final Stopwatch _elapsed=Stopwatch();
+  CallRecorder? recording;
+  Duration get elapsed=>_elapsed.elapsed;
+  bool get audioInterrupted=>_session?.audioInterrupted??false;
+  String get statusLabel=>audioInterrupted?'Audio paused':_session?.reconnecting==true?'Reconnecting…':muted?'Muted':'Connected';
+  Future<void> resumeAudio()async{await _session?.resumeAudio();_notify();}
+  Future<void> toggleRecording()async{final capture=recording;if(capture==null)return;if(capture.recording){await capture.stop();}else if(_valid&&active){await capture.start();}}
   GroupAdmission? _admission;
   AgentLiveVoiceGrant? _grant;
   String? error;
@@ -92,7 +105,7 @@ class IncomingCallController extends ChangeNotifier
       if (call != null && !call!.ringing && value.ringing) return;
       call = value;
       error = null;
-      if (!value.ringing && value.state != 'accepted') await end();
+      if (!value.ringing && value.state != 'accepted') { _session?.endReason??=CallEndReason.providerEnded; await end(); }
     } catch (_) {
       if (_valid) {
         error = 'Could not check this call. Check your connection and retry.';
@@ -160,6 +173,12 @@ class IncomingCallController extends ChangeNotifier
         );
       };
       _session = session;
+      if(session.audioObserver==null){
+        recording=CallRecorder(store:CallRecordingStore(accountKey),agentName:accepted.displayName,
+          isCurrentAccount:()=>currentAccountKey()==accountKey,onChanged:_notify);
+        session.audioObserver=recording;
+      }
+      _states=session.states.listen((_)=>_notify());
       await session.start();
       await session.ready;
       _check();
@@ -168,7 +187,9 @@ class IncomingCallController extends ChangeNotifier
       await admission.onMediaStarted();
       _check();
       active = true;
+      _elapsed.start();_elapsedTick=Timer.periodic(const Duration(seconds:1),(_)=>_notify());
     } catch (failure) {
+      _session?.endReason ??= currentAccountKey()!=accountKey ? CallEndReason.accountChanged : CallEndReason.connectionFailed;
       error = failure is StateError
           ? failure.message
           : 'Could not connect this call. Check Calls and Wallet activity.';
@@ -206,6 +227,9 @@ class IncomingCallController extends ChangeNotifier
   Future<void> _cleanup() async {
     final session = _session;
     _session = null;
+    _elapsed.stop();_elapsedTick?.cancel();
+    await _states?.cancel();_states=null;
+    recording?.ended();
     final admission = _admission;
     _admission = null;
     final grant = _grant;
@@ -214,7 +238,7 @@ class IncomingCallController extends ChangeNotifier
       await session?.close();
     } catch (_) {}
     try {
-      if (grant != null) await onClosed?.call(grant);
+      if (grant != null) {await onOutcome?.call(grant,session?.endReason);await onClosed?.call(grant);}
     } catch (_) {}
     try {
       await admission?.onEnded();
@@ -226,6 +250,7 @@ class IncomingCallController extends ChangeNotifier
 
   Future<void> end() {
     if (_ending != null) return _ending!;
+    _session?.endReason??=currentAccountKey()!=accountKey?CallEndReason.accountChanged:CallEndReason.userEnded;
     ended = true;
     active = false;
     _poll?.cancel();
@@ -239,6 +264,7 @@ class IncomingCallController extends ChangeNotifier
     if (state == AppLifecycleState.resumed) {
       if (!ended) unawaited(refresh());
     } else if (state == AppLifecycleState.detached) {
+      _session?.endReason??=CallEndReason.appClosed;
       if (busy || _session != null) unawaited(end());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
@@ -259,3 +285,4 @@ class IncomingCallController extends ChangeNotifier
     super.dispose();
   }
 }
+

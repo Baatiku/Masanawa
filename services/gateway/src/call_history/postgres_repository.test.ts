@@ -28,6 +28,9 @@ describe.skipIf(!databaseUrl)("Masana call history on PostgreSQL", () => {
     const sql = await readFile(new URL("../../../../packages/agents/migrations/0007_masana_call_history.sql", import.meta.url), "utf8");
     await writeFile(path.join(migrationDirectory, "0007_masana_call_history.sql"), sql);
     expect(await runMigrations(pool, [{ owner: "agents", directory: migrationDirectory }])).toEqual(["agents/0007_masana_call_history.sql"]);
+    for (const file of ["0008_masana_group_calls.sql","0009_masana_incoming_calls.sql","0013_masana_call_outcomes.sql"]) {
+      await pool.query(await readFile(new URL(`../../../../packages/agents/migrations/${file}`, import.meta.url), "utf8"));
+    }
     await pool.query(`INSERT INTO agents.agent_presentations
       (tenant_id,character_id,character_version_id,display_name,role_label)
       VALUES ('tenant-a','masana-a','version-a','Amina','Masana'),

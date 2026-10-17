@@ -86,6 +86,11 @@ Future<void> _mount(
 );
 
 void main() {
+  testWidgets('history row opens full call details instead of immediately starting a call',(tester)async{
+    await _mount(tester,_Session(),_Transport((_)async=>page('Amina')));await tester.pumpAndSettle();
+    await tester.tap(find.text('Amina'));await tester.pumpAndSettle();
+    expect(find.text('Call details'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);
+  });
   testWidgets('labels incoming missed history and preserves outgoing history', (tester) async {
     await _mount(tester, _Session(), _Transport((_) async => CallHistoryPage(calls: [
       CallHistoryItem(callId: 'incoming', characterId: 'masana', displayName: 'Missed Amina', state: 'missed', direction: 'incoming', createdAt: DateTime.utc(2026,10,12)),

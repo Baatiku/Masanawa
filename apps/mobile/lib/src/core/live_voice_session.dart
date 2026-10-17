@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 import 'package:flutter/widgets.dart';
 
 import '../agents/agent_shell.dart';
+import '../calls/call_outcome.dart';
 import 'app_permissions.dart';
 import 'audio_failure.dart';
 import 'microphone_capture.dart';
@@ -115,6 +116,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
   bool _audioInterrupted = false;
   Future<void>? _suspendingAudio;
   bool get audioInterrupted => _audioInterrupted;
+  bool get reconnecting => _reconnectTask!=null;
+  CallEndReason? endReason;
 
   Stream<LiveVoiceState> get states => _state.stream;
   Stream<String> get errors => _errors.stream;
@@ -200,6 +203,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       }
       await _connectSocket();
     } catch (error) {
+      if(error is AudioFailure && error.code=='permission')endReason??=CallEndReason.permissionDenied;
       _fail(
         audioFailureMessage(error, fallback: error is StateError ? error.message : 'Could not start live voice.'),
       );
@@ -446,7 +450,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
             if (allowed <= Duration.zero) {
               throw StateError('This call permission has expired.');
             }
-            _durationTimer = Timer(allowed, () => unawaited(close()));
+            _durationTimer = Timer(allowed, () {endReason??=CallEndReason.durationLimit;unawaited(close());});
           }
           _ready.complete();
           if (!_connectedReported) {
@@ -628,12 +632,14 @@ class LiveVoiceSession with WidgetsBindingObserver {
       // Native Android foreground service keeps a customer-authorized live
       // call visible when they lock the phone or switch apps. Standalone
       // notes and unsupported platforms retain the conservative close path.
+      endReason??=CallEndReason.appClosed;
       unawaited(close());
     }
   }
 
   void _fail(String message) {
     if (_closed) return;
+    endReason??=CallEndReason.connectionFailed;
     if (!_ready.isCompleted) {
       _ready.completeError(StateError(message));
     }
@@ -720,6 +726,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
     unawaited(Future<void>.sync(callback).catchError((Object _) {}));
   }
 }
+
 
 
 

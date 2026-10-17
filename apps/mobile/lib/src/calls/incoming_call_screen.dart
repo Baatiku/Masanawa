@@ -86,7 +86,7 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
           accessToken: owner.accessToken,
         ),
         onConnected: (_) => binding.connected(),
-        onClosed: (_) => binding.closed(),
+        onOutcome: (_,reason) => binding.closed(reason:reason),
         authorize: (call) async {
           final quote = await paid.quote(characterId: call.characterId);
           if (quote == null) {
@@ -200,8 +200,10 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
                   Text(
                     controller == null
                         ? 'Sign in to check this call.'
+                        : controller.busy
+                        ? 'Connecting…'
                         : controller.active
-                        ? 'Connected'
+                        ? controller.statusLabel
                         : call == null
                         ? 'Checking this call…'
                         : controller.ended && call.state == 'accepted'
@@ -215,6 +217,16 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
                               }[call.state] ??
                               'Call ended',
                   ),
+                  if(controller?.active==true||controller?.ended==true&&controller!.elapsed>Duration.zero)
+                    Text('${controller!.elapsed.inMinutes.toString().padLeft(2,'0')}:${(controller.elapsed.inSeconds%60).toString().padLeft(2,'0')}',semanticsLabel:'Call duration'),
+                  if(controller?.audioInterrupted==true)TextButton.icon(onPressed:controller!.resumeAudio,icon:const Icon(Icons.play_arrow),label:const Text('Resume audio')),
+                  if(controller?.active==true&&controller?.recording!=null) ...[
+                    TextButton.icon(onPressed:controller!.recording!.saving?null:controller.toggleRecording,
+                      icon:Icon(controller.recording!.recording?Icons.stop_circle_outlined:Icons.fiber_manual_record),
+                      label:Text(controller.recording!.recording?'Stop recording':controller.recording!.saving?'Saving recording…':'Record call')),
+                    if(controller.recording!.recording)const Text('Recording · saved on this device'),
+                    if(controller.recording!.error!=null)Text(controller.recording!.error!,textAlign:TextAlign.center),
+                  ],
                   if (controller?.busy == true)
                     const CircularProgressIndicator(),
                   if (controller?.error != null)
@@ -276,3 +288,4 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
     );
   }
 }
+

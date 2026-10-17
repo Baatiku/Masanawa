@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
+import '../../calls/call_details_screen.dart';
 import '../../calls/call_recordings_screen.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/group_call_screen.dart';
@@ -63,9 +64,7 @@ class CallsScreen extends ConsumerWidget {
               sessionIdentity: session.tokens,
             )
           : session is SessionRestoring
-          ? const MasanawaListSkeleton(
-              semanticLabel: 'Restoring call history session',
-            )
+          ? const MasanawaListSkeleton(semanticLabel: 'Restoring call history session')
           : const Center(child: Text('Sign in to see your calls.')),
     );
   }
@@ -382,10 +381,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                     )
                   else
                     OutlinedButton.icon(
-                      onPressed: () {
-                        _search.clear();
-                        _searchChanged('');
-                      },
+                      onPressed: () { _search.clear(); _searchChanged(''); },
                       icon: const Icon(Icons.clear),
                       label: const Text('Clear call search'),
                     ),
@@ -416,7 +412,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${_label(call.state)} · ${_date(context, call.createdAt)}',
+                      '${call.isGroupCall?'Group · ':''}${_label(call.state)}${call.duration==null?'':' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
                       style: TextStyle(color: u.textMuted, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -430,9 +426,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                   '/chat/${Uri.encodeComponent(call.characterId)}?mode=liveVoice',
                 ),
               ),
-              onTap: () => context.push(
-                '/chat/${Uri.encodeComponent(call.characterId)}',
-              ),
+              onTap: () => Navigator.push<void>(context,MaterialPageRoute(builder:(_)=>CallDetailsScreen(ownerId:widget.accountId,initial:call))),
             ),
           if (_failed && !_invalidQuery)
             Padding(
@@ -472,4 +466,5 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     return '${strings.formatMediumDate(local)} ${strings.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
   }
 }
+
 

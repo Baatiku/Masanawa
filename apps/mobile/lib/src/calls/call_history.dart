@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/api_client.dart';
 import '../core/providers.dart';
+import 'call_outcome.dart';
+import 'group_call_transport.dart';
 
 class CallHistoryItem {
   const CallHistoryItem({
@@ -12,6 +14,7 @@ class CallHistoryItem {
     required this.state,
     required this.createdAt,
     this.direction = 'outgoing',
+    this.connectedAt,this.endedAt,this.expiresAt,this.endReason,this.groupId,
   });
   final String callId;
   final String characterId;
@@ -21,6 +24,16 @@ class CallHistoryItem {
   bool get incoming => direction == 'incoming';
   bool get missed => incoming && (state == 'missed' || state == 'expired');
   final DateTime createdAt;
+  final DateTime? connectedAt,endedAt,expiresAt;
+  final CallEndReason? endReason;
+  final String? groupId;
+  bool get isGroupCall=>groupId!=null;
+  Duration? get duration {
+    final start=connectedAt,end=endedAt;
+    if(start==null||end==null)return null;
+    final elapsed=end.difference(start);return elapsed.isNegative?Duration.zero:elapsed;
+  }
+  String get outcomeLabel=>endReason?.label??(missed?'Not answered':state=='declined'?'Declined':state=='cancelled'?'Cancelled':state=='expired'?'No confirmed connection before expiry':endedAt!=null&&connectedAt==null?'Ended before a connection was confirmed':state=='ended'?'Call ended':state=='active'?'Connected':'Connecting');
 
   factory CallHistoryItem.fromJson(Map<String, dynamic> json) {
     final callId = json['callId'];
@@ -52,7 +65,15 @@ class CallHistoryItem {
         createdAt == null) {
       throw const FormatException('Invalid Masana call history record');
     }
+    DateTime? optionalDate(String key){
+      final raw=json[key];if(raw==null)return null;
+      if(raw is! String)throw const FormatException('Invalid call timestamp');
+      final parsed=DateTime.tryParse(raw);if(parsed==null)throw const FormatException('Invalid call timestamp');return parsed;
+    }
+    final groupId=json['groupId'];if(groupId!=null&&(groupId is! String||groupId.isEmpty))throw const FormatException('Invalid call group');
     return CallHistoryItem(
+      connectedAt:optionalDate('connectedAt'),endedAt:optionalDate('endedAt'),expiresAt:optionalDate('expiresAt'),
+      endReason:CallEndReason.parse(json['endReason']),groupId:groupId as String?,
       callId: callId,
       characterId: characterId,
       displayName: displayName,
@@ -73,9 +94,26 @@ abstract interface class CallHistoryTransport {
   Future<CallHistoryPage> loadPage({String? cursor, String query = '', CancelToken? cancelToken});
 }
 
-class GatewayCallHistoryTransport implements CallHistoryTransport {
+abstract interface class CallDetailTransport {
+  Future<CallHistoryItem> get(String callId,{CancelToken? cancelToken});
+  Future<MasanaCallGroup> group(String groupId,{CancelToken? cancelToken});
+}
+
+class GatewayCallHistoryTransport implements CallHistoryTransport,CallDetailTransport {
   const GatewayCallHistoryTransport({required this.api});
   final ApiClient api;
+  @override Future<CallHistoryItem> get(String callId,{CancelToken? cancelToken})async{
+    final response=await api.dio.get<dynamic>('/v1/calls/${Uri.encodeComponent(callId)}',cancelToken:cancelToken);
+    if(response.data is! Map)throw const FormatException('Invalid call detail');
+    final item=CallHistoryItem.fromJson((response.data as Map).cast<String,dynamic>());
+    if(item.callId!=callId)throw const FormatException('Mismatched call detail');return item;
+  }
+  @override Future<MasanaCallGroup> group(String groupId,{CancelToken? cancelToken})async{
+    final response=await api.dio.get<dynamic>('/v1/calls/groups/${Uri.encodeComponent(groupId)}',cancelToken:cancelToken);
+    if(response.data is! Map)throw const FormatException('Invalid group detail');
+    final item=MasanaCallGroup.fromJson((response.data as Map).cast<String,dynamic>());
+    if(item.groupId!=groupId)throw const FormatException('Mismatched group detail');return item;
+  }
   @override
   Future<CallHistoryPage> loadPage({
     String? cursor,
@@ -114,3 +152,4 @@ class GatewayCallHistoryTransport implements CallHistoryTransport {
 final callHistoryTransportProvider = Provider<CallHistoryTransport>(
   (ref) => GatewayCallHistoryTransport(api: ref.watch(apiClientProvider)),
 );
+

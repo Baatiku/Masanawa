@@ -1,5 +1,5 @@
 import { createCanonicalId } from "@masanawa/contracts";
-import { CallHistoryError, encodeCallCursor, type CallHistoryRecorder, type CallHistoryRepository, type CallRecord } from "./service.js";
+import { CallHistoryError, encodeCallCursor, type CallHistoryRecorder, type CallHistoryRepository, type CallRecord, type CallEndReason } from "./service.js";
 
 export interface CallHistorySqlPool {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<{ rows: Row[]; rowCount: number | null }>;
@@ -7,9 +7,12 @@ export interface CallHistorySqlPool {
 interface Row extends Record<string, unknown> {
   call_id: string; character_id: string; display_name: string;
   created_at: Date; connected_at: Date | null; ended_at: Date | null; expires_at: Date;
+  end_reason?: CallEndReason | null; group_id?: string | null;
   expired: boolean; direction?: "incoming" | "outgoing"; incoming_outcome?: string | null;
 }
-const selection = `h.*, (h.expires_at <= clock_timestamp()) AS expired`;
+const selection = `h.*, (h.expires_at <= clock_timestamp()) AS expired,
+  (SELECT member.group_id::text FROM agents.masana_call_group_participants member
+   WHERE member.tenant_id=h.tenant_id AND member.user_id=h.user_id AND member.call_id=h.call_id) AS group_id`;
 const scope = `h.tenant_id=$1 AND h.user_id=$2
   AND ($3::text[] IS NULL OR h.character_id=ANY($3::text[]))`;
 // Existing approved platform profiles are the Masana roster. Historical personal
@@ -22,9 +25,10 @@ function record(row: Row): CallRecord {
   return {
     callId: row.call_id, characterId: row.character_id, displayName: row.display_name,
     direction: row.direction ?? "outgoing", kind: "audio",
-    state: row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.expired ? "expired" : row.connected_at ? "active" : "connecting",
+    state: row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.connected_at ? "active" : row.expired ? "expired" : "connecting",
     createdAt: row.created_at.toISOString(), connectedAt: row.connected_at?.toISOString() ?? null,
     endedAt: row.ended_at?.toISOString() ?? null, expiresAt: row.expires_at.toISOString(),
+    endReason: row.end_reason ?? null,groupId:row.group_id ?? null,
     connectionEvidence: row.connected_at ? "client_report" : null,
   };
 }
@@ -61,8 +65,8 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
             OR position($6 in lower(CASE
               WHEN (to_jsonb(h)->>'incoming_outcome') IN ('missed','declined','cancelled') THEN to_jsonb(h)->>'incoming_outcome'
               WHEN h.ended_at IS NOT NULL THEN 'ended'
-              WHEN h.expires_at<=clock_timestamp() THEN 'expired'
               WHEN h.connected_at IS NOT NULL THEN 'active'
+              WHEN h.expires_at<=clock_timestamp() THEN 'expired'
               ELSE 'connecting' END))>0)
         ORDER BY h.created_at DESC,h.call_id DESC LIMIT $7`,
       [input.tenantId,input.userId,input.characterIds,input.cursor?.createdAt ?? null,input.cursor?.callId ?? null,input.query ?? "",input.limit+1]);
@@ -82,10 +86,12 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
       const result = await pool.query<Row>(`UPDATE agents.masana_call_history h SET
         connected_at=CASE WHEN $5='connected' AND h.ended_at IS NULL AND h.expires_at>clock_timestamp()
           THEN COALESCE(h.connected_at,clock_timestamp()) ELSE h.connected_at END,
-        ended_at=CASE WHEN $5='ended' THEN COALESCE(h.ended_at,clock_timestamp()) ELSE h.ended_at END
+        ended_at=CASE WHEN $5='ended' THEN COALESCE(h.ended_at,clock_timestamp()) ELSE h.ended_at END,
+        end_reason=CASE WHEN $5='ended' THEN COALESCE(h.end_reason,$6::text) ELSE h.end_reason END
         WHERE ${scope} AND ${roster} AND h.call_id=$4::uuid RETURNING ${selection}`,
-      [input.tenantId,input.userId,input.characterIds,input.callId,input.event]);
+      [input.tenantId,input.userId,input.characterIds,input.callId,input.event,input.endReason??null]);
       return result.rows[0] ? record(result.rows[0]) : null;
     },
   };
 }
+

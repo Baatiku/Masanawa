@@ -18,6 +18,26 @@ class _Adapter implements HttpClientAdapter {
 }
 
 void main() {
+  final record=<String,dynamic>{'callId':'call-a','characterId':'agent-a','displayName':'Amina','state':'ended','direction':'outgoing','kind':'audio','createdAt':'2026-10-17T10:00:00Z','connectedAt':'2026-10-17T10:00:05Z','endedAt':'2026-10-17T10:01:10Z','endReason':'connection_failed','groupId':'group-a'};
+  test('final duration requires both timestamps and preserves bounded outcomes',(){
+    final call=CallHistoryItem.fromJson(record);
+    expect(call.duration,const Duration(seconds:65));expect(call.outcomeLabel,'Connection lost');expect(call.isGroupCall,isTrue);
+    expect(CallHistoryItem.fromJson({...record,'endedAt':null}).duration,isNull);
+    expect(CallHistoryItem.fromJson({...record,'endReason':'unknown future reason'}).endReason,isNull);
+    expect(()=>CallHistoryItem.fromJson({...record,'endedAt':'bad'}),throwsFormatException);
+  });
+  test('detail endpoint pins id and rejects mismatched records',()async{
+    final dio=Dio(BaseOptions(baseUrl:'https://example.test'));
+    final api=ApiClient(dio:dio)..accessToken='owner';
+    var mismatch=false;
+    dio.httpClientAdapter=_Adapter((request)async{
+      expect(request.path,'/v1/calls/call-a');expect(request.headers['Authorization'],'Bearer owner');
+      return ResponseBody.fromString(jsonEncode({...record,if(mismatch)'callId':'another-call'}),200,headers:{Headers.contentTypeHeader:['application/json']});
+    });
+    final transport=GatewayCallHistoryTransport(api:api);
+    expect((await transport.get('call-a')).duration,const Duration(seconds:65));
+    mismatch=true;await expectLater(transport.get('call-a'),throwsFormatException);dio.close();
+  });
   test(
     'history uses canonical endpoint, opaque cursor and session authorization',
     () async {

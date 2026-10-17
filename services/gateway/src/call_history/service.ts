@@ -1,5 +1,10 @@
 import type { AgentDirectoryAuthorizer } from "../agent_directory.js";
 
+export const CALL_END_REASONS = ['user_ended','connection_failed','permission_denied',
+  'audio_device_disconnected','app_closed','duration_limit','provider_ended',
+  'account_changed','participant_removed'] as const;
+export type CallEndReason = typeof CALL_END_REASONS[number];
+
 export interface CallScope {
   readonly tenantId: string;
   readonly userId: string;
@@ -16,13 +21,15 @@ export interface CallRecord {
   readonly connectedAt: string | null;
   readonly endedAt: string | null;
   readonly expiresAt: string;
+  readonly endReason?: CallEndReason | null;
+  readonly groupId?: string | null;
   readonly connectionEvidence: "client_report" | null;
 }
 export interface CallCursor { readonly createdAt: string; readonly callId: string }
 export interface CallHistoryRepository {
   list(input: CallScope & { readonly limit: number; readonly cursor: CallCursor | null; readonly query?: string }): Promise<{ readonly calls: readonly CallRecord[]; readonly nextCursor: string | null }>;
   get(input: CallScope & { readonly callId: string }): Promise<CallRecord | null>;
-  report(input: CallScope & { readonly callId: string; readonly event: "connected" | "ended" }): Promise<CallRecord | null>;
+  report(input: CallScope & { readonly callId: string; readonly event: "connected" | "ended"; readonly endReason?: CallEndReason }): Promise<CallRecord | null>;
 }
 export interface CallHistoryRecorder {
   attachIssued?(input: { readonly tenantId: string; readonly userId: string; readonly characterId: string; readonly callId: string; readonly expiresAt: string }): Promise<string>;
@@ -79,12 +86,16 @@ export function createCallHistoryService(input: { readonly repository: CallHisto
       if (!call) throw new CallHistoryError("calls.not_found", 404);
       return call;
     },
-    async report(request: { readonly authorizationHeader?: string; readonly callId: string; readonly event: "connected" | "ended" }) {
+    async report(request: { readonly authorizationHeader?: string; readonly callId: string; readonly event: "connected" | "ended"; readonly endReason?: string }) {
       const actor = await scope(request.authorizationHeader);
-      const call = await input.repository.report({ ...actor, callId: id(request.callId), event: request.event });
+      if(request.endReason!==undefined && (request.event!=='ended'||!CALL_END_REASONS.includes(request.endReason as CallEndReason)))
+        throw new CallHistoryError('calls.end_reason_invalid',400);
+      const call = await input.repository.report({ ...actor, callId: id(request.callId), event: request.event,
+        ...(request.endReason===undefined?{}:{endReason:request.endReason as CallEndReason}) });
       if (!call) throw new CallHistoryError("calls.not_found", 404);
       return call;
     },
   });
 }
 export type CallHistoryService = ReturnType<typeof createCallHistoryService>;
+

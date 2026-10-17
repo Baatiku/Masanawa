@@ -25,6 +25,7 @@ import '../../chat/message_parts.dart';
 import '../../chat/message_parts_view.dart';
 import '../../chat/shell_document.dart';
 import '../../calls/call_lifecycle_reporter.dart';
+import '../../calls/call_outcome.dart';
 import '../../calls/call_lifecycle_limits.dart';
 import '../../calls/group_paid_voice_transport.dart';
 import '../../calls/group_paid_voice_outbox.dart';
@@ -128,6 +129,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final previousId = previous is SessionSignedIn ? previous.user.id : null;
       final nextId = next is SessionSignedIn ? next.user.id : null;
       if (previousId != nextId) {
+        _inlineVoiceSession?.endReason=CallEndReason.accountChanged;
+        _modalVoiceSession?.endReason=CallEndReason.accountChanged;
         _pendingVoiceAutoplay = null;
         unawaited(_inlineVoiceSession?.close() ?? Future<void>.value());
         unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
@@ -2017,7 +2020,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 );
         },
         onConnected: history.connected,
-        onClosed: history.closed,
+        onClosed: () => history!.closed(reason:session?.endReason),
         captureInputTranscription: false,
         endAt: paidAdmission?.expiresAt,
         maxDuration: paidAdmission == null ? null : paidNativeCallMaxDuration(
@@ -2100,6 +2103,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     try {
       await _inlineVoiceStateSub?.cancel();
       _inlineVoiceStateSub = null;
+      session.endReason??=CallEndReason.userEnded;
       await session.close();
       if (admission != null) {
         await _inlinePaidController?.complete(
@@ -2252,7 +2256,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 );
         },
         onConnected: history.connected,
-        onClosed: history.closed,
+        onClosed: () => history!.closed(reason:session?.endReason),
         endAt: paidAdmission?.expiresAt,
         maxDuration: paidAdmission == null ? null : paidNativeCallMaxDuration(
           estimatedSeconds: estimatedSeconds,
@@ -2516,6 +2520,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
       if (maxDuration != null) {
         _durationTimer?.cancel();
         _durationTimer = Timer(maxDuration, () async {
+          widget.session.endReason??=CallEndReason.durationLimit;
           await widget.session.close();
           if (mounted) Navigator.of(context).pop();
         });
@@ -2537,6 +2542,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
     _elapsed.stop();
     _errors?.cancel();
     _recording?.ended();
+    widget.session.endReason??=CallEndReason.userEnded;
     widget.session.close();
     super.dispose();
   }
@@ -2544,6 +2550,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   String _label(LiveVoiceState state) {
     if (_ringing) return 'Calling…';
     if (widget.session.audioInterrupted) return 'Audio paused';
+    if (state==LiveVoiceState.connecting && widget.session.reconnecting) return 'Reconnecting…';
     return switch (state) {
         LiveVoiceState.connecting => 'Connecting…',
         LiveVoiceState.listening => _muted ? 'Muted' : 'Listening…',
@@ -2643,6 +2650,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                       icon: Icons.call_end,
                       danger: true,
                       onTap: () async {
+                        widget.session.endReason??=CallEndReason.userEnded;
                         await widget.session.close();
                         if (context.mounted) Navigator.of(context).pop();
                       },
@@ -4762,5 +4770,6 @@ class _TypingBubble extends StatelessWidget {
     );
   }
 }
+
 
 
