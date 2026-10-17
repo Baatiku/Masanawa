@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../state/session_state.dart';
+import 'verify_account_email_screen.dart';
 
 /// Server-authorized security controls. No locally invented devices or events.
 class AccountSecurityScreen extends ConsumerStatefulWidget {
@@ -132,6 +133,23 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text('Verified contact',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+            const SizedBox(height:8),
+            const Text('Add or re-verify an email address with a code. '
+                'Email changes need separate account-recovery safeguards.'),
+            ListTile(
+              key:const Key('security-verify-email'),
+              leading:const Icon(Icons.alternate_email),
+              title:const Text('Verify email address'),
+              subtitle:const Text('Prove you control the inbox before linking it'),
+              trailing:const Icon(Icons.chevron_right),
+              onTap:() => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder:(_)=>const VerifyAccountEmailScreen(),
+                ),
+              ),
+            ),
+            const SizedBox(height:22),
             const Text('Signed-in devices', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             const Text('Review active sessions and revoke any you do not recognize. '

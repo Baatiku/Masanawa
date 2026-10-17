@@ -694,20 +694,35 @@ describe("customer password authentication", () => {
       .rejects.toMatchObject({ code: "VALIDATION_FAILED", statusCode: 400 });
   });
 
-  it("attaches the optional email identity at setup", async () => {
+  it("never links unverified optional signup email; verifies ownership with OTP first", async () => {
     const repository = new MemorySessions();
-    const auth = service(repository);
-    const created = await auth.passwordSetup({
-      phone: "+2348012345678",
-      deviceId,
-      password: "123456",
-      name: "Amina",
-      email: "amina@example.com",
+    const tenantId=createCanonicalId("tenant");
+    let otp="";
+    const auth=createCustomerAuthService({
+      repository,tenantId,otpPepper:"p".repeat(48),
+      emailDelivery:{async send(input) {otp=input.code;}},
     });
-    expect(created.user).toMatchObject({
-      phone: "+2348012345678",
-      email: "amina@example.com",
+    const created=await auth.passwordSetup({
+      phone:"+2348012345678",deviceId,password:"123456",name:"Amina",
+      email:"amina@example.com",
     });
+    // The email supplied during phone signup must not be a second login
+    // until the verified, authenticated linking flow completes.
+    expect(created.user.email).toBeNull();
+    await expect(auth.startEmailLink({
+      authorizationHeader:"Bearer invalid",email:"amina@example.com",
+    })).rejects.toMatchObject({code:"UNAUTHORIZED",statusCode:401});
+    const token=created.accessToken;
+    await auth.startEmailLink({
+      authorizationHeader:`Bearer ${token}`,email:"amina@example.com",
+    });
+    await expect(auth.confirmEmailLink({
+      authorizationHeader:`Bearer ${token}`,email:"amina@example.com",code:"000000",
+    })).rejects.toMatchObject({code:"OTP_INVALID"});
+    await expect(auth.confirmEmailLink({
+      authorizationHeader:`Bearer ${token}`,email:"amina@example.com",code:otp,
+    })).resolves.toEqual({email:"amina@example.com"});
+    expect(repository.profile?.email).toBe("amina@example.com");
   });
 
   it("routes registered numbers without a password to setup", async () => {

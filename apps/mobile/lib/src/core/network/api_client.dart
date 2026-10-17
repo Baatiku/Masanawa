@@ -311,6 +311,19 @@ class ApiClient {
     return _post('/auth/logout', const {});
   }
 
+  Future<int> startVerifiedEmailLink(String email) async {
+    final data=await _post('/v1/auth/security/email/start',{'email':email});
+    return (data['resendInSeconds'] as num?)?.toInt() ?? 60;
+  }
+
+  Future<String> confirmVerifiedEmailLink({required String email,required String code}) async {
+    final data=await _post('/v1/auth/security/email/confirm',{'email':email,'code':code});
+    final verified=data['email'];
+    if(verified is! String || verified.isEmpty)
+      throw const ApiException('Email verification could not be confirmed.');
+    return verified;
+  }
+
   // ---- Account security: authenticated, server-owned sessions ----
 
   Future<List<Map<String, dynamic>>> securitySessions() async {
