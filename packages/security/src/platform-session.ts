@@ -24,6 +24,17 @@ export type OtpConsumeResult = "accepted" | "invalid" | "expired" | "locked" | "
 
 export type PasswordVerifyResult = "accepted" | "invalid" | "locked" | "missing";
 
+export interface PlatformSessionView {
+  readonly sessionId: string;
+  readonly deviceId: string | null;
+  readonly createdAt: string;
+  readonly lastAccessAt: string;
+  readonly current: boolean;
+}
+export interface PlatformAuthEventView {
+  readonly action: string;
+  readonly at: string;
+}
 export interface PlatformSessionRepository {
   putOtpChallenge(input: Readonly<{
     tenantId: TenantId; channel: PlatformAuthChannel; identifier: string; codeHash: string;
@@ -60,7 +71,7 @@ export interface PlatformSessionRepository {
   }>): Promise<PlatformAuthProfile | null>;
   issueSession(input: Readonly<{
     identity: PlatformSessionIdentity; accessHash: string; refreshHash: string;
-    accessExpiresAt: string; refreshExpiresAt: string; issuedAt: string;
+    accessExpiresAt: string; refreshExpiresAt: string; issuedAt: string; deviceId?: string;
   }>): Promise<void>;
   resolveAccess(input: Readonly<{ accessHash: string; at: string }>): Promise<PlatformSessionIdentity | null>;
   rotateRefresh(input: Readonly<{
@@ -68,6 +79,11 @@ export interface PlatformSessionRepository {
     accessExpiresAt: string; refreshExpiresAt: string; rotatedAt: string;
   }>): Promise<PlatformSessionIdentity | null>;
   revokeAccess(input: Readonly<{ accessHash: string; revokedAt: string }>): Promise<void>;
+  listSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; accessHash: string; at: string }>): Promise<readonly PlatformSessionView[]>;
+  revokeSession?(input: Readonly<{ tenantId: TenantId; userId: UserId; sessionId: string; revokedAt: string }>): Promise<boolean>;
+  revokeAllSessions?(input: Readonly<{ tenantId: TenantId; userId: UserId; revokedAt: string }>): Promise<number>;
+  listAuthEvents?(input: Readonly<{ tenantId: TenantId; userId: UserId; limit: number }>): Promise<readonly PlatformAuthEventView[]>;
+  recordAuthEvent?(input: Readonly<{ tenantId: TenantId; userId: UserId; action: string; at: string }>): Promise<void>;
 }
 
 export function normalizePlatformAuthIdentifier(input: Readonly<{
