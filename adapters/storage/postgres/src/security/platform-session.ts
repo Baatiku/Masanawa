@@ -551,7 +551,13 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
                ON t.tenant_id=s.tenant_id
             WHERE s.access_hash=$1 AND s.revoked_at IS NULL
               AND s.access_expires_at>$2 AND s.refresh_expires_at>$2
-              AND u.state='active' AND t.state='active'`,
+              AND u.state='active' AND t.state='active'
+               AND NOT EXISTS(
+                 SELECT 1 FROM security.platform_account_controls ctl
+                 WHERE ctl.tenant_id=s.tenant_id AND ctl.user_id=s.user_id
+                   AND ctl.state='suspended' AND
+                     (ctl.until_at IS NULL OR ctl.until_at>$2)
+               )`,
           [input.accessHash,input.at],
         );
         const row = result.rows[0];
@@ -580,6 +586,12 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
                    AND u.user_id=s.user_id
                    AND u.state='active'
                    AND t.state='active'
+                    AND NOT EXISTS(
+                      SELECT 1 FROM security.platform_account_controls ctl
+                      WHERE ctl.tenant_id=s.tenant_id AND ctl.user_id=s.user_id
+                        AND ctl.state='suspended' AND
+                          (ctl.until_at IS NULL OR ctl.until_at>$6)
+                    )
               )
             RETURNING s.tenant_id,s.user_id`,
           [
