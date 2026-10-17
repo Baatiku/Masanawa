@@ -1,0 +1,224 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers.dart';
+import '../../state/session_state.dart';
+
+/// Server-authorized security controls. No locally invented devices or events.
+class AccountSecurityScreen extends ConsumerStatefulWidget {
+  const AccountSecurityScreen({super.key});
+
+  @override
+  ConsumerState<AccountSecurityScreen> createState() => _AccountSecurityScreenState();
+}
+
+class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
+  List<Map<String, dynamic>> _sessions = const [];
+  List<Map<String, dynamic>> _history = const [];
+  bool _loading = true;
+  bool _saving = false;
+  bool _confirmAll = false;
+  String? _confirmSession;
+  String? _error;
+  int _epoch = 0;
+
+  String? get _account {
+    final state = ref.read(sessionProvider);
+    return state is SessionSignedIn ? state.user.id : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    final ticket = ++_epoch;
+    final owner = _account;
+    if (owner == null) {
+      if (mounted) setState(() { _loading = false; _error = 'Sign in to manage account security.'; });
+      return;
+    }
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      final api = ref.read(apiClientProvider);
+      final sessions = await api.securitySessions();
+      final history = await api.securityLoginHistory();
+      if (!mounted || _epoch != ticket || _account != owner) return;
+      setState(() {
+        _sessions = sessions;
+        _history = history;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || _epoch != ticket || _account != owner) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not load security details. Check your connection and retry.';
+      });
+    }
+  }
+
+  Future<void> _revoke(String sessionId, {required bool current}) async {
+    if (_saving || _account == null) return;
+    final owner = _account;
+    setState(() => _saving = true);
+    try {
+      await ref.read(apiClientProvider).revokeSecuritySession(sessionId);
+      if (!mounted || _account != owner) return;
+      if (current) {
+        await ref.read(sessionProvider.notifier).logout();
+        if (mounted) Navigator.of(context).pop();
+      } else {
+        setState(() => _confirmSession = null);
+        await _load();
+      }
+    } catch (_) {
+      if (mounted && _account == owner) {
+        setState(() => _error = 'Could not revoke that session. Retry when online.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _logoutAll() async {
+    if (_saving || _account == null) return;
+    final owner = _account;
+    setState(() => _saving = true);
+    try {
+      // If the server is unavailable, do not claim remote sessions were revoked.
+      await ref.read(apiClientProvider).securityLogoutAll();
+      if (!mounted || _account != owner) return;
+      await ref.read(sessionProvider.notifier).logout();
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted && _account == owner) {
+        setState(() => _error = 'Other devices have not been signed out. Retry online.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String _date(Object? value) {
+    if (value is! String) return 'Time unavailable';
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return 'Time unavailable';
+    final local = parsed.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<SessionState>(sessionProvider, (previous, next) {
+      final previousId = previous is SessionSignedIn ? previous.user.id : null;
+      final nextId = next is SessionSignedIn ? next.user.id : null;
+      if (previousId == nextId) return;
+      ++_epoch;
+      _sessions = const [];
+      _history = const [];
+      _confirmSession = null;
+      _confirmAll = false;
+      if (nextId != null) Future<void>.microtask(_load);
+    });
+    return Scaffold(
+      appBar: AppBar(title: const Text('Account security')),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Signed-in devices', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Review active sessions and revoke any you do not recognize. '
+                'Device names may be unavailable on older sessions.'),
+            if (_loading) const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              TextButton.icon(onPressed: _saving ? null : _load,
+                icon: const Icon(Icons.refresh), label: const Text('Retry')),
+            ],
+            if (!_loading && _sessions.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text('No active sessions could be displayed.')),
+            for (final item in _sessions) ...[
+              const Divider(),
+              ListTile(
+                leading: Icon(item['current'] == true ? Icons.smartphone : Icons.devices_other),
+                title: Text(item['current'] == true ? 'This session' : 'Another session'),
+                subtitle: Text('Last access: ${_date(item['lastAccessAt'])}\n'
+                    'Started: ${_date(item['createdAt'])}'),
+                isThreeLine: true,
+              ),
+              if (_confirmSession == item['sessionId']) ...[
+                const Text('Revoke this session? Its access and refresh tokens will stop working.'),
+                Wrap(spacing: 8, children: [
+                  TextButton(onPressed: _saving ? null : () => setState(() => _confirmSession = null),
+                    child: const Text('Cancel')),
+                  FilledButton(
+                    onPressed: _saving ? null : () => _revoke(item['sessionId'] as String,
+                        current: item['current'] == true),
+                    child: const Text('Confirm revoke'),
+                  ),
+                ]),
+              ] else
+                Align(alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _saving ? null : () => setState(() {
+                      _confirmSession = item['sessionId'] as String?;
+                      _confirmAll = false;
+                    }),
+                    child: const Text('Sign out device'),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 24),
+            const Text('Emergency sign out', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text('Sign out every device, including this one. You will need to sign in again.'),
+            if (_confirmAll) ...[
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: [
+                TextButton(onPressed: _saving ? null : () => setState(() => _confirmAll = false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                  onPressed: _saving ? null : _logoutAll,
+                  child: const Text('Confirm sign out all'),
+                ),
+              ]),
+            ] else
+              Align(alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : () => setState(() {
+                    _confirmAll = true;
+                    _confirmSession = null;
+                  }),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out of all devices'),
+                )),
+            const SizedBox(height: 24),
+            const Text('Recent account access', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            if (!_loading && _history.isEmpty)
+              const Text('No recent sign-in events recorded yet.'),
+            for (final event in _history)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.history),
+                title: Text((event['action'] as String? ?? 'Account activity').replaceAll('_', ' ')),
+                subtitle: Text(_date(event['at'])),
+              ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
