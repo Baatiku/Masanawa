@@ -13,6 +13,8 @@ import '../../features/videos/videos_screen.dart';
 import '../../features/videos/official_video_player_screen.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
+import '../../state/agent_directory_state.dart';
+import '../profile/masana_profile_screen.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Scope every Status operation to the signed-in fan who opened the tab.
@@ -157,6 +159,7 @@ class StatusScreen extends ConsumerWidget {
       ));
     }
     final account = session.user.id;
+    final directory = ref.watch(agentDirectoryProvider);
     final feed = ref.watch(statusFeedApiProvider);
     final api = ref.watch(apiClientProvider);
     String? currentAccount() {
@@ -166,6 +169,27 @@ class StatusScreen extends ConsumerWidget {
       } catch (_) {
         return null;
       }
+    }
+
+    void openMasanaProfile(String characterId) {
+      if (currentAccount() != account) return;
+      final agent = directory.find(characterId);
+      if (agent == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('This Masana profile is currently unavailable.'),
+        ));
+        return;
+      }
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Consumer(builder: (context, ref, _) {
+          final active = ref.watch(sessionProvider);
+          if (active is! SessionSignedIn || active.user.id != account) {
+            return const Scaffold(body: Center(
+              child: Text('Sign in to view this profile.')));
+          }
+          return MasanaProfileScreen(agent: agent);
+        }),
+      ));
     }
 
     void openMedia(FeedPost post, String mediaId) {
@@ -238,6 +262,7 @@ class StatusScreen extends ConsumerWidget {
               api: feed,
               accountKey: account,
               onOpenMedia: openMedia,
+              onMasanaProfile: openMasanaProfile,
               audioPlaybackAvailable: true,
             ),
             ExternalVideosScreen(
