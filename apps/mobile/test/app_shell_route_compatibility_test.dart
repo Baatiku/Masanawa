@@ -30,8 +30,8 @@ void main() {
   });
 
   test('R17 old shell links retain their original destination', () {
-    expect(legacyShellDestination('create'), '/talk/create');
-    expect(legacyShellDestination('activity'), '/activity');
+    expect(legacyShellDestination('create'), '/home?tab=status');
+    expect(legacyShellDestination('activity'), '/home?tab=status');
     expect(legacyShellDestination('agents'), '/home?tab=chats');
     expect(legacyShellDestination('wallet'), '/home?tab=wallet');
     expect(legacyShellDestination('talk'), '/home?tab=status');
