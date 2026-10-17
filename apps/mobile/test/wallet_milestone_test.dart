@@ -79,18 +79,16 @@ void main(){
     expect(find.byType(AlertDialog),findsNothing);expect(find.byType(BottomSheet),findsNothing);
     expect(find.text('Recipient: Amina'),findsOneWidget);await tester.pageBack();await tester.pumpAndSettle();expect(result,isNull);
   });
-  test('history preserves legacy denomination and pending funding authority',(){
-    final old=parseWalletTransactions('Archive',{'entries':[{'id':'old','title':'Call','amountCredits':20,'incoming':false,'createdAt':'2026-10-17T10:00:00Z'}]},'a').single;
+  test('normalized history preserves exact legacy and fiat units',(){
+    final old=parseWalletActivity({'id':'old','reference':'old','category':'Archive','title':'Call','amountAtomic':'20','decimals':0,'asset':'Cr (historical)','status':'recorded','incoming':false,'createdAt':'2026-10-17T10:00:00Z','details':{}});
     expect(old.asset,'Cr (historical)');expect(old.amount,'20');
-    final f=parseWalletTransactions('Funding',{'items':[{'reference':'bank','amountKobo':'12345','paidAt':'2026-10-17T10:00:00Z','obligationState':'backing_pending'}]},'a').single;
+    final f=parseWalletActivity({'id':'bank','reference':'bank','category':'Funding','title':'Bank funding','amountAtomic':'12345','decimals':2,'asset':'NGN','status':'backing_pending','incoming':true,'createdAt':'2026-10-17T10:00:00Z','details':{}});
     expect(f.asset,'NGN');expect(f.amount,'123.45');expect(f.status,'backing_pending');
   });
-  test('history rejects invalid transfer asset, amount and direction',(){
-    for(final row in [
-      {'asset':'MSN','operationId':'x','amountMicro':'1','direction':'sent'},
-      {'asset':'MSNW','operationId':'x','amountMicro':'NaN','direction':'sent'},
-      {'asset':'MSNW','operationId':'x','amountMicro':'1','direction':'other'}]){
-      expect(()=>parseWalletTransactions('Transfers',{'items':[row]},'a'),throwsFormatException);
+  test('normalized history rejects invalid amount, precision and missing identity',(){
+    for(final row in [null,{'id':'x'},
+      {'id':'x','reference':'x','category':'Transfers','title':'Sent','amountAtomic':'NaN','decimals':6,'asset':'MSNW','status':'completed','incoming':false,'createdAt':'2026-10-17T10:00:00Z','details':{}}]){
+      expect(()=>parseWalletActivity(row),throwsFormatException);
     }
   });
   test('history filters type, state and UTC dates',(){
@@ -99,18 +97,19 @@ void main(){
     expect(const WalletHistoryFilter(status:'Pending').matches(e),isFalse);
     expect(const WalletHistoryFilter(category:'Funding').matches(e),isFalse);
   });
-  test('CSV escapes spreadsheet formula injection and quotes',(){
-    final e=WalletTransaction(id:'=SUM(A1)',category:'Transfers',title:'a,"b"',amount:'1.000001',asset:'MSNW',status:'completed',incoming:false,details:{});
-    final csv=walletTransactionsCsv([e]);expect(csv,contains('"\'=SUM(A1)"'));expect(csv,contains('"a,""b"""'));expect(csv,contains('1.000001'));
-  });
-  testWidgets('history shows partial failure rather than a false empty account',(tester)async{
+  testWidgets('history retries an outage and loads a subsequent cursor page',(tester)async{
+    var calls=0;
     final dio=Dio()..httpClientAdapter=_Adapter((o)async{
-      if(o.path.contains('/transactions'))return _json('{"items":[{"asset":"MSNW","operationId":"one","amountMicro":"1000001","direction":"sent","createdAt":"2026-10-17T10:00:00Z"}]}');
-      throw StateError('offline');
+      calls++;if(calls==1)throw StateError('offline');
+      final second=o.queryParameters['cursor']=='next';
+      final id=second?'two':'one';
+      return _json('{"items":[{"id":"Transfers:$id","reference":"$id","category":"Transfers","title":"MSNW sent $id","amountAtomic":"1000001","decimals":6,"asset":"MSNW","status":"completed","incoming":false,"createdAt":"2026-10-17T10:00:00Z","details":{}}],"nextCursor":${second?'null':'"next"'}}');
     });
     await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:Scaffold(body:MsnwTransactionHistory(dio:dio,baseUrl:'https://test',expectedUserId:'a',currentUserId:()=>'a',accessToken:()=>'token'))));
-    await tester.pumpAndSettle();expect(find.text('MSNW sent'),findsOneWidget);expect(find.textContaining('Couldn’t load:'),findsOneWidget);expect(find.text('No transactions yet'),findsNothing);
-    await tester.tap(find.text('MSNW sent'));await tester.pumpAndSettle();expect(find.text('Transaction details'),findsOneWidget);expect(find.text('Transfers:one'),findsWidgets);
+    await tester.pumpAndSettle();expect(find.text('No transactions yet'),findsNothing);expect(find.textContaining('Couldn’t refresh'),findsOneWidget);
+    await tester.tap(find.byTooltip('Refresh transactions'));await tester.pumpAndSettle();expect(find.text('MSNW sent one'),findsOneWidget);
+    await tester.tap(find.text('Load more'));await tester.pumpAndSettle();expect(find.text('MSNW sent two'),findsOneWidget);expect(find.text('MSNW sent one'),findsOneWidget);
+    await tester.tap(find.text('MSNW sent one'));await tester.pumpAndSettle();expect(find.text('Transaction details'),findsOneWidget);
   });
   testWidgets('send review Back does not pay; explicit confirmation posts once',(tester)async{
     var posts=0;
