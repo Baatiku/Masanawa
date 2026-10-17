@@ -761,6 +761,26 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       });}catch(error){return authError(error,reply);}
     });
 
+    const bankChallengeFields={
+      bankCode:Type.String({minLength:3,maxLength:6}),
+      accountNumber:Type.String({minLength:10,maxLength:10}),
+    };
+    app.post("/v1/auth/security/bank/start",{
+      schema:{body:Type.Object(bankChallengeFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/bank/confirm",{
+      schema:{body:Type.Object({...bankChallengeFields,
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
     const contactChangeBody={
       channel:Type.Union([Type.Literal("email"),Type.Literal("sms")]),
       nextIdentifier:Type.String({minLength:3,maxLength:320}),
