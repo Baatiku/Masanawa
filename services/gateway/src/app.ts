@@ -656,6 +656,23 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       },
     );
 
+    app.post("/v1/auth/password/recovery/start", {
+      schema:{body:Type.Object({phone:Type.String({minLength:7,maxLength:40})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.requestPasswordRecovery({phone:request.body.phone});}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/password/recovery/complete", {
+      schema:{body:Type.Object({
+        phone:Type.String({minLength:7,maxLength:40}),
+        code:Type.String({minLength:6,maxLength:6}),
+        password:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.completePasswordRecovery(request.body);}
+      catch(error) {return authError(error,reply);}
+    });
+
     app.post("/v1/auth/security/email/start", {
       schema:{body:Type.Object({email:Type.String({minLength:3,maxLength:320})},{additionalProperties:false})},
     },async (request,reply) => {
