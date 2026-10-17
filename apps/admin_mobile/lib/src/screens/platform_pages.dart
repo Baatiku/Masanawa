@@ -244,29 +244,35 @@ class _CommerceAdminPageState extends State<CommerceAdminPage> {
         );
         return;
       }
-      final draft = await showDialog<_OfferDraft>(
-        context: context,
-        builder: (context) => _OfferEditorDialog(
-          current: offer,
-          skills: skills,
+
+      // The network mutation is performed inside the route so an uncertain
+      // save never discards the edited offer before feedback reaches the user.
+      final saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          settings: const RouteSettings(name: '/admin/commerce/offer'),
+          builder: (_) => _OfferEditorPage(
+            current: offer,
+            skills: skills,
+            onSave: (draft) async {
+              await widget.api.saveOffer(
+                current: offer,
+                key: draft.key,
+                title: draft.title,
+                description: draft.description,
+                skillVersionId: draft.skillVersionId,
+                priceCredits: draft.priceCredits,
+                fulfillmentReserveCredits: draft.fulfillmentReserveCredits,
+                creatorCommissionCredits: draft.creatorCommissionCredits,
+                fallbackCommissionCredits: draft.fallbackCommissionCredits,
+                platformMarginCredits: draft.platformMarginCredits,
+                regions: draft.regions,
+                enabled: draft.enabled,
+              );
+            },
+          ),
         ),
       );
-      if (draft == null) return;
-      await widget.api.saveOffer(
-        current: offer,
-        key: draft.key,
-        title: draft.title,
-        description: draft.description,
-        skillVersionId: draft.skillVersionId,
-        priceCredits: draft.priceCredits,
-        fulfillmentReserveCredits: draft.fulfillmentReserveCredits,
-        creatorCommissionCredits: draft.creatorCommissionCredits,
-        fallbackCommissionCredits: draft.fallbackCommissionCredits,
-        platformMarginCredits: draft.platformMarginCredits,
-        regions: draft.regions,
-        enabled: draft.enabled,
-      );
-      if (!mounted) return;
+      if (!mounted || saved != true) return;
       setState(() => _future = _load());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -421,20 +427,22 @@ class _OfferDraft {
   final bool enabled;
 }
 
-class _OfferEditorDialog extends StatefulWidget {
-  const _OfferEditorDialog({
+class _OfferEditorPage extends StatefulWidget {
+  const _OfferEditorPage({
     required this.current,
     required this.skills,
+    required this.onSave,
   });
 
   final AdminOffer? current;
   final List<AdminSkill> skills;
+  final Future<void> Function(_OfferDraft) onSave;
 
   @override
-  State<_OfferEditorDialog> createState() => _OfferEditorDialogState();
+  State<_OfferEditorPage> createState() => _OfferEditorPageState();
 }
 
-class _OfferEditorDialogState extends State<_OfferEditorDialog> {
+class _OfferEditorPageState extends State<_OfferEditorPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _key;
   late final TextEditingController _title;
@@ -447,6 +455,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
   late final TextEditingController _regions;
   late String _skillVersionId;
   late bool _enabled;
+  bool _busy = false;
+  String? _error;
 
   @override
   void initState() {
@@ -517,68 +527,85 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
         : null;
   }
 
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _submit() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
     final price = _credits(_price)!;
     final reserve = _credits(_reserve)!;
     final creator = _credits(_creator)!;
     final fallback = _credits(_fallback)!;
     final margin = _credits(_margin)!;
+    String? validationError;
     if (price < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Price must be at least 1 credit.')),
-      );
+      validationError = 'Price must be at least 1 credit.';
+    } else if (fallback > creator) {
+      validationError = 'Fallback commission cannot exceed creator commission.';
+    } else if (reserve + creator + margin != price) {
+      validationError = 'Price must equal reserve + creator commission + platform margin.';
+    }
+    if (validationError != null) {
+      setState(() => _error = validationError);
       return;
     }
-    if (fallback > creator) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fallback commission cannot exceed creator commission.')),
-      );
-      return;
-    }
-    if (reserve + creator + margin != price) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Price must equal reserve + creator commission + platform margin.'),
-        ),
-      );
-      return;
-    }
+
     final regions = _regions.text
         .split(',')
         .map((value) => value.trim().toUpperCase())
         .where((value) => value.isNotEmpty)
         .toSet()
-        .toList()
-      ..sort();
-    Navigator.of(context).pop(
-      _OfferDraft(
-        key: _key.text.trim(),
-        title: _title.text.trim(),
-        description: _description.text.trim(),
-        skillVersionId: _skillVersionId,
-        priceCredits: price,
-        fulfillmentReserveCredits: reserve,
-        creatorCommissionCredits: creator,
-        fallbackCommissionCredits: fallback,
-        platformMarginCredits: margin,
-        regions: regions,
-        enabled: _enabled,
-      ),
+        .toList()..sort();
+    final draft = _OfferDraft(
+      key: _key.text.trim(),
+      title: _title.text.trim(),
+      description: _description.text.trim(),
+      skillVersionId: _skillVersionId,
+      priceCredits: price,
+      fulfillmentReserveCredits: reserve,
+      creatorCommissionCredits: creator,
+      fallbackCommissionCredits: fallback,
+      platformMarginCredits: margin,
+      regions: regions,
+      enabled: _enabled,
     );
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(draft);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Offer save not confirmed: $error. '
+            'Your form is retained. Check the offers list before retrying '
+            'to avoid an accidental second revision.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.current == null ? 'New Offer' : 'Revise Offer'),
-        content: SizedBox(
-          width: 560,
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: Text(widget.current == null ? 'New Offer' : 'Revise Offer'),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: AbsorbPointer(
+                absorbing: _busy,
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
+                    children: [
+                      const Text(
+                        'Review pricing and the payout breakdown before saving. '
+                        'Changes create a new offer revision.',
+                      ),
+                      const SizedBox(height: 18),
                   TextFormField(
                     controller: _key,
                     enabled: widget.current == null,
@@ -655,21 +682,33 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                     value: _enabled,
                     onChanged: (value) => setState(() => _enabled = value),
                   ),
-                ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: Theme.of(context).colorScheme.error),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 22),
+                      FilledButton.icon(
+                        key: const ValueKey('admin-offer-submit'),
+                        onPressed: _busy ? null : _submit,
+                        icon: _busy
+                            ? const SizedBox(width: 18, height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.save_outlined),
+                        label: Text(_busy ? 'Saving…' : 'Save revision'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: _submit,
-            child: const Text('Save revision'),
-          ),
-        ],
       );
 }
 
