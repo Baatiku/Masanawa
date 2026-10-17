@@ -18,11 +18,12 @@ class MasanaAuthorFeedApi extends AccountBoundFeedApi {
   MasanaAuthorFeedApi({
     required Dio dio,
     required String characterId,
-    required super.ownerAccount,
-    required super.currentAccount,
+    required String ownerAccount,
+    required String? Function() currentAccount,
     required Future<String?> Function() token,
   }) : _dio = dio, _characterId = characterId,
-       super(superDio: dio, superToken: token);
+       super(superDio: dio, superToken: token,
+         ownerAccount: ownerAccount, currentAccount: currentAccount);
 
   final Dio _dio;
   final String _characterId;
