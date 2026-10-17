@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/account_deletion_models.dart';
 import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
+import '../../state/session_state.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 
 /// Deletion request intake, not an immediate destructive action.
 /// All status transitions come from the authenticated Gateway.
@@ -25,11 +27,21 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
   bool _loading = true;
   bool _working = false;
   bool _codeSent = false;
+  bool _statusLoaded = false;
+  String? _owner;
+
+  bool get _authorized {
+    final state = ref.read(sessionProvider);
+    return mounted && _owner != null &&
+        state is SessionSignedIn && state.user.id == _owner;
+  }
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
+    if (_owner != null) unawaited(_load());
   }
 
   @override
@@ -39,16 +51,19 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
   }
 
   Future<void> _load() async {
+    if (!_authorized) return;
+    setState(() { _loading = true; _error = null; });
     try {
       final request = await ref.read(apiClientProvider).accountDeletionStatus();
-      if (!mounted) return;
+      if (!_authorized) return;
       setState(() {
         _request = request;
+        _statusLoaded = true;
         _error = null;
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!_authorized) return;
       setState(() {
         _error = _friendlyError(error);
         _loading = false;
@@ -57,13 +72,14 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
   }
 
   Future<void> _sendRequest() async {
+    if (!_authorized || _working || !_statusLoaded) return;
     setState(() {
       _working = true;
       _error = null;
     });
     try {
       final sent = await ref.read(apiClientProvider).requestAccountDeletion();
-      if (!mounted) return;
+      if (!_authorized) return;
       setState(() {
         _request = sent.request;
         _codeSent = sent.verificationSent;
@@ -75,22 +91,23 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
     } catch (error) {
       // The request may have persisted even if code delivery failed.
       // Refresh the canonical status rather than assuming the request failed.
-      if (!mounted) return;
+      if (!_authorized) return;
       setState(() {
         _error = _friendlyError(error);
       });
       try {
         final request = await ref.read(apiClientProvider).accountDeletionStatus();
-        if (mounted) setState(() => _request = request);
+        if (_authorized) setState(() => _request = request);
       } catch (_) {
         // Preserve the original failure; do not invent a final status.
       }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (_authorized) setState(() => _working = false);
     }
   }
 
   Future<void> _verify() async {
+    if (!_authorized || _working) return;
     final code = _code.text.trim();
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       setState(() => _error = 'Enter the 6-digit verification code.');
@@ -103,16 +120,16 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
     try {
       final updated =
           await ref.read(apiClientProvider).verifyAccountDeletion(code);
-      if (!mounted) return;
+      if (!_authorized) return;
       _code.clear();
       setState(() {
         _request = updated;
         _codeSent = false;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = _friendlyError(error));
+      if (_authorized) setState(() => _error = _friendlyError(error));
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (_authorized) setState(() => _working = false);
     }
   }
 
@@ -141,22 +158,35 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final active = ref.watch(sessionProvider);
+    if (active is! SessionSignedIn || active.user.id != _owner) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Delete account')),
+        body: const Center(child: Text(
+          'This session changed. Sign in to manage account deletion.',
+          textAlign: TextAlign.center,
+        )),
+      );
+    }
     final request = _request;
     final needsCode = (request?.needsVerification ?? false) ||
         (request?.phase == 'failed' && _codeSent);
     final theme = Theme.of(context);
 
-    return AlertDialog(
-      title: const Text('Delete account'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_loading) const Center(child: CircularProgressIndicator()),
-              if (!_loading && request == null) ...[
+    return Scaffold(
+      appBar: AppBar(title: const Text('Delete account')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          children: [
+              Text('Account deletion and data requests',
+                  style: theme.textTheme.titleLarge),
+              const SizedBox(height: 12),
+              if (_loading) const MasanawaListSkeleton(
+                shrinkWrap: true, itemCount: 3,
+                semanticLabel: 'Loading account deletion status',
+              ),
+              if (!_loading && _statusLoaded && request == null) ...[
                 const Text(
                   'You can request deletion of your Masanawa account and '
                   'associated personal data. We will verify your identity '
@@ -165,7 +195,7 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
                 const SizedBox(height: 12),
                 const Text(
                   'Pending payments, lawful financial record retention and '
-                  'public Talk content may need separate handling. '
+                  'your comments and stored conversations may need separate handling. '
                   'This request is not immediate logout or account erasure.',
                 ),
               ],
@@ -227,21 +257,20 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
+                Semantics(liveRegion: true,
+                  child: Text(_error!, style: TextStyle(
+                    color: theme.colorScheme.error,
+                  )),
                 ),
               ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _working ? null : () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-        if (!_loading && request == null)
+          const SizedBox(height: 20),
+          if (!_loading && !_statusLoaded)
+            OutlinedButton.icon(
+              onPressed: _working ? null : _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry account status'),
+            ),
+        if (!_loading && _statusLoaded && request == null)
           FilledButton(
             onPressed: _working ? null : _sendRequest,
             child: const Text('Request deletion'),
@@ -261,13 +290,16 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
             onPressed: _load,
             child: const Text('Refresh status'),
           ),
-        if (_loading || _working)
-          const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-      ],
+        if (_working)
+          const LinearProgressIndicator(),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: _working ? null : () => Navigator.of(context).pop(),
+          child: const Text('Back to Settings'),
+        ),
+          ],
+        ),
+      ),
     );
   }
 }
