@@ -157,6 +157,26 @@ extension MasanawaContext on BuildContext {
 }
 
 /// The Masanawa ThemeData — every screen renders from this (design DoD).
+/// Suppress route artwork animation when Android's reduced-motion preference
+/// is enabled. Default page Back/navigation semantics remain framework-owned.
+class MasanawaPageTransitionsBuilder extends PageTransitionsBuilder {
+  const MasanawaPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    return const FadeUpwardsPageTransitionsBuilder().buildTransitions<T>(
+      route, context, animation, secondaryAnimation, child,
+    );
+  }
+}
+
 ThemeData buildMasanawaTheme({required Brightness brightness}) {
   // Theme construction follows the requested palette. Selecting the default
   // experience belongs to MaterialApp, not the semantic color factory.
@@ -179,6 +199,16 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
 
   return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.linux: MasanawaPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    splashFactory: InkRipple.splashFactory,
     brightness: brightness,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     iconButtonTheme: const IconButtonThemeData(
@@ -319,7 +349,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: brightness == Brightness.light ? const Color(0xFFF1F4F3) : masanawa.surfaceMuted,
+      fillColor: masanawa.surfaceMuted,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -327,7 +357,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: masanawa.brand, width: 1.6),
+        borderSide: BorderSide(color: masanawa.brandStrong, width: 1.6),
       ),
     ),
     checkboxTheme: CheckboxThemeData(
@@ -366,7 +396,6 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ),
-    splashFactory: InkSparkle.splashFactory,
     visualDensity: VisualDensity.standard,
   );
 }
