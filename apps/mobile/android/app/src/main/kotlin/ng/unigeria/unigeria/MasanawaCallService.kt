@@ -97,7 +97,7 @@ class MasanawaCallService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_masanawa)
             .setContentTitle("Masanawa call in progress")
             .setContentText("Tap to return to your call or hang up")
             .setCategory(Notification.CATEGORY_CALL)

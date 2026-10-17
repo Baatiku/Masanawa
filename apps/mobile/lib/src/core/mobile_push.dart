@@ -61,6 +61,7 @@ const _callNotificationDetails = NotificationDetails(
     'masanawa_calls',
     'Incoming Masana calls',
     channelDescription: 'Ringing invitations from your Masana contacts',
+    icon: 'ic_stat_masanawa',
     category: AndroidNotificationCategory.call,
     importance: Importance.max,
     priority: Priority.max,
@@ -74,6 +75,7 @@ const _workNotificationDetails = NotificationDetails(
     'masanawa_work',
     'Masanawa updates',
     channelDescription: 'Agent replies, approvals and completed work',
+    icon: 'ic_stat_masanawa',
     importance: Importance.high,
     priority: Priority.high,
   ),
@@ -104,7 +106,7 @@ Future<void> masanawaFirebaseBackgroundMessage(RemoteMessage message) async {
   final notifications = FlutterLocalNotificationsPlugin();
   await notifications.initialize(
     settings: const InitializationSettings(
-      android: AndroidInitializationSettings('ic_launcher'),
+      android: AndroidInitializationSettings('ic_stat_masanawa'),
       iOS: DarwinInitializationSettings(),
     ),
   );
@@ -190,7 +192,7 @@ class MobilePushService {
 
     await _notifications.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('ic_launcher'),
+        android: AndroidInitializationSettings('ic_stat_masanawa'),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,
