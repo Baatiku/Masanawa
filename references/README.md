@@ -1,73 +1,35 @@
-# Reference Source Vault
+# External research references
 
-This directory gives Masanawa contributors one organized checkout of every major donor/reference project used during the greenfield rewrite.
+Masanawa's donor/reference repositories are **optional research materials**, not production dependencies. They are not Git submodules and are not downloaded by cloning Masanawa.
 
-These folders are Git submodules. They are **not Masanawa modules**.
+The original 17 source projects remain listed in [SOURCES.md](SOURCES.md), together with upstream GitHub links. Exact previously reviewed commit SHAs and their provenance remain in [docs/migration/SOURCE-LOCK.md](../docs/migration/SOURCE-LOCK.md).
 
-## Why submodules
+## Fast Masanawa clone
 
-We intentionally do not vendor/copy these repositories into Masanawa history because several are very large, evolve independently, and carry their own licenses. A gitlink gives us:
-- exact reproducible source commits;
-- a real local source checkout for cross-project search and comparison;
-- independent upstream history;
-- easy deliberate updates;
-- no accidental package-manager/build inclusion;
-- clear license/provenance boundaries.
-
-## Layout
-
-```
-references/sources/
-├─ domain/
-│  └─ chatwithstars/
-├─ agents/
-│  ├─ openjarvis/
-│  ├─ eliza/
-│  └─ microsoft-agent-framework/
-├─ companion/
-│  └─ neko/
-├─ digital-life/
-│  └─ airi/
-├─ gateway/
-│  └─ openclaw/
-├─ memory/
-│  ├─ letta-server/
-│  ├─ letta-code/
-│  └─ mem0/
-├─ presence/
-│  ├─ cyberverse/
-│  ├─ livekit-server/
-│  ├─ livekit-agents-ts/
-│  ├─ livekit-agents-py/
-│  └─ pipecat/
-├─ skills/
-│  └─ openclaw-agent-skills/
-└─ world/
-   └─ ai-town/
+```bash
+git clone https://github.com/Baatiku/Masanawa.git
 ```
 
-Categories are for human navigation only. They do not decide final donor ownership.
+A regular checkout (including one made by GitHub Desktop or tools that previously used `--recurse-submodules`) no longer needs to fetch large external donor projects.
+
+## Read an optional donor
+
+Browse the pinned revision using the GitHub links recorded in the source lock, or clone only the reference you actually need into a **separate directory outside Masanawa**, for example:
+
+```bash
+git clone --filter=blob:none --no-checkout https://github.com/livekit/livekit.git ../livekit-reference
+cd ../livekit-reference
+git checkout 7ef0cd014e950373acd789557099305716eea196
+```
+
+A pinned commit may require further fetching if it is not included in a filtered clone. Do not automatically fetch every reference.
 
 ## Rules
 
-1. Do not edit donor source as if it were Masanawa code.
-2. Do not import donor packages from Masanawa production packages.
-3. Do not commit generated dependency folders/build outputs from submodules.
-4. Read pinned source first; do not reason from a newer upstream checkout without updating SOURCE-LOCK.
-5. Record every adopted behavior/concept in Masanawa ledgers.
-6. Direct code adaptation needs provenance/license treatment.
-7. A submodule's own README/docs/tests remain authoritative only for that donor, never for Masanawa architecture.
+1. Keep donor source outside production package and build contexts.
+2. Never import external reference source into Masanawa runtime.
+3. Read `docs/migration/SOURCE-LOCK.md` and the provenance/license ledgers before adapting donor code.
+4. Record adopted behaviors in the existing migration ledgers; donor code is not itself a Masanawa component.
+5. Research-source revision updates are deliberate and documented, not automatic dependency upgrades.
 
-## Local search
-
-After initializing submodules, ordinary recursive search can compare all donors:
-
-```bash
-rg "memory|reflection|handoff|barge|skill|world" references/sources
-```
-
-For very large donors, use targeted source directories/tests rather than indexing generated assets or models.
-
-## Updating
-
-See `docs/migration/SOURCE-LOCK.md`. Updates are explicit review events, never automatic production dependency upgrades.
+Existing local `references/sources/` checkouts from an older clone may be removed **after checking for local changes**; they are not part of the current tracked source.

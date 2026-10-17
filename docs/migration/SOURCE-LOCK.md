@@ -2,7 +2,7 @@
 
 Masanawa's rewrite is analysed against exact pinned source revisions so the target cannot move silently.
 
-All donors are mounted as **reference-only Git submodules** under `references/sources/`. They are not Masanawa production dependencies and are not included by the application/package workspaces.
+These are **reference-only external projects**, not Masanawa dependencies. Their previously reviewed commit SHAs remain recorded for reproducibility, but the donor Git submodules were removed to keep Masanawa cloning lightweight. They are not fetched by the application/package workspaces or by recursive cloning.
 
 | Reference path | Source | Tracking branch | Pinned revision | Role |
 |---|---|---|---|---|
@@ -26,32 +26,32 @@ All donors are mounted as **reference-only Git submodules** under `references/so
 
 ## Clone
 
-Preferred local clone:
+Clone **only Masanawa**, with no external donor repositories:
 
 ```bash
-git clone --recurse-submodules --shallow-submodules <masanawa-url>
+git clone https://github.com/Baatiku/Masanawa.git
 ```
 
-Existing clone:
+For a faster first checkout when history is not needed:
 
 ```bash
-git submodule update --init --recursive --depth 1
+git clone --depth 1 https://github.com/Baatiku/Masanawa.git
 ```
 
-The parent repository pins every submodule to the exact commit above even though `.gitmodules` records its upstream tracking branch for deliberate refreshes.
+The 17 donor SHAs listed above are a **documentation-based reference lock**, not Git submodule pointers. Open `https://github.com/<owner>/<repo>/tree/<pinned-SHA>` when reviewing a donor, or check out a single donor separately as described in `references/README.md`. Do not run `git submodule update`; there are no tracked submodules.
 
 ## Refresh policy
 
 Never run a source refresh as an incidental change.
 
 For one donor:
-1. fetch/update that submodule's configured upstream branch;
-2. inspect the upstream delta;
-3. record important capability/behavior changes in the migration ledgers;
-4. move only that submodule gitlink;
-5. update this lock's pinned revision;
-6. update license/provenance if needed;
-7. commit as an explicit `references: refresh <source>` change.
+1. inspect the relevant upstream project separately at its pinned revision and the proposed new revision;
+2. record important capability/behavior changes in the migration ledgers;
+3. update only that donor's documented pinned revision and tracking branch;
+4. update license/provenance if needed;
+5. commit as an explicit `references: refresh <source>` change.
+
+No donor repository needs to be downloaded to clone, build, or run Masanawa.
 
 A refresh must not silently alter donor decisions already used by implemented Masanawa code.
 
