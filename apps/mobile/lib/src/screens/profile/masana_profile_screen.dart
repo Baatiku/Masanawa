@@ -9,6 +9,7 @@ import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../theme/masanawa_theme.dart';
 import 'masana_status_posts_screen.dart';
+import 'masana_quality_feedback_screen.dart';
 
 /// All actions use the canonical server Character ID; the visual portrait
 /// and Room link are approved projections, never display-name-derived routes.
@@ -121,6 +122,20 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : Icon(_following ? Icons.check : Icons.person_add_alt_outlined),
                 label: Text(_following ? 'Following' : 'Follow'),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.rate_review_outlined),
+                label: const Text('Answer feedback'),
+                onPressed: () async {
+                  final submitted = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => MasanaQualityFeedbackScreen(agent: agent)));
+                  if (submitted == true && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Thank you. Your feedback was received.'),
+                    ));
+                  }
+                },
               ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.article_outlined),
