@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../core/providers.dart';
@@ -51,6 +52,31 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
       if (mounted) setState(() => _followPending = false);
     }
   }
+
+  Future<void> _openOfficialChannel(AgentSocialChannel channel) async {
+    try {
+      final opened = await launchUrl(
+        Uri.parse(channel.url), mode: LaunchMode.externalApplication);
+      if (!opened) throw StateError('No app for this link');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not open that official channel.'),
+        ));
+      }
+    }
+  }
+
+  String _channelName(String platform) => switch (platform) {
+    'whatsapp' => 'WhatsApp',
+    'telegram' => 'Telegram',
+    'youtube' => 'YouTube',
+    'tiktok' => 'TikTok',
+    'facebook' => 'Facebook',
+    'instagram' => 'Instagram',
+    'x' => 'X',
+    _ => platform,
+  };
 
   void _openChat({String? starter}) {
     final id = widget.agent.characterId;
@@ -116,6 +142,24 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
           SelectableText(agent.about.isEmpty
               ? 'More profile information will appear here.'
               : agent.about),
+          if (agent.socialChannels.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Official channels',
+              style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text('Links approved by Masanawa administrators.',
+              style: TextStyle(color: colors.textMuted)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8,
+              children: [
+                for (final channel in agent.socialChannels)
+                  OutlinedButton.icon(
+                    onPressed: () => _openOfficialChannel(channel),
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(_channelName(channel.platform)),
+                  ),
+              ]),
+          ],
           if (agent.conversationStarters.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text('Try asking', style: Theme.of(context).textTheme.titleMedium),
