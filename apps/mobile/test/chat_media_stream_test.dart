@@ -8,7 +8,8 @@ import 'package:masanawa/src/agents/masanawa_transport.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 
 class Adapter implements HttpClientAdapter {
-  Adapter(this.events, {this.status = 200});
+  Adapter(this.events, {this.status = 200, this.keepOpen = false});
+  final bool keepOpen;
   final List<Map<String, dynamic>> events;
   final int status;
   final requests = <RequestOptions>[];
@@ -21,6 +22,11 @@ class Adapter implements HttpClientAdapter {
     requests.add(options);
     final text = events.map(jsonEncode).join('\n') + '\n';
     // Split every UTF-8 byte, including multi-codepoint emoji and JSON strings.
+    if (keepOpen) {
+      final output=StreamController<Uint8List>();
+      output.add(Uint8List.fromList(utf8.encode(text)));
+      return ResponseBody(output.stream,status,headers:{Headers.contentTypeHeader:['application/x-ndjson']});
+    }
     return ResponseBody(
       Stream.fromIterable(
         utf8.encode(text).map((b) => Uint8List.fromList([b])),
@@ -90,6 +96,21 @@ void main() {
       );
     },
   );
+  test('missing final ASR never promotes a partial transcript over the complete reply', () async {
+    final adapter=Adapter([
+      {'type':'audio','dataBase64':'AQACAA=='},
+      {'type':'audio-transcript','text':'Hello, two'},
+      {'type':'done','reply':'Hello, two plus three is five.','parts':[]},
+    ]);
+    final result=await transport(adapter).sendMediaTurnStream(binding:binding,bytes:Uint8List.fromList([1,2]),mimeType:'audio/mp4',caption:'');
+    expect(result.text,'Hello, two plus three is five.');
+    expect(result.audioTranscript,isNull);
+  });
+  test('done ends a reply even when the HTTP connection remains open', () async {
+    final adapter=Adapter([{'type':'done','reply':'Complete reply','parts':[]}],keepOpen:true);
+    final result=await transport(adapter).sendMediaTurnStream(binding:binding,bytes:Uint8List.fromList([1,2]),mimeType:'audio/mp4',caption:'').timeout(const Duration(seconds:2));
+    expect(result.text,'Complete reply');expect(adapter.requests,hasLength(1));
+  });
   test(
     'emoji-only text survives split UTF-8 and requires a completed reply',
     () async {

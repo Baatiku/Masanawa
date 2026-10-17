@@ -29,9 +29,11 @@ import '../../calls/call_lifecycle_limits.dart';
 import '../../calls/group_paid_voice_transport.dart';
 import '../../calls/group_paid_voice_outbox.dart';
 import '../../core/live_pcm_audio.dart';
+import '../../core/live_call_foreground.dart';
 import '../../core/live_voice_session.dart';
 import '../../ui/components/voice_note_composer.dart';
 import '../../core/voice_note_recorder.dart';
+import '../profile/masana_profile_screen.dart';
 import '../../core/app_permissions.dart';
 import '../../agents/agent_shell.dart';
 import '../../agents/masanawa_transport.dart';
@@ -122,7 +124,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final nextId = next is SessionSignedIn ? next.user.id : null;
       if (previousId != nextId) {
         unawaited(_inlineVoiceSession?.close() ?? Future<void>.value());
-        unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
+        _pendingVoiceAutoplay = null;
+    unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
       }
     });
     _input.addListener(() {
@@ -184,6 +187,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   @override
   void dispose() {
     _voiceAccountSubscription?.close();
+    _pendingVoiceAutoplay = null;
     unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
     _scrollPersistTimer?.cancel();
     _walletRefreshTimer?.cancel();
@@ -443,9 +447,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       _inlinePreviewPlayer = player;
       player.playerStateStream.listen((state) {
         if (!mounted) return;
-        if (state.processingState == ProcessingState.completed) {
+        if (state.processingState == ProcessingState.completed && _inlinePreviewPlaying) {
           setState(() => _inlinePreviewPlaying = false);
-          player.seek(Duration.zero);
+          unawaited(player.pause().then((_) => player.seek(Duration.zero)));
         }
       });
       await player.setFilePath(path);
@@ -493,49 +497,46 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         return;
       }
 
-      // The chat controller copies into owner-scoped durable media storage
-      // before accepting the turn. Do not detach, retain or dispose the
-      // recorder first: a revoked file/low-storage failure must leave the
-      // current voice note ready to retry rather than silently losing it.
-      try {
-        await ref.read(aiChatProvider.notifier)
-            .sendAttachment(widget.characterId, note);
-      } catch (_) {
-        if (!sameAccount()) {
-          await _cancelInlineRecording();
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(
-            'Could not keep this voice note for sending. Free some storage and retry.',
-          )),
-        );
-        return;
-      }
-
-      if (!sameAccount()) {
-        await _cancelInlineRecording();
-        return;
-      }
-      // The user may have cancelled the preview during a slow disk copy.
-      // In that case the send controller has already accepted its own copy;
-      // never attempt to retain a recorder that has been closed.
-      if (!identical(_inlineRecorder, recorder)) return;
-      recorder.retain();
-      recorder.removeListener(_onInlineRecorderChanged);
-      _inlineRecorder = null;
-      try {
+      Future<void> releaseAcceptedRecorder() async {
+        if (!identical(_inlineRecorder, recorder)) return;
+        recorder.retain();
+        recorder.removeListener(_onInlineRecorderChanged);
+        _inlineRecorder = null;
         await _inlinePreviewPlayer?.stop();
         await _inlinePreviewPlayer?.dispose();
-      } catch (_) {}
-      _inlinePreviewPlayer = null;
-      _inlinePreviewPlaying = false;
-      if (mounted) setState(() {});
-      await recorder.close();
+        _inlinePreviewPlayer = null;
+        _inlinePreviewPlaying = false;
+        if (mounted) setState(() {});
+        await recorder.close();
+      }
+      try {
+        await ref.read(aiChatProvider.notifier).sendAttachment(
+          widget.characterId, note, onAccepted: releaseAcceptedRecorder,
+        );
+      } catch (_) {
+        if (!sameAccount()) { await _cancelInlineRecording(); return; }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this voice note. Please retry.')),
+        );
+      }
     } finally {
       _voiceNoteSending = false;
       if (mounted) setState(() {});
     }
+  }
+
+  void _openMasanaProfile(AgentDirectoryEntry agent) {
+    if (widget.onOpenProfile != null) { widget.onOpenProfile!(); return; }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => MasanaProfileScreen(agent: agent),
+    ));
+  }
+
+  Future<void> _prepareCallAudio() async {
+    _pendingVoiceAutoplay = null;
+    await _cancelInlineRecording();
+    await _activeVoiceBubble?._pauseFromAnotherBubble();
+    await LivePcmAudio.stop();
   }
 
   // ---- Attachments ---------------------------------------------------------
@@ -1019,7 +1020,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final workingLabel = !sending
         ? agent.presenceLabel
         : lastUser?.attachment?.kind == 'voice'
-        ? 'Understanding voice…'
+        ? 'Recording…'
         : lastUser?.attachment != null
         ? 'Reviewing attachment…'
         : 'Typing…';
@@ -1064,6 +1065,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
 
     ref.listen(aiChatProvider, (prev, next) {
+      final prior = prev?.threads[widget.characterId]?.messages ?? const <AiChatMessage>[];
+      for (final message in next.threads[widget.characterId]?.messages ?? const <AiChatMessage>[]) {
+        final wasStreaming = prior.any((m) => m.id == message.id && m.deliveryStatus == 'streaming');
+        final audio = message.attachment;
+        if (wasStreaming && message.deliveryStatus == 'delivered' && audio?.kind == 'voice' &&
+            _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
+          _pendingVoiceAutoplay = audio!.path;
+        }
+      }
       final before = prev?.threads[widget.characterId]?.messages.length ?? 0;
       final after = next.threads[widget.characterId]?.messages.length ?? 0;
       if (after > before) {
@@ -1111,6 +1121,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   autofocus: true,
                   decoration: const InputDecoration(
                     hintText: 'Search this chat',
+                    filled: true,
+                    fillColor: Color(0xFFF1F4F3),
                     border: InputBorder.none,
                   ),
                   onChanged: (_) {
@@ -1121,9 +1133,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   },
                 )
               : InkWell(
-            onTap: widget.embeddedInShell
-                ? widget.onOpenAgents
-                : () => context.push('/masana'),
+            onTap: () => _openMasanaProfile(agent),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1248,7 +1258,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               onSelected: (value) async {
                 final ctl = ref.read(aiChatProvider.notifier);
                 if (value == 'activity') widget.onOpenActivity?.call();
-                if (value == 'profile') widget.onOpenProfile?.call();
+                if (value == 'profile') _openMasanaProfile(agent);
                 if (value == 'room' && agent.roomId != null) {
                   context.push('/rooms/${Uri.encodeComponent(agent.roomId!)}');
                 }
@@ -1341,6 +1351,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                           return const _TypingBubble();
                         }
                         final message = messages[index];
+                        if (!message.isUser && message.deliveryStatus == 'streaming') {
+                          return _TypingBubble(recording: lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') ?? false);
+                        }
                         final failedParts = message.parts.where(
                           (p) =>
                               p.kind == AgentMessagePartKind.status &&
@@ -1957,6 +1970,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _startInlineLiveVoice(AgentDirectoryEntry agent) async {
+    await _prepareCallAudio();
+    if (!mounted) return;
     if (_inlineVoiceSession != null) {
       await _stopInlineLiveVoice(outcome: 'completed');
       return;
@@ -2154,6 +2169,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _openLiveVoice(AgentDirectoryEntry agent) async {
+    await _prepareCallAudio();
+    if (!mounted) return;
     if (!await _ensurePermission(AppPermission.microphone, 'Microphone')) {
       return;
     }
@@ -3500,7 +3517,7 @@ class _ChatBubble extends StatelessWidget {
     final failure = failedParts.isEmpty ? null : failedParts.first;
     final attachments = message.allAttachments;
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: failure != null ? Alignment.center : isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onLongPress: () => _showActions(context),
         onHorizontalDragEnd: (details) {
@@ -3566,8 +3583,8 @@ class _ChatBubble extends StatelessWidget {
                       if (message.text.isNotEmpty) const SizedBox(height: 6),
                     ],
                     if (message.uploadProgress case final progress?
-                        when message.deliveryStatus == 'uploading' ||
-                            message.deliveryStatus == 'processing') ...[
+                        when !attachments.any((a) => a.kind == 'voice' || a.kind == 'audio') &&
+                            (message.deliveryStatus == 'uploading' || message.deliveryStatus == 'processing')) ...[
                       const SizedBox(height: 6),
                       LinearProgressIndicator(
                         value: message.deliveryStatus == 'processing'
@@ -3621,12 +3638,16 @@ class _ChatBubble extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              _RichMessageText(text: message.text),
+                              failure != null
+                          ? Text(message.text, textAlign: TextAlign.center, style: TextStyle(color: u.textMuted))
+                          : _RichMessageText(text: message.text),
                             ],
                           ),
                         )
                       else
-                        _RichMessageText(text: message.text),
+                        failure != null
+                          ? Text(message.text, textAlign: TextAlign.center, style: TextStyle(color: u.textMuted))
+                          : _RichMessageText(text: message.text),
                     if (message.parts.any((p) => p != failure))
                       MessagePartsView(
                         parts: message.parts.where((p) => p != failure).toList(),
@@ -3655,17 +3676,6 @@ class _ChatBubble extends StatelessWidget {
                         formatClock(message.createdAt),
                         style: TextStyle(color: u.textMuted, fontSize: 10.5),
                       ),
-                      if (message.deliveryStatus == 'streaming') ...[
-                        const SizedBox(width: 4),
-                        SizedBox(
-                          width: 9,
-                          height: 9,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: u.brand,
-                          ),
-                        ),
-                      ],
                       if (isUser) ...[
                         const SizedBox(width: 3),
                         Icon(
@@ -4382,6 +4392,7 @@ class _VoiceWaveform extends StatelessWidget {
   }
 }
 
+String? _pendingVoiceAutoplay;
 _VoiceBubbleState? _activeVoiceBubble;
 double _sharedVoiceSpeed = 1.0;
 
@@ -4404,6 +4415,17 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   Duration _duration = Duration.zero;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _pendingVoiceAutoplay == widget.attachment.path) {
+        _pendingVoiceAutoplay = null;
+        if (!LiveCallForeground.active) unawaited(_toggle());
+      }
+    });
+  }
+
+  @override
   void dispose() {
     if (identical(_activeVoiceBubble, this)) {
       _activeVoiceBubble = null;
@@ -4415,7 +4437,15 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
     super.dispose();
   }
 
+  Future<void> _finishPlayback(AudioPlayer player) async {
+    await player.pause();
+    await player.seek(Duration.zero);
+    if (identical(_activeVoiceBubble, this)) _activeVoiceBubble = null;
+    await _releaseAudioRoute();
+  }
+
   Future<void> _releaseAudioRoute() async {
+    if (LiveCallForeground.active) return;
     try {
       await LivePcmAudio.release();
       final session = await AudioSession.instance;
@@ -4433,16 +4463,16 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   Future<void> _ensurePlayer() async {
     if (_player != null) return;
     final player = AudioPlayer();
+    await player.setLoopMode(LoopMode.off);
     _player = player;
     _stateSub = player.playerStateStream.listen((state) {
       if (!mounted) return;
-      if (state.processingState == ProcessingState.completed) {
+      if (state.processingState == ProcessingState.completed && _playing) {
         setState(() {
           _playing = false;
           _position = Duration.zero;
         });
-        player.seek(Duration.zero);
-        unawaited(_releaseAudioRoute());
+        unawaited(_finishPlayback(player));
       }
     });
     _positionSub = player.positionStream.listen((value) {
@@ -4515,8 +4545,10 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
       if (_position >= _duration && _duration > Duration.zero) {
         await _player!.seek(Duration.zero);
       }
-      await _player!.play();
       if (mounted) setState(() => _playing = true);
+      unawaited(_player!.play().catchError((Object error) {
+        if (mounted) setState(() { _playing = false; _broken = true; });
+      }));
     } catch (_) {
       await _player?.dispose();
       _player = null;
@@ -4673,7 +4705,8 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
 }
 
 class _TypingBubble extends StatelessWidget {
-  const _TypingBubble();
+  const _TypingBubble({this.recording = false});
+  final bool recording;
 
   @override
   Widget build(BuildContext context) {
@@ -4693,22 +4726,14 @@ class _TypingBubble extends StatelessWidget {
           ),
           border: Border.all(color: u.structuralBorder),
         ),
-        child: SizedBox(
-          width: 44,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var i = 0; i < 3; i++)
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: u.textMuted,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-            ],
-          ),
+        child: Semantics(
+          liveRegion: true,
+          label: recording ? 'Recording voice reply' : 'Typing',
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(recording ? Icons.mic : Icons.more_horiz, color: u.brand, size: 20),
+            const SizedBox(width: 6),
+            Text(recording ? 'Recording…' : 'Typing…', style: TextStyle(color: u.textMuted, fontSize: 13)),
+          ]),
         ),
       ),
     );

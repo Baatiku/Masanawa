@@ -23,6 +23,7 @@ void main() {
       expect(config.androidConfig.manageBluetooth, false);
       expect(config.sampleRate, 16000);
       expect(config.encoder, AudioEncoder.pcm16bits);
+      expect(config.audioInterruption, AudioInterruptionMode.none);
     },
   );
   test(
@@ -43,6 +44,7 @@ void main() {
       expect(configs.last.androidConfig.manageBluetooth, false);
       expect(configs.last.androidConfig.audioSource, AndroidAudioSource.mic);
       expect(configs.last.echoCancel, false);
+      expect(configs.last.audioInterruption, AudioInterruptionMode.none);
       verify(() => r.stop()).called(1);
     },
   );

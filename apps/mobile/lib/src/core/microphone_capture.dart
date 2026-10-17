@@ -11,6 +11,9 @@ Future<Stream<Uint8List>> startCallMicrophone(
 }) async {
   RecordConfig config({bool compatible = false}) => RecordConfig(
     encoder: AudioEncoder.pcm16bits,
+    // LiveVoiceSession owns focus and interruption handling. A second
+    // record_android focus request interrupts our own call.
+    audioInterruption: AudioInterruptionMode.none,
     sampleRate: 16000,
     numChannels: 1,
     echoCancel: !compatible,

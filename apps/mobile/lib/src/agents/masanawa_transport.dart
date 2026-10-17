@@ -554,7 +554,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
               continue;
             }
             if (type == 'error') throw const ApiException('The reply was interrupted. Check message status before retrying.');
-            if (type == 'done') done = event;
+            if (type == 'done') { done = event; break; }
           }
           if (done != null) {
             final finalReply = done['reply'];
@@ -661,7 +661,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
             if(chunk.length.isOdd || audio.length+chunk.length>8*1024*1024)throw const ApiException('Invalid voice response');
             audio.add(chunk);await onAudioPcmChunk?.call(chunk);
           }
-          if(type=='done')done=event;
+          if(type=='done'){done=event;break;}
         }
       } on ApiException catch(error) {
         // Only an explicitly absent old-Gateway route can use its legacy rail.
@@ -678,7 +678,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
         audioBytes:result.audioBytes ?? (streamedAudio.isNotEmpty ? streamedAudio : null),
         audioMimeType:result.audioMimeType ?? (streamedAudio.isNotEmpty ? 'audio/l16;rate=24000' : null),
         audioDurationMs:result.audioDurationMs,
-        audioTranscript:result.audioTranscript ?? (transcript.trim().isNotEmpty ? transcript.trim() : null));
+        audioTranscript:result.audioTranscript);
     } finally {
       if(identical(_turnTokens[binding.characterId],token))_turnTokens.remove(binding.characterId);
     }
