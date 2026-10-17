@@ -13,6 +13,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../tokens/masanawa_tokens.dart';
 import 'account_deletion_dialog.dart';
+import 'account_data_screen.dart';
 import 'account_security_screen.dart';
 import 'clear_device_chats_dialog.dart';
 
@@ -389,6 +390,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-my-data'),
+                leading:Icon(Icons.manage_accounts_outlined,color:u.brand),
+                title:const Text('Account and my data'),
+                subtitle:const Text('Profile completion, account status and exports'),
+                onTap:user==null?null:()=>Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder:(_)=>const AccountDataScreen()),
+                ),
+              ),
+              const Divider(height:1),
               ListTile(
                 key: const Key('settings-delete-account'),
                 leading: Icon(Icons.person_remove_outlined, color: u.emergency),
