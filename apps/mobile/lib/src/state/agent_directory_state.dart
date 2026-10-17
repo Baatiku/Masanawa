@@ -54,6 +54,10 @@ class AgentDirectoryController extends Notifier<AgentDirectoryState> {
   int _request = 0;
   bool _disposed = false;
   String? _ownerId;
+  // Request generations prevent a slow cached read from replacing definitive
+  // live results or resurrecting a roster denied by the Gateway.
+  int _lastLiveSuccessRequest = -1;
+  int _lastDeniedRequest = -1;
 
   @override
   AgentDirectoryState build() {
@@ -103,20 +107,36 @@ class AgentDirectoryController extends Notifier<AgentDirectoryState> {
       return;
     }
 
-    final cached = await cache.read(ownerId);
-    if (_disposed || request != _request || _ownerId != ownerId) return;
+    // The cache and network are independent: slow path-provider/file I/O must
+    // not postpone the first authenticated live directory request.
+    final cachedRead = cache.read(ownerId);
+    unawaited(_refreshForOwner(ownerId, request));
 
-    if (cached != null && cached.isNotEmpty) {
+    List<AgentDirectoryEntry>? cached;
+    try {
+      cached = await cachedRead;
+    } catch (_) {
+      // Cache is best effort; live loading proceeds independently.
+      return;
+    }
+    if (_disposed || request != _request || _ownerId != ownerId ||
+        _lastLiveSuccessRequest == request ||
+        _lastDeniedRequest == request) {
+      return;
+    }
+
+    if (cached != null && cached.isNotEmpty && state.agents.isEmpty) {
+      final pending = state;
       state = AgentDirectoryState(
         agents: List.unmodifiable([
           for (final agent in cached) agent.withUnverifiedPresence(),
         ]),
-        loading: true,
+        loading: pending.loading,
+        error: pending.error,
+        recovery: pending.recovery,
       );
       MasanawaStartupMetrics.mark('cached_directory_ready');
     }
-
-    await _refreshForOwner(ownerId, request);
   }
 
   Future<void> refresh() async {
@@ -155,6 +175,7 @@ class AgentDirectoryController extends Notifier<AgentDirectoryState> {
       if (_disposed || request != _request || _ownerId != ownerId) return;
 
       final immutableAgents = List<AgentDirectoryEntry>.unmodifiable(agents);
+      _lastLiveSuccessRequest = request;
       state = AgentDirectoryState(
         agents: immutableAgents,
         loading: false,
@@ -185,6 +206,7 @@ class AgentDirectoryController extends Notifier<AgentDirectoryState> {
       final denied = error is ApiException &&
           (error.statusCode == 401 || error.statusCode == 403);
       if (denied) {
+        _lastDeniedRequest = request;
         await ref.read(agentDirectoryCacheProvider).clear();
         if (_disposed || request != _request || _ownerId != ownerId) return;
       }
