@@ -2830,6 +2830,12 @@ export async function startGatewayService(
                 const owner = await msnBalanceAuthorizer!.authorize({authorizationHeader:header});
                 return {tenantId:owner.tenantId,userId:owner.userId};
               },
+              ...(customerAuth ? {
+                authorizeBankStepUp: async(request: {
+                  authorizationHeader:string|undefined;bankCode:string;accountNumber:string;
+                  stepUpToken:string|undefined;
+                }) => customerAuth.consumeBankStepUp(request),
+              } : {}),
               // Reuse the same operator-principal allowlist already bound
               // to the Gateway; no customer-supplied staff role is trusted.
               ...(talkSafetyPlatformAuthority ? {

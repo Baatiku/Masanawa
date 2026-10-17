@@ -7,6 +7,10 @@ import type { P2pEvidenceStorage } from "./evidence_storage.js";
 export interface P2pRoutesDependencies {
   readonly service: P2pService;
   readonly bankMethods?: VerifiedP2pBankMethods;
+  readonly authorizeBankStepUp?: (input: Readonly<{
+    authorizationHeader:string|undefined;bankCode:string;accountNumber:string;
+    stepUpToken:string|undefined;
+  }>)=>Promise<void>;
   readonly evidenceStorage?: P2pEvidenceStorage;
   /** Existing platform session authorizer, same identity authority as MSNW Wallet. */
   readonly authorize: (authorizationHeader: string | undefined) => Promise<P2pActor>;
@@ -24,8 +28,13 @@ export interface P2pRoutesDependencies {
 function respond(error: unknown, reply: { code(n: number): any }) {
   if (error instanceof P2pError)
     return reply.code(error.status).send({ error: error.code });
-  if (error instanceof Error && "statusCode" in error && error.statusCode === 401)
-    return reply.code(401).send({ error: "p2p.authentication_required" });
+  if (error instanceof Error && "statusCode" in error) {
+    const status=(error as {statusCode?:unknown}).statusCode;
+    if(status===401)return reply.code(401).send({error:"p2p.authentication_required"});
+    if(status===403)return reply.code(403).send({error:"p2p.step_up_required"});
+    if(status===409)return reply.code(409).send({error:"p2p.verified_email_required"});
+    if(status===429)return reply.code(429).send({error:"p2p.verification_rate_limited"});
+  }
   return reply.code(503).send({ error: "p2p.unavailable" });
 }
 export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependencies): void {
@@ -66,6 +75,15 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try{
       const owner=await actor(req.headers.authorization);
       if(!deps.bankMethods)throw new P2pError("p2p.bank_verification_unavailable",503);
+      if(!deps.authorizeBankStepUp)throw new P2pError("p2p.step_up_unavailable",503);
+      const body=req.body as Record<string,unknown>|null;
+      if(!body || typeof body.bankCode!=="string" || typeof body.accountNumber!=="string")
+        throw new P2pError("p2p.bank_input_invalid",422);
+      await deps.authorizeBankStepUp({
+        authorizationHeader:req.headers.authorization,
+        bankCode:body.bankCode,accountNumber:body.accountNumber,
+        stepUpToken:req.headers["x-masanawa-step-up"] as string|undefined,
+      });
       const method=await deps.bankMethods.verify(owner,req.body);
       return reply.code(201).send(method);
     }catch(error){return respond(error,reply);}
