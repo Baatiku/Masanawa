@@ -54,7 +54,7 @@ class ColorTokens {
   /// (light #D9FDD3 verified; dark #144D37 evidence-matched).
   final String bubbleOut;
 
-  /// Conversation background (light classic #EFEAE2; dark #0B141A verified).
+  /// Conversation background (light white per owner; dark #0B141A).
   final String chatBg;
 
   /// Read-receipt blue, both modes (verified #53BDEB in the APK).
@@ -85,7 +85,7 @@ final class MasanawaTokens {
     surfaceMuted: '#E7FCEB',
     structuralBorder: '#E9EDEF',
     bubbleOut: '#D9FDD3',
-    chatBg: '#EFEAE2',
+    chatBg: '#FFFFFF',
     tickRead: '#53BDEB',
     chatNotice: '#FFD279',
   );
