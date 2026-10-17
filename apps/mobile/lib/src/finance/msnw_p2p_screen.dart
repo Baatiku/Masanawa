@@ -196,7 +196,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           if(!mounted || !_sameAccount)throw StateError('Account changed.');
           final code=await openWalletPage<String>(
             context:context,title:'Verify bank details',
-            builder:(_)=>const WalletStepUpPage(),
+            builder:(_)=>const WalletStepUpPage(bankDetails:true),
           );
           if(code==null)throw StateError('Bank verification cancelled.');
           final confirmation=await widget.dio.post<Map<String,dynamic>>(
