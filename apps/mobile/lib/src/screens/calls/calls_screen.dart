@@ -63,7 +63,9 @@ class CallsScreen extends ConsumerWidget {
               sessionIdentity: session.tokens,
             )
           : session is SessionRestoring
-          ? const Center(child: CircularProgressIndicator())
+          ? const MasanawaListSkeleton(
+              semanticLabel: 'Restoring call history session',
+            )
           : const Center(child: Text('Sign in to see your calls.')),
     );
   }
@@ -371,14 +373,22 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                         : 'Try a different name, state, or call identifier.',
                     textAlign: TextAlign.center,
                   ),
-                  if (_query.isEmpty) ...[
-                    const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  if (_query.isEmpty)
                     OutlinedButton.icon(
                       onPressed: () => context.push('/masana'),
                       icon: const Icon(Icons.people_outline),
                       label: const Text('Choose a Masana'),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        _search.clear();
+                        _searchChanged('');
+                      },
+                      icon: const Icon(Icons.clear),
+                      label: const Text('Clear call search'),
                     ),
-                  ],
                 ],
               ),
             ),
