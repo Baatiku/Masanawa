@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
@@ -38,6 +39,20 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   Duration get elapsed => _clock.elapsed;
   String? _path;
   Timer? _timer;
+  StreamSubscription<Amplitude>? _meter;
+  final List<double> _levels=[];
+  /// Measured peak envelope; an unavailable meter remains empty, never fake.
+  List<double> get waveform {
+    if(_levels.isEmpty)return const [];
+    final count=math.min(48,_levels.length);
+    return List<double>.generate(count,(bin){
+      final begin=bin*_levels.length~/count;
+      final end=(bin+1)*_levels.length~/count;
+      var peak=0.0;
+      for(var i=begin;i<end;i++){peak=math.max(peak,_levels[i]);}
+      return peak;
+    },growable:false);
+  }
   int _generation = 0;
   Future<void>? _opening;
   Future<ChatAttachment?>? _stopping;
@@ -49,6 +64,7 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> start({bool Function()? isOwnerCurrent}) async {
     if (state != VoiceNoteState.idle && state != VoiceNoteState.failed) return;
     _isOwnerCurrent = isOwnerCurrent ?? () => true;
+    _levels.clear();note=null;
     if (!_isOwnerCurrent()) return;
     final generation = ++_generation;
     _set(VoiceNoteState.starting);
@@ -129,6 +145,12 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
       _set(VoiceNoteState.recording);
+      try {
+        _meter=_recorder.onAmplitudeChanged(const Duration(milliseconds:100)).listen((value){
+          if(!_current(generation)||state!=VoiceNoteState.recording||!_clock.isRunning||!value.current.isFinite)return;
+          if(_levels.length<3000)_levels.add(((value.current+60)/60).clamp(0.0,1.0).toDouble());
+        },onError:(Object _) { /* Metering never interrupts microphone custody. */ });
+      } catch (_) { /* Older native recorders can still produce valid audio. */ }
       _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (!_isOwnerCurrent()) {
           unawaited(cancel());
@@ -198,6 +220,7 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
         name: 'Voice note.m4a',
         durationMs: elapsed.inMilliseconds,
         sizeBytes: bytes,
+        waveform: waveform,
       );
       _set(VoiceNoteState.ready);
       return note;
@@ -231,11 +254,13 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
     await _opening;
     await _stopping;
     await _discard();
-    note = null;
+    note = null;_levels.clear();
     _set(VoiceNoteState.idle);
   }
 
   void _stopClock() {
+    unawaited((_meter?.cancel()??Future<void>.value()).catchError((Object _){}));
+    _meter=null;
     _timer?.cancel();
     _timer = null;
     _clock.stop();
@@ -291,3 +316,4 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 }
+

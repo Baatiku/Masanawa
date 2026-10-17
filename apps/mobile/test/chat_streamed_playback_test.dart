@@ -23,7 +23,7 @@ void main(){
  TestWidgetsFlutterBinding.ensureInitialized();
  const channel=MethodChannel('masanawa/live_pcm');
  for(final mode in ['on','off','call']){
- test('streamed reply $mode plays only when authorized and finalizes once with canonical text',()async{
+ test('chat reply $mode never plays generating PCM and finalizes once with canonical text',()async{
   final calls=<String>[];
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel,(call)async{calls.add(call.method);return true;});
   final transport=_Transport();
@@ -32,7 +32,7 @@ void main(){
   try{
    final sending=container.read(aiChatProvider.notifier).sendText('agent','Hello');
    await transport.first.future.timeout(const Duration(seconds:2));
-   expect(calls.where((c)=>c=='write').length,mode=='on'?1:0,reason:'PCM must be delivered before the final response, without stealing a live call');
+   expect(calls.where((c)=>c=='write').length,0,reason:'A recorded-message reply must never play generation PCM or steal a live call');
    expect(container.read(aiChatProvider).threads['agent']!.messages.where((m)=>!m.isUser).single.deliveryStatus,'streaming');
    transport.finish.complete(const AgentTurnResult(text:'A complete canonical answer.',audioDurationMs:0));await sending;
    final replies=container.read(aiChatProvider).threads['agent']!.messages.where((m)=>!m.isUser).toList();
