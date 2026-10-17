@@ -897,12 +897,12 @@ describe('new account welcome delivery',()=>{
     expect(welcomes).toHaveLength(1);
   });
   it("identifies new email sign-in devices and records coarse labels without exposing raw headers",async()=>{
+    const events:string[]=[];
     const repo=Object.assign(new MemorySessions(),{
       async recordAuthEvent(input:{action:string}){
         events.push(input.action);
       },
     });
-    const events:string[]=[];
     const labels:(string|undefined)[]=[];
     const issued=repo.issueSession.bind(repo);
     repo.issueSession=async(request)=>{
