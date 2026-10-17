@@ -656,6 +656,29 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       },
     );
 
+    app.post("/v1/auth/security/email/start", {
+      schema:{body:Type.Object({email:Type.String({minLength:3,maxLength:320})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.startEmailLink({
+          authorizationHeader:request.headers.authorization,email:request.body.email,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/email/confirm", {
+      schema:{body:Type.Object({
+        email:Type.String({minLength:3,maxLength:320}),
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.confirmEmailLink({
+          authorizationHeader:request.headers.authorization,
+          email:request.body.email,code:request.body.code,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+
     app.get("/v1/auth/security/sessions", async (request, reply) => {
       try {return {sessions:await auth.sessions({authorizationHeader:request.headers.authorization})};}
       catch(error) {return authError(error,reply);}
