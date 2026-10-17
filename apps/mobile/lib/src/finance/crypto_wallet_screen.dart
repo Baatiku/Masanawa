@@ -9,6 +9,7 @@ import '../core/network/api_client.dart';
 import '../core/providers.dart';
 import 'wallet_step_up_page.dart';
 import '../core/request_id.dart';
+import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import '../tokens/masanawa_tokens.dart';
 import 'crypto_models.dart';
@@ -39,6 +40,23 @@ class CryptoWalletScreen extends ConsumerStatefulWidget {
 
 class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
   bool _busy = false;
+  // In-memory, account-scoped UI inputs. Never persist a withdrawal address
+  // into logs, unsecured preferences or a second account's widget.
+  _BuyInput? _buyDraft;
+  _ReceiveInput? _receiveDraft;
+  _ConvertInput? _convertDraft;
+  _WithdrawInput? _withdrawDraft;
+  String? _receiveSource, _convertSource, _withdrawSource;
+
+  void _clearDrafts() {
+    _buyDraft = null;
+    _receiveDraft = null;
+    _convertDraft = null;
+    _withdrawDraft = null;
+    _receiveSource = null;
+    _convertSource = null;
+    _withdrawSource = null;
+  }
   Future<void> _runAction(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -89,9 +107,11 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       builder: (_) => _BuySheet(
         fiatCurrencies: capabilities.fiatCurrencies,
         settlementAsset: settlement,
+        initial: _buyDraft,
       ),
     );
     if (input == null || !context.mounted) return;
+    _buyDraft = input;
 
     try {
       final purchase = await ref
@@ -101,6 +121,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
             fiatAmount: input.amount,
             fiatCurrency: input.currency,
           );
+      _buyDraft = null; // Provider accepted the idempotent request.
       final checkout = purchase.checkoutUrl == null
           ? null
           : Uri.tryParse(purchase.checkoutUrl!);
@@ -155,7 +176,12 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         _message(context, message);
       }
     } catch (error) {
-      if (context.mounted) _error(context, error);
+      if (context.mounted) {
+        _error(context, error);
+        _message(context,
+          'Could not confirm the purchase. Your amount is retained. '
+          'Check Wallet activity before starting another checkout.');
+      }
     }
   }
 
@@ -168,9 +194,14 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     if (route == null) return;
     final input = await openWalletPage<_ReceiveInput>(
       context: context,
-      builder: (_) => _ReceiveSheet(route: route),
+      builder: (_) => _ReceiveSheet(
+        route: route,
+        initial: _receiveSource == route.providerCode ? _receiveDraft : null,
+      ),
     );
     if (input == null || !context.mounted) return;
+    _receiveDraft = input;
+    _receiveSource = route.providerCode;
     try {
       final intent = await ref
           .read(cryptoWalletProvider.notifier)
@@ -179,6 +210,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
             providerCode: route.providerCode,
             amount: input.amount,
           );
+      _receiveDraft = null;
+      _receiveSource = null;
       if (!context.mounted) return;
       await openWalletPage<void>(
         context: context,
@@ -205,9 +238,15 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     }
     final input = await openWalletPage<_ConvertInput>(
       context: context,
-      builder: (_) => _ConvertSheet(source: source, targets: targets),
+      builder: (_) => _ConvertSheet(
+        source: source,
+        targets: targets,
+        initial: _convertSource == source.providerCode ? _convertDraft : null,
+      ),
     );
     if (input == null || !context.mounted) return;
+    _convertDraft = input;
+    _convertSource = source.providerCode;
 
     try {
       final controller = ref.read(cryptoWalletProvider.notifier);
@@ -269,9 +308,16 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         targetProviderCode: input.targetProviderCode,
         amount: input.amount,
       );
+      _convertDraft = null;
+      _convertSource = null;
       if (context.mounted) _operationResult(context, intent);
     } catch (error) {
-      if (context.mounted) _error(context, error);
+      if (context.mounted) {
+        _error(context, error);
+        _message(context,
+          'Could not confirm conversion. Your input is retained. '
+          'Check Wallet activity before making another request.');
+      }
     }
   }
 
@@ -284,9 +330,14 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     if (route == null || !wallet.capabilities.withdrawals) return;
     final input = await openWalletPage<_WithdrawInput>(
       context: context,
-      builder: (_) => _WithdrawSheet(route: route),
+      builder: (_) => _WithdrawSheet(
+        route: route,
+        initial: _withdrawSource == route.providerCode ? _withdrawDraft : null,
+      ),
     );
     if (input == null || !context.mounted) return;
+    _withdrawDraft = input;
+    _withdrawSource = route.providerCode;
 
     try {
       final controller = ref.read(cryptoWalletProvider.notifier);
@@ -374,9 +425,16 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         destinationAddress: input.address,
         stepUpToken:grant,
       );
+      _withdrawDraft = null;
+      _withdrawSource = null;
       if (context.mounted) _operationResult(context, intent);
     } catch (error) {
-      if (context.mounted) _error(context, error);
+      if (context.mounted) {
+        _error(context, error);
+        _message(context,
+          'Withdrawal status is not confirmed. Details are retained. '
+          'Check transaction activity before submitting again.');
+      }
     }
   }
 
@@ -421,6 +479,11 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<SessionState>(sessionProvider, (previous, next) {
+      final previousAccount = previous is SessionSignedIn ? previous.user.id : null;
+      final nextAccount = next is SessionSignedIn ? next.user.id : null;
+      if (previousAccount != nextAccount) _clearDrafts();
+    });
     final wallet = ref.watch(cryptoWalletProvider);
     final u = context.masanawa;
     final content = wallet.when(
@@ -948,23 +1011,28 @@ class _BuySheet extends StatefulWidget {
   const _BuySheet({
     required this.fiatCurrencies,
     required this.settlementAsset,
+    this.initial,
   });
 
   final List<String> fiatCurrencies;
   final String settlementAsset;
+  final _BuyInput? initial;
 
   @override
   State<_BuySheet> createState() => _BuySheetState();
 }
 
 class _BuySheetState extends State<_BuySheet> {
-  final _amount = TextEditingController();
+  late final TextEditingController _amount;
   late String _currency;
 
   @override
   void initState() {
     super.initState();
-    _currency = widget.fiatCurrencies.first;
+    _amount = TextEditingController(text: widget.initial?.amount ?? '');
+    _currency = widget.initial != null &&
+        widget.fiatCurrencies.contains(widget.initial!.currency)
+        ? widget.initial!.currency : widget.fiatCurrencies.first;
   }
 
   @override
@@ -1016,15 +1084,22 @@ class _BuySheetState extends State<_BuySheet> {
 }
 
 class _ReceiveSheet extends StatefulWidget {
-  const _ReceiveSheet({required this.route});
+  const _ReceiveSheet({required this.route, this.initial});
   final CryptoRoute route;
+  final _ReceiveInput? initial;
 
   @override
   State<_ReceiveSheet> createState() => _ReceiveSheetState();
 }
 
 class _ReceiveSheetState extends State<_ReceiveSheet> {
-  final _amount = TextEditingController();
+  late final TextEditingController _amount;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(text: widget.initial?.amount ?? '');
+  }
 
   @override
   void dispose() {
@@ -1054,22 +1129,26 @@ class _ReceiveSheetState extends State<_ReceiveSheet> {
 }
 
 class _ConvertSheet extends StatefulWidget {
-  const _ConvertSheet({required this.source, required this.targets});
+  const _ConvertSheet({required this.source, required this.targets, this.initial});
   final CryptoRoute source;
   final List<CryptoRoute> targets;
+  final _ConvertInput? initial;
 
   @override
   State<_ConvertSheet> createState() => _ConvertSheetState();
 }
 
 class _ConvertSheetState extends State<_ConvertSheet> {
-  final _amount = TextEditingController();
+  late final TextEditingController _amount;
   late String _target;
 
   @override
   void initState() {
     super.initState();
-    _target = widget.targets.first.providerCode;
+    _amount = TextEditingController(text: widget.initial?.amount ?? '');
+    _target = widget.initial != null &&
+        widget.targets.any((route) => route.providerCode == widget.initial!.targetProviderCode)
+        ? widget.initial!.targetProviderCode : widget.targets.first.providerCode;
   }
 
   @override
@@ -1116,16 +1195,24 @@ class _ConvertSheetState extends State<_ConvertSheet> {
 }
 
 class _WithdrawSheet extends StatefulWidget {
-  const _WithdrawSheet({required this.route});
+  const _WithdrawSheet({required this.route, this.initial});
   final CryptoRoute route;
+  final _WithdrawInput? initial;
 
   @override
   State<_WithdrawSheet> createState() => _WithdrawSheetState();
 }
 
 class _WithdrawSheetState extends State<_WithdrawSheet> {
-  final _amount = TextEditingController();
-  final _address = TextEditingController();
+  late final TextEditingController _amount;
+  late final TextEditingController _address;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(text: widget.initial?.amount ?? '');
+    _address = TextEditingController(text: widget.initial?.address ?? '');
+  }
 
   @override
   void dispose() {
