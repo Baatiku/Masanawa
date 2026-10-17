@@ -120,7 +120,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
   final scheme = ColorScheme(
     brightness: brightness,
     primary: colors.brand,
-    onPrimary: Colors.white,
+    onPrimary: brightness == Brightness.light ? colors.textPrimary : Colors.black87,
     secondary: colors.brandStrong,
     onSecondary: Colors.white,
     error: colors.emergency,
@@ -135,7 +135,11 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: colors.surfaceBg,
+    scaffoldBackgroundColor: colors.surfaceCard,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(48, 48))),
+    ),
     extensions: [colors],
     appBarTheme: AppBarTheme(
       backgroundColor: colors.surfaceCard,
@@ -151,15 +155,28 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
       color: colors.surfaceCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: colors.structuralBorder),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: colors.brand,
+        foregroundColor: colors.textPrimary,
+        minimumSize: const Size(48, 48),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: colors.surfaceMuted,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: colors.structuralBorder),
       ),
     ),

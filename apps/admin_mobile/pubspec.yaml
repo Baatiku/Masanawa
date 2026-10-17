@@ -24,16 +24,16 @@ flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/brand/masanawa_agent_logo.png"
-  adaptive_icon_background: "#0A6FFA"
-  adaptive_icon_foreground: "assets/brand/masanawa_agent_logo.png"
+  adaptive_icon_background: "#25D366"
+  adaptive_icon_foreground: "assets/brand/masanawa_launcher_foreground.png"
   min_sdk_android: 21
 flutter_native_splash:
-  color: "#0A6FFA"
-  image: "assets/brand/masanawa_agent_logo.png"
-  color_dark: "#0A6FFA"
-  image_dark: "assets/brand/masanawa_agent_logo.png"
+  color: "#FFFFFF"
+  image: "assets/brand/masanawa_splash_mark.png"
+  color_dark: "#FFFFFF"
+  image_dark: "assets/brand/masanawa_splash_mark.png"
   android_12:
-    color: "#0A6FFA"
-    image: "assets/brand/masanawa_agent_logo.png"
-    color_dark: "#0A6FFA"
-    image_dark: "assets/brand/masanawa_agent_logo.png"
+    color: "#FFFFFF"
+    image: "assets/brand/masanawa_splash_mark.png"
+    color_dark: "#FFFFFF"
+    image_dark: "assets/brand/masanawa_splash_mark.png"
