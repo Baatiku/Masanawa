@@ -73,22 +73,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               '&setup=${session.setup ? '1' : '0'}';
         }
         if (session is SessionAwaitingOtp) return '/otp';
-        if (session is SessionSignedIn && session.user.isNewUser) {
-          return '/name';
-        }
+        // Signed-in users have completed account creation. Optional
+        // profile fields belong to Settings, not a mandatory auth loop.
       }
 
       if (isSignedIn && (path == '/phone-login' || path == '/otp')) {
-        final user = (session as SessionSignedIn).user;
-        return user.isNewUser ? '/name' : '/home';
+        return '/home';
       }
 
       if (path == '/name') {
         if (session is SessionNameRequired) return null;
-        if (isSignedIn) {
-          final user = (session as SessionSignedIn).user;
-          return user.isNewUser ? null : '/home';
-        }
+        if (isSignedIn) return '/home';
         return '/phone-login';
       }
 

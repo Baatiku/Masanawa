@@ -114,6 +114,7 @@ import {
   type CustomerAuthService,
 } from "./customer_auth.js";
 import { registerGatewayRequestCorrelation } from "./request_correlation.js";
+import { AccountExportError, type AccountDataExports } from "./account_data_exports.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Type from "typebox";
 import { registerCallHistoryRoutes } from "./call_history/routes.js";
@@ -163,6 +164,7 @@ export interface GatewayAppOptions {
   readonly liveVoiceTokens?: LiveVoiceTokenService;
   readonly mobilePush?: MobilePushRegistrationService;
   readonly customerAuth?: CustomerAuthService;
+  readonly accountDataExports?: AccountDataExports;
   readonly accountDeletion?: AccountDeletionService;
   readonly talks?: TalkService;
   readonly talkReplay?: TalkReplayService;
@@ -450,6 +452,43 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
 
   registerAuthEmailRoutes(app);
+
+  if(options.accountDataExports) {
+    const exports=options.accountDataExports;
+    const fail=(error:unknown,reply:{code(statusCode:number):unknown})=>{
+      const status=error instanceof AccountExportError?error.statusCode:
+        error instanceof CustomerAuthError?error.statusCode:
+        error instanceof Error&&error.message==="wallet.export_range_too_large"?413:503;
+      reply.code(status);
+      return {code:status===413?"EXPORT_TOO_LARGE":status===503?"EXPORT_UNAVAILABLE":
+        error instanceof AccountExportError?error.code:"UNAUTHORIZED"};
+    };
+    app.get("/v1/account/summary",async(request,reply)=>{
+      try{return await exports.summary({authorizationHeader:request.headers.authorization});}
+      catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/conversations",{
+      schema:{querystring:Type.Object({
+        cursor:Type.Optional(Type.String({maxLength:512})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.conversations({
+        authorizationHeader:request.headers.authorization,
+        ...(request.query.cursor?{cursor:request.query.cursor}:{}),
+      });}catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/financial",{
+      schema:{querystring:Type.Object({
+        from:Type.Optional(Type.String({maxLength:10})),
+        to:Type.Optional(Type.String({maxLength:10})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.financialStatement({
+        authorizationHeader:request.headers.authorization,
+        ...request.query,
+      });}catch(error){return fail(error,reply);}
+    });
+  }
 
   if (options.customerAuth) {
     const auth = options.customerAuth;
