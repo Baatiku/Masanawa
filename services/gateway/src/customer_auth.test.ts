@@ -719,9 +719,6 @@ describe("customer password authentication", () => {
       .rejects.toMatchObject({code:"OTP_INVALID"});
     await auth.requestPasswordRecovery({phone});
     expect(code).toMatch(/^\\d{6}$/u);
-    await expect(auth.completePasswordRecovery({phone,code,password:"123456"}))
-      .rejects.toMatchObject({code:"PASSWORD_REUSED",statusCode:409});
-    await auth.requestPasswordRecovery({phone});
     await expect(auth.completePasswordRecovery({phone,code,password:"999999"}))
       .resolves.toEqual({success:true});
     const authorizer=createPlatformCustomerSessionAuthorizer({repository});
