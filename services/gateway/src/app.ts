@@ -114,6 +114,7 @@ import {
   type CustomerAuthService,
 } from "./customer_auth.js";
 import { registerGatewayRequestCorrelation } from "./request_correlation.js";
+import { requiresFinancialCustomerState } from "./financial_mutation_guard.js";
 import { AccountExportError, type AccountDataExports } from "./account_data_exports.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Type from "typebox";
@@ -450,16 +451,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   // remain available for restricted customers. Refuse new financial actions
   // during the first 24h after a password reset.
   app.addHook("preHandler",async(request)=>{
-    if(!options.customerAuth || !["POST","PUT","PATCH","DELETE"].includes(request.method))
-      return;
-    const path=request.url.split("?")[0] ?? "";
-    if(path.startsWith("/v1/financial/") ||
-       path.startsWith("/v1/wallet/") ||
-       path.startsWith("/v1/commerce/bills/")) {
-      await options.customerAuth.authorizeSensitiveMutation({
-        authorizationHeader:request.headers.authorization,
-      });
-    }
+    // A provider-signed callback must reconcile even if the customer's
+    // login is restricted or recovering. The callback handler separately
+    // authenticates the provider signature against the original payload.
+    if(!requiresFinancialCustomerState(request.method,request.url))return;
+    if(!options.customerAuth)return; // Preserve optional test/legacy composition.
+    await options.customerAuth.authorizeSensitiveMutation({
+      authorizationHeader:request.headers.authorization,
+    });
   });
 
 
