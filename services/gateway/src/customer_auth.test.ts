@@ -896,6 +896,48 @@ describe('new account welcome delivery',()=>{
     expect((await service.verifyOtp({email:'welcome@example.com',code})).user.isNewUser).toBe(false);
     expect(welcomes).toHaveLength(1);
   });
+  it("identifies new email sign-in devices and records coarse labels without exposing raw headers",async()=>{
+    const repo=Object.assign(new MemorySessions(),{
+      async recordAuthEvent(input:{action:string}){
+        events.push(input.action);
+      },
+    });
+    const events:string[]=[];
+    const labels:(string|undefined)[]=[];
+    const issued=repo.issueSession.bind(repo);
+    repo.issueSession=async(request)=>{
+      labels.push(request.clientLabel);
+      await issued(request);
+    };
+    let code="";
+    const notices:string[]=[];
+    const auth=createCustomerAuthService({
+      repository:repo,tenantId:createCanonicalId("tenant"),otpPepper:"p".repeat(48),
+      emailDelivery:{
+        async send(input){code=input.code;},
+        async sendSecurityAlert(input){notices.push(input.identifier);},
+      },
+    });
+    const email="account@example.com";
+    const first="a".repeat(32), second="b".repeat(32);
+    await auth.sendOtp({email});
+    await auth.verifyOtp({email,code,name:"Amina",deviceId:first,
+      clientLabel:"Android · Masanawa app"});
+    expect(notices).toHaveLength(0);
+    await auth.sendOtp({email});
+    await auth.verifyOtp({email,code,deviceId:first,clientLabel:"Android · Masanawa app"});
+    expect(notices).toHaveLength(0);
+    await auth.sendOtp({email});
+    await auth.verifyOtp({email,code,deviceId:second,
+      clientLabel:"iPhone/iPad · Masanawa app"});
+    expect(notices).toEqual([email]);
+    expect(events).toContain("new_device_signin");
+    expect(labels).toEqual([
+      "Android · Masanawa app","Android · Masanawa app",
+      "iPhone/iPad · Masanawa app",
+    ]);
+  });
+
   it('keeps signup usable when the welcome provider fails',async()=>{
     const repository=new MemorySessions();let code='';
     const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
