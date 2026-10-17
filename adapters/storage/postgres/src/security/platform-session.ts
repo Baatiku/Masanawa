@@ -460,8 +460,8 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       );
       return result.rows.map(row=>Object.freeze({
         sessionId:row.session_id,deviceId:row.device_id,
-        createdAt:new Date(row.created_at).toISOString(),
-        lastAccessAt:new Date(row.updated_at).toISOString(),current:row.current,
+        createdAt:(row.created_at instanceof Date ? row.created_at : new Date(row.created_at)).toISOString(),
+        lastAccessAt:(row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at)).toISOString(),current:row.current,
       }));
     },
     async revokeSession(input) {
@@ -487,7 +487,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         [input.tenantId,input.userId,input.limit],
       );
       return result.rows.map(row=>Object.freeze({
-        action:row.action,at:new Date(row.at).toISOString(),
+        action:row.action,at:(row.at instanceof Date ? row.at : new Date(row.at)).toISOString(),
       }));
     },
     async recordAuthEvent(input) {
