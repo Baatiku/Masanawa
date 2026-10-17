@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import '../ui/components/masanawa_list_skeleton.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -405,7 +406,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     final wallet = ref.watch(cryptoWalletProvider);
     final u = context.masanawa;
     final content = wallet.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const MasanawaListSkeleton(semanticLabel: 'Loading crypto wallet'),
       error: (error, _) =>
           _WalletError(error: error, onRetry: _refreshWallet),
       data: (data) => RefreshIndicator(

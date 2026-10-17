@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../state/session_state.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import 'verify_account_email_screen.dart';
 
 /// Server-authorized security controls. No locally invented devices or events.
@@ -154,9 +155,9 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
             const SizedBox(height: 8),
             const Text('Review active sessions and revoke any you do not recognize. '
                 'Device names may be unavailable on older sessions.'),
-            if (_loading) const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(child: CircularProgressIndicator()),
+            if (_loading) const MasanawaListSkeleton(
+              itemCount: 3, shrinkWrap: true,
+              semanticLabel: 'Loading account sessions',
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

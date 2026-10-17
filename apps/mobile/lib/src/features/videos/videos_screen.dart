@@ -71,6 +71,11 @@ class _ExternalVideosScreenState extends State<ExternalVideosScreen> {
     if (oldWidget.accountKey != widget.accountKey ||
         oldWidget.enabled != widget.enabled) {
       reset(null);
+    } else if (widget.accountKey.isEmpty &&
+        (oldWidget.load != widget.load || oldWidget.loadPage != widget.loadPage)) {
+      // Standalone embeds may replace the source; a signed-in Status parent
+      // merely recreates credential-reading callbacks on normal rebuilds.
+      reset(filter);
     }
   }
 
