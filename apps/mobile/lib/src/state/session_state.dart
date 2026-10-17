@@ -113,6 +113,9 @@ class SessionError extends SessionState {
 
 class SessionController extends Notifier<SessionState> {
   int _authEpoch = 0;
+  String? _recentlyExpiredOwnerId;
+  /// Only a session-expiry redirect may resume this account's protected route.
+  String? get recentlyExpiredOwnerId => _recentlyExpiredOwnerId;
   Future<void> _storageWrites = Future<void>.value();
 
   // Serialize sign-in, refresh and sign-out writes so a late old refresh can
@@ -368,6 +371,8 @@ class SessionController extends Notifier<SessionState> {
     final stored = await _readPersisted();
     if (epoch != _authEpoch) return;
     if (stored == null) {
+      _recentlyExpiredOwnerId=(state is SessionSignedIn)
+        ? (state as SessionSignedIn).user.id : null;
       await _clear();
       state = const SessionSignedOut();
       return;
@@ -382,8 +387,15 @@ class SessionController extends Notifier<SessionState> {
       await _persist(rotated, expectedEpoch: epoch);
       if (epoch != _authEpoch) return;
       state = SessionSignedIn(rotated.user, rotated);
-    } catch (_) {
+    } catch (error) {
       if (epoch != _authEpoch) return;
+      // Temporary outages must not destroy authenticated drafts/credentials.
+      // Only a rejected refresh (or changed account) requires re-login.
+      final unauthorized=error is ApiException &&
+          (error.statusCode==401 || error.code=='SESSION_NOT_FOUND' ||
+           error.code=='UNAUTHORIZED');
+      if(!unauthorized && error is! StateError)return;
+      _recentlyExpiredOwnerId=stored.user.id;
       await _clear();
       state = const SessionSignedOut();
     }
@@ -398,6 +410,7 @@ class SessionController extends Notifier<SessionState> {
   }
 
   Future<void> logout() async {
+    _recentlyExpiredOwnerId=null; // Explicit sign-out never resumes a private route.
     // Immediately revoke permission for in-flight refresh to write the old
     // session, even if the best-effort remote logout is slow/offline.
     final epoch = ++_authEpoch;
