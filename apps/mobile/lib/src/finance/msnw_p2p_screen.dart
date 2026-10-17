@@ -440,7 +440,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
   }
 
   String? _validRate(String? text) {
-    if (!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?).hasMatch(text?.trim() ?? '')) {
+    if (!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?$').hasMatch(text?.trim() ?? '')) {
       return 'Enter a valid NGN price with at most 2 decimals.';
     }
     final parts = text!.trim().split('.');
