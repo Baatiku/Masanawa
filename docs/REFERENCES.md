@@ -1,8 +1,8 @@
 # External and Source References
 
-## Canonical local reference vault
+## External research references (not cloned)
 
-All donor repositories are available as pinned submodules under `references/sources/`.
+Donor repositories are optional upstream sources; Masanawa no longer tracks or downloads their Git submodules. Exact previously reviewed revisions are preserved in the source lock.
 
 Read:
 - `references/README.md` for usage rules;

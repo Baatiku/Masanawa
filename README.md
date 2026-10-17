@@ -23,7 +23,7 @@ This documentation captures direction, not verified product delivery. The owner 
 
 One canonical implementation with domain packages, services and Flutter presentation. Reference systems are specifications/donors, never runtime architecture boundaries. Runtime code must not import the reference vault.
 
-Reference repositories are pinned as submodules under references/sources. See [reference instructions](references/README.md) and [source lock](docs/migration/SOURCE-LOCK.md).
+Reference repositories are **not included in Masanawa clones**. They are optional research sources listed with pinned commits and upstream links in [reference instructions](references/README.md) and [source lock](docs/migration/SOURCE-LOCK.md). Standard and recursive clones download only Masanawa itself.
 
 main remains the canonical source for ordinary pulls and qualified APK builds once local improvements and dependency-ready work have been integrated. Temporary work/integration branches are not an alternative product source of truth.
 

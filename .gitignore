@@ -41,3 +41,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.class
+
+# Optional historical donor checkouts (no longer tracked as submodules)
+references/sources/
