@@ -7,6 +7,7 @@ export interface PlatformAuthProfile {
   readonly tenantId: TenantId;
   readonly userId: UserId;
   readonly name: string;
+  readonly username?: string;
   readonly email: string | null;
   readonly phone: string | null;
   readonly locale: string;

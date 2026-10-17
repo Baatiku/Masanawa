@@ -979,6 +979,7 @@ export async function startGatewayService(
               emailDelivery: createResendOtpDelivery({
                 apiKey: resendApiKey,
                 from: resendFrom,
+                publicBaseUrl: env.MASANAWA_AUTH_PUBLIC_BASE_URL?.trim() || "https://masanawa-gateway-production-338f.up.railway.app",
               }),
             }
           : {}),

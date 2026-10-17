@@ -23,21 +23,8 @@ AppBar masanawaMainHeader(
     textScaler: scaler,
     textDirection: direction,
   )..layout();
-  final suffix = TextPainter(
-    text: const TextSpan(
-      text: 'Agents',
-      style: TextStyle(
-        fontSize: 24 * .48,
-        fontWeight: FontWeight.w700,
-        letterSpacing: .6,
-      ),
-    ),
-    textScaler: scaler,
-    textDirection: direction,
-  )..layout();
-  final titleWidth = brand.width + suffix.width + 4;
+  final titleWidth = brand.width;
   brand.dispose();
-  suffix.dispose();
   final available = math.max(
     0,
     MediaQuery.sizeOf(context).width - titleWidth - 32,
@@ -51,8 +38,8 @@ AppBar masanawaMainHeader(
   return AppBar(
     backgroundColor: colors.surfaceCard,
     foregroundColor: colors.brand,
-    actionsIconTheme: IconThemeData(color: colors.brand),
-    iconTheme: IconThemeData(color: colors.brand),
+    actionsIconTheme: IconThemeData(color: colors.textPrimary),
+    iconTheme: IconThemeData(color: colors.textPrimary),
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     automaticallyImplyLeading: false,
@@ -69,7 +56,7 @@ AppBar masanawaMainHeader(
       if (hidden.isNotEmpty)
         PopupMenuButton<int>(
           tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
-          icon: Icon(Icons.more_vert, color: colors.brand),
+          icon: Icon(Icons.more_vert, color: colors.textPrimary),
           onSelected: (index) {
             final action = hidden[index];
             if (action is IconButton) action.onPressed?.call();
