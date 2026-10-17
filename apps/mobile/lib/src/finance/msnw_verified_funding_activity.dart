@@ -104,7 +104,7 @@ class _MsnwVerifiedFundingActivityState extends State<MsnwVerifiedFundingActivit
               row['obligationState'] != 'msnw_issued') ||
             (row['obligationState'] == 'msnw_issued' &&
               (row['issuedMicro'] is! String ||
-                !RegExp(r'^[1-9][0-9]*
+                !RegExp(r'^[1-9][0-9]*$').hasMatch(row['issuedMicro'] as String)))) {
           throw const FormatException('Invalid funding state');
         }
         entries.add(row);
@@ -163,63 +163,6 @@ class _MsnwVerifiedFundingActivityState extends State<MsnwVerifiedFundingActivit
             }),
             trailing: Icon(row['obligationState'] == 'msnw_issued'
               ? Icons.check_circle_outline : Icons.schedule),
-          ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(onPressed: _load, child: const Text('Refresh')),
-        ),
-      ],
-    );
-  }
-}
-).hasMatch(row['issuedMicro'] as String)))) {
-          throw const FormatException('Invalid funding state');
-        }
-        entries.add(row);
-      }
-      setState(() { _entries = entries; _loading = false; });
-    } catch (_) {
-      if (!mounted || generation != _generation ||
-          widget.currentUserId() != widget.sessionIdentity) return;
-      setState(() {
-        _entries = null;
-        _loading = false;
-        _error = 'Funding activity unavailable. Retry to refresh.';
-      });
-    }
-  }
-
-  String _ngn(String kobo) {
-    final amount = BigInt.parse(kobo);
-    final whole = amount ~/ BigInt.from(100);
-    final fractional = (amount % BigInt.from(100)).toString().padLeft(2, '0');
-    return '₦$whole.$fractional';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) return const LinearProgressIndicator(minHeight: 2);
-    if (_error != null) {
-      return ListTile(
-        title: Text(_error!),
-        trailing: TextButton(onPressed: _load, child: const Text('Retry')),
-      );
-    }
-    final items = _entries;
-    if (items == null) return const ListTile(title: Text('Funding history unavailable'));
-    if (items.isEmpty) {
-      return const ListTile(title: Text('No verified bank funding yet'));
-    }
-    return Column(
-      children: [
-        for (final row in items.take(8))
-          ListTile(
-            leading: const Icon(Icons.account_balance),
-            title: Text('Verified bank transfer · ${_ngn(row['amountKobo'] as String)}'),
-            subtitle: Text(row['obligationState'] == 'registration_pending'
-              ? 'Settlement journal reconciliation pending · Ref: ${row['reference']}'
-              : 'MSNW backing pending · Ref: ${row['reference']}'),
-            trailing: const Icon(Icons.schedule),
           ),
         Align(
           alignment: Alignment.centerRight,
