@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../social/talk_social_profiles.dart';
 import '../../state/talk_social_profile_state.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_profile_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../talks/talk_home_screen.dart';
 
@@ -59,8 +60,9 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   Widget build(BuildContext context) {
     final asyncProfile = ref.watch(humanProfileProvider(widget.handle));
     return asyncProfile.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Profile')),
+        body: const MasanawaProfileSkeleton(semanticLabel: 'Loading user profile'),
       ),
       error: (_, __) => _Unavailable(
         label: 'Couldn’t load this profile.',
@@ -296,7 +298,7 @@ class _Unavailable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      appBar: AppBar(title: const Text('Profile')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),

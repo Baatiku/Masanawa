@@ -17,6 +17,7 @@ import '../../finance/msnw_p2p_screen.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 
 /// Historical credit ledger compatibility only. Never expose a second
 /// customer-facing credit balance alongside MSNW.
@@ -226,9 +227,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final openCrypto = _openCrypto;
     return Scaffold(
       backgroundColor: u.surfaceCard,
-      appBar: widget.embeddedInShell ? null : masanawaMainHeader(context),
+      appBar: widget.embeddedInShell
+          ? null
+          : AppBar(
+              title: const Text('Wallet'),
+              leading: IconButton(
+                tooltip: 'Back',
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).canPop()
+                    ? Navigator.of(context).pop()
+                    : context.go('/home?tab=wallet'),
+              ),
+            ),
       body: Column(children: [
         Expanded(child: _tab == 0 ? ListView(
+          key: PageStorageKey<String>('wallet-assets-${accountId ?? 'signed-out'}'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
             MsnwWalletBalanceCard(
@@ -305,7 +318,12 @@ class _ReceiveMsnwPage extends StatefulWidget {
 class _ReceiveMsnwState extends State<_ReceiveMsnwPage> {
   late Future<MsnBalance> future=widget.transport.read();
   @override Widget build(BuildContext context)=>FutureBuilder<MsnBalance>(future:future,builder:(context,snapshot){
-    if(snapshot.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+    if(snapshot.connectionState!=ConnectionState.done) {
+      return const MasanawaListSkeleton(
+        itemCount: 4,
+        semanticLabel: 'Loading verified receiving address',
+      );
+    }
     final value=snapshot.data;
     if(value==null||value.receiveAddress==null||value.chainId==null||value.tokenContract==null) {
       return Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[

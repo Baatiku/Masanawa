@@ -223,7 +223,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
         (states) => IconThemeData(
           size: 24,
           color: states.contains(WidgetState.selected)
-              ? masanawa.textPrimary
+              ? masanawa.brandStrong
               : masanawa.textMuted,
         ),
       ),
@@ -285,7 +285,10 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(foregroundColor: masanawa.brandStrong),
+      style: TextButton.styleFrom(
+        foregroundColor: masanawa.brandStrong,
+        minimumSize: const Size(48, 48),
+      ),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: masanawa.surfaceMuted,
