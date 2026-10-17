@@ -57,7 +57,7 @@ class ChatListScreen extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: u.brand,
+          color: u.brandStrong,
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
@@ -70,7 +70,7 @@ class ChatListScreen extends ConsumerWidget {
         'pending' => Icon(Icons.access_time_rounded, size: 13, color: u.textMuted),
         'sent' => Icon(Icons.done_rounded, size: 14, color: u.textMuted),
         'delivered' => Icon(Icons.done_all_rounded, size: 14, color: u.textMuted),
-        'read' => const Icon(Icons.done_all_rounded, size: 14, color: Color(0xFF53BDEB)),
+        'read' => Icon(Icons.done_all_rounded, size: 14, color: u.tickRead),
         _ => Icon(Icons.done_rounded, size: 14, color: u.textMuted),
       };
     }
@@ -439,7 +439,7 @@ class ChatListScreen extends ConsumerWidget {
             tooltip: 'Settings & profile',
             icon: CircleAvatar(
               radius: 14,
-              backgroundColor: u.brand,
+              backgroundColor: u.brandStrong,
               child: Text(
                 userName.isNotEmpty ? userName[0].toUpperCase() : 'M',
                 style: const TextStyle(
@@ -495,7 +495,7 @@ class ChatListScreen extends ConsumerWidget {
                     title: Row(
                       children: [
                         if (thread.pinned) ...[
-                          Icon(Icons.push_pin, size: 14, color: u.brand),
+                          Icon(Icons.push_pin, size: 14, color: u.brandStrong),
                           const SizedBox(width: 5),
                         ],
                         Expanded(
@@ -523,7 +523,7 @@ class ChatListScreen extends ConsumerWidget {
                         Text(
                           last == null ? '' : formatChatTime(last.createdAt),
                           style: TextStyle(
-                            color: thread.unread > 0 ? u.brand : u.textMuted,
+                            color: thread.unread > 0 ? u.brandStrong : u.textMuted,
                             fontSize: 12,
                             fontWeight: thread.unread > 0
                                 ? FontWeight.w700
@@ -538,7 +538,7 @@ class ChatListScreen extends ConsumerWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: u.brand,
+                              color: u.brandStrong,
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(

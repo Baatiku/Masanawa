@@ -97,6 +97,9 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
           ),
         ),
         child: NavigationBar(
+          animationDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 250),
           selectedIndex: _index,
           onDestinationSelected: _selectTab,
           destinations: [
