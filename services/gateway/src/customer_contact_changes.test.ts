@@ -1,7 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {createCanonicalId} from "@masanawa/contracts";
 import {
-  hashPlatformSessionToken,hashOtpCode,mintPlatformSessionToken,
+  hashPlatformSessionToken,mintPlatformSessionToken,
   type PlatformSessionRepository,type PlatformSessionIdentity,
 } from "@masanawa/security";
 import {createCustomerAuthService} from "./customer_auth.js";
@@ -64,7 +64,7 @@ describe("verified contact changes",()=>{
     const newCode=delivered.get("new@example.com")!;
     expect(challenges.size).toBe(2);
     await expect(auth.completeContactChange({
-      ...request,oldCode:newCode,newCode:oldCode,
+      ...request,oldCode:oldCode==="000000"?"999999":"000000",newCode,
     })).rejects.toMatchObject({code:"OTP_INVALID"});
     expect(replaced).toBe(0);
     await expect(auth.completeContactChange({
