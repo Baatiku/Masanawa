@@ -18,6 +18,14 @@ String? shellDeepLinkRoute(Uri uri) {
     return '/wallet';
   }
 
+  if (uri.scheme == 'masanawa' &&
+      (uri.host == 'status' || uri.host == 'masana')) {
+    if (uri.pathSegments.isNotEmpty || uri.queryParameters.isNotEmpty) {
+      return null;
+    }
+    return uri.host == 'status' ? '/home?tab=status' : '/masana';
+  }
+
   if (uri.scheme == 'masanawa' && uri.host == 'calls') {
     if (uri.queryParameters.isNotEmpty ||
         uri.pathSegments.length != 2 ||
@@ -84,7 +92,7 @@ String? shellDeepLinkRoute(Uri uri) {
     if (uri.pathSegments.isNotEmpty || uri.queryParameters.isNotEmpty) {
       return null;
     }
-    return '/home?tab=activity';
+    return '/home?tab=status';
   }
 
   String? characterId;
