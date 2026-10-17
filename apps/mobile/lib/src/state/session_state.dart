@@ -186,8 +186,10 @@ class SessionController extends Notifier<SessionState> {
     final identifier = phone ?? email!;
     state = SessionVerifying(channel, identifier);
     try {
+      final deviceId=await _deviceId();
       final tokens = await ref.read(apiClientProvider).otpVerify(
             code,
+            deviceId:deviceId,
             phone: phone,
             email: email,
             name: name,
