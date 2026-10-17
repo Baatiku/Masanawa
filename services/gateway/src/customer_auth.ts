@@ -468,13 +468,11 @@ export function createCustomerAuthService(input: Readonly<{
       const password = assertPassword(request.password);
       const name = request.name.trim();
       if (!name || name.length > 160) throw new CustomerAuthError("VALIDATION_FAILED", 400);
-      let email: string | null = null;
+      // Validate the optional address, but do not bind it to a login identity.
+      // Email linking requires explicit possession proof after registration.
       if (request.email !== undefined) {
-        try {
-          email = normalizePlatformAuthIdentifier({ email: request.email }).identifier;
-        } catch {
-          throw new CustomerAuthError("VALIDATION_FAILED", 400);
-        }
+        try { normalizePlatformAuthIdentifier({email:request.email}); }
+        catch { throw new CustomerAuthError("VALIDATION_FAILED",400); }
       }
       const createdAt = now();
       const existing = await input.repository.resolveProfile({
