@@ -566,7 +566,7 @@ export function createCustomerAuthService(input: Readonly<{
       catch {throw new CustomerAuthError("VALIDATION_FAILED",400);}
       if (identity.profile.email && identity.profile.email !== email)
         throw new CustomerAuthError("EMAIL_CHANGE_UNAVAILABLE",409);
-      if(!/^\\d{6}$/u.test(request.code))
+      if(!/^\d{6}$/u.test(request.code))
         throw new CustomerAuthError("OTP_INVALID",400);
       const at=now();
       const codeHash=hashOtpCode({pepper:input.otpPepper,
