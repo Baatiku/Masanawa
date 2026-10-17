@@ -256,7 +256,10 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                 dense: true,
                 leading: const Icon(Icons.history),
                 title: Text((event['action'] as String? ?? 'Account activity').replaceAll('_', ' ')),
-                subtitle: Text(_date(event['at'])),
+                subtitle: Text(event['clientLabel'] is String &&
+                    (event['clientLabel'] as String).isNotEmpty
+                  ? '${_date(event['at'])} · ${event['clientLabel']}'
+                  : _date(event['at'])),
               ),
             const SizedBox(height: 24),
           ],
