@@ -51,7 +51,9 @@ export class CustomerAuthError extends Error {
 }
 
 export interface OtpDelivery {
-  send(input: Readonly<{ identifier: string; code: string }>): Promise<void>;
+  send(input: Readonly<{
+    identifier: string; code: string; purpose?: "password_recovery";
+  }>): Promise<void>;
   sendWelcome?(input: Readonly<{identifier:string;name:string;username?:string;userId:string}>): Promise<void>;
   sendSecurityAlert?(input: Readonly<{identifier:string;at:string}>): Promise<void>;
 }
@@ -277,13 +279,17 @@ export function createCustomerAuthService(input: Readonly<{
       throw new CustomerAuthError("VALIDATION_FAILED",400);
     return createHash("sha256").update(JSON.stringify(["p2p_bank_method",bankCode,accountNumber])).digest("hex");
   }
+  function recoveryKey(phone:string):string {
+    return "password-recovery:"+phone;
+  }
   function changeKeys(userId:string,channel:PlatformAuthChannel,oldValue:string,newValue:string) {
     const fingerprint=createHash("sha256").update(JSON.stringify([userId,channel,oldValue,newValue])).digest("hex");
     return {oldKey:"contact-old:"+fingerprint,newKey:"contact-new:"+fingerprint};
   }
+  // Phone customers authenticate with a six-digit password.
+  // Recovery has a separate, purpose-bound SMS code and cannot mint tokens.
   const otpChannels = Object.freeze([
     ...(input.emailDelivery ? ["email" as const] : []),
-    ...(input.smsDelivery ? ["sms" as const] : []),
   ]);
 
   return Object.freeze<CustomerAuthService>({
@@ -298,6 +304,8 @@ export function createCustomerAuthService(input: Readonly<{
       } catch {
         throw new CustomerAuthError("VALIDATION_FAILED", 400);
       }
+      if(normalized.channel==="sms")
+        throw new CustomerAuthError("PHONE_PASSWORD_REQUIRED",409);
       const code = createOtpCode();
       const createdAt = now();
       const codeHash = hashOtpCode({
@@ -350,6 +358,8 @@ export function createCustomerAuthService(input: Readonly<{
       } catch {
         throw new CustomerAuthError("VALIDATION_FAILED", 400);
       }
+      if(normalized.channel==="sms")
+        throw new CustomerAuthError("PHONE_PASSWORD_REQUIRED",409);
       if (!/^\d{6}$/u.test(request.code)) throw new CustomerAuthError("OTP_INVALID", 400);
       const verifiedAt = now();
       const codeHash = hashOtpCode({
@@ -611,8 +621,33 @@ export function createCustomerAuthService(input: Readonly<{
         tenantId:input.tenantId,channel:"sms",identifier:normalized.identifier,observedAt:now(),
       });
       if(!profile)throw new CustomerAuthError("ACCOUNT_NOT_FOUND",404);
-      const response=await this.sendOtp({phone:normalized.identifier});
-      return {resendInSeconds:response.resendInSeconds};
+      const identifier=recoveryKey(normalized.identifier),at=now(),code=createOtpCode();
+      const codeHash=hashOtpCode({
+        pepper:input.otpPepper,tenantId:input.tenantId,
+        channel:"sms",identifier,code,
+      });
+      try{
+        await input.repository.putOtpChallenge({
+          tenantId:input.tenantId,channel:"sms",identifier,codeHash,
+          createdAt:at,expiresAt:plusSeconds(at,otpTtlSeconds),
+          resendAfter:plusSeconds(at,resendSeconds),maxAttempts:5,
+        });
+      }catch(error){
+        if(error instanceof Error&&error.message==="auth.otp.cooldown")
+          throw new CustomerAuthError("OTP_RATE_LIMITED",429);
+        throw error;
+      }
+      try{
+        await input.smsDelivery.send({
+          identifier:normalized.identifier,code,purpose:"password_recovery",
+        });
+      }catch{
+        await input.repository.cancelOtpChallenge({
+          tenantId:input.tenantId,channel:"sms",identifier,codeHash,
+        }).catch(()=>undefined);
+        throw new CustomerAuthError("OTP_DELIVERY_UNAVAILABLE",503);
+      }
+      return {resendInSeconds:resendSeconds};
     },
     async completePasswordRecovery(request) {
       let normalized;
@@ -628,10 +663,10 @@ export function createCustomerAuthService(input: Readonly<{
       if(!profile)throw new CustomerAuthError("ACCOUNT_NOT_FOUND",404);
       const codeHash=hashOtpCode({
         pepper:input.otpPepper,tenantId:input.tenantId,
-        channel:"sms",identifier:normalized.identifier,code:request.code,
+        channel:"sms",identifier:recoveryKey(normalized.identifier),code:request.code,
       });
       const consumed=await input.repository.consumeOtpChallenge({
-        tenantId:input.tenantId,channel:"sms",identifier:normalized.identifier,
+        tenantId:input.tenantId,channel:"sms",identifier:recoveryKey(normalized.identifier),
         codeHash,consumedAt:at,
       });
       if(consumed==="locked")throw new CustomerAuthError("OTP_LOCKED",429);
@@ -1108,7 +1143,9 @@ export function createHttpSmsOtpDelivery(input: Readonly<{
         },
         body: JSON.stringify({
           to: request.identifier,
-          message: `Your Masanawa sign-in code is ${request.code}. It expires in 10 minutes.`,
+          message: request.purpose==="password_recovery"
+            ? `Your Masanawa password recovery code is ${request.code}. It expires in 10 minutes. If this was not you, do not share it.`
+            : `Your Masanawa verification code is ${request.code}. It expires in 10 minutes.`,
         }),
       });
       if (!response.ok) throw new Error("auth.sms_delivery_failed");
