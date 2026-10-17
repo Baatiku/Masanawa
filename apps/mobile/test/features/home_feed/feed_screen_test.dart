@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
+import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
 class StubFeed implements FeedApi {
   StubFeed(this.label);
@@ -27,6 +28,15 @@ FeedPost update(String body)=>FeedPost(id:'381026c2-9d56-47b1-b73d-1784e24e41e2'
  likeCount:0,commentCount:0,liked:false,saved:false);
 DioException denial(int status)=>DioException(requestOptions:RequestOptions(path:'/v1/feed'),
  type:DioExceptionType.badResponse,response:Response(requestOptions:RequestOptions(path:'/v1/feed'),statusCode:status));
+class InlineMediaStub implements FeedMediaApi {
+  InlineMediaStub(this.load);
+  final Future<FeedMediaGrant> Function(String,String) load;
+  @override Future<FeedMediaGrant> getGrant(String p,String m)=>load(p,m);
+}
+FeedMediaGrant inlineGrant(String id)=>FeedMediaGrant(
+  mediaId:id,kind:'image',
+  url:Uri.parse('https://example.test/original?signature=short-lived'),
+  expiresAt:DateTime.now().add(const Duration(minutes:2)));
 void main(){
  testWidgets('C21 renders Masana-only posts and reacts without a publish button',(tester)async{
    final api=StubFeed('Hello from Masana');
@@ -136,6 +146,46 @@ void main(){
    onOpenMedia:(post,id){openedPost=post.id;openedMedia=id;}))));await tester.pumpAndSettle();
   await tester.tap(find.text('View image'));await tester.pumpAndSettle();
   expect(openedPost,post.id);expect(openedMedia,'media_abcdefgh');
+ });
+
+ testWidgets('signed original image renders inline only after scoped grant',(tester)async{
+  final pending=Completer<FeedMediaGrant>(),feed=StubFeed('image');
+  final post=FeedPost(id:'post1',authorMasanaId:'masana',kind:'image',
+    body:'Illustrated lesson',mediaIds:const ['media1','media2'],
+    publishedAt:DateTime.utc(2026),likeCount:0,commentCount:0,liked:false,saved:false);
+  feed.onList=(_,__)async=>FeedPage([post],null);
+  String? opened;
+  await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
+    api:feed,accountKey:'owner1',
+    mediaApi:InlineMediaStub((p,id){expect(p,'post1');expect(id,'media1');return pending.future;}),
+    inlineMediaRenderer:(grant)=>Text('AUTHORIZED IMAGE: ${grant.mediaId}'),
+    onOpenMedia:(_,media)=>opened=media))));
+  await tester.pump();
+  expect(find.textContaining('AUTHORIZED IMAGE'),findsNothing);
+  pending.complete(inlineGrant('media1'));
+  await tester.pumpAndSettle();
+  expect(find.text('AUTHORIZED IMAGE: media1'),findsOneWidget);
+  await tester.tap(find.text('View all 2 images'));await tester.pump();
+  expect(opened,'media1');
+ });
+ testWidgets('a new account cannot render an outstanding old media grant',(tester)async{
+  final pending=Completer<FeedMediaGrant>();
+  final feed=StubFeed('image');
+  feed.onList=(_,__)async=>FeedPage([FeedPost(id:'post2',authorMasanaId:'masana',
+    kind:'image',body:'Original',mediaIds:const ['media1'],
+    publishedAt:DateTime.utc(2026),likeCount:0,commentCount:0,liked:false,saved:false)],null);
+  Future<void> draw(String account, FeedMediaApi media)async{
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
+      api:feed,accountKey:account,mediaApi:media,
+      inlineMediaRenderer:(g)=>Text('Image for $account')))));
+    await tester.pump();
+  }
+  await draw('first',InlineMediaStub((_,__)=>pending.future));
+  await draw('second',InlineMediaStub((_,__)async=>inlineGrant('media1')));
+  pending.complete(inlineGrant('media1'));
+  await tester.pumpAndSettle();
+  expect(find.text('Image for first'),findsNothing);
+  expect(find.text('Image for second'),findsOneWidget);
  });
 
 }

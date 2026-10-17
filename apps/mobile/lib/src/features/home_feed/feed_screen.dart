@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'feed_api.dart';
+import 'feed_media_api.dart';
+import 'feed_inline_media_card.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 
@@ -8,7 +10,8 @@ import 'feed_post_detail_screen.dart';
 class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
     this.onMasanaProfile,this.onOpenMedia,this.onReport,this.enabled=true,
-    this.audioPlaybackAvailable=false,this.authorScoped=false});
+    this.audioPlaybackAvailable=false,this.authorScoped=false,
+    this.mediaApi,this.inlineMediaRenderer});
   final FeedApi api;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile;
@@ -18,6 +21,9 @@ class MasanaFeedScreen extends StatefulWidget {
   final bool audioPlaybackAvailable;
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
+  /// Optional per-account signed media projection, never persisted to disk.
+  final FeedMediaApi? mediaApi;
+  final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
   @override State<MasanaFeedScreen> createState()=>_MasanaFeedScreenState();
 }
 class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
@@ -155,7 +161,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 Align(alignment:AlignmentDirectional.centerStart,
                   child:TextButton(onPressed:()=>openPost(post),
                     child:Text(t('Open post','Bude labari')))),
-                if(post.mediaIds.isNotEmpty)Wrap(spacing:8,children:post.mediaIds.map((id)=>ActionChip(
+                if(post.kind=='image' && post.mediaIds.isNotEmpty && widget.mediaApi!=null)
+                  FeedInlineMediaCard(
+                    key:ValueKey('status-inline-${widget.accountKey}-${post.id}'),
+                    api:widget.mediaApi!,accountKey:widget.accountKey,
+                    postId:post.id,mediaId:post.mediaIds.first,
+                    mediaCount:post.mediaIds.length,
+                    onOpen:widget.onOpenMedia==null?null:()=>widget.onOpenMedia!(post,post.mediaIds.first),
+                    renderer:widget.inlineMediaRenderer,
+                  ),
+                if(post.mediaIds.isNotEmpty && (post.kind!='image'||widget.mediaApi==null))
+                  Wrap(spacing:8,children:post.mediaIds.map((id)=>ActionChip(
                   avatar:Icon(post.kind=='audio'?Icons.play_circle_outline:Icons.image_outlined),
                   label:Text(post.kind=='audio'?t('Play audio','Kunna sauti'):t('View image','Duba hoto')),
                   onPressed:widget.onOpenMedia==null||(post.kind=='audio'&&!widget.audioPlaybackAvailable)
