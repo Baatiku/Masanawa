@@ -18,7 +18,8 @@ String roomDiscussionError(Object e){
 }
 class RoomDiscussionScreen extends StatefulWidget {
  const RoomDiscussionScreen({super.key,required this.roomId,required this.api,
-  required this.accountScope,this.onReport});
+  required this.accountScope,this.onReport,this.initialTarget});
+ final RoomDiscussionTarget? initialTarget;
  final String roomId,accountScope;final RoomDiscussionApi api;
  final ValueChanged<RoomDiscussionReply>? onReport;
  @override State<RoomDiscussionScreen> createState()=>_RoomDiscussionScreenState();
@@ -42,8 +43,8 @@ class _RoomDiscussionScreenState extends State<RoomDiscussionScreen>{
    final ts=await widget.api.targets(widget.roomId);
    if(!mounted||n!=revision)return;
    RoomDiscussionTarget? target;
-   for(final t in ts){if(t.kind==selected?.kind&&t.id==selected?.id){target=t;break;}}
-   if(target==null&&ts.isNotEmpty)target=ts.first;
+   for(final t in ts){if(t.kind==(selected??widget.initialTarget)?.kind&&t.id==(selected??widget.initialTarget)?.id){target=t;break;}}
+   if(target==null&&widget.initialTarget==null&&ts.isNotEmpty)target=ts.first;
    final page=target==null?const RoomDiscussionPage([],null):await widget.api.list(widget.roomId,target);
    if(!mounted||n!=revision)return;
    setState((){targets=ts;selected=target;items=page.items;cursor=page.cursor;loading=false;});
@@ -80,7 +81,7 @@ class _RoomDiscussionScreenState extends State<RoomDiscussionScreen>{
   }finally{if(mounted&&widget.accountScope==scope&&widget.roomId==room&&identical(widget.api,api))setState(()=>sending=false);}
  }
  @override Widget build(BuildContext context)=>Column(children:[
-  if(targets.isNotEmpty)Padding(padding:const EdgeInsets.all(8),child:DropdownButtonFormField<String>(
+  if(targets.isNotEmpty&&widget.initialTarget==null)Padding(padding:const EdgeInsets.all(8),child:DropdownButtonFormField<String>(
    value:selected==null?null:selected!.kind+':'+selected!.id,
    isExpanded:true,decoration:const InputDecoration(labelText:'Discuss a lesson or question'),
    items:targets.map((t)=>DropdownMenuItem(value:t.kind+':'+t.id,
@@ -89,7 +90,7 @@ class _RoomDiscussionScreenState extends State<RoomDiscussionScreen>{
   Expanded(child:loading&&items.isEmpty?const Center(child:CircularProgressIndicator()):
    error!=null&&items.isEmpty?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
     Text(roomDiscussionError(error!)),TextButton(onPressed:refresh,child:const Text('Retry'))])):
-   targets.isEmpty?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+   (targets.isEmpty||selected==null)?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
     const Text('No lessons or questions to discuss yet.'),
     TextButton(onPressed:refresh,child:const Text('Refresh'))])):
    RefreshIndicator(onRefresh:refresh,child:ListView(children:[
@@ -133,3 +134,4 @@ class _RoomDiscussionScreenState extends State<RoomDiscussionScreen>{
   }finally{text.dispose();}
  }
 }
+

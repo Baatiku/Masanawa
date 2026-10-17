@@ -4,12 +4,14 @@ import 'saved_lessons_client.dart';
 
 /// C38: saved lessons never render from an expired entitlement or another fan's account.
 class SavedRoomLessonsScreen extends StatefulWidget {
- const SavedRoomLessonsScreen({super.key,required this.client,required this.roomId,required this.accountKey});
+ const SavedRoomLessonsScreen({super.key,required this.client,required this.roomId,required this.accountKey,this.protectDetail});
+ final Widget Function(BuildContext,Widget)? protectDetail;
  final SavedLessonsClient client;
  final String roomId,accountKey;
  @override State<SavedRoomLessonsScreen> createState()=>_SavedRoomLessonsScreenState();
 }
 class _SavedRoomLessonsScreenState extends State<SavedRoomLessonsScreen> {
+ final search=TextEditingController();String query='';
  List<SavedRoomLesson> items=const [];
  bool loading=true,working=false;
  String? message;
@@ -22,7 +24,7 @@ class _SavedRoomLessonsScreenState extends State<SavedRoomLessonsScreen> {
    epoch++;items=const [];loading=true;load();
   }
  }
- @override void dispose(){epoch++;super.dispose();}
+ @override void dispose(){epoch++;search.dispose();super.dispose();}
  String friendly(Object error) {
   if(!active)return 'Sign in again to view your saved lessons.';
   if(error is DioException){
@@ -63,24 +65,33 @@ class _SavedRoomLessonsScreenState extends State<SavedRoomLessonsScreen> {
    if(mounted&&current==epoch)setState(()=>working=false);
   }
  }
- @override Widget build(BuildContext context)=>Scaffold(
+ @override Widget build(BuildContext context){
+ final filtered=items.where((lesson)=>lesson.body.toLowerCase().contains(query)).toList();
+ return Scaffold(
   appBar:AppBar(title:const Text('Saved lessons')),
   body:SafeArea(child:!active?
    const Center(child:Text('Sign in again to view your saved lessons.')):
    loading?const Center(child:CircularProgressIndicator()):
    Column(children:[
+    Padding(padding:const EdgeInsets.all(16),child:TextField(controller:search,onChanged:(value)=>setState(()=>query=value.trim().toLowerCase()),
+      decoration:InputDecoration(hintText:'Search saved lessons',prefixIcon:const Icon(Icons.search),filled:true,fillColor:Theme.of(context).colorScheme.surfaceContainerLow,
+        border:OutlineInputBorder(borderRadius:BorderRadius.circular(14),borderSide:BorderSide.none)))),
     if(message!=null)Padding(padding:const EdgeInsets.all(16),child:Column(children:[
      Text(message!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
      TextButton(onPressed:working?null:load,child:const Text('Retry')),
     ])),
-    Expanded(child:items.isEmpty?const Center(child:Text('No saved lessons available.')):
+    Expanded(child:filtered.isEmpty?Center(child:Text(items.isEmpty?'No saved lessons available.':'No matching saved lessons')):
       RefreshIndicator(onRefresh:load,child:ListView.builder(
-       itemCount:items.length,itemBuilder:(context,index){
-        final lesson=items[index];
+       itemCount:filtered.length,itemBuilder:(context,index){
+        final lesson=filtered[index];
         return ListTile(
          key:Key('saved-lesson-${lesson.id}'),
          title:Text(lesson.body,maxLines:3,overflow:TextOverflow.ellipsis),
          subtitle:Text(lesson.kind=='lesson'?'Lesson':'Announcement'),
+         onTap:()=>Navigator.push<void>(context,MaterialPageRoute(builder:(routeContext){
+          final page=Scaffold(appBar:AppBar(title:const Text('Saved lesson')),body:active?ListView(padding:const EdgeInsets.all(24),children:[SelectableText(lesson.body,style:const TextStyle(fontSize:16,height:1.6))]):const Center(child:Text('Sign in again to view your saved lessons.')));
+          return widget.protectDetail?.call(routeContext,page)??page;
+         })),
          trailing:IconButton(
           tooltip:'Remove saved lesson',icon:const Icon(Icons.bookmark_remove_outlined),
           onPressed:working?null:()=>remove(lesson)),
@@ -88,4 +99,6 @@ class _SavedRoomLessonsScreenState extends State<SavedRoomLessonsScreen> {
        }))),
    ])),
  );
+ }
 }
+

@@ -46,8 +46,10 @@ void main(){
    id:'room_math',savedLessonsClient:saves,savedLessonsAccountKey:'fanA')));
   await tester.pumpAndSettle();
   expect(find.text('Introduction to algebra'),findsOneWidget);
+  await tester.tap(find.text('Introduction to algebra'));await tester.pumpAndSettle();
   await tester.tap(find.byTooltip('Save lesson'));await tester.pump();
   expect(saves.saved,1);
+  await tester.pageBack();await tester.pumpAndSettle();
   await tester.tap(find.byTooltip('Saved lessons'));await tester.pumpAndSettle();
   expect(find.text('Saved lessons'),findsOneWidget);
   expect(find.byTooltip('Remove saved lesson'),findsOneWidget);
@@ -98,3 +100,4 @@ void main(){
   expect(find.text('Introduction to algebra'),findsOneWidget);
  });
 }
+

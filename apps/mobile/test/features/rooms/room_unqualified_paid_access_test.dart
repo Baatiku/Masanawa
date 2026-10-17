@@ -31,7 +31,8 @@ void main() {
     expect(button.onPressed, isNull);
     expect(rooms.joins, 0);
     expect(find.text('Join free Room'), findsNothing);
-    expect(find.text('A verified subscription is required to access lessons and questions'), findsOneWidget);
+    expect(find.text('Active subscription required'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
+

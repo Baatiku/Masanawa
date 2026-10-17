@@ -8,12 +8,18 @@ import '../../features/rooms/rooms_client.dart';
 import '../../features/rooms/rooms_screen.dart' as canonical;
 import '../../features/rooms/saved_lessons_client.dart';
 import '../../state/session_state.dart';
+import '../../state/agent_directory_state.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Reuses the existing authenticated Gateway Dio and the canonical J07 Rooms
 /// contract. Never use the retired Talk/live-feed endpoint as Room discovery.
-final roomsClientProvider = Provider<RoomsClient>((ref) =>
-    HttpRoomsClient(ref.watch(apiClientProvider).dio));
+final roomsClientProvider = Provider<RoomsClient>((ref) {
+  ref.watch(agentDirectoryProvider.select((value)=>value.agents.map((a)=>'${a.characterId}:${a.displayName}').join('|')));
+  return HttpRoomsClient(ref.watch(apiClientProvider).dio,teacherName:(id){
+    for(final agent in ref.read(agentDirectoryProvider).agents){if(agent.characterId==id)return agent.displayName;}
+    return null;
+  });
+});
 
 class AccountBoundRoomsClient implements RoomsClient {
   AccountBoundRoomsClient({
@@ -211,6 +217,11 @@ class MasanaRoomDetailScreen extends ConsumerWidget {
     return KeyedSubtree(
       key:ValueKey('masana-room-$accountId-$roomId'),
       child:canonical.RoomHomeScreen(
+        protectDetail:(routeContext,detail)=>Consumer(builder:(context,detailRef,_){
+          final active=detailRef.watch(sessionProvider);
+          return active is SessionSignedIn && active.user.id==accountId?detail:
+            const Scaffold(body:Center(child:Text('Session changed. Sign in to view this Room.')));
+        }),
         id:roomId,
         client:AccountBoundRoomsClient(delegate:ref.watch(roomsClientProvider),
           ownerAccount:accountId,currentAccount:currentAccount),
@@ -228,3 +239,4 @@ class MasanaRoomDetailScreen extends ConsumerWidget {
     );
   }
 }
+
