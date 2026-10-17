@@ -60,6 +60,9 @@ export interface PlatformSessionRepository {
   verifyPasswordCredential(input: Readonly<{
     tenantId: TenantId; userId: UserId; passwordHash: string; at: string;
   }>): Promise<PasswordVerifyResult>;
+  resetPasswordCredential?(input: Readonly<{
+    tenantId: TenantId; userId: UserId; passwordHash: string; at: string;
+  }>): Promise<"changed" | "reused" | "missing">;
   registerDevice(input: Readonly<{
     tenantId: TenantId; userId: UserId; deviceId: string; at: string;
   }>): Promise<void>;
