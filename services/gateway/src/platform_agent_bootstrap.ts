@@ -63,6 +63,8 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
  presentations:AgentPresentationRepository;profiles:PlatformAgentProfileRepository;
  skillAssignments:CharacterSkillAssignmentRepository;
  skillDistribution:SkillDistributionRepository;now?:()=>Instant;
+ /** Already approved stock handle -> canonical identity, from tenant-scoped PostgreSQL. */
+ canonicalByHandle?:ReadonlyMap<string,CharacterId>;
 }>):Promise<PlatformAgentBootstrapResult>{
  const now=input.now?.()??nowInstant();
  const all=[...(await input.presentations.listAll({tenantId:input.tenantId}))];
@@ -83,7 +85,15 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
     item.displayName.trim().toLowerCase()===seed.displayName.toLowerCase() ||
     (seed.key==="gwani"&&(item.displayName==="Gwani"||item.displayName==="Mallam Gwani Bodi")) ||
     (seed.key==="gwana"&&(item.displayName==="Gwana"||item.displayName==="Malamah Gwana Sulafat"||item.displayName==="Malamah Gwana Fora"));
-   let presentation=all.find(match);
+   const canonicalId=input.canonicalByHandle?.get(seed.handle);
+   // An editor may rename a Masana without changing its canonical ID.
+   // Never duplicate that identity or attach its portrait to a name lookalike.
+   const presentationById=canonicalId
+     ? all.find(p=>p.characterId===canonicalId)
+     : null;
+   if(canonicalId&&!presentationById)
+     throw new Error("approved_masana_identity_missing");
+   let presentation=presentationById??(canonicalId?undefined:all.find(match));
    if(presentation&&!presentation.visibleInUserApp)continue;
    if(!presentation){
      const characterId=createCanonicalId("character");
