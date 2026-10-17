@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -20,94 +20,26 @@ class WalletTransaction {
   String get searchable => '$title $category $id $asset $status ${details.values.join(' ')}'.toLowerCase();
 }
 
-String _required(Map row, String key) {
-  final value = row[key];
-  if (value is! String || value.isEmpty || value.length > 2000) {
-    throw FormatException('Invalid transaction $key');
+WalletTransaction parseWalletActivity(dynamic row) {
+  if(row is! Map || row['id'] is! String || row['reference'] is! String ||
+    row['category'] is! String || row['title'] is! String || row['asset'] is! String ||
+    row['status'] is! String || row['incoming'] is! bool || row['amountAtomic'] is! String ||
+    row['decimals'] is! int || (row['decimals'] as int)<0 || (row['decimals'] as int)>36 ||
+    row['createdAt'] is! String || DateTime.tryParse(row['createdAt'] as String)==null ||
+    row['details'] is! Map) throw const FormatException('Invalid transaction record');
+  final details=<String,String>{'Reference':row['reference'] as String};
+  for(final field in (row['details'] as Map).entries) {
+    if(field.key is! String || field.value is! String)throw const FormatException('Invalid receipt detail');
+    if(field.key=='MSNW credited atomic') {
+      details['MSNW credited']='${formatWalletAtomic(field.value as String)} MSNW';
+    } else if(field.key=='Crypto amount atomic') {
+      details['Crypto amount']='${formatWalletAtomic(field.value as String)} ${row['details']['Network']??''}';
+    } else { details[field.key as String]=field.value as String; }
   }
-  return value;
-}
-DateTime? _date(Map row, Iterable<String> keys) {
-  for (final key in keys) {
-    final value = row[key];
-    if (value is String && DateTime.tryParse(value) != null) return DateTime.parse(value).toUtc();
-  }
-  return null;
-}
-Map<String,String> _details(Map row) {
-  const labels = {'operationId':'Transfer reference','reference':'Funding reference',
-    'conversionId':'Conversion reference','order_id':'Order reference',
-    'receipt_reference':'Receipt','requestId':'Request reference',
-    'recipientName':'Recipient','counterpartyName':'With',
-    'providerCode':'Asset / network','network':'Network','destinationAddress':'Destination'};
-  return {
-    for (final field in labels.entries)
-      if(row[field.key] is String) field.value:'${row[field.key]}',
-    if(row['issuedMicro'] is String) 'MSNW credited':'${formatWalletAtomic(row['issuedMicro'] as String)} MSNW',
-    if(row['targetMicro'] is String && row['providerCode'] is String)
-      'Crypto amount':'${formatWalletAtomic(row['targetMicro'] as String)} ${row['providerCode']}',
-    if(row['updatedAt'] is String) 'Updated':'${row['updatedAt']}',
-    if(row['updated_at'] is String) 'Updated':'${row['updated_at']}',
-  };
-}
-
-List<WalletTransaction> parseWalletTransactions(String source, dynamic data, String userId) {
-  if (data is! Map) throw const FormatException('Invalid history response');
-  final raw = data[source == 'Crypto' ? 'intents' : source == 'Archive' ? 'entries' : 'items'];
-  if (raw is! List || raw.length > 1000) throw const FormatException('Invalid history page');
-  return raw.map((item) {
-    if (item is! Map) throw const FormatException('Invalid transaction');
-    final row = item;
-    String id, title, amount, asset, status;
-    bool incoming;
-    switch (source) {
-      case 'Transfers':
-        if (row['asset'] != 'MSNW' || !['sent','received'].contains(row['direction'])) {
-          throw const FormatException('Invalid custody transfer');
-        }
-        id = _required(row,'operationId'); incoming = row['direction'] == 'received';
-        title = incoming ? 'MSNW received' : 'MSNW sent';
-        amount = formatWalletAtomic(_required(row,'amountMicro')); asset = 'MSNW'; status = 'completed';
-      case 'Funding':
-        id = _required(row,'reference'); incoming = true; title = 'Bank funding';
-        amount = formatWalletAtomic(_required(row,'amountKobo'), decimals: 2); asset = 'NGN';
-        status = row['obligationState'] == 'msnw_issued' ? 'completed' : 'backing_pending';
-      case 'Conversions':
-        if (row['asset'] != 'MSNW') throw const FormatException('Invalid conversion asset');
-        id = _required(row,'conversionId'); incoming = false; title = 'MSNW to ${_required(row,'providerCode')}';
-        amount = formatWalletAtomic(_required(row,'sourceMicro')); asset = 'MSNW'; status = _required(row,'state');
-      case 'P2P':
-        id = _required(row,'order_id'); incoming = row['seller_id'] != userId;
-        title = incoming ? 'P2P buy' : 'P2P sell';
-        amount = formatWalletAtomic(_required(row,'amount_micro')); asset = 'MSNW'; status = _required(row,'state');
-      case 'Crypto':
-        id = _required(row,'requestId'); title = 'Crypto ${_required(row,'operation').replaceAll('_',' ')}';
-        incoming = row['operation'] == 'deposit' || row['operation'] == 'fiat_purchase';
-        amount = _required(row,'amount');
-        if (!RegExp(r'^[0-9]+(\.[0-9]+)?$').hasMatch(amount)) throw const FormatException('Invalid crypto amount');
-        asset = _required(row,'asset'); status = _required(row,'status');
-      case 'Archive':
-        id = _required(row,'id'); title = _required(row,'title');
-        final value = row['amountCredits'];
-        if (value is! int || value < 0) throw const FormatException('Invalid historical amount');
-        amount = '$value'; asset = 'Cr (historical)'; incoming = row['incoming'] == true; status = 'recorded';
-      default: throw const FormatException('Unknown transaction source');
-    }
-    return WalletTransaction(id: '$source:$id', category: source, title: title,
-      amount: amount, asset: asset, status: status, incoming: incoming,
-      createdAt: _date(row,['createdAt','paidAt','created_at']), details: _details(row));
-  }).toList();
-}
-
-String walletTransactionsCsv(List<WalletTransaction> entries) {
-  String cell(String value) {
-    final safe = RegExp(r'^[\s]*[=+\-@\t\r]').hasMatch(value) ? "'$value" : value;
-    return '"${safe.replaceAll('"','""')}"';
-  }
-  return const ['Reference,Category,Description,Amount,Asset,Direction,Status,Created UTC']
-    .followedBy(entries.map((e) => [e.id,e.category,e.title,e.amount,e.asset,
-      e.incoming ? 'in' : 'out',e.status,e.createdAt?.toIso8601String() ?? ''].map(cell).join(',')))
-    .join('\r\n');
+  return WalletTransaction(id:row['id'] as String,category:row['category'] as String,
+    title:row['title'] as String,amount:formatWalletAtomic(row['amountAtomic'] as String,decimals:row['decimals'] as int),
+    asset:row['asset'] as String,status:row['status'] as String,incoming:row['incoming'] as bool,
+    details:details,createdAt:DateTime.parse(row['createdAt'] as String).toUtc());
 }
 
 class WalletHistoryFilter {
@@ -136,61 +68,73 @@ class _HistoryState extends State<MsnwTransactionHistory> {
   List<String> failed = [];
   bool busy = true;
   int generation = 0;
+  String? nextCursor;
+  Timer? debounce;
   WalletHistoryFilter filter = const WalletHistoryFilter();
-  static const paths = {
-    'Transfers': '/v1/wallet/msnw/transactions',
-    'Funding': '/v1/wallet/msnw/funding/verified',
-    'Conversions': '/v1/wallet/msnw/convert/history',
-    'P2P': '/v1/wallet/msnw/p2p/orders',
-    'Crypto': '/v1/financial/crypto/history?limit=100',
-    'Archive': '/v1/wallet?limit=100',
-  };
+  static const categories=['Transfers','Funding','Bills','Conversions','P2P','Crypto','Calls','Rooms','Archive'];
   @override void initState() { super.initState(); load(); }
   @override void didUpdateWidget(covariant MsnwTransactionHistory old) {
     super.didUpdateWidget(old);
     if (old.expectedUserId != widget.expectedUserId) { search.clear(); filter = const WalletHistoryFilter(); load(); }
   }
-  @override void dispose() { search.dispose(); super.dispose(); }
+  @override void dispose() { debounce?.cancel(); search.dispose(); super.dispose(); }
   bool same(String? token) => mounted && widget.currentUserId() == widget.expectedUserId &&
     token != null && token.isNotEmpty && token == widget.accessToken()?.trim();
-  Future<void> load() async {
-    final run = ++generation, token = widget.accessToken()?.trim();
-    setState(() { busy = true; entries = []; failed = []; });
-    if (!same(token)) { setState(() { busy = false; failed = ['Sign in again']; }); return; }
-    final values = <WalletTransaction>[], errors = <String>[];
-    await Future.wait(paths.entries.map((source) async {
-      try {
-        final r = await widget.dio.get<dynamic>(
-          '${widget.baseUrl.replaceFirst(RegExp(r'/$'), '')}${source.value}',
-          options: Options(headers: {'Authorization':'Bearer $token','Cache-Control':'no-store'},
-            followRedirects:false, receiveTimeout:const Duration(seconds:15)));
-        values.addAll(parseWalletTransactions(source.key,r.data,widget.expectedUserId));
-      } catch (_) { errors.add(source.key); }
-    }));
-    if (!same(token) || run != generation) {
-      if(mounted && run==generation) setState(() { busy=false; entries=[]; failed=['Session changed']; });
-      return;
+  Map<String,String> get query => {
+    if(filter.category!='All') 'category':filter.category,
+    if(filter.status!='All') 'status':filter.status,
+    if(search.text.trim().isNotEmpty) 'search':search.text.trim(),
+    if(filter.from!=null) 'from':filter.from!.toIso8601String().substring(0,10),
+    if(filter.to!=null) 'to':filter.to!.toIso8601String().substring(0,10),
+  };
+  Future<void> load({bool more=false}) async {
+    if(more&&(busy||nextCursor==null))return;
+    final run=++generation,token=widget.accessToken()?.trim();
+    final cursor=more?nextCursor:null;
+    setState(() {busy=true;failed=[];if(!more){entries=[];nextCursor=null;}});
+    if(!same(token)){setState((){busy=false;failed=['Sign in again'];});return;}
+    try {
+      final response=await widget.dio.get<dynamic>(
+        '${widget.baseUrl.replaceFirst(RegExp(r'/$'),'')}/v1/wallet/msnw/activity',
+        queryParameters:{...query,'limit':'50',if(cursor!=null)'cursor':cursor},
+        options:Options(headers:{'Authorization':'Bearer $token','Cache-Control':'no-store'},
+          followRedirects:false,receiveTimeout:const Duration(seconds:15)));
+      final raw=response.data;
+      if(raw is! Map||raw['items'] is! List||(raw['items'] as List).length>50||
+        raw['nextCursor']!=null&&raw['nextCursor'] is! String)throw const FormatException('Invalid history page');
+      final values=(raw['items'] as List).map(parseWalletActivity).toList();
+      if(!same(token)||run!=generation)return;
+      setState(() {
+        entries={for(final e in [...(more?entries:<WalletTransaction>[]),...values])e.id:e}.values.toList();
+        nextCursor=raw['nextCursor'] as String?;busy=false;
+      });
+    } catch(_) {
+      if(!mounted||run!=generation)return;
+      setState((){busy=false;failed=['Transactions'];});
+    } finally {
+      if(mounted&&run==generation&&!same(token))setState((){busy=false;entries=[];nextCursor=null;failed=['Session changed'];});
     }
-    final byId = {for (final e in values) e.id: e};
-    final sorted = byId.values.toList()..sort((a,b) {
-      final order = (b.createdAt?.millisecondsSinceEpoch ?? -1).compareTo(a.createdAt?.millisecondsSinceEpoch ?? -1);
-      return order != 0 ? order : b.id.compareTo(a.id);
-    });
-    setState(() { entries = sorted; failed = errors..sort(); busy = false; });
   }
-  List<WalletTransaction> get visible => entries.where((e) => filter.matches(e) &&
-    e.searchable.contains(search.text.trim().toLowerCase())).toList();
+  void searched(String value) {
+    debounce?.cancel();
+    // Fence an older query immediately, including before the debounce fires.
+    generation++;
+    setState((){entries=[];nextCursor=null;busy=true;});
+    debounce=Timer(const Duration(milliseconds:300),load);
+  }
+  List<WalletTransaction> get visible=>entries;
   Future<void> filters() async {
     final next = await openWalletPage<WalletHistoryFilter>(context:context,title:'Filter transactions',
       builder: (_) => _FilterPage(initial:filter));
     if (mounted && next != null) setState(() => filter = next);
+    if(mounted && next!=null) await load();
   }
   @override Widget build(BuildContext context) {
     if (widget.currentUserId() != widget.expectedUserId) return const Center(child:Text('Sign in to view transactions'));
     final rows = visible;
     return Column(children:[
       Padding(padding:const EdgeInsets.fromLTRB(16,12,16,8),child:TextField(
-        controller:search,onChanged:(_)=>setState((){}),
+        controller:search,onChanged:searched,
         decoration:InputDecoration(hintText:'Search transactions',filled:true,
           fillColor:Theme.of(context).colorScheme.surfaceContainerLow,
           prefixIcon:const Icon(Icons.search),border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none)))),
@@ -199,18 +143,19 @@ class _HistoryState extends State<MsnwTransactionHistory> {
         const Spacer(),
         IconButton(tooltip:'Refresh transactions',onPressed:busy?null:load,icon:const Icon(Icons.refresh)),
         IconButton(tooltip:'Export transactions',onPressed:busy||rows.isEmpty?null:()=>openWalletPage<void>(context:context,title:'Export transactions',
-          builder:(_)=>_ExportPage(entries:List.unmodifiable(rows),failed:List.unmodifiable(failed),
-            authorized:()=>same(widget.accessToken()?.trim()))),icon:const Icon(Icons.ios_share)),
+          builder:(_)=>_ExportPage(dio:widget.dio,baseUrl:widget.baseUrl,query:Map.unmodifiable(query),
+            accessToken:widget.accessToken,authorized:()=>same(widget.accessToken()?.trim()))),icon:const Icon(Icons.ios_share)),
       ])),
       if (busy) const LinearProgressIndicator(minHeight:2),
       if (failed.isNotEmpty) Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
-        child:Text('Couldn’t load: ${failed.join(', ')}. Retry to refresh.',textAlign:TextAlign.center)),
+        child:const Text('Couldn’t refresh transactions. Check your connection and retry.',textAlign:TextAlign.center)),
       Expanded(child:rows.isEmpty ? Center(child:Padding(padding:const EdgeInsets.all(24),
-        child:Text(busy?'Loading transactions…':failed.length==paths.length?'Couldn’t load transactions. Check your connection and retry.':
+        child:Text(busy?'Loading transactions…':failed.isNotEmpty?'Couldn’t load transactions. Check your connection and retry.':
           entries.isEmpty?'No transactions yet':'No matching transactions',textAlign:TextAlign.center))) :
         ListView.builder(padding:const EdgeInsets.fromLTRB(8,0,8,24),itemCount:rows.length+1,itemBuilder:(context,index) {
-          if (index==rows.length) return const Padding(padding:EdgeInsets.all(16),child:Text(
-            'Recent records from each service. Older records may not be included.',textAlign:TextAlign.center,style:TextStyle(fontSize:12)));
+          if(index==rows.length)return Padding(padding:const EdgeInsets.all(16),child:nextCursor==null?
+            const Text('End of transactions',textAlign:TextAlign.center,style:TextStyle(fontSize:12)):
+            OutlinedButton(onPressed:busy?null:()=>load(more:true),child:const Text('Load more')));
           final e=rows[index];
           final day=e.createdAt?.toLocal();
           final previous=index==0?null:rows[index-1].createdAt?.toLocal();
@@ -275,7 +220,7 @@ class _FilterState extends State<_FilterPage> {
   }
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
     DropdownButtonFormField<String>(initialValue:category,decoration:const InputDecoration(labelText:'Transaction type'),
-      items:['All',..._HistoryState.paths.keys].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>category=v!)),
+      items:['All',..._HistoryState.categories].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>category=v!)),
     const SizedBox(height:20),
     DropdownButtonFormField<String>(initialValue:status,decoration:const InputDecoration(labelText:'Status'),
       items:['All','Completed','Pending','Failed'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>status=v!)),
@@ -286,26 +231,51 @@ class _FilterState extends State<_FilterPage> {
     TextButton(onPressed:()=>Navigator.pop(context,const WalletHistoryFilter()),child:const Text('Reset filters')),
   ]);
 }
-class _ExportPage extends StatelessWidget {
-  const _ExportPage({required this.entries,required this.failed,required this.authorized});
-  final List<WalletTransaction> entries;
-  final List<String> failed;
+class _ExportPage extends StatefulWidget {
+  const _ExportPage({required this.dio,required this.baseUrl,required this.query,
+    required this.accessToken,required this.authorized});
+  final Dio dio;
+  final String baseUrl;
+  final Map<String,String> query;
+  final String? Function() accessToken;
   final bool Function() authorized;
+  @override State<_ExportPage> createState()=>_ExportState();
+}
+class _ExportState extends State<_ExportPage> {
+  bool busy=false;
+  String format='csv';
+  String? error;
+  Future<void> share() async {
+    if(busy||!widget.authorized())return;
+    final token=widget.accessToken();
+    setState((){busy=true;error=null;});
+    try {
+      final response=await widget.dio.get<List<int>>(
+        '${widget.baseUrl.replaceFirst(RegExp(r'/$'),'')}/v1/wallet/msnw/activity/export',
+        queryParameters:{...widget.query,'format':format},
+        options:Options(headers:{'Authorization':'Bearer $token','Cache-Control':'no-store'},
+          responseType:ResponseType.bytes,followRedirects:false,receiveTimeout:const Duration(seconds:30)));
+      if(!mounted||!widget.authorized()||widget.accessToken()!=token)return;
+      final bytes=response.data;
+      if(bytes==null||bytes.isEmpty||bytes.length>8000000||
+        !response.headers.value('content-type').toString().startsWith(format=='csv'?'text/csv':'application/pdf'))throw const FormatException('Invalid statement');
+      await SharePlus.instance.share(ShareParams(files:[XFile.fromData(Uint8List.fromList(bytes),mimeType:format=='csv'?'text/csv':'application/pdf')],
+        fileNameOverrides:['masanawa-transactions.$format'],title:'Masanawa transactions'));
+    } catch(failure) {
+      if(mounted&&widget.authorized())setState(()=>error=failure is DioException&&failure.response?.statusCode==413?
+        'Too many transactions match this format. Choose a smaller date range.':'Couldn’t export transactions. Please retry.');
+    } finally {if(mounted)setState(()=>busy=false);}
+  }
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(24),children:[
     const Icon(Icons.description_outlined,size:48),const SizedBox(height:20),
-    Text('${entries.length} transactions',style:Theme.of(context).textTheme.titleLarge),
-    const SizedBox(height:12),const Text('CSV · exact amounts · UTC timestamps'),
-    const SizedBox(height:12),const Text('Includes the filtered records currently loaded from each service. This is a recent-activity export, not a full account statement.'),
-    if(failed.isNotEmpty)Text('Missing sources: ${failed.join(', ')}. Go back and retry before exporting.'),
-    const SizedBox(height:24),FilledButton.icon(onPressed:failed.isNotEmpty?null:()async{
-      if(!authorized())return;
-      final csv=walletTransactionsCsv(entries);
-      try {
-        await SharePlus.instance.share(ShareParams(files:[XFile.fromData(Uint8List.fromList(utf8.encode(csv)),mimeType:'text/csv')],
-          fileNameOverrides:['masanawa-transactions.csv'],title:'Masanawa transactions'));
-      } catch (_) {
-        if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Couldn’t export. Please retry.')));
-      }
-    },icon:const Icon(Icons.ios_share),label:const Text('Save or share CSV')),
+    Text('All matching transactions',style:Theme.of(context).textTheme.titleLarge),
+    const SizedBox(height:12),const Text('Exact amounts · UTC timestamps'),
+    const SizedBox(height:20),DropdownButtonFormField<String>(initialValue:format,decoration:const InputDecoration(labelText:'File format'),
+      items:const [DropdownMenuItem(value:'csv',child:Text('CSV spreadsheet')),DropdownMenuItem(value:'pdf',child:Text('PDF statement'))],
+      onChanged:busy?null:(value)=>setState(()=>format=value!)),
+    const SizedBox(height:12),const Text('Includes every transaction matching your filters, including pages you haven’t loaded. Up to 10,000 records in CSV or 1,000 in PDF. Use a date range for larger histories.'),
+    const SizedBox(height:24),if(error!=null)Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
+    if(busy)const LinearProgressIndicator(),
+    FilledButton.icon(onPressed:busy?null:share,icon:const Icon(Icons.ios_share),label:const Text('Save or share statement')),
   ]);
 }

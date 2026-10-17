@@ -1,3 +1,4 @@
+import { WalletActivityError } from './wallet_activity.js';
 import type { FastifyInstance } from "fastify";
 import type { MsnBalanceAuthority } from "./routes.js";
 import { MsnwCustodyError, createMsnwCustodyService } from "./custody_send.js";
@@ -21,7 +22,7 @@ export function registerMsnwCustodyRoutes(
     }
   }
   function failed(reply: { code(value: number): unknown }, error: unknown) {
-    const mapped = error instanceof MsnwCustodyError
+    const mapped = error instanceof MsnwCustodyError || error instanceof WalletActivityError
       ? error : new MsnwCustodyError("msnw.custody_unavailable");
     reply.code(mapped.statusCode);
     return { error: mapped.code };
@@ -33,6 +34,28 @@ export function registerMsnwCustodyRoutes(
   app.get("/v1/wallet/msnw/transactions", async (request, reply) => {
     try { return { items: await input.ledger.history(await owner(request.headers.authorization)) }; }
     catch (error) { return failed(reply,error); }
+  });
+  app.get('/v1/wallet/msnw/activity', async (request, reply) => {
+    reply.header('Cache-Control','private, no-store');
+    try {
+      return await input.ledger.activity.list(await owner(request.headers.authorization),
+        request.query as Record<string,unknown>);
+    } catch(error) {return failed(reply,error);}
+  });
+  app.get('/v1/wallet/msnw/activity/export', async (request, reply) => {
+    reply.header('Cache-Control','private, no-store');
+    try {
+      const identity=await owner(request.headers.authorization);
+      const {format='csv',...query}=request.query as Record<string,unknown>;
+      if(format!=='csv'&&format!=='pdf')throw new WalletActivityError('wallet.export_format_invalid');
+      const result=format==='csv'?await input.ledger.activity.exportCsv(identity,query):
+        await input.ledger.activity.exportPdf(identity,query);
+      reply.header('Content-Type',format==='csv'?'text/csv; charset=utf-8':'application/pdf');
+      reply.header('Content-Disposition',`attachment; filename="masanawa-transactions.${format}"`);
+      reply.header('X-Statement-Rows',String(result.count));
+      reply.header('X-Statement-Snapshot',result.snapshot);
+      return 'csv' in result?result.csv:result.pdf;
+    } catch(error) {return failed(reply,error);}
   });
   app.post("/v1/wallet/msnw/send/preview", {
     bodyLimit: 1024,
@@ -63,3 +86,4 @@ export function registerMsnwCustodyRoutes(
     } catch (error) { return failed(reply,error); }
   });
 }
+
