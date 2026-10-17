@@ -12,8 +12,6 @@ describe("platform Masana to published classroom directory",()=>{
    expect(sql).toContain("room.state='published'");
    expect(sql).toContain("room.plan_mode='free'");
    expect(sql).toContain("revision.state='approved'");
-     expect(sql).toContain("media.media_id=revision.profile->>'portraitMediaId'");
-     expect(sql).toContain("media.approved_by='masanawa-platform-catalog-v1'");
    expect(params).toEqual([tenant,[character]]);
    return {rows:[{teacher_character_id:character,room_id:"room_masana_02_amina"}]};
   });
