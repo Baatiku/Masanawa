@@ -8,7 +8,7 @@ import 'feed_post_detail_screen.dart';
 class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
     this.onMasanaProfile,this.onOpenMedia,this.onReport,this.enabled=true,
-    this.audioPlaybackAvailable=false});
+    this.audioPlaybackAvailable=false,this.authorScoped=false});
   final FeedApi api;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile;
@@ -16,6 +16,8 @@ class MasanaFeedScreen extends StatefulWidget {
   final ValueChanged<String>? onReport;
   final bool enabled;
   final bool audioPlaybackAvailable;
+  /// A dedicated professional feed has one author, not global ranking modes.
+  final bool authorScoped;
   @override State<MasanaFeedScreen> createState()=>_MasanaFeedScreenState();
 }
 class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
@@ -119,7 +121,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override Widget build(BuildContext context){
     if(!widget.enabled)return Center(child:Text(t('Status is currently unavailable','Ba a samun labarai a yanzu')));
     return Column(children:[
-      Row(children:[
+      if(!widget.authorScoped) Row(children:[
         Expanded(child:ChoiceChip(label:Text(t('For You','Domin Kai')),selected:mode=='for_you',onSelected:(_){setState((){mode='for_you';items=[];cursor=null;});refresh();})),
         const SizedBox(width:8),
         Expanded(child:ChoiceChip(label:Text(t('Following','Wadanda nake bi')),selected:mode=='following',onSelected:(_){setState((){mode='following';items=[];cursor=null;});refresh();})),

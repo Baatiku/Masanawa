@@ -82,5 +82,19 @@ describe("J06 Masana-only Feed",()=>{
   expect(db.comments).not.toHaveBeenCalled();
  });
 
+ it("filters a professional feed by exact canonical ID and preserves cursor semantics",async()=>{
+   const db=mock(),service=new FeedService(db,async()=>true);
+   const result=await service.list("tenant","fan","for_you",undefined,"character_masana_Amina");
+   expect(result.items).toHaveLength(1);
+   expect(db.list).toHaveBeenCalledWith(
+     "tenant","fan","for_you",null,21,"character_masana_Amina");
+ });
+ it("rejects invalid author IDs before repository access",async()=>{
+   const db=mock(),service=new FeedService(db,async()=>true);
+   await expect(service.list("tenant","fan","for_you",undefined,"../someone"))
+     .rejects.toMatchObject({status:422,code:"invalid_id"});
+   expect(db.list).not.toHaveBeenCalled();
+ });
+
 });
 

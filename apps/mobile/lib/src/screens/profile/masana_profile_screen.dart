@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../theme/masanawa_theme.dart';
+import 'masana_status_posts_screen.dart';
 
 /// All actions use the canonical server Character ID; the visual portrait
 /// and Room link are approved projections, never display-name-derived routes.
@@ -121,10 +122,17 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                     : Icon(_following ? Icons.check : Icons.person_add_alt_outlined),
                 label: Text(_following ? 'Following' : 'Follow'),
               ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.article_outlined),
+                label: const Text('Status posts'),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => MasanaStatusPostsScreen(agent: agent),
+                )),
+              ),
               if (agent.roomId != null)
                 OutlinedButton.icon(
                   icon: const Icon(Icons.groups_outlined),
-                  label: const Text('Open Room'),
+                  label: const Text('Room & lessons'),
                   onPressed: () => context.push(
                     '/rooms/${Uri.encodeComponent(agent.roomId!)}'),
                 ),

@@ -1,7 +1,7 @@
 import type {FastifyInstance,FastifyRequest} from "fastify";
 type Actor={kind:"fan"|"staff"|"masana";tenantId:string;id:string;permissions?:readonly string[];approved?:boolean};
 type FeedPort={
- list(t:string,v:string|null,m:"for_you"|"following",c?:string):Promise<unknown>;
+ list(t:string,v:string|null,m:"for_you"|"following",c?:string,authorMasanaId?:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
@@ -31,7 +31,13 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
  app.get("/v1/feed",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),mode=q.mode===undefined?"for_you":str(q.mode);
   if(mode!=="for_you"&&mode!=="following")throw Object.assign(new Error("invalid_mode"),{status:422,code:"invalid_mode"});
-  return o.service.list(tenant,viewer,mode,str(q.cursor)||undefined);
+  // The server checks author ownership and published visibility in the same
+  // tenant-scoped read. A client query never authorizes unpublished content.
+  const author=q.authorMasanaId;
+  if(author!==undefined&&(typeof author!=="string"||author.length>128))
+    return rep.code(422).send({code:"invalid_author"});
+  return o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
+    typeof author==="string"?author:undefined);
  }));
  app.get("/v1/posts/:id",async(req,rep)=>run(req,rep,async({tenant,viewer})=>o.service.detail(tenant,viewer,str(object(req.params).id))));
  app.get("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
