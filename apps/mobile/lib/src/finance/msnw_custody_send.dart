@@ -1,3 +1,4 @@
+import 'wallet_flow_page.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -119,14 +120,13 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     final token = widget.accessToken()?.trim();
     if (busy || current == null || idempotencyKey == null ||
         token == null || token.isEmpty || !sameSession(token)) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
+    final confirmed = await openWalletPage<bool>(
+      context: context, title: 'Review transfer',
+      builder: (ctx) => WalletReviewContent(
         title: const Text('Confirm MSNW transfer'),
         content: Text('Send ' + quantity.text.trim() + ' MSNW to ' +
           (current['recipientName'] as String) +
-          '? This transfers already-backed platform custody tokens. '
-          'No legacy Credits or pending bank payment will be charged.'),
+          '? Check the recipient carefully. Completed transfers cannot be reversed.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel')),
@@ -176,9 +176,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       children: [
         Text('Send MSNW', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const Text('Transfers use confirmed platform-custodied MSNW only. '
-          'External on-chain MSNW holdings cannot be spent here until deposited '
-          'and settled with the platform.'),
+        const Text('Send MSNW to another Masanawa user.'),
         const SizedBox(height: 10),
         TextField(controller: recipient, enabled: !busy && receipt == null,
           keyboardType: TextInputType.emailAddress,
@@ -314,3 +312,4 @@ class _MsnwCustodyActivityState extends State<MsnwCustodyActivity> {
     ],
   );
 }
+

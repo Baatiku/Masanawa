@@ -1,3 +1,4 @@
+import '../../finance/wallet_flow_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/billing_models.dart';
@@ -261,8 +262,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       return;
     }
     final expected = session.user.id;
-    await showModalBottomSheet<void>(
-      context: context, isScrollControlled: true, showDragHandle: true,
+    await openWalletPage<void>(
+      context: context,
       builder: (sheet) => MsnwBillingCheckoutSheet(
         api: api, dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         categoryCode: chosenCategory.code,
@@ -289,10 +290,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       return;
     }
     final expected = session.user.id;
-    showModalBottomSheet<void>(
+    openWalletPage<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (_) => MsnwPaystackFundingSheet(
         dio: ref.read(dioProvider),
         baseUrl: kApiBaseUrl,
@@ -642,3 +641,4 @@ class _BundleCard extends StatelessWidget {
     );
   }
 }
+

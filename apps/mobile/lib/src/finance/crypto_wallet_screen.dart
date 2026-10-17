@@ -1,3 +1,4 @@
+import 'wallet_flow_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,10 +81,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       return;
     }
 
-    final input = await showModalBottomSheet<_BuyInput>(
+    final input = await openWalletPage<_BuyInput>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (_) => _BuySheet(
         fiatCurrencies: capabilities.fiatCurrencies,
         settlementAsset: settlement,
@@ -119,9 +118,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         );
         return;
       }
-      final checkStatus = await showDialog<bool>(
+      final checkStatus = await openWalletPage<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => WalletReviewContent(
           scrollable: true,
           title: const Text('Checkout opened'),
           content: Text(
@@ -164,10 +163,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
   ) async {
     final route = wallet.selectedRoute;
     if (route == null) return;
-    final input = await showModalBottomSheet<_ReceiveInput>(
+    final input = await openWalletPage<_ReceiveInput>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (_) => _ReceiveSheet(route: route),
     );
     if (input == null || !context.mounted) return;
@@ -180,7 +177,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
             amount: input.amount,
           );
       if (!context.mounted) return;
-      await showDialog<void>(
+      await openWalletPage<void>(
         context: context,
         builder: (_) => _DepositDialog(intent: intent),
       );
@@ -203,10 +200,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       _message(context, 'No conversion destination is available right now.');
       return;
     }
-    final input = await showModalBottomSheet<_ConvertInput>(
+    final input = await openWalletPage<_ConvertInput>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (_) => _ConvertSheet(source: source, targets: targets),
     );
     if (input == null || !context.mounted) return;
@@ -219,9 +214,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         amount: input.amount,
       );
       if (!context.mounted) return;
-      final confirmed = await showDialog<bool>(
+      final confirmed = await openWalletPage<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => WalletReviewContent(
           scrollable: true,
           title: const Text('Confirm conversion'),
           content: Column(
@@ -284,10 +279,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
   ) async {
     final route = wallet.selectedRoute;
     if (route == null || !wallet.capabilities.withdrawals) return;
-    final input = await showModalBottomSheet<_WithdrawInput>(
+    final input = await openWalletPage<_WithdrawInput>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (_) => _WithdrawSheet(route: route),
     );
     if (input == null || !context.mounted) return;
@@ -300,9 +293,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         destinationAddress: input.address,
       );
       if (!context.mounted) return;
-      final confirmed = await showDialog<bool>(
+      final confirmed = await openWalletPage<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => WalletReviewContent(
           scrollable: true,
           title: const Text('Confirm withdrawal'),
           content: Column(
@@ -715,7 +708,7 @@ class _HistoryTile extends StatelessWidget {
               padding: EdgeInsets.zero,
               alignment: AlignmentDirectional.centerStart,
             ),
-            onPressed: () => showDialog<void>(
+            onPressed: () => openWalletPage<void>(
               context: context,
               builder: (_) => _IntentDetails(intent: intent),
             ),
@@ -759,7 +752,7 @@ class _IntentDetails extends StatelessWidget {
   const _IntentDetails({required this.intent});
   final CryptoIntent intent;
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => WalletReviewContent(
     scrollable: true,
     title: const Text('Transaction details'),
     content: Column(
@@ -880,7 +873,7 @@ class _DepositDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final address = intent.payAddress;
     final amount = intent.providerPayAmount ?? intent.amount;
-    return AlertDialog(
+    return WalletReviewContent(
       scrollable: true,
       title: const Text('Receive crypto'),
       content: Column(
@@ -1257,3 +1250,4 @@ class _WithdrawInput {
   final String amount;
   final String address;
 }
+

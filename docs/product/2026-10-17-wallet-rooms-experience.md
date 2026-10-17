@@ -149,3 +149,18 @@ Avoid repeated broad audits, repeated document variants, new infrastructure and 
 OPay's official site emphasizes funding, transfers and bill payments; its publisher app listing explicitly highlights transaction history and airtime/data purchasing. Adopt short, task-focused flows and discoverable history, not unrelated loans/cards/rewards or a copied visual design. These sources do not establish Masanawa provider readiness or prove OPay's current screen layout:
 - https://opayweb.com/
 - https://play.google.com/store/apps/details?id=team.opay.pay&gl=NG&hl=en
+
+## Implementation checkpoint — Wallet milestone 1, 17 October 2026
+
+Owner authorized execution after reviewing the plan. This batch implements the Wallet home and dedicated financial navigation:
+
+- Main card reads `/v1/wallet/msnw/custody`, the same available/reserved MSNW authority used by Send. Confirmed zero displays `0 MSNW` and Fund; failed/unknown reads show a dash and Retry. Includes visibility toggle, last-refresh time, reserved amount only when positive, account and stale-response fencing. Assets view makes one balance request rather than fetching four activity panels.
+- Fund lives on the card; Send / Convert / Receive / P2P share a single row. My assets / Transactions are persistent page choices. Data, airtime, electricity and TV use asset-style rows; duplicate Services/Crypto chips are removed.
+- MSNW Send/Convert/Fund/Receive, crypto input/review/deposit/details, P2P bank/offer/order confirmations and Data Bundles/bill checkout/funding use normal full pages. Existing quote binding, explicit confirmation, canonical operations, idempotency and escrow safeguards remain. Financial routes hide their contents on sign-out/account change.
+- Transactions tab and dedicated history screen merge the six existing authenticated recent-history sources chronologically with deterministic ties and date groups. Includes search, type/status/UTC-date filters, individual details, copy reference and exact-value CSV sharing. Partial source failures remain visible and disable export; original historical Cr records retain their denomination.
+
+**History is not yet the complete statement milestone.** Existing APIs cap each source; the UI and CSV export explicitly say recent activity. Full server cursor pagination, complete-range export/PDF, bill/call/Room correlation and normalized status reconciliation remain open under milestone 2. No claim that recent records exhaust all platform transactions. No balance migration, on-chain deployment, money-provider activation or new ledger was introduced.
+
+Executed checks: 19 focused Flutter tests covering verified zero versus error, precision, account-switch fencing, 320px actions, integrated Wallet-to-history navigation, logout protection, full-page review/Back, explicit single Send execution, legacy denominations, filter/CSV safety, partial history errors, crypto contracts, P2P presentation and Send amount parsing. Scoped analysis has no errors; existing unused crypto notice warning and style diagnostics remain. Native share sheet, installed Android/provider execution and APK packaging are not certified by widget tests.
+
+Next implementation: finish milestone 2 server-backed full history/statement contract, then the existing contacts/memory, Rooms and dual-track recording milestones. No additional planning approval is required; owner has authorized execution.

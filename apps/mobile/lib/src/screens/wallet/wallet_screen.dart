@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
-import '../../finance/msn_balance_card.dart';
 import '../../finance/msn_balance_transport.dart';
+import '../../finance/msnw_wallet_home.dart';
+import '../../finance/msnw_transaction_history.dart';
+import '../../finance/wallet_flow_page.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
-import '../../finance/msnw_verified_funding_activity.dart';
 import '../../finance/msnw_custody_send.dart';
 import '../../finance/msnw_stablecoin_convert.dart';
-import '../../finance/msnw_stablecoin_history.dart';
 import '../../finance/msnw_p2p_screen.dart';
-import '../../finance/msnw_p2p_activity.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
@@ -83,15 +83,17 @@ class WalletScreen extends ConsumerStatefulWidget {
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   bool _crypto = false;
+  int _tab = 0;
   int _custodyRefresh = 0;
 
   Future<void> _sendMsnw() async {
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn) return;
     final expected = session.user.id;
-    await showModalBottomSheet<void>(
-      context: context, isScrollControlled: true, showDragHandle: true,
-      builder: (_) => MsnwCustodySendSheet(
+    await openWalletPage<void>(
+      context: context, 
+      title: 'Send MSNW',
+      builder: (_) => _AccountWalletPage(accountId: expected, child: MsnwCustodySendSheet(
         dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         expectedUserId: expected,
         currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -99,7 +101,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
         onCompleted: () { if (mounted) setState(() => _custodyRefresh++); },
-      ),
+      )),
     );
   }
 
@@ -107,9 +109,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn) return;
     final expected = session.user.id;
-    await showModalBottomSheet<void>(
-      context: context, isScrollControlled: true, showDragHandle: true,
-      builder: (_) => MsnwStablecoinConvertSheet(
+    await openWalletPage<void>(
+      context: context, 
+      title: 'Convert MSNW',
+      builder: (_) => _AccountWalletPage(accountId: expected, child: MsnwStablecoinConvertSheet(
         dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         expectedUserId: expected,
         currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -117,7 +120,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
         onCompleted: () { if (mounted) setState(() => _custodyRefresh++); },
-      ),
+      )),
     );
   }
 
@@ -156,18 +159,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       return;
     }
     final session = ref.read(sessionProvider);
-    if (!widget.walletPaystackDvaEnabled || session is! SessionSignedIn) {
+    if (session is! SessionSignedIn) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('MSNW funding is not available yet.'),
       ));
       return;
     }
     final userId = session.user.id;
-    await showModalBottomSheet<void>(
+    await openWalletPage<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => MsnwPaystackFundingSheet(
+      title: 'Fund wallet',
+      builder: (_) => _AccountWalletPage(accountId: userId, child: MsnwPaystackFundingSheet(
         dio: ref.read(dioProvider),
         baseUrl: kApiBaseUrl,
         expectedUserId: userId,
@@ -176,70 +178,30 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           _ => null,
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
-      ),
+      )),
     );
+    if (mounted) setState(() => _custodyRefresh++);
   }
 
   Future<void> _receive() async {
     final session = ref.read(sessionProvider);
-    if (!widget.walletMsnBalanceEnabled || session is! SessionSignedIn) return;
-    final expectedUserId = session.user.id;
-    MsnBalance wallet;
-    try {
-      wallet = await GatewayMsnBalanceTransport(
-        dio: ref.read(dioProvider),
-        baseUrl: kApiBaseUrl,
-        readAccessToken: () => ref.read(apiClientProvider).accessToken,
-      ).read();
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Verified MSNW receive address unavailable.')),
-      );
-      return;
-    }
-    if (!mounted) return;
-    final active = ref.read(sessionProvider);
-    if (active is! SessionSignedIn || active.user.id != expectedUserId) return;
-    final address = wallet.receiveAddress;
-    if (address == null || wallet.chainId == null || wallet.tokenContract == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('MSNW deposit address is not yet verified.')),
-      );
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Receive MSNW', style: Theme.of(ctx).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text('Chain ID: ${wallet.chainId}'),
-            Text('Verified token: ${wallet.tokenContract}'),
-            const SizedBox(height: 8),
-            const Text('Only send MSNW on the shown blockchain to this '
-              'verified address. Other assets or networks may be lost.'),
-            const SizedBox(height: 16),
-            SelectableText(address),
-            OutlinedButton.icon(
-              onPressed: () {
-                final current = ref.read(sessionProvider);
-                if (current is SessionSignedIn &&
-                    current.user.id == expectedUserId) {
-                  Clipboard.setData(ClipboardData(text: address));
-                }
-              },
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy verified address'),
-            ),
-          ]),
-      )),
-    );
+    if (session is! SessionSignedIn) return;
+    final expected = session.user.id;
+    await openWalletPage<void>(context: context, title: 'Receive MSNW',
+      builder: (_) => _AccountWalletPage(accountId: expected,
+        child: _ReceiveMsnwPage(transport: GatewayMsnBalanceTransport(
+          dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
+          readAccessToken: () => ref.read(apiClientProvider).accessToken))));
   }
+
+  Widget _history(String accountId) => _AccountWalletPage(accountId: accountId,
+    child: MsnwTransactionHistory(
+      key: ValueKey('history-$accountId-$_custodyRefresh'),
+      dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
+      expectedUserId: accountId,
+      currentUserId: () => switch (ref.read(sessionProvider)) {
+        SessionSignedIn(:final user) => user.id, _ => null,
+      }, accessToken: () => ref.read(apiClientProvider).accessToken));
 
   @override Widget build(BuildContext context) {
     final u = context.masanawa;
@@ -265,180 +227,106 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     return Scaffold(
       backgroundColor: u.surfaceCard,
       appBar: widget.embeddedInShell ? null : masanawaMainHeader(context),
-      body: ListView(
+      body: Column(children: [
+        Expanded(child: _tab == 0 ? ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-          children: [
-            if (widget.walletMsnBalanceEnabled && accountId != null)
-              MsnBalanceCard(
-                sessionIdentity: accountId,
-                transport: GatewayMsnBalanceTransport(
-                  dio: ref.watch(dioProvider),
-                  baseUrl: kApiBaseUrl,
-                  readAccessToken: () => ref.read(apiClientProvider).accessToken))
-            else _MsnHero(signedIn: accountId != null),
-            const SizedBox(height: 22),
-            Wrap(alignment: WrapAlignment.spaceBetween,
-              spacing: 12, runSpacing: 16, children: [
-              _WalletShortcut(label: 'Send', icon: Icons.north_east,
-                onTap: accountId != null ? _sendMsnw : null),
-              _WalletShortcut(label: 'Convert', icon: Icons.swap_horiz,
-                onTap: accountId != null ? _convertMsnw : null),
-              _WalletShortcut(label: 'Fund', icon: Icons.add,
-                onTap: _fund),
-              _WalletShortcut(label: 'Receive', icon: Icons.south_west,
-                onTap: widget.walletMsnBalanceEnabled ? _receive : null),
-              _WalletShortcut(label: 'P2P', icon: Icons.people_alt_outlined,
-                onTap: accountId != null ? _openP2p : null),
-            ]),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
+            MsnwWalletBalanceCard(
+              dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,
+              accountId: accountId, refreshKey: _custodyRefresh,
+              currentUserId: () => switch (ref.read(sessionProvider)) {
+                SessionSignedIn(:final user) => user.id, _ => null,
+              }, accessToken: () => ref.read(apiClientProvider).accessToken,
+              onFund: _fund),
             const SizedBox(height: 24),
-            _WalletSection(label: 'My assets', action: 'View crypto',
-              onTap: openCrypto),
-            const SizedBox(height: 8),
-            Card(
-              color: u.surfaceCard, margin: EdgeInsets.zero,
-              child: Column(children: [
-                const ListTile(
-                  leading: CircleAvatar(child: Text('M')),
-                  title: Text('MSNW', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('Masanawa wallet token')),
-                Divider(height: 1, color: u.structuralBorder),
-                ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.currency_bitcoin)),
-                  title: const Text('Crypto assets', style: TextStyle(
-                    fontWeight: FontWeight.w700)),
-                  subtitle: const Text('All supported networks'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: openCrypto),
-
-              ]),
-            ),
-            const SizedBox(height: 22),
-            const _WalletSection(label: 'Services'),
-            const SizedBox(height: 8),
-            WalletServiceShortcuts(
-              onOpenCrypto: openCrypto,
-              onBuyBills: widget.onBuyBills,
+            WalletActionRow(onSend: accountId == null ? null : _sendMsnw,
+              onConvert: accountId == null ? null : _convertMsnw,
+              onReceive: accountId == null ? null : _receive,
+              onP2p: accountId == null ? null : _openP2p),
+            const SizedBox(height: 24),
+            _tabs(),
+            const SizedBox(height: 12),
+            ListTile(contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(backgroundColor: u.brand.withValues(alpha: .10),
+                child: Text('M', style: TextStyle(color: u.brandStrong, fontWeight: FontWeight.w800))),
+              title: const Text('MSNW', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Masanawa'),
+              trailing: const Icon(Icons.chevron_right), onTap: _receive),
+            Divider(height: 1, color: u.structuralBorder),
+            ListTile(contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(backgroundColor: u.surfaceMuted,
+                child: Icon(Icons.currency_bitcoin, color: u.textPrimary)),
+              title: const Text('Crypto assets', style: TextStyle(fontWeight: FontWeight.w700)),
+              trailing: const Icon(Icons.chevron_right), onTap: openCrypto),
+            const SizedBox(height: 12),
+            WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
               onOpenBillingService: widget.onOpenBillingService),
-            const SizedBox(height: 24),
-            const _WalletSection(label: 'Recent activity'),
-            if (kWalletVerifiedFundingActivityEnabled && accountId != null)
-              MsnwVerifiedFundingActivity(
-                sessionIdentity: accountId,
-                dio: ref.watch(dioProvider),
-                baseUrl: kApiBaseUrl,
-                currentUserId: () => switch (ref.read(sessionProvider)) {
-                  SessionSignedIn(:final user) => user.id,
-                  _ => null,
-                },
-                accessToken: () => ref.read(apiClientProvider).accessToken,
-              )
-            else
-              const ListTile(title: Text('MSNW history unavailable')),
-            if (accountId != null)
-              MsnwCustodyActivity(
-                key: ValueKey('msnw-custody-$accountId-$_custodyRefresh'),
-                dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,
-                expectedUserId: accountId,
-                currentUserId: () => switch (ref.read(sessionProvider)) {
-                  SessionSignedIn(:final user) => user.id, _ => null,
-                },
-                accessToken: () => ref.read(apiClientProvider).accessToken,
-              ),
-            if (accountId != null)
-              MsnwStablecoinHistory(
-                key: ValueKey('msnw-stable-history-$accountId-$_custodyRefresh'),
-                dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,
-                expectedUserId: accountId,
-                currentUserId: () => switch (ref.read(sessionProvider)) {
-                  SessionSignedIn(:final user) => user.id, _ => null,
-                },
-                accessToken: () => ref.read(apiClientProvider).accessToken,
-              ),
-            if (accountId != null)
-              MsnwP2pActivity(
-                dio: ref.watch(dioProvider),
-                baseUrl: kApiBaseUrl,
-                expectedUserId: accountId,
-                currentUserId: () => switch (ref.read(sessionProvider)) {
-                  SessionSignedIn(:final user) => user.id,
-                  _ => null,
-                },
-                accessToken: () => ref.read(apiClientProvider).accessToken,
-                onOpenP2p: _openP2p,
-              ),
-          ],
-      ),
-    );
-  }
-}
-
-class _MsnHero extends StatelessWidget {
-  const _MsnHero({required this.signedIn});
-  final bool signedIn;
-  @override Widget build(BuildContext context) {
-    final u = context.masanawa;
-    return Container(
-      constraints: const BoxConstraints(minHeight: 156),
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: u.brand, borderRadius: BorderRadius.circular(22)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.account_balance_wallet_outlined, color: Colors.white),
-          SizedBox(width: 10),
-          Text('MSNW balance', style: TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
-        ]),
-        const SizedBox(height: 22),
-        const Text('— MSNW', style: TextStyle(
-          color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
-        Text(signedIn ? 'Balance unavailable' : 'Sign in to view balance',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.86))),
+          ]) : Column(children: [
+            Padding(padding: const EdgeInsets.symmetric(horizontal:16), child:_tabs()),
+            if(accountId != null) ...[
+              Align(alignment:Alignment.centerRight,child:TextButton.icon(
+                onPressed:()=>openWalletPage<void>(context:context,title:'Transaction history',builder:(_)=>_history(accountId)),
+                icon:const Icon(Icons.open_in_full,size:18),label:const Text('View all transactions'))),
+              Expanded(child:_history(accountId)),
+            ]
+            else const Expanded(child:Center(child:Text('Sign in to view transactions'))),
+          ])),
       ]),
     );
   }
+
+  Widget _tabs() => Row(children: [
+    for (final item in [(0, 'My assets'), (1, 'Transactions')])
+      Expanded(child:TextButton(
+        style:TextButton.styleFrom(
+          foregroundColor: _tab == item.$1 ? context.masanawa.brandStrong : context.masanawa.textMuted,
+          backgroundColor: _tab == item.$1 ? context.masanawa.brand.withValues(alpha:.08) : null,
+          shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
+        onPressed:()=>setState(()=>_tab=item.$1),child:Text(item.$2))),
+  ]);
 }
 
-class _WalletShortcut extends StatelessWidget {
-  const _WalletShortcut({required this.label, required this.icon, required this.onTap});
-  final String label;
-  final IconData icon;
-  final VoidCallback? onTap;
-  @override Widget build(BuildContext context) {
-    final u = context.masanawa;
-    return Column(children: [
-      SizedBox.square(dimension: 62, child: FilledButton(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          padding: EdgeInsets.zero,
-          backgroundColor: u.brand.withValues(alpha: 0.10),
-          foregroundColor: u.brand,
-          disabledBackgroundColor: u.surfaceBg,
-          disabledForegroundColor: u.textMuted,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(17))),
-        child: Icon(icon, size: 24),
-      )),
-      const SizedBox(height: 7),
-      Text(label, style: const TextStyle(fontSize: 12,
-        fontWeight: FontWeight.w600)),
-    ]);
+class _AccountWalletPage extends ConsumerWidget {
+  const _AccountWalletPage({required this.accountId, required this.child});
+  final String accountId;
+  final Widget child;
+  @override Widget build(BuildContext context, WidgetRef ref) {
+    final session=ref.watch(sessionProvider);
+    return session is SessionSignedIn && session.user.id == accountId
+      ? child : const Center(child:Text('Sign in again to continue'));
   }
 }
 
-class _WalletSection extends StatelessWidget {
-  const _WalletSection({required this.label, this.action, this.onTap});
-  final String label;
-  final String? action;
-  final VoidCallback? onTap;
-  @override Widget build(BuildContext context) => Row(children: [
-    Expanded(child: Text(label, style: const TextStyle(
-      fontSize: 17, fontWeight: FontWeight.w700))),
-    if (action != null) TextButton(
-      onPressed: onTap, child: Text(action!,
-        style: const TextStyle(fontSize: 12))),
-  ]);
+class _ReceiveMsnwPage extends StatefulWidget {
+  const _ReceiveMsnwPage({required this.transport});
+  final MsnBalanceTransport transport;
+  @override State<_ReceiveMsnwPage> createState()=>_ReceiveMsnwState();
+}
+class _ReceiveMsnwState extends State<_ReceiveMsnwPage> {
+  late Future<MsnBalance> future=widget.transport.read();
+  @override Widget build(BuildContext context)=>FutureBuilder<MsnBalance>(future:future,builder:(context,snapshot){
+    if(snapshot.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());
+    final value=snapshot.data;
+    if(value==null||value.receiveAddress==null||value.chainId==null||value.tokenContract==null) {
+      return Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[
+        const Icon(Icons.account_balance_wallet_outlined,size:48),const SizedBox(height:16),
+        const Text('Verified deposit address unavailable',textAlign:TextAlign.center),const SizedBox(height:12),
+        FilledButton(onPressed:()=>setState(()=>future=widget.transport.read()),child:const Text('Retry')),
+      ])));
+    }
+    return ListView(padding:const EdgeInsets.all(24),children:[
+      const Icon(Icons.south_west,size:48),const SizedBox(height:24),
+      Text('MSNW',style:Theme.of(context).textTheme.headlineMedium),const SizedBox(height:16),
+      Text('Chain ID: ${value.chainId}'),const SizedBox(height:8),
+      SelectableText('Token: ${value.tokenContract}'),const SizedBox(height:24),
+      SelectableText(value.receiveAddress!),const SizedBox(height:16),
+      FilledButton.icon(onPressed:()async{
+        await Clipboard.setData(ClipboardData(text:value.receiveAddress!));
+        if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Address copied')));
+      },icon:const Icon(Icons.copy),label:const Text('Copy address')),
+      const SizedBox(height:24),const Text('Only send MSNW on this verified network. Other assets or networks may be lost.'),
+    ]);
+  });
 }
 
 /// Shared service links remain navigation-only until the private durable
@@ -457,48 +345,23 @@ class WalletServiceShortcuts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final billing = onOpenBillingService;
-    if (onOpenCrypto == null && onBuyBills == null && billing == null) {
-      return const SizedBox.shrink();
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        if (onOpenCrypto != null)
-          ActionChip(
-            avatar: const Icon(Icons.currency_bitcoin, size: 18),
-            label: const Text('Crypto'),
-            onPressed: onOpenCrypto,
-          ),
-        if (billing != null) ...[
-          ActionChip(
-            avatar: const Icon(Icons.bolt, size: 16),
-            label: const Text('Data bundles'),
-            onPressed: () => billing('data'),
-          ),
-          ActionChip(
-            avatar: const Icon(Icons.phone_android, size: 16),
-            label: const Text('Airtime'),
-            onPressed: () => billing('airtime'),
-          ),
-          ActionChip(
-            avatar: const Icon(Icons.electric_bolt_outlined, size: 16),
-            label: const Text('Electricity'),
-            onPressed: () => billing('electricity'),
-          ),
-          ActionChip(
-            avatar: const Icon(Icons.live_tv_outlined, size: 16),
-            label: const Text('TV / Cable'),
-            onPressed: () => billing('tv'),
-          ),
-        ] else if (onBuyBills != null)
-          ActionChip(
-            avatar: const Icon(Icons.bolt, size: 16),
-            label: const Text('Data bundles'),
-            onPressed: onBuyBills,
-          ),
+    final billing = onOpenBillingService ?? (String service) => context.push('/billing?service=$service');
+    return Column(children: [
+      ...[
+        for (final service in [
+          ('data', 'Data bundles', Icons.bolt_outlined),
+          ('airtime', 'Airtime', Icons.phone_android),
+          ('electricity', 'Electricity', Icons.electric_bolt_outlined),
+          ('tv', 'TV', Icons.live_tv_outlined),
+        ]) ...[
+          Divider(height:1,color:context.masanawa.structuralBorder),
+          ListTile(contentPadding:EdgeInsets.zero,
+            leading:CircleAvatar(backgroundColor:context.masanawa.surfaceMuted,
+              child:Icon(service.$3,color:context.masanawa.textPrimary)),
+            title:Text(service.$2,style:const TextStyle(fontWeight:FontWeight.w600)),
+            trailing:const Icon(Icons.chevron_right),onTap:()=>billing(service.$1)),
+        ],
       ],
-    );
+    ]);
   }
 }
