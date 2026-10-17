@@ -1,3 +1,4 @@
+import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import { MASANA_VOICE_ASSIGNMENTS } from "./masana_voice_catalog.js";
 import type {
   AgentPresentation, AgentPresentationRepository,
@@ -26,6 +27,7 @@ export const PROFESSIONAL_MASANA_CATALOG:readonly ProfessionalMasanaSeed[] =
  Object.freeze(rows.map((r,index):ProfessionalMasanaSeed=>{
    const [key,displayName,roleLabel,roomName,expertise,languages,kind]=r;
    const voiceName=MASANA_VOICE_ASSIGNMENTS[key];
+   if(!MASANA_CHARACTER_DESIGNS[key])throw new Error(`Missing professional style for ${key}`);
    if(!voiceName)throw new Error(`Missing approved voice for Masana ${key}`);
    return Object.freeze({
      key,displayName,roleLabel,roomName,
@@ -61,6 +63,8 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
  presentations:AgentPresentationRepository;profiles:PlatformAgentProfileRepository;
  skillAssignments:CharacterSkillAssignmentRepository;
  skillDistribution:SkillDistributionRepository;now?:()=>Instant;
+ /** Already approved stock handle -> canonical identity, from tenant-scoped PostgreSQL. */
+ canonicalByHandle?:ReadonlyMap<string,CharacterId>;
 }>):Promise<PlatformAgentBootstrapResult>{
  const now=input.now?.()??nowInstant();
  const all=[...(await input.presentations.listAll({tenantId:input.tenantId}))];
@@ -70,12 +74,26 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
  const catalog:Array<{seed:ProfessionalMasanaSeed;characterId:CharacterId}>=[];
  let changed=false;
  for(const seed of PROFESSIONAL_MASANA_CATALOG){
+   const design=MASANA_CHARACTER_DESIGNS[seed.key]!;
+   const defaultAbout="AI "+seed.roleLabel+" educator. "+seed.expertise.join("; ")+
+     ". Fictional persona, not a licensed human practitioner.";
+   const styledAbout=defaultAbout+" Communication style: "+design.manner+".";
+   const defaultGreeting="Hello! I'm "+seed.displayName+", your Masanawa AI tutor. "+
+     "What would you like to learn or discuss?";
    // NEVER attach a catalog persona to a hidden/admin-maintained profile.
    const match=(item:AgentPresentation)=>
     item.displayName.trim().toLowerCase()===seed.displayName.toLowerCase() ||
     (seed.key==="gwani"&&(item.displayName==="Gwani"||item.displayName==="Mallam Gwani Bodi")) ||
     (seed.key==="gwana"&&(item.displayName==="Gwana"||item.displayName==="Malamah Gwana Sulafat"||item.displayName==="Malamah Gwana Fora"));
-   let presentation=all.find(match);
+   const canonicalId=input.canonicalByHandle?.get(seed.handle);
+   // An editor may rename a Masana without changing its canonical ID.
+   // Never duplicate that identity or attach its portrait to a name lookalike.
+   const presentationById=canonicalId
+     ? all.find(p=>p.characterId===canonicalId)
+     : null;
+   if(canonicalId&&!presentationById)
+     throw new Error("approved_masana_identity_missing");
+   let presentation=presentationById??(canonicalId?undefined:all.find(match));
    if(presentation&&!presentation.visibleInUserApp)continue;
    if(!presentation){
      const characterId=createCanonicalId("character");
@@ -87,7 +105,7 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
          biography:seed.displayName+" is a fictional Masanawa AI "+
            seed.roleLabel+" educator. Not a real human, licensed professional, "+
            "or a substitute for verified individual advice.",
-         personality:Object.freeze(["patient","clear","knowledgeable","respectful"]),
+         personality:Object.freeze(["clear","knowledgeable","respectful",design.manner]),
          boundaries:Object.freeze([
            "Always identify as an AI character, not a real professor, practitioner or doctor.",
            "Teach any ordinary question directly without staff approval.",
@@ -105,11 +123,9 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
        presentation:{
          schemaVersion:1,tenantId:input.tenantId,characterId,characterVersionId,
          displayName:seed.displayName,roleLabel:seed.roleLabel,
-         about:"AI "+seed.roleLabel+" educator. "+seed.expertise.join("; ")+
-           ". Fictional persona, not a licensed human practitioner.",
+         about:styledAbout,
          countryCode:seed.countryCode,countryName:seed.countryName,
-         greeting:"Hello! I'm "+seed.displayName+", your Masanawa AI tutor. "+
-           "What would you like to learn or discuss?",
+         greeting:design.welcome,
          visibleInUserApp:true,sortOrder:seed.illustrationIndex,revision:1,
        },
      });
@@ -125,6 +141,17 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
          roleLabel:"Masanawa General Support",
          about:"Fictional AI support agent for Masanawa accounts and general help."},
      });
+     all[at]=presentation;changed=true;
+   }
+   // Update only the untouched original stock text. Never replace staff edits.
+   if(presentation.displayName===seed.displayName &&
+      (presentation.about===defaultAbout||presentation.greeting===defaultGreeting)){
+     const at=all.indexOf(presentation);
+     presentation=await input.presentations.put({expectedRevision:presentation.revision,
+       presentation:{...presentation,
+         about:presentation.about===defaultAbout?styledAbout:presentation.about,
+         greeting:presentation.greeting===defaultGreeting?design.welcome:presentation.greeting,
+         revision:presentation.revision+1}});
      all[at]=presentation;changed=true;
    }
    // Explicit affiliation for the fictional stock catalog. Never replace an
@@ -156,7 +183,10 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
        voiceProvider:"gemini",voiceName:seed.voiceName,revision:1,
      }});
      changed=true;
-   }else if(profile.voiceProvider.toLowerCase()==="gemini" && profile.voiceName!==seed.voiceName){
+   }else if(profile.voiceProvider.toLowerCase()==="gemini" && profile.voiceName!==seed.voiceName &&
+     // Migrate only old shared stock voices. Preserve staff-selected voices.
+     ((seed.key==="gwana"&&["Sulafat","Fora"].includes(profile.voiceName)) ||
+      (seed.key!=="gwani"&&seed.key!=="gwana"&&["Bodi","Fora"].includes(profile.voiceName)))){
      // Owner-authorized 26-persona roster revision. Preserve identity and use
      // optimistic revision fencing; never create replacement Masana.
      await input.profiles.put({expectedRevision:profile.revision,profile:{

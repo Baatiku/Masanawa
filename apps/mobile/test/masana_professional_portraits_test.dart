@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
+import 'package:masanawa/src/agents/agent_directory.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,36 @@ void main() {
       expect((await rootBundle.loadString(avatar!)).contains('<svg'), true);
       expect((await rootBundle.loadString(banner!)).contains('<svg'), true);
     }
+    // Server-assigned canonical IDs alone never imply which bundled portrait
+    // belongs to the agent. Only an approved server portraitKey may bind it.
+    const keys = [
+      'gwani','gwana','amina','fatima','salim','zainab','sadiq',
+      'musa','bello','umar','safiya','ruqayya','idris','maryam',
+      'kabir','hauwa','yusuf','haruna','bilkisu','nura','aisha',
+      'abdulrahman','layla','grace','asha','mei',
+    ];
+    expect(keys.toSet().length, 26);
+    for (var index = 0; index < keys.length; index++) {
+      final key = keys[index];
+      final path = portraitPhotoAssetForKey(key);
+      expect(path, 'assets/masana/portraits/$key.webp');
+      expect((await rootBundle.load(path!)).lengthInBytes, greaterThan(1000));
+      expect(bannerAssetForKey(key), isNotNull);
+    }
+    expect(portraitPhotoAssetForKey('amina-lookalike'), isNull);
+    expect(portraitPhotoAssetForKey(''), isNull);
+    expect(portraitPhotoAssetForKey(null), isNull);
+    final renamed = AgentDirectoryEntry(
+      characterId: 'character_approved',
+      characterVersionId: 'version_1',
+      displayName: 'Custom professional alias',
+      roleLabel: 'Medicine',
+      about: 'Expert',
+      presence: AgentPresence.unknown,
+      portraitKey: 'amina',
+    );
+    expect(renamed.portraitKey, 'amina');
+    expect(portraitPhotoAssetForKey(renamed.portraitKey), endsWith('/amina.webp'));
     // Backward compatibility for legacy aliases
     expect(portraitPhotoAssetFor("Mallam Gwani Bodi"), isNotNull);
     expect(portraitPhotoAssetFor("Malamah Gwana Sulafat"), isNotNull);

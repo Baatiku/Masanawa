@@ -49,6 +49,9 @@ class AgentDirectoryEntry {
     this.voiceProvider,
     this.voiceName,
     this.roomId,
+    this.portraitKey,
+    this.following = false,
+    this.conversationStarters = const [],
     this.countryCode,
     this.countryName,
   });
@@ -69,6 +72,9 @@ class AgentDirectoryEntry {
   final String? voiceProvider;
   final String? voiceName;
   final String? roomId;
+  final String? portraitKey;
+  final bool following;
+  final List<String> conversationStarters;
   final String? countryCode, countryName;
 
   String get countrySearchText => [countryName ?? '', countryCode ?? '',
@@ -96,6 +102,9 @@ class AgentDirectoryEntry {
         voiceProvider: voiceProvider,
         voiceName: voiceName,
         roomId: roomId,
+        portraitKey: portraitKey,
+        following: following,
+        conversationStarters: conversationStarters,
         countryCode:countryCode,countryName:countryName,
       );
 
@@ -131,6 +140,9 @@ class AgentDirectoryEntry {
         if (voiceProvider != null) 'voiceProvider': voiceProvider,
         if (voiceName != null) 'voiceName': voiceName,
         if (roomId != null) 'roomId': roomId,
+        if (portraitKey != null) 'portraitKey': portraitKey,
+        'following': following,
+        'conversationStarters': conversationStarters,
         if(countryCode!=null) 'countryCode':countryCode,
         if(countryName!=null) 'countryName':countryName,
       };
@@ -163,6 +175,15 @@ class AgentDirectoryEntry {
       voiceName: (json['voiceName'] as String?)?.trim(),
       countryCode:json['countryCode'] is String && RegExp(r'^[A-Z]{2}$').hasMatch(json['countryCode'] as String)?json['countryCode'] as String:null,
       countryName:json['countryName'] is String && (json['countryName'] as String).trim().isNotEmpty?(json['countryName'] as String).trim():null,
+      portraitKey: json['portraitKey'] is String &&
+          RegExp(r'^[a-z][a-z0-9_-]{1,39}$').hasMatch(json['portraitKey'] as String)
+          ? json['portraitKey'] as String : null,
+      following: json['following'] == true,
+      conversationStarters: json['conversationStarters'] is List
+          ? (json['conversationStarters'] as List).whereType<String>()
+              .where((v) => v.trim().isNotEmpty && v.length <= 160)
+              .take(4).toList(growable: false)
+          : const [],
       roomId: (json['roomId'] is String && (json['roomId'] as String).trim().isNotEmpty)
           ? (json['roomId'] as String).trim() : null,
     );

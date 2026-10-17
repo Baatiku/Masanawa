@@ -26,6 +26,7 @@ class MasanaListScreen extends ConsumerStatefulWidget {
 class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  String _filter = 'all';
 
   @override
   void dispose() {
@@ -139,13 +140,26 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
       );
     }
 
+    final chatThreads = ref.watch(aiChatProvider).threads;
     final filtered = directory.agents.where((agent) {
+      if (_filter == 'following' && !agent.following) return false;
+      if (_filter == 'recent' && !(chatThreads[agent.characterId]?.messages.isNotEmpty ?? false)) return false;
       if (_query.isEmpty) return true;
       return agent.displayName.toLowerCase().contains(_query) ||
           agent.roleLabel.toLowerCase().contains(_query) ||
           agent.about.toLowerCase().contains(_query) ||
           agent.countrySearchText.contains(_query);
     }).toList(growable: false);
+    filtered.sort((a, b) {
+      // Explicit follows first; otherwise recent real conversations first.
+      if (a.following != b.following) return a.following ? -1 : 1;
+      final lastA = chatThreads[a.characterId]?.updatedAt;
+      final lastB = chatThreads[b.characterId]?.updatedAt;
+      if (lastA != null && lastB != null) return lastB.compareTo(lastA);
+      if (lastA != null) return -1;
+      if (lastB != null) return 1;
+      return a.displayName.compareTo(b.displayName);
+    });
 
     return Column(
       children: [
@@ -158,6 +172,19 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
             _searchController.clear();
             _query = '';
           }),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 5, 14, 7),
+          child: Wrap(spacing: 8, children: [
+            for (final choice in const [
+              ('all', 'All'), ('following', 'Following'), ('recent', 'Recent')
+            ])
+              ChoiceChip(
+                label: Text(choice.$2),
+                selected: _filter == choice.$1,
+                onSelected: (_) => setState(() => _filter = choice.$1),
+              ),
+          ]),
         ),
         if (directory.error != null)
           MaterialBanner(
@@ -172,7 +199,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
             ],
           ),
         Expanded(
-          child: filtered.isEmpty && _query.isNotEmpty
+          child: filtered.isEmpty && (_query.isNotEmpty || _filter != 'all')
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -182,7 +209,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                         const Icon(Icons.search_off_outlined, size: 42),
                         const SizedBox(height: 12),
                         Text(
-                          'No matching Masana contacts for "$_query"',
+                          _filter == 'following' ? 'No followed Masana yet. Open a profile to follow one.'
+                              : _filter == 'recent' ? 'No conversations yet. Start a chat with a Masana.'
+                              : 'No matching Masana contacts for "$_query"',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: u.textPrimary, fontSize: 16),
                         ),
@@ -214,14 +243,20 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                     vertical: 7,
                   ),
                   leading: _MasanaAvatar(agent: agent),
-                  title: Text(
+                  title: Row(children: [
+                    Flexible(child: Text(
                     agent.displayName,
                     style: TextStyle(
                       color: u.textPrimary,
                       fontSize: 16.5,
                       fontWeight: FontWeight.w700,
                     ),
-                  ),
+                    )),
+                    if(agent.following) const Padding(
+                      padding: EdgeInsets.only(left: 5),
+                      child: Icon(Icons.star_rounded, size: 16),
+                    ),
+                  ]),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 3),
                     child: Text(

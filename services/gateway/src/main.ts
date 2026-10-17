@@ -10,7 +10,7 @@ import {
   createMasanaInboxRepository,
   ensureMasanaCatalogProfilesAndRooms,withCatalogProvisionLock,
 } from "@masanawa/postgres";
-import {createPgAgentRoomDirectory} from "./agent_directory_rooms.js";
+import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -914,8 +914,33 @@ export async function startGatewayService(
     ) {
       try {
         await withCatalogProvisionLock(database.featurePool, activePlatformTenantId, async () => {
+          // Resolve identities by approved handle before bootstrapping. This
+          // prevents a staff-renamed profile from creating a new character on
+          // restart and preserves its chats, Room, follow graph and voice.
+          const identityRows=await database.featurePool!.query(
+            `SELECT revision.character_id, revision.profile->>'handle' AS handle
+             FROM masana.character_revisions revision
+             JOIN identity.characters character ON character.tenant_id=revision.tenant_id
+               AND character.character_id=revision.character_id AND character.state='active'
+             JOIN identity.character_ownership owner ON owner.tenant_id=revision.tenant_id
+               AND owner.character_id=revision.character_id AND owner.kind='platform'
+             WHERE revision.tenant_id=$1 AND revision.state='approved'
+               AND revision.profile->>'handle' LIKE 'masana.%'`,
+            [activePlatformTenantId],
+          );
+          const canonicalByHandle=new Map<string, import("@masanawa/contracts").CharacterId>();
+          for(const raw of identityRows.rows){
+            const row=raw as {character_id:unknown;handle:unknown};
+            if(typeof row.handle!=="string"||typeof row.character_id!=="string")
+              throw new Error("invalid_approved_masana_identity");
+            const characterId=parseCanonicalId("character",row.character_id);
+            if(canonicalByHandle.has(row.handle))
+              throw new Error("duplicate_approved_masana_handle");
+            canonicalByHandle.set(row.handle,characterId);
+          }
           const roster = await ensureDefaultPlatformAgents({
             tenantId: activePlatformTenantId,
+            canonicalByHandle,
             identity: database.platformAgentIdentity!,
             presentations: database.agentPresentations!,
             profiles: database.platformAgentProfiles!,
@@ -1735,6 +1760,10 @@ export async function startGatewayService(
           ...(database.mobileActivity
             ? { activity: database.mobileActivity }
             : {}),
+          ...(database.featurePool ? {
+            rooms: createPgAgentRoomDirectory(database.featurePool),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool),
+          } : {}),
         })
       : undefined);
 

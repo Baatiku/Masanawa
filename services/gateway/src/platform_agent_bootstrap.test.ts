@@ -2,6 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {createCanonicalId,nowInstant} from "@masanawa/contracts";
 import type {AgentPresentation,PlatformAgentProfile,CharacterSkillAssignment} from "@masanawa/agents";
 import {ensureDefaultPlatformAgents,PROFESSIONAL_MASANA_CATALOG} from "./platform_agent_bootstrap.js";
+import {MASANA_CHARACTER_DESIGNS} from "./masana_character_design.js";
 function fixture(){
  const presentations:AgentPresentation[]=[],profiles:PlatformAgentProfile[]=[];
  const assignments=new Map<string,CharacterSkillAssignment>();
@@ -37,8 +38,10 @@ function fixture(){
   skillsPort:{listForAudience:async()=>[{skillVersionId:createCanonicalId("skill-version"),installMode:"automatic"}]},
  };
 }
-function run(f:ReturnType<typeof fixture>,tenantId=createCanonicalId("tenant")){
+function run(f:ReturnType<typeof fixture>,tenantId=createCanonicalId("tenant"),
+ canonicalByHandle?:ReadonlyMap<string,import("@masanawa/contracts").CharacterId>){
  return ensureDefaultPlatformAgents({tenantId,identity:f.identity,
+   ...(canonicalByHandle?{canonicalByHandle}:{}),
    presentations:f.presentationsPort as never,profiles:f.profilesPort as never,
    skillAssignments:f.assignmentsPort as never,skillDistribution:f.skillsPort as never,
    now:()=>nowInstant()});
@@ -50,6 +53,11 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(new Set(PROFESSIONAL_MASANA_CATALOG.map(s=>s.roomId)).size).toBe(26);
    expect(PROFESSIONAL_MASANA_CATALOG.slice(-4).map(s=>s.languages[0])).toEqual(["ar","en","hi","zh"]);
    expect(PROFESSIONAL_MASANA_CATALOG.every(s=>s.displayName.includes(" "))).toBe(true);
+   expect(Object.keys(MASANA_CHARACTER_DESIGNS)).toHaveLength(26);
+   const welcomes=PROFESSIONAL_MASANA_CATALOG.map(s=>MASANA_CHARACTER_DESIGNS[s.key]?.welcome);
+   expect(new Set(welcomes).size).toBe(26);
+   expect(PROFESSIONAL_MASANA_CATALOG.every(s=>
+     MASANA_CHARACTER_DESIGNS[s.key]?.starters.length===3)).toBe(true);
  });
  it("provisions 26 chat/call identities, keeps Gwani default and is idempotent",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
@@ -65,6 +73,8 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.profiles[0]).toMatchObject({supportAgent:true,voiceName:"Bodi"});
    expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Fola"});
    expect(f.profiles.slice(2).every(p=>!p.supportAgent&&p.voiceProvider==="gemini")).toBe(true);
+   expect(f.presentations[2]?.greeting).toBe(MASANA_CHARACTER_DESIGNS.amina?.welcome);
+   expect(f.presentations[2]?.about).toContain("Communication style:");
    const second=await run(f,tenant);
    expect(second.changed).toBe(false);
    expect(f.identity.provision).toHaveBeenCalledTimes(26);
@@ -108,6 +118,33 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.presentations.find(p=>p.displayName==='Ustazah Layla Hassan')?.countryCode).toBe('NG');
    f.presentations[0]={...f.presentations[0]!,countryCode:'GB',countryName:'United Kingdom'};
    await run(f,tenant);expect(f.presentations[0]?.countryCode).toBe('GB');
+ });
+
+ it("does not overwrite administrator-selected voices or editorial welcomes",async()=>{
+   const f=fixture(),tenant=createCanonicalId("tenant");
+   await run(f,tenant);
+   const earlier=f.profiles[2]!;
+   f.profiles[2]={...earlier,voiceName:"CustomStudioVoice",revision:earlier.revision+1};
+   f.presentations[2]={...f.presentations[2]!,greeting:"My curated introduction"};
+   const next=await run(f,tenant);
+   expect(next.changed).toBe(false);
+   expect(f.profiles[2]?.voiceName).toBe("CustomStudioVoice");
+   expect(f.presentations[2]?.greeting).toBe("My curated introduction");
+ });
+
+ it("keeps a renamed professional canonical identity and existing messages/Room",async()=>{
+   const f=fixture(),tenant=createCanonicalId("tenant");
+   const first=await run(f,tenant);
+   const approvedId=first.characterIds[2]!;
+   const existing=f.presentations.find(p=>p.characterId===approvedId)!;
+   const index=f.presentations.indexOf(existing);
+   f.presentations[index]={...existing,displayName:"Dr. Amina (curated name)"};
+   const mapped=new Map([["masana.amina",approvedId]]);
+   const again=await run(f,tenant,mapped);
+   expect(again.characterIds[2]).toBe(approvedId);
+   expect(f.presentations).toHaveLength(26);
+   expect(f.identity.provision).toHaveBeenCalledTimes(26);
+   expect(f.presentations[index]?.displayName).toBe("Dr. Amina (curated name)");
  });
 
 });

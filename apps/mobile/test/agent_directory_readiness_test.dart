@@ -80,4 +80,36 @@ void main() {
     expect(entry.presenceLabel, 'Offline');
   });
 
+  test('canonical portrait and Following metadata survive cache, with unknown presence', () {
+    final entry = AgentDirectoryEntry.fromJson({
+      ...entryWithPresence('available'),
+      'displayName': 'Renamed by editor',
+      'portraitKey': 'gwani',
+      'following': true,
+      'conversationStarters': ['How can I set up my account?', 'Explain this in Hausa'],
+      'roomId': 'room_masana_00_gwani',
+    });
+    final restored = AgentDirectoryEntry.fromJson(
+      entry.withUnverifiedPresence().toJson(),
+    );
+    expect(restored.displayName, 'Renamed by editor');
+    expect(restored.portraitKey, 'gwani');
+    expect(restored.following, isTrue);
+    expect(restored.conversationStarters, hasLength(2));
+    expect(restored.roomId, 'room_masana_00_gwani');
+    expect(restored.presence, AgentPresence.unknown);
+  });
+
+  test('malformed identity projection is not trusted as a portrait key', () {
+    final entry = AgentDirectoryEntry.fromJson({
+      ...entryWithPresence('unknown'),
+      'portraitKey': '../other/asset',
+      'following': 'yes',
+      'conversationStarters': [9, '', 'Valid?', List.filled(161, 'x').join()],
+    });
+    expect(entry.portraitKey, isNull);
+    expect(entry.following, isFalse);
+    expect(entry.conversationStarters, ['Valid?']);
+  });
+
 }
