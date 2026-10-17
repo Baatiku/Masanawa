@@ -167,7 +167,7 @@ class _ExternalVideosScreenState extends State<ExternalVideosScreen> {
             return Center(child: Column(mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.ondemand_video_outlined, size: 48),
-                Text(t('No approved videos for this source yet', 'Babu bidiyon da aka amince da su')),
+                Text(t('No approved videos', 'Babu bidiyon da aka amince da su')),
                 TextButton(onPressed: () => reload(filter),
                   child: Text(t('Refresh', 'Sabunta'))),
               ]));

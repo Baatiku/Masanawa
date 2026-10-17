@@ -68,6 +68,38 @@ void main() {
     expect(find.text('Videos are currently unavailable'), findsOneWidget);
     expect(calls, 0);
   });
+  testWidgets('Status parent callback rebuild keeps filter and avoids new request',
+      (tester) async {
+    var requests = 0;
+    Future<List<ExternalVideo>> first({String? provider}) async {
+      requests++;
+      return [ExternalVideo.fromJson(data)];
+    }
+    Widget page(int generation) => MaterialApp(
+      home: Scaffold(
+        body: ExternalVideosScreen(
+          accountKey: 'user-a',
+          // Every invocation creates a new wrapper, as the Status shell does.
+          load: ({provider}) => first(provider: provider),
+          languageCode: generation.isEven ? 'en' : 'ha',
+        ),
+      ),
+    );
+    await tester.pumpWidget(page(0));
+    await tester.pumpAndSettle();
+    expect(requests, 1);
+    await tester.tap(find.text('youtube'));
+    await tester.pumpAndSettle();
+    expect(requests, 2);
+    await tester.pumpWidget(page(2));
+    await tester.pumpAndSettle();
+    expect(requests, 2);
+    final selected = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'youtube'),
+    );
+    expect(selected.selected, isTrue);
+  });
+
   test('page metadata requires approved items and a matching cursor', () {
     final first = ExternalVideo.fromJson(data);
     final page = VideoCatalogPage.fromJson({
