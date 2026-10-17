@@ -67,6 +67,8 @@ dependencies:
   super_sliver_list: ^0.4.1
   # Multi-select media gallery.
   wechat_assets_picker: ^10.1.3
+  # Efficiently downsize native gallery photos before sending on mobile data.
+  flutter_image_compress: ^2.5.1
   # Disk-cache only static public image origins, never signed media.
   cached_network_image: ^4.0.4
   # Account-fenced SQLite cache of directory metadata (no chats, keys or wallet).

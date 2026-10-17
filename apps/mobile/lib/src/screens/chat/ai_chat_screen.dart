@@ -10,6 +10,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mime/mime.dart';
 import 'package:share_plus/share_plus.dart';
@@ -934,15 +936,41 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       var active = ref.read(sessionProvider);
       if (active is! SessionSignedIn || active.user.id != ownerId) return;
       final attachments = <ChatAttachment>[];
-      for (final asset in selected.take(8)) {
-        final file = await asset.file;
-        if (file == null || !await file.exists()) continue;
-        final size = await file.length();
-        if (size == 0 || size > 8 * 1024 * 1024) continue;
+      for (var index=0;index<selected.length && index<8;index++) {
+        final asset=selected[index];
+        final original=await asset.file;
+        if(original==null||!await original.exists())continue;
+        File file=original;
+        var size=await file.length();
+        if(size==0)continue;
+        var name=asset.title??'Photo';
+        // The old gallery picker resized 1600px photos at quality 85.
+        // Restore that low-data behavior after switching gallery UIs, while
+        // keeping non-photo files and the source gallery entirely untouched.
+        if(size>1024*1024) {
+          try {
+            final temp=await getTemporaryDirectory();
+            final target='${temp.path}/masanawa-photo-${DateTime.now().microsecondsSinceEpoch}-$index.jpg';
+            final compressed=await FlutterImageCompress.compressAndGetFile(
+              original.path,target,minWidth:1600,minHeight:1600,
+              quality:80,format:CompressFormat.jpeg,keepExif:false);
+            if(compressed!=null){
+              final result=File(compressed.path);
+              final resultSize=await result.length();
+              if(resultSize>0 && resultSize<size){
+                file=result;size=resultSize;
+                name='Photo-${index+1}.jpg';
+              }else{
+                await result.delete().catchError((_)=>result);
+              }
+            }
+          }catch(_){
+            // Compression is an optimization; preserve usable original media.
+          }
+        }
+        if(size>8*1024*1024)continue;
         attachments.add(ChatAttachment(
-          kind: 'image',path: file.path,
-          name: asset.title ?? 'Photo',sizeBytes: size,
-        ));
+          kind:'image',path:file.path,name:name,sizeBytes:size));
       }
       if (!mounted) return;
       active = ref.read(sessionProvider);
