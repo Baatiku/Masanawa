@@ -103,11 +103,19 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
        _sessionFactory = sessionFactory ?? _NativeMember.new {
     _playback = GroupPlaybackCoordinator(
       player: player ?? NativeGroupPcmPlayer(),
+      onSpeakerChanged: (_) => _notify(),
       onFailure: (_) {
         error = 'Group audio stopped. Start a new call.';
         unawaited(end());
       },
     );
+    final mic=_microphone;
+    if(mic is RecoverableGroupMicrophone)mic.onPauseChanged=(paused){
+      if(!_valid)return;
+      audioPaused=paused;
+      if(paused)unawaited(_playback.suspend());
+      _notify();
+    };
     WidgetsBinding.instance.addObserver(this);
   }
   final String accountKey;
@@ -136,6 +144,14 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void>? _ending;
   String? _requestId;
   List<String>? _selection;
+  bool audioPaused=false,speakerEnabled=true;
+  Future<void> setSpeaker(bool enabled)async{
+    final mic=_microphone;if(!_valid)return;
+    try{if(mic is RecoverableGroupMicrophone)await mic.setSpeaker(enabled);if(_valid){speakerEnabled=enabled;_notify();}}
+    catch(_){if(_valid){error='Could not change the audio route.';_notify();}}
+  }
+  Future<void> resumeAudio()async{final mic=_microphone;if(_valid&&mic is RecoverableGroupMicrophone)await mic.resume();}
+  String? get speakingCharacterId => _playback.speaker;
   bool get _valid => !ended && currentAccountKey() == accountKey;
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -237,7 +253,7 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
       _check();
       _capture = stream.listen(
         (bytes) {
-          if (_valid && !muted && !_input.isClosed) _input.add(bytes);
+          if (_valid && !muted && !audioPaused && !_input.isClosed) _input.add(bytes);
         },
         onError: (_) {
           error = 'Microphone streaming stopped.';
@@ -300,7 +316,7 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
         name: contact.displayName,
         microphone: _input.stream,
         audio: (bytes) {
-          if (_valid && !_removed.contains(id)) _playback.add(id, bytes);
+          if (_valid && !audioPaused && !_removed.contains(id)) _playback.add(id, bytes);
         },
         interrupted: () => unawaited(_playback.interrupt(id)),
         turnComplete: () => _playback.turnComplete(id),
@@ -483,3 +499,4 @@ class GroupCallController extends ChangeNotifier with WidgetsBindingObserver {
     super.dispose();
   }
 }
+
