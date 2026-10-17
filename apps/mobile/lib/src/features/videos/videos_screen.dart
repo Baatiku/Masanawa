@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'video_models.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import 'official_video_player_screen.dart';
 
 typedef VideoLoader = Future<List<ExternalVideo>> Function({String? provider});
@@ -64,10 +65,10 @@ class _ExternalVideosScreenState extends State<ExternalVideosScreen> {
   @override
   void didUpdateWidget(covariant ExternalVideosScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.load != widget.load ||
-        oldWidget.loadPage != widget.loadPage ||
-        oldWidget.accountKey != widget.accountKey ||
-        oldWidget.checkAvailability != widget.checkAvailability ||
+    // Parent Status builds fresh closure wrappers each time it renders.
+    // Those closures read the current credentials at call-time; refreshing
+    // them must not erase the selected provider, scroll or current catalogue.
+    if (oldWidget.accountKey != widget.accountKey ||
         oldWidget.enabled != widget.enabled) {
       reset(null);
     }
@@ -147,7 +148,7 @@ class _ExternalVideosScreenState extends State<ExternalVideosScreen> {
         future: future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            return const MasanawaListSkeleton(semanticLabel: 'Loading approved videos');
           }
           if (snapshot.hasError) {
             return Center(child: Column(mainAxisSize: MainAxisSize.min,
@@ -165,7 +166,8 @@ class _ExternalVideosScreenState extends State<ExternalVideosScreen> {
           if (items.isEmpty) {
             return Center(child: Column(mainAxisSize: MainAxisSize.min,
               children: [
-                Text(t('No approved videos', 'Babu bidiyon da aka amince da su')),
+                const Icon(Icons.ondemand_video_outlined, size: 48),
+                Text(t('No approved videos for this source yet', 'Babu bidiyon da aka amince da su')),
                 TextButton(onPressed: () => reload(filter),
                   child: Text(t('Refresh', 'Sabunta'))),
               ]));
