@@ -382,6 +382,14 @@ function defaultLimitPolicy(
   });
 }
 
+/** Historical Credits are not MSNW. Keep admitted-call recovery intact, but
+ * never create another legacy customer reservation for a new voice call. */
+function requireMsnwVoiceBilling(): never {
+  throw Object.assign(new Error('Paid calls are temporarily unavailable while MSNW billing is being connected. No funds were reserved.'), {
+    statusCode: 503, code: 'voice.msnw_billing_unavailable',
+  });
+}
+
 export function createTwinProductionRuntime(input: {
   readonly sessions: PlatformCustomerSessionAuthorizer;
   readonly profiles: EnsuringTwinProfiles;
@@ -1258,6 +1266,7 @@ export function createTwinProductionRuntime(input: {
           expectedSeconds: request.expectedSeconds,
           now: at(),
         });
+        if (quote.chargeMode === "paid") requireMsnwVoiceBilling();
         const quoteId = createCanonicalId("quote");
         const createdAt = at();
         const record = await input.economy.putVoiceQuote({
@@ -1365,33 +1374,10 @@ export function createTwinProductionRuntime(input: {
             statusCode: 410, code: "voice.quote_expired_without_admission",
           });
         }
+        if (quote.chargeMode === "paid") requireMsnwVoiceBilling();
         const admissionId = createCanonicalId("operation");
         const admittedAt = at();
-        let reservationLedgerEntryId: LedgerEntryId | null = null;
-        if (quote.chargeMode === "paid" && quote.spendCapCredits > 0) {
-          const reservePlan = await ensurePlan(input.economy, {
-            tenantId: request.tenantId,
-            planKey: `voice-reserve:${quote.quoteId}`,
-            roles: [{ role: "reserve", amountCredits: quote.spendCapCredits }],
-          });
-          reservationLedgerEntryId = planEntry(
-            reservePlan,
-            "reserve",
-            quote.spendCapCredits,
-          );
-          await input.commerce.postTransfer({
-            schemaVersion: 1,
-            ledgerEntryId: reservationLedgerEntryId!,
-            tenantId: request.tenantId,
-            debit: account(request.tenantId, "customer-credit", request.userId, null),
-            credit: account(request.tenantId, "fulfillment-reserve", request.userId, request.characterId),
-            amountCredits: quote.spendCapCredits,
-            reason: "fulfillment-reserve",
-            quoteId: quote.quoteId as never,
-            fulfillmentId: null,
-            createdAt: reservePlan.createdAt as never,
-          });
-        }
+        const reservationLedgerEntryId: LedgerEntryId | null = null;
         const admission = await input.economy.putVoiceAdmission({
           tenantId: request.tenantId,
           userId: request.userId,
@@ -3416,3 +3402,4 @@ export function createTwinProductionRuntime(input: {
     monetization,
   });
 }
+

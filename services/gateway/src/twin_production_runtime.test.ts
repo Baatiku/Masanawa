@@ -635,6 +635,7 @@ function ownerLifecycleHarness(input: {
 
 
 function voiceLifecycleHarness(options: {
+  readonly expiredTrial?: boolean;
   readonly startedAt?: string | null;
   readonly platform?: boolean;
   readonly support?: boolean;
@@ -693,7 +694,7 @@ function voiceLifecycleHarness(options: {
     } as never,
     economy: {
       async readTrialPolicy() { return null; },
-      async readTrialUsage() { return { startedAt: null, consumedUnits: 0 }; },
+      async readTrialUsage() { return { startedAt: options.expiredTrial ? new Date(Date.now()-30*86400000).toISOString() : null, consumedUnits: 0 }; },
       async putVoiceQuote(value: unknown) { return value; },
       async readOwnerForCharacter() {
         return options.platform ? null : ownerUserId;
@@ -814,19 +815,14 @@ describe("Twin production runtime composition", () => {
   });
 
 
-  it("reserves paid Twin voice before persisting the admission", async () => {
+  it("rejects a new legacy paid voice admission before reserving or persisting", async () => {
     const order: string[] = [];
     const runtime = paidOrderingHarness(order);
-
-    await runtime.paidVoice.start({
-      authorizationHeader: "Bearer requester",
-      characterId,
-      quoteId: "quote_paid_123",
-      accepted: true,
-    });
-
-    expect(order.indexOf("reserve")).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf("persist-voice")).toBeGreaterThan(order.indexOf("reserve"));
+    await expect(runtime.paidVoice.start({
+      authorizationHeader: "Bearer requester", characterId,
+      quoteId: "quote_paid_123", accepted: true,
+    })).rejects.toMatchObject({statusCode:503,code:"voice.msnw_billing_unavailable"});
+    expect(order).not.toContain("reserve");expect(order).not.toContain("persist-voice");
   });
 
   it("reserves paid owner access before persisting the request and event", async () => {
@@ -1520,12 +1516,20 @@ describe("Twin production runtime composition", () => {
 
 
 describe("platform Masana canonical voice billing", () => {
-  it("quotes platform voice without a human beneficiary", async () => {
+  it("quotes free-trial platform voice without a human beneficiary", async () => {
     const h = voiceLifecycleHarness({ platform: true });
     const quote = await h.runtime.paidVoice.quote({ authorizationHeader: "Bearer test",
       characterId, expectedSeconds: 300 });
-    expect(quote.ownerShareBasisPoints).toBe(0);
-    expect(quote.estimatedSeconds).toBe(300);
+    expect(quote.chargeMode).toBe("trial");expect(quote.spendCapCredits).toBe(0);
+    expect(quote.ownerShareBasisPoints).toBe(0);expect(quote.estimatedSeconds).toBe(300);
+  });
+  it("does not offer legacy paid quotes as MSNW after trial expiry", async () => {
+    const h = voiceLifecycleHarness({ platform: true, expiredTrial:true });
+    await expect(h.runtime.paidVoice.quote({ authorizationHeader: "Bearer test",
+      characterId, expectedSeconds: 300 })).rejects.toMatchObject({
+        statusCode:503,code:"voice.msnw_billing_unavailable",
+      });
+    expect(h.transfers).toHaveLength(0);
   });
 
   it("requires and account/character fences admissions at both token gates", async () => {
@@ -1641,3 +1645,4 @@ describe("paid voice accepted quote recovery", () => {
     expect(order).toEqual([]);
   });
 });
+
