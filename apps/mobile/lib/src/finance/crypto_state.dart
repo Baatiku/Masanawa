@@ -209,12 +209,14 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String providerCode,
     required String amount,
     required String destinationAddress,
+    String? stepUpToken,
   }) async {
     final result = await _transport.createWithdrawal(
       requestId: requestId,
       providerCode: providerCode,
       amount: amount,
       destinationAddress: destinationAddress,
+      stepUpToken: stepUpToken,
     );
     await _mergeOperation(result, refreshBalance: true);
     return result;

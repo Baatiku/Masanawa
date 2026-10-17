@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/network/api_client.dart';
+import '../core/providers.dart';
+import 'wallet_step_up_page.dart';
 import '../core/request_id.dart';
 import '../theme/masanawa_theme.dart';
 import '../tokens/masanawa_tokens.dart';
@@ -350,11 +352,27 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         ),
       );
       if (confirmed != true || !context.mounted) return;
+      final requestId=createRequestId();
+      final api=ref.read(apiClientProvider);
+      await api.beginWithdrawalStepUp(
+        requestId:requestId,providerCode:route.providerCode,
+        amount:input.amount,destinationAddress:input.address,
+      );
+      if(!context.mounted)return;
+      final code=await openWalletPage<String>(
+        context:context,builder:(_)=>const WalletStepUpPage(),
+      );
+      if(code==null || !context.mounted)return;
+      final grant=await api.confirmWithdrawalStepUp(
+        requestId:requestId,providerCode:route.providerCode,
+        amount:input.amount,destinationAddress:input.address,code:code,
+      );
       final intent = await controller.createWithdrawal(
-        requestId: createRequestId(),
+        requestId: requestId,
         providerCode: route.providerCode,
         amount: input.amount,
         destinationAddress: input.address,
+        stepUpToken:grant,
       );
       if (context.mounted) _operationResult(context, intent);
     } catch (error) {

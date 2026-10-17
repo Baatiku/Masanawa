@@ -390,6 +390,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   const checks = options.readinessChecks ?? [];
 
   app.setErrorHandler((error, request, reply) => {
+    if(error instanceof CustomerAuthError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
+      return;
+    }
     if (error instanceof GeminiProviderError) {
       void reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
       return;
@@ -694,6 +698,28 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           email:request.body.email,code:request.body.code,
         });
       } catch(error) {return authError(error,reply);}
+    });
+
+    const withdrawalFields = {
+      requestId: Type.String({minLength:1,maxLength:128}),
+      providerCode: Type.String({minLength:2,maxLength:32}),
+      amount: Type.String({minLength:1,maxLength:80}),
+      destinationAddress: Type.String({minLength:1,maxLength:512}),
+    };
+    app.post("/v1/auth/security/withdrawal/start",{
+      schema:{body:Type.Object(withdrawalFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/withdrawal/confirm",{
+      schema:{body:Type.Object({...withdrawalFields,code:Type.String({minLength:6,maxLength:6})},
+        {additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
     });
 
     app.get("/v1/auth/security/sessions", async (request, reply) => {
@@ -1479,13 +1505,24 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         amount: Type.String({ minLength: 1, maxLength: 80 }),
         destinationAddress: Type.String({ minLength: 1, maxLength: 512 }),
       }, { additionalProperties: false }) } },
-      async (request) => financial.createWithdrawal({
-        authorizationHeader: auth(request),
-        requestId: request.body.requestId,
-        providerCode: request.body.providerCode,
-        amount: request.body.amount,
-        destinationAddress: request.body.destinationAddress,
-      }),
+      async (request) => {
+        if(!options.customerAuth)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
+        await options.customerAuth.consumeWithdrawalStepUp({
+          authorizationHeader:auth(request),
+          stepUpToken:request.headers["x-masanawa-step-up"] as string|undefined,
+          requestId:request.body.requestId,
+          providerCode:request.body.providerCode,
+          amount:request.body.amount,
+          destinationAddress:request.body.destinationAddress,
+        });
+        return financial.createWithdrawal({
+          authorizationHeader:auth(request),
+          requestId:request.body.requestId,
+          providerCode:request.body.providerCode,
+          amount:request.body.amount,
+          destinationAddress:request.body.destinationAddress,
+        });
+      },
     );
 
     app.post(

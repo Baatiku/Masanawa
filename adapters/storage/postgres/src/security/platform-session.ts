@@ -574,6 +574,35 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         [input.tenantId,input.userId,input.action,input.at],
       );
     },
+    async issueActionGrant(input) {
+      const inserted=await pool.query(
+        `INSERT INTO security.platform_action_grants(
+          grant_hash,session_id,operation,fingerprint,issued_at,expires_at
+        )
+        SELECT $2,s.session_id,$3,$4,$5,$6
+        FROM security.platform_sessions s
+        WHERE s.access_hash=$1 AND s.revoked_at IS NULL
+          AND s.access_expires_at>$5 AND s.refresh_expires_at>$5
+        RETURNING grant_hash`,
+        [input.accessHash,input.grantHash,input.operation,input.fingerprint,
+          input.issuedAt,input.expiresAt],
+      );
+      if(!inserted.rowCount)throw new Error("auth.session_expired");
+    },
+    async consumeActionGrant(input) {
+      const used=await pool.query(
+        `UPDATE security.platform_action_grants g
+         SET consumed_at=$5
+         FROM security.platform_sessions s
+         WHERE g.grant_hash=$2 AND g.operation=$3 AND g.fingerprint=$4
+           AND g.session_id=s.session_id AND s.access_hash=$1
+           AND s.revoked_at IS NULL AND s.refresh_expires_at>$5
+           AND g.consumed_at IS NULL AND g.expires_at>$5
+         RETURNING g.grant_hash`,
+        [input.accessHash,input.grantHash,input.operation,input.fingerprint,input.at],
+      );
+      return (used.rowCount??0)===1;
+    },
     async revokeAccess(input) {
       await pool.query(
         `UPDATE security.platform_sessions

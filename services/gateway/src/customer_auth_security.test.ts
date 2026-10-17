@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createCanonicalId } from "@masanawa/contracts";
 import {
-  hashPlatformSessionToken, mintPlatformSessionToken,
+  hashPlatformSessionToken, hashOtpCode, mintPlatformSessionToken,
   type PlatformSessionRepository, type PlatformSessionIdentity,
 } from "@masanawa/security";
 import { createCustomerAuthService } from "./customer_auth.js";
@@ -96,5 +96,65 @@ describe("authenticated account-security controls", () => {
     await expect(service.deviceRestore({
       phone:"+2348012345678",deviceId:"a".repeat(32),
     })).rejects.toMatchObject({code:"PASSWORD_REQUIRED",statusCode:401});
+  });
+});
+
+describe("financial withdrawal step-up",()=>{
+  it("requires email possession, exact request fingerprint, active session and a single-use grant",async()=>{
+    const tenantId=createCanonicalId("tenant"),userId=createCanonicalId("user");
+    const bearerToken=mintPlatformSessionToken("access");
+    const bearerHash=hashPlatformSessionToken(bearerToken);
+    let code="",challenge:{
+      identifier:string;codeHash:string;consumed:boolean;
+    }|undefined;
+    const grants=new Map<string,{fingerprint:string;consumed:boolean}>();
+    const identity:PlatformSessionIdentity={
+      tenantId,userId,profile:{tenantId,userId,name:"Amina",email:"amina@example.com",
+        phone:"+2348012345678",locale:"en-NG",createdAt:"2026-10-01T12:00:00.000Z"},
+    };
+    const repo={
+      async resolveAccess({accessHash}:{accessHash:string}){
+        return accessHash===bearerHash?identity:null;
+      },
+      async putOtpChallenge(input:{identifier:string;codeHash:string}){
+        challenge={identifier:input.identifier,codeHash:input.codeHash,consumed:false};
+      },
+      async cancelOtpChallenge(){challenge=undefined;},
+      async consumeOtpChallenge(input:{identifier:string;codeHash:string}){
+        if(!challenge||challenge.consumed||input.identifier!==challenge.identifier ||
+          input.codeHash!==challenge.codeHash)return "invalid" as const;
+        challenge.consumed=true;return "accepted" as const;
+      },
+      async issueActionGrant(input:{accessHash:string;grantHash:string;fingerprint:string}){
+        expect(input.accessHash).toBe(bearerHash);
+        grants.set(input.grantHash,{fingerprint:input.fingerprint,consumed:false});
+      },
+      async consumeActionGrant(input:{
+        accessHash:string;grantHash:string;fingerprint:string;
+      }){
+        const grant=grants.get(input.grantHash);
+        if(input.accessHash!==bearerHash||!grant||grant.consumed ||
+          input.fingerprint!==grant.fingerprint)return false;
+        grant.consumed=true;return true;
+      },
+    } as unknown as PlatformSessionRepository;
+    const auth=createCustomerAuthService({
+      repository:repo,tenantId,otpPepper:"p".repeat(48),
+      emailDelivery:{async send(input){expect(input.identifier).toBe("amina@example.com");code=input.code;}},
+    });
+    const request={requestId:"request-1",providerCode:"usdttrc20",
+      amount:"20",destinationAddress:"TExampleDestination"};
+    const authorizationHeader=`Bearer ${bearerToken}`;
+    await expect(auth.consumeWithdrawalStepUp({...request,authorizationHeader,stepUpToken:"no"}))
+      .rejects.toMatchObject({code:"STEP_UP_REQUIRED"});
+    await auth.beginWithdrawalStepUp({...request,authorizationHeader});
+    expect(code).toMatch(/^\d{6}$/u);
+    const result=await auth.confirmWithdrawalStepUp({...request,authorizationHeader,code});
+    await expect(auth.consumeWithdrawalStepUp({
+      ...request,amount:"200",authorizationHeader,stepUpToken:result.stepUpToken,
+    })).rejects.toMatchObject({code:"STEP_UP_REQUIRED"});
+    await auth.consumeWithdrawalStepUp({...request,authorizationHeader,stepUpToken:result.stepUpToken});
+    await expect(auth.consumeWithdrawalStepUp({...request,authorizationHeader,
+      stepUpToken:result.stepUpToken})).rejects.toMatchObject({code:"STEP_UP_REQUIRED"});
   });
 });

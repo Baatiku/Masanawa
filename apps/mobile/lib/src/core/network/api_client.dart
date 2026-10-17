@@ -337,6 +337,30 @@ class ApiClient {
     return verified;
   }
 
+  Future<void> beginWithdrawalStepUp({
+    required String requestId,required String providerCode,
+    required String amount,required String destinationAddress,
+  }) async {
+    await _post('/v1/auth/security/withdrawal/start',{
+      'requestId':requestId,'providerCode':providerCode,'amount':amount,
+      'destinationAddress':destinationAddress,
+    });
+  }
+
+  Future<String> confirmWithdrawalStepUp({
+    required String requestId,required String providerCode,
+    required String amount,required String destinationAddress,required String code,
+  }) async {
+    final result=await _post('/v1/auth/security/withdrawal/confirm',{
+      'requestId':requestId,'providerCode':providerCode,'amount':amount,
+      'destinationAddress':destinationAddress,'code':code,
+    });
+    final token=result['stepUpToken'];
+    if(token is! String || token.isEmpty)
+      throw const ApiException('Withdrawal verification could not be confirmed.');
+    return token;
+  }
+
   // ---- Account security: authenticated, server-owned sessions ----
 
   Future<List<Map<String, dynamic>>> securitySessions() async {
