@@ -437,6 +437,61 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       });
     },
 
+    async replaceIdentity(input) {
+      return withTransaction(pool,async(client)=>{
+        const current=await client.query<{email:string|null;phone:string|null}>(
+          `SELECT email,phone FROM security.platform_user_profiles
+             WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
+          [input.tenantId,input.userId],
+        );
+        const profile=current.rows[0];
+        if(!profile)throw new Error("auth.profile_missing");
+        const old=input.channel==="email"?profile.email:profile.phone;
+        if(!old||old!==input.previousIdentifier)
+          throw new Error("auth.contact_changed_since_verification");
+        if(input.nextIdentifier===old)
+          throw new Error("auth.contact_not_changed");
+        // Existing values (including a concurrent other account) are unique
+        // in the canonical external identity authority.
+        const external=subject(input.channel,input.nextIdentifier,input.at);
+        const reserved=await resolveUserByExternalIdentity(client,input.tenantId,external);
+        if(reserved && reserved!==input.userId)throw new Error("auth.identity_taken");
+        // Old address/phone must stop being a login route in the SAME tx.
+        await client.query(
+          `DELETE FROM identity.external_user_identities
+           WHERE tenant_id=$1 AND user_id=$2 AND system='masanawa'
+             AND namespace=$3 AND subject_value=$4`,
+          [input.tenantId,input.userId,input.channel,old],
+        );
+        await linkExternalUserIdentity(client,{
+          tenantId:input.tenantId,userId:input.userId,
+          subject:external,linkedAt:toInstant(input.at),
+        });
+        await client.query(
+          `UPDATE security.platform_user_profiles
+           SET email=CASE WHEN $3='email' THEN $4 ELSE email END,
+               phone=CASE WHEN $3='sms' THEN $4 ELSE phone END,
+               updated_at=$5
+           WHERE tenant_id=$1 AND user_id=$2`,
+          [input.tenantId,input.userId,input.channel,input.nextIdentifier,input.at],
+        );
+        // Re-authenticate on every device with the new contact.
+        await client.query(
+          `UPDATE security.platform_sessions SET revoked_at=$3,updated_at=$3
+           WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL`,
+          [input.tenantId,input.userId,input.at],
+        );
+        await client.query(
+          `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
+           VALUES($1,$2,'contact_changed',$3)`,
+          [input.tenantId,input.userId,input.at],
+        );
+        const updated=await loadProfile(client,input.tenantId,input.userId);
+        if(!updated)throw new Error("auth.profile_missing");
+        return updated;
+      });
+    },
+
     async issueSession(input) {
       await withTransaction(pool, async (client) => {
         // Serialize issuance against the deletion revoker's canonical User
