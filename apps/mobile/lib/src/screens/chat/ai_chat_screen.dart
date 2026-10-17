@@ -44,7 +44,6 @@ import '../../state/session_state.dart';
 import '../../state/wallet_state.dart';
 import '../../voice/paid_voice.dart';
 import '../../voice/paid_voice_state.dart';
-import '../../safety/twin_safety.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';

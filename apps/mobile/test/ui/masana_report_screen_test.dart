@@ -28,7 +28,8 @@ void main() {
     expect(selected, TwinReportReason.fraud);
     expect(detail, 'Suspicious request');
     expect(find.textContaining('Could not confirm'), findsOneWidget);
-    expect(find.text('Suspicious request'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('report-details'))).controller!.text,
+        'Suspicious request');
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('report-submit'))).onPressed, isNotNull);
   });
 }
