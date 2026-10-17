@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
+import '../../calls/call_recordings_screen.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/group_call_screen.dart';
 import '../../calls/group_call_controller.dart';
@@ -35,6 +36,8 @@ class CallsScreen extends ConsumerWidget {
       appBar: masanawaMainHeader(
         context,
         actions: [
+          IconButton(tooltip:'Call recordings',icon:const Icon(Icons.graphic_eq),
+            onPressed:session is SessionSignedIn?()=>Navigator.push<void>(context,MaterialPageRoute(builder:(_)=>CallRecordingsScreen(ownerId:session.user.id))):null),
           IconButton(
             tooltip: 'Call multiple Masana',
             icon: const Icon(Icons.groups_outlined),
@@ -459,3 +462,4 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     return '${strings.formatMediumDate(local)} ${strings.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
   }
 }
+

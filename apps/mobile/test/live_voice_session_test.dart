@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
+import 'package:audio_session/audio_session.dart';
+import 'package:masanawa/src/core/call_recording.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
@@ -10,6 +12,13 @@ import 'package:masanawa/src/agents/agent_shell.dart';
 import 'package:masanawa/src/core/live_voice_session.dart';
 
 class _Recorder extends Mock implements AudioRecorder {}
+class _Capture implements CallAudioObserver {
+ int inputBytes=0,outputBytes=0,interruptions=0,ends=0;
+ @override void input(Uint8List bytes){inputBytes+=bytes.length;}
+ @override void output(Uint8List bytes){outputBytes+=bytes.length;}
+ @override void interrupted(){interruptions++;}
+ @override void ended(){ends++;}
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +42,29 @@ void main() {
     );
   });
   tearDown(() async => session.close());
+
+  test('notification ducking never closes or stops a call microphone', () async {
+    final capture=_Capture();session.audioObserver=capture;
+    await session.handleAudioInterruption(AudioInterruptionEvent(true,AudioInterruptionType.duck));
+    expect(session.audioInterrupted,isFalse);expect(capture.ends,0);
+    verifyNever(()=>recorder.stop());verifyNever(()=>recorder.dispose());
+  });
+  test('temporary focus loss pauses without closing session or losing user mute', () async {
+    final capture=_Capture();session.audioObserver=capture;
+    await session.mute(true);
+    await session.handleAudioInterruption(AudioInterruptionEvent(true,AudioInterruptionType.pause));
+    expect(session.audioInterrupted,isTrue);expect(session.muted,isTrue);
+    expect(capture.interruptions,1);expect(capture.ends,0);
+    verifyNever(()=>recorder.dispose());
+    await session.close();expect(capture.ends,1);
+  });
+  test('closing while audio is suspended cannot restart the microphone', () async {
+    final stopped=Completer<String?>();when(()=>recorder.stop()).thenAnswer((_)=>stopped.future);
+    final pause=session.handleAudioInterruption(AudioInterruptionEvent(true,AudioInterruptionType.pause));
+    await Future<void>.delayed(Duration.zero);
+    final close=session.close();stopped.complete(null);await Future.wait([pause,close]);
+    await session.resumeAudio();verifyNever(()=>recorder.hasPermission());verify(()=>recorder.dispose()).called(1);
+  });
 
   test('closing preserves readiness failure for callers', () async {
     final failure = expectLater(session.ready, throwsStateError);
@@ -111,6 +143,7 @@ void main() {
     var connected = 0;
     var closed = 0;
     final microphone = StreamController<Uint8List>.broadcast();
+    final capture=_Capture();
     final live = LiveVoiceSession(
       grant: AgentLiveVoiceGrant(
         token: 'unused',
@@ -122,6 +155,7 @@ void main() {
       characterName: 'Gwani',
       sharedMicrophone: microphone.stream,
       sendGreeting: false,
+      onAudioPcm: (_) async {},
       onConnected: () {
         connected++;
       },
@@ -129,6 +163,7 @@ void main() {
         closed++;
       },
     );
+    live.audioObserver=capture;
     try {
       await live.start();
       final socket = await peer.future;
@@ -136,6 +171,10 @@ void main() {
       socket.add(jsonEncode({'setupComplete': {}}));
       await live.ready.timeout(const Duration(seconds: 2));
       expect(connected, 1);
+      microphone.add(Uint8List(320));
+      socket.add(jsonEncode({'serverContent':{'modelTurn':{'parts':[{'inlineData':{'mimeType':'audio/pcm;rate=24000','data':base64Encode(Uint8List(480))}}]}}}));
+      await Future<void>.delayed(const Duration(milliseconds:50));
+      expect(capture.inputBytes,320);expect(capture.outputBytes,480);
       final interrupted = live.states.firstWhere(
         (state) => state == LiveVoiceState.interrupted,
       );
@@ -148,7 +187,7 @@ void main() {
       await interrupted.timeout(const Duration(seconds: 2));
       expect(connected, 1);
       await live.close();
-      expect(closed, 1);
+      expect(closed, 1);expect(capture.ends,1);expect(capture.interruptions,1);
       await socket.close();
     } finally {
       await live.close();
@@ -494,3 +533,4 @@ void main() {
     );
   }
 }
+

@@ -13,6 +13,7 @@ import 'audio_failure.dart';
 import 'microphone_capture.dart';
 import 'live_pcm_audio.dart';
 import 'live_call_foreground.dart';
+import 'call_recording.dart';
 
 enum LiveVoiceState {
   idle,
@@ -79,6 +80,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
   final FutureOr<void> Function()? onInterrupted;
   final FutureOr<void> Function()? onConnected;
   final FutureOr<void> Function()? onClosed;
+  CallAudioObserver? audioObserver;
   final bool sendGreeting;
   final Duration? maxDuration;
   final DateTime? endAt;
@@ -110,6 +112,9 @@ class LiveVoiceSession with WidgetsBindingObserver {
   bool _muted = false;
   bool _observing = false;
   bool _foregroundCallActive = false;
+  bool _audioInterrupted = false;
+  Future<void>? _suspendingAudio;
+  bool get audioInterrupted => _audioInterrupted;
 
   Stream<LiveVoiceState> get states => _state.stream;
   Stream<String> get errors => _errors.stream;
@@ -174,18 +179,13 @@ class LiveVoiceSession with WidgetsBindingObserver {
           return;
         }
         _interruptions = audioSession.interruptionEventStream.listen((event) {
-          if (event.begin && !_closed) {
-            _fail(
-              'Live voice ended because another call needs the microphone.',
-            );
-            unawaited(close());
-          }
+          unawaited(handleAudioInterruption(event));
         });
         _noisy = audioSession.becomingNoisyEventStream.listen((_) {
-          if (!_closed) {
-            _fail('Live voice ended because the audio device disconnected.');
-            unawaited(close());
-          }
+          // Stop capture/playback when a headset disconnects. Keep the same
+          // session/admission and let the user explicitly choose the new route.
+          unawaited(handleAudioInterruption(
+            AudioInterruptionEvent(true, AudioInterruptionType.pause)));
         });
       }
       WidgetsBinding.instance.addObserver(this);
@@ -332,7 +332,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
 
   Future<void> _beginMicrophone({bool initialSetup = false}) async {
     if (_closed ||
-        (_muted && !initialSetup) ||
+        (_audioInterrupted || (_muted && !initialSetup)) ||
         !_setupComplete ||
         _micSub != null)
       return;
@@ -350,7 +350,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
   Future<void> _startMicrophone({bool initialSetup = false}) async {
     final stream = sharedMicrophone ?? await startCallMicrophone(
       _recorder!, bluetoothGranted: await AppPermissions.bluetoothConnectGranted());
-    if (_closed || (_muted && !initialSetup)) {
+    if (_closed || (_audioInterrupted || (_muted && !initialSetup))) {
       try {
         if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
       } catch (_) {}
@@ -359,11 +359,12 @@ class LiveVoiceSession with WidgetsBindingObserver {
     _micSub = stream.listen(
       (chunk) {
         if (_closed ||
-            _muted ||
+            _muted || _audioInterrupted ||
             chunk.isEmpty ||
             _socket?.readyState != WebSocket.open) {
           return;
         }
+        try { audioObserver?.input(chunk); } catch (_) {}
         _socket!.add(
           jsonEncode({
             'realtimeInput': {
@@ -483,6 +484,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       final server = message['serverContent'];
       if (server is! Map) return;
       if (server['interrupted'] == true) {
+        try { audioObserver?.interrupted(); } catch (_) {}
         if (_ownsAudio) await LivePcmAudio.stop();
         if (onInterrupted != null) await onInterrupted!();
         if (_closed) return;
@@ -523,18 +525,22 @@ class LiveVoiceSession with WidgetsBindingObserver {
                 mime.startsWith('audio/pcm') &&
                 data is String &&
                 data.isNotEmpty) {
+              if (_audioInterrupted) continue;
+              final pcm = base64Decode(data);
               _state.add(LiveVoiceState.speaking);
               if (onAudioPcm != null) {
-                await onAudioPcm!(base64Decode(data));
+                await onAudioPcm!(pcm);
+                try { audioObserver?.output(pcm); } catch (_) {}
                 continue;
               }
               if (!await LivePcmAudio.start(sampleRate: 24000)) {
                 throw StateError('Native live audio playback is unavailable.');
               }
               if (_closed) return;
-              if (!await LivePcmAudio.write(base64Decode(data))) {
+              if (!await LivePcmAudio.write(pcm)) {
                 throw StateError('Native live audio playback stopped.');
               }
+              try { audioObserver?.output(pcm); } catch (_) {}
             }
           }
         }
@@ -546,6 +552,47 @@ class LiveVoiceSession with WidgetsBindingObserver {
     } catch (error) {
       _fail(audioFailureMessage(error, fallback:'Live voice received an invalid audio event.'));
       unawaited(close());
+    }
+  }
+
+  /// Transient focus events (notifications/navigation/media) are not proof
+  /// that another call owns the microphone. Never tear down paid admission.
+  Future<void> handleAudioInterruption(AudioInterruptionEvent event) async {
+    if (_closed || !_ownsAudio) return;
+    if (event.type == AudioInterruptionType.duck) return;
+    if (!event.begin) { await resumeAudio(); return; }
+    if (_audioInterrupted) return;
+    _audioInterrupted = true;
+    _state.add(LiveVoiceState.interrupted);
+    try { audioObserver?.interrupted(); } catch (_) {}
+    final stopping = _suspendAudio();
+    _suspendingAudio = stopping;
+    await stopping;
+  }
+
+  Future<void> _suspendAudio() async {
+    await _startingMic;
+    try { await _micSub?.cancel(); } catch (_) {}
+    _micSub = null;
+    try { await _recorder!.stop().timeout(const Duration(seconds:2)); } catch (_) {}
+    try { await LivePcmAudio.stop(); } catch (_) {}
+  }
+
+  Future<void> resumeAudio() async {
+    if (_closed || !_audioInterrupted) return;
+    await _suspendingAudio;
+    if (_closed || !_audioInterrupted) return;
+    try {
+      final session = await AudioSession.instance;
+      if (!await session.setActive(true) || _closed) return;
+      _audioInterrupted = false;
+      await LivePcmAudio.setSpeaker(_speaker);
+      if (!_muted) await _beginMicrophone();
+      if (!_closed) _state.add(LiveVoiceState.listening);
+    } catch (_) {
+      // Keep explicit Resume available; connection and admission stay intact.
+      _audioInterrupted = true;
+      if (!_closed) _state.add(LiveVoiceState.interrupted);
     }
   }
 
@@ -605,6 +652,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
   Future<void> _close() async {
     if (_closed) return;
     _closed = true;
+    try { audioObserver?.ended(); } catch (_) {}
+    audioObserver = null;
     if (!_ready.isCompleted) {
       _ready.completeError(
         StateError('Live voice ended before media setup completed.'),
@@ -627,6 +676,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
     } catch (_) {}
     try {
       await _startingMic;
+      await _suspendingAudio;
     } catch (_) {}
     try {
       await _micSub?.cancel();
@@ -670,5 +720,6 @@ class LiveVoiceSession with WidgetsBindingObserver {
     unawaited(Future<void>.sync(callback).catchError((Object _) {}));
   }
 }
+
 
 

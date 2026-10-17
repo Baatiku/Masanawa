@@ -193,3 +193,40 @@ Executed: 21 backend/domain/embedded PostgreSQL tests, strict changed-source Typ
 Implemented compact discovery rows and dedicated Room info/join, lesson, question, pinned discussion, saved reading/search and leave-review routes. Teacher labels resolve display names rather than canonical IDs. Removed invented seven-day trial and active-presence claims; unqualified subscriptions remain blocked. Timeline uses actual optional timestamps with deterministic undated fallback. Hidden parents pause answer polling while a question/detail/discussion is open. Account guards extend to descendant routes. Preserved newer brandStrong tabs, initial-tab race fix, search clearing, list position keys and loading skeletons from other windows.
 
 Executed 23 focused Flutter checks across discovery, question answer refresh, discussion, subscription denial, saved lessons and account changes (22 passing in combined run plus the corrected auto-answer pair). Scoped analysis: zero errors/warnings, ten existing style/deprecation infos. No Google Play activation, installed handset or new APK claim. Next source: call interruption recovery and explicit private local recording. Owner's added sections 7/8 are tracked next; Gemini Live remains primary speech and genuine continuous sessions must not invoke recorded-message processing.
+
+
+## Call interruption and recording source — 2026-10-17
+
+Owner reproduced a call ending after about a minute with a late welcome message and microphone-conflict text. The traced defect treats every audio-focus interruption as another call and immediately closes Live. Notifications/ducking now keep the session; temporary loss pauses microphone/output and resumes on focus return or an explicit Resume control. Headset disconnect pauses for explicit route selection. Cleanup still releases the microphone; resumption reuses the same session, voice and paid admission. Late seeded greetings and voice-bubble playback are fenced while the call owns audio. This fixes a proven source path; the exact handset notification source remains to be observed during acceptance.
+
+One-to-one calls now show elapsed connected time and explicit opt-in Record call. Recording taps existing 16kHz microphone and 24kHz accepted player PCM, writes bounded private per-account tracks and mixes a mono WAV in an isolate. Interruptions trim queued output; recording errors never end the call. No second microphone, automatic recording or upload. Calls header opens dedicated local recording list/detail with play/pause, seek, 10-second jumps, speeds, explicit share and full-page deletion review. Capture is capped at 30 minutes per recording; users can start another. Hardware playback latency and group/incoming recording are not qualified by this implementation.
+
+Executed: five synthetic disk/WAV/account/error tests; 20 focused recording UI, Live lifecycle/resumption and full-call presentation tests; 11 current Calls history/account/search checks. Analyzer: zero errors/warnings and five style infos. Native playback/sharing, actual focus interruption recovery on Android, Bodi/Fora sound identity and a newly signed binary remain device checks. No new APK is attached or claimed.
+
+### Owner added voice/call checklist (sections 7–8)
+
+| Item | Source progress / next acceptance |
+| --- | --- |
+| 7.1 Native recording/microphone | Existing single-microphone source; transient-focus fix above; physical handset must retest >1 minute. |
+| 7.2 Immediate Gemini Live speech | Preserve existing Live streaming backend; mobile voice-note playback policy must be reconciled with owner's latest immediate-stream instruction, without duplicate replay or delayed TTS. |
+| 7.3 Complete final transcripts | Existing canonical response pipeline retained; test missing/partial provider transcription next. |
+| 7.4 Bodi/Fora and professional identity | Exact configured voices retained; real-device listening acceptance remains. |
+| 7.5 Hold/slide/lock gestures | Review/finish existing composer gestures next; do not replace recording foundations. |
+| 7.6 Preview/delete/re-record | Existing preview source retained; handset acceptance and any gesture integration next. |
+| 7.7 Waveform/progress | Existing sampled attachment waveform retained; verify recorded-message capture and long-note progress. |
+| 7.8 Playback rates | Existing voice-note rates retained; recording detail adds 1/1.5/2x. |
+| 7.9 Seeking | Existing voice-note slider retained; recording detail adds seek and 10-second jumps. |
+| 7.10 Background/interruptions | Continuous Android foreground service retained; temporary focus pauses rather than ending; headset, lock, Bluetooth device matrix outstanding. |
+| 7.11 Transcript/replay/autoplay preference | Read/replay retained; persistent disable-autoplay control is next source work. |
+| 7.12 Optional sequential playback | Not enabled; explicit stop-at-end remains default and must be qualified first. |
+| 8.1 Continuous calls | Existing bidirectional Live/session resumption preserved; no recorded-message loop introduced. |
+| 8.2 Incoming foreground/background/locked | Existing signaling/service retained; permissions/locked-device acceptance outstanding. |
+| 8.3 Audio routing | Existing speaker/earpiece controls retained; wired/Bluetooth hardware matrix outstanding. |
+| 8.4 Reconnection | Existing provider-handle/grant renewal preserved; tests assert same admission/one connected report; real unstable-network check outstanding. |
+| 8.5 MSNW billing authority | Traced remaining Credits fields and customer-credit reservations in twin_production_runtime. Must replace with reconciled canonical MSNW authority before new paid charging; never relabel old balances/settlements. |
+| 8.6 Call states | Existing states retained; explicit audio-paused/Resume added; richer reconnect presentation next. |
+| 8.7 Duration | Connected elapsed timer added; final history duration/reasons require server projection review. |
+| 8.8 Group identities/join/speaking | Existing group source preserved; focused review/acceptance outstanding. |
+| 8.10 History details/profile callbacks | Existing persisted/searchable Calls retained; dedicated detail/reason/duration/profile projection next. |
+
+Owner numbering skips 8.9 and 8.11; no unrequested features invented for those gaps. “Complete” in supplied priorities is not taken as executed device evidence.

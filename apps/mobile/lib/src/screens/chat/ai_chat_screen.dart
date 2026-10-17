@@ -31,6 +31,7 @@ import '../../calls/group_paid_voice_outbox.dart';
 import '../../core/live_pcm_audio.dart';
 import '../../core/live_call_foreground.dart';
 import '../../core/live_voice_session.dart';
+import '../../core/call_recording.dart';
 import '../../ui/components/voice_note_composer.dart';
 import '../../core/voice_note_recorder.dart';
 import '../profile/masana_profile_screen.dart';
@@ -389,7 +390,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   Future<void> _startInlineRecording() async {
     if (_inlineRecorder != null || !mounted) return;
-    if (_inlineVoiceSession != null || _modalVoiceSession != null) {
+    if (_inlineVoiceSession != null || _modalVoiceSession != null || LiveCallForeground.active) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('End the live call before recording a voice note.')),
       );
@@ -1025,11 +1026,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ? 'Reviewing attachment…'
         : 'Typing…';
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(aiChatProvider.notifier)
-          .seedGreeting(agent.characterId, agent.greeting);
-    });
+    if (widget.entryMode != AiChatEntryMode.liveVoice &&
+        widget.entryMode != AiChatEntryMode.liveTalk &&
+        _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _inlineVoiceSession != null || _modalVoiceSession != null || LiveCallForeground.active) return;
+        ref.read(aiChatProvider.notifier).seedGreeting(agent.characterId, agent.greeting);
+      });
+    }
     if (!_initialEntryHandled) {
       _initialEntryHandled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2300,6 +2304,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         builder: (_) => MasanaLiveCallScreen(
           agent: agent,
           session: session!,
+          recordingOwnerId: owner.accountId,
+          isRecordingOwnerCurrent: () {
+            if (!mounted) return false;
+            final current = ref.read(sessionProvider);
+            return current is SessionSignedIn && current.user.id == owner.accountId;
+          },
           maxDuration: paidAdmission == null
               ? null
               : Duration(
@@ -2478,8 +2488,12 @@ class MasanaLiveCallScreen extends StatefulWidget {
     required this.session,
     this.maxDuration,
     this.onMediaStarted,
+    this.recordingOwnerId,
+    this.isRecordingOwnerCurrent,
   });
 
+  final String? recordingOwnerId;
+  final bool Function()? isRecordingOwnerCurrent;
   final AgentDirectoryEntry agent;
   final LiveVoiceSession session;
   final Duration? maxDuration;
@@ -2495,11 +2509,22 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   bool _speaker = true;
   String? _error;
   Timer? _durationTimer;
+  Timer? _elapsedTimer;
+  final Stopwatch _elapsed = Stopwatch();
+  bool _connected = false;
+  CallRecorder? _recording;
+  StreamSubscription<String>? _errors;
 
   @override
   void initState() {
     super.initState();
-    widget.session.errors.listen((message) {
+    final owner = widget.recordingOwnerId;
+    if (owner != null && widget.isRecordingOwnerCurrent != null) {
+      _recording = CallRecorder(store:CallRecordingStore(owner),agentName:widget.agent.displayName,
+        isCurrentAccount:widget.isRecordingOwnerCurrent!,onChanged:(){if(mounted)setState((){});});
+      widget.session.audioObserver = _recording;
+    }
+    _errors = widget.session.errors.listen((message) {
       if (mounted) setState(() => _error = message);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2521,6 +2546,10 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
         widget.session.ready,
       ]);
       await widget.onMediaStarted?.call();
+      if (!mounted) return;
+      _elapsed.start();
+      setState(() => _connected = true);
+      _elapsedTimer = Timer.periodic(const Duration(seconds:1), (_) {if(mounted)setState((){});});
       final maxDuration = widget.maxDuration;
       if (maxDuration != null) {
         _durationTimer?.cancel();
@@ -2542,17 +2571,22 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   @override
   void dispose() {
     _durationTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _elapsed.stop();
+    _errors?.cancel();
+    _recording?.ended();
     widget.session.close();
     super.dispose();
   }
 
   String _label(LiveVoiceState state) {
     if (_ringing) return 'Calling…';
+    if (widget.session.audioInterrupted) return 'Audio paused';
     return switch (state) {
         LiveVoiceState.connecting => 'Connecting…',
         LiveVoiceState.listening => _muted ? 'Muted' : 'Listening…',
         LiveVoiceState.speaking => 'Speaking…',
-        LiveVoiceState.interrupted => 'Listening…',
+        LiveVoiceState.interrupted => widget.session.audioInterrupted ? 'Audio paused' : 'Listening…',
         LiveVoiceState.failed => 'Connection problem',
         LiveVoiceState.ended => 'Call ended',
         LiveVoiceState.idle => 'Ready',
@@ -2598,6 +2632,24 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                     ),
                   ),
                 ),
+                if (_connected) ...[
+                  const SizedBox(height:12),
+                  Text('${_elapsed.elapsed.inMinutes.toString().padLeft(2,'0')}:${(_elapsed.elapsed.inSeconds%60).toString().padLeft(2,'0')}', semanticsLabel:'Call duration'),
+                ],
+                if (widget.session.audioInterrupted)
+                  TextButton.icon(onPressed:widget.session.resumeAudio,icon:const Icon(Icons.play_arrow),label:const Text('Resume audio')),
+                if (_recording != null && _connected) ...[
+                  const SizedBox(height:12),
+                  TextButton.icon(
+                    onPressed:_recording!.saving?null:() async {
+                      if(_recording!.recording){await _recording!.stop();}else{await _recording!.start();}
+                    },
+                    icon:Icon(_recording!.recording?Icons.stop_circle_outlined:Icons.fiber_manual_record,color:_recording!.recording?u.emergency:u.textPrimary),
+                    label:Text(_recording!.recording?'Stop recording':_recording!.saving?'Saving recording…':'Record call'),
+                  ),
+                  if(_recording!.recording)Text('Recording · saved on this device',style:TextStyle(color:u.emergency)),
+                  if(_recording!.error!=null)Text(_recording!.error!,textAlign:TextAlign.center),
+                ],
                 const SizedBox(height: 28),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -4166,6 +4218,7 @@ class _VideoAttachmentState extends State<_VideoAttachment> {
   }
 
   Future<void> _toggle() async {
+    if (LiveCallForeground.active) return;
     try {
       final controller = _controller ??= VideoPlayerController.file(
         File(widget.attachment.path),
@@ -4517,6 +4570,7 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
         return;
       }
 
+      if (LiveCallForeground.active) return;
       final session = await AudioSession.instance;
       await session.configure(
         const AudioSessionConfiguration(
@@ -4736,4 +4790,5 @@ class _TypingBubble extends StatelessWidget {
     );
   }
 }
+
 
