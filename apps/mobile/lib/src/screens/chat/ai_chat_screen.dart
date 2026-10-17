@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:super_sliver_list/super_sliver_list.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mime/mime.dart';
 import 'package:share_plus/share_plus.dart';
@@ -915,25 +917,41 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _pickMultipleImages() async {
+    // Native gallery handles Android's limited-media permission flow.
+    // Keep the existing server-authorized 8-file/8MB/12MB draft policy.
+    final session = ref.read(sessionProvider);
+    final ownerId = session is SessionSignedIn ? session.user.id : null;
+    if (ownerId == null) return;
     try {
-      final picked = await _imagePicker.pickMultiImage(
-        maxWidth: 1600,
-        imageQuality: 85,
+      final selected = await AssetPicker.pickAssets(
+        context,
+        pickerConfig: const AssetPickerConfig(
+          maxAssets: 8,
+          requestType: RequestType.image,
+        ),
       );
+      if (selected == null || selected.isEmpty || !mounted) return;
+      var active = ref.read(sessionProvider);
+      if (active is! SessionSignedIn || active.user.id != ownerId) return;
       final attachments = <ChatAttachment>[];
-      for (final image in picked.take(8)) {
-        final size = await File(image.path).length();
-        attachments.add(
-          ChatAttachment(
-            kind: 'image',
-            path: image.path,
-            name: image.name,
-            sizeBytes: size,
-          ),
-        );
+      for (final asset in selected.take(8)) {
+        final file = await asset.file;
+        if (file == null || !await file.exists()) continue;
+        final size = await file.length();
+        if (size == 0 || size > 8 * 1024 * 1024) continue;
+        attachments.add(ChatAttachment(
+          kind: 'image',path: file.path,
+          name: asset.title ?? 'Photo',sizeBytes: size,
+        ));
       }
-      if (attachments.isNotEmpty && mounted) {
-        _stageAttachments(attachments);
+      if (!mounted) return;
+      active = ref.read(sessionProvider);
+      if (active is! SessionSignedIn || active.user.id != ownerId) return;
+      _stageAttachments(attachments);
+      if (attachments.length < selected.length) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Some photos exceeded 8 MB or could not be opened.'),
+        ));
       }
     } catch (_) {
       if (mounted) _pickerFailed('Photos');
@@ -1339,7 +1357,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             Expanded(
               child: messages.isEmpty && !sending
                   ? const SizedBox.shrink()
-                  : ListView.builder(
+                  : SuperListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,

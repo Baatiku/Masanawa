@@ -76,6 +76,12 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
       currentAccount: currentAccount,
       token: () async => api.accessToken,
     );
+    final inlineMedia = AccountBoundFeedMediaApi(
+      delegate: DioFeedMediaApi(api.dio, () async => api.accessToken),
+      ownerAccount: account,
+      currentAccount: currentAccount,
+    );
+
     void openMedia(FeedPost post, String mediaId) {
       if (post.authorMasanaId != agent.characterId ||
           !const {'audio', 'image'}.contains(post.kind) ||
@@ -117,6 +123,7 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
         child: MasanaFeedScreen(
           api: feed,
           accountKey: account,
+          mediaApi: inlineMedia,
           authorScoped: true,
           audioPlaybackAvailable: true,
           onOpenMedia: openMedia,
