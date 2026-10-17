@@ -408,9 +408,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: TextStyle(color: u.emergency),
                 ),
                 subtitle: const Text('Account and data deletion options'),
-                onTap: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => const AccountDeletionDialog(),
+                onTap: user == null ? null : () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: '/settings/account-deletion'),
+                    builder: (_) => const AccountDeletionDialog(),
+                  ),
                 ),
               ),
             ],
