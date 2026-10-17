@@ -197,6 +197,13 @@ class StatusScreen extends ConsumerWidget {
       ));
     }
 
+    // Only the current signed-in account may obtain an original-media grant.
+    final inlineMedia = AccountBoundFeedMediaApi(
+      delegate: DioFeedMediaApi(api.dio, () async => api.accessToken),
+      ownerAccount: account,
+      currentAccount: currentAccount,
+    );
+
     void openMedia(FeedPost post, String mediaId) {
       if (!const {'image', 'audio'}.contains(post.kind) ||
           currentAccount() != account) return;
@@ -268,6 +275,7 @@ class StatusScreen extends ConsumerWidget {
             MasanaFeedScreen(
               api: feed,
               accountKey: account,
+              mediaApi: inlineMedia,
               onOpenMedia: openMedia,
               onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
               audioPlaybackAvailable: true,
