@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'agent_directory.dart';
 
 /// Curated offline portraits. Server-approved identity keys take priority over labels.
@@ -118,6 +119,20 @@ String? bannerAssetFor(String displayName) {
   return index < 0 ? null : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
 }
 
+/// Persist only immutable, public official portraits. Never cache short-lived
+/// account-owned signed URLs, which may contain temporary access credentials.
+bool isPublicMasanawaPortraitUrl(String raw) {
+  final uri = Uri.tryParse(raw);
+  if (uri == null || uri.scheme != 'https' ||
+      uri.host != 'raw.githubusercontent.com' ||
+      uri.userInfo.isNotEmpty || uri.hasPort || uri.hasQuery || uri.hasFragment) {
+    return false;
+  }
+  return RegExp(
+    r'^/Baatiku/Masanawa/main/apps/mobile/assets/masana/portraits/[a-z][a-z0-9_-]{1,39}\.webp$',
+  ).hasMatch(uri.path);
+}
+
 class MasanaPortraitAvatar extends StatelessWidget {
   const MasanaPortraitAvatar({
     super.key,
@@ -148,6 +163,14 @@ class MasanaPortraitAvatar extends StatelessWidget {
 
     Widget fallbackSvgOrUrl() {
       if (url != null && url.isNotEmpty) {
+        if (isPublicMasanawaPortraitUrl(url)) {
+          return CachedNetworkImage(
+            imageUrl: url,width: size,height: size,fit: BoxFit.cover,
+            placeholder: (_, __) => _initial(initial),
+            errorWidget: (_, __, ___) => _initial(initial),
+          );
+        }
+        // Preserve memory-only loading for private/ephemeral media.
         return Image.network(
           url,
           width: size,
