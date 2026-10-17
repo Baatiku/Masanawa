@@ -118,16 +118,16 @@ export function createAccountDataExports(
       if(!row)throw new AccountExportError("ACCOUNT_NOT_FOUND",404);
       // Audit event history is intentionally bounded, not a dump of
       // credentials, password/PIN hashes, OTPs or private wallet ledgers.
-      const events=await pool.query<{action:string;at:Date|string}>(
-        `SELECT action,at FROM security.platform_auth_events
+      const events=await pool.query<{action:string;at:Date|string;client_label:string|null}>(
+        `SELECT action,at,client_label FROM security.platform_auth_events
            WHERE tenant_id=$1 AND user_id=$2 ORDER BY at DESC LIMIT 100`,
         [owner.tenantId,owner.userId],
       );
       const devices=await pool.query<{
-        session_id:string;device_id:string|null;
+        session_id:string;device_id:string|null;client_label:string|null;
         created_at:Date|string;updated_at:Date|string;
       }>(
-        `SELECT session_id::text,device_id,created_at,updated_at
+        `SELECT session_id::text,device_id,client_label,created_at,updated_at
            FROM security.platform_sessions
            WHERE tenant_id=$1 AND user_id=$2
              AND revoked_at IS NULL AND refresh_expires_at>clock_timestamp()
@@ -147,11 +147,13 @@ export function createAccountDataExports(
         },
         activeDevices:devices.rows.map(d=>({
           sessionId:d.session_id,installationId:d.device_id,
+          clientLabel:d.client_label,
           createdAt:new Date(d.created_at).toISOString(),
           lastAccessAt:new Date(d.updated_at).toISOString(),
         })),
         recentAccessEvents:events.rows.map(e=>({
           action:e.action,at:new Date(e.at).toISOString(),
+          clientLabel:e.client_label,
         })),
         notices:[
           "Only your account profile and latest 100 security events/devices are included.",
