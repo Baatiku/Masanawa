@@ -8,6 +8,16 @@ export type RecordedLiveSocket = Pick<
   "send" | "close" | "addEventListener" | "removeEventListener" | "binaryType"
 >;
 
+
+/** Only replace the canonical read-aloud text with a complete transcription.
+ * Live can omit the final ASR fragments even after a completed audio turn. */
+function completeTranscript(prompt: string, transcript: string): string | undefined {
+  const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const candidate = transcript.trim();
+  const expected = normalize(prompt);
+  return candidate && expected && normalize(candidate) === expected ? candidate : undefined;
+}
+
 /** One read-aloud turn, without microphone capture, tools or call admission. */
 export function createGeminiRecordedLiveAudioRenderer(input: {
   readonly apiKey: string;
@@ -82,7 +92,8 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
             settled = true;
             cleanup();
             const buffer = Buffer.concat(chunks, size);
-            resolve(Object.freeze({dataBase64: buffer.toString("base64"), mimeType: "audio/l16;rate=24000", durationMs: Math.max(1,Math.round(size/48)), ...(transcript.trim() ? {transcript:transcript.trim()} : {})}));
+            const completedTranscript = completeTranscript(prompt, transcript);
+            resolve(Object.freeze({dataBase64: buffer.toString("base64"), mimeType: "audio/l16;rate=24000", durationMs: Math.max(1,Math.round(size/48)), ...(completedTranscript ? {transcript:completedTranscript} : {})}));
           });
         }
         function onFailure(event?: Event) {

@@ -269,3 +269,18 @@ it('retains transcript fragments arriving after the completed audio turn', async
 it('preserves completed audio when the provider closes during transcript grace',async()=>{
  const f=fixture();const result=f.renderer.render('Hello');f.socket.open();f.socket.receive({setupComplete:{}});audioTurn(f.socket);f.socket.dispatchEvent(new Event('close'));expect((await result).dataBase64).toBe(audio.toString('base64'));
 });
+
+it.each([
+  ["Hello! Two", undefined],
+  ["", undefined],
+  ["Hello! Two plus three is 5.", "Hello! Two plus three is 5."],
+  ["hello two plus three is 5", "hello two plus three is 5"],
+])("never lets an incomplete transcript replace the complete reply: %s", async (transcript, expected) => {
+  const f = fixture();
+  const result = f.renderer.render("**Hello!** Two plus three is 5. 😀");
+  f.socket.open();
+  f.socket.receive({ setupComplete: {} });
+  f.socket.receive({ serverContent: { outputTranscription: { text: transcript, finished: true } } });
+  audioTurn(f.socket);
+  expect((await result).transcript).toBe(expected);
+});
