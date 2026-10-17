@@ -259,75 +259,19 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         content:Text('Verify your bank account before creating an offer.')));
       return;
     }
-    // A seller may verify more than one bank; never silently publish an
-    // offer against the first (most recently created) account.
-    String? chosenId;
-    if(methods.length==1){
-      chosenId='${methods.single['method_id']}';
-    } else {
-      chosenId=await openWalletPage<String>(context:context,builder:(dialog)=>
-        WalletChoiceContent(
-          title:const Text('Choose bank for buyer payments'),
-          children:[
-            for(final method in methods)
-              SimpleDialogOption(
-                onPressed:()=>Navigator.pop(dialog,'${method['method_id']}'),
-                child:ListTile(
-                  leading:const Icon(Icons.account_balance_outlined),
-                  title:Text('${method['bank_name']}'),
-                  subtitle:Text('${method['account_name']} · '
-                    '${_maskedP2pAccount(method['account_number'])}'),
-                ),
-              ),
-          ],
-        ));
-    }
-    if(chosenId==null||!mounted)return;
-    final chosen=methods.where((item)=>'${item['method_id']}'==chosenId);
-    if(chosen.length!=1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:Text('Selected bank is no longer available. Refresh to retry.')));
-      return;
-    }
-    final payment=chosen.single;
-    final rate=await _field(title:'Sell MSNW',label:'NGN per MSNW',hint:'e.g. 1500.00');
-    if(rate==null||!mounted)return;
-    final minimum=await _field(title:'Minimum purchase',label:'MSNW amount',hint:'e.g. 1');
-    if(minimum==null||!mounted)return;
-    final maximum=await _field(title:'Maximum purchase',label:'MSNW amount',hint:'e.g. 100');
-    if(maximum==null||!mounted)return;
-    final inventory=await _field(title:'Offer inventory',label:'MSNW amount',hint:'e.g. 100');
-    if(inventory==null||!mounted)return;
-    late final String rateKobo,minMicro,maxMicro,inventoryMicro;
-    try {
-      if(!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?$').hasMatch(rate.trim()))
-        throw const FormatException('Enter a valid NGN price.');
-      final parts=rate.trim().split('.');
-      rateKobo=(BigInt.parse(parts.first)*BigInt.from(100)+
-        BigInt.parse((parts.length==2?parts[1]:'').padRight(2,'0'))).toString();
-      minMicro=_micro(minimum);maxMicro=_micro(maximum);
-      inventoryMicro=_micro(inventory);
-    } catch(error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('Invalid offer: $error')));
-      return;
-    }
-    if(!await _confirm('Publish sell offer',
-      'Buyer payments will go to ${payment['bank_name']} '
-      '(${payment['account_name']}). '
-      'Price ${_ngn(rateKobo)} per MSNW. Platform escrow fee: 0.5% of '
-      'MSNW sold, reserved with the principal and returned if cancelled. '
-      'Your available MSNW will only be reserved when a buyer '
-      'creates a funded escrow order.'))return;
-    await _act(() async {
-      await _request('POST','/offers',{
-        'paymentMethodId':chosenId,
-        'rateKoboPerMsnw':rateKobo,
-        'minMicro':minMicro,'maxMicro':maxMicro,
-        'inventoryMicro':inventoryMicro,
-      });
-      _reload(0);
-    });
+    // A seller may verify multiple accounts. Never publish an offer with a
+    // silently selected first bank or lose input through separate modal steps.
+    final completed = await openWalletPage<bool>(
+      context: context,
+      title: 'Sell MSNW',
+      builder: (_) => MsnwP2pSellerOfferForm(
+        methods: methods,
+        onPublish: (input) async {
+          await _request('POST', '/offers', input);
+        },
+      ),
+    );
+    if (mounted && completed == true && _sameAccount) _reload(0);
   }
 
   Future<void> _orderDetail(String id) async {
@@ -435,6 +379,250 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     ]),
   );
 }
+
+/// Complete, self-contained P2P seller offer editor. Input survives failed
+/// validation or network requests; no write occurs before Review and Publish.
+/// The parent owns the authenticated gateway call and account-fenced route.
+class MsnwP2pSellerOfferForm extends StatefulWidget {
+  const MsnwP2pSellerOfferForm({
+    super.key,
+    required this.methods,
+    required this.onPublish,
+  });
+
+  final List<Map<String, dynamic>> methods;
+  final Future<void> Function(Map<String, dynamic> payload) onPublish;
+
+  @override
+  State<MsnwP2pSellerOfferForm> createState() => _MsnwP2pSellerOfferFormState();
+}
+
+class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
+  final _form = GlobalKey<FormState>();
+  final _rate = TextEditingController();
+  final _minimum = TextEditingController();
+  final _maximum = TextEditingController();
+  final _inventory = TextEditingController();
+  String? _paymentMethodId;
+  Map<String, dynamic>? _payload;
+  bool _reviewing = false;
+  bool _saving = false;
+  bool _uncertain = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.methods.length == 1) {
+      _paymentMethodId = '${widget.methods.first['method_id']}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _rate.dispose();
+    _minimum.dispose();
+    _maximum.dispose();
+    _inventory.dispose();
+    super.dispose();
+  }
+
+  String? _validAmount(String? text) {
+    try {
+      _micro(text?.trim() ?? '');
+      return null;
+    } catch (_) {
+      return 'Enter a positive MSNW amount (up to 6 decimals).';
+    }
+  }
+
+  String? _validRate(String? text) {
+    if (!RegExp(r'^[0-9]{1,10}(\\.[0-9]{1,2})?$').hasMatch(text?.trim() ?? '')) {
+      return 'Enter a valid NGN price with at most 2 decimals.';
+    }
+    final parts = text!.trim().split('.');
+    final amount = BigInt.parse(parts[0]) * BigInt.from(100) +
+        BigInt.parse((parts.length == 2 ? parts[1] : '').padRight(2, '0'));
+    return amount <= BigInt.zero ? 'Rate must be greater than zero.' : null;
+  }
+
+  void _review() {
+    if (!_form.currentState!.validate()) return;
+    final method = widget.methods.where(
+      (item) => '${item['method_id']}' == _paymentMethodId,
+    ).toList(growable: false);
+    if (method.length != 1) {
+      setState(() => _error = 'Choose a verified seller bank.');
+      return;
+    }
+    final parts = _rate.text.trim().split('.');
+    final rateKobo = (BigInt.parse(parts.first) * BigInt.from(100) +
+        BigInt.parse((parts.length == 2 ? parts[1] : '').padRight(2, '0')))
+        .toString();
+    final minMicro = _micro(_minimum.text);
+    final maxMicro = _micro(_maximum.text);
+    final inventoryMicro = _micro(_inventory.text);
+    if (BigInt.parse(minMicro) > BigInt.parse(maxMicro) ||
+        BigInt.parse(maxMicro) > BigInt.parse(inventoryMicro)) {
+      setState(() => _error =
+          'Minimum must not exceed maximum, and inventory must cover maximum.');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _reviewing = true;
+      _payload = <String, dynamic>{
+        'paymentMethodId': _paymentMethodId,
+        'rateKoboPerMsnw': rateKobo,
+        'minMicro': minMicro,
+        'maxMicro': maxMicro,
+        'inventoryMicro': inventoryMicro,
+      };
+    });
+  }
+
+  Future<void> _publish() async {
+    if (_saving || _uncertain || _payload == null) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onPublish(_payload!);
+      if (mounted) Navigator.of(context).pop(true);
+    } on DioException catch (error) {
+      if (!mounted) return;
+      final unknown = error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout;
+      setState(() {
+        _saving = false;
+        _uncertain = unknown;
+        _error = unknown
+            ? 'Offer outcome is unconfirmed. Check My Offers before creating '
+                'another offer. Your inputs are retained.'
+            : 'Offer could not be published. Review your details and try again.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Offer could not be confirmed. Review the offer list '
+            'before submitting another request.';
+        _uncertain = true;
+      });
+    }
+  }
+
+  Widget _entry(String title, TextEditingController controller,
+      String? Function(String?) validate, String hint) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: TextFormField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(labelText: title, hintText: hint),
+      validator: validate,
+      enabled: !_saving,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final method = widget.methods.where(
+      (item) => '${item['method_id']}' == _paymentMethodId,
+    ).toList(growable: false);
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        children: [
+          Text(_reviewing ? 'Review sell offer' : 'Create a sell offer',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          if (_reviewing && _payload != null) ...[
+            Text('Buyer bank: ${method.isEmpty ? 'Unavailable' : method.first['bank_name']}'),
+            const SizedBox(height: 10),
+            Text('Your price: ${_rate.text.trim()} NGN per MSNW'),
+            Text('Minimum: ${_minimum.text.trim()} MSNW'),
+            Text('Maximum: ${_maximum.text.trim()} MSNW'),
+            Text('Inventory: ${_inventory.text.trim()} MSNW'),
+            const SizedBox(height: 16),
+            const Text('Escrow reserves MSNW only after a buyer creates a '
+                'funded order. Do not treat a screenshot as payment proof.'),
+            if (!_uncertain) ...[
+              const SizedBox(height: 20),
+              OutlinedButton(
+                onPressed: _saving ? null : () => setState(() {
+                  _reviewing = false;
+                  _payload = null;
+                  _error = null;
+                }),
+                child: const Text('Edit details'),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('p2p-publish-offer'),
+                onPressed: _saving ? null : _publish,
+                icon: const Icon(Icons.check_circle_outline),
+                label: Text(_saving ? 'Publishing…' : 'Publish sell offer'),
+              ),
+            ],
+          ] else ...[
+            const Text('All seller payments go to your verified bank. '
+                'Amounts are exact MSNW values and the NGN price is per MSNW.'),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('p2p-seller-bank'),
+              initialValue: _paymentMethodId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Verified bank'),
+              items: [
+                for (final bank in widget.methods)
+                  DropdownMenuItem(
+                    value: '${bank['method_id']}',
+                    child: Text('${bank['bank_name']} · '
+                        '${_maskedP2pAccount(bank['account_number'])}',
+                        overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: _saving ? null : (value) => setState(() {
+                _paymentMethodId = value;
+                _error = null;
+              }),
+              validator: (value) => value == null
+                  ? 'Select the bank receiving payments.' : null,
+            ),
+            const SizedBox(height: 14),
+            _entry('NGN per MSNW', _rate, _validRate, 'e.g. 1500.00'),
+            _entry('Minimum MSNW', _minimum, _validAmount, 'e.g. 1'),
+            _entry('Maximum MSNW', _maximum, _validAmount, 'e.g. 100'),
+            _entry('Inventory MSNW', _inventory, _validAmount, 'e.g. 100'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              key: const ValueKey('p2p-review-offer'),
+              onPressed: _saving ? null : _review,
+              icon: const Icon(Icons.rate_review_outlined),
+              label: const Text('Review offer'),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(_error!, style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              )),
+            ),
+          ],
+          if (_uncertain)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.list_alt),
+              label: const Text('Return to My Offers'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
