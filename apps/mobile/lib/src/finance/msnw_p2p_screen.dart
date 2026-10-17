@@ -179,67 +179,25 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       return;
     }
     if (!mounted) return;
-    final number = TextEditingController();
-    String? selectedBank;
-    bool consent = false;
-    try {
-      final request = await openWalletPage<Map<String,String>>(
-        context:context,
-        builder:(dialog) => StatefulBuilder(builder:(dialog, update) =>
-          WalletReviewContent(
-            title:const Text('Verify seller bank'),
-            content:SingleChildScrollView(child:Column(
-              mainAxisSize:MainAxisSize.min,
-              children:[
-                const Text('Your bank account must match your Paystack-verified '
-                  'legal identity. This is for receiving P2P payments.'),
-                const SizedBox(height:12),
-                DropdownButtonFormField<String>(
-                  isExpanded:true,
-                  decoration:const InputDecoration(labelText:'Nigerian bank'),
-                  items:[
-                    for(final bank in banks)
-                      DropdownMenuItem<String>(
-                        value:'${bank['code']}',
-                        child:Text('${bank['name']}',overflow:TextOverflow.ellipsis)),
-                  ],
-                  onChanged:(value)=>update(()=>selectedBank=value),
-                ),
-                TextField(controller:number,maxLength:10,
-                  keyboardType:TextInputType.number,
-                  onChanged:(_)=>update((){}),
-                  decoration:const InputDecoration(labelText:'10-digit bank account number')),
-                CheckboxListTile(
-                  value:consent,
-                  onChanged:(value)=>update(()=>consent=value??false),
-                  title:const Text('I consent to Paystack verifying my bank details.'),
-                ),
-              ])),
-            actions:[
-              TextButton(onPressed:()=>Navigator.pop(dialog),
-                child:const Text('Cancel')),
-              FilledButton(
-                onPressed:consent && selectedBank!=null &&
-                  RegExp(r'^[0-9]{10}$').hasMatch(number.text)
-                    ? ()=>Navigator.pop(dialog,{
-                        'bankCode':selectedBank!,
-                        'accountNumber':number.text,
-                      })
-                    : null,
-                child:const Text('Verify')),
-            ],
-          )),
+    final verified = await openWalletPage<bool>(
+      context: context,
+      title: 'Verify seller bank',
+      builder: (_) => MsnwP2pBankVerificationForm(
+        banks: banks,
+        onSubmit: (bankCode, accountNumber) async {
+          await _request('POST', '/methods/verify', {
+            'bankCode': bankCode,
+            'accountNumber': accountNumber,
+            'consent': true,
+          });
+        },
+      ),
+    );
+    if (mounted && verified == true && _sameAccount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your seller bank was verified.')),
       );
-      if(request==null||!mounted)return;
-      await _act(() async {
-        final result = _json(await _request('POST','/methods/verify',
-          {...request,'consent':true}));
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content:Text('Verified ${result['bankName']} · ${result['accountName']}')));
-        _reload(1);
-      });
-    } finally {
-      number.dispose();
+      _reload(1);
     }
   }
 
@@ -380,6 +338,163 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           ]));
         })),
     ]),
+  );
+}
+
+/// Dedicated identity-consented bank verification page. An unsuccessful
+/// request leaves the bank, account number and consent intact for correction.
+/// Never infer a verification result from the typed account details.
+class MsnwP2pBankVerificationForm extends StatefulWidget {
+  const MsnwP2pBankVerificationForm({
+    super.key, required this.banks, required this.onSubmit,
+  });
+
+  final List<Map<String, dynamic>> banks;
+  final Future<void> Function(String bankCode, String accountNumber) onSubmit;
+
+  @override
+  State<MsnwP2pBankVerificationForm> createState() =>
+      _MsnwP2pBankVerificationFormState();
+}
+
+class _MsnwP2pBankVerificationFormState
+    extends State<MsnwP2pBankVerificationForm> {
+  final _form = GlobalKey<FormState>();
+  final _number = TextEditingController();
+  String? _bankCode;
+  bool _consent = false;
+  bool _verifying = false;
+  bool _uncertain = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _number.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verify() async {
+    if (_verifying || _uncertain || !_form.currentState!.validate()) return;
+    if (!_consent) {
+      setState(() => _error = 'Please consent to bank verification first.');
+      return;
+    }
+    final validBank = widget.banks.any(
+      (bank) => '${bank['code']}' == _bankCode,
+    );
+    if (!validBank) {
+      setState(() => _error = 'Select a verified Nigerian bank.');
+      return;
+    }
+    setState(() { _verifying = true; _error = null; });
+    try {
+      await widget.onSubmit(_bankCode!, _number.text.trim());
+      if (mounted) Navigator.of(context).pop(true);
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final uncertain = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          (e.response?.statusCode ?? 0) >= 500;
+      setState(() {
+        _verifying = false;
+        _uncertain = uncertain;
+        _error = uncertain
+            ? 'Verification result is uncertain. Check your verified '
+                'payment methods before sending another request.'
+            : 'The bank could not be verified. Check your details and retry.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _uncertain = true;
+        _error = 'Bank verification could not be confirmed. '
+            'Check payment methods before submitting again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Form(
+      key: _form,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        children: [
+          Text('Verify your receiving bank',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          const Text('The account holder must match your Paystack-verified '
+              'legal identity. Verification does not automatically publish an offer.'),
+          const SizedBox(height: 20),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('p2p-bank-identity'),
+            initialValue: _bankCode,
+            isExpanded: true,
+            items: [
+              for (final bank in widget.banks)
+                DropdownMenuItem(
+                  value: '${bank['code']}',
+                  child: Text('${bank['name']}', overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            decoration: const InputDecoration(labelText: 'Nigerian bank'),
+            onChanged: _verifying || _uncertain ? null
+                : (value) => setState(() { _bankCode = value; _error = null; }),
+            validator: (value) => value == null ? 'Choose a bank' : null,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const ValueKey('p2p-bank-number'),
+            controller: _number,
+            maxLength: 10,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            enabled: !_verifying && !_uncertain,
+            decoration: const InputDecoration(
+              labelText: '10-digit account number',
+            ),
+            validator: (value) =>
+                RegExp(r'^[0-9]{10}$').hasMatch(value?.trim() ?? '')
+                ? null : 'Enter a valid 10-digit account number',
+          ),
+          CheckboxListTile(
+            key: const ValueKey('p2p-bank-consent'),
+            contentPadding: EdgeInsets.zero,
+            value: _consent,
+            onChanged: _verifying || _uncertain ? null : (value) =>
+                setState(() { _consent = value ?? false; _error = null; }),
+            title: const Text(
+              'I consent to Paystack verifying these bank details.',
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(_error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+          ],
+          const SizedBox(height: 18),
+          if (!_uncertain)
+            FilledButton.icon(
+              key: const ValueKey('p2p-bank-verify'),
+              onPressed: _verifying ? null : _verify,
+              icon: const Icon(Icons.verified_user_outlined),
+              label: Text(_verifying ? 'Verifying…' : 'Verify bank'),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.account_balance_outlined),
+              label: const Text('Return to payment methods'),
+            ),
+        ],
+      ),
+    ),
   );
 }
 
