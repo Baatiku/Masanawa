@@ -1,4 +1,5 @@
 import '../../finance/wallet_flow_page.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/billing_models.dart';
@@ -496,7 +497,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       selected: isSelected,
                       selectedColor: u.brand,
                       labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : u.textPrimary,
+                        color: u.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                       onSelected: (_) => setState(() => selectedFilter = filter),
@@ -508,15 +509,24 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             const SizedBox(height: 12),
 
             // Bundle Cards List
-            if (loading)
-              const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
-            else if (filteredItems.isEmpty)
+            if (loading || busy)
+              const MasanawaListSkeleton(
+                itemCount: 4, shrinkWrap: true,
+                semanticLabel: 'Loading verified billing services',
+              )
+            else if (filteredItems.isEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text(error ??
-                  'No verified Flutterwave bundles are available. '
-                  'Pull down to refresh.'),
-              )
+                  'No verified billing packages are available for this selection.',
+                  textAlign: TextAlign.center),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => category == null ? load() : selectCategory(category),
+                icon: const Icon(Icons.refresh),
+                label: Text(error != null ? 'Retry services' : 'Refresh packages'),
+              ),
+            ]
             else
               ...filteredItems.map((pkg) => _BundleCard(
                     item: pkg,

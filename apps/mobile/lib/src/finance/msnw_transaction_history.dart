@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'msnw_wallet_home.dart';
 import 'wallet_flow_page.dart';
+import '../ui/components/masanawa_list_skeleton.dart';
 
 class WalletTransaction {
   const WalletTransaction({required this.id, required this.category,
@@ -149,10 +150,30 @@ class _HistoryState extends State<MsnwTransactionHistory> {
       if (busy) const LinearProgressIndicator(minHeight:2),
       if (failed.isNotEmpty) Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
         child:const Text('Couldn’t refresh transactions. Check your connection and retry.',textAlign:TextAlign.center)),
-      Expanded(child:rows.isEmpty ? Center(child:Padding(padding:const EdgeInsets.all(24),
-        child:Text(busy?'Loading transactions…':failed.isNotEmpty?'Couldn’t load transactions. Check your connection and retry.':
-          entries.isEmpty?'No transactions yet':'No matching transactions',textAlign:TextAlign.center))) :
-        ListView.builder(padding:const EdgeInsets.fromLTRB(8,0,8,24),itemCount:rows.length+1,itemBuilder:(context,index) {
+      Expanded(child:rows.isEmpty
+        ? busy
+          ? const MasanawaListSkeleton(semanticLabel: 'Loading transactions')
+          : Center(child:Padding(padding:const EdgeInsets.all(24),
+              child:Column(mainAxisSize:MainAxisSize.min,children:[
+                const Icon(Icons.receipt_long_outlined,size:42),
+                const SizedBox(height:12),
+                Text(failed.isNotEmpty
+                  ? 'Couldn’t load transactions. Check your connection and retry.'
+                  : filter.category != 'All' || filter.status != 'All' || search.text.trim().isNotEmpty
+                    ? 'No transactions match your filters.'
+                    : 'No transactions yet. Fund your MSNW wallet to get started.',
+                  textAlign:TextAlign.center),
+                const SizedBox(height:16),
+                if(failed.isNotEmpty)
+                  OutlinedButton.icon(onPressed:()=>load(),
+                    icon:const Icon(Icons.refresh),label:const Text('Retry'))
+                else if(filter.category!='All'||filter.status!='All'||search.text.trim().isNotEmpty)
+                  TextButton(onPressed:(){debounce?.cancel();search.clear();setState(()=>filter=const WalletHistoryFilter());load();},
+                    child:const Text('Clear filters'))
+              ])))
+        : ListView.builder(
+            key:PageStorageKey<String>('msnw-history-${widget.expectedUserId}-${filter.category}-${filter.status}'),
+            padding:const EdgeInsets.fromLTRB(8,0,8,24),itemCount:rows.length+1,itemBuilder:(context,index) {
           if(index==rows.length)return Padding(padding:const EdgeInsets.all(16),child:nextCursor==null?
             const Text('End of transactions',textAlign:TextAlign.center,style:TextStyle(fontSize:12)):
             OutlinedButton(onPressed:busy?null:()=>load(more:true),child:const Text('Load more')));

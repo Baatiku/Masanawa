@@ -7,6 +7,7 @@ import '../../social/talk_social_profiles.dart';
 import '../../state/session_state.dart';
 import '../../state/talk_social_profile_state.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_profile_skeleton.dart';
 
 /// Edits the signed-in person's public identity, not an Agent/Twin profile.
 class EditProfileScreen extends ConsumerStatefulWidget {
@@ -245,7 +246,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       backgroundColor: u.surfaceBg,
       appBar: AppBar(title: const Text('Edit profile')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MasanawaProfileSkeleton(semanticLabel: 'Loading your profile')
           : profile == null && !_creatingProfile
           ? Center(
               child: Column(
