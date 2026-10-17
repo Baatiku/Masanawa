@@ -29,6 +29,7 @@ interface ProfileRow {
   phone: string | null;
   locale: string;
   created_at: Date | string;
+  account_state?: "active"|"restricted"|"suspended"|"recovery";
 }
 
 function profile(row: ProfileRow): PlatformAuthProfile {
@@ -40,6 +41,7 @@ function profile(row: ProfileRow): PlatformAuthProfile {
     email: row.email,
     phone: row.phone,
     locale: row.locale,
+    ...(row.account_state ? {accountState:row.account_state} : {}),
     createdAt: (row.created_at instanceof Date ? row.created_at : new Date(row.created_at)).toISOString(),
   });
 }
@@ -61,9 +63,19 @@ async function loadProfile(
   userId: UserId,
 ): Promise<PlatformAuthProfile | null> {
   const result = await client.query<ProfileRow>(
-    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.locale,p.created_at,h.handle AS username
+    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.locale,p.created_at,h.handle AS username,
+         CASE WHEN c.state IS NOT NULL AND
+           (c.until_at IS NULL OR c.until_at>clock_timestamp())
+           THEN c.state
+          WHEN EXISTS(SELECT 1 FROM security.platform_auth_events e
+            WHERE e.tenant_id=p.tenant_id AND e.user_id=p.user_id
+            AND e.action='password_reset'
+            AND e.at>clock_timestamp()-interval '24 hours') THEN 'recovery'
+          ELSE 'active' END AS account_state
        FROM security.platform_user_profiles p
        LEFT JOIN talks.public_profiles h ON h.tenant_id=p.tenant_id AND h.user_id=p.user_id
+       LEFT JOIN security.platform_account_controls c
+         ON c.tenant_id=p.tenant_id AND c.user_id=p.user_id
       WHERE p.tenant_id=$1 AND p.user_id=$2`,
     [tenantId,userId],
   );
@@ -497,14 +509,19 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         // Serialize issuance against the deletion revoker's canonical User
         // UPDATE. A session inserted first is revoked by that transaction;
         // a revoker that wins first makes this request fail closed.
-        const current = await client.query<{ state: string }>(
-          `SELECT state FROM identity.users
-            WHERE tenant_id=$1 AND user_id=$2 FOR SHARE`,
+        const current = await client.query<{ state: string; account_state: string | null }>(
+          `SELECT u.state,c.state AS account_state FROM identity.users u
+           LEFT JOIN security.platform_account_controls c ON
+             c.tenant_id=u.tenant_id AND c.user_id=u.user_id AND
+             (c.until_at IS NULL OR c.until_at>clock_timestamp())
+           WHERE u.tenant_id=$1 AND u.user_id=$2 FOR SHARE OF u`,
           [input.identity.tenantId,input.identity.userId],
         );
         if (current.rows[0]?.state !== "active") {
           throw new Error("auth.account_inactive");
         }
+        if(current.rows[0]?.account_state==="suspended")
+          throw new Error("auth.account_suspended");
         await client.query(
           `INSERT INTO security.platform_sessions(
              access_hash,refresh_hash,tenant_id,user_id,access_expires_at,
@@ -657,6 +674,26 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         [input.accessHash,input.grantHash,input.operation,input.fingerprint,input.at],
       );
       return (used.rowCount??0)===1;
+    },
+    async readAccountState(input) {
+      const result=await pool.query<{state:string;control:string|null;recent:boolean}>(
+        `SELECT u.state,c.state AS control,
+          EXISTS(SELECT 1 FROM security.platform_auth_events e
+            WHERE e.tenant_id=u.tenant_id AND e.user_id=u.user_id
+              AND e.action='password_reset'
+              AND e.at>$3::timestamptz-interval '24 hours') AS recent
+          FROM identity.users u
+          LEFT JOIN security.platform_account_controls c
+            ON c.tenant_id=u.tenant_id AND c.user_id=u.user_id AND
+              (c.until_at IS NULL OR c.until_at>$3)
+          WHERE u.tenant_id=$1 AND u.user_id=$2`,
+        [input.tenantId,input.userId,input.at],
+      );
+      const row=result.rows[0];
+      if(!row || row.state!=="active")return "suspended" as const;
+      if(row.control==="restricted"||row.control==="suspended"||row.control==="recovery")
+        return row.control;
+      return row.recent?"recovery" as const:"active" as const;
     },
     async revokeAccess(input) {
       await pool.query(
