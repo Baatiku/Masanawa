@@ -98,6 +98,9 @@ describe("gateway service bootstrap", () => {
       async confirmEmailLink() { throw new Error("unused"); },
       async requestPasswordRecovery() { throw new Error("unused"); },
       async completePasswordRecovery() { throw new Error("unused"); },
+      async beginWithdrawalStepUp() { throw new Error("unused"); },
+      async confirmWithdrawalStepUp() { throw new Error("unused"); },
+      async consumeWithdrawalStepUp() { throw new Error("unused"); },
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);
