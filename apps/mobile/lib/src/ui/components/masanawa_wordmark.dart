@@ -17,6 +17,7 @@ class MasanawaWordmark extends StatelessWidget {
     final main = light ? Colors.white : u.brandStrong;
     return Semantics(
       label: 'Masanawa',
+      excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
