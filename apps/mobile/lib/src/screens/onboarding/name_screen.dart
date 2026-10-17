@@ -33,6 +33,17 @@ class _NameScreenState extends ConsumerState<NameScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _skip() async {
+    // Every account needs a server display_name; this explicitly recognizable
+    // placeholder marks onboarding incomplete until the user edits it.
+    if(_saving)return;
+    final state=ref.read(sessionProvider);
+    if(state is! SessionNameRequired && state is! SessionRegisterProfile)return;
+    setState(()=>_saving=true);
+    await ref.read(sessionProvider.notifier).submitProfile(name:'Masanawa member');
+    if(mounted)setState(()=>_saving=false);
+  }
+
   Future<void> _submit() async {
     final current = ref.read(sessionProvider);
     if (current is SessionSignedIn) {
@@ -138,6 +149,11 @@ class _NameScreenState extends ConsumerState<NameScreen> {
             label: _saving ? l10n.finishingSignIn : l10n.continueAction,
             loading: _saving,
             onPressed: _saving ? null : _submit,
+          ),
+          const SizedBox(height:12),
+          TextButton(
+            onPressed:_saving?null:_skip,
+            child:const Text('Skip for now — complete later in Profile'),
           ),
           const SizedBox(height: 12),
           Text(
