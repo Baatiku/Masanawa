@@ -309,6 +309,69 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       });
     },
 
+    async resetPasswordCredential(input) {
+      return withTransaction(pool, async(client) => {
+        const selected=await client.query<{password_hash:string}>(
+          `SELECT password_hash FROM security.platform_device_passwords
+           WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
+          [input.tenantId,input.userId],
+        );
+        const prior=selected.rows[0];
+        if(!prior) {
+          await client.query(
+            `INSERT INTO security.platform_device_passwords(
+              tenant_id,user_id,password_hash,attempts,max_attempts,
+              locked_until,created_at,updated_at
+             ) VALUES($1,$2,$3,0,5,NULL,$4,$4)`,
+            [input.tenantId,input.userId,input.passwordHash,input.at],
+          );
+        }
+        const history=await client.query<{password_hash:string}>(
+          `SELECT password_hash FROM security.platform_password_history
+            WHERE tenant_id=$1 AND user_id=$2 ORDER BY revision DESC LIMIT 3`,
+          [input.tenantId,input.userId],
+        );
+        if((prior && sameHash(prior.password_hash,input.passwordHash)) ||
+           history.rows.some(row=>sameHash(row.password_hash,input.passwordHash))) {
+          return "reused" as const;
+        }
+        if(prior) {
+          await client.query(
+            `UPDATE security.platform_device_passwords
+               SET password_hash=$3, attempts=0,locked_until=NULL,updated_at=$4
+             WHERE tenant_id=$1 AND user_id=$2`,
+            [input.tenantId,input.userId,input.passwordHash,input.at],
+          );
+          await client.query(
+            `INSERT INTO security.platform_password_history(tenant_id,user_id,password_hash,changed_at)
+             VALUES($1,$2,$3,$4)`,
+            [input.tenantId,input.userId,prior.password_hash,input.at],
+          );
+        }
+        await client.query(
+          `DELETE FROM security.platform_password_history
+           WHERE tenant_id=$1 AND user_id=$2 AND revision NOT IN (
+             SELECT revision FROM security.platform_password_history
+             WHERE tenant_id=$1 AND user_id=$2 ORDER BY revision DESC LIMIT 3
+           )`,
+          [input.tenantId,input.userId],
+        );
+        // Revocation is in the same transaction: no old refresh token can
+        // outlive a successfully committed credential reset.
+        await client.query(
+          `UPDATE security.platform_sessions SET revoked_at=$3,updated_at=$3
+           WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL`,
+          [input.tenantId,input.userId,input.at],
+        );
+        await client.query(
+          `INSERT INTO security.platform_auth_events(tenant_id,user_id,action,at)
+           VALUES($1,$2,'password_reset',$3)`,
+          [input.tenantId,input.userId,input.at],
+        );
+        return "changed" as const;
+      });
+    },
+
     async registerDevice(input) {
       await pool.query(
         `INSERT INTO security.platform_auth_devices(

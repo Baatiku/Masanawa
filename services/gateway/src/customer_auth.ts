@@ -109,6 +109,8 @@ export interface CustomerAuthService {
   loginHistory(input: Readonly<{authorizationHeader:string|undefined}>): Promise<readonly import("@masanawa/security").PlatformAuthEventView[]>;
   startEmailLink(input: Readonly<{authorizationHeader:string|undefined; email:string}>): Promise<Readonly<{resendInSeconds:number}>>;
   confirmEmailLink(input: Readonly<{authorizationHeader:string|undefined;email:string;code:string}>): Promise<Readonly<{email:string}>>;
+  requestPasswordRecovery(input: Readonly<{phone:string}>): Promise<Readonly<{resendInSeconds:number}>>;
+  completePasswordRecovery(input: Readonly<{phone:string;code:string;password:string}>): Promise<Readonly<{success:true}>>;
 }
 
 export interface AuthUserView {
@@ -542,6 +544,53 @@ export function createCustomerAuthService(input: Readonly<{
         accessExpiresIn: accessTtlSeconds,
         user: authUser(identity.profile, false),
       });
+    },
+
+    async requestPasswordRecovery(request) {
+      let normalized;
+      try {normalized=normalizePlatformAuthIdentifier({phone:request.phone});}
+      catch {throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      if(!input.smsDelivery)throw new CustomerAuthError("RECOVERY_CHANNEL_UNAVAILABLE",503);
+      const profile=await input.repository.resolveProfile({
+        tenantId:input.tenantId,channel:"sms",identifier:normalized.identifier,observedAt:now(),
+      });
+      if(!profile)throw new CustomerAuthError("ACCOUNT_NOT_FOUND",404);
+      const response=await this.sendOtp({phone:normalized.identifier});
+      return {resendInSeconds:response.resendInSeconds};
+    },
+    async completePasswordRecovery(request) {
+      let normalized;
+      try {normalized=normalizePlatformAuthIdentifier({phone:request.phone});}
+      catch {throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      if(!input.smsDelivery)throw new CustomerAuthError("RECOVERY_CHANNEL_UNAVAILABLE",503);
+      const password=assertPassword(request.password);
+      if(!/^\d{6}$/u.test(request.code))throw new CustomerAuthError("OTP_INVALID",400);
+      const at=now();
+      const profile=await input.repository.resolveProfile({
+        tenantId:input.tenantId,channel:"sms",identifier:normalized.identifier,observedAt:at,
+      });
+      if(!profile)throw new CustomerAuthError("ACCOUNT_NOT_FOUND",404);
+      const codeHash=hashOtpCode({
+        pepper:input.otpPepper,tenantId:input.tenantId,
+        channel:"sms",identifier:normalized.identifier,code:request.code,
+      });
+      const consumed=await input.repository.consumeOtpChallenge({
+        tenantId:input.tenantId,channel:"sms",identifier:normalized.identifier,
+        codeHash,consumedAt:at,
+      });
+      if(consumed==="locked")throw new CustomerAuthError("OTP_LOCKED",429);
+      if(consumed==="expired")throw new CustomerAuthError("OTP_EXPIRED",400);
+      if(consumed!=="accepted")throw new CustomerAuthError("OTP_INVALID",400);
+      if(!input.repository.resetPasswordCredential)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const result=await input.repository.resetPasswordCredential({
+        tenantId:profile.tenantId,userId:profile.userId,at,
+        passwordHash:hashDevicePassword({pepper:input.otpPepper,
+          tenantId:profile.tenantId,userId:profile.userId,password}),
+      });
+      if(result==="reused")throw new CustomerAuthError("PASSWORD_REUSED",409);
+      if(result!=="changed")throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      // No token minted by recovery. User must sign in again with new password.
+      return {success:true as const};
     },
 
     async startEmailLink(request) {

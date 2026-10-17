@@ -143,6 +143,17 @@ class MemorySessions implements PlatformSessionRepository {
     row.attempts = 0;
     return "accepted" as const;
   }
+  async resetPasswordCredential(input: Parameters<NonNullable<PlatformSessionRepository["resetPasswordCredential"]>>[0]) {
+    const key=this.passwordKey(input.tenantId,input.userId);
+    const row=this.passwords.get(key);
+    if(row?.hash===input.passwordHash)return "reused" as const;
+    this.passwords.set(key,{hash:input.passwordHash,attempts:0,locked:false});
+    for(const session of this.sessions.values()) {
+      if(session.identity.userId===input.userId)session.revoked=true;
+    }
+    return "changed" as const;
+  }
+
   async registerDevice(input: Parameters<PlatformSessionRepository["registerDevice"]>[0]) {
     const key = this.passwordKey(input.tenantId, input.userId);
     const set = this.devices.get(key) ?? new Set<string>();
@@ -692,6 +703,31 @@ describe("customer password authentication", () => {
       .rejects.toMatchObject({ code: "VALIDATION_FAILED", statusCode: 400 });
     await expect(auth.accountStatus({ phone, deviceId: "short" }))
       .rejects.toMatchObject({ code: "VALIDATION_FAILED", statusCode: 400 });
+  });
+
+  it("recovers a lost six-digit password only after consuming an SMS OTP and revokes old sessions", async () => {
+    const repository=new MemorySessions();
+    const tenantId=createCanonicalId("tenant");
+    let code="";
+    const auth=createCustomerAuthService({
+      repository,tenantId,otpPepper:"p".repeat(48),
+      smsDelivery:{async send(request) {code=request.code;}},
+    });
+    const phone="+2348012345678";
+    const created=await auth.passwordSetup({phone,deviceId,password:"123456",name:"Amina"});
+    await expect(auth.completePasswordRecovery({phone,code:"000000",password:"999999"}))
+      .rejects.toMatchObject({code:"OTP_INVALID"});
+    await auth.requestPasswordRecovery({phone});
+    expect(code).toMatch(/^\\d{6}$/u);
+    await expect(auth.completePasswordRecovery({phone,code,password:"999999"}))
+      .resolves.toEqual({success:true});
+    const authorizer=createPlatformCustomerSessionAuthorizer({repository});
+    await expect(authorizer.authorize({authorizationHeader:`Bearer ${created.accessToken}`}))
+      .rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(auth.passwordVerify({phone,deviceId,password:"123456"}))
+      .rejects.toMatchObject({code:"PASSWORD_INVALID"});
+    await expect(auth.passwordVerify({phone,deviceId,password:"999999"}))
+      .resolves.toMatchObject({user:{phone}});
   });
 
   it("never links unverified optional signup email; verifies ownership with OTP first", async () => {

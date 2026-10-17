@@ -269,6 +269,19 @@ class ApiClient {
     return AuthTokens.fromJson(data);
   }
 
+  Future<int> sendRecoveryCode(String phone) async {
+    final json=await _post('/v1/auth/password/recovery/start', {'phone': phone});
+    return (json['resendInSeconds'] as num?)?.toInt() ?? 60;
+  }
+
+  Future<void> confirmRecoveryCode(String phone, String code, String password) async {
+    final json=await _post('/v1/auth/password/recovery/complete',
+      {'phone': phone, 'code': code, 'password': password});
+    if (json['success'] != true) {
+      throw const ApiException('Could not update password.');
+    }
+  }
+
   Future<AuthTokens> passwordVerify({
     required String phone,
     required String deviceId,
