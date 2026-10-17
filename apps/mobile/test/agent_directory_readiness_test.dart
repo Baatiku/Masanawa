@@ -112,4 +112,30 @@ void main() {
     expect(entry.conversationStarters, ['Valid?']);
   });
 
+  test('approved professional social channels survive directory cache', () {
+    final entry = AgentDirectoryEntry.fromJson({
+      ...entryWithPresence('available'),
+      'portraitKey': 'gwani',
+      'socialChannels': [
+        {'platform': 'telegram', 'url': 'https://t.me/masanawaofficial'},
+        {'platform': 'whatsapp', 'url': 'https://wa.me/2348012345678'},
+      ],
+    });
+    final restored = AgentDirectoryEntry.fromJson(entry.toJson());
+    expect(restored.socialChannels.map((v) => v.platform), ['telegram', 'whatsapp']);
+    expect(restored.socialChannels.first.url, 'https://t.me/masanawaofficial');
+  });
+
+  test('forged professional social links never become navigation buttons', () {
+    final entry = AgentDirectoryEntry.fromJson({
+      ...entryWithPresence('unknown'),
+      'socialChannels': [
+        {'platform': 'telegram', 'url': 'https://t.me.evil.example/stolen'},
+        {'platform': 'whatsapp', 'url': 'http://wa.me/2348012345678'},
+        {'platform': 'telegram', 'url': 'https://t.me/masanawaofficial'},
+      ],
+    });
+    expect(entry.socialChannels.map((v) => v.platform), ['telegram']);
+  });
+
 }

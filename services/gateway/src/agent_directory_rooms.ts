@@ -1,3 +1,4 @@
+import { validateMasanaSocialChannels, type MasanaSocialChannel } from "@masanawa/masana";
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import type {AgentRoomDirectoryReader} from "./agent_directory.js";
 import type {CharacterId} from "@masanawa/contracts";
@@ -36,6 +37,7 @@ export function createPgAgentRoomDirectory(db:{query(sql:string,params:unknown[]
 export interface ApprovedMasanaDirectoryIdentity {
   readonly portraitKey: string | null;
   readonly following: boolean;
+  readonly socialChannels: readonly MasanaSocialChannel[];
 }
 export interface AgentMasanaIdentityReader {
   read(input: {
@@ -52,6 +54,7 @@ export function createPgAgentMasanaIdentityReader(
       if(characterIds.length===0) return new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       const found=await db.query(`
         SELECT revision.character_id, revision.profile->>'handle' AS handle,
+          revision.profile->'socialChannels' AS social_channels,
           EXISTS(SELECT 1 FROM masana.follows following
             WHERE following.tenant_id=revision.tenant_id
               AND following.character_id=revision.character_id
@@ -65,7 +68,7 @@ export function createPgAgentMasanaIdentityReader(
           AND revision.state='approved'`,[tenantId,characterIds,userId]);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
-        const row=raw as {character_id?:unknown;handle?:unknown;following?:unknown};
+        const row=raw as {character_id?:unknown;handle?:unknown;following?:unknown;social_channels?:unknown};
         if(typeof row.character_id!=="string" ||
            !characterIds.includes(row.character_id as CharacterId)) {
           throw new Error("invalid_masana_identity_projection");
@@ -75,7 +78,8 @@ export function createPgAgentMasanaIdentityReader(
         const portraitKey=/^[a-z][a-z0-9_-]{1,39}$/.test(key) &&
           Object.hasOwn(MASANA_CHARACTER_DESIGNS,key)?key:null;
         result.set(row.character_id as CharacterId,
-          Object.freeze({portraitKey,following:row.following===true}));
+          Object.freeze({portraitKey,following:row.following===true,
+            socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
       return result;
     },

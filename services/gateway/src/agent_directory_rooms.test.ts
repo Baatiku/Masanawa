@@ -57,7 +57,7 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
    const port=createPgAgentMasanaIdentityReader({query} as never);
    expect((await port.read({tenantId:tenant,userId:user,characterIds:[]})).size).toBe(0);
    const identities=await port.read({tenantId:tenant,userId:user,characterIds:[character]});
-   expect(identities.get(character)).toEqual({portraitKey:"amina",following:true});
+   expect(identities.get(character)).toEqual({portraitKey:"amina",following:true,socialChannels:[]});
    expect(query).toHaveBeenCalledTimes(1);
  });
  it("does not bind lookalike custom handles to stock images",async()=>{
@@ -67,7 +67,7 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
    } as never);
    const result=await port.read({tenantId:createCanonicalId("tenant"),
      userId:createCanonicalId("user"),characterIds:[character]});
-   expect(result.get(character)).toEqual({portraitKey:null,following:false});
+   expect(result.get(character)).toEqual({portraitKey:null,following:false,socialChannels:[]});
  });
  it("rejects server identity rows for a different character",async()=>{
    const character=createCanonicalId("character"),other=createCanonicalId("character");
@@ -77,4 +77,17 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
    await expect(port.read({tenantId:createCanonicalId("tenant"),
      userId:createCanonicalId("user"),characterIds:[character]})).rejects.toThrow("invalid_masana_identity_projection");
  });
+ it("projects only approved official WhatsApp/Telegram URLs",async()=>{
+   const character=createCanonicalId("character");
+   const port=createPgAgentMasanaIdentityReader({query:async()=>({
+     rows:[{character_id:character,handle:"masana.gwani",following:true,
+       social_channels:[{platform:"telegram",url:"https://t.me/masanawaofficial"},
+         {platform:"whatsapp",url:"https://wa.me/2348012345678"}]}],
+   })} as never);
+   const found=await port.read({tenantId:createCanonicalId("tenant"),
+     userId:createCanonicalId("user"),characterIds:[character]});
+   expect(found.get(character)?.socialChannels).toHaveLength(2);
+   expect(found.get(character)?.socialChannels[0]?.url).toBe("https://t.me/masanawaofficial");
+ });
+
 });

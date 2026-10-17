@@ -1,3 +1,4 @@
+import type {MasanaSocialChannel} from "@masanawa/masana";
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import type { AgentMasanaIdentityReader } from "./agent_directory_rooms.js";
 import type {
@@ -40,6 +41,7 @@ export interface MobileAgentDirectoryEntry {
   readonly portraitKey?: string;
   readonly following?: boolean;
   readonly conversationStarters?: readonly string[];
+  readonly socialChannels?: readonly MasanaSocialChannel[];
   readonly countryCode?: string | null;
   readonly countryName?: string | null;
 }
@@ -165,6 +167,7 @@ export function createAgentDirectoryService(input: {
             ...(identity?.portraitKey ? {portraitKey:identity.portraitKey} : {}),
             following:identity?.following??false,
             conversationStarters:Object.freeze([...(design?.starters??[])]),
+            socialChannels:Object.freeze([...(identity?.socialChannels??[])]),
           });
         }),
       );

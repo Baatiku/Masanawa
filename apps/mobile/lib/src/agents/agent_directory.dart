@@ -1,3 +1,42 @@
+/// A public official channel admitted through an approved server revision.
+class AgentSocialChannel {
+  const AgentSocialChannel({required this.platform, required this.url});
+  final String platform;
+  final String url;
+  static const allowed = <String, List<String>>{
+    'whatsapp': ['wa.me'],
+    'telegram': ['t.me'],
+    'youtube': ['www.youtube.com', 'youtube.com'],
+    'tiktok': ['www.tiktok.com', 'tiktok.com'],
+    'facebook': ['www.facebook.com', 'facebook.com'],
+    'instagram': ['www.instagram.com', 'instagram.com'],
+    'x': ['x.com', 'www.x.com'],
+  };
+  static AgentSocialChannel? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final platform = raw['platform'];
+    final link = raw['url'];
+    if (platform is! String || link is! String || link.length > 256) return null;
+    final uri = Uri.tryParse(link);
+    if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty ||
+        uri.hasPort || uri.hasQuery || uri.hasFragment ||
+        !(allowed[platform]?.contains(uri.host) ?? false) ||
+        !link.startsWith('https://')) return null;
+    final path = uri.path;
+    final valid = platform == 'whatsapp'
+        ? RegExp(r'^/[1-9][0-9]{6,15}/?$').hasMatch(path)
+        : platform == 'telegram'
+            ? RegExp(r'^/[a-zA-Z0-9_]{5,32}/?$').hasMatch(path)
+            : platform == 'youtube'
+                ? RegExp(r'^/@[a-zA-Z0-9._-]{3,80}/?$').hasMatch(path)
+                : RegExp(r'^/@?[a-zA-Z0-9._-]{3,80}/?$').hasMatch(path);
+    if (!valid) return null;
+    return AgentSocialChannel(platform: platform, url: uri.toString());
+  }
+
+  Map<String, String> toJson() => {'platform': platform, 'url': url};
+}
+
 /// Server-driven projection used by the mobile shell.
 ///
 /// This is intentionally presentation-only. Character identity is owned by the
@@ -52,6 +91,7 @@ class AgentDirectoryEntry {
     this.portraitKey,
     this.following = false,
     this.conversationStarters = const [],
+    this.socialChannels = const [],
     this.countryCode,
     this.countryName,
   });
@@ -75,6 +115,7 @@ class AgentDirectoryEntry {
   final String? portraitKey;
   final bool following;
   final List<String> conversationStarters;
+  final List<AgentSocialChannel> socialChannels;
   final String? countryCode, countryName;
 
   String get countrySearchText => [countryName ?? '', countryCode ?? '',
@@ -105,6 +146,7 @@ class AgentDirectoryEntry {
         portraitKey: portraitKey,
         following: following,
         conversationStarters: conversationStarters,
+        socialChannels: socialChannels,
         countryCode:countryCode,countryName:countryName,
       );
 
@@ -143,6 +185,7 @@ class AgentDirectoryEntry {
         if (portraitKey != null) 'portraitKey': portraitKey,
         'following': following,
         'conversationStarters': conversationStarters,
+        'socialChannels': [for (final channel in socialChannels) channel.toJson()],
         if(countryCode!=null) 'countryCode':countryCode,
         if(countryName!=null) 'countryName':countryName,
       };
@@ -183,6 +226,11 @@ class AgentDirectoryEntry {
           ? (json['conversationStarters'] as List).whereType<String>()
               .where((v) => v.trim().isNotEmpty && v.length <= 160)
               .take(4).toList(growable: false)
+          : const [],
+      socialChannels: json['socialChannels'] is List
+          ? (json['socialChannels'] as List)
+              .map(AgentSocialChannel.fromJson)
+              .whereType<AgentSocialChannel>().take(7).toList(growable: false)
           : const [],
       roomId: (json['roomId'] is String && (json['roomId'] as String).trim().isNotEmpty)
           ? (json['roomId'] as String).trim() : null,
