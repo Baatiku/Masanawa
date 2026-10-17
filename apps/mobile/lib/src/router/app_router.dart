@@ -41,6 +41,8 @@ String? legacyShellDestination(String? tab) => switch (tab) {
 /// /home, not through a separate branded splash screen or a fixed timer.
 /// Legacy links remain redirects to supported destinations.
 final appRouterProvider = Provider<GoRouter>((ref) {
+  String? resumeLocation;
+  String? resumeOwner;
   final router = GoRouter(
     initialLocation: '/home?tab=chats',
     redirect: (context, state) {
@@ -52,6 +54,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final session = ref.read(sessionProvider);
       final isSignedIn = session is SessionSignedIn;
+
+      // Redirect only to internal protected paths, and only after the same
+      // account returns. A different account must not inherit a private route.
+      if (isSignedIn && resumeLocation != null &&
+          (path == '/chats' || path == '/phone-login' ||
+           path == '/otp' || path == '/home')) {
+        final target = resumeLocation;
+        final owner = resumeOwner;
+        resumeLocation = null;
+        resumeOwner = null;
+        if (owner == session.user.id && target != null &&
+            target.length <= 300 && target.startsWith('/')) {
+          if (target != state.uri.toString()) return target;
+        }
+      }
+      if (!isSignedIn && path == '/phone-login' &&
+          ref.read(sessionProvider.notifier).recentlyExpiredOwnerId == null) {
+        resumeLocation = null;
+        resumeOwner = null;
+      }
 
       // The /home widget itself only paints a neutral progress indicator
       // during secure-storage restoration; neither local conversations nor
@@ -104,7 +126,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path == '/billing' ||
           path == '/crypto' ||
           path == '/profile';
-      if (!isSignedIn && protected) return '/phone-login';
+      if (!isSignedIn && protected) {
+        final expiredOwner=ref.read(sessionProvider.notifier).recentlyExpiredOwnerId;
+        if(expiredOwner!=null && state.uri.toString().length<=300) {
+          resumeLocation=state.uri.toString();
+          resumeOwner=expiredOwner;
+        }
+        return '/phone-login';
+      }
 
       // Retired shell deep links land on their closest current tab.
       if (path == '/home') {

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mime/mime.dart';
 
 import '../agents/agent_session.dart';
@@ -30,6 +31,10 @@ import 'session_state.dart';
 import 'agent_directory_state.dart';
 
 const String _kThreadsFile = 'masanawa_threads_v2.json';
+const _draftVault=FlutterSecureStorage(
+  aOptions:AndroidOptions(),
+  iOptions:IOSOptions(accessibility:KeychainAccessibility.first_unlock_this_device),
+);
 
 /// Opaque local placeholder, never an unauthenticated URL. The signed-in
 /// account must authorize every requested download from the Gateway.
@@ -2533,12 +2538,61 @@ class AiChatController extends Notifier<AiChatState> {
     }
   }
 
+  String _draftKey(String owner)=>'masanawa_auth_drafts_v1_${base64Url.encode(utf8.encode(owner)).replaceAll('=', '')}';
+
+  Future<void> _saveSessionExpiryDrafts(String owner,Map<String,String> drafts) async {
+    try{
+      if(drafts.isEmpty){
+        await _draftVault.delete(key:_draftKey(owner));
+        return;
+      }
+      // Only user-authored unsent text is restored after authentication;
+      // no cached media, session tokens or private server history.
+      await _draftVault.write(key:_draftKey(owner),value:jsonEncode(drafts));
+    }catch(_){
+      // Secure storage unavailability must not interfere with sign-out.
+    }
+  }
+
+  Future<void> _restoreSessionExpiryDrafts(String owner,int generation) async {
+    try{
+      final raw=await _draftVault.read(key:_draftKey(owner));
+      if(raw==null||raw.isEmpty)return;
+      final parsed=jsonDecode(raw);
+      if(parsed is! Map || _disposed || owner!=_cacheOwnerId ||
+         generation!=_cacheGeneration)return;
+      final recovered=<String,ChatThread>{};
+      for(final entry in parsed.entries){
+        final id=entry.key, text=entry.value;
+        if(id is! String || text is! String ||
+           id.length>128 || text.isEmpty || text.length>32000)continue;
+        final prior=threadOf(id);
+        if(prior.draft.isEmpty) recovered[id]=prior.copyWith(draft:text);
+      }
+      if(recovered.isNotEmpty && !_disposed && owner==_cacheOwnerId &&
+         generation==_cacheGeneration){
+        state=state.copyWith(threads:{...state.threads,...recovered});
+        unawaited(_save());
+      }
+      await _draftVault.delete(key:_draftKey(owner));
+    }catch(_){
+      // A damaged local vault must not leak data or prevent sign-in.
+    }
+  }
+
   Future<void> _handleOwnerChange(
     String? previousOwner,
     String? nextOwner,
     int generation,
   ) async {
     _connectionGeneration++;
+    final safeDrafts=<String,String>{
+      for(final entry in state.threads.entries)
+        if(entry.value.draft.isNotEmpty && entry.value.draft.length<=32000)
+          entry.key:entry.value.draft,
+    };
+    final expiryOnly=nextOwner==null && previousOwner!=null &&
+      ref.read(sessionProvider.notifier).recentlyExpiredOwnerId==previousOwner;
     final ids = <String>{...state.threads.keys, ..._bindings.keys};
     for (final id in ids) {
       _threadGenerations[id] = (_threadGenerations[id] ?? 0) + 1;
@@ -2557,6 +2611,7 @@ class AiChatController extends Notifier<AiChatState> {
     );
 
     if (previousOwner != null && previousOwner.isNotEmpty) {
+      await _saveSessionExpiryDrafts(previousOwner,expiryOnly?safeDrafts:const {});
       await clearSecureShellState(ownerId: previousOwner);
       await _deleteThreadCache(previousOwner);
       await _deleteOwnedMediaCache(previousOwner);
@@ -2578,6 +2633,8 @@ class AiChatController extends Notifier<AiChatState> {
       return;
     }
     await _load(nextOwner, generation);
+    if(!_disposed && generation==_cacheGeneration && nextOwner==_cacheOwnerId)
+      await _restoreSessionExpiryDrafts(nextOwner,generation);
   }
 
   Future<void> _load(String ownerId, int generation) async {
