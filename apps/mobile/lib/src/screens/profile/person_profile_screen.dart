@@ -60,9 +60,9 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   Widget build(BuildContext context) {
     final asyncProfile = ref.watch(humanProfileProvider(widget.handle));
     return asyncProfile.when(
-      loading: () => const Scaffold(
-        appBar: AppBar(title: Text('Profile')),
-        body: MasanawaProfileSkeleton(semanticLabel: 'Loading user profile'),
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Profile')),
+        body: const MasanawaProfileSkeleton(semanticLabel: 'Loading user profile'),
       ),
       error: (_, __) => _Unavailable(
         label: 'Couldn’t load this profile.',

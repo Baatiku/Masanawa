@@ -27,9 +27,9 @@ class PersonaProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncProfile = ref.watch(personaProfileProvider(publicId));
     return asyncProfile.when(
-      loading: () => const Scaffold(
-        appBar: AppBar(title: Text('Masana profile')),
-        body: MasanawaProfileSkeleton(semanticLabel: 'Loading Masana profile'),
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Masana profile')),
+        body: const MasanawaProfileSkeleton(semanticLabel: 'Loading Masana profile'),
       ),
       error: (_, __) => _PersonaUnavailable(
         label: 'Couldn’t load this profile.',
