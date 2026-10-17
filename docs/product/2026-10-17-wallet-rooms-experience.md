@@ -230,3 +230,10 @@ Executed: five synthetic disk/WAV/account/error tests; 20 focused recording UI, 
 | 8.10 History details/profile callbacks | Existing persisted/searchable Calls retained; dedicated detail/reason/duration/profile projection next. |
 
 Owner numbering skips 8.9 and 8.11; no unrequested features invented for those gaps. “Complete” in supplied priorities is not taken as executed device evidence.
+
+
+## Immediate streamed reply and accessibility source — 2026-10-17
+
+Owner's latest immediate-speech instruction supersedes the earlier voice-note wait-until-finished policy. The same Gemini Live PCM callback now plays usable voice-note and text response chunks immediately when enabled. A secure, persistent per-account automatic-speech preference is available in the chat menu; loading/read failure defaults to silence. Turning it off stops only the automatic playback owner and never another live call. Completed audio remains explicit replay, preventing the previous streamed-then-attachment duplicate playback. Final canonical text wins over partial transcription; absent final text retains available stream text. Original request identity, media retry semantics, secure expiry-draft restoration and merged call recording controls are preserved.
+
+Executed 26 focused Flutter tests covering immediate playback before final completion, opt-out, active-call suppression, one canonical reply, preference owner races/errors, recorder acceptance, chat search/header/avatar, split streaming media, partial ASR and replay recovery. The 12 affected preference/playback/chat-action checks passed again after the final listener/context refinements. Analysis: 0 errors, 1 pre-existing unused remoteMedia parameter warning and 19 style infos. Physical provider/audio latency and preference/native playback acceptance remain device checks. No separate TTS pipeline, voice substitution or sequential autoplay was added. This advances 7.2/7.3/7.11; gesture and routing/incoming/group/history-detail work remains as listed above.

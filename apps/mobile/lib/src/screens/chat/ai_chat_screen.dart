@@ -45,6 +45,7 @@ import '../../state/session_state.dart';
 import '../../state/wallet_state.dart';
 import '../../voice/paid_voice.dart';
 import '../../voice/paid_voice_state.dart';
+import '../../voice/voice_reply_playback_preference.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';
@@ -125,8 +126,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final nextId = next is SessionSignedIn ? next.user.id : null;
       if (previousId != nextId) {
         unawaited(_inlineVoiceSession?.close() ?? Future<void>.value());
-        _pendingVoiceAutoplay = null;
-    unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
+        unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
       }
     });
     _input.addListener(() {
@@ -188,7 +188,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   @override
   void dispose() {
     _voiceAccountSubscription?.close();
-    _pendingVoiceAutoplay = null;
     unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
     _scrollPersistTimer?.cancel();
     _walletRefreshTimer?.cancel();
@@ -534,7 +533,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Future<void> _prepareCallAudio() async {
-    _pendingVoiceAutoplay = null;
     await _cancelInlineRecording();
     await _activeVoiceBubble?._pauseFromAnotherBubble();
     await LivePcmAudio.stop();
@@ -1069,15 +1067,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
 
     ref.listen(aiChatProvider, (prev, next) {
-      final prior = prev?.threads[widget.characterId]?.messages ?? const <AiChatMessage>[];
-      for (final message in next.threads[widget.characterId]?.messages ?? const <AiChatMessage>[]) {
-        final wasStreaming = prior.any((m) => m.id == message.id && m.deliveryStatus == 'streaming');
-        final audio = message.attachment;
-        if (wasStreaming && message.deliveryStatus == 'delivered' && audio?.kind == 'voice' &&
-            _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
-          _pendingVoiceAutoplay = audio!.path;
-        }
-      }
+      // Streaming PCM is the automatic response. The completed attachment is
+      // retained for explicit replay, never automatically played a second time.
       final before = prev?.threads[widget.characterId]?.messages.length ?? 0;
       final after = next.threads[widget.characterId]?.messages.length ?? 0;
       if (after > before) {
@@ -1230,6 +1221,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               tooltip: 'More',
               onSelected: (value) async {
                 final ctl = ref.read(aiChatProvider.notifier);
+                if (value == 'voice-autoplay') {
+                  try {
+                    final enabled=ref.read(voiceReplyAutoplayProvider).asData?.value??false;
+                    await ref.read(voiceReplyAutoplayProvider.notifier).setEnabled(!enabled);
+                  } catch (_) {
+                    if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Could not save automatic playback preference. Automatic speech is off.')));
+                  }
+                }
+                if (!context.mounted) return;
                 if (value == 'activity') widget.onOpenActivity?.call();
                 if (value == 'profile') _openMasanaProfile(agent);
                 if (value == 'room' && agent.roomId != null) {
@@ -1245,6 +1245,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 if (value == 'report') await _reportAgent(agent);
               },
               itemBuilder: (_) => [
+                PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
                 if (agent.roomId != null)
                   PopupMenuItem(
                     value: 'room',
@@ -4442,7 +4443,6 @@ class _VoiceWaveform extends StatelessWidget {
   }
 }
 
-String? _pendingVoiceAutoplay;
 _VoiceBubbleState? _activeVoiceBubble;
 double _sharedVoiceSpeed = 1.0;
 
@@ -4463,17 +4463,6 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   bool _speakerOn = true;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _pendingVoiceAutoplay == widget.attachment.path) {
-        _pendingVoiceAutoplay = null;
-        if (!LiveCallForeground.active) unawaited(_toggle());
-      }
-    });
-  }
 
   @override
   void dispose() {
