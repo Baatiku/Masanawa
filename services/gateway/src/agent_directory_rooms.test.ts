@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from "vitest";
 import {createCanonicalId} from "@masanawa/contracts";
-import {createPgAgentRoomDirectory} from "./agent_directory_rooms.js";
+import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
 import {createAgentDirectoryService} from "./agent_directory.js";
 describe("platform Masana to published classroom directory",()=>{
  it("batches one tenant's visible characters and denies paused, paid or unapproved room entries",async()=>{
@@ -40,5 +40,41 @@ describe("platform Masana to published classroom directory",()=>{
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({characterId:allowed,roomId:"room_masana_02_amina"});
   expect(rooms.readPublished).toHaveBeenCalledWith({tenantId:tenant,characterIds:[allowed]});
+ });
+});
+
+describe("approved canonical Masana portrait and followed metadata",()=>{
+ it("reads identity by tenant and canonical character ID, with a private user-scoped follow",async()=>{
+   const tenant=createCanonicalId("tenant"),user=createCanonicalId("user"),character=createCanonicalId("character");
+   const query=vi.fn(async(sql:string,params:unknown[])=>{
+     expect(sql).toContain("revision.state='approved'");
+     expect(sql).toContain("owner.kind='platform'");
+     expect(sql).toContain("following.fan_user_id=$3");
+     expect(sql).toContain("revision.character_id=ANY($2::text[])");
+     expect(params).toEqual([tenant,[character],user]);
+     return {rows:[{character_id:character,handle:"masana.amina",following:true}]};
+   });
+   const port=createPgAgentMasanaIdentityReader({query} as never);
+   expect((await port.read({tenantId:tenant,userId:user,characterIds:[]})).size).toBe(0);
+   const identities=await port.read({tenantId:tenant,userId:user,characterIds:[character]});
+   expect(identities.get(character)).toEqual({portraitKey:"amina",following:true});
+   expect(query).toHaveBeenCalledTimes(1);
+ });
+ it("does not bind lookalike custom handles to stock images",async()=>{
+   const character=createCanonicalId("character");
+   const port=createPgAgentMasanaIdentityReader({
+     query:async()=>({rows:[{character_id:character,handle:"masana.aminax",following:false}]})
+   } as never);
+   const result=await port.read({tenantId:createCanonicalId("tenant"),
+     userId:createCanonicalId("user"),characterIds:[character]});
+   expect(result.get(character)).toEqual({portraitKey:null,following:false});
+ });
+ it("rejects server identity rows for a different character",async()=>{
+   const character=createCanonicalId("character"),other=createCanonicalId("character");
+   const port=createPgAgentMasanaIdentityReader({
+     query:async()=>({rows:[{character_id:other,handle:"masana.gwani",following:true}]})
+   } as never);
+   await expect(port.read({tenantId:createCanonicalId("tenant"),
+     userId:createCanonicalId("user"),characterIds:[character]})).rejects.toThrow("invalid_masana_identity_projection");
  });
 });
