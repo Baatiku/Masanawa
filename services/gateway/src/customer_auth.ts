@@ -217,6 +217,26 @@ export function createCustomerAuthService(input: Readonly<{
   if (input.otpPepper.length < 32) throw new TypeError("MASANAWA_AUTH_OTP_PEPPER must be at least 32 characters");
   const now = input.now ?? (() => new Date().toISOString());
 
+  async function notifyNewDevice(
+    profile:PlatformAuthProfile,at:string,
+  ):Promise<void> {
+    // A delivery failure never grants/blocks access. Prefer linked email,
+    // then SMS when a phone account has no verified linked email.
+    if(profile.email && input.emailDelivery?.sendSecurityAlert){
+      try{
+        await input.emailDelivery.sendSecurityAlert({identifier:profile.email,at});
+        return;
+      }catch{
+        // Fall back to the account's verified phone if delivery failed.
+      }
+    }
+    if(profile.phone && input.smsDelivery?.sendSecurityAlert){
+      await input.smsDelivery.sendSecurityAlert({
+        identifier:profile.phone,at,
+      }).catch(()=>undefined);
+    }
+  }
+
   function delivery(channel: PlatformAuthChannel): OtpDelivery {
     const result = channel === "email" ? input.emailDelivery : input.smsDelivery;
     if (!result) throw new CustomerAuthError("OTP_CHANNEL_UNAVAILABLE", 503);
@@ -439,9 +459,7 @@ export function createCustomerAuthService(input: Readonly<{
         await input.repository.recordAuthEvent?.({tenantId:profile.tenantId,
           userId:profile.userId,action:"new_device_signin",at:verifiedAt,
           clientLabel:request.clientLabel}).catch(()=>undefined);
-        if(profile.email)await input.emailDelivery?.sendSecurityAlert?.({
-          identifier:profile.email,at:verifiedAt,
-        }).catch(()=>undefined);
+        await notifyNewDevice(profile,verifiedAt);
       }
       if(isNewUser && profile.email && normalized.channel==="email") {
         // Delivery failure must not undo a completed account/session. Resend
@@ -545,10 +563,7 @@ export function createCustomerAuthService(input: Readonly<{
           tenantId:input.tenantId,userId:profile.userId,action:"new_device_signin",at,
           clientLabel:request.clientLabel,
         }).catch(()=>undefined);
-        if(profile.email) {
-          await input.emailDelivery?.sendSecurityAlert?.({identifier:profile.email,at})
-            .catch(()=>undefined);
-        }
+        await notifyNewDevice(profile,at);
       }
       return tokens;
     },
@@ -1178,6 +1193,23 @@ export function createHttpSmsOtpDelivery(input: Readonly<{
         }),
       });
       if (!response.ok) throw new Error("auth.sms_delivery_failed");
+    },
+    async sendSecurityAlert(request: Readonly<{identifier:string;at:string}>) {
+      // Best-effort security notices are not OTP challenges. No password,
+      // one-time code or bearer token is included in the message.
+      const response=await fetchImpl(endpoint,{
+        method:"POST",signal:AbortSignal.timeout(8000),
+        headers:{
+          authorization:`Bearer ${token}`,
+          "content-type":"application/json",
+          accept:"application/json",
+        },
+        body:JSON.stringify({
+          to:request.identifier,
+          message:`Security notice: a new device signed in to your Masanawa account at ${request.at}. If it was not you, go to Account Security and sign out all devices.`,
+        }),
+      });
+      if(!response.ok)throw new Error("auth.sms_security_notice_failed");
     },
   });
 }

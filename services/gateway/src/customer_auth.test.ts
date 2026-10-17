@@ -21,6 +21,7 @@ import type {
 import {
   createCustomerAuthService,
   createResendOtpDelivery,
+  createHttpSmsOtpDelivery,
   renderMasanawaOtpEmail,
   createPlatformCustomerAuthorizers,
   createPlatformCustomerSessionAuthorizer,
@@ -896,6 +897,44 @@ describe('new account welcome delivery',()=>{
     expect((await service.verifyOtp({email:'welcome@example.com',code})).user.isNewUser).toBe(false);
     expect(welcomes).toHaveLength(1);
   });
+  it("notifies phone-only PIN account on an unknown installation exactly once",async()=>{
+    const repository=new MemorySessions();
+    const notices:string[]=[];
+    const auth=createCustomerAuthService({
+      repository,tenantId:createCanonicalId("tenant"),otpPepper:"p".repeat(48),
+      smsDelivery:{
+        async send(){},
+        async sendSecurityAlert(input){notices.push(input.identifier);},
+      },
+    });
+    const phone="+2348012345678",first="a".repeat(32),second="b".repeat(32);
+    await auth.passwordSetup({phone,password:"123456",deviceId:first,name:"Amina"});
+    await auth.passwordVerify({phone,password:"123456",deviceId:first});
+    expect(notices).toEqual([]);
+    await auth.passwordVerify({phone,password:"123456",deviceId:second});
+    await auth.passwordVerify({phone,password:"123456",deviceId:second});
+    expect(notices).toEqual([phone]);
+  });
+
+  it("sends an SMS notice without exposing a PIN, OTP or login token",async()=>{
+    const calls:Array<{to:string;message:string}>=[];
+    const sms=createHttpSmsOtpDelivery({
+      endpoint:"https://sms.example.test/alerts",bearerToken:"test-bearer-token",
+      fetchImpl:async(_url,init)=>{
+        calls.push(JSON.parse(String(init?.body)));
+        return new Response("ok",{status:200});
+      },
+    });
+    await sms.sendSecurityAlert?.({
+      identifier:"+2348012345678",at:"2026-10-17T20:00:00.000Z",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.to).toBe("+2348012345678");
+    expect(calls[0]?.message).toContain("new device signed in");
+    expect(calls[0]?.message).not.toContain("123456");
+    expect(calls[0]?.message).not.toContain("test-bearer-token");
+  });
+
   it("identifies new email sign-in devices and records coarse labels without exposing raw headers",async()=>{
     const events:string[]=[];
     const repo=Object.assign(new MemorySessions(),{
