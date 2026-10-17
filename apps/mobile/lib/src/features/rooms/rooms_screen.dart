@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../agents/masana_portrait_avatar.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import '../../theme/masanawa_theme.dart';
 import 'room_discussion_api.dart';
 import 'room_membership_client.dart';
@@ -12,8 +13,6 @@ import 'room_membership_screen.dart';
 import 'rooms_client.dart';
 import 'saved_lessons_client.dart';
 import 'saved_lessons_screen.dart';
-
-const masanaBlue = Color(0xFF1E63D6);
 
 String cleanProfessionTitle(String rawTitle) {
   final clean = rawTitle.trim();
@@ -80,6 +79,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
   List<RoomInfo> rows = [];
   int _loadVersion = 0;
   Timer? _searchDebounce;
+  final TextEditingController _searchController = TextEditingController();
   String query = '', language = '';
 
   bool get joined => _tabController.index == 0;
@@ -100,6 +100,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _searchController.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
@@ -314,14 +315,21 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
               children: [
                 Expanded(
                   child: TextField(
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
+                      suffixIcon: query.isEmpty ? null : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () { _searchController.clear(); setState(() => query = ''); load(); },
+                      ),
                       hintText: 'Search professions',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
                     onChanged: (v) {
-                      query = v;
+                      setState(() => query = v);
                       ++_loadVersion;
                       _searchDebounce?.cancel();
                       _searchDebounce = Timer(const Duration(milliseconds: 300), load);
@@ -349,7 +357,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
           ),
           Expanded(
             child: loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const MasanawaListSkeleton(semanticLabel: 'Loading Rooms')
                 : error != null
                     ? Center(
                         child: Column(
@@ -384,7 +392,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
                                   )
                                 else
                                   TextButton(
-                                    onPressed: () { query = ''; language = ''; load(); },
+                                    onPressed: () { _searchController.clear(); setState(() { query = ''; language = ''; }); load(); },
                                     child: const Text('Show all'),
                                   ),
                               ],
@@ -393,6 +401,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
                         : RefreshIndicator(
                             onRefresh: load,
                             child: ListView.builder(
+                              key: PageStorageKey<String>('rooms-${widget.savedLessonsAccountKey ?? widget.discussionAccountScope ?? 'current'}-${joined ? 'joined' : 'discover'}-$query-$language'),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               itemCount: rows.length,
                               itemBuilder: (context, i) {
@@ -810,7 +819,7 @@ class _RoomHomeScreenState extends State<RoomHomeScreen> {
         ],
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MasanawaListSkeleton(semanticLabel: 'Loading Room details')
           : error != null
               ? Center(
                   child: Column(

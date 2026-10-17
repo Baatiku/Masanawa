@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'feed_api.dart';
-import 'feed_comments_sheet.dart';
+import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 
 /// Masana-only Status feed. The coordinating shell supplies account-owned API and identity.
@@ -109,9 +109,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     )));
   }
   void openComments(FeedPost post) {
-    showModalBottomSheet<void>(context:context,isScrollControlled:true,
-      builder:(ctx)=>SizedBox(height:MediaQuery.sizeOf(ctx).height*0.78,
-        child:FeedCommentsSheet(api:widget.api,post:post)));
+    // Use the complete thread page so typing, scrolling and keyboard focus
+    // are not lost in a height-constrained modal.
+    openPost(post);
   }
   @override Widget build(BuildContext context){
     if(!widget.enabled)return Center(child:Text(t('Status is currently unavailable','Ba a samun labarai a yanzu')));
@@ -125,12 +125,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if(offline)MaterialBanner(content:Text(t('Offline — showing previous updates','Ba intanet — ana nuna bayanan baya')),actions:[TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]),
       if(error!=null&&!offline)MaterialBanner(content:Text(t('Could not load updates','An kasa dauko labarai')),actions:[TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]),
       Expanded(child:loading&&items.isEmpty
-        ?const Center(child:CircularProgressIndicator())
+        ?const MasanawaListSkeleton(semanticLabel: 'Loading Status updates')
         :items.isEmpty?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
           const Icon(Icons.article_outlined,size:48),
-          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):t('No Status updates yet','Babu labarai tukuna')),
-          TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]))
+          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('You are not following any Masana with updates yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
+          if(mode=='following'&&error==null)
+            TextButton(onPressed:(){setState((){mode='for_you';items=[];cursor=null;});refresh();},child:Text(t('Explore For You','Duba Domin Kai')))
+          else TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]))
         :RefreshIndicator(onRefresh:refresh,child:ListView.builder(
+          key: PageStorageKey<String>('status-feed-${widget.accountKey}-$mode'),
           physics:const AlwaysScrollableScrollPhysics(),
           itemCount:items.length+(cursor==null?0:1),
           itemBuilder:(ctx,i){
