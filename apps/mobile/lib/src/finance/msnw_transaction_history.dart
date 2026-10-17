@@ -57,9 +57,11 @@ class WalletHistoryFilter {
 
 class MsnwTransactionHistory extends StatefulWidget {
   const MsnwTransactionHistory({super.key, required this.dio, required this.baseUrl,
-    required this.expectedUserId, required this.currentUserId, required this.accessToken});
+    required this.expectedUserId, required this.currentUserId, required this.accessToken,
+    this.refreshKey = 0});
   final Dio dio;
   final String baseUrl, expectedUserId;
+  final int refreshKey;
   final String? Function() currentUserId, accessToken;
   @override State<MsnwTransactionHistory> createState() => _HistoryState();
 }
@@ -76,7 +78,14 @@ class _HistoryState extends State<MsnwTransactionHistory> {
   @override void initState() { super.initState(); load(); }
   @override void didUpdateWidget(covariant MsnwTransactionHistory old) {
     super.didUpdateWidget(old);
-    if (old.expectedUserId != widget.expectedUserId) { search.clear(); filter = const WalletHistoryFilter(); load(); }
+    if (old.expectedUserId != widget.expectedUserId) {
+      search.clear();
+      filter = const WalletHistoryFilter();
+      load();
+    } else if (old.refreshKey != widget.refreshKey) {
+      // A balance-affecting operation refreshes the rows, not the filters.
+      load();
+    }
   }
   @override void dispose() { debounce?.cancel(); search.dispose(); super.dispose(); }
   bool same(String? token) => mounted && widget.currentUserId() == widget.expectedUserId &&

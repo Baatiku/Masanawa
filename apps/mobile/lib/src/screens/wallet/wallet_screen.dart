@@ -83,8 +83,10 @@ class WalletScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
-  bool _crypto = false;
   int _tab = 0;
+  // Build the history tab only after its first visit, then keep its filters,
+  // query, list position and in-flight loading state mounted when switching.
+  final Set<int> _visitedWalletTabs = <int>{0};
   int _custodyRefresh = 0;
 
   Future<void> _sendMsnw() async {
@@ -150,7 +152,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   void _openCrypto() {
     final navigate = widget.onOpenCrypto;
     if (navigate != null) { navigate(); return; }
-    setState(() => _crypto = true);
+    // Navigating over the Wallet instead of replacing its Scaffold keeps
+    // search, transaction history and the asset list alive for Back.
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/wallet/crypto-assets'),
+        builder: (_) => const CryptoWalletScreen(),
+      ),
+    );
   }
 
   Future<void> _fund() async {
@@ -197,7 +206,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   Widget _history(String accountId) => _AccountWalletPage(accountId: accountId,
     child: MsnwTransactionHistory(
-      key: ValueKey('history-$accountId-$_custodyRefresh'),
+      key: ValueKey('history-$accountId'),
+      refreshKey: _custodyRefresh,
       dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
       expectedUserId: accountId,
       currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -206,17 +216,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   @override Widget build(BuildContext context) {
     final u = context.masanawa;
-    if (_crypto) return Scaffold(
-      backgroundColor: u.surfaceCard,
-      appBar: AppBar(
-        backgroundColor: u.surfaceCard,
-        title: const Text('Crypto assets'),
-        leading: IconButton(
-          tooltip: 'Back to wallet', icon: const Icon(Icons.arrow_back),
-          onPressed: () => setState(() => _crypto = false)),
-      ),
-      body: const CryptoWalletScreen(embedded: true),
-    );
     // Never show a legacy Credits projection as MSNW, even when it holds
     // historical value. Only an MSNW-asset readback may display a balance.
     final accountId = switch (ref.watch(sessionProvider)) {
@@ -240,7 +239,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
             ),
       body: Column(children: [
-        Expanded(child: _tab == 0 ? ListView(
+        Expanded(child: IndexedStack(index: _tab, children: [ListView(
           key: PageStorageKey<String>('wallet-assets-${accountId ?? 'signed-out'}'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
@@ -274,7 +273,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             const SizedBox(height: 12),
             WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
               onOpenBillingService: widget.onOpenBillingService),
-          ]) : Column(children: [
+          ]),
+          _visitedWalletTabs.contains(1) ? Column(children: [
             Padding(padding: const EdgeInsets.symmetric(horizontal:16), child:_tabs()),
             if(accountId != null) ...[
               Align(alignment:Alignment.centerRight,child:TextButton.icon(
@@ -283,7 +283,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               Expanded(child:_history(accountId)),
             ]
             else const Expanded(child:Center(child:Text('Sign in to view transactions'))),
-          ])),
+          ]) : const SizedBox.shrink(),
+        ])),
       ]),
     );
   }
@@ -295,7 +296,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           foregroundColor: _tab == item.$1 ? context.masanawa.brandStrong : context.masanawa.textMuted,
           backgroundColor: _tab == item.$1 ? context.masanawa.brand.withValues(alpha:.08) : null,
           shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-        onPressed:()=>setState(()=>_tab=item.$1),child:Text(item.$2))),
+        onPressed:()=>setState(() { _tab=item.$1; _visitedWalletTabs.add(_tab); }),child:Text(item.$2))),
   ]);
 }
 
