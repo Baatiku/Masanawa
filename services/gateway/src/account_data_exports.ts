@@ -35,6 +35,40 @@ export function createAccountDataExports(
 ) {
   const wallet = createWalletActivity(pool);
   return Object.freeze({
+    async summary(input: Context) {
+      const owner=await sessions.authorize({authorizationHeader:input.authorizationHeader});
+      const rows=await pool.query<{
+        display_name:string;email:string|null;phone:string|null;
+        avatar_url:string|null;state:string;deletion_phase:string|null;
+      }>(
+        `SELECT p.display_name,p.email,p.phone,t.avatar_url,u.state,
+                d.phase AS deletion_phase
+           FROM security.platform_user_profiles p
+           JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
+           LEFT JOIN talks.public_profiles t
+             ON t.tenant_id=p.tenant_id AND t.user_id=p.user_id
+           LEFT JOIN identity.account_deletion_requests d
+             ON d.tenant_id=p.tenant_id AND d.user_id=p.user_id
+          WHERE p.tenant_id=$1 AND p.user_id=$2`,
+        [owner.tenantId,owner.userId],
+      );
+      const entry=rows.rows[0];
+      if(!entry)throw new AccountExportError("ACCOUNT_NOT_FOUND",404);
+      const pending=entry.deletion_phase!==null&&entry.deletion_phase!=="completed";
+      return {
+        state:pending?"pending_deletion":entry.state==="disabled"?"suspended":
+          entry.state==="archived"?"archived":"active",
+        deletionPhase:entry.deletion_phase,
+        recoveryRequired:false,
+        profileCompletion:{
+          displayName:entry.display_name.trim()!=="Masanawa member",
+          profilePhoto:Boolean(entry.avatar_url),
+          linkedEmail:Boolean(entry.email),
+          phonePresent:Boolean(entry.phone),
+          paymentIdentity:"only_when_using_financial_services",
+        },
+      };
+    },
     async conversations(input: Context & {cursor?:string}) {
       const owner=await sessions.authorize({authorizationHeader:input.authorizationHeader});
       const start=cursor(input.cursor);
