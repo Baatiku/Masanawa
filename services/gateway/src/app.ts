@@ -656,6 +656,27 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       },
     );
 
+    app.get("/v1/auth/security/sessions", async (request, reply) => {
+      try {return {sessions:await auth.sessions({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/logout-all", async (request, reply) => {
+      try {await auth.logoutAll({authorizationHeader:request.headers.authorization});return {success:true as const};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/:sessionId/revoke", {
+      schema:{params:Type.Object({sessionId:Type.String({minLength:36,maxLength:36})})},
+    }, async (request,reply) => {
+      try {
+        await auth.revokeSession({authorizationHeader:request.headers.authorization,sessionId:request.params.sessionId});
+        return {success:true as const};
+      } catch(error) {return authError(error,reply);}
+    });
+    app.get("/v1/auth/security/history", async (request,reply) => {
+      try {return {events:await auth.loginHistory({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+
     app.post("/auth/logout", async (request) => {
       await auth.logout({
         authorizationHeader: request.headers.authorization,

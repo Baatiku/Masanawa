@@ -13,6 +13,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../tokens/masanawa_tokens.dart';
 import 'account_deletion_dialog.dart';
+import 'account_security_screen.dart';
 import 'clear_device_chats_dialog.dart';
 
 /// Account and app preferences for the current Masanawa consumer product.
@@ -376,6 +377,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           _Card(
             children: [
+              ListTile(
+                key: const Key('settings-account-security'),
+                leading: Icon(Icons.security_outlined, color: u.brand),
+                title: const Text('Account security'),
+                subtitle: const Text('Devices, sign-out everywhere and recent sign-ins'),
+                onTap: user == null ? null : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AccountSecurityScreen(),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
               ListTile(
                 key: const Key('settings-delete-account'),
                 leading: Icon(Icons.person_remove_outlined, color: u.emergency),

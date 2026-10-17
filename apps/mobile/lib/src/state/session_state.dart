@@ -247,7 +247,7 @@ class SessionController extends Notifier<SessionState> {
   }
 
   /// Phone login without SMS OTP. Unregistered numbers go to password setup;
-  /// known devices restore directly; anything else asks the 6-digit password.
+  /// returning users enter their six-digit password if no valid session remains.
   /// Email keeps real OTP and never enters this path.
   Future<void> startPhoneLogin(String phone) async {
     try {
@@ -259,19 +259,9 @@ class SessionController extends Notifier<SessionState> {
         state = SessionPasswordRequired(phone, setup: true);
         return;
       }
-      if (status.deviceKnown) {
-        try {
-          final tokens = await ref
-              .read(apiClientProvider)
-              .deviceRestore(phone: phone, deviceId: deviceId);
-          await _persist(tokens);
-          state = SessionSignedIn(tokens.user, tokens);
-          return;
-        } catch (_) {
-          // A failed restore is not a verdict: the password check below is
-          // strictly stronger, so fall through to it instead of failing.
-        }
-      }
+      // A remembered install ID is not proof of account ownership. Never
+      // ask the Gateway for a passwordless session; use the existing
+      // securely stored refresh token only when resuming an active login.
       state = SessionPasswordRequired(phone, setup: false);
     } catch (e) {
       final err = e is ApiException

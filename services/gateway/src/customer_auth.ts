@@ -103,6 +103,10 @@ export interface CustomerAuthService {
   }>): Promise<AuthTokensView>;
   refresh(input: Readonly<{ refreshToken: string }>): Promise<AuthTokensView>;
   logout(input: Readonly<{ authorizationHeader: string | undefined }>): Promise<void>;
+  sessions(input: Readonly<{authorizationHeader:string|undefined}>): Promise<readonly import("@masanawa/security").PlatformSessionView[]>;
+  revokeSession(input: Readonly<{authorizationHeader:string|undefined;sessionId:string}>): Promise<void>;
+  logoutAll(input: Readonly<{authorizationHeader:string|undefined}>): Promise<void>;
+  loginHistory(input: Readonly<{authorizationHeader:string|undefined}>): Promise<readonly import("@masanawa/security").PlatformAuthEventView[]>;
 }
 
 export interface AuthUserView {
@@ -197,7 +201,7 @@ export function createCustomerAuthService(input: Readonly<{
     return result;
   }
 
-  async function issueTokens(identity: PlatformSessionIdentity, isNewUser: boolean): Promise<AuthTokensView> {
+  async function issueTokens(identity: PlatformSessionIdentity, isNewUser: boolean, deviceId?: string): Promise<AuthTokensView> {
     const issuedAt = now();
     const accessToken = mintPlatformSessionToken("access");
     const refreshToken = mintPlatformSessionToken("refresh");
@@ -209,6 +213,7 @@ export function createCustomerAuthService(input: Readonly<{
         accessExpiresAt: plusSeconds(issuedAt, accessTtlSeconds),
         refreshExpiresAt: plusSeconds(issuedAt, refreshTtlSeconds),
         issuedAt,
+        ...(deviceId ? {deviceId} : {}),
       });
     } catch (error) {
       if (error instanceof Error && error.message === "auth.account_inactive") {
@@ -224,6 +229,16 @@ export function createCustomerAuthService(input: Readonly<{
     });
   }
 
+  async function requireSession(header: string | undefined) {
+    const token=bearer(header);
+    if(!token)throw new CustomerAuthError("UNAUTHORIZED",401);
+    let accessHash:string;
+    try{accessHash=hashPlatformSessionToken(token);}
+    catch{throw new CustomerAuthError("UNAUTHORIZED",401);}
+    const identity=await input.repository.resolveAccess({accessHash,at:now()});
+    if(!identity)throw new CustomerAuthError("UNAUTHORIZED",401);
+    return {identity,accessHash};
+  }
   const otpChannels = Object.freeze([
     ...(input.emailDelivery ? ["email" as const] : []),
     ...(input.smsDelivery ? ["sms" as const] : []),
@@ -385,37 +400,10 @@ export function createCustomerAuthService(input: Readonly<{
     },
 
     async deviceRestore(request) {
-      let normalized;
-      try {
-        normalized = normalizePlatformAuthIdentifier({ phone: request.phone });
-      } catch {
-        throw new CustomerAuthError("VALIDATION_FAILED", 400);
-      }
-      const deviceId = assertDeviceId(request.deviceId);
-      const at = now();
-      const profile = await input.repository.resolveProfile({
-        tenantId: input.tenantId,
-        channel: normalized.channel,
-        identifier: normalized.identifier,
-        observedAt: at,
-      });
-      if (!profile) throw new CustomerAuthError("ACCOUNT_NOT_FOUND", 404);
-      const known = await input.repository.isDeviceKnown({
-        tenantId: input.tenantId,
-        userId: profile.userId,
-        deviceId,
-      });
-      if (!known) throw new CustomerAuthError("DEVICE_CHALLENGE", 401);
-      await input.repository.registerDevice({
-        tenantId: input.tenantId,
-        userId: profile.userId,
-        deviceId,
-        at,
-      });
-      return issueTokens(
-        Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
-        false,
-      );
+      // Recognizing an installation UUID does not prove possession of a secret.
+      // Existing clients fall back to the password screen on this 401.
+      assertDeviceId(request.deviceId);
+      throw new CustomerAuthError("PASSWORD_REQUIRED",401);
     },
 
     async passwordVerify(request) {
@@ -449,7 +437,11 @@ export function createCustomerAuthService(input: Readonly<{
       });
       if (result === "missing") throw new CustomerAuthError("PASSWORD_NOT_SET", 409);
       if (result === "locked") throw new CustomerAuthError("PASSWORD_LOCKED", 429);
-      if (result !== "accepted") throw new CustomerAuthError("PASSWORD_INVALID", 400);
+      if (result !== "accepted") {
+        await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_failed",at});
+        throw new CustomerAuthError("PASSWORD_INVALID",400);
+      }
+      await input.repository.recordAuthEvent?.({tenantId:input.tenantId,userId:profile.userId,action:"password_accepted",at});
       await input.repository.registerDevice({
         tenantId: input.tenantId,
         userId: profile.userId,
@@ -459,6 +451,7 @@ export function createCustomerAuthService(input: Readonly<{
       return issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         false,
+        deviceId,
       );
     },
 
@@ -527,6 +520,7 @@ export function createCustomerAuthService(input: Readonly<{
       return issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         true,
+        deviceId,
       );
     },
 
@@ -557,6 +551,33 @@ export function createCustomerAuthService(input: Readonly<{
       });
     },
 
+    async sessions(request) {
+      const {identity,accessHash}=await requireSession(request.authorizationHeader);
+      if(!input.repository.listSessions)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      return input.repository.listSessions({tenantId:identity.tenantId,userId:identity.userId,accessHash,at:now()});
+    },
+    async revokeSession(request) {
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(request.sessionId))
+        throw new CustomerAuthError("VALIDATION_FAILED",400);
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(!input.repository.revokeSession)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const revoked=await input.repository.revokeSession({
+        tenantId:identity.tenantId,userId:identity.userId,sessionId:request.sessionId,revokedAt:now(),
+      });
+      if(!revoked)throw new CustomerAuthError("SESSION_NOT_FOUND",404);
+      await input.repository.recordAuthEvent?.({tenantId:identity.tenantId,userId:identity.userId,action:"session_revoked",at:now()});
+    },
+    async logoutAll(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(!input.repository.revokeAllSessions)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      await input.repository.revokeAllSessions({tenantId:identity.tenantId,userId:identity.userId,revokedAt:now()});
+      await input.repository.recordAuthEvent?.({tenantId:identity.tenantId,userId:identity.userId,action:"logout_all",at:now()});
+    },
+    async loginHistory(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(!input.repository.listAuthEvents)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      return input.repository.listAuthEvents({tenantId:identity.tenantId,userId:identity.userId,limit:50});
+    },
     async logout(request) {
       const token = bearer(request.authorizationHeader);
       if (!token) return;

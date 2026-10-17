@@ -650,8 +650,8 @@ describe("customer password authentication", () => {
       .resolves.toEqual({ registered: true, deviceKnown: true });
     await expect(auth.accountStatus({ phone, deviceId: otherDevice }))
       .resolves.toEqual({ registered: true, deviceKnown: false });
-    const restored = await auth.deviceRestore({ phone, deviceId });
-    expect(restored.user.phone).toBe(phone);
+    await expect(auth.deviceRestore({ phone, deviceId }))
+      .rejects.toMatchObject({ code: "PASSWORD_REQUIRED", statusCode: 401 });
     const verified = await auth.passwordVerify({
       phone,
       deviceId: otherDevice,

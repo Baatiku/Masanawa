@@ -90,6 +90,10 @@ describe("gateway service bootstrap", () => {
       async passwordSetup() { throw new Error("unused"); },
       async refresh() { throw new Error("unused"); },
       async logout() {},
+      async sessions() { return []; },
+      async revokeSession() {},
+      async logoutAll() {},
+      async loginHistory() { return []; },
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);
