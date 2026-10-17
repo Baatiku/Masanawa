@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// One-time code for the exact withdrawal reviewed immediately before this page.
-/// The actual release requires a server-issued grant bound to that request.
+/// One-time code for an exact reviewed financial action. Its server-issued
+/// grant is bound to the financial request and cannot be reused.
 class WalletStepUpPage extends StatefulWidget {
-  const WalletStepUpPage({super.key});
+  const WalletStepUpPage({super.key, this.bankDetails = false});
+  final bool bankDetails;
 
   @override
   State<WalletStepUpPage> createState()=>_WalletStepUpPageState();
@@ -21,17 +22,23 @@ class _WalletStepUpPageState extends State<WalletStepUpPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar:AppBar(title:const Text('Verify withdrawal')),
+    appBar:AppBar(title:Text(widget.bankDetails
+      ? 'Verify bank details' : 'Verify withdrawal')),
     body:SafeArea(child:ListView(
       padding:const EdgeInsets.all(20),
       children:[
         const Icon(Icons.verified_user_outlined,size:44),
         const SizedBox(height:16),
-        Text('Approve this withdrawal',style:Theme.of(context).textTheme.titleLarge),
+        Text(widget.bankDetails?'Approve bank details':'Approve this withdrawal',
+          style:Theme.of(context).textTheme.titleLarge),
         const SizedBox(height:8),
-        const Text('Enter the six-digit code sent to your linked email. '
-          'The approval is valid only for the reviewed withdrawal, '
-          'expires after five minutes, and can be used once.'),
+        Text(widget.bankDetails
+          ? 'Enter the six-digit code sent to your linked email. '
+            'This approval is only for the selected receiving bank and '
+            'account number, expires after five minutes, and can be used once.'
+          : 'Enter the six-digit code sent to your linked email. '
+            'The approval is valid only for the reviewed withdrawal, '
+            'expires after five minutes, and can be used once.'),
         const SizedBox(height:20),
         TextField(
           key:const Key('withdrawal-step-up-code'),
