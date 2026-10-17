@@ -525,11 +525,12 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         await client.query(
           `INSERT INTO security.platform_sessions(
              access_hash,refresh_hash,tenant_id,user_id,access_expires_at,
-             refresh_expires_at,revoked_at,created_at,updated_at,device_id
-           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7,$8)`,
+             refresh_expires_at,revoked_at,created_at,updated_at,device_id,client_label
+           ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$7,$8,$9)`,
           [
             input.accessHash,input.refreshHash,input.identity.tenantId,input.identity.userId,
             input.accessExpiresAt,input.refreshExpiresAt,input.issuedAt,input.deviceId ?? null,
+            input.clientLabel ?? null,
           ],
         );
         await client.query(
@@ -610,17 +611,17 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async listSessions(input) {
       const result=await pool.query<{
-        session_id:string;device_id:string|null;
+        session_id:string;device_id:string|null;client_label:string|null;
         created_at:Date|string;updated_at:Date|string;current:boolean;
       }>(
-        `SELECT session_id::text,device_id,created_at,updated_at,(access_hash=$3) AS current
+        `SELECT session_id::text,device_id,client_label,created_at,updated_at,(access_hash=$3) AS current
            FROM security.platform_sessions
           WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL AND refresh_expires_at>$4
           ORDER BY created_at DESC LIMIT 100`,
         [input.tenantId,input.userId,input.accessHash,input.at],
       );
       return result.rows.map(row=>Object.freeze({
-        sessionId:row.session_id,deviceId:row.device_id,
+        sessionId:row.session_id,deviceId:row.device_id,clientLabel:row.client_label,
         createdAt:(row.created_at instanceof Date ? row.created_at : new Date(row.created_at)).toISOString(),
         lastAccessAt:(row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at)).toISOString(),current:row.current,
       }));
