@@ -271,7 +271,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         },
       ),
     );
-    if (mounted && completed == true && _sameAccount) _reload(0);
+    if (mounted && _sameAccount) {
+      if (completed == true) _reload(0);
+      if (completed == false) _reload(1); // Uncertain result: check My Offers.
+    }
   }
 
   Future<void> _orderDetail(String id) async {
@@ -437,7 +440,474 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
   }
 
   String? _validRate(String? text) {
-    if (!RegExp(r'^[0-9]{1,10}(\\.[0-9]{1,2})?$').hasMatch(text?.trim() ?? '')) {
+    if (!RegExp(r'^[0-9]{1,10}(\.[0-9]{1,2})?).hasMatch(text?.trim() ?? '')) {
+      return 'Enter a valid NGN price with at most 2 decimals.';
+    }
+    final parts = text!.trim().split('.');
+    final amount = BigInt.parse(parts[0]) * BigInt.from(100) +
+        BigInt.parse((parts.length == 2 ? parts[1] : '').padRight(2, '0'));
+    return amount <= BigInt.zero ? 'Rate must be greater than zero.' : null;
+  }
+
+  void _review() {
+    if (!_form.currentState!.validate()) return;
+    final method = widget.methods.where(
+      (item) => '${item['method_id']}' == _paymentMethodId,
+    ).toList(growable: false);
+    if (method.length != 1) {
+      setState(() => _error = 'Choose a verified seller bank.');
+      return;
+    }
+    final parts = _rate.text.trim().split('.');
+    final rateKobo = (BigInt.parse(parts.first) * BigInt.from(100) +
+        BigInt.parse((parts.length == 2 ? parts[1] : '').padRight(2, '0')))
+        .toString();
+    final minMicro = _micro(_minimum.text);
+    final maxMicro = _micro(_maximum.text);
+    final inventoryMicro = _micro(_inventory.text);
+    if (BigInt.parse(minMicro) > BigInt.parse(maxMicro) ||
+        BigInt.parse(maxMicro) > BigInt.parse(inventoryMicro)) {
+      setState(() => _error =
+          'Minimum must not exceed maximum, and inventory must cover maximum.');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _reviewing = true;
+      _payload = <String, dynamic>{
+        'paymentMethodId': _paymentMethodId,
+        'rateKoboPerMsnw': rateKobo,
+        'minMicro': minMicro,
+        'maxMicro': maxMicro,
+        'inventoryMicro': inventoryMicro,
+      };
+    });
+  }
+
+  Future<void> _publish() async {
+    if (_saving || _uncertain || _payload == null) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onPublish(_payload!);
+      if (mounted) Navigator.of(context).pop(true);
+    } on DioException catch (error) {
+      if (!mounted) return;
+      final unknown = error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          (error.response?.statusCode ?? 0) >= 500;
+      setState(() {
+        _saving = false;
+        _uncertain = unknown;
+        _error = unknown
+            ? 'Offer outcome is unconfirmed. Check My Offers before creating '
+                'another offer. Your inputs are retained.'
+            : 'Offer could not be published. Review your details and try again.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Offer could not be confirmed. Review the offer list '
+            'before submitting another request.';
+        _uncertain = true;
+      });
+    }
+  }
+
+  Widget _entry(String title, TextEditingController controller,
+      String? Function(String?) validate, String hint) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: TextFormField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(labelText: title, hintText: hint),
+      validator: validate,
+      enabled: !_saving,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final method = widget.methods.where(
+      (item) => '${item['method_id']}' == _paymentMethodId,
+    ).toList(growable: false);
+    return SafeArea(
+      child: Form(key: _form, child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        children: [
+          Text(_reviewing ? 'Review sell offer' : 'Create a sell offer',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          if (_reviewing && _payload != null) ...[
+            Text('Buyer bank: ${method.isEmpty ? 'Unavailable' : method.first['bank_name']}'),
+            const SizedBox(height: 10),
+            Text('Your price: ${_rate.text.trim()} NGN per MSNW'),
+            Text('Minimum: ${_minimum.text.trim()} MSNW'),
+            Text('Maximum: ${_maximum.text.trim()} MSNW'),
+            Text('Inventory: ${_inventory.text.trim()} MSNW'),
+            const SizedBox(height: 16),
+            const Text('Escrow reserves MSNW only after a buyer creates a '
+                'funded order. Do not treat a screenshot as payment proof.'),
+            if (!_uncertain) ...[
+              const SizedBox(height: 20),
+              OutlinedButton(
+                onPressed: _saving ? null : () => setState(() {
+                  _reviewing = false;
+                  _payload = null;
+                  _error = null;
+                }),
+                child: const Text('Edit details'),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('p2p-publish-offer'),
+                onPressed: _saving ? null : _publish,
+                icon: const Icon(Icons.check_circle_outline),
+                label: Text(_saving ? 'Publishing…' : 'Publish sell offer'),
+              ),
+            ],
+          ] else ...[
+            const Text('All seller payments go to your verified bank. '
+                'Amounts are exact MSNW values and the NGN price is per MSNW.'),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('p2p-seller-bank'),
+              initialValue: _paymentMethodId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Verified bank'),
+              items: [
+                for (final bank in widget.methods)
+                  DropdownMenuItem(
+                    value: '${bank['method_id']}',
+                    child: Text('${bank['bank_name']} · '
+                        '${_maskedP2pAccount(bank['account_number'])}',
+                        overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: _saving ? null : (value) => setState(() {
+                _paymentMethodId = value;
+                _error = null;
+              }),
+              validator: (value) => value == null
+                  ? 'Select the bank receiving payments.' : null,
+            ),
+            const SizedBox(height: 14),
+            _entry('NGN per MSNW', _rate, _validRate, 'e.g. 1500.00'),
+            _entry('Minimum MSNW', _minimum, _validAmount, 'e.g. 1'),
+            _entry('Maximum MSNW', _maximum, _validAmount, 'e.g. 100'),
+            _entry('Inventory MSNW', _inventory, _validAmount, 'e.g. 100'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              key: const ValueKey('p2p-review-offer'),
+              onPressed: _saving ? null : _review,
+              icon: const Icon(Icons.rate_review_outlined),
+              label: const Text('Review offer'),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(_error!, style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              )),
+            ),
+          ],
+          if (_uncertain)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.list_alt),
+              label: const Text('Return to My Offers'),
+            ),
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+
+class _P2pOrderDetail extends StatefulWidget {
+  const _P2pOrderDetail({required this.load,required this.act,
+    required this.confirmReceipt,required this.listEvidence,
+    required this.uploadEvidence,required this.openEvidence,
+    required this.loadReceipt,required this.userId});
+  final Future<Map<String,dynamic>> Function() load;
+  final Future<void> Function(String action,[String? reason]) act;
+  final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
+  final Future<Map<String,dynamic>> Function() loadReceipt;
+  final Future<List<Map<String,dynamic>>> Function() listEvidence;
+  final Future<void> Function(Map<String,dynamic>) uploadEvidence;
+  final Future<void> Function(String) openEvidence;
+  final String userId;
+  @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
+}
+class _P2pOrderDetailState extends State<_P2pOrderDetail> {
+  late Future<Map<String,dynamic>> _future=widget.load();
+  late Future<List<Map<String,dynamic>>> _evidence=widget.listEvidence();
+  void _refresh()=>setState((){
+    _future=widget.load();
+    _evidence=widget.listEvidence();
+  });
+  Future<void> _showReceipt() async {
+    try {
+      final receipt=await widget.loadReceipt();
+      if(!mounted)return;
+      final ref='${receipt['receiptReference'] ?? ''}';
+      final postings=receipt['postings'] is List
+        ? receipt['postings'] as List<dynamic> : const <dynamic>[];
+      await openWalletPage<void>(context:context,builder:(dialog)=>WalletReviewContent(
+        title:const Text('Verified MSNW escrow receipt'),
+        content:SingleChildScrollView(child:Column(
+          mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
+          children:[
+            Text('Reference: $ref'),
+            Text('Status: ${receipt['status']}'),
+            Text('Settlement: ${receipt['stage']}'),
+            Text('MSNW principal: ${_msnw(receipt['amountMicro'])}'),
+            Text('MSNW fee: ${_msnw(receipt['feeMicro'])}'),
+            Text('NGN consideration: ${_ngn(receipt['fiatKobo'])}'),
+            Text('Posted: ${receipt['recordedAt']}'),
+            const SizedBox(height:12),
+            const Text('Custody postings',style:TextStyle(fontWeight:FontWeight.bold)),
+            for(final posting in postings)
+              Text('${(posting as Map)['bucket']}: '
+                '${posting['deltaMicro']} micro-MSNW'
+                ' (${posting['ownerKind']})'),
+            const SizedBox(height:12),
+            const Text('Only finalized release or refund postings produce '
+              'this receipt. A payment claim or screenshot is not settlement.'),
+          ])),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialog),
+            child:const Text('Close')),
+          TextButton.icon(onPressed:(){
+            Clipboard.setData(ClipboardData(text:ref));
+            Navigator.pop(dialog);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:Text('Receipt reference copied')));
+          },icon:const Icon(Icons.copy_outlined),
+            label:const Text('Copy reference')),
+        ],
+      ));
+    }catch(error){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Receipt unavailable: $error')));
+    }
+  }
+  Future<void> _uploadEvidence() async {
+    try {
+      final file=await FilePicker.pickFile(
+        type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf']);
+      if(file==null)return;
+      final length=await file.length();
+      if(length==null||length<=0||length>2*1024*1024)
+        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
+      final bytes=await file.readAsBytes();
+      if(bytes.isEmpty||bytes.length>2*1024*1024)
+        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
+      final extension=(file.extension??'').toLowerCase();
+      final contentType=switch(extension){
+        'png'=>'image/png','jpg'||'jpeg'=>'image/jpeg',
+        'webp'=>'image/webp','pdf'=>'application/pdf',
+        _=>throw StateError('Unsupported evidence type'),
+      };
+      await widget.uploadEvidence({
+        'contentType':contentType,'contentBase64':base64Encode(bytes),
+      });
+      if(mounted)_refresh();
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Could not attach evidence: $error')));
+    }
+  }
+
+  Future<void> _perform(String action,{bool reasonRequired=false}) async {
+    String? reason;
+    if(reasonRequired) {
+      final input=TextEditingController();
+      try {
+        reason=await openWalletPage<String>(context:context,builder:(ctx)=>WalletReviewContent(
+          title:Text(action=='late-payment'
+            ? 'Report a bank transfer after expiry'
+            : 'Explain the dispute'),content:TextField(
+            controller:input,maxLines:3,decoration:const InputDecoration(
+              hintText:'What happened? Give transaction reference, not passwords.')),
+          actions:[TextButton(onPressed:()=>Navigator.pop(ctx),
+            child:const Text('Back')),
+            FilledButton(onPressed:()=>Navigator.pop(ctx,input.text),
+              child:const Text('Submit'))]));
+      } finally {input.dispose();}
+      if(reason==null||reason.trim().length<10)return;
+    } else {
+      final yes=await openWalletPage<bool>(context:context,builder:(ctx)=>WalletReviewContent(
+        title:const Text('Confirm this action'),
+        content:Text(action=='claim'
+          ? 'Mark payment sent? A claim is not bank settlement proof.'
+          : 'Cancel only if payment was not sent. Funds return to the seller.'),
+        actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Back')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Confirm'))]));
+      if(yes!=true)return;
+    }
+    await widget.act(action,reason);
+    if(mounted)_refresh();
+  }
+  Future<void> _sellerConfirm(Map<String,dynamic> order) async {
+    final typed=TextEditingController();
+    try {
+      final accepted=await openWalletPage<bool>(context:context,
+        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>WalletReviewContent(
+          title:const Text('Confirm bank payment received'),
+          content:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
+            children:[
+              Text('Order: ${order['order_id']}'),
+              Text('Expected bank payment: ${_ngn(order['fiat_kobo'])}'),
+              const SizedBox(height:12),
+              const Text('Check your own bank account or bank transaction '
+                'records. Do not rely on the buyer’s message or screenshot. '
+                'Once released, MSNW goes to the buyer and cannot be '
+                'reclaimed simply by cancelling this order.'),
+              const SizedBox(height:16),
+              const Text('Type RECEIVED to explicitly authorize release:'),
+              TextField(controller:typed,onChanged:(_)=>update((){}),
+                decoration:const InputDecoration(hintText:'RECEIVED'),
+                textCapitalization:TextCapitalization.characters),
+            ])),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(ctx,false),
+              child:const Text('Not received')),
+            FilledButton(
+              onPressed:typed.text.trim()=='RECEIVED'
+                ? ()=>Navigator.pop(ctx,true):null,
+              child:const Text('Authorize MSNW release')),
+          ],
+        )))??false;
+      if(!accepted)return;
+      await widget.confirmReceipt(order);
+      if(mounted)_refresh();
+    } finally {
+      typed.dispose();
+    }
+  }
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:const Text('P2P order'),actions:[
+      IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh)),
+    ]),
+    body:FutureBuilder<Map<String,dynamic>>(future:_future,builder:(context,s){
+      if(!s.hasData)return Center(child:s.hasError?Text('Could not read order: ${s.error}')
+        :const CircularProgressIndicator());
+      final o=s.data!;
+      final buyer=o['buyer_id']==widget.userId;
+      final state='${o['state']}';
+      final p=o['payment'] is Map?_json(o['payment']):<String,dynamic>{};
+      final late=o['latePayment'] is Map
+        ? _json(o['latePayment']) : <String,dynamic>{};
+      final lateOpen=['open','escalated'].contains(late['state']);
+      return ListView(padding:const EdgeInsets.all(18),children:[
+        Text('Status: $state',style:Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height:12),
+        Text('MSNW: ${_msnw(o['amount_micro'])}'),
+        Text('Seller fee: ${_msnw(o['fee_micro'])}'),
+        Text('Fiat payment: ${_ngn(o['fiat_kobo'])}'),
+        const Divider(height:32),
+        const Text('Pay only to these order-bound bank details:'),
+        SelectableText('${p['bank_name']??'Unavailable'}\n'
+          '${p['account_name']??'Unavailable'}\n'
+          '${p['account_number']??'Unavailable'}'),
+        const SizedBox(height:12),
+        Text('Deadline: ${o['payment_deadline']}'),
+        if(buyer&&state=='awaiting_payment') ...[
+          FilledButton(onPressed:()=>_perform('claim'),child:const Text('I have paid')),
+          TextButton(onPressed:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
+        ],
+        if(state=='awaiting_payment'||state=='payment_claimed') ...[
+          OutlinedButton(onPressed:()=>_perform('dispute',reasonRequired:true),
+            child:const Text('Open dispute')),
+        ],
+        if(buyer&&(state=='expired'||state=='cancelled')) ...[
+          const SizedBox(height:12),
+          const ListTile(
+            leading:Icon(Icons.warning_amber_outlined),
+            title:Text('Escrow already refunded to the seller'),
+            subtitle:Text('If you sent a bank transfer, report it for '
+              'operator review. This does not reopen the MSNW escrow.')),
+          if(late.isEmpty)
+            OutlinedButton.icon(
+              onPressed:()=>_perform('late-payment',reasonRequired:true),
+              icon:const Icon(Icons.report_outlined),
+              label:const Text('Report bank payment sent')),
+        ],
+        if(late.isNotEmpty)ListTile(
+          leading:const Icon(Icons.support_agent_outlined),
+          title:Text('Late-payment case: ${late['state']}'),
+          subtitle:const Text('A support case does not move MSNW. '
+            'Keep your bank transaction reference and evidence available.')),
+        if(!buyer&&state=='payment_claimed') ...[
+          const ListTile(
+            title:Text('Seller confirmation pending'),
+            subtitle:Text('Confirm only after you independently see '
+              'the correct transfer credited in your own bank account. '
+              'A screenshot or buyer claim is not enough.')),
+          FilledButton(
+            onPressed:()=>_sellerConfirm(o),
+            child:const Text('I received the bank payment')),
+        ],
+        if(state=='payment_claimed'||state=='disputed'||
+           (buyer&&lateOpen)) ...[
+          const SizedBox(height:18),
+          Text('Payment evidence',style:Theme.of(context).textTheme.titleMedium),
+          const Text('Optional. Attach a bank receipt only to assist a dispute. '
+            'Screenshots and attachments never release MSNW escrow.'),
+          OutlinedButton.icon(onPressed:_uploadEvidence,
+            icon:const Icon(Icons.upload_file_outlined),
+            label:const Text('Attach receipt (2 MB max)')),
+          FutureBuilder<List<Map<String,dynamic>>>(future:_evidence,
+            builder:(ctx,snapshot){
+              if(snapshot.connectionState!=ConnectionState.done)
+                return const LinearProgressIndicator();
+              if(snapshot.hasError) return const Text('Evidence unavailable. Refresh to retry.');
+              final items=snapshot.data??[];
+              if(items.isEmpty)return const Text('No evidence attached.');
+              return Column(children:[
+                for(final item in items)
+                  ListTile(
+                    leading:const Icon(Icons.verified_user_outlined),
+                    title:Text('Evidence ${item['created_at'] ?? ''}'),
+                    subtitle:Text('SHA256: ${item['sha256'] ?? ''}',
+                      maxLines:1,overflow:TextOverflow.ellipsis),
+                    trailing:const Icon(Icons.open_in_new),
+                    onTap:()async{
+                      try { await widget.openEvidence('${item['evidence_id']}'); }
+                      catch(error) {
+                        if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content:Text('Unable to open evidence: $error')));
+                      }
+                    },
+                  ),
+              ]);
+            }),
+        ],
+        if(state=='disputed')const ListTile(
+          title:Text('Escrow frozen'),
+          subtitle:Text('An authorized operator must resolve this dispute.')),
+        if((state=='completed'||state=='expired'||state=='cancelled') &&
+            o['receipt_reference']!=null)
+          ListTile(
+            leading:const Icon(Icons.receipt_long_outlined),
+            title:const Text('View verified MSNW receipt'),
+            subtitle:Text('${o['receipt_reference']}'),
+            trailing:const Icon(Icons.chevron_right),
+            onTap:_showReceipt,
+          ),
+      ]);
+    }),
+  );
+}
+
+).hasMatch(text?.trim() ?? '')) {
       return 'Enter a valid NGN price with at most 2 decimals.';
     }
     final parts = text!.trim().split('.');
