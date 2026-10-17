@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import 'wallet_step_up_page.dart';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -67,13 +68,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     'Cache-Control': 'no-store',
   });
   Future<dynamic> _request(String method, String uri, [dynamic data,
-      String? idempotency]) async {
+      String? idempotency,String? stepUpToken]) async {
     if (!_sameAccount || widget.accessToken()?.isNotEmpty != true) {
       throw StateError('Sign in again to access P2P.');
     }
     final options = _headers.copyWith(headers: {
       ...?_headers.headers,
       if (idempotency != null) 'Idempotency-Key': idempotency,
+      if (stepUpToken != null) 'X-Masanawa-Step-Up': stepUpToken,
     });
     final r = await widget.dio.request<dynamic>('$_prefix$uri',
       options: options.copyWith(method: method), data: data);
@@ -185,11 +187,31 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       builder: (_) => MsnwP2pBankVerificationForm(
         banks: banks,
         onSubmit: (bankCode, accountNumber) async {
+          if(!_sameAccount)throw StateError('Sign in again to continue.');
+          final parameters={'bankCode':bankCode,'accountNumber':accountNumber};
+          await widget.dio.post<Map<String,dynamic>>(
+            '${widget.baseUrl}/v1/auth/security/bank/start',
+            data:parameters,options:_headers,
+          );
+          if(!mounted || !_sameAccount)throw StateError('Account changed.');
+          final code=await openWalletPage<String>(
+            context:context,title:'Verify bank details',
+            builder:(_)=>const WalletStepUpPage(),
+          );
+          if(code==null)throw StateError('Bank verification cancelled.');
+          final confirmation=await widget.dio.post<Map<String,dynamic>>(
+            '${widget.baseUrl}/v1/auth/security/bank/confirm',
+            data:{...parameters,'code':code},options:_headers,
+          );
+          if(!_sameAccount)throw StateError('Account changed.');
+          final stepUpToken=confirmation.data?['stepUpToken'];
+          if(stepUpToken is! String || stepUpToken.isEmpty)
+            throw StateError('Could not approve bank verification.');
           await _request('POST', '/methods/verify', {
             'bankCode': bankCode,
             'accountNumber': accountNumber,
             'consent': true,
-          });
+          },null,stepUpToken);
         },
       ),
     );
