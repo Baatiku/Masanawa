@@ -63,6 +63,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // video_player 2.14.x requires Android API 24+.
         minSdk = 24
+        testInstrumentationRunner = "pl.leancode.patrol.PatrolJUnitRunner"
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -91,6 +93,10 @@ android {
         }
     }
 
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
+
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -106,6 +112,7 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    androidTestUtil("androidx.test:orchestrator:1.5.1")
 }
 
 flutter {
