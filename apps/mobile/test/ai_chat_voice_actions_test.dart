@@ -103,6 +103,19 @@ void main() {
   expect(find.byTooltip('Call'), findsOneWidget);
   expect(tester.takeException(), isNull);
  });
+ testWidgets('Data Bundles remains visible before call and search at phone width', (tester) async {
+  tester.view.physicalSize=const Size(360,800);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  final bundles=find.text('Data Bundles');
+  expect(bundles, findsOneWidget);
+  expect(tester.getCenter(bundles).dx,lessThan(tester.getCenter(find.byTooltip('Call')).dx));
+  expect(tester.getCenter(find.byTooltip('Call')).dx,lessThan(tester.getCenter(find.byTooltip('Search')).dx));
+  final button=tester.widget<TextButton>(find.ancestor(of:bundles,matching:find.byType(TextButton)).first);
+  expect(button.style!.foregroundColor!.resolve({}), isNot(Colors.white));
+  expect(tester.takeException(),isNull);
+ });
  testWidgets('chat avatar opens this Masana profile callback', (tester) async {
   var opened=0;
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:AiChatScreen(characterId:'agent',onOpenProfile:()=>opened++))));

@@ -370,9 +370,6 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('MSNW P2P')),
     body: Column(children: [
-      const Padding(padding: EdgeInsets.fromLTRB(16,12,16,4),
-        child: Text('Trade MSNW directly with another member. '
-          'Only verified escrow protects MSNW; bank transfers remain subject to confirmation.')),
       SegmentedButton<int>(segments: const [
         ButtonSegment(value:0,label:Text('Buy')),
         ButtonSegment(value:1,label:Text('Sell')),

@@ -1192,43 +1192,19 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 icon: const Icon(Icons.close),
                 onPressed: () => setState(_selectedMessageIds.clear),
               ),
-            ] else
-            IconButton(
-              tooltip: _showSearch ? 'Close search' : 'Search',
-              icon: Icon(_showSearch ? Icons.close : Icons.search),
-              onPressed: () => setState(() {
-                _showSearch = !_showSearch;
-                if (!_showSearch) _search.clear();
-              }),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 2),
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                  minimumSize: const Size(0, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                icon: const Icon(Icons.bolt, size: 14, color: Colors.white),
-                label: const Text(
-                  'Data Bundles',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                onPressed: () => context.push('/billing?service=data'),
+            ] else ...[
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: u.brandStrong,
+                backgroundColor: u.brand.withValues(alpha: .10),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: const Size(72, 48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
+              onPressed: () => context.push('/billing?service=data'),
+              child: const SizedBox(width: 64, child: Text('Data Bundles',
+                textAlign: TextAlign.center, maxLines: 2,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700))),
             ),
             IconButton(
               tooltip: 'Call',
@@ -1237,6 +1213,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   ? null
                   : () => _openLiveVoice(agent),
             ),
+            IconButton(
+              tooltip: _showSearch ? 'Close search' : 'Search',
+              icon: Icon(_showSearch ? Icons.close : Icons.search),
+              onPressed: () => setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) _search.clear();
+              }),
+            ),
+            ],
             PopupMenuButton<String>(
               tooltip: 'More',
               onSelected: (value) async {
@@ -2288,14 +2273,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ),
       );
       _modalVoiceSession = session;
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => FractionallySizedBox(
-          heightFactor: .92,
-          child: _LiveVoiceSheet(
+      await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+        settings: RouteSettings(name: '/calls/live/${agent.characterId}'),
+        builder: (_) => MasanaLiveCallScreen(
           agent: agent,
           session: session!,
           maxDuration: paidAdmission == null
@@ -2469,8 +2449,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 }
 
-class _LiveVoiceSheet extends StatefulWidget {
-  const _LiveVoiceSheet({
+class MasanaLiveCallScreen extends StatefulWidget {
+  const MasanaLiveCallScreen({
+    super.key,
     required this.agent,
     required this.session,
     this.maxDuration,
@@ -2483,10 +2464,10 @@ class _LiveVoiceSheet extends StatefulWidget {
   final Future<void> Function()? onMediaStarted;
 
   @override
-  State<_LiveVoiceSheet> createState() => _LiveVoiceSheetState();
+  State<MasanaLiveCallScreen> createState() => _MasanaLiveCallScreenState();
 }
 
-class _LiveVoiceSheetState extends State<_LiveVoiceSheet> {
+class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   bool _ringing = true;
   bool _muted = false;
   bool _speaker = true;
@@ -2559,10 +2540,10 @@ class _LiveVoiceSheetState extends State<_LiveVoiceSheet> {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    return Material(
-      color: u.surfaceBg,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      child: SafeArea(
+    return Scaffold(
+      key: const ValueKey('masanawa-live-call-screen'),
+      backgroundColor: u.surfaceBg,
+      body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 34, 24, 30),
           child: StreamBuilder<LiveVoiceState>(
@@ -2571,7 +2552,8 @@ class _LiveVoiceSheetState extends State<_LiveVoiceSheet> {
           builder: (context, snapshot) {
             final state = snapshot.data ?? LiveVoiceState.connecting;
             return Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 MasanaPortraitAvatar(agent: widget.agent, size: 76),
                 const SizedBox(height: 14),
@@ -2665,6 +2647,7 @@ class _CallControl extends StatelessWidget {
           color: color,
           shape: const CircleBorder(),
           child: IconButton(
+            tooltip: label,
             onPressed: onTap,
             icon: Icon(
               icon,
