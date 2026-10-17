@@ -84,6 +84,8 @@ export interface CustomerAuthService {
     email?: string;
     code: string;
     name?: string;
+    deviceId?: string;
+    clientLabel?: string;
   }>): Promise<AuthTokensView>;
   accountStatus(input: Readonly<{
     phone: string;
@@ -97,6 +99,7 @@ export interface CustomerAuthService {
     phone: string;
     deviceId: string;
     password: string;
+    clientLabel?: string;
   }>): Promise<AuthTokensView>;
   passwordSetup(input: Readonly<{
     phone: string;
@@ -104,6 +107,7 @@ export interface CustomerAuthService {
     password: string;
     name: string;
     email?: string;
+    clientLabel?: string;
   }>): Promise<AuthTokensView>;
   refresh(input: Readonly<{ refreshToken: string }>): Promise<AuthTokensView>;
   logout(input: Readonly<{ authorizationHeader: string | undefined }>): Promise<void>;
@@ -219,7 +223,7 @@ export function createCustomerAuthService(input: Readonly<{
     return result;
   }
 
-  async function issueTokens(identity: PlatformSessionIdentity, isNewUser: boolean, deviceId?: string): Promise<AuthTokensView> {
+  async function issueTokens(identity: PlatformSessionIdentity, isNewUser: boolean, deviceId?: string, clientLabel?: string): Promise<AuthTokensView> {
     const issuedAt = now();
     const accessToken = mintPlatformSessionToken("access");
     const refreshToken = mintPlatformSessionToken("refresh");
@@ -232,6 +236,7 @@ export function createCustomerAuthService(input: Readonly<{
         refreshExpiresAt: plusSeconds(issuedAt, refreshTtlSeconds),
         issuedAt,
         ...(deviceId ? {deviceId} : {}),
+        ...(clientLabel ? {clientLabel} : {}),
       });
     } catch (error) {
       if (error instanceof Error && error.message === "auth.account_inactive") {
@@ -404,6 +409,12 @@ export function createCustomerAuthService(input: Readonly<{
       if (consumed !== "accepted") throw new CustomerAuthError("OTP_INVALID", 400);
 
       const isNewUser = !profile;
+      const signedInDeviceId=request.deviceId===undefined?undefined:assertDeviceId(request.deviceId);
+      const knownEmailDevice=profile && signedInDeviceId
+        ? await input.repository.isDeviceKnown({
+            tenantId:profile.tenantId,userId:profile.userId,deviceId:signedInDeviceId,
+          })
+        : false;
       if (!profile) {
         profile = await input.repository.createProfile({
           tenantId: input.tenantId,
@@ -417,7 +428,20 @@ export function createCustomerAuthService(input: Readonly<{
       const tokens=await issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         isNewUser,
+        signedInDeviceId,
+        request.clientLabel,
       );
+      if(signedInDeviceId){
+        await input.repository.registerDevice({tenantId:profile.tenantId,
+          userId:profile.userId,deviceId:signedInDeviceId,at:verifiedAt});
+      }
+      if(!isNewUser && !knownEmailDevice){
+        await input.repository.recordAuthEvent?.({tenantId:profile.tenantId,
+          userId:profile.userId,action:"new_device_signin",at:verifiedAt}).catch(()=>undefined);
+        if(profile.email)await input.emailDelivery?.sendSecurityAlert?.({
+          identifier:profile.email,at:verifiedAt,
+        }).catch(()=>undefined);
+      }
       if(isNewUser && profile.email && normalized.channel==="email") {
         // Delivery failure must not undo a completed account/session. Resend
         // deduplicates the stable account key; no welcome on ordinary logins.
@@ -512,6 +536,7 @@ export function createCustomerAuthService(input: Readonly<{
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         false,
         deviceId,
+        request.clientLabel,
       );
       if(!known) {
         await input.repository.recordAuthEvent?.({
@@ -582,6 +607,7 @@ export function createCustomerAuthService(input: Readonly<{
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
         true,
         deviceId,
+        request.clientLabel,
       );
     },
 
