@@ -46,6 +46,7 @@ import '../../voice/paid_voice.dart';
 import '../../voice/paid_voice_state.dart';
 import '../../safety/twin_safety.dart';
 import '../../safety/twin_safety_state.dart';
+import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// One Character conversation. Voice is the primary action while text,
@@ -1824,33 +1825,55 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       context.go('/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not block this Twin.')),
+        const SnackBar(content: Text('Could not block this Masana.')),
       );
     }
   }
 
   Future<void> _reportAgent(AgentDirectoryEntry agent) async {
-    final selected = await showDialog<TwinReportReason>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('Report Twin'),
-        children: [
-          for (final reason in TwinReportReason.values)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(reason),
-              child: Text(twinReportReasonLabel(reason)),
-            ),
-        ],
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final expectedAccount = session.user.id;
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        settings: const RouteSettings(name: '/masana/report'),
+        builder: (_) => Consumer(
+          builder: (routeContext, routeRef, _) {
+            final current = routeRef.watch(sessionProvider);
+            if (current is! SessionSignedIn ||
+                current.user.id != expectedAccount) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Report Masana')),
+                body: const Center(
+                  child: Text('Your session changed. Sign in again to report.'),
+                ),
+              );
+            }
+            return MasanaReportScreen(
+              displayName: agent.displayName,
+              onSubmit: (reason, detail) async {
+                final active = routeRef.read(sessionProvider);
+                if (active is! SessionSignedIn ||
+                    active.user.id != expectedAccount) return false;
+                final ok = await routeRef
+                    .read(twinSafetyControllerProvider.notifier)
+                    .report(
+                      characterId: agent.characterId,
+                      reason: reason,
+                      detail: detail,
+                    );
+                final after = routeRef.read(sessionProvider);
+                return ok && after is SessionSignedIn &&
+                    after.user.id == expectedAccount;
+              },
+            );
+          },
+        ),
       ),
     );
-    if (selected == null) return;
-    final ok = await ref.read(twinSafetyControllerProvider.notifier).report(
-      characterId: agent.characterId,
-      reason: selected,
-    );
-    if (!mounted) return;
+    if (!mounted || submitted != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'Report submitted.' : 'Could not submit report.')),
+      const SnackBar(content: Text('Masana report submitted.')),
     );
   }
   PaidVoiceController _capturePaidController(

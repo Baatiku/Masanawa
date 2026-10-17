@@ -39,6 +39,12 @@ class PersonaProfileScreen extends ConsumerWidget {
             label: 'This profile is unavailable.',
           );
         }
+        if (profile.kind != PersonaProfileKind.expert) {
+          return const _PersonaUnavailable(
+            label: 'This personal profile has been retired. Browse Masana contacts instead.',
+            showBrowse: true,
+          );
+        }
         return _PersonaBody(
           profile: profile,
           onOpenTalk: onOpenTalk,
@@ -73,7 +79,7 @@ class _PersonaBody extends StatelessWidget {
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
-        title: Text(isExpert ? 'Expert' : 'Twin'),
+        title: const Text('Masana profile'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 18, 12, 28),
@@ -110,11 +116,9 @@ class _PersonaBody extends StatelessWidget {
           Text(
             isExpert
                 ? (profile.role.trim().isEmpty
-                    ? 'Masanawa Expert'
-                    : 'Masanawa Expert · ' + profile.role)
-                : (profile.role.trim().isEmpty
-                    ? 'User Twin'
-                    : 'User Twin · ' + profile.role),
+                    ? 'Masana'
+                    : 'Masana · ' + profile.role)
+                : 'Retired profile',
             textAlign: TextAlign.center,
             style: TextStyle(color: u.textMuted, fontSize: 13),
           ),
@@ -292,10 +296,11 @@ class _PersonaMetric extends StatelessWidget {
 }
 
 class _PersonaUnavailable extends StatelessWidget {
-  const _PersonaUnavailable({required this.label, this.onRetry});
+  const _PersonaUnavailable({required this.label, this.onRetry, this.showBrowse = false});
 
   final String label;
   final VoidCallback? onRetry;
+  final bool showBrowse;
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +318,14 @@ class _PersonaUnavailable extends StatelessWidget {
               if (onRetry != null) ...[
                 const SizedBox(height: 12),
                 FilledButton(onPressed: onRetry, child: const Text('Try again')),
+              ],
+              if (showBrowse) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => context.go('/masana'),
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text('Browse Masana'),
+                ),
               ],
             ],
           ),
