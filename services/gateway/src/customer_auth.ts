@@ -118,6 +118,9 @@ export interface CustomerAuthService {
   consumeWithdrawalStepUp(input: Readonly<{requestId:string;providerCode:string;amount:string;destinationAddress:string}> & Readonly<{authorizationHeader:string|undefined;stepUpToken:string|undefined}>): Promise<void>;
   beginContactChange(input: Readonly<{authorizationHeader:string|undefined;channel:PlatformAuthChannel;nextIdentifier:string}>): Promise<Readonly<{resendInSeconds:number}>>;
   completeContactChange(input: Readonly<{authorizationHeader:string|undefined;channel:PlatformAuthChannel;nextIdentifier:string;oldCode:string;newCode:string}>): Promise<Readonly<{success:true}>>;
+  beginBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string}>): Promise<Readonly<{resendInSeconds:number}>>;
+  confirmBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;code:string}>): Promise<Readonly<{stepUpToken:string}>>;
+  consumeBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;stepUpToken:string|undefined}>): Promise<void>;
 }
 
 export interface AuthUserView {
@@ -264,6 +267,11 @@ export function createCustomerAuthService(input: Readonly<{
   }
   function stepUpChallengeKey(userId:string,fingerprint:string):string {
     return "stepup:"+createHash("sha256").update(userId+":"+fingerprint).digest("hex");
+  }
+  function bankFingerprint(bankCode:string,accountNumber:string):string {
+    if(!/^[0-9]{3,6}$/u.test(bankCode) || !/^[0-9]{10}$/u.test(accountNumber))
+      throw new CustomerAuthError("VALIDATION_FAILED",400);
+    return createHash("sha256").update(JSON.stringify(["p2p_bank_method",bankCode,accountNumber])).digest("hex");
   }
   function changeKeys(userId:string,channel:PlatformAuthChannel,oldValue:string,newValue:string) {
     const fingerprint=createHash("sha256").update(JSON.stringify([userId,channel,oldValue,newValue])).digest("hex");
@@ -745,6 +753,71 @@ export function createCustomerAuthService(input: Readonly<{
       const valid=await input.repository.consumeActionGrant({
         accessHash,grantHash:createHash("sha256").update(request.stepUpToken).digest("hex"),
         operation:"crypto_withdrawal",fingerprint,at:now()});
+      if(!valid)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
+    },
+
+    async beginBankStepUp(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      const fingerprint=bankFingerprint(request.bankCode,request.accountNumber);
+      if(!identity.profile.email||!input.emailDelivery)
+        throw new CustomerAuthError("STEP_UP_EMAIL_REQUIRED",409);
+      const identifier=stepUpChallengeKey(identity.userId,fingerprint);
+      const code=createOtpCode(),at=now();
+      const codeHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:"email",identifier,code});
+      try{
+        await input.repository.putOtpChallenge({
+          tenantId:identity.tenantId,channel:"email",identifier,codeHash,
+          createdAt:at,expiresAt:plusSeconds(at,600),
+          resendAfter:plusSeconds(at,60),maxAttempts:5,
+        });
+      }catch(error){
+        if(error instanceof Error&&error.message==="auth.otp.cooldown")
+          throw new CustomerAuthError("OTP_RATE_LIMITED",429);
+        throw error;
+      }
+      try{await input.emailDelivery.send({identifier:identity.profile.email,code});}
+      catch{
+        await input.repository.cancelOtpChallenge({
+          tenantId:identity.tenantId,channel:"email",identifier,codeHash,
+        }).catch(()=>undefined);
+        throw new CustomerAuthError("OTP_DELIVERY_UNAVAILABLE",503);
+      }
+      return {resendInSeconds:60};
+    },
+    async confirmBankStepUp(request) {
+      const {identity,accessHash}=await requireSession(request.authorizationHeader);
+      const fingerprint=bankFingerprint(request.bankCode,request.accountNumber);
+      if(!identity.profile.email||!input.emailDelivery)
+        throw new CustomerAuthError("STEP_UP_EMAIL_REQUIRED",409);
+      if(!/^\d{6}$/u.test(request.code))throw new CustomerAuthError("OTP_INVALID",400);
+      if(!input.repository.issueActionGrant)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const identifier=stepUpChallengeKey(identity.userId,fingerprint),at=now();
+      const codeHash=hashOtpCode({pepper:input.otpPepper,tenantId:identity.tenantId,
+        channel:"email",identifier,code:request.code});
+      const result=await input.repository.consumeOtpChallenge({
+        tenantId:identity.tenantId,channel:"email",identifier,codeHash,consumedAt:at,
+      });
+      if(result!=="accepted")throw new CustomerAuthError(result==="locked"?
+        "OTP_LOCKED":"OTP_INVALID",result==="locked"?429:400);
+      const stepUpToken="stp_"+randomBytes(32).toString("base64url");
+      await input.repository.issueActionGrant({
+        accessHash,operation:"p2p_bank_method",fingerprint,
+        grantHash:createHash("sha256").update(stepUpToken).digest("hex"),
+        issuedAt:at,expiresAt:plusSeconds(at,300),
+      });
+      return {stepUpToken};
+    },
+    async consumeBankStepUp(request) {
+      const {accessHash}=await requireSession(request.authorizationHeader);
+      const fingerprint=bankFingerprint(request.bankCode,request.accountNumber);
+      if(!request.stepUpToken || !/^stp_[A-Za-z0-9_-]{43}$/u.test(request.stepUpToken))
+        throw new CustomerAuthError("STEP_UP_REQUIRED",403);
+      if(!input.repository.consumeActionGrant)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      const valid=await input.repository.consumeActionGrant({
+        accessHash,operation:"p2p_bank_method",fingerprint,
+        grantHash:createHash("sha256").update(request.stepUpToken).digest("hex"),at:now(),
+      });
       if(!valid)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
     },
 
