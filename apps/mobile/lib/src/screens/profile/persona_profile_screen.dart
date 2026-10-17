@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../social/talk_social_profiles.dart';
 import '../../state/talk_social_profile_state.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_profile_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../talks/talk_home_screen.dart';
 
@@ -27,7 +28,8 @@ class PersonaProfileScreen extends ConsumerWidget {
     final asyncProfile = ref.watch(personaProfileProvider(publicId));
     return asyncProfile.when(
       loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        appBar: AppBar(title: Text('Masana profile')),
+        body: MasanawaProfileSkeleton(semanticLabel: 'Loading Masana profile'),
       ),
       error: (_, __) => _PersonaUnavailable(
         label: 'Couldn’t load this profile.',
@@ -305,7 +307,7 @@ class _PersonaUnavailable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      appBar: AppBar(title: const Text('Masana profile')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),

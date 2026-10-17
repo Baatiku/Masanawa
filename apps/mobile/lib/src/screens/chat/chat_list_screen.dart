@@ -563,7 +563,7 @@ class ChatListScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton(
         tooltip: 'Start conversation',
         backgroundColor: u.brand,
-        foregroundColor: Colors.white,
+        foregroundColor: u.textPrimary,
         onPressed: () => context.push('/masana'),
         child: const Icon(Icons.mic_none_outlined),
       ),
