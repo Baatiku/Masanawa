@@ -107,6 +107,8 @@ export interface CustomerAuthService {
   revokeSession(input: Readonly<{authorizationHeader:string|undefined;sessionId:string}>): Promise<void>;
   logoutAll(input: Readonly<{authorizationHeader:string|undefined}>): Promise<void>;
   loginHistory(input: Readonly<{authorizationHeader:string|undefined}>): Promise<readonly import("@masanawa/security").PlatformAuthEventView[]>;
+  startEmailLink(input: Readonly<{authorizationHeader:string|undefined; email:string}>): Promise<Readonly<{resendInSeconds:number}>>;
+  confirmEmailLink(input: Readonly<{authorizationHeader:string|undefined;email:string;code:string}>): Promise<Readonly<{email:string}>>;
 }
 
 export interface AuthUserView {
@@ -501,16 +503,9 @@ export function createCustomerAuthService(input: Readonly<{
         }),
         createdAt,
       });
-      if (email) {
-        const attached = await input.repository.attachIdentity({
-          tenantId: input.tenantId,
-          userId: profile.userId,
-          channel: "email",
-          identifier: email,
-          linkedAt: createdAt,
-        });
-        if (attached) profile = attached;
-      }
+      // An email typed during phone registration is NOT proof of possession.
+      // Never grant it a login identity until its OTP is consumed via
+      // /v1/auth/security/email/confirm by this authenticated account.
       await input.repository.registerDevice({
         tenantId: input.tenantId,
         userId: profile.userId,
@@ -549,6 +544,57 @@ export function createCustomerAuthService(input: Readonly<{
         accessExpiresIn: accessTtlSeconds,
         user: authUser(identity.profile, false),
       });
+    },
+
+    async startEmailLink(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      let email:string;
+      try {email=normalizePlatformAuthIdentifier({email:request.email}).identifier;}
+      catch {throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      if (identity.profile.email && identity.profile.email !== email)
+        throw new CustomerAuthError("EMAIL_CHANGE_UNAVAILABLE",409);
+      const existing=await input.repository.resolveProfile({
+        tenantId:identity.tenantId,channel:"email",identifier:email,observedAt:now(),
+      });
+      if(existing && existing.userId !== identity.userId)
+        throw new CustomerAuthError("EMAIL_ALREADY_LINKED",409);
+      const response=await this.sendOtp({email});
+      return {resendInSeconds:response.resendInSeconds};
+    },
+    async confirmEmailLink(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      let email:string;
+      try {email=normalizePlatformAuthIdentifier({email:request.email}).identifier;}
+      catch {throw new CustomerAuthError("VALIDATION_FAILED",400);}
+      if (identity.profile.email && identity.profile.email !== email)
+        throw new CustomerAuthError("EMAIL_CHANGE_UNAVAILABLE",409);
+      if(!/^\\d{6}$/u.test(request.code))
+        throw new CustomerAuthError("OTP_INVALID",400);
+      const at=now();
+      const codeHash=hashOtpCode({pepper:input.otpPepper,
+        tenantId:identity.tenantId,channel:"email",identifier:email,code:request.code});
+      const checked=await input.repository.consumeOtpChallenge({
+        tenantId:identity.tenantId,channel:"email",identifier:email,codeHash,consumedAt:at,consume:false,
+      });
+      if(checked==="locked")throw new CustomerAuthError("OTP_LOCKED",429);
+      if(checked!=="accepted")throw new CustomerAuthError("OTP_INVALID",400);
+      const consumed=await input.repository.consumeOtpChallenge({
+        tenantId:identity.tenantId,channel:"email",identifier:email,codeHash,consumedAt:at,
+      });
+      if(consumed!=="accepted")throw new CustomerAuthError("OTP_INVALID",400);
+      try {
+        const attached=await input.repository.attachIdentity({
+          tenantId:identity.tenantId,userId:identity.userId,channel:"email",identifier:email,linkedAt:at,
+        });
+        if(!attached)throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+      } catch(error) {
+        if(error instanceof Error && error.message==="auth.identity_taken")
+          throw new CustomerAuthError("EMAIL_ALREADY_LINKED",409);
+        if(error instanceof Error && error.message==="auth.email_change_requires_recovery")
+          throw new CustomerAuthError("EMAIL_CHANGE_UNAVAILABLE",409);
+        throw error;
+      }
+      return {email};
     },
 
     async sessions(request) {
