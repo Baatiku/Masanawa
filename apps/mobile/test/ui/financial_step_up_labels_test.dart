@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:masanawa_mobile/src/finance/wallet_step_up_page.dart';
+import 'package:masanawa/src/finance/wallet_step_up_page.dart';
 
 void main(){
   testWidgets('bank verification explains the exact approved payment details',(
