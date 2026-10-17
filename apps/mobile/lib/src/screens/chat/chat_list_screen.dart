@@ -804,7 +804,7 @@ class _ChatsSearchPaneState extends State<_ChatsSearchPane> {
           const LinearProgressIndicator(minHeight: 2),
         if (_query.isNotEmpty && _serverError != null)
           MaterialBanner(
-            content: Text(_serverError!),
+            content: Center(child: Text(_serverError!, textAlign: TextAlign.center)),
             actions: [
               TextButton(onPressed: _retryRemote, child: const Text('Retry server search')),
             ],
@@ -943,6 +943,7 @@ class _EmptyChats extends StatelessWidget {
                           (hasAgents
                               ? 'Talk to an agent'
                               : 'No agents are available right now.'),
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: u.textPrimary,
                   fontSize: 19,
@@ -970,3 +971,4 @@ class _EmptyChats extends StatelessWidget {
     );
   }
 }
+

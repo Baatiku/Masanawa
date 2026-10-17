@@ -10,11 +10,11 @@ flutter_native_splash:
   ios: false
   web: false
   color: '#FFFFFF'
-  image: assets/brand/masanawa_agent_logo.png
+  image: assets/brand/masanawa_splash_mark.png
   color_dark: '#FFFFFF'
-  image_dark: assets/brand/masanawa_agent_logo.png
+  image_dark: assets/brand/masanawa_splash_mark.png
   android_12:
     color: '#FFFFFF'
-    image: assets/brand/masanawa_agent_logo.png
+    image: assets/brand/masanawa_splash_mark.png
     color_dark: '#FFFFFF'
-    image_dark: assets/brand/masanawa_agent_logo.png
+    image_dark: assets/brand/masanawa_splash_mark.png

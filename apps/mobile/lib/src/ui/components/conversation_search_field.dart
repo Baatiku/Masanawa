@@ -40,7 +40,8 @@ class ConversationSearchField extends StatelessWidget {
             hintText: hintText,
             hintStyle: TextStyle(fontSize: 16, color: colors.textMuted),
             filled: true,
-            fillColor: colors.surfaceBg,
+            fillColor: Theme.of(context).brightness == Brightness.light
+                ? const Color(0xFFF1F4F3) : colors.surfaceMuted,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,

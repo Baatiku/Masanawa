@@ -310,7 +310,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: masanawa.surfaceCard,
+      fillColor: brightness == Brightness.light ? const Color(0xFFF1F4F3) : masanawa.surfaceMuted,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

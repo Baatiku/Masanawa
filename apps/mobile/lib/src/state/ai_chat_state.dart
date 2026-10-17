@@ -922,6 +922,8 @@ class AiChatController extends Notifier<AiChatState> {
     }
     for (final item in history) {
       final existing = byKey[item.key];
+      if (existing?.deliveryStatus == 'streaming' &&
+          state.sendingIn.contains(characterId)) continue;
       final parsedParts = [
         for (final raw in item.parts)
           AgentMessagePart.fromJson(raw),
@@ -1433,6 +1435,7 @@ class AiChatController extends Notifier<AiChatState> {
     String? caption,
     String? replyToId,
     String? replyPreview,
+    Future<void> Function()? onAccepted,
   }) async {
     if (state.sendingIn.contains(characterId)) return;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
@@ -1461,9 +1464,10 @@ class AiChatController extends Notifier<AiChatState> {
     }
     if (offline) {
       await _enqueueMessage(characterId, message);
+      await onAccepted?.call();
       return;
     }
-    await _dispatchUserMessage(characterId, message);
+    await _dispatchUserMessage(characterId, message, onAccepted: onAccepted);
   }
 
   Future<void> sendAttachments(
@@ -1521,6 +1525,7 @@ class AiChatController extends Notifier<AiChatState> {
     AiChatMessage userMsg, {
     bool retry = false,
     String? transportPrompt,
+    Future<void> Function()? onAccepted,
   }) async {
     final connectionGeneration = _connectionGeneration;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
@@ -1536,6 +1541,7 @@ class AiChatController extends Notifier<AiChatState> {
       sendingIn: {...state.sendingIn, characterId},
     );
     await _save();
+    await onAccepted?.call();
     _setDelivery(characterId, userMsg.id, 'sent');
     if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
       return;
@@ -1547,7 +1553,8 @@ class AiChatController extends Notifier<AiChatState> {
       final attachment = userMsg.attachment;
       final attachmentSet = userMsg.attachments;
       final hasMedia = attachment != null || attachmentSet.isNotEmpty;
-      final streamMessageId = _beginAiStream(characterId);
+      final voiceReply = userMsg.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio');
+      final streamMessageId = _beginAiStream(characterId, requestId: userMsg.requestId);
       final visiblePrompt = userMsg.replyPreview?.trim().isNotEmpty == true
           ? 'Replying to this earlier message:\n"${userMsg.replyPreview}"\n\n${userMsg.text}'
           : userMsg.text;
@@ -1560,7 +1567,7 @@ class AiChatController extends Notifier<AiChatState> {
       DateTime? livePcmStartedAt;
       var playbackSuppressed = false;
       Future<void> playChunk(Uint8List chunk) async {
-        if (!currentAudioOwner() || playbackSuppressed) return;
+        if (voiceReply || !currentAudioOwner() || playbackSuppressed) return;
         if (LiveCallForeground.active) {playbackSuppressed = true;return;}
         playbackOwner ??= LivePcmAudio.acquirePlaybackOwner();
         if (!LivePcmAudio.isPlaybackOwner(playbackOwner!)) {playbackSuppressed = true;return;}
@@ -1573,10 +1580,10 @@ class AiChatController extends Notifier<AiChatState> {
       }
       var spokenTranscript = '';
       void textDelta(String delta) {
-        if (currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
+        if (!voiceReply && currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
-        if (!currentAudioOwner()) return;
+        if (voiceReply || !currentAudioOwner()) return;
         spokenTranscript += delta;
         _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
       }
@@ -1675,7 +1682,7 @@ class AiChatController extends Notifier<AiChatState> {
               userMsg.requestId != null &&
               playable.bytes.length <= 8 * 1024 * 1024) {
             try {
-              await mediaTransport.savePrivateChatMedia(
+              unawaited(mediaTransport.savePrivateChatMedia(
                 characterId: characterId,
                 requestId: userMsg.requestId!,
                 slot: 8,
@@ -1684,7 +1691,7 @@ class AiChatController extends Notifier<AiChatState> {
                     : 'audio/${playable.extension}',
                 name: 'masana-reply.${playable.extension}',
                 bytes: playable.bytes,
-              );
+              ).catchError((Object _) {}));
             } catch (_) {
               // Retain the already delivered chat and local audio. Media
               // backup never causes inference or a charged turn to replay.
@@ -1707,7 +1714,7 @@ class AiChatController extends Notifier<AiChatState> {
         await _finalizeAiStream(
           characterId,
           streamMessageId,
-          result.audioTranscript?.trim().isNotEmpty == true ? result.audioTranscript! : result.text,
+          result.text,
           parts: result.parts,
           attachment: replyAudio,
           agentRunId: result.agentRunId,
@@ -2004,7 +2011,7 @@ class AiChatController extends Notifier<AiChatState> {
     return binding;
   }
 
-  String _beginAiStream(String characterId) {
+  String _beginAiStream(String characterId, {String? requestId}) {
     final thread = threadOf(characterId);
     final id = _newId();
     final isOpen = state.openThreadId == characterId;
@@ -2014,6 +2021,7 @@ class AiChatController extends Notifier<AiChatState> {
       text: '',
       createdAt: DateTime.now(),
       deliveryStatus: 'streaming',
+      requestId: requestId,
     );
     state = state.copyWith(
       threads: {
@@ -2071,6 +2079,8 @@ class AiChatController extends Notifier<AiChatState> {
       threads: {
         ...state.threads,
         characterId: thread.copyWith(
+          messages: [for (final m in thread.messages)
+            if (m.id == messageId || requestId == null || m.isUser || m.requestId != requestId) m],
           updatedAt: DateTime.now(),
           agentRunId: agentRunId,
         ),

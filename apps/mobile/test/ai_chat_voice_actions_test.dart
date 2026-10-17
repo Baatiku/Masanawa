@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,7 @@ class _Recorder extends VoiceNoteRecorder {
  @override void retain(){retained=true;}
 }
 class _Chats extends AiChatController {
+ Completer<void>? response;
  final sent=<ChatAttachment>[];
  final texts=<String>[];
  @override void setDraft(String characterId,String value) {}
@@ -39,7 +41,7 @@ class _Chats extends AiChatController {
  @override AiChatState build()=>const AiChatState();
  @override void openThread(String characterId) {}
  @override void closeThread() {}
- @override Future<void> sendAttachment(String characterId,ChatAttachment attachment,{String? caption,String? replyToId,String? replyPreview}) async {sent.add(attachment);}
+ @override Future<void> sendAttachment(String characterId,ChatAttachment attachment,{String? caption,String? replyToId,String? replyPreview,Future<void> Function()? onAccepted}) async {sent.add(attachment);await onAccepted?.call();await response?.future;}
 }
 class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
@@ -71,6 +73,29 @@ void main() {
   expect(chats.sent,hasLength(1));expect(chats.sent.single.kind,'voice');expect(recorder.retained,true);
   expect(find.text('Recording voice note'),findsNothing);
   expect(tester.takeException(),isNull);
+ });
+ testWidgets('accepted voice note closes recorder before the agent finishes', (tester) async {
+  final chats=_Chats()..response=Completer<void>();final recorder=_Recorder();
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pump();await tester.pump();
+  expect(chats.sent,hasLength(1));
+  expect(find.text('Recording voice note'),findsNothing);
+  expect(find.bySemanticsLabel('Send voice note'),findsNothing);
+  expect(recorder.retained,isTrue);
+  chats.response!.complete();await tester.pumpAndSettle();
+ });
+ testWidgets('chat avatar opens this Masana profile callback', (tester) async {
+  var opened=0;
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:AiChatScreen(characterId:'agent',onOpenProfile:()=>opened++))));
+  await tester.pumpAndSettle();await tester.tap(find.text('Amina').first);await tester.pump();
+  expect(opened,1);
+ });
+ testWidgets('chat avatar opens the Masana detail screen without shell callbacks', (tester) async {
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();await tester.tap(find.text('Amina').first);await tester.pumpAndSettle();
+  expect(find.text('Masana profile'),findsOneWidget);expect(find.text('About'),findsOneWidget);
  });
  testWidgets('emoji picker opens and an emoji-only message sends and renders without a crash',(tester)async{
   final chats=_Chats();
