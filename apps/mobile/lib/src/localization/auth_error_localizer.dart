@@ -18,6 +18,14 @@ abstract final class AuthErrorLocalizer {
       'OTP_RATE_LIMITED' || 'RATE_LIMITED' || 'TOO_MANY_REQUESTS' =>
         l10n.authRateLimited,
       'AUTH_UNAVAILABLE' => l10n.signInMethodsUnavailable,
+      'ACCOUNT_SUSPENDED' || 'ACCOUNT_INACTIVE' =>
+        'This account is suspended. Contact Masanawa support for help.',
+      'ACCOUNT_RESTRICTED' =>
+        'This account is restricted. Financial actions are paused.',
+      'ACCOUNT_RECOVERY_HOLD' =>
+        'Account recovery protection is active. Financial actions resume after the security hold.',
+      'STEP_UP_EMAIL_REQUIRED' =>
+        'Verify a linked email address in Account Security before this action.',
       _ => switch (stage) {
         AuthFailureStage.capabilities => l10n.signInMethodsLoadFailed,
         AuthFailureStage.sendCode => l10n.authSendFailed,
