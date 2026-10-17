@@ -74,6 +74,7 @@ class RoomsScreen extends StatefulWidget {
 class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _resolvedDefaultTab = false;
+  bool _applyingInitialTab = false;
   bool loading = true;
   Object? error;
   List<RoomInfo> rows = [];
@@ -93,7 +94,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
   }
 
   void _onTabChanged() {
-    if (_tabController.indexIsChanging) return;
+    if (_applyingInitialTab || _tabController.indexIsChanging) return;
     load();
   }
 
@@ -116,7 +117,9 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
       if (!_resolvedDefaultTab) {
         _resolvedDefaultTab = true;
         if (!hasJoinedRooms) {
+          _applyingInitialTab = true;
           _tabController.index = 1;
+          _applyingInitialTab = false;
           final discoverList = await widget.client.list(joined: false, query: query, language: language);
           if (mounted && version == _loadVersion) {
             setState(() { rows = discoverList; loading = false; });
@@ -295,9 +298,9 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: u.brand,
+          labelColor: u.brandStrong,
           unselectedLabelColor: u.textMuted,
-          indicatorColor: u.brand,
+          indicatorColor: u.brandStrong,
           indicatorWeight: 3,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
