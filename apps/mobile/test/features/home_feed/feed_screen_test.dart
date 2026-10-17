@@ -111,6 +111,20 @@ void main(){
   expect(find.text('Could not load more updates'),findsNothing);expect(find.text('post'),findsOneWidget);
  });
 
+ testWidgets('same account replacement of auth-backed API does not re-fetch feed',(tester)async{
+  final before=StubFeed('Already visible'),after=StubFeed('New transport');
+  Future<void> render(StubFeed feed)async{
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
+      api:feed,accountKey:'fan1'))));
+    await tester.pumpAndSettle();
+  }
+  await render(before);
+  expect(before.calls,1);
+  await render(after);
+  expect(after.calls,0);
+  expect(find.text('Already visible'),findsOneWidget);
+ });
+
  testWidgets('Status media action retains the authorized post and media pair',(tester)async{
   final api=StubFeed('image');
   final post=FeedPost(id:'381026c2-9d56-47b1-b73d-1784e24e41e2',authorMasanaId:'masana',

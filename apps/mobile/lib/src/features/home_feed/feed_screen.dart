@@ -40,7 +40,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override void initState(){super.initState();WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)refresh();});}
   @override void didUpdateWidget(covariant MasanaFeedScreen old) {
     super.didUpdateWidget(old);
-    if(old.accountKey!=widget.accountKey||old.api!=widget.api||old.enabled!=widget.enabled){
+    // A refreshed auth token recreates the Status API wrapper but keeps the
+    // same authorized account. Do not erase visible posts or refetch then.
+    if(old.accountKey!=widget.accountKey||old.enabled!=widget.enabled||
+       (widget.accountKey.isEmpty&&old.api!=widget.api)){
       clearProjection();
       if(widget.enabled)refresh();
     }
