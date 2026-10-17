@@ -11,6 +11,7 @@ import 'status_editorial_page.dart';
 import 'admin_videos_page.dart';
 import 'admin_rooms_page.dart';
 import 'admin_masana_page.dart';
+import 'admin_skill_readiness_form.dart';
 
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.api, required this.onSignOut});
@@ -734,89 +735,22 @@ class _SkillsPageState extends State<SkillsPage> {
   late Future<List<AdminSkill>> _future = widget.api.skills();
 
   Future<void> _edit(AdminSkill skill) async {
-    var state = skill.readiness == 'unknown' ? 'disabled' : skill.readiness;
-    var advertised = skill.advertised;
-    final reason = TextEditingController(text: skill.reasonCode ?? '');
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(skill.displayName),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  initialValue: state,
-                  decoration: const InputDecoration(labelText: 'Readiness'),
-                  items: const [
-                    DropdownMenuItem(value: 'ready', child: Text('Ready')),
-                    DropdownMenuItem(value: 'degraded', child: Text('Degraded')),
-                    DropdownMenuItem(value: 'blocked', child: Text('Blocked')),
-                    DropdownMenuItem(value: 'disabled', child: Text('Disabled')),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setDialogState(() {
-                      state = value;
-                      if (state != 'ready') advertised = false;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: advertised,
-                  onChanged: state == 'ready'
-                      ? (value) => setDialogState(() => advertised = value)
-                      : null,
-                  title: const Text('Advertise to runtime'),
-                  subtitle: const Text('Only Ready Skills may be advertised.'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: reason,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason code',
-                    hintText: 'Optional, e.g. provider.degraded',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  await widget.api.updateSkillReadiness(
-                    skill,
-                    state: state,
-                    advertised: advertised,
-                    reasonCode: reason.text,
-                  );
-                  if (context.mounted) Navigator.of(context).pop(true);
-                } catch (error) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(error.toString())),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        settings: const RouteSettings(name: '/admin/skills/readiness'),
+        builder: (_) => AdminSkillReadinessForm(
+          skill: skill,
+          onSave: (state, advertised, reasonCode) async {
+            await widget.api.updateSkillReadiness(
+              skill,
+              state: state,
+              advertised: advertised,
+              reasonCode: reasonCode,
+            );
+          },
         ),
       ),
     );
-    reason.dispose();
-
     if (saved == true && mounted) {
       setState(() => _future = widget.api.skills());
     }
