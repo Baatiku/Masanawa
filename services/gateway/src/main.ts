@@ -869,6 +869,7 @@ export async function startGatewayService(
     liveVoiceTokens = createGeminiLiveTokenService({
       apiKey: alphaGeminiApiKey,
       authorizer: conversationAuthorizer!,
+      ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
       ...(database.callHistory ? { callHistory: database.callHistory } : {}),
       ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
       model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
@@ -1351,6 +1352,7 @@ export async function startGatewayService(
         liveVoiceTokens = createGeminiLiveTokenService({
           apiKey: liveApiKey,
           authorizer: conversationAuthorizer,
+          ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.callHistory ? { callHistory: database.callHistory } : {}),
           ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
           model: liveModel,
@@ -3054,3 +3056,4 @@ if (isDirectExecution()) {
     process.exitCode = 1;
   });
 }
+

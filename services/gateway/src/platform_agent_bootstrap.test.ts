@@ -101,4 +101,13 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.presentations[0]?.roleLabel).toBe("Admin-owned");
    expect(f.identity.provision).toHaveBeenCalledTimes(25);
  });
+ it('authors stock country affiliation explicitly and preserves administrator overrides',async()=>{
+   const f=fixture(),tenant=createCanonicalId('tenant');await run(f,tenant);
+   expect(f.presentations.find(p=>p.displayName==='Madam Asha Verma')?.countryCode).toBe('IN');
+   expect(f.presentations.find(p=>p.displayName==='Prof. Mei Lin')?.countryCode).toBe('CN');
+   expect(f.presentations.find(p=>p.displayName==='Ustazah Layla Hassan')?.countryCode).toBe('NG');
+   f.presentations[0]={...f.presentations[0]!,countryCode:'GB',countryName:'United Kingdom'};
+   await run(f,tenant);expect(f.presentations[0]?.countryCode).toBe('GB');
+ });
+
 });

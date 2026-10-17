@@ -23,6 +23,8 @@ export interface AgentPresentation {
   readonly roleLabel: string;
   readonly about: string;
   readonly greeting: string | null;
+  readonly countryCode?: string | null;
+  readonly countryName?: string | null;
   readonly visibleInUserApp: boolean;
   readonly sortOrder: number;
   readonly revision: number;
@@ -77,6 +79,13 @@ export function normalizeAgentPresentation(
     throw new RangeError("sortOrder is invalid");
   }
 
+  const hasCountry=input.countryCode!==undefined || input.countryName!==undefined;
+  const code=input.countryCode?.trim().toUpperCase()??null;
+  const name=input.countryName?.trim()??null;
+  if(hasCountry && ((code===null)!==(name===null) || code!==null&&
+    (!/^[A-Z]{2}$/.test(code)||name!.length<1||name!.length>80))) {
+    throw new TypeError('country identity is invalid');
+  }
   return Object.freeze({
     schemaVersion: 1,
     tenantId: parseCanonicalId("tenant", input.tenantId),
@@ -92,6 +101,7 @@ export function normalizeAgentPresentation(
       input.greeting === null
         ? null
         : bounded(input.greeting, "greeting", 1000, true),
+    ...(hasCountry?{countryCode:code,countryName:name}:{}),
     visibleInUserApp: Boolean(input.visibleInUserApp),
     sortOrder: input.sortOrder,
     revision: revision(input.revision),
@@ -246,3 +256,4 @@ export interface UserAgentPreferenceRepository {
     readonly expectedRevision: number | null;
   }): Promise<UserAgentPreference>;
 }
+

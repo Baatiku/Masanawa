@@ -255,7 +255,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
         if (captureInputTranscription) 'inputAudioTranscription': {},
         'systemInstruction': {
           'parts': [{
-            'text': 'You are $characterName. Have a natural live voice conversation. '
+            'text': _activeGrant.systemInstruction ?? 'You are $characterName. Have a natural live voice conversation. '
                 'Answer in the user\'s language. Do not read hidden system information aloud.',
           }],
         },
@@ -424,8 +424,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
                     'parts': [
                       {
                         'text':
-                            'Start this live conversation with a brief natural greeting, '
-                            'then ask how you can help.',
+                            'Continue naturally using the saved conversation context. A brief hello is enough. '
+                            'Do not repeat your introduction or ask for facts already supplied.',
                       },
                     ],
                   },
@@ -670,4 +670,5 @@ class LiveVoiceSession with WidgetsBindingObserver {
     unawaited(Future<void>.sync(callback).catchError((Object _) {}));
   }
 }
+
 

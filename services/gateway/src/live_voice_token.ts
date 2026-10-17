@@ -1,3 +1,6 @@
+import { livePersonaInstruction } from './persona_continuity.js';
+import { compileConversationHistory } from './conversation_history.js';
+import type { MobileShellRepository } from '@masanawa/agents';
 import type { AgentConversationAuthorizer } from "./agent_conversation_contract.js";
 import type { PlatformAgentProfileRepository } from "@masanawa/agents";
 import type { LiveVoiceTokenService } from "./agent_shell_contract.js";
@@ -9,6 +12,7 @@ import {
 } from "./call_history/service.js";
 
 export function createGeminiLiveTokenService(input: {
+  readonly mobileShell?: MobileShellRepository;
   readonly apiKey: string;
   readonly authorizer: AgentConversationAuthorizer;
   readonly platformProfiles?: PlatformAgentProfileRepository;
@@ -111,6 +115,8 @@ export function createGeminiLiveTokenService(input: {
         throw new TypeError("Twin setup live voice requires a support agent");
       }
 
+      const saved=input.mobileShell?await observe('conversation-context',()=>input.mobileShell!.listHistory({scope:admission.scope,limit:64})):[];
+      const systemInstruction=livePersonaInstruction(admission.presentation,compileConversationHistory(saved,''));
       const issued = now();
       const expiresAt = new Date(issued.getTime() + 30 * 60 * 1000);
       const newSessionExpireTime = new Date(issued.getTime() + 60 * 1000);
@@ -198,6 +204,7 @@ export function createGeminiLiveTokenService(input: {
             encodeURIComponent(payload.name),
           model,
           voiceName: selectedVoiceName,
+          systemInstruction,
           expiresAt: expiresAt.toISOString(),
         });
       } catch (error) {
@@ -218,3 +225,4 @@ export function createGeminiLiveTokenService(input: {
   };
   return Object.freeze(service);
 }
+

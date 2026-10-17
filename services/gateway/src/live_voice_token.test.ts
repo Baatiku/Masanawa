@@ -9,6 +9,7 @@ const authorizer: AgentConversationAuthorizer = {
     expect(authorizationHeader).toBe("Bearer valid-user");
     expect(requested).toBe(characterId);
     return {
+      presentation:{displayName:"Amina",roleLabel:"Medicine",about:"Medical education"},
       scope: {
         tenantId: createCanonicalId("tenant"),
         userId: createCanonicalId("user"),
@@ -42,6 +43,7 @@ describe("Gemini Live ephemeral token compatibility", () => {
         characterId,
         authorizationHeader: "Bearer valid-user",
       });
+      expect(grant.systemInstruction).toContain("Do not introduce yourself");
       expect(grant.model).toBe("gemini-3.8-live");
       expect(grant.voiceName).toBe(expectedLiveVoice);
       expect(grant.token).toBe("auth_tokens/safe-test-token-0123456789");
@@ -109,3 +111,4 @@ describe("Gemini Live ephemeral token compatibility", () => {
     }
   });
 });
+
