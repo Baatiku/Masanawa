@@ -9,10 +9,12 @@ class MasanawaListSkeleton extends StatelessWidget {
   const MasanawaListSkeleton({
     super.key,
     this.itemCount = 5,
+    this.shrinkWrap = false,
     this.semanticLabel = 'Loading content',
   }) : assert(itemCount > 0);
 
   final int itemCount;
+  final bool shrinkWrap;
   final String semanticLabel;
 
   @override
@@ -24,6 +26,7 @@ class MasanawaListSkeleton extends StatelessWidget {
       liveRegion: true,
       child: ExcludeSemantics(
         child: ListView.separated(
+          shrinkWrap: shrinkWrap,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: itemCount,
           separatorBuilder: (_, __) => Divider(

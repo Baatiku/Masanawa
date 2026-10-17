@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/session_state.dart';
+import '../ui/components/masanawa_list_skeleton.dart';
 
 /// Inline authenticated shell gate. No decorative timer, extra landing route,
 /// network request or embedded brand/splash stage is added to startup.
@@ -18,8 +19,11 @@ class StartupGate extends ConsumerWidget {
     }
     if (session is SessionRestoring) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(strokeWidth: 2),
+        body: SafeArea(
+          child: MasanawaListSkeleton(
+            itemCount: 5,
+            semanticLabel: 'Restoring your session',
+          ),
         ),
       );
     }
