@@ -102,8 +102,9 @@ describe("P2P real-SQL read and pagination qualification", () => {
       await expect(service.quote({tenantId:"tenant-b",userId:buyer},{
         offerId:uuid(1),amountMicro:"1000000",
       })).rejects.toMatchObject({code:"p2p.offer_not_found"});
-      expect((await service.offersPage({tenantId:tenant,userId:buyer})).items)
-        .toHaveLength(1);
+      const publicPage=await service.offersPage({tenantId:tenant,userId:buyer});
+      expect(publicPage.items).toHaveLength(1);
+      expect(publicPage.items[0]).not.toHaveProperty("seller_id");
       await t.query("UPDATE commerce.msnw_custody_accounts SET available_micro='1004000'");
       expect((await service.offersPage({tenantId:tenant,userId:buyer})).items)
         .toHaveLength(0);
