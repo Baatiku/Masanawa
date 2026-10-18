@@ -36,6 +36,12 @@ export function foundationMigrationRoots(): readonly MigrationRoot[] {
       owner: "events",
       directory: packageMigrationDirectory("@masanawa/events"),
     }),
+    // Security's durable channel delivery references identity.users. Keep this
+    // dependency in the shared foundation, including foundation-only installs.
+    Object.freeze({
+      owner: "identity",
+      directory: packageMigrationDirectory("@masanawa/identity"),
+    }),
     Object.freeze({
       owner: "security",
       directory: packageMigrationDirectory("@masanawa/security"),
@@ -51,7 +57,6 @@ export function foundationMigrationRoots(): readonly MigrationRoot[] {
 export function characterSessionMigrationRoots(): readonly MigrationRoot[] {
   return Object.freeze([
     ...foundationMigrationRoots(),
-    Object.freeze({ owner: "identity", directory: packageMigrationDirectory("@masanawa/identity") }),
     Object.freeze({ owner: "agents", directory: packageMigrationDirectory("@masanawa/agents") }),
   ]);
 }
