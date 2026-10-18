@@ -108,6 +108,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _buyDrafts = <String, String>{};
+  final _sellDraft = <String,String>{};
   final _secure = const FlutterSecureStorage();
   Map<String, dynamic>? _pendingOrder;
   Map<String, dynamic>? _pendingOffer;
@@ -139,6 +140,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         oldWidget.baseUrl != widget.baseUrl) {
       _cached.clear();
       _buyDrafts.clear();
+      _sellDraft.clear();
       _nextCursors.clear();
       _pendingOrder = null;
       _pendingOffer = null;
@@ -598,7 +600,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       builder: (_) => MsnwP2pSellerOfferForm(
         methods: methods,
         availableMicro: availableMicro,
-        onPublish: _publishSellerOffer,
+        initialDraft: _sellDraft,
+        onDraftChanged: (draft) {
+          _sellDraft
+            ..clear()
+            ..addAll(draft);
+        },
+        onPublish: (payload) async {
+          await _publishSellerOffer(payload);
+          _sellDraft.clear();
+        },
       ),
     );
     if (mounted && _sameAccount) {
@@ -833,6 +844,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if (!_sameAccount) {
       _cached.clear();
       _buyDrafts.clear();
+      _sellDraft.clear();
       _nextCursors.clear();
       _pendingOrder = null;
       _pendingOffer = null;
@@ -1271,10 +1283,14 @@ class MsnwP2pSellerOfferForm extends StatefulWidget {
     required this.methods,
     required this.onPublish,
     this.availableMicro,
+    this.initialDraft,
+    this.onDraftChanged,
   });
 
   final List<Map<String, dynamic>> methods;
   final String? availableMicro;
+  final Map<String,String>? initialDraft;
+  final ValueChanged<Map<String,String>>? onDraftChanged;
   final Future<void> Function(Map<String, dynamic> payload) onPublish;
 
   @override
@@ -1283,10 +1299,10 @@ class MsnwP2pSellerOfferForm extends StatefulWidget {
 
 class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
   final _form = GlobalKey<FormState>();
-  final _rate = TextEditingController();
-  final _minimum = TextEditingController();
-  final _maximum = TextEditingController();
-  final _inventory = TextEditingController();
+  late final TextEditingController _rate;
+  late final TextEditingController _minimum;
+  late final TextEditingController _maximum;
+  late final TextEditingController _inventory;
   String? _paymentMethodId;
   Map<String, dynamic>? _payload;
   bool _reviewing = false;
@@ -1297,13 +1313,36 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
   @override
   void initState() {
     super.initState();
-    if (widget.methods.length == 1) {
-      _paymentMethodId = '${widget.methods.first['method_id']}';
+    final draft=widget.initialDraft??const <String,String>{};
+    _rate=TextEditingController(text:draft['rate']);
+    _minimum=TextEditingController(text:draft['minimum']);
+    _maximum=TextEditingController(text:draft['maximum']);
+    _inventory=TextEditingController(text:draft['inventory']);
+    for(final field in [_rate,_minimum,_maximum,_inventory]){
+      field.addListener(_rememberDraft);
     }
+    final savedMethod=draft['methodId'];
+    if(savedMethod!=null && widget.methods.any((bank)=>
+      bank['method_id']=='$savedMethod')){
+      _paymentMethodId=savedMethod;
+    } else if (widget.methods.length==1) {
+      _paymentMethodId='${widget.methods.first['method_id']}';
+    }
+  }
+
+  void _rememberDraft() {
+    widget.onDraftChanged?.call({
+      'methodId':_paymentMethodId??'',
+      'rate':_rate.text,'minimum':_minimum.text,
+      'maximum':_maximum.text,'inventory':_inventory.text,
+    });
   }
 
   @override
   void dispose() {
+    for(final field in [_rate,_minimum,_maximum,_inventory]){
+      field.removeListener(_rememberDraft);
+    }
     _rate.dispose();
     _minimum.dispose();
     _maximum.dispose();
@@ -1529,6 +1568,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
               onChanged: _saving ? null : (value) => setState(() {
                 _paymentMethodId = value;
                 _error = null;
+                _rememberDraft();
               }),
               validator: (value) => value == null
                   ? 'Select the bank receiving payments.' : null,
