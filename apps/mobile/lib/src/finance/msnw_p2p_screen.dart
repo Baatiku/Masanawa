@@ -954,16 +954,21 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           builder: (context, snapshot) {
             final cached = _cached[_tab] ?? <Map<String, dynamic>>[];
             if (snapshot.connectionState != ConnectionState.done &&
-                cached.isEmpty) return _loading();
+                cached.isEmpty) return Semantics(
+                  label: 'Loading P2P ${['offers','sell offers','orders','updates'][_tab]}',
+                  liveRegion: true,
+                  child: _loading());
             final items = snapshot.hasData ? snapshot.data! : cached;
-            if (snapshot.hasError && items.isEmpty) return Center(child: Column(
+            if (snapshot.hasError && items.isEmpty) return Semantics(
+              liveRegion: true,
+              child: Center(child: Column(
               mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.wifi_off_outlined, size: 32),
                 const SizedBox(height: 12),
                 const Text('Unable to load P2P'),
                 TextButton.icon(onPressed: () => _reload(),
                   icon: const Icon(Icons.refresh), label: const Text('Retry')),
-              ]));
+              ])));
             final filtered = items;
             return RefreshIndicator(
               onRefresh: () async { _reload(); try { await _list; } catch (_) {} },
