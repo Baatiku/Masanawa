@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import Fastify from "fastify";
+import { registerMsnwPaystackEnrollmentRoutes } from "./paystack_customer_enrollment_routes.js";
 import type { PlatformSessionIdentity } from "@masanawa/security";
 import type { PlatformCustomerSessionAuthorizer } from "../customer_auth.js";
 import { createMsnwPaystackEnrollmentService } from "./paystack_customer_enrollment.js";
@@ -81,6 +83,7 @@ function scenario() {
     });
     const found = { id: 321, customer_code: "CUS_test321", email: owner.profile.email,
       identified };
+    if(path==='/bank')return ok([{name:'Test Bank',code:'007',active:true},{name:'Inactive',code:'008',active:false},{name:'Bad',code:'bad'}]);
     if (path === "/customer/owner%40example.com")
       return new Response("", { status: 404 });
     if (path === "/customer" && init?.method === "POST") return ok(found);
@@ -103,6 +106,30 @@ function scenario() {
 }
 
 describe("MSNW Paystack customer identity enrollment", () => {
+  it('prefills canonical contact fields, locks committed identity, never returns bank identifiers',async()=>{
+    const test=scenario();
+    expect(await test.service.profile(owner)).toEqual({legalName:'Amina Yusuf',email:'owner@example.com',phone:'+2348012345678',legalNameEditable:true,emailEditable:false,phoneEditable:false});
+    const missing={...owner,profile:{...owner.profile,email:null,phone:null}} as PlatformSessionIdentity;
+    expect(await test.service.profile(missing)).toMatchObject({email:'',phone:'',emailEditable:true,phoneEditable:true});
+    await test.service.submit(owner,details);
+    const stored=await test.service.profile(owner);
+    expect(stored.legalNameEditable).toBe(false);
+    expect(JSON.stringify(stored)).not.toContain(details.bvn);
+    expect(JSON.stringify(stored)).not.toContain(details.accountNumber);
+    expect(JSON.stringify(stored)).not.toContain('CUS_');
+    await expect(test.service.profile({...owner,profile:{...owner.profile,email:'other@example.com'}})).rejects.toMatchObject({code:'funding.identity_changed'});
+  });
+  it('serves profile and active bank choices only to authenticated owners',async()=>{
+    const test=scenario();const app=Fastify();registerMsnwPaystackEnrollmentRoutes(app,test.service);
+    try{
+      for(const path of ['/v1/wallet/msnw/funding/enrollment','/v1/wallet/msnw/funding/enrollment/banks'])expect((await app.inject({url:path})).statusCode).toBe(401);
+      const response=await app.inject({url:'/v1/wallet/msnw/funding/enrollment',headers:{authorization:'Bearer logged-in'}});
+      expect(response.statusCode).toBe(200);expect(response.json()).toMatchObject({state:'identity_details_required',profile:{legalName:'Amina Yusuf'}});
+      const banks=await app.inject({url:'/v1/wallet/msnw/funding/enrollment/banks',headers:{authorization:'Bearer logged-in'}});
+      expect(banks.json()).toEqual({banks:[{name:'Test Bank',code:'007'}]});
+      expect(test.calls.some(call=>call.startsWith('POST'))).toBe(false);
+    }finally{await app.close();}
+  });
   it("creates one customer, submits identity once, and only then provisions DVA", async () => {
     const test = scenario();
     expect(await test.service.read(owner)).toEqual({ state: "identity_details_required" });

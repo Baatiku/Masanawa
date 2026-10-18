@@ -176,7 +176,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       children: [
         Text('Send MSNW', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const Text('Send MSNW to another Masanawa user.'),
+
         const SizedBox(height: 10),
         TextField(controller: recipient, enabled: !busy && receipt == null,
           keyboardType: TextInputType.emailAddress,
@@ -193,8 +193,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           ListTile(title: Text(preview!['recipientName'] as String),
             subtitle: Text('Recipient ID: ' +
               (preview!['recipientUserId'] as String))),
-          const Text('Network transfers or platform conversion fees are '
-            'not included. In-platform Send fee: 0 MSNW.'),
+
           FilledButton(onPressed: busy ? null : send,
             child: const Text('Review and confirm')),
         ] else if (receipt == null)
@@ -312,4 +311,3 @@ class _MsnwCustodyActivityState extends State<MsnwCustodyActivity> {
     ],
   );
 }
-

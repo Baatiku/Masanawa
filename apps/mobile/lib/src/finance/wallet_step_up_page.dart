@@ -61,3 +61,5 @@ class _WalletStepUpPageState extends State<WalletStepUpPage> {
       ],
     )),
   );
+
+}

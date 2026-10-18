@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agents/masanawa_transport.dart';
 import '../core/providers.dart';
+import '../state/session_state.dart';
 import 'crypto_models.dart';
 import 'crypto_transport.dart';
 
@@ -69,14 +70,19 @@ final cryptoWalletTransportProvider = Provider<CryptoWalletTransport>((ref) {
 class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   CryptoWalletTransport get _transport => ref.read(cryptoWalletTransportProvider);
 
+  int _epoch=0;
   @override
   Future<CryptoWalletSnapshot> build() async {
+    ref.watch(sessionProvider);
+    _epoch++;
     ref.watch(cryptoWalletTransportProvider);
     return _load();
   }
 
   Future<CryptoWalletSnapshot> _load() async {
+    final epoch=_epoch;
     final capabilities = await _transport.capabilities();
+    if(epoch!=_epoch)throw StateError('Wallet account changed');
     // Load independent provider resources in parallel; a slow history call
     // should not serially block the asset list and overview.
     final resources = await Future.wait<Object>([
@@ -90,10 +96,18 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
 
     final selected = _initialSelectedCode(depositRoutes, history);
     final balances = <String, String>{};
-    if (selected != null) {
-      final result = await _transport.balance(selected);
-      balances[result.providerCode] = result.amount;
+    // Bound parallel balance reads; one unavailable asset never hides others.
+    for(var start=0;start<depositRoutes.length;start+=4){
+      if(epoch!=_epoch)throw StateError('Wallet account changed');
+      final batch=depositRoutes.skip(start).take(4);
+      await Future.wait(batch.map((route)async{
+        try{
+          final result=await _transport.balance(route.providerCode);
+          if(epoch==_epoch&&result.providerCode==route.providerCode)balances[result.providerCode]=result.amount;
+        }catch(_){ /* No fabricated zero on unavailable balance. */ }
+      }));
     }
+    if(epoch!=_epoch)throw StateError('Wallet account changed');
 
     return CryptoWalletSnapshot(
       capabilities: capabilities,
@@ -119,8 +133,10 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   }
 
   Future<void> refresh() async {
+    final epoch=++_epoch;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final value=await AsyncValue.guard(_load);
+    if(epoch==_epoch)state=value;
   }
 
   Future<void> selectAsset(String providerCode) async {
@@ -141,7 +157,9 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     if (current == null) return;
     final code = (providerCode ?? current.selectedProviderCode)?.trim();
     if (code == null || code.isEmpty) return;
+    final epoch=_epoch;
     final balance = await _transport.balance(code);
+    if(epoch!=_epoch||balance.providerCode!=code)return;
     final balances = Map<String, String>.from(current.balances)
       ..[balance.providerCode] = balance.amount;
     state = AsyncData(current.copyWith(balances: Map.unmodifiable(balances)));
@@ -296,7 +314,9 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       final balances = Map<String, String>.from(next.balances);
       for (final code in codes) {
         try {
-          final balance = await _transport.balance(code);
+          final epoch=_epoch;
+    final balance = await _transport.balance(code);
+    if(epoch!=_epoch||balance.providerCode!=code)return;
           balances[balance.providerCode] = balance.amount;
         } catch (_) {
           // The transaction result remains useful even if a balance refresh

@@ -328,29 +328,25 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [u.brandStrong, u.brand],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: u.surfaceMuted,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 28),
+                  Icon(Icons.account_balance_wallet_rounded, color: u.textPrimary, size: 28),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'MSNW Wallet',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                          style: TextStyle(color: u.textMuted, fontSize: 12),
                         ),
                         Text(
-                          'Fund with Paystack',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          'Fund wallet',
+                          style: TextStyle(
+                            color: u.textPrimary,
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
                           ),
@@ -360,8 +356,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   ),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white70),
+                      foregroundColor: u.textPrimary,
+                      side: BorderSide(color: u.structuralBorder),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       minimumSize: Size.zero,
                     ),
@@ -472,7 +468,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
             const SizedBox(height: 16),
 
-            if (!mobileCategory && billers.isNotEmpty) DropdownButtonFormField<String>(
+            if (!mobileCategory && billers.isNotEmpty) WalletSelectionField<String>(
               value: biller?.billerCode,
               items: billers.map((entry) => DropdownMenuItem(
                 value: entry.billerCode, child: Text(entry.name))).toList(),
@@ -651,4 +647,3 @@ class _BundleCard extends StatelessWidget {
     );
   }
 }
-
