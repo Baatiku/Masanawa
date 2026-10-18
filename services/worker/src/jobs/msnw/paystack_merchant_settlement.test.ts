@@ -5,7 +5,7 @@ import { createMsnwMerchantSettlementRuntime } from "./paystack_merchant_settlem
 
 const settlement = {
   id: 3090024,domain:"test",status:"success",currency:"NGN",
-  total_processed:10000,effective_amount:9800,
+  total_processed:10000,total_amount:9800,effective_amount:9800,
   settlement_date:"2026-10-15T10:00:00Z",
 };
 const transactions = [
@@ -28,12 +28,22 @@ function fake(patches: Readonly<{
     expect(init?.method).toBe("GET");
     const path = new URL(url);
     calls.push(path.pathname);
+    if(path.pathname==="/settlement") {
+      expect(path.searchParams.get("subaccount")).toBe("none");
+      expect(path.searchParams.get("perPage")).toBe("50");
+    }
+    if(path.pathname.endsWith("/transactions"))
+      expect(path.searchParams.get("perPage")).toBe("50");
     const data = path.pathname === "/settlement"
       ? [{...settlement,...patches.settlement}]
       : path.pathname === "/settlement/3090024/transactions"
         ? transactions.map(x=>({...x,...patches.transaction}))
         : [];
-    return new Response(JSON.stringify({status:true,data}),{
+    return new Response(JSON.stringify({
+      status:true,data,
+      ...(patches.partial && path.pathname.endsWith("/transactions")
+        ? {meta:{page:1,pageCount:2,perPage:50}} : {}),
+    }),{
       status:200,headers:{"content-type":"application/json"},
     });
   };
@@ -91,6 +101,9 @@ describe("MSNW Paystack completed merchant payout provenance",()=>{
       {currency:"USD"},
       {domain:"live"},
       {effective_amount:11000},
+      {effective_amount:0},
+      {total_amount:0},
+      {total_amount:5000},
     ]){
       const t=fake({settlement:patch});
       await expect(t.runtime.runOnce()).rejects.toThrow();
@@ -100,9 +113,19 @@ describe("MSNW Paystack completed merchant payout provenance",()=>{
   });
   it("never attaches mismatched transaction amounts or references as backing proof",async()=>{
     const t=fake({transaction:{amount:20000}});
-    expect(await t.runtime.runOnce()).toEqual({scanned:1,matched:0,failed:0});
+    expect(await t.runtime.runOnce()).toEqual({scanned:0,matched:0,failed:1});
     expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_payout_matches")))
       .toBe(false);
+    expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_merchant_settlements")))
+      .toBe(false);
+  });
+  it("rejects Paystack metadata indicating missing payout transaction pages",async()=>{
+    const t=fake({partial:true});
+    expect(await t.runtime.runOnce()).toEqual({scanned:0,matched:0,failed:1});
+    expect(t.writes.some(x=>x.includes(
+      "INSERT INTO commerce.msnw_paystack_payout_matches"))).toBe(false);
+    expect(t.writes.some(x=>x.includes(
+      "INSERT INTO commerce.msnw_paystack_merchant_settlements"))).toBe(false);
   });
   it("rechecks previously scanned payouts for independently verified late funding",async()=>{
     const t=fake({existing:true});
