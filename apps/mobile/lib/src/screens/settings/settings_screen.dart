@@ -15,6 +15,7 @@ import '../../tokens/masanawa_tokens.dart';
 import 'account_deletion_dialog.dart';
 import 'account_data_screen.dart';
 import 'account_security_screen.dart';
+import 'notification_preferences_screen.dart';
 import 'clear_device_chats_dialog.dart';
 
 /// Account and app preferences for the current Masanawa consumer product.
@@ -333,6 +334,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         !_notificationController.canChange
                     ? null
                     : (value) => unawaited(_setNotifications(value)),
+              ),
+              ListTile(
+                key: const Key('settings-notification-preferences'),
+                leading: Icon(Icons.tune_outlined, color: u.brand),
+                title: const Text('Notification preferences & activity'),
+                subtitle: const Text('Messages, calls, Rooms, Wallet, quiet hours and alert history'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: user == null ? null : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationPreferencesScreen())),
               ),
               if (_notificationController.error != null &&
                   MobilePushService.instance.configured)
