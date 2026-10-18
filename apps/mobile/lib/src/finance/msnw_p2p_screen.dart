@@ -47,6 +47,44 @@ String _ngn(Object? kobo) {
   final minor = (n % BigInt.from(100)).toString().padLeft(2, '0');
   return '₦$major.$minor';
 }
+String p2pUserMessage(Object error) {
+  if (error is StateError) return error.toString().replaceFirst('Bad state: ', '');
+  if (error is FormatException) return 'Check the values and try again.';
+  if (error is DioException) {
+    final code=error.response?.data is Map
+      ? '${(error.response!.data as Map)['error'] ?? ''}' : '';
+    switch(code) {
+      case 'p2p.offer_limit':
+      case 'p2p.offer_unavailable':
+        return 'Offer availability changed. Refresh the offers.';
+      case 'p2p.quote_changed':
+        return 'The rate or fees changed. Review a new price.';
+      case 'p2p.wallet_unavailable':
+        return 'Spendable MSNW is unavailable. Check your wallet.';
+      case 'p2p.deadline_passed':
+        return 'Payment window ended. Refresh the original order.';
+      case 'p2p.already_terminal':
+        return 'Order completed or closed. Refresh its status.';
+      case 'p2p.verified_method_required':
+        return 'Verify a bank account before selling.';
+      case 'p2p.step_up_required':
+        return 'Additional account verification is required.';
+      case 'p2p.idempotency_conflict':
+        return 'The earlier request cannot be changed. Check its result.';
+      case 'p2p.evidence_forbidden':
+        return 'Evidence cannot be added in this order state.';
+    }
+    final status=error.response?.statusCode;
+    if(status==401)return 'Session expired. Sign in again.';
+    if(status==403)return 'This action is not authorized.';
+    if(status==429)return 'Too many attempts. Try again later.';
+    if(status==409)return 'Order status changed. Refresh the order.';
+    if(status!=null&&status>=500)return 'Service temporarily unavailable. Check original order before retrying.';
+    return 'Request not confirmed. Check your connection and retry.';
+  }
+  return 'Request not confirmed. Check status before retrying.';
+}
+
 Map<String, dynamic> _json(dynamic data) =>
     Map<String, dynamic>.from(data as Map);
 
@@ -347,11 +385,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       if (mounted && _sameAccount && widget.initialOrderId==null) _reload();
     } catch (error) {
       if (mounted) {
-        final message = error is DioException
-            ? (error.response?.data is Map
-                ? '${(error.response!.data as Map)['error'] ?? 'P2P unavailable'}'
-                : 'Connection failed; retry to check the order state.')
-            : '$error';
+        final message = p2pUserMessage(error);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
@@ -478,7 +512,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       if (banks.isEmpty) throw StateError('No banks available');
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('Bank directory unavailable: $error')));
+        SnackBar(content:Text(p2pUserMessage(error))));
       return;
     }
     if (!mounted) return;
@@ -2024,7 +2058,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
                       try { await widget.openEvidence('${item['evidence_id']}'); }
                       catch(error) {
                         if(mounted)ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content:Text('Unable to open evidence: $error')));
+                          SnackBar(content:Text(p2pUserMessage(error))));
                       }
                     },
                   ),
