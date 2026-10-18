@@ -134,6 +134,10 @@ import {
   type CreatorCloneAuthorizer,
 } from "./creator_clone.js";
 import { createCreatorEconomyService } from "./creator_economy.js";
+import { createGeminiCreatorGenerator, CreatorGenerationError } from "./creator_agents/generator.js";
+import { createPostgresCreatorAgentService, type CreatorPool } from "./creator_agents/store.js";
+import { createCreatorPolicyService } from "./creator_agents/policy.js";
+import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
 import { createCreatorSkillService } from "./creator_skills.js";
 import {
   createCommerceCatalogService,
@@ -1061,6 +1065,10 @@ export async function startGatewayService(
             },
           }
         : {}),
+      ...(database.featurePool ? {
+        publicCreatorAdmission: createPgCreatorPublicReader(
+          database.featurePool as unknown as Parameters<typeof createPgCreatorPublicReader>[0]),
+      } : {}),
       policyRevision: platformPolicyRevision,
     });
     if (!options.agentDirectoryAuthorizer) {
@@ -2647,6 +2655,38 @@ export async function startGatewayService(
         },
       };
     })() : undefined);
+  // Creator agent routes use the same tenant-scoped session and PostgreSQL pool.
+  // Publishing is limited to a lifetime first-free character until an atomic,
+  // authorized MSNW fee-capture adapter is composed for additional characters.
+  const creatorKey = env.MASANAWA_GEMINI_API_KEY?.trim() ||
+    env.MASANAWA_ALPHA_GEMINI_API_KEY?.trim();
+  const creatorAgents: GatewayAppOptions["creatorAgents"] =
+    options.appOptions?.creatorAgents ??
+    (featurePool && sessions && featureTenant ? {
+      auth: { fan: resolveFeatureFan },
+      service: createPostgresCreatorAgentService({
+        pool: featurePool as unknown as CreatorPool,
+        generator: creatorKey
+          ? createGeminiCreatorGenerator({
+              apiKey: creatorKey,
+              model: env.MASANAWA_CREATOR_GENERATION_MODEL?.trim() ||
+                env.MASANAWA_GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+            })
+          : { async generate(): Promise<never> {
+              throw new CreatorGenerationError("creator.gemini_unconfigured");
+            } },
+      }),
+    } : undefined);
+  const creatorPolicy: GatewayAppOptions["creatorPolicy"] = options.appOptions?.creatorPolicy ??
+    (featurePool && sessions && featureTenant ? {
+      service: createCreatorPolicyService(featurePool as unknown as CreatorPool),
+      fan: resolveFeatureFan,
+      staff: async(header:string|undefined)=>{
+        const actor=await resolveFeatureFan(header);
+        if(!editors.has(actor.userId))throw new CustomerAuthError("FORBIDDEN",403);
+        return actor;
+      },
+    } : undefined);
   const masana: GatewayAppOptions["masana"] = options.appOptions?.masana ??
     (featurePool && sessions && featureTenant ? {
       auth:{
@@ -2706,6 +2746,8 @@ export async function startGatewayService(
       ...(videoSources ? {videoSources} : {}),
       ...(rooms ? {rooms} : {}),
       ...(masana ? {masana} : {}),
+      ...(creatorAgents ? {creatorAgents} : {}),
+      ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
