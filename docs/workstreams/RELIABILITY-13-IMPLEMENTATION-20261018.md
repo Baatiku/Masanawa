@@ -32,7 +32,7 @@ Read-only health check, using separately configured service hostnames:
 
 Optionally set MASANAWA_JOB_HEALTH_URL to an **actual authorized read-only endpoint** returning a JSON object with "jobs": entries containing "name", nonnegative integer "stuck", and nonnegative "oldestPendingSeconds". Unknown/missing endpoints must not count as healthy. For alerts configure MASANAWA_ALERT_WEBHOOK_URL and a durable MASANAWA_WATCH_STATE_FILE; inject webhook credentials into the operator-owned environment, never code or public logs. A persistent timer/cron and a real incident response destination must be qualified independently.
 
-For backups, set SOURCE_DATABASE_URL, SOURCE_OBJECT_URI=s3://..., AGE_RECIPIENT, BACKUP_DIR (absolute, secured), and MASANAWA_WRITES_FENCED_ACK=YES **only after** proving all writes are fenced and documenting snapshot/object version boundaries. Run:
+For backups, set MASANAWA_SECURE_TMPDIR to an **encrypted, private scratch volume with capacity for both the DB and all objects** (for restore, too). Temporary decrypted files must never reside on ordinary unencrypted /tmp. For backups, set SOURCE_DATABASE_URL, SOURCE_OBJECT_URI=s3://..., AGE_RECIPIENT, BACKUP_DIR (absolute, secured), and MASANAWA_WRITES_FENCED_ACK=YES **only after** proving all writes are fenced and documenting snapshot/object version boundaries. Run:
 
     bash scripts/reliability/backup-restore.sh backup
 
