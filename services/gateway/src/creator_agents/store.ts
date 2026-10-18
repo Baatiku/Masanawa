@@ -1,5 +1,6 @@
 import {createHash,randomBytes,randomUUID} from "node:crypto";
 import {createCanonicalId} from "@masanawa/contracts";
+import {atomic} from "@masanawa/masana";
 import {
  validateCreatorSeed, validateCreatorGeneration,
  type CreatorSeed, type CreatorAgentState, type GeneratedCreatorAgent
@@ -225,6 +226,115 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
      [owner.tenantId,owner.userId,item.characterId,"free:"+item.characterId]);
     await db.query("COMMIT");begun=false;return published;
    }catch(error){if(begun)await db.query("ROLLBACK").catch(()=>{});throw error;}
+   finally{db.release();}
+  },
+  /** Issue a short-lived, exact MSNW amount bound to one draft and policy. */
+  async quoteAdditionalPublication(owner:Owner,characterId:string,expectedRevision:number,key:unknown){
+   const idempotencyKey=draftKey(key);
+   if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)throw new CreatorAgentError("creator.revision_invalid",400);
+   const db=await pool.connect();let begun=false;
+   try{
+    await db.query("BEGIN");begun=true;
+    const user=await db.query("SELECT state FROM identity.users WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE",[owner.tenantId,owner.userId]);
+    if(user.rows[0]?.state!=="active")throw new CreatorAgentError("creator.owner_not_active",403);
+    const rows=await db.query(ownSelect+" AND character_id=$3",[owner.tenantId,owner.userId,id(characterId)]);
+    if(!rows.rows[0])throw new CreatorAgentError("creator.agent_not_found",404);
+    const item=view(rows.rows[0]);
+    if(item.state!=="draft"||item.revision!==expectedRevision||!item.generated)
+      throw new CreatorAgentError("creator.publish_invalid");
+    const free=await db.query("SELECT 1 FROM creator.first_free_publications WHERE tenant_id=$1 AND owner_user_id=$2",[owner.tenantId,owner.userId]);
+    if(!free.rowCount)throw new CreatorAgentError("creator.free_entitlement_available");
+    const p=await db.query("SELECT revision,creation_msnw::text AS fee FROM creator.fee_policies WHERE tenant_id=$1 AND effective_at<=now() ORDER BY effective_at DESC,revision DESC LIMIT 1",[owner.tenantId]);
+    const fee=p.rows[0]?.fee??"5000",policyRevision=Number(p.rows[0]?.revision??1);
+    if(typeof fee!=="string"||!/^(0|[1-9][0-9]{0,35})$/u.test(fee)||!Number.isSafeInteger(policyRevision)||policyRevision<1)
+      throw new CreatorAgentError("creator.price_unavailable",503);
+    const amountAtomic=(BigInt(fee)*1_000_000n).toString();
+    const fingerprint=sha([owner.tenantId,owner.userId,item.characterId,expectedRevision,amountAtomic,policyRevision]);
+    const prior=await db.query(
+      "SELECT operation_id,character_id,request_hash,msnw_atomic,authorization_ref,expires_at,state FROM creator.operations "+
+      "WHERE tenant_id=$1 AND owner_user_id=$2 AND kind='create' AND idempotency_key=$3",
+      [owner.tenantId,owner.userId,idempotencyKey]);
+    if(prior.rows[0]){
+      const q=prior.rows[0];
+      if(q.character_id!==item.characterId||q.request_hash!==fingerprint)
+        throw new CreatorAgentError("creator.quote_idempotency_conflict");
+      await db.query("COMMIT");begun=false;
+      return {operationId:q.operation_id,asset:"MSNW" as const,characterId:item.characterId,
+        amountAtomic:q.msnw_atomic,authorizationRef:q.authorization_ref,expiresAt:String(q.expires_at),state:q.state};
+    }
+    const operationId=randomUUID(),nonce=randomUUID();
+    const created=await db.query(
+      "INSERT INTO creator.operations(tenant_id,operation_id,owner_user_id,character_id,kind,policy_revision,msnw_atomic,state,authorization_ref,expires_at,idempotency_key,request_hash) "+
+      "VALUES($1,$2,$3,$4,'create',$5,$6,'quoted',$7,now()+interval '10 minutes',$8,$9) RETURNING expires_at",
+      [owner.tenantId,operationId,owner.userId,item.characterId,policyRevision,amountAtomic,nonce,idempotencyKey,fingerprint]);
+    await db.query("COMMIT");begun=false;
+    return {operationId,asset:"MSNW" as const,characterId:item.characterId,
+      amountAtomic,authorizationRef:nonce,expiresAt:String(created.rows[0]?.expires_at),state:"quoted" as const};
+   }catch(e){if(begun)await db.query("ROLLBACK").catch(()=>{});throw e;}
+   finally{db.release();}
+  },
+  /** One canonical custody debit+fee liability+journal+Masana publication transaction. */
+  async confirmAdditionalPublication(owner:Owner,characterId:string,expectedRevision:number,
+    operationRaw:unknown,nonceRaw:unknown,keyRaw:unknown):Promise<CreatorAgentView>{
+   if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)throw new CreatorAgentError("creator.revision_invalid",400);
+   const character=id(characterId),operationId=id(operationRaw),nonce=id(nonceRaw),key=draftKey(keyRaw);
+   const db=await pool.connect();let begun=false;
+   try{
+    await db.query("BEGIN");begun=true;
+    const user=await db.query("SELECT state FROM identity.users WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE",[owner.tenantId,owner.userId]);
+    if(user.rows[0]?.state!=="active")throw new CreatorAgentError("creator.owner_not_active",403);
+    const opResult=await db.query(
+      "SELECT operation_id,character_id,policy_revision,msnw_atomic,authorization_ref,expires_at,request_hash,state,idempotency_key "+
+      "FROM creator.operations WHERE tenant_id=$1 AND owner_user_id=$2 AND operation_id=$3 AND kind='create' FOR UPDATE",
+      [owner.tenantId,owner.userId,operationId]);
+    const op=opResult.rows[0];
+    if(!op||op.character_id!==character||op.authorization_ref!==nonce||op.idempotency_key!==key)
+      throw new CreatorAgentError("creator.quote_invalid");
+    const rows=await db.query(ownSelect+" AND character_id=$3 FOR UPDATE",[owner.tenantId,owner.userId,character]);
+    if(!rows.rows[0])throw new CreatorAgentError("creator.agent_not_found",404);
+    const item=view(rows.rows[0]);
+    if((op.state==="captured"||op.state==="free_granted")&&item.state==="published"){
+      await db.query("COMMIT");begun=false;return item;
+    }
+    if(op.state!=="quoted"||!op.expires_at||Date.parse(String(op.expires_at))<=Date.now())
+      throw new CreatorAgentError("creator.quote_expired");
+    if(item.state!=="draft"||item.revision!==expectedRevision||!item.generated)
+      throw new CreatorAgentError("creator.stale_draft");
+    const amount=String(op.msnw_atomic);
+    if(op.request_hash!==sha([owner.tenantId,owner.userId,item.characterId,expectedRevision,amount,Number(op.policy_revision)]))
+      throw new CreatorAgentError("creator.quote_payload_changed");
+    const free=await db.query("SELECT 1 FROM creator.first_free_publications WHERE tenant_id=$1 AND owner_user_id=$2",[owner.tenantId,owner.userId]);
+    if(!free.rowCount)throw new CreatorAgentError("creator.free_entitlement_available");
+    const fee=atomic(amount);let walletRef:string|null=null;
+    if(fee>0n){
+      const balance=await db.query("SELECT available_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE",[owner.tenantId,owner.userId]);
+      const raw=balance.rows[0]?.available_micro;
+      if(typeof raw!=="string"||!/^(0|[1-9][0-9]*)$/u.test(raw)||BigInt(raw)<fee)
+        throw new CreatorAgentError("creator.insufficient_msnw");
+      const debit=await db.query(
+        "UPDATE commerce.msnw_custody_accounts SET available_micro=available_micro-$3::numeric,updated_at=statement_timestamp() "+
+        "WHERE tenant_id=$1 AND user_id=$2 AND available_micro >= $3::numeric",
+        [owner.tenantId,owner.userId,amount]);
+      if(debit.rowCount!==1)throw new CreatorAgentError("creator.insufficient_msnw");
+      await db.query("INSERT INTO commerce.msnw_creator_fee_liabilities(tenant_id,accrued_micro) VALUES($1,$2::numeric) "+
+        "ON CONFLICT(tenant_id) DO UPDATE SET accrued_micro=commerce.msnw_creator_fee_liabilities.accrued_micro+$2::numeric,updated_at=statement_timestamp()",
+        [owner.tenantId,amount]);
+      walletRef=randomUUID();
+      await db.query(
+        "INSERT INTO commerce.msnw_creator_fee_journal(operation_id,tenant_id,owner_user_id,character_id,kind,idempotency_key,amount_micro,receipt_ref) "+
+        "VALUES($1,$2,$3,$4,'create',$5,$6::numeric,$7)",
+        [walletRef,owner.tenantId,owner.userId,character,key,amount,"creator:"+operationId]);
+      await db.query(
+        "INSERT INTO commerce.msnw_creator_fee_postings(operation_id,entry_number,tenant_id,owner_user_id,bucket,delta_micro) "+
+        "VALUES($1,1,$2,$3,'available',-$4::numeric),($1,2,$2,NULL,'platform_fee',$4::numeric)",
+        [walletRef,owner.tenantId,owner.userId,amount]);
+    }
+    const published=await commitCharacterPublication(db,owner,item,expectedRevision);
+    await db.query("UPDATE creator.operations SET state=$4,wallet_ledger_ref=$5,updated_at=statement_timestamp() "+
+      "WHERE tenant_id=$1 AND owner_user_id=$2 AND operation_id=$3",
+      [owner.tenantId,owner.userId,operationId,fee>0n?"captured":"free_granted",walletRef]);
+    await db.query("COMMIT");begun=false;return published;
+   }catch(e){if(begun)await db.query("ROLLBACK").catch(()=>{});throw e;}
    finally{db.release();}
   },
   async setActive(owner:Owner,characterId:string,active:boolean,expectedRevision:number):Promise<CreatorAgentView>{
