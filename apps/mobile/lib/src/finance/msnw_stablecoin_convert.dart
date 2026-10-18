@@ -249,10 +249,18 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
         price=response.cast<String,dynamic>();
         key=idem();uncertain=false;
       });
+    }on DioException catch(e){
+      final errorCode=e.response?.data is Map
+        ? '${(e.response!.data as Map)['error'] ?? ''}' : '';
+      fail(errorCode=='msnw.convert.previous_unresolved'
+        ? 'Another MSNW crypto payout is still being processed. '
+          'Open Crypto History and check that original payout before starting another.'
+        : 'NOWPayments crypto quote unavailable. Check your approved destination, '
+          'network, treasury liquidity and available MSNW.',token);
     }catch(_){
       fail('NOWPayments crypto quote unavailable. Verify approved destination, '
         'network, treasury liquidity and available MSNW.',token);
-    }finally{if(mounted)setState(()=>busy=false);}
+    }finally{if(same(token))setState(()=>busy=false);}
   }
   Future<void> confirm() async{
     final token=widget.accessToken()?.trim(),v=price,id=key;

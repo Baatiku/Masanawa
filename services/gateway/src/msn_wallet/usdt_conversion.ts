@@ -74,6 +74,17 @@ export function createMsnwUsdtConversion(input: Readonly<{
     if(!enabled.has(providerCode) ||
        !input.approvedDestination(owner,providerCode,destinationAddress))
       throw new MsnwConversionError("msnw.convert.destination_unapproved",403);
+    // Cross-device guard: a different idempotency key cannot silently
+    // start another payout while this owner has unresolved provider funds.
+    // A same-key replay is handled by reserve() before requesting a quote.
+    const prior=await input.pool.query(
+      "SELECT conversion_id FROM commerce.msnw_usdt_payouts " +
+      "WHERE tenant_id=$1 AND user_id=$2 AND state IN " +
+      "('reserved','submitting','awaiting_verification','processing','manual_review') LIMIT 1",
+      [owner.tenantId,owner.userId],
+    );
+    if(prior.rowCount)
+      throw new MsnwConversionError("msnw.convert.previous_unresolved",409);
     // A 6-decimal MSNW quote amount converts to exact 6-decimal USD
     // stablecoin tokens using an explicitly operator-governed rate.
     const target = source*priceMicro/1000000n;
@@ -217,6 +228,15 @@ export function createMsnwUsdtConversion(input: Readonly<{
         await client.query("COMMIT");started=false;
         return { conversionId:text(row.conversion_id),claimed:false };
       }
+      const active=await client.query(
+        "SELECT conversion_id FROM commerce.msnw_usdt_payouts " +
+        "WHERE tenant_id=$1 AND user_id=$2 AND state IN " +
+        "('reserved','submitting','awaiting_verification','processing','manual_review') " +
+        "ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+        [owner.tenantId,owner.userId],
+      );
+      if(active.rowCount)
+        throw new MsnwConversionError("msnw.convert.previous_unresolved",409);
       const outstanding=await client.query(
         "SELECT COALESCE(sum(target_micro+fee_estimate_micro),0)::text AS queued " +
         "FROM commerce.msnw_usdt_payouts WHERE provider_code=$1 " +
