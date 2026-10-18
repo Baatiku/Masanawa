@@ -92,6 +92,19 @@ void _mockSecureRecovery() {
 }
 
 void main() {
+  test('typed gateway errors map to readable recovery instructions',(){
+    final dio=DioException(requestOptions:RequestOptions(path:'/orders'),
+      response:Response(requestOptions:RequestOptions(path:'/orders'),
+        statusCode:409,data:{'error':'p2p.quote_changed'}));
+    expect(p2pUserMessage(dio),'The rate or fees changed. Review a new price.');
+    final auth=DioException(requestOptions:RequestOptions(path:'/orders'),
+      response:Response(requestOptions:RequestOptions(path:'/orders'),
+        statusCode:401));
+    expect(p2pUserMessage(auth),'Session expired. Sign in again.');
+    expect(p2pUserMessage(const FormatException('secret')),
+      'Check the values and try again.');
+  });
+
   testWidgets('own offer opens management, never closes on row tap', (t) async {
     _mockSecureRecovery();
     t.view.physicalSize = const Size(320, 700);
