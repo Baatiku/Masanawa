@@ -29,14 +29,14 @@ class _P2pAdapter implements HttpClientAdapter {
       Future<void>? cancelFuture) async {
     calls.add(options);
     final path = options.path;
-    final body = path.contains('/my-offers')
+    final body = path.contains('/my-offers/page')
       ? <String, dynamic>{'items': [{
           'offer_id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           'rate_kobo_per_msnw': '150000',
           'min_micro': '1000000', 'max_micro': '30000000',
           'remaining_micro': '100000000', 'state': 'active',
         }]}
-      : path.endsWith('/offers')
+      : path.contains('/offers/page')
       ? <String, dynamic>{'items': [{
           'offer_id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           'rate_kobo_per_msnw': '150000',
