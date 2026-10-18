@@ -78,25 +78,32 @@ function offerRequestId(actor:P2pActor,requestKey:string):string {
 }
 
 function pageCursor(value?:string):{time:string|null;id:string|null}{
-  if(value === undefined)return {time:null,id:null};
+  if(value===undefined)return {time:null,id:null};
   if(value.length===0||value.length>256)
     throw new P2pError("p2p.invalid_cursor",422);
   try{
     const raw=JSON.parse(Buffer.from(value,"base64url").toString("utf8")) as Record<string,unknown>;
     if(typeof raw.time!=="string"||typeof raw.id!=="string"||
-       !uuid.test(raw.id)||!Number.isFinite(Date.parse(raw.time)))
+      !uuid.test(raw.id)||
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3,6}Z$/.test(raw.time)||
+      !Number.isFinite(Date.parse(raw.time)))
       throw Error("bad cursor");
-    return {time:new Date(raw.time).toISOString(),id:raw.id};
+    return {time:raw.time,id:raw.id};
   }catch{throw new P2pError("p2p.invalid_cursor",422);}
 }
-function nextPageCursor(items:Record<string,unknown>[], all:number,
-  limit:number, dateField="created_at", idField="offer_id"):string|null{
+function cursorTime(row:Record<string,unknown>,field="created_at"):string{
+  const exact=row.created_at_cursor;
+  if(typeof exact==="string"&&/^[0-9]{4}-/.test(exact))return exact;
+  return new Date(String(row[field])).toISOString();
+}
+function nextPageCursor(items:Record<string,unknown>[],all:number,
+  limit:number,dateField="created_at",idField="offer_id"):string|null{
   const last=items.at(-1);
-  return all>limit && last
+  return all>limit&&last
     ?Buffer.from(JSON.stringify({
-       time:new Date(String(last[dateField])).toISOString(),
-       id:String(last[idField]),
-     })).toString("base64url")
+      time:cursorTime(last,dateField),
+      id:String(last[idField]),
+    })).toString("base64url")
     :null;
 }
 
@@ -190,7 +197,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         o.rate_kobo_per_msnw::text,o.min_micro::text,
         LEAST(o.max_micro,capacity.amount)::text AS max_micro,
         capacity.amount::text AS remaining_micro,o.fee_bps,
-        p.bank_name,p.method_type,o.created_at
+        p.bank_name,p.method_type,o.created_at,
+        to_char(o.created_at AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
         FROM commerce.msnw_p2p_offers o
         JOIN commerce.msnw_p2p_payment_methods p
           ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id
@@ -214,7 +223,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       const limit=20;
       const result=await pool.query(`SELECT o.offer_id,o.rate_kobo_per_msnw::text,
         o.min_micro::text,o.max_micro::text,o.remaining_micro::text,
-        o.state,o.created_at,o.payment_method_id,o.fee_bps,p.bank_name
+        o.state,o.created_at,o.payment_method_id,o.fee_bps,p.bank_name,
+        to_char(o.created_at AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
         FROM commerce.msnw_p2p_offers o
         JOIN commerce.msnw_p2p_payment_methods p ON
           p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
@@ -231,7 +242,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
       const result=await pool.query(`SELECT event_id,order_id,action,state,created_at,
-          processed_at,delivered
+          processed_at,delivered,
+          to_char(created_at AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
         FROM commerce.msnw_p2p_notifications
         WHERE tenant_id=$1 AND user_id=$2
           AND ($3::timestamptz IS NULL OR
@@ -405,7 +418,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           ? "AND state NOT IN ('completed','cancelled','expired')" : "";
       const rows=await pool.query(`SELECT order_id,offer_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,
-        payment_deadline,state,version,receipt_reference,created_at
+        payment_deadline,state,version,receipt_reference,created_at,
+        to_char(created_at AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
         FROM commerce.msnw_p2p_orders WHERE tenant_id=$1
           AND (seller_id=$2 OR buyer_id=$2)
           ${stateCondition}
@@ -417,7 +432,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       const last=items[items.length-1];
       const nextCursor=rows.rows.length>limit && last
         ? Buffer.from(JSON.stringify({
-            time:new Date(String(last.created_at)).toISOString(),
+            time:cursorTime(last),
             id:String(last.order_id),
           })).toString("base64url") : null;
       return {items,nextCursor};
