@@ -117,19 +117,28 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try { return {items:await deps.service.methods(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/offers/by-request/:requestKey",async(req,reply)=>{
+    try {
+      return await deps.service.offerByRequest(await actor(req.headers.authorization),
+        (req.params as {requestKey:string}).requestKey);
+    }catch(error){return respond(error,reply);}
+  });
   app.post("/v1/wallet/msnw/p2p/offers", async (req,reply) => {
     try {
       const a=await actor(req.headers.authorization);
       const body=req.body as Record<string,unknown>|null;
       if(!body||typeof body!=="object"||Array.isArray(body))
         throw new P2pError("p2p.invalid_offer",422);
-      return reply.code(201).send(await deps.service.createOffer(a,{
+      const requestKey=req.headers["idempotency-key"];
+      const created=await deps.service.createOffer(a,{
         paymentMethodId:String(body.paymentMethodId??""),
         rateKoboPerMsnw:String(body.rateKoboPerMsnw??""),
         minMicro:String(body.minMicro??""),
         maxMicro:String(body.maxMicro??""),
         inventoryMicro:String(body.inventoryMicro??""),
-      }));
+        idempotencyKey:typeof requestKey==="string"?requestKey:undefined,
+      });
+      return reply.code(created.replay?200:201).send(created);
     } catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/notifications",async(req,reply)=>{
