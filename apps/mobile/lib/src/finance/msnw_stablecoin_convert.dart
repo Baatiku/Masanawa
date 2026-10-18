@@ -31,7 +31,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
       'msnw.convert.pending.v1.${widget.expectedUserId}';
   String? key,error;
   Map<String,dynamic>? price,receipt;
-  bool busy=false,uncertain=false;
+  bool busy=false,uncertain=false,restoring=true,blockedRecovery=false;
 
   @override void initState() {
     super.initState();
@@ -105,9 +105,11 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
       setState((){pending=value;uncertain=true;});
       await recoverPending();
     }catch(_){
-      if(same(token))setState((){uncertain=true;error=
+      if(same(token))setState((){uncertain=true;blockedRecovery=true;error=
         'A previous payout could not be restored. Check transaction '
         'history and support before starting another conversion.';});
+    }finally{
+      if(same(token))setState(()=>restoring=false);
     }
   }
 
@@ -218,7 +220,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
 
   Future<void> review() async{
     final token=widget.accessToken()?.trim(),value=atomic(amount.text);
-    if(busy||pending!=null||token==null||!same(token))return;
+    if(busy||restoring||blockedRecovery||pending!=null||token==null||!same(token))return;
     if(value==null||address.text.trim().length<20){
       setState(()=>error='Enter a positive MSNW amount (up to six decimals) '
         'and a valid destination address.');
@@ -254,7 +256,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
   }
   Future<void> confirm() async{
     final token=widget.accessToken()?.trim(),v=price,id=key;
-    if(busy||pending!=null||token==null||!same(token)||v==null||id==null||
+    if(busy||restoring||blockedRecovery||pending!=null||token==null||!same(token)||v==null||id==null||
        v['sufficient']!=true||v['providerLiquidityQualified']!=true)return;
     final destination=address.text.trim();
     final proceed=await openWalletPage<bool>(context:context,
@@ -309,8 +311,17 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
       final value=r.data;
       if(value is! Map||value['conversionId']!=op||value['state'] is! String)
         throw const FormatException('Invalid provider payout status');
-      setState(()=>receipt=value.cast<String,dynamic>());
-      if(value['state']=='finished'||value['state']=='refunded')widget.onCompleted();
+      final terminal=value['state']=='finished'||value['state']=='refunded';
+      if(terminal) {
+        try { await storage.delete(key:pendingStorageKey); } catch (_) {}
+      }
+      if(!same(token))return;
+      setState((){
+        receipt=value.cast<String,dynamic>();
+        uncertain=!terminal;
+        if(terminal)pending=null;
+      });
+      if(terminal)widget.onCompleted();
     }catch(_){
       fail('Payout status has not been verified. Reserved MSNW is protected '
         'until exact provider evidence is available.',token);
@@ -356,6 +367,10 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
             if(price!['sufficient']!=true)
               const Text('Insufficient settled MSNW available.'),
           ],
+          if(restoring)const LinearProgressIndicator(),
+          if(blockedRecovery)const Text(
+            'An earlier conversion needs support review before a new one '
+            'can be authorized on this device.'),
           if(error!=null)Padding(padding:const EdgeInsets.only(top:10),
             child:Text(error!,style:TextStyle(
               color:Theme.of(context).colorScheme.error))),
@@ -377,11 +392,11 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
             ]),
           ],
           if(price==null&&receipt==null&&pending==null)
-            FilledButton(onPressed:busy?null:review,
+            FilledButton(onPressed:busy||restoring||blockedRecovery?null:review,
               child:const Text('Get executable quote')),
           if(price!=null&&receipt==null&&pending==null)
             FilledButton(
-              onPressed:busy||price!['sufficient']!=true||
+              onPressed:busy||restoring||blockedRecovery||price!['sufficient']!=true||
                 price!['providerLiquidityQualified']!=true?null:confirm,
               child:const Text('Review and convert')),
           if(receipt!=null)...[
