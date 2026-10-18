@@ -14,7 +14,7 @@ const event = {
 
 describe("notification outbox delivery", () => {
   it("fences delivery and never passes money or private content to FCM", async () => {
-    const query = vi.fn(async () => ({ rows: [event] }));
+    const query = vi.fn(async (..._args: unknown[]) => ({ rows: [event] }));
     const send = vi.fn(async () => ({ attempted: 1, delivered: 1 }));
     const service = createFinancialNotificationRuntime({
       pool: { query } as never, sender: { send },
@@ -40,7 +40,7 @@ describe("notification outbox delivery", () => {
   });
 
   it("retries partial push without double-submitting any payment", async () => {
-    const query = vi.fn(async () => ({ rows: [event] }));
+    const query = vi.fn(async (..._args: unknown[]) => ({ rows: [event] }));
     const send = vi.fn(async () => ({ attempted: 2, delivered: 1 }));
     const service = createFinancialNotificationRuntime({
       pool: { query } as never, sender: { send },
@@ -48,12 +48,12 @@ describe("notification outbox delivery", () => {
     expect(await service.runOnce()).toMatchObject({
       claimed: 1, delivered: 1, retried: 1,
     });
-    expect(query.mock.calls[2]?.[1]?.[4]).toBe(false);
+    expect((query.mock.calls[2]?.[1] as unknown[])[4]).toBe(false);
     expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("retains quiet-hour muted notices without retry flood", async () => {
-    const query = vi.fn(async () => ({ rows: [event] }));
+    const query = vi.fn(async (..._args: unknown[]) => ({ rows: [event] }));
     const send = vi.fn(async () => ({ attempted: 0, delivered: 0 }));
     const service = createFinancialNotificationRuntime({
       pool: { query } as never, sender: { send },
@@ -61,6 +61,6 @@ describe("notification outbox delivery", () => {
     expect(await service.runOnce()).toMatchObject({
       claimed: 1, delivered: 0, retried: 0,
     });
-    expect(query.mock.calls[2]?.[1]?.[4]).toBe(true);
+    expect((query.mock.calls[2]?.[1] as unknown[])[4]).toBe(true);
   });
 });
