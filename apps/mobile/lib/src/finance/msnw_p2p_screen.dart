@@ -72,14 +72,18 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   final _buyDrafts = <String, String>{};
   final _secure = const FlutterSecureStorage();
   Map<String, dynamic>? _pendingOrder;
+  Map<String, dynamic>? _pendingOffer;
   bool _recoveryReady = false;
+  bool _offerRecoveryReady = false;
   String get _pendingKey => 'masanawa.p2p.order.${widget.expectedUserId}';
+  String get _pendingOfferKey => 'masanawa.p2p.offer.${widget.expectedUserId}';
   late Future<List<Map<String, dynamic>>> _list = _load();
 
   @override
   void initState() {
     super.initState();
     _restorePending();
+    _restorePendingOffer();
   }
 
   Future<void> _restorePending() async {
@@ -106,6 +110,72 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Secure order recovery unavailable. New purchases are paused.')));
     }
+  }
+
+  Future<void> _restorePendingOffer() async {
+    try {
+      final encoded=await _secure.read(key:_pendingOfferKey);
+      if (!mounted || !_sameAccount) return;
+      Map<String,dynamic>? pending;
+      if(encoded!=null){
+        final decoded=_json(jsonDecode(encoded));
+        if(decoded['requestKey'] is! String||decoded['payload'] is! Map){
+          throw const FormatException('Invalid sell-offer recovery');
+        }
+        pending=decoded;
+      }
+      setState(() {
+        _pendingOffer=pending;
+        _offerRecoveryReady=true;
+      });
+    } catch (_) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text(
+          'Secure sell-offer recovery is unavailable. Publishing is paused.')));
+    }
+  }
+
+  Future<void> _savePendingOffer(Map<String,dynamic> pending) async {
+    await _secure.write(key:_pendingOfferKey,value:jsonEncode(pending));
+    if(!mounted || !_sameAccount)throw StateError('Account changed.');
+    setState(() => _pendingOffer=pending);
+  }
+
+  Future<void> _clearPendingOffer() async {
+    await _secure.delete(key:_pendingOfferKey);
+    if(mounted)setState(()=>_pendingOffer=null);
+  }
+
+  String _requestId() {
+    final rng=Random.secure();
+    final bytes=List<int>.generate(18,(_)=>rng.nextInt(256));
+    return 'p2p-${base64Url.encode(bytes).replaceAll('=', '')}';
+  }
+
+  /// An uncertain publish always reuses the originally authorized payload and
+  /// server request key, even after navigation or app restart.
+  Future<void> _resumeOffer() async {
+    final pending=_pendingOffer;
+    if(pending==null||!_sameAccount)throw StateError('No offer to recover.');
+    final key='${pending['requestKey']}';
+    try {
+      await _request('GET','/offers/by-request/$key');
+    } on DioException catch(e) {
+      if(e.response?.statusCode!=404)rethrow;
+      await _request('POST','/offers',_json(pending['payload']),key);
+    }
+    await _clearPendingOffer();
+    if(mounted&&_sameAccount)_reload(1);
+  }
+
+  Future<void> _publishSellerOffer(Map<String,dynamic> input) async {
+    if(!_offerRecoveryReady)throw StateError('Check previous offers before publishing.');
+    if(_pendingOffer!=null)throw StateError('An earlier offer has an uncertain result. Recover it first.');
+    await _savePendingOffer({
+      'requestKey':_requestId(),
+      'payload':Map<String,dynamic>.from(input),
+    });
+    await _resumeOffer();
   }
 
   Future<void> _savePending(Map<String, dynamic> pending) async {
@@ -423,6 +493,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   }
 
   Future<void> _sell() async {
+    if(!_offerRecoveryReady||_pendingOffer!=null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Resolve the earlier offer or secure recovery check first.')));
+      return;
+    }
     late final List<Map<String,dynamic>> methods;
     try {
       final payload = _json(await _request('GET','/methods'));
@@ -457,9 +532,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       builder: (_) => MsnwP2pSellerOfferForm(
         methods: methods,
         availableMicro: availableMicro,
-        onPublish: (input) async {
-          await _request('POST','/offers',input);
-        },
+        onPublish: _publishSellerOffer,
       ),
     );
     if (mounted && _sameAccount) {
@@ -715,6 +788,20 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _restorePending,
           ),
+        ),
+        if (!_offerRecoveryReady) ListTile(
+          leading: const Icon(Icons.lock_clock_outlined),
+          title: const Text('Checking saved sell offers'),
+          subtitle: const Text('Publishing resumes after secure recovery.'),
+          trailing: IconButton(tooltip:'Retry offer recovery',
+            icon: const Icon(Icons.refresh),onPressed:_restorePendingOffer),
+        ),
+        if (_pendingOffer != null) ListTile(
+          leading: const Icon(Icons.sync_outlined),
+          title: const Text('Check unfinished sell offer'),
+          subtitle: const Text('Check or retry the original request before creating another.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _busy ? null : () => _act(_resumeOffer),
         ),
         if (_pendingOrder != null) ListTile(
           leading: const Icon(Icons.sync_outlined),
