@@ -23,12 +23,19 @@ export interface JobHealthSnapshot {
   readonly consecutiveFailures: number;
 }
 
+export interface DurableJobSnapshot {
+  readonly name: string;
+  readonly stuck: number;
+  readonly oldestPendingSeconds: number;
+}
+
 export interface WorkerAppOptions {
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly opsMonitorToken?: string;
   readonly jobsHealth?: () => readonly JobHealthSnapshot[];
+  readonly databaseJobs?: () => Promise<readonly DurableJobSnapshot[]>;
 }
 
 const HealthResponseSchema = Type.Object(
@@ -60,14 +67,21 @@ const ReadinessResponseSchema = Type.Object(
 );
 
 const JobsResponseSchema = Type.Object({
-  jobs: Type.Array(Type.Object({
-    name: Type.String(),
-    enabled: Type.Boolean(),
-    runningSeconds: Type.Number(),
-    lastSuccessAgeSeconds: Type.Union([Type.Number(), Type.Null()]),
-    stuck: Type.Integer(),
-    consecutiveFailures: Type.Integer(),
-  }, { additionalProperties: false })),
+  jobs: Type.Array(Type.Union([
+    Type.Object({
+      name: Type.String(),
+      enabled: Type.Boolean(),
+      runningSeconds: Type.Number(),
+      lastSuccessAgeSeconds: Type.Union([Type.Number(), Type.Null()]),
+      stuck: Type.Integer(),
+      consecutiveFailures: Type.Integer(),
+    }, { additionalProperties: false }),
+    Type.Object({
+      name: Type.String(),
+      stuck: Type.Integer(),
+      oldestPendingSeconds: Type.Number(),
+    }, { additionalProperties: false }),
+  ])),
 }, { additionalProperties: false });
 
 export function createWorkerApp(options: WorkerAppOptions = {}) {
@@ -191,7 +205,13 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
         reply.code(401);
         return { error: "unauthorized" };
       }
-      return { jobs: options.jobsHealth?.() ?? [] };
+      try {
+        const durable = await options.databaseJobs?.() ?? [];
+        return { jobs: [...(options.jobsHealth?.() ?? []), ...durable] };
+      } catch {
+        reply.code(503);
+        return { error: "job_metrics_unavailable" };
+      }
     });
   }
 
