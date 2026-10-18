@@ -40,9 +40,10 @@ function recipient(raw: unknown) {
 }
 
 export function createMsnwCustodyService(pool: Pool) {
-  async function resolve(owner: Owner, value: unknown) {
+  async function resolve(owner: Owner, value: unknown,
+    db?: Awaited<ReturnType<Pool["connect"]>>) {
     const identifier = recipient(value);
-    const r = await pool.query(
+    const r = await (db ?? pool).query(
       "SELECT user_id,display_name FROM security.platform_user_profiles " +
       "WHERE tenant_id=$1 AND (($2::text IS NOT NULL AND email=$2) OR " +
       "($3::text IS NOT NULL AND phone=$3)) LIMIT 2",
@@ -124,7 +125,7 @@ export function createMsnwCustodyService(pool: Pool) {
           asset: "MSNW" as const, state: "completed" as const,
           createdAt: at(item.created_at) });
       }
-      const target = await resolve(owner,input.recipient);
+      const target = await resolve(owner,input.recipient,db);
       if (target.userId !== input.recipientUserId)
         throw new MsnwCustodyError("msnw.recipient_changed",409);
       // Creating an empty receiving account is not issuance.
