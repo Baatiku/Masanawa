@@ -9,7 +9,7 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
+import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
@@ -25,6 +25,7 @@ import { createMsnwCustodyIssuanceRuntime } from "./jobs/msnw/custody_issuance.j
 import { createMsnwReserveAudit } from "./jobs/msnw/reserve_audit.js";
 import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_merchant_settlement.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
+import { createAccountDeletionFinancialClearance, createAccountDeletionPrivacyWorker } from "./jobs/privacy/account_deletion.js";
 import { createDurableJobHealth } from "./jobs/durable_health.js";
 import {
   createWorkerApp,
@@ -127,10 +128,27 @@ export async function startWorkerService(
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwMerchantSettlements: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let privacyDeletion: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
     if (!database.pool) throw new Error("rooms_teacher_postgres_pool_required");
+    // Account deletion only after exact financial clearance and owner OTP.
+    const accessRevoker = createPostgresAccountDeletionAccessRevoker(
+      database.pool, createAccountDeletionFinancialClearance(),
+    );
+    const privacy = createAccountDeletionPrivacyWorker({
+      pool: database.pool,
+      revoke: input => accessRevoker.revoke(input),
+    });
+    privacyDeletion = createYouTubeOutboxScheduler({
+      runOnce: privacy.runOnce,
+      enabled: () => !drain.isDraining(),
+      intervalMs: 60_000,
+      onError: () => process.stderr.write(JSON.stringify({
+        event: "privacy.deletion.retry", reason: "database_or_clearance_unavailable",
+      }) + "\n"),
+    });
     roomReview = createRoomTeacherRuntime({
       queue: createPgTeacherQueue(database.pool),
       model: createGeminiRoomAnswerModel({
@@ -334,6 +352,7 @@ export async function startWorkerService(
         schedulerHealth("p2p_notices", p2pNotices),
         schedulerHealth("p2p_expiry", p2pExpiry),
         schedulerHealth("p2p_custody_audit", p2pAudit),
+        schedulerHealth("privacy_deletion", privacyDeletion),
       ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
@@ -367,6 +386,7 @@ export async function startWorkerService(
         await p2pNotices?.stop();
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
+        await privacyDeletion?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -384,6 +404,7 @@ export async function startWorkerService(
     p2pNotices?.start();
     p2pExpiry?.start();
     p2pAudit?.start();
+    privacyDeletion?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
@@ -394,6 +415,7 @@ export async function startWorkerService(
     await p2pNotices?.stop();
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
+        await privacyDeletion?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
