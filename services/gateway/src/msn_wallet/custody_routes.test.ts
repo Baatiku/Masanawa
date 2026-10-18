@@ -52,6 +52,50 @@ describe("canonical MSNW custody Gateway routes", () => {
     await app.close();
   });
 
+  it("recovers only the authenticated sender's completed operation and never mutates custody", async () => {
+    const owners: string[] = [];
+    const app=createGatewayApp({
+      msnwCustody: {
+        authorizer: { async authorize({ authorizationHeader }) {
+          if (authorizationHeader !== "Bearer trusted") throw new Error("denied");
+          return { tenantId: "tenantA", userId: "senderA" };
+        }},
+        ledger: {
+          async lookup(owner, key) {
+            owners.push(owner.tenantId, owner.userId, String(key));
+            return key === "original-send-key-001" ? {
+              operationId: "committed-001", recipientUserId: "recipientB",
+              amountMicro: "1200000", feeMicro: "0", asset: "MSNW",
+              state: "completed", createdAt: "2026-10-18T08:00:00.000Z",
+            } : null;
+          },
+          async send() { throw new Error("must not issue or debit"); },
+        } as any,
+      },
+    });
+    const url="/v1/wallet/msnw/send/status/original-send-key-001";
+    const unauthorized=await app.inject({method:"GET",url});
+    expect(unauthorized.statusCode).toBe(401);
+    expect(owners).toEqual([]);
+    const invalid=await app.inject({method:"GET",
+      url:"/v1/wallet/msnw/send/status/short",
+      headers:{authorization:"Bearer trusted"}});
+    // The mock deliberately bypasses ledger validation; route delegates to it.
+    expect(invalid.statusCode).toBe(404);
+    const good=await app.inject({method:"GET",url,
+      headers:{authorization:"Bearer trusted"}});
+    expect(good.statusCode).toBe(200);
+    expect(good.headers["cache-control"]).toBe("private, no-store");
+    expect(JSON.parse(good.body)).toMatchObject({
+      operationId:"committed-001",amountMicro:"1200000",state:"completed",
+    });
+    expect(owners).toEqual([
+      "tenantA","senderA","short",
+      "tenantA","senderA","original-send-key-001",
+    ]);
+    await app.close();
+  });
+
   it("rejects unexpected user-controlled money movement fields", async () => {
     const app = createGatewayApp({
       msnwCustody: {
