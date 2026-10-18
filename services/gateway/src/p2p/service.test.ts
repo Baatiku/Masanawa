@@ -197,4 +197,49 @@ describe("MSNW P2P exact money and escrow",()=>{
       .rejects.toMatchObject({code:"p2p.invalid_cursor"});
   });
 
+  it("publishes a seller offer only once for the same durable request",async()=>{
+    const methodId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const input={
+      paymentMethodId:methodId,rateKoboPerMsnw:"10000",
+      minMicro:"1000000",maxMicro:"5000000",inventoryMicro:"10000000",
+      idempotencyKey:"request-recover-123",
+    };
+    const first=mock(sql=>sql.includes("SELECT method_id")?[{method_id:methodId}]:[]);
+    const service=createP2pService(first.pool,deniedWallet);
+    const created=await service.createOffer(
+      {tenantId:"tenant-a",userId:"seller-b"},input);
+    expect(created).toMatchObject({replay:false,state:"active"});
+    expect(first.statements.filter(sql=>sql.includes("INSERT INTO commerce.msnw_p2p_offers")))
+      .toHaveLength(1);
+    const replay=mock(sql=>sql.includes("SELECT offer_id,payment_method_id,")?[{
+      offer_id:created.offerId,payment_method_id:methodId,
+      rate_kobo_per_msnw:"10000",min_micro:"1000000",
+      max_micro:"5000000",state:"active",
+    }]:[]);
+    const recovered=await createP2pService(replay.pool,deniedWallet)
+      .createOffer({tenantId:"tenant-a",userId:"seller-b"},input);
+    expect(recovered).toEqual({
+      offerId:created.offerId,replay:true,state:"active",
+    });
+    expect(replay.statements.some(sql=>sql.includes("INSERT INTO commerce.msnw_p2p_offers")))
+      .toBe(false);
+    await expect(createP2pService(replay.pool,deniedWallet)
+      .createOffer({tenantId:"tenant-a",userId:"seller-b"},{
+        ...input,rateKoboPerMsnw:"20000",
+      })).rejects.toMatchObject({code:"p2p.idempotency_conflict"});
+  });
+  it("recovers seller offer only with original tenant and seller identity",async()=>{
+    const {pool,statements}=mock(sql=>sql.includes("SELECT offer_id,state")
+      ?[{offer_id:offerId,state:"active"}]:[]);
+    const service=createP2pService(pool,deniedWallet);
+    expect(await service.offerByRequest({
+      tenantId:"tenant-a",userId:"seller-b"},"seller-request-123"))
+      .toEqual({offerId,state:"active"});
+    expect(statements.some(sql=>sql.includes("tenant_id=$1 AND seller_id=$2 AND offer_id=$3")))
+      .toBe(true);
+    await expect(service.offerByRequest({
+      tenantId:"tenant-a",userId:"seller-b"},"x"))
+      .rejects.toMatchObject({code:"p2p.idempotency_required"});
+  });
+
 });
