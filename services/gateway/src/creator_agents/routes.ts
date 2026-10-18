@@ -79,6 +79,26 @@ export function registerCreatorAgentRoutes(app:FastifyInstance,deps:{
    return await deps.service.publishFirstFree(owner,ident(obj(request.params).id),rev(body.expectedRevision));
   }catch(error){return report(reply,error);}
  });
+ app.post("/v1/creator/masana/:id/publish-quote",{bodyLimit:512},async(request,reply)=>{
+  reply.header("Cache-Control","private, no-store");
+  try{
+   const owner=await deps.auth.fan(request.headers.authorization),body=obj(request.body);
+   if(Object.keys(body).sort().join(",")!=="expectedRevision,idempotencyKey")
+    throw new CreatorAgentError("creator.invalid_payload",400);
+   return await deps.service.quoteAdditionalPublication(owner,ident(obj(request.params).id),
+     rev(body.expectedRevision),body.idempotencyKey);
+  }catch(error){return report(reply,error);}
+ });
+ app.post("/v1/creator/masana/:id/publish-paid",{bodyLimit:512},async(request,reply)=>{
+  reply.header("Cache-Control","private, no-store");
+  try{
+   const owner=await deps.auth.fan(request.headers.authorization),body=obj(request.body);
+   if(Object.keys(body).sort().join(",")!=="authorizationRef,expectedRevision,idempotencyKey,operationId")
+    throw new CreatorAgentError("creator.invalid_payload",400);
+   return await deps.service.confirmAdditionalPublication(owner,ident(obj(request.params).id),
+     rev(body.expectedRevision),body.operationId,body.authorizationRef,body.idempotencyKey);
+  }catch(error){return report(reply,error);}
+ });
  for(const [action,active] of [["pause",false],["resume",true]] as const){
   app.post("/v1/creator/masana/:id/"+action,{bodyLimit:256},async(request,reply)=>{
    reply.header("Cache-Control","private, no-store");
