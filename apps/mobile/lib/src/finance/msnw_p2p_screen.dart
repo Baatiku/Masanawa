@@ -1151,6 +1151,14 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       '${locale.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
   }
 
+  Widget _summaryLine(String label,String value) => Padding(
+    padding:const EdgeInsets.only(top:6),
+    child:Row(children:[
+      Expanded(child:Text(label)),
+      Flexible(child:Text(value,textAlign:TextAlign.end,
+        style:const TextStyle(fontWeight:FontWeight.w600))),
+    ]),
+  );
   Future<void> _showReceipt() async {
     try {
       final receipt=await widget.loadReceipt();
@@ -1324,18 +1332,53 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       final late=o['latePayment'] is Map
         ? _json(o['latePayment']) : <String,dynamic>{};
       final lateOpen=['open','escalated'].contains(late['state']);
-      return ListView(padding:const EdgeInsets.all(18),children:[
-        Text(p2pOrderStatus(state),style:Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height:20),P2pOrderProgress(state:state),
-        const SizedBox(height:12),
-        const SizedBox(height:12),
-        Text('MSNW: ${_msnw(o['amount_micro'])}'),
-        Text('Seller fee: ${_msnw(o['fee_micro'])}'),
-        Text('Fiat payment: ${_ngn(o['fiat_kobo'])}'),
-        const Divider(height:32),
-        P2pOrderBankDetails(bankName:'${p['bank_name']??''}',accountName:'${p['account_name']??''}',accountNumber:'${p['account_number']??''}',buyer:buyer),
-        const SizedBox(height:12),
-        P2pPaymentDeadline(deadline:DateTime.tryParse('${o['payment_deadline']}'),serverNow:DateTime.tryParse('${o['server_now']}'),active:state=='awaiting_payment',onRefresh:_refresh),
+      return ListView(padding:const EdgeInsets.all(16),children:[
+        Container(
+          padding:const EdgeInsets.all(18),
+          decoration:BoxDecoration(
+            color:Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius:BorderRadius.circular(16)),
+          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(buyer?'Buying MSNW':'Selling MSNW',
+              style:Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height:8),
+            Text(_msnw(o['amount_micro']),
+              style:Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight:FontWeight.w700)),
+            const SizedBox(height:8),
+            Text(p2pOrderStatus(state),
+              style:TextStyle(color:Theme.of(context).colorScheme.primary,
+                fontWeight:FontWeight.w600)),
+            const Divider(height:24),
+            _summaryLine('Bank payment',_ngn(o['fiat_kobo'])),
+            _summaryLine('Seller escrow fee',_msnw(o['fee_micro'])),
+          ]),
+        ),
+        const SizedBox(height:16),
+        P2pOrderProgress(state:state),
+        const SizedBox(height:14),
+        if(state=='awaiting_payment'||state=='payment_claimed') ...[
+          P2pOrderBankDetails(bankName:'${p['bank_name']??''}',
+            accountName:'${p['account_name']??''}',
+            accountNumber:'${p['account_number']??''}',buyer:buyer),
+          const SizedBox(height:8),
+        ],
+        P2pPaymentDeadline(deadline:DateTime.tryParse('${o['payment_deadline']}'),
+          serverNow:DateTime.tryParse('${o['server_now']}'),
+          active:state=='awaiting_payment',onRefresh:_refresh),
+        if(o['order_id']!=null) ListTile(
+          contentPadding:EdgeInsets.zero,
+          title:const Text('Order reference'),
+          subtitle:SelectableText('${o['order_id']}',
+            style:Theme.of(context).textTheme.bodySmall),
+          trailing:IconButton(tooltip:'Copy order reference',
+            icon:const Icon(Icons.copy_outlined),
+            onPressed:()async {
+              await Clipboard.setData(ClipboardData(text:'${o['order_id']}'));
+              if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content:Text('Order reference copied')));
+            }),
+        ),
         if(buyer&&state=='awaiting_payment') ...[
           FilledButton(onPressed:()=>_perform('claim'),child:const Text('I have paid')),
           TextButton(onPressed:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
