@@ -9,6 +9,7 @@ import 'src/localization/locale_preference.dart';
 import 'src/localization/locale_preference_scope.dart';
 import 'src/core/mobile_push.dart';
 import 'src/core/startup_metrics.dart';
+import 'src/core/mobile_diagnostics.dart';
 import 'src/core/pending_deep_link.dart';
 import 'src/core/shell_deep_link.dart';
 import 'src/router/app_router.dart';
@@ -18,6 +19,7 @@ import 'src/theme/masanawa_theme.dart';
 Future<void> main() async {
   MasanawaStartupMetrics.mark('dart_main');
   WidgetsFlutterBinding.ensureInitialized();
+  MasanawaDiagnostics.instance.install();
   WidgetsBinding.instance.addPostFrameCallback((_) {
     MasanawaStartupMetrics.mark('first_flutter_frame');
   });
