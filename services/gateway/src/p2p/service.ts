@@ -64,6 +64,29 @@ export function orderAmounts(micro: string, rateKobo: string, feeBps: number) {
   return { amountMicro: amount.toString(), fiatKobo: fiat.toString(),
     feeMicro: fee.toString(), reservedMicro: (amount + fee).toString() };
 }
+function pageCursor(value?:string):{time:string|null;id:string|null}{
+  if(value === undefined)return {time:null,id:null};
+  if(value.length===0||value.length>256)
+    throw new P2pError("p2p.invalid_cursor",422);
+  try{
+    const raw=JSON.parse(Buffer.from(value,"base64url").toString("utf8")) as Record<string,unknown>;
+    if(typeof raw.time!=="string"||typeof raw.id!=="string"||
+       !uuid.test(raw.id)||!Number.isFinite(Date.parse(raw.time)))
+      throw Error("bad cursor");
+    return {time:new Date(raw.time).toISOString(),id:raw.id};
+  }catch{throw new P2pError("p2p.invalid_cursor",422);}
+}
+function nextPageCursor(items:Record<string,unknown>[], all:number,
+  limit:number, dateField="created_at", idField="offer_id"):string|null{
+  const last=items.at(-1);
+  return all>limit && last
+    ?Buffer.from(JSON.stringify({
+       time:new Date(String(last[dateField])).toISOString(),
+       id:String(last[idField]),
+     })).toString("base64url")
+    :null;
+}
+
 function take<T>(result: { rows: Record<string, unknown>[] }, code = "p2p.not_found"): T {
   if (!result.rows[0]) throw new P2pError(code, 404);
   return result.rows[0] as T;
@@ -145,6 +168,66 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
         ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId,actor.userId]);
       return rows.rows;
+    },
+    /** Seek-paginated listings keep tenant visibility and reserve capacity rules. */
+    async offersPage(actor:P2pActor,input:{cursor?:string}={}) {
+      const {time,id:afterId}=pageCursor(input.cursor);
+      const limit=20;
+      const result=await pool.query(`SELECT o.offer_id,o.seller_id,
+        o.rate_kobo_per_msnw::text,o.min_micro::text,
+        LEAST(o.max_micro,capacity.amount)::text AS max_micro,
+        capacity.amount::text AS remaining_micro,o.fee_bps,
+        p.bank_name,p.method_type,o.created_at
+        FROM commerce.msnw_p2p_offers o
+        JOIN commerce.msnw_p2p_payment_methods p
+          ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id
+          AND p.owner_id=o.seller_id
+        JOIN commerce.msnw_custody_accounts c
+          ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+        CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
+          floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
+          AND capacity.amount>=o.min_micro AND capacity.amount>0
+          AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
+          AND ($3::timestamptz IS NULL OR
+            (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
+        ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
+        [actor.tenantId,actor.userId,time,afterId,limit+1]);
+      const items=result.rows.slice(0,limit);
+      return {items,nextCursor:nextPageCursor(items,result.rows.length,limit)};
+    },
+    async myOffersPage(actor:P2pActor,input:{cursor?:string}={}) {
+      const {time,id:afterId}=pageCursor(input.cursor);
+      const limit=20;
+      const result=await pool.query(`SELECT o.offer_id,o.rate_kobo_per_msnw::text,
+        o.min_micro::text,o.max_micro::text,o.remaining_micro::text,
+        o.state,o.created_at,o.payment_method_id,o.fee_bps,p.bank_name
+        FROM commerce.msnw_p2p_offers o
+        JOIN commerce.msnw_p2p_payment_methods p ON
+          p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
+          AND p.owner_id=o.seller_id
+        WHERE o.tenant_id=$1 AND o.seller_id=$2
+          AND ($3::timestamptz IS NULL OR
+            (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
+        ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
+        [actor.tenantId,actor.userId,time,afterId,limit+1]);
+      const items=result.rows.slice(0,limit);
+      return {items,nextCursor:nextPageCursor(items,result.rows.length,limit)};
+    },
+    async notificationsPage(actor:P2pActor,input:{cursor?:string}={}) {
+      const {time,id:afterId}=pageCursor(input.cursor);
+      const limit=20;
+      const result=await pool.query(`SELECT event_id,order_id,action,state,created_at,
+          processed_at,delivered
+        FROM commerce.msnw_p2p_notifications
+        WHERE tenant_id=$1 AND user_id=$2
+          AND ($3::timestamptz IS NULL OR
+            (created_at,event_id)<($3::timestamptz,$4::uuid))
+        ORDER BY created_at DESC,event_id DESC LIMIT $5`,
+        [actor.tenantId,actor.userId,time,afterId,limit+1]);
+      const items=result.rows.slice(0,limit);
+      return {items,nextCursor:nextPageCursor(items,result.rows.length,
+        limit,"created_at","event_id")};
     },
     async myOffers(actor: P2pActor) {
       return (await pool.query(`SELECT offer_id,rate_kobo_per_msnw::text,
