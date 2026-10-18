@@ -34,6 +34,11 @@ describe("channel voice reply media", () => {
     expect(prepareChannelReplyAudio(
       Buffer.from([1, 2]).toString("base64"), "audio/pcm;rate=999",
     )).toBeNull();
+    for (const rate of ["", "24000junk", "24000.5", "-24000", "99999"]) {
+      expect(prepareChannelReplyAudio("AQI=", "audio/pcm;rate=" + rate)).toBeNull();
+    }
+    expect(prepareChannelReplyAudio("AQI", "audio/pcm")).toBeNull();
+    expect(prepareChannelReplyAudio("AQI=", "audio/pcm-malformed")).toBeNull();
     expect(prepareChannelReplyAudio(
       Buffer.from([1, 2]).toString("base64"), "application/pdf",
     )).toBeNull();

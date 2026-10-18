@@ -12,7 +12,7 @@ import {
 import type { TalkSafetyService } from "./service.js";
 
 function replay():TalkReplaySession{
-  return createTalkReplaySession({
+  const live=createTalkReplaySession({
     tenantId:"tenant_1" as never,
     talkId:"talk_1" as never,
     recordingId:"recording_1" as never,
@@ -21,6 +21,7 @@ function replay():TalkReplaySession{
     publicationPreference:"publish",
     startedAt:toInstant("2026-10-07T10:00:00.000Z"),
   });
+  return {...live,recordingState:"finalized",publicationState:"private",finalizedAt:live.updatedAt,finalizeReason:"host_ended"};
 }
 
 describe("Talk safety replay bridge",()=>{

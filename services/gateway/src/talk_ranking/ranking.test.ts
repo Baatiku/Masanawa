@@ -68,6 +68,7 @@ describe("Talk Explore ranking", () => {
       reactionCount: 0,
       relevance: 0.1,
       languageMatch: 0.1,
+      startedAt: "2026-10-07T08:00:00.000Z",
       updatedAt: "2026-10-07T09:00:00.000Z",
     });
     const unfamiliarStrong = candidate({

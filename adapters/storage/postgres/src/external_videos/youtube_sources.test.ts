@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from "vitest";
-import type {Pool} from "@masanawa/postgres";
+import type {Pool} from "../pool.js";
 import {createPostgresYouTubeSourceAdminStore} from "./youtube_sources.js";
 
 function setup(found=true){

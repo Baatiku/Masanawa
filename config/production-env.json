@@ -65,6 +65,13 @@
       "description": "Production configuration for FLUTTERWAVE_WEBHOOK_URL."
     },
     {
+      "name": "GEMINI_API_KEY",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "GEMINI_REPLY_MODELS",
       "owner": "gateway/inference",
       "classification": "public",
@@ -77,6 +84,27 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Deployment-host compatibility bind address."
+    },
+    {
+      "name": "LIVEKIT_API_KEY",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "LIVEKIT_API_SECRET",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "LIVEKIT_URL",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "MASANAWA_ADMIN_EMAILS",
@@ -198,6 +226,13 @@
       "description": "OTP and session digest secret."
     },
     {
+      "name": "MASANAWA_AUTH_PUBLIC_BASE_URL",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "MASANAWA_AUTH_SMS_ENDPOINT",
       "owner": "gateway",
       "classification": "public",
@@ -254,6 +289,13 @@
         "production"
       ],
       "description": "Canonical PostgreSQL bootstrap connection secret for deployable services."
+    },
+    {
+      "name": "MASANAWA_DELETION_GATEWAY_URL",
+      "owner": "apps/web",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by apps/web/src/app/api/delete-account/[action]/route.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON",
@@ -347,6 +389,13 @@
       "description": "Production configuration for MASANAWA_GEMINI_VERIFY_ON_START."
     },
     {
+      "name": "MASANAWA_INCOMING_CALLS_SERVER_TOKEN",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "MASANAWA_MOBILE_MIN_VERSION",
       "owner": "gateway",
       "classification": "public",
@@ -361,6 +410,20 @@
       "description": "Recommended mobile application version."
     },
     {
+      "name": "MASANAWA_MSN_BALANCE_ENABLED",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_MSN_FUNDING_READBACK_ENABLED",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "MASANAWA_NOWPAYMENTS_RELAY_TOKEN",
       "owner": "gateway/crypto",
       "classification": "secret",
@@ -373,6 +436,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Ops bind address override."
+    },
+    {
+      "name": "MASANAWA_OPS_MONITOR_TOKEN",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "MASANAWA_OPS_PORT",
@@ -424,6 +494,13 @@
       "description": "Owner-access scheduled-session start grace policy in minutes."
     },
     {
+      "name": "MASANAWA_P2P_NOTICE_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "MASANAWA_PLATFORM_POLICY_REVISION",
       "owner": "gateway",
       "classification": "public",
@@ -445,11 +522,116 @@
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
     },
     {
+      "name": "MASANAWA_ROOMS_MEMBERSHIP_ENABLED",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_ROOMS_TEACHER_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
       "name": "MASANAWA_SHUTDOWN_TIMEOUT_MS",
       "owner": "runtime",
       "classification": "public",
       "requiredIn": [],
       "description": "Bounded graceful shutdown timeout."
+    },
+    {
+      "name": "MASANAWA_TALK_AI_AGENT_NAME",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_AI_SEAT_HOST_SHARE_BPS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_AI_SEAT_QUOTE_TTL_SECONDS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_EXPERT_SEAT_PRICE_CREDITS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_PLAYBACK_TTL_SECONDS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_S3_ACCESS_KEY",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_S3_BUCKET",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_S3_ENDPOINT",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_S3_REGION",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_REPLAY_S3_SECRET",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_TWIN_OWNER_SHARE_BPS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_TALK_TWIN_SEAT_PRICE_CREDITS",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "MASANAWA_TELEGRAM_BOT_TOKEN",
@@ -517,11 +699,39 @@
       "description": "Twin paid-voice metering unit duration in seconds."
     },
     {
+      "name": "MASANAWA_WALLET_CREDIT_SEND_ENABLED",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_ADMIN_TOKEN",
+      "owner": "gateway/channels",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Bearer token protecting linked-device WhatsApp QR, status, and reset administration routes."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_AUTH_DIR",
+      "owner": "gateway/channels",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Persistent filesystem directory for the encrypted linked-device WhatsApp authentication state."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_ENABLED",
       "owner": "gateway/channels",
       "classification": "public",
       "requiredIn": [],
       "description": "Enables the WhatsApp customer channel webhook and delivery adapter."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_MODE",
+      "owner": "gateway/channels",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production WhatsApp transport mode. Must be linked-device when WhatsApp is enabled."
     },
     {
       "name": "MASANAWA_WORKER_HOST",
@@ -536,6 +746,90 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Worker listen port override."
+    },
+    {
+      "name": "MASANAWA_YOUTUBE_DATA_API_KEY",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_YOUTUBE_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_BILLING_RATE_KOBO_PER_MSNW",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_CHAIN_ID",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_CONVERT_USD_MICRO_PER_MSNW",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_CUSTODY_ADDRESS",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_MINT_APPROVER_PUBLIC_KEY",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/msnw_admission_cli.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_MINT_PRICE_KOBO_PER_MSNW",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/msnw_admission_cli.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_RESERVE_APPROVER_PUBLIC_KEY",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/msnw_admission_cli.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_RPC_URL",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_TOKEN_BYTECODE_SHA256",
+      "owner": "services/worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MSNW_TOKEN_CONTRACT",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "NEXT_PUBLIC_OPS_API_BASE_URL",
@@ -559,6 +853,13 @@
       "description": "Production configuration for NOWPAYMENTS_API_KEY."
     },
     {
+      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_CONVERSION_ENABLED",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -571,13 +872,6 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_CONVERSION_PROVIDER_CODES."
-    },
-    {
-      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_CUSTODY_ENABLED",
@@ -629,6 +923,13 @@
       "description": "Production configuration for NOWPAYMENTS_IPN_SECRET."
     },
     {
+      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_PAYOUT_2FA_READY",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -678,13 +979,6 @@
       "description": "Production configuration for NOWPAYMENTS_PAYOUT_VERIFICATION_CODE."
     },
     {
-      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
-    },
-    {
       "name": "NOWPAYMENTS_RELAY_URL",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -704,6 +998,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_WITHDRAWAL_PROVIDER_CODES."
+    },
+    {
+      "name": "PAYSTACK_SECRET_KEY",
+      "owner": "services/gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "PORT",
@@ -748,25 +1049,11 @@
       "description": "Production configuration for SUPABASE_URL."
     },
     {
-      "name": "MASANAWA_WHATSAPP_MODE",
-      "owner": "gateway/channels",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production WhatsApp transport mode. Must be linked-device when WhatsApp is enabled."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_AUTH_DIR",
-      "owner": "gateway/channels",
+      "name": "YOUTUBE_API_KEY",
+      "owner": "services/worker",
       "classification": "secret",
       "requiredIn": [],
-      "description": "Persistent filesystem directory for the encrypted linked-device WhatsApp authentication state."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_ADMIN_TOKEN",
-      "owner": "gateway/channels",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Bearer token protecting linked-device WhatsApp QR, status, and reset administration routes."
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     }
   ]
 }

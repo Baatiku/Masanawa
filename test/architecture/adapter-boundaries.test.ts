@@ -213,9 +213,13 @@ describe("adapter architecture", () => {
               if (!insideAdapter) {
                 const isTestFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file);
                 const sharedTestSupport = path.resolve("test/support");
+                // Cross-layer SQL journeys belong to integration fixtures;
+                // production adapters still cannot depend on service code.
+                const integrationService = file.endsWith(".integration.test.ts") &&
+                  resolved.startsWith(`${path.resolve("services")}${path.sep}`);
                 expect(
                   isTestFile &&
-                    (resolved === sharedTestSupport ||
+                    (integrationService || resolved === sharedTestSupport ||
                       resolved.startsWith(`${sharedTestSupport}${path.sep}`)),
                   `${path.relative(process.cwd(), file)} must not escape its adapter package via ${specifier}`,
                 ).toBe(true);

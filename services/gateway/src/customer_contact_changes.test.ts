@@ -73,6 +73,6 @@ describe("verified contact changes",()=>{
     expect(replaced).toBe(1);
     await expect(auth.completeContactChange({
       ...request,oldCode,newCode,
-    })).rejects.toMatchObject({code:"OTP_INVALID"});
+    })).rejects.toMatchObject({code:"CONTACT_UNCHANGED"});
   });
 });

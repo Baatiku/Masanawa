@@ -290,7 +290,7 @@ describe("live Talk AI Seat worker", () => {
       seatId: "seat-ai-1",
       turn,
     });
-    await Promise.resolve();
+    await vi.waitFor(() => expect(persona.respond).toHaveBeenCalledOnce());
     worker.stop();
     resolveReply({ text: "too late", correlationId: "corr-late" });
 

@@ -17,10 +17,12 @@ export function prepareChannelReplyAudio(
       dataBase64.length > Math.ceil(maxAudioBytes * 4 / 3) + 4 ||
       !/^[A-Za-z0-9+/]+={0,2}$/u.test(dataBase64)) return null;
   const bytes = Buffer.from(dataBase64, "base64");
-  if (bytes.length === 0 || bytes.length > maxAudioBytes) return null;
+  if (bytes.length === 0 || bytes.length > maxAudioBytes ||
+      bytes.toString("base64") !== dataBase64) return null;
   const mime = mimeType.toLowerCase().trim();
-  if (mime.startsWith("audio/pcm")) {
-    const match = /(?:^|;)\s*rate=(\d{4,6})/iu.exec(mime);
+  if ((mime.split(";")[0] ?? "").trim() === "audio/pcm") {
+    const match = /(?:^|;)\s*rate=([^;]*)/iu.exec(mime);
+    if (match && !/^\d{4,5}$/u.test(match[1] ?? "")) return null;
     const rate = match ? Number(match[1]) : 24000;
     if (!Number.isSafeInteger(rate) || rate < 8000 || rate > 48000 ||
         bytes.length % 2 !== 0 || bytes.length + 44 > maxAudioBytes) return null;

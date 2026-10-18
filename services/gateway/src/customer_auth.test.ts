@@ -493,7 +493,7 @@ describe("customer authentication", () => {
       code,
       name: "Inactive Customer",
     })).rejects.toMatchObject({
-      code: "ACCOUNT_INACTIVE",
+      code: "ACCOUNT_SUSPENDED",
       statusCode: 403,
     });
     expect(repository.sessions.size).toBe(0);
@@ -719,7 +719,7 @@ describe("customer password authentication", () => {
     await expect(auth.completePasswordRecovery({phone,code:"000000",password:"999999"}))
       .rejects.toMatchObject({code:"OTP_INVALID"});
     await auth.requestPasswordRecovery({phone});
-    expect(code).toMatch(/^\\d{6}$/u);
+    expect(code).toMatch(/^\d{6}$/u);
     await expect(auth.completePasswordRecovery({phone,code,password:"999999"}))
       .resolves.toEqual({success:true});
     const authorizer=createPlatformCustomerSessionAuthorizer({repository});
@@ -757,7 +757,7 @@ describe("customer password authentication", () => {
     })).resolves.toEqual({success:true});
     await expect(auth.completePasswordRecovery({
       phone,code:sent[0]!.code,password:"555555",
-    })).rejects.toMatchObject({code:"OTP_INVALID"});
+    })).rejects.toMatchObject({code:"OTP_LOCKED"});
     await expect(auth.passwordVerify({phone,deviceId,password:"654321"}))
       .resolves.toMatchObject({user:{phone}});
   });

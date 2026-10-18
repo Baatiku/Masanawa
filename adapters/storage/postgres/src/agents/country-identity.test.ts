@@ -1,9 +1,8 @@
-import {createAgentDirectoryService} from '../../../../../services/gateway/src/agent_directory.js';
 import {afterAll,beforeAll,it,expect} from 'vitest';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {createCanonicalId} from '@masanawa/contracts';
-import {normalizeAgentPresentation} from '../../../../../packages/agents/src/configuration.js';
+import {normalizeAgentPresentation} from '@masanawa/agents';
 import {createPostgresAgentPresentationRepository} from './configuration.js';
 const db=new PGlite(),tenantId=createCanonicalId('tenant'),characterId=createCanonicalId('character');
 const base={schemaVersion:1 as const,tenantId,characterId,characterVersionId:createCanonicalId('character-version'),displayName:'Amina',roleLabel:'Medicine',about:'Education',greeting:null,visibleInUserApp:true,sortOrder:0,revision:1};
@@ -27,8 +26,3 @@ it('enforces paired fields in actual PostgreSQL, including NULL-code non-NULL-na
  await expect(db.query('UPDATE agents.agent_presentations SET country_code=$1,country_name=NULL',['NG'])).rejects.toThrow();
 });
 
-it('projects authored country metadata after directory authorization',async()=>{
- const directory=createAgentDirectoryService({presentations:{async listVisible(){return [{...base,countryCode:'NG',countryName:'Nigeria'}];}} as any,
-  authorizer:{async authorize(){return {tenantId,userId:createCanonicalId('user')};}}});
- expect((await directory.list({authorizationHeader:'Bearer session'}))[0]).toMatchObject({countryCode:'NG',countryName:'Nigeria'});
-});

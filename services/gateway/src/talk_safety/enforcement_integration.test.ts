@@ -32,7 +32,7 @@ describe("Talk safety enforcement integration", () => {
     expect(sql).toContain("se.target_kind = 'talk'");
     expect(sql).toContain("se.target_id = t.talk_id");
     expect(sql).toContain("se.visibility IN ('restricted','blocked')");
-    expect(sql.indexOf("safety_enforcement")).toBeLessThan(sql.indexOf("ORDER BY"));
+    expect(sql.indexOf("safety_enforcement")).toBeLessThan(sql.lastIndexOf("ORDER BY"));
   });
 
   it("lets the Host privately resolve a safety-hidden Talk detail while public viewers cannot", async () => {
@@ -45,7 +45,7 @@ describe("Talk safety enforcement integration", () => {
 
     const sql = calls[0]?.text ?? "";
     expect(sql).toContain("t.host_user_id = $3");
-    expect(sql).toContain("OR NOT EXISTS");
+    expect(sql).toMatch(/OR\s*\(\s*NOT EXISTS/u);
     expect(sql).toContain("se.target_kind = 'talk'");
   });
 

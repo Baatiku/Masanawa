@@ -68,6 +68,6 @@ describe("authenticated Status and official Video Gateway registration", () => {
     const response = await app.inject({url:"/v1/feed",headers:{authorization:"Bearer permitted"}});
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({items:[],nextCursor:null});
-    expect(list).toHaveBeenCalledWith("tenant_a","fan_a","for_you",undefined);
+    expect(list).toHaveBeenCalledWith("tenant_a","fan_a","for_you",undefined,undefined);
   });
 });

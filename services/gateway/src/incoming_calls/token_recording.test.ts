@@ -15,7 +15,7 @@ function setup(withPaidVoice = true) {
   const service = createGeminiLiveTokenService({
     apiKey: "fake-test-key",
     authorizer: {
-      authorize: async () => ({ scope: { tenantId: "a", userId: "u" } }),
+      authorize: async () => ({ scope: { tenantId: "a", userId: "u" }, presentation: {displayName:"Malam Musa",roleLabel:"Teacher",about:"Teaches clearly"} }),
     } as never,
     platformProfiles: {
       readForCharacter: async () => ({

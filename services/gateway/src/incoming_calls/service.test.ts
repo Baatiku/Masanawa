@@ -135,7 +135,7 @@ describe("incoming authorization and explicit media", () => {
   });
   it("keeps push retryable when no installation is registered", async () => {
     const h = harness();
-    vi.mocked(h.repository.claimPush).mockResolvedValue({
+    vi.mocked(h.repository.claimPush).mockResolvedValueOnce({
       tenantId: "tenant",
       userId: "user",
       call,

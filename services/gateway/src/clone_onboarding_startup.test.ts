@@ -74,35 +74,21 @@ async function fixture() {
   return { runtime, request, create, qualify: () => qualified = true, assignment: () => assignment };
 }
 
-it("normal startup mounts saved draft/review/confirm/recovery routes and exact Core custody", async () => {
-  const f = await fixture();
-  try {
-    expect((await f.request("")).json.setup).toBeNull();
-    const save = await f.request("/profile", "PUT", { expectedRevision: null, profile: { displayName: "Amina", languages: ["Hausa"] } });
-    expect(save.status).toBe(200); expect(save.cache).toBe("private, no-store");
-    expect((await f.request("/preview", "POST", { expectedRevision: 1 })).json.setup.state).toBe("preview");
-    expect(f.create).not.toHaveBeenCalled();
-    const confirmation = { expectedPreviewRevision: 2, requestId: createCanonicalId("request") };
-    expect((await f.request("/confirm", "POST", confirmation)).status).toBe(409);
-    const interrupted = await f.request("");
-    expect(interrupted.json.setup.state).toBe("confirmed");
-    expect(interrupted.json.setup.confirmationRequestId).toBe(confirmation.requestId);
-    expect((await f.request("/confirm", "POST", { ...confirmation, requestId: createCanonicalId("request") })).status).toBe(409);
-    f.qualify();
-    const complete = await f.request("/confirm", "POST", confirmation);
-    expect(complete.status).toBe(200); expect(complete.json.setup.state).toBe("ready");
-    expect(complete.json.runtimeReadiness).toBe("not-verified");
-    expect(f.assignment()?.skillVersionIds).toHaveLength(1);
-    const replay = await f.request("/confirm", "POST", confirmation);
-    expect(replay.json.setup.result).toEqual(complete.json.setup.result);
-  } finally { await f.runtime.shutdown(); }
+it("normal startup cannot resurrect retired personal-clone onboarding from legacy dependencies", async () => {
+ const f=await fixture();
+ try {
+  for(const [path,method] of [["","GET"],["/profile","PUT"],["/preview","POST"],["/confirm","POST"]]) {
+   expect((await f.request(path!,method!,method==="GET"?undefined:{expectedRevision:1})).status).toBe(404);
+  }
+  expect(f.create).not.toHaveBeenCalled();
+  expect(f.assignment()).toBeNull();
+ }finally{await f.runtime.shutdown();}
 });
-
-it("normal startup rejects unauthorized and forged-scope requests", async () => {
-  const f = await fixture();
-  try {
-    expect((await f.request("", "GET", undefined, false)).status).toBe(403);
-    expect((await f.request("/profile", "PUT", { expectedRevision: null, profile: {}, userId: createCanonicalId("user") })).status).toBe(400);
-    expect(f.create).not.toHaveBeenCalled();
-  } finally { await f.runtime.shutdown(); }
+it("retired clone routes reject unauthorized and forged-scope requests without mutation",async()=>{
+ const f=await fixture();
+ try {
+  expect((await f.request("","GET",undefined,false)).status).toBe(404);
+  expect((await f.request("/profile","PUT",{expectedRevision:null,profile:{},userId:createCanonicalId("user")})).status).toBe(404);
+  expect(f.create).not.toHaveBeenCalled();
+ }finally{await f.runtime.shutdown();}
 });

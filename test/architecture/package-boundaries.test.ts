@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const allowedDependencies: Readonly<Record<string, ReadonlySet<string>>> = {
   contracts: new Set(),
+  feed: new Set(),
+  masana: new Set(),
+  rooms: new Set(),
+  "mobile-push": new Set(["agents"]),
   events: new Set(["contracts"]),
   security: new Set(["contracts", "events"]),
   identity: new Set(["contracts", "events", "security"]),

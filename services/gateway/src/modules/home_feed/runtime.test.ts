@@ -18,7 +18,7 @@ describe("connected Status canonical session and feature registration",()=>{
   expect((await app.inject("/v1/feed")).statusCode).toBe(401);
   const r=await app.inject({url:"/v1/feed",headers:{authorization:"Bearer valid","x-tenant-id":"foreign","x-user-id":"another"}});
   expect(r.statusCode).toBe(200);
-  expect(p.list).toHaveBeenCalledWith("trusted_tenant","trusted_user","for_you",undefined);
+  expect(p.list).toHaveBeenCalledWith("trusted_tenant","trusted_user","for_you",undefined,undefined);
   await app.close();
  });
  it("maps unavailable session/storage to typed 503 without leaking internals",async()=>{
