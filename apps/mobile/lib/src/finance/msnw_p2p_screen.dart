@@ -1908,7 +1908,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         if(state=='awaiting_payment'||state=='payment_claimed') ...[
           P2pOrderBankDetails(bankName:'${p['bank_name']??''}',
             accountName:'${p['account_name']??''}',
-            accountNumber:'${p['account_number']??''}',buyer:buyer),
+            accountNumber:'${p['account_number']??''}',buyer:buyer,
+            fiatTotal:_ngn(o['fiat_kobo'])),
           const SizedBox(height:8),
         ],
         P2pPaymentDeadline(deadline:DateTime.tryParse('${o['payment_deadline']}'),
