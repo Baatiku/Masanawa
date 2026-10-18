@@ -239,7 +239,9 @@ class MobilePushService {
       await _notifications.show(
         id: isCall
             ? (message.data['callId'] as String).hashCode
-            : (message.messageId?.hashCode ??
+            : ((message.data['eventId'] is String
+                    ? (message.data['eventId'] as String).hashCode
+                    : message.messageId?.hashCode) ??
                 DateTime.now().millisecondsSinceEpoch),
         // Foreground FCM payload text is untrusted and may contain private
         // message or money details. Keep both device states preview-safe.
