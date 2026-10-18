@@ -85,4 +85,53 @@ describe("MSNW P2P exact money and escrow",()=>{
     await expect(service.action(actor,offerId,"release"))
       .rejects.toMatchObject({code:"p2p.operator_resolution_required"});
   });
+  it("returns exact read-only server quote with canonical fee and bank",async()=>{
+    const {pool,statements}=mock(sql=>sql.includes("FROM commerce.msnw_p2p_offers o")
+      ?[{
+        offer_id:offerId,seller_id:"seller-b",rate_kobo_per_msnw:"150000",
+        min_micro:"1000000",max_micro:"5000000",remaining_micro:"5000000",
+        funded_micro:"2000000",fee_bps:50,state:"active",bank_name:"Verified Bank",
+        verified_at:new Date(),disabled_at:null,
+      }]:[]);
+    const service=createP2pService(pool,deniedWallet);
+    const quote=await service.quote(actor,{offerId,amountMicro:"1000001"});
+    expect(quote).toMatchObject({
+      offerId,amountMicro:"1000001",fiatKobo:"151",feeMicro:"5001",
+      rateKoboPerMsnw:"150000",feeBps:50,bankName:"Verified Bank",
+      paymentWindowSeconds:1800,availableMicro:"2000000",
+    });
+    expect(statements.every(sql=>!sql.includes("INSERT")&&!sql.includes("UPDATE"))).toBe(true);
+    await expect(service.quote(actor,{offerId,amountMicro:"3000000"}))
+      .rejects.toMatchObject({code:"p2p.offer_limit"});
+    await expect(service.quote({tenantId:"tenant-a",userId:"seller-b"},
+      {offerId,amountMicro:"1000000"})).rejects.toMatchObject({code:"p2p.self_trade_forbidden"});
+  });
+  it("resolves an interrupted request only for the original buyer and tenant",async()=>{
+    const {pool}=mock(sql=>sql.includes("FROM commerce.msnw_p2p_orders")
+      ?[{order_id:offerId,state:"awaiting_payment"}]:[]);
+    const p2p=createP2pService(pool,deniedWallet);
+    expect(await p2p.orderByRequest(actor,key)).toEqual({
+      orderId:offerId,state:"awaiting_payment",
+    });
+    await expect(p2p.orderByRequest(actor,"bad")).rejects
+      .toMatchObject({code:"p2p.idempotency_required"});
+  });
+  it("rejects a changed reviewed rate or fee before reserving escrow",async()=>{
+    const {pool,statements}=mock(sql=>
+      sql.includes("SELECT order_id,offer_id,amount_micro::text")?[]:
+      sql.includes("FROM commerce.msnw_p2p_offers o JOIN")?[{
+        offer_id:offerId,seller_id:"seller-b",payment_method_id:offerId,
+        rate_kobo_per_msnw:"150000",min_micro:"1000000",max_micro:"5000000",
+        remaining_micro:"5000000",fee_bps:75,state:"active",
+        verified_at:new Date(),disabled_at:null,
+      }]:[]);
+    const reserve=vi.fn();
+    await expect(createP2pService(pool,{...deniedWallet,reserve}).createOrder(actor,{
+      offerId,amountMicro:"1000000",idempotencyKey:key,
+      expectedRateKoboPerMsnw:"140000",expectedFeeBps:50,
+    })).rejects.toMatchObject({code:"p2p.quote_changed"});
+    expect(reserve).not.toHaveBeenCalled();
+    expect(statements.some(s=>s.includes("INSERT INTO commerce.msnw_p2p_orders"))).toBe(false);
+  });
+
 });
