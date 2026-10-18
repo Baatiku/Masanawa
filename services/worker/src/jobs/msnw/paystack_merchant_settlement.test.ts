@@ -39,7 +39,11 @@ function fake(patches: Readonly<{
       : path.pathname === "/settlement/3090024/transactions"
         ? transactions.map(x=>({...x,...patches.transaction}))
         : [];
-    return new Response(JSON.stringify({status:true,data}),{
+    return new Response(JSON.stringify({
+      status:true,data,
+      ...(patches.partial && path.pathname.endsWith("/transactions")
+        ? {meta:{page:1,pageCount:2,perPage:50}} : {}),
+    }),{
       status:200,headers:{"content-type":"application/json"},
     });
   };
@@ -114,6 +118,14 @@ describe("MSNW Paystack completed merchant payout provenance",()=>{
       .toBe(false);
     expect(t.writes.some(x=>x.includes("INSERT INTO commerce.msnw_paystack_merchant_settlements")))
       .toBe(false);
+  });
+  it("rejects Paystack metadata indicating missing payout transaction pages",async()=>{
+    const t=fake({partial:true});
+    expect(await t.runtime.runOnce()).toEqual({scanned:0,matched:0,failed:1});
+    expect(t.writes.some(x=>x.includes(
+      "INSERT INTO commerce.msnw_paystack_payout_matches"))).toBe(false);
+    expect(t.writes.some(x=>x.includes(
+      "INSERT INTO commerce.msnw_paystack_merchant_settlements"))).toBe(false);
   });
   it("rechecks previously scanned payouts for independently verified late funding",async()=>{
     const t=fake({existing:true});
