@@ -862,7 +862,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       _recoveryReady = false;
       _offerRecoveryReady = false;
       return const Scaffold(body: Center(
-        child: Text('Sign in again to continue'));
+        child: Text('Sign in again to continue')));
     }
     return Scaffold(
       appBar: AppBar(title: const Text('MSNW P2P')),
