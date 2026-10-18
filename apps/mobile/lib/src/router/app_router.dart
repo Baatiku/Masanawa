@@ -12,6 +12,7 @@ import '../screens/onboarding/password_screen.dart';
 import '../screens/onboarding/phone_login_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/settings/notification_preferences_screen.dart';
 import '../core/startup_metrics.dart';
 import '../screens/chat/masana_list_screen.dart';
 import '../screens/search/unified_search_screen.dart';
@@ -118,6 +119,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path == '/home' ||
           path == '/activity' ||
           path == '/search' ||
+          path == '/notifications' ||
           path == '/chats' ||
           path.startsWith('/chat/') ||
           path.startsWith('/rooms/') ||
@@ -183,6 +185,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/search',
         builder: (_, __) => const UnifiedSearchScreen()),
+      GoRoute(path: '/notifications',
+        builder: (_, __) => const NotificationPreferencesScreen()),
       GoRoute(path: '/talk/create',
         redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/talk/:id',
