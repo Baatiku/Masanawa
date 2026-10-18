@@ -164,13 +164,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     return r.data;
   }
   Future<List<Map<String, dynamic>>> _load() async {
-    final path = switch (_tab) {
+    final requestedTab = _tab;
+    final path = switch (requestedTab) {
       0 => '/offers',1 => '/my-offers',2 => '/orders',_ => '/notifications',
     };
     final json = _json(await _request('GET', path));
     final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
-    if (_sameAccount) _cached[_tab] = items;
+    if (_sameAccount) _cached[requestedTab] = items;
     return items;
   }
   void _reload([int? tab]) {
