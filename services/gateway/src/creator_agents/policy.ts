@@ -87,8 +87,8 @@ export function createCreatorPolicyService(pool:CreatorPool) {
 }
 export function registerCreatorPolicyRoutes(app:FastifyInstance,deps:{
  readonly service:ReturnType<typeof createCreatorPolicyService>;
- readonly fan(header:string|undefined):Promise<Identity>;
- readonly staff(header:string|undefined):Promise<Identity>;
+ readonly fan:(header:string|undefined)=>Promise<Identity>;
+ readonly staff:(header:string|undefined)=>Promise<Identity>;
 }):void {
  app.get("/v1/creator/policy",async(request,reply)=>{
   reply.header("Cache-Control","private, no-store");
