@@ -1,5 +1,6 @@
 name: Masana Android APK Compilation
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "apps/mobile/assets/masana/**"
@@ -84,3 +85,38 @@ jobs:
             apps/mobile/build/app/outputs/flutter-apk/release-evidence.json
           if-no-files-found: error
           retention-days: 7
+
+  publish-handset:
+    if: github.event_name == 'workflow_dispatch'
+    needs: compile-android
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: masanawa-26-masana-handset-apk
+          path: handset
+      - name: Publish downloadable handset test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+          RELEASE_TAG: handset-${{ github.run_number }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd handset
+          sha256sum --check app-release.apk.sha256
+          cat > release-notes.md <<EOF
+          Android handset test build from commit ${SOURCE_SHA}.
+
+          Download app-release.apk below. The checksum and signing evidence are attached.
+          This build uses development signing and production service URLs. Device, call,
+          audio and provider acceptance have not been qualified by this build workflow.
+          A different signing certificate may prevent updating an existing installation.
+          EOF
+          gh release create "$RELEASE_TAG" app-release.apk app-release.apk.sha256 release-evidence.json \
+            --target "$SOURCE_SHA" --prerelease \
+            --title "Masanawa handset test APK ($RELEASE_TAG)" --notes-file release-notes.md
