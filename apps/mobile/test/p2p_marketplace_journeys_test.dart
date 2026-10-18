@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/models.dart';
@@ -70,8 +71,17 @@ Widget _app(_P2pAdapter adapter) {
   );
 }
 
+void _mockSecureRecovery() {
+  const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(channel, (_) async => null);
+  addTearDown(() => TestDefaultBinaryMessengerBinding.instance
+      .defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+}
+
 void main() {
   testWidgets('own offer opens management, never closes on row tap', (t) async {
+    _mockSecureRecovery();
     t.view.physicalSize = const Size(320, 700);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -91,6 +101,7 @@ void main() {
   });
 
   testWidgets('Buy review displays actual quote before posting', (t) async {
+    _mockSecureRecovery();
     final adapter = _P2pAdapter();
     await t.pumpWidget(_app(adapter));
     await t.pumpAndSettle();
