@@ -48,6 +48,26 @@ flutter test test/p2p_marketplace_journeys_test.dart test/p2p_order_presentation
 
 Also perform actual PostgreSQL-backed concurrency and tenant-fencing checks against a disposable test database, Android 320/360px and 200% font tests, denial/offline/back/resume journeys, active/disputed/terminal order review, native file permissions and share, and live escrow/provider reconciliation **before** production activation. Do not run financial tests against production customer balances.
 
+## Continuation after initial handoff — source checks and extra regression coverage
+
+- Added `services/gateway/src/p2p/read_journeys.pglite.test.ts`: executes the actual P2P SQL on disposable embedded PostgreSQL for exact fiat/fee, funded offer visibility, buyer-versus-seller restrictions, cross-tenant isolation, tied-timestamp seek pagination, owned-offer and notification isolation. **Authored, not executed.**
+- Added `apps/mobile/test/p2p_amount_bounds_test.dart`: invalid minimum/maximum, six-decimal precision, 320px/200%-text layout. **Authored, not executed.**
+- The account-switch `Scaffold` constructor in `msnw_p2p_screen.dart` had an unmatched closing parenthesis; repaired at source commit `df50f9e13a6871b299697b7311248f4f66010cb4`. A local delimiter scan subsequently found no unmatched (), [] or {} in the current mobile and Gateway files. **This is not a Flutter compiler or runtime result.**
+- Public paginated offers no longer return unverified internal seller account IDs; the new SQL regression asserts this privacy property.
+- The order-progress stepper now labels its first stage as **Buyer reports** rather than implying buyer-reported payment was verified by the seller or bank.
+- Latest source changes must be evaluated at the **actual PR head**; the commits above are intermediate checkpoints, not a pinned final integration SHA.
+- The current GitHub Actions P2P run (`39107166261`) completed with a failed allocation and no executed steps. Its job had no step data; attempting to fetch logs returned 404 BlobNotFound. Do not call these test failures or passes.
+
+### Additional execution commands
+
+```bash
+cd services/gateway
+pnpm exec vitest run src/p2p/read_journeys.pglite.test.ts src/p2p/service.test.ts src/p2p/order_read_clock.test.ts src/p2p/evidence_storage.test.ts
+cd ../../apps/mobile
+flutter analyze lib/src/finance/msnw_p2p_screen.dart lib/src/finance/p2p_order_presentation.dart
+flutter test test/p2p_amount_bounds_test.dart test/p2p_marketplace_journeys_test.dart test/p2p_order_presentation_test.dart test/wallet_redesign_journeys_test.dart
+```
+
 ## Execution/merge evidence
 
 GitHub Actions on the first PR #183 head failed before job steps (no actual test result; runner allocation unavailable). The assistant environment used for this PR lacks Flutter/Dart and GitHub network access from its container, so no local toolchain run, rendered UI acceptance, or E2E claim is possible here. Earlier malformed source was repaired in commit `83ab1aa`; that repair was not a compiler run. Leave PR as draft until an actual compiler/test executor examines the final head. Missing runner is not a failing assertion; also not a passing test.
