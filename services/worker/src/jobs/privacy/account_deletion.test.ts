@@ -79,10 +79,12 @@ describe("account deletion financial and privacy holds",()=>{
       expectedRevision:3,now:"2026-10-18T12:00:00.000Z",
     });
     const deletes=h.calls.filter(c=>c.sql.includes("DELETE FROM"));
-    expect(deletes).toHaveLength(10);
+    expect(deletes).toHaveLength(14);
     expect(deletes.every(c=>c.params[0]==="tenant-a"&&c.params[1]==="user-a"))
       .toBe(true);
     expect(deletes.every(c=>!c.sql.includes("commerce."))).toBe(true);
+    expect(h.calls.some(c=>c.sql.includes("UPDATE feed.comments SET body"))).toBe(true);
+    expect(h.calls.some(c=>c.sql.includes("UPDATE rooms.questions SET body"))).toBe(true);
     expect(h.calls.filter(c=>c.sql.includes("INSERT INTO identity.account_deletion_events")))
       .toHaveLength(2);
   });
