@@ -16,6 +16,9 @@ export function createGeminiLiveTokenService(input: {
   readonly apiKey: string;
   readonly authorizer: AgentConversationAuthorizer;
   readonly platformProfiles?: PlatformAgentProfileRepository;
+  readonly creatorVoiceReader?: {
+    readPublished(input:{tenantId:import('@masanawa/contracts').TenantId;characterId:import('@masanawa/contracts').CharacterId}):Promise<string|null>;
+  };
   readonly model?: string;
   readonly voiceName?: string;
   readonly fetchImpl?: typeof fetch;
@@ -99,15 +102,18 @@ export function createGeminiLiveTokenService(input: {
             characterId,
           })
         : null;
+      const creatorVoice = profile ? null : await input.creatorVoiceReader?.readPublished({
+        tenantId:admission.scope.tenantId,characterId,
+      }) ?? null;
       const selectedVoiceName =
         profile?.voiceProvider.toLowerCase() === "gemini" &&
         profile.voiceName.trim()
           ? profile.voiceName.trim()
-          : voiceName;
+          : creatorVoice ?? voiceName;
       // Do not substitute owner-selected Gemini voices. Bodi and Fora are
       // passed unchanged to the mobile Live setup, exactly as configured.
       // Provider acceptance is verified at runtime, never guessed here.
-      if (input.callHistory && !profile) {
+      if (input.callHistory && !profile && !creatorVoice) {
         throw new CallHistoryError("calls.masana_unavailable", 403);
       }
       const twinSetup = request.purpose === "twin-setup";

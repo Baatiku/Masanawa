@@ -6,6 +6,7 @@ import {
  type CreatorSeed, type CreatorAgentState, type GeneratedCreatorAgent
 } from "@masanawa/masana";
 import type {CreatorAgentGenerator} from "./generator.js";
+import {suggestedCreatorVoice} from "./voice.js";
 
 type Owner = Readonly<{tenantId:string;userId:string}>;
 export class CreatorAgentError extends Error {
@@ -26,6 +27,7 @@ export interface CreatorAgentView {
  readonly generated:GeneratedCreatorAgent|null;
  readonly statusEnabled:boolean;
  readonly publishedAt:string|null;
+ readonly voiceName:string;
 }
 function text(row:Record<string,unknown>,field:string):string{
  const value=row[field];
@@ -43,6 +45,7 @@ function view(row:Record<string,unknown>):CreatorAgentView{
  return Object.freeze({
   characterId:text(row,"character_id"),state,revision,handle:text(row,"handle"),
   seed,generated,statusEnabled:row.status_enabled===true,
+  voiceName:suggestedCreatorVoice(seed),
   publishedAt:publishedAt===null?null:publishedAt instanceof Date?publishedAt.toISOString():String(publishedAt),
  });
 }
@@ -91,10 +94,10 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
      "WHERE tenant_id=$1 AND character_id=$2 AND state='active'",
      [owner.tenantId,item.characterId,charVersionId,at]);
     const advanced=await db.query(
-     "UPDATE creator.agents SET state='published',revision=revision+1,published_at=$4,updated_at=$4 "+
+     "UPDATE creator.agents SET state='published',voice_profile_id=$6,revision=revision+1,published_at=$4,updated_at=$4 "+
      "WHERE tenant_id=$1 AND owner_user_id=$2 AND character_id=$3 AND state='draft' AND revision=$5 "+
      "RETURNING character_id,state,revision,handle,seed,generated,status_enabled,published_at",
-     [owner.tenantId,owner.userId,item.characterId,at,expectedRevision]);
+     [owner.tenantId,owner.userId,item.characterId,at,expectedRevision,suggestedCreatorVoice(item.seed)]);
     if(!advanced.rows[0])throw new CreatorAgentError("creator.stale_draft");
     const profile={
      handle:item.handle,displayName:g.name,profession:g.profession,biography:g.biography,
