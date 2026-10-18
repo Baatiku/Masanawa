@@ -57,6 +57,18 @@ export function registerMsnwCustodyRoutes(
       return 'csv' in result?result.csv:result.pdf;
     } catch(error) {return failed(reply,error);}
   });
+  // Lookup is strictly scoped by authenticated tenant and sender. A 404 means
+  // no committed operation is visible yet, not proof an in-flight send failed.
+  app.get("/v1/wallet/msnw/send/status/:idempotencyKey", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    try {
+      const identity = await owner(request.headers.authorization);
+      const { idempotencyKey } = request.params as { idempotencyKey?: unknown };
+      const result = await input.ledger.lookup(identity, idempotencyKey);
+      if (!result) throw new MsnwCustodyError("msnw.operation_not_found",404);
+      return result;
+    } catch (error) { return failed(reply,error); }
+  });
   app.post("/v1/wallet/msnw/send/preview", {
     bodyLimit: 1024,
   }, async (request, reply) => {

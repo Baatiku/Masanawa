@@ -1,6 +1,7 @@
 import 'wallet_flow_page.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,9 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
   final recipient = TextEditingController();
   final quantity = TextEditingController();
   final random = Random.secure();
+  final storage = const FlutterSecureStorage();
+  Map<String, dynamic>? pending;
+  String get pendingStorageKey => 'msnw.send.pending.v1.${widget.expectedUserId}';
   Map<String, dynamic>? preview;
   Map<String, dynamic>? receipt;
   String? key;
@@ -51,6 +55,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     super.initState();
     recipient.addListener(invalidate);
     quantity.addListener(invalidate);
+    WidgetsBinding.instance.addPostFrameCallback((_) => restorePending());
   }
   @override
   void dispose() {
@@ -115,12 +120,142 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     }
   }
 
+  // Store the *original* authorized request before network I/O, encrypted and
+  // fenced by account. Never mint a new key for an uncertain outcome.
+  bool validPending(Map<String, dynamic> value) =>
+      value['recipient'] is String &&
+      value['recipientUserId'] is String &&
+      value['amountMicro'] is String &&
+      RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(value['amountMicro'] as String) &&
+      value['idempotencyKey'] is String &&
+      RegExp(r'^[A-Za-z0-9:_-]{16,128}$')
+          .hasMatch(value['idempotencyKey'] as String);
+
+  Future<void> restorePending() async {
+    final token = widget.accessToken()?.trim();
+    if (token == null || token.isEmpty || !sameSession(token)) return;
+    try {
+      final raw = await storage.read(key: pendingStorageKey);
+      if (!sameSession(token) || raw == null) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) throw const FormatException('Invalid saved transfer');
+      final value = decoded.cast<String, dynamic>();
+      if (!validPending(value)) throw const FormatException('Invalid saved transfer');
+      setState(() => pending = value);
+      await recoverPending();
+    } catch (_) {
+      if (sameSession(token)) setState(() => error =
+          'A previous transfer could not be recovered. Check custody history '
+          'before making another transfer.');
+    }
+  }
+
+  Future<void> recoverPending() async {
+    final original = pending;
+    final token = widget.accessToken()?.trim();
+    if (busy || original == null || !validPending(original) ||
+        token == null || token.isEmpty || !sameSession(token)) return;
+    setState(() { busy = true; error = null; });
+    try {
+      final result = await widget.dio.get<dynamic>(
+        widget.baseUrl.replaceFirst(RegExp(r'/$'), '') +
+            '/v1/wallet/msnw/send/status/' +
+            Uri.encodeComponent(original['idempotencyKey'] as String),
+        options: headers(token),
+      );
+      if (!sameSession(token)) return;
+      final raw = result.data;
+      if (raw is! Map || raw['asset'] != 'MSNW' ||
+          raw['state'] != 'completed' || raw['operationId'] is! String ||
+          raw['recipientUserId'] != original['recipientUserId'] ||
+          raw['amountMicro'] != original['amountMicro']) {
+        throw const FormatException('Transfer status mismatched the original request');
+      }
+      try { await storage.delete(key: pendingStorageKey); } catch (_) {
+        // A later authenticated lookup can safely rediscover this receipt.
+      }
+      if (!sameSession(token)) return;
+      setState(() { receipt = raw.cast<String, dynamic>();
+        pending = null; preview = null; key = null; });
+      widget.onCompleted();
+    } on DioException catch (e) {
+      if (sameSession(token)) setState(() => error =
+          e.response?.statusCode == 404
+              ? 'No completed transfer found yet. Only retry the original '
+                  'request below; do not start another transfer.'
+              : 'Transfer status unavailable. Check again or retry the '
+                  'original request; it keeps the same protected reference.');
+    } catch (_) {
+      if (sameSession(token)) setState(() => error =
+          'Transfer details could not be confirmed. Do not start a new '
+          'transfer; contact support with the original request reference.');
+    } finally {
+      if (sameSession(token)) setState(() => busy = false);
+    }
+  }
+
+  Future<void> retryPending() async {
+    final original = pending;
+    final token = widget.accessToken()?.trim();
+    if (busy || original == null || !validPending(original) ||
+        token == null || token.isEmpty || !sameSession(token)) return;
+    final approved = await openWalletPage<bool>(
+      context: context, title: 'Recover transfer',
+      builder: (ctx) => WalletReviewContent(
+        title: const Text('Retry the original request?'),
+        content: Text('This checks or completes the SAME MSNW transfer to ' +
+          (original['recipient'] as String) + '. It does not create a new '
+          'request or authorize a different amount.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Retry original')),
+        ],
+      ),
+    );
+    if (approved == true && sameSession(token)) await submitOriginal(original, token);
+  }
+
+  Future<void> submitOriginal(Map<String, dynamic> original, String token) async {
+    if (busy || !sameSession(token)) return;
+    setState(() { busy = true; error = null; });
+    try {
+      final result = await widget.dio.post<dynamic>(
+        widget.baseUrl.replaceFirst(RegExp(r'/$'), '') +
+            '/v1/wallet/msnw/send',
+        data: original, options: headers(token),
+      );
+      if (!sameSession(token)) return;
+      final raw = result.data;
+      if (raw is! Map || raw['asset'] != 'MSNW' ||
+          raw['state'] != 'completed' || raw['operationId'] is! String ||
+          raw['recipientUserId'] != original['recipientUserId'] ||
+          raw['amountMicro'] != original['amountMicro']) {
+        throw const FormatException('Invalid MSNW receipt');
+      }
+      try { await storage.delete(key: pendingStorageKey); } catch (_) {
+        // Retaining an encrypted request only triggers a safe status lookup.
+      }
+      if (!sameSession(token)) return;
+      setState(() { receipt = raw.cast<String, dynamic>(); preview = null;
+        pending = null; key = null; });
+      widget.onCompleted();
+    } catch (_) {
+      if (sameSession(token)) setState(() => error =
+          'Transfer outcome is uncertain. Check its status or retry the '
+          'original request with the same reference. Never start a new one.');
+    } finally {
+      if (sameSession(token)) setState(() => busy = false);
+    }
+  }
+
   Future<void> send() async {
     final current = preview, idempotencyKey = key;
     final token = widget.accessToken()?.trim();
-    if (busy || current == null || idempotencyKey == null ||
+    if (busy || pending != null || current == null || idempotencyKey == null ||
         token == null || token.isEmpty || !sameSession(token)) return;
-    final confirmed = await openWalletPage<bool>(
+    final approved = await openWalletPage<bool>(
       context: context, title: 'Review transfer',
       builder: (ctx) => WalletReviewContent(
         title: const Text('Confirm MSNW transfer'),
@@ -129,42 +264,31 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           '? Check the recipient carefully. Completed transfers cannot be reversed.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
+              child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm & send')),
+              child: const Text('Confirm & send')),
         ],
       ),
     );
-    if (confirmed != true || !sameSession(token)) return;
-    setState(() { busy = true; error = null; });
+    if (approved != true || !sameSession(token) || preview != current ||
+        key != idempotencyKey) return;
+    final original = <String, dynamic>{
+      'recipient': recipient.text.trim(),
+      'recipientUserId': current['recipientUserId'],
+      'amountMicro': current['amountMicro'],
+      'idempotencyKey': idempotencyKey,
+    };
+    if (!validPending(original)) return;
     try {
-      final result = await widget.dio.post<dynamic>(
-        widget.baseUrl.replaceFirst(RegExp(r'/$'), '') +
-          '/v1/wallet/msnw/send',
-        data: {
-          'recipient': recipient.text.trim(),
-          'recipientUserId': current['recipientUserId'],
-          'amountMicro': current['amountMicro'],
-          'idempotencyKey': idempotencyKey,
-        },
-        options: headers(token),
-      );
-      if (!sameSession(token)) return;
-      final raw = result.data;
-      if (raw is! Map || raw['asset'] != 'MSNW' ||
-          raw['state'] != 'completed' || raw['operationId'] is! String ||
-          raw['amountMicro'] != current['amountMicro']) {
-        throw const FormatException('Invalid MSNW receipt');
-      }
-      setState(() { receipt = raw.cast<String, dynamic>(); preview = null; });
-      widget.onCompleted();
+      await storage.write(key: pendingStorageKey, value: jsonEncode(original));
     } catch (_) {
       if (sameSession(token)) setState(() => error =
-        'Transfer status could not be confirmed. Retry the SAME transfer '
-        'without editing it; your idempotency key protects against double spending.');
-    } finally {
-      if (mounted) setState(() => busy = false);
+          'Secure recovery storage is unavailable. No transfer was sent.');
+      return;
     }
+    if (!sameSession(token)) return;
+    setState(() => pending = original);
+    await submitOriginal(original, token);
   }
 
   @override
@@ -178,21 +302,32 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
         const SizedBox(height: 8),
 
         const SizedBox(height: 10),
-        TextField(controller: recipient, enabled: !busy && receipt == null,
+        TextField(controller: recipient, enabled: !busy && receipt == null && pending == null,
           keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(
             labelText: 'Recipient email or +234 phone')),
-        TextField(controller: quantity, enabled: !busy && receipt == null,
+        TextField(controller: quantity, enabled: !busy && receipt == null && pending == null,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(labelText: 'Amount (MSNW)')),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 8),
           child: Text(error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error))),
         if (busy) const LinearProgressIndicator(),
-        if (preview != null && receipt == null) ...[
+        if (pending != null && receipt == null) ...[
+          const SizedBox(height: 12),
+          const Text('Previous transfer needs confirmation',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          SelectableText('Request: ' +
+              (pending!['idempotencyKey'] as String)),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton(onPressed: busy ? null : recoverPending,
+                child: const Text('Check status')),
+            FilledButton(onPressed: busy ? null : retryPending,
+                child: const Text('Retry original')),
+          ]),
+        ] else if (preview != null && receipt == null) ...[
           ListTile(title: Text(preview!['recipientName'] as String),
-            subtitle: Text('Recipient ID: ' +
-              (preview!['recipientUserId'] as String))),
+            subtitle: const Text('Verified recipient for this transfer')),
 
           FilledButton(onPressed: busy ? null : send,
             child: const Text('Review and confirm')),
