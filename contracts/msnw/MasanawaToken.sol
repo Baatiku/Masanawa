@@ -10,7 +10,9 @@ import {AccessControlDefaultAdminRules} from
  * MSNW: six-decimal ERC20, one official customer wallet asset.
  * Mint/burn each require a unique SHA-256 settlement reference admitted by
  * the independently reconciled custody worker. Burn can only destroy
- * tokens already held by the authorized custodian, never user balances.
+ * tokens already held by the designated custody Safe, never user balances.
+ * This token has no fiat peg, national currency denomination or transfer tax.
+ * Fiat and stablecoin rails are independent adapters to the off-chain ledger.
  *
  * This contract is SOURCE ONLY. Nothing is deployed or issued by merging it.
  * Governance should use an audited multisig, not an operator hot wallet.
@@ -20,24 +22,36 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
     bytes32 public constant BURNER_ROLE = keccak256("MSNW_BURNER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("MSNW_PAUSER_ROLE");
     mapping(bytes32 => bool) public settledReference;
+    address public immutable custodian;
 
     error InvalidAccount();
+    error InvalidCustodian();
+    error RoleCollision();
     error InvalidAmount();
     error DuplicateSettlement();
 
     event SettledMint(bytes32 indexed settlementReference, address indexed recipient, uint256 amount);
     event SettledBurn(bytes32 indexed settlementReference, address indexed custodian, uint256 amount);
 
-    constructor(address governance, address settlementMinter, address settlementBurner, address emergencyPauser)
+    constructor(address governance, address settlementMinter, address custodySafe, address emergencyPauser)
         ERC20("Masanawa Wallet", "MSNW")
         AccessControlDefaultAdminRules(2 days, governance)
     {
         if (governance == address(0) ||
             settlementMinter == address(0) ||
-            settlementBurner == address(0) ||
+            custodySafe == address(0) ||
             emergencyPauser == address(0)) revert InvalidAccount();
+        if (governance == settlementMinter ||
+            governance == custodySafe ||
+            governance == emergencyPauser ||
+            settlementMinter == custodySafe ||
+            settlementMinter == emergencyPauser ||
+            custodySafe == emergencyPauser) revert RoleCollision();
+        custodian = custodySafe;
         _grantRole(MINTER_ROLE, settlementMinter);
-        _grantRole(BURNER_ROLE, settlementBurner);
+        // The Safe itself authorizes burns from its own custody balance.
+        // No separate burner hot wallet can destroy customer-held tokens.
+        _grantRole(BURNER_ROLE, custodySafe);
         _grantRole(PAUSER_ROLE, emergencyPauser);
     }
 
@@ -50,7 +64,7 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
         uint256 amountMicro,
         bytes32 settlementReference
     ) external onlyRole(MINTER_ROLE) {
-        if (recipient == address(0)) revert InvalidAccount();
+        if (recipient != custodian) revert InvalidCustodian();
         if (amountMicro == 0) revert InvalidAmount();
         if (settlementReference == bytes32(0) ||
             settledReference[settlementReference]) revert DuplicateSettlement();
@@ -69,6 +83,8 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
         uint256 amountMicro,
         bytes32 settlementReference
     ) external onlyRole(BURNER_ROLE) {
+        // Re-granting BURNER_ROLE must not allow burning from another account.
+        if (msg.sender != custodian) revert InvalidCustodian();
         if (amountMicro == 0) revert InvalidAmount();
         if (settlementReference == bytes32(0) ||
             settledReference[settlementReference]) revert DuplicateSettlement();
@@ -81,7 +97,9 @@ contract MasanawaToken is ERC20, ERC20Pausable, AccessControlDefaultAdminRules {
         _pause();
     }
 
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    // Emergency pauser cannot resume transfers unilaterally; the delayed
+    // governance admin Safe alone can approve recovery.
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 
