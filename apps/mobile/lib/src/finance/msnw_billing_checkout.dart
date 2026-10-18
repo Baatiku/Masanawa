@@ -7,6 +7,22 @@ import 'package:flutter/services.dart';
 import '../core/api/billing_models.dart';
 import '../core/network/api_client.dart';
 
+bool isValidMsnwBillRecoveryRecord(Map<String,dynamic> value) {
+    final ref=value['fulfillmentReference'];
+    final quoteId=value['quoteId'];
+    final rev=value['quoteRevision'];
+    final amount=value['expectedAmountMicro'];
+    final rate=value['expectedRateKoboPerMsnw'];
+    return ref is String &&
+        RegExp(r'^msnw-bill-[A-Za-z0-9_-]{5,128}$').hasMatch(ref) &&
+        quoteId is String && ref=='msnw-bill-$quoteId' &&
+        rev is int && rev>=0 &&
+        amount is String && RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(amount) &&
+        rate is String && RegExp(r'^[1-9][0-9]{0,15}$').hasMatch(rate) &&
+        value['customerId'] is String &&
+        value['itemName'] is String && value['totalAmount'] is String;
+  }
+
 /// Confirmed MSNW custody balance only; old NGN/Credits are not spendable here.
 class MsnwBillingCheckoutSheet extends StatefulWidget {
   const MsnwBillingCheckoutSheet({
@@ -59,21 +75,6 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   }
 
   // Never replace an uncertain provider purchase with a new quote.
-  bool validPendingBill(Map<String,dynamic> value) {
-    final ref=value['fulfillmentReference'];
-    final quoteId=value['quoteId'];
-    final rev=value['quoteRevision'];
-    final amount=value['expectedAmountMicro'];
-    final rate=value['expectedRateKoboPerMsnw'];
-    return ref is String &&
-        RegExp(r'^msnw-bill-[A-Za-z0-9_-]{5,128}$').hasMatch(ref) &&
-        quoteId is String && ref=='msnw-bill-$quoteId' &&
-        rev is int && rev>=0 &&
-        amount is String && RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(amount) &&
-        rate is String && RegExp(r'^[1-9][0-9]{0,15}$').hasMatch(rate) &&
-        value['customerId'] is String &&
-        value['itemName'] is String && value['totalAmount'] is String;
-  }
   bool terminalReceipt(Object? status) =>
       const {'succeeded','fulfilled','failed','refunded','cancelled'}
           .contains(status);
@@ -87,7 +88,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       final parsed=jsonDecode(raw);
       if(parsed is! Map)throw const FormatException('Malformed pending bill');
       final saved=parsed.cast<String,dynamic>();
-      if(!validPendingBill(saved))
+      if(!isValidMsnwBillRecoveryRecord(saved))
         throw const FormatException('Malformed pending bill');
       setState(()=>pendingBill=saved);
       await recoverPending();
@@ -100,7 +101,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
 
   Future<void> recoverPending() async {
     final saved=pendingBill,token=widget.accessToken()?.trim();
-    if(busy||saved==null||!validPendingBill(saved)||
+    if(busy||saved==null||!isValidMsnwBillRecoveryRecord(saved)||
        token==null||token.isEmpty||!same(token))return;
     setState((){busy=true;error=null;});
     try {
@@ -142,7 +143,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   }
 
   Future<void> submitPending(Map<String,dynamic> saved,String token) async {
-    if(busy||!same(token)||!validPendingBill(saved))return;
+    if(busy||!same(token)||!isValidMsnwBillRecoveryRecord(saved))return;
     setState((){busy=true;error=null;uncertain=false;});
     try {
       final response=await widget.dio.post<dynamic>(
@@ -179,7 +180,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
 
   Future<void> retryPending() async {
     final saved=pendingBill,token=widget.accessToken()?.trim();
-    if(busy||saved==null||!validPendingBill(saved)||
+    if(busy||saved==null||!isValidMsnwBillRecoveryRecord(saved)||
        token==null||token.isEmpty||!same(token))return;
     final approved=await openWalletPage<bool>(context:context,
       title:'Recover bill payment',
@@ -274,7 +275,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       'serviceAmount':q.serviceAmount,
       'feeAmount':q.feeAmount,
     };
-    if(!validPendingBill(original)) {
+    if(!isValidMsnwBillRecoveryRecord(original)) {
       setState(()=>error='Bill reference invalid. Obtain a new verified quote.');
       return;
     }
