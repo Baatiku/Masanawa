@@ -96,7 +96,7 @@ describe("MSNW P2P exact money and escrow",()=>{
     const service=createP2pService(pool,deniedWallet);
     const quote=await service.quote(actor,{offerId,amountMicro:"1000001"});
     expect(quote).toMatchObject({
-      offerId,amountMicro:"1000001",fiatKobo:"151",feeMicro:"5001",
+      offerId,amountMicro:"1000001",fiatKobo:"150001",feeMicro:"5001",
       rateKoboPerMsnw:"150000",feeBps:50,bankName:"Verified Bank",
       paymentWindowSeconds:1800,availableMicro:"2000000",
     });
