@@ -1138,6 +1138,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   late Future<Map<String,dynamic>> _future=widget.load();
   late Future<List<Map<String,dynamic>>> _evidence=widget.listEvidence();
   bool _uploading = false;
+  String _reasonDraft = '';
   void _refresh()=>setState((){
     _future=widget.load();
     _evidence=widget.listEvidence();
@@ -1220,20 +1221,45 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
     String? reason;
     if(reasonRequired) {
-      final input=TextEditingController();
+      final input = TextEditingController(text: _reasonDraft);
       try {
-        reason=await openWalletPage<String>(context:context,builder:(ctx)=>WalletReviewContent(
-          title:Text(action=='late-payment'
-            ? 'Report a bank transfer after expiry'
-            : 'Explain the dispute'),content:TextField(
-            controller:input,maxLines:3,decoration:const InputDecoration(
-              hintText:'What happened? Give transaction reference, not passwords.')),
-          actions:[TextButton(onPressed:()=>Navigator.pop(ctx),
-            child:const Text('Back')),
-            FilledButton(onPressed:()=>Navigator.pop(ctx,input.text),
-              child:const Text('Submit'))]));
-      } finally {input.dispose();}
-      if(reason==null||reason.trim().length<10)return;
+        reason = await openWalletPage<String>(context: context,
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, update) => WalletReviewContent(
+              title: Text(action == 'late-payment'
+                ? 'Report a late bank payment' : 'Open a dispute'),
+              content: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Describe what happened. Never share a password.'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: input, maxLines: 4, maxLength: 2000,
+                    onChanged: (value) {
+                      _reasonDraft = value;
+                      update(() {});
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'What happened?',
+                      hintText: 'Add a bank transfer reference when available',
+                    ),
+                  ),
+                  if (input.text.trim().length < 10)
+                    const Text('Enter at least 10 characters.'),
+                ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Back')),
+                FilledButton(
+                  onPressed: input.text.trim().length >= 10
+                    ? () => Navigator.pop(ctx, input.text.trim()) : null,
+                  child: const Text('Submit report'),
+                ),
+              ],
+            ),
+          ),
+        );
+      } finally { input.dispose(); }
+      if (reason == null) return;
     } else {
       final yes=await openWalletPage<bool>(context:context,builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm this action'),
@@ -1245,7 +1271,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       if(yes!=true)return;
     }
     await widget.act(action,reason);
-    if(mounted)_refresh();
+    if(mounted) { _reasonDraft = ''; _refresh(); }
   }
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
     final typed=TextEditingController();
