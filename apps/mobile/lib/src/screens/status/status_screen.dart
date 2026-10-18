@@ -179,7 +179,8 @@ class StatusScreen extends ConsumerWidget {
         if (!context.mounted || currentAccount() != account) return;
         agent = ref.read(agentDirectoryProvider).find(characterId);
       }
-      if (agent == null) {
+      final profileAgent = agent;
+      if (profileAgent == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('This Masana profile is currently unavailable.'),
         ));
@@ -192,7 +193,7 @@ class StatusScreen extends ConsumerWidget {
             return const Scaffold(body: Center(
               child: Text('Sign in to view this profile.')));
           }
-          return MasanaProfileScreen(agent: agent);
+          return MasanaProfileScreen(agent: profileAgent);
         }),
       ));
     }

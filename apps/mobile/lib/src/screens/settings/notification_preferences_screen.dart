@@ -314,7 +314,7 @@ class _NotificationPreferencesScreenState
                 ])),
               RefreshIndicator(onRefresh: _refreshHistory,
                 child: _historyLoading && _history.isEmpty
-                ? const ListView(children: [
+                ? ListView(children: const [
                     ListTile(title: Text('Loading recent alerts…')),
                   ])
                 : _historyError != null
@@ -324,7 +324,7 @@ class _NotificationPreferencesScreenState
                       onTap: _refreshHistory),
                   ])
                 : _history.isEmpty
-                ? const ListView(children: [
+                ? ListView(children: const [
                     SizedBox(height: 64),
                     Icon(Icons.notifications_none_outlined, size: 48),
                     Center(child: Padding(padding: EdgeInsets.all(20),
