@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agents/masanawa_transport.dart';
 import '../core/providers.dart';
+import '../state/session_state.dart';
 import 'crypto_models.dart';
 import 'crypto_transport.dart';
 
@@ -60,28 +61,43 @@ class CryptoWalletSnapshot {
 
 final cryptoWalletTransportProvider = Provider<CryptoWalletTransport>((ref) {
   final api = ref.watch(apiClientProvider);
-  return MasanawaCryptoWalletTransport(
-    dio: api.dio,
-    baseUrl: kAgentBaseUrl,
-  );
+  return MasanawaCryptoWalletTransport(dio: api.dio, baseUrl: kAgentBaseUrl);
 });
 
 class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
-  CryptoWalletTransport get _transport => ref.read(cryptoWalletTransportProvider);
+  CryptoWalletTransport get _transport =>
+      ref.read(cryptoWalletTransportProvider);
+
+  int _epoch = 0;
+  String? _owner() => switch (ref.read(sessionProvider)) {
+    SessionSignedIn(:final user) => user.id,
+    _ => null,
+  };
+  void _checkOwner(String? owner) {
+    if (owner != _owner()) throw StateError('Wallet account changed');
+  }
 
   @override
   Future<CryptoWalletSnapshot> build() async {
+    ref.watch(sessionProvider);
+    _epoch++;
     ref.watch(cryptoWalletTransportProvider);
     return _load();
   }
 
   Future<CryptoWalletSnapshot> _load() async {
+    final epoch = _epoch;
     final capabilities = await _transport.capabilities();
+    if (epoch != _epoch) throw StateError('Wallet account changed');
     // Load independent provider resources in parallel; a slow history call
     // should not serially block the asset list and overview.
     final resources = await Future.wait<Object>([
-      capabilities.deposits ? _transport.depositRoutes() : Future.value(<CryptoRoute>[]),
-      capabilities.conversions ? _transport.conversionRoutes() : Future.value(<CryptoRoute>[]),
+      capabilities.deposits
+          ? _transport.depositRoutes()
+          : Future.value(<CryptoRoute>[]),
+      capabilities.conversions
+          ? _transport.conversionRoutes()
+          : Future.value(<CryptoRoute>[]),
       _transport.history(limit: 50),
     ]);
     final depositRoutes = resources[0] as List<CryptoRoute>;
@@ -90,10 +106,23 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
 
     final selected = _initialSelectedCode(depositRoutes, history);
     final balances = <String, String>{};
-    if (selected != null) {
-      final result = await _transport.balance(selected);
-      balances[result.providerCode] = result.amount;
+    // Bound parallel balance reads; one unavailable asset never hides others.
+    for (var start = 0; start < depositRoutes.length; start += 4) {
+      if (epoch != _epoch) throw StateError('Wallet account changed');
+      final batch = depositRoutes.skip(start).take(4);
+      await Future.wait(
+        batch.map((route) async {
+          try {
+            final result = await _transport.balance(route.providerCode);
+            if (epoch == _epoch && result.providerCode == route.providerCode)
+              balances[result.providerCode] = result.amount;
+          } catch (_) {
+            /* No fabricated zero on unavailable balance. */
+          }
+        }),
+      );
     }
+    if (epoch != _epoch) throw StateError('Wallet account changed');
 
     return CryptoWalletSnapshot(
       capabilities: capabilities,
@@ -119,8 +148,10 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   }
 
   Future<void> refresh() async {
+    final epoch = ++_epoch;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final value = await AsyncValue.guard(_load);
+    if (epoch == _epoch) state = value;
   }
 
   Future<void> selectAsset(String providerCode) async {
@@ -141,10 +172,14 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     if (current == null) return;
     final code = (providerCode ?? current.selectedProviderCode)?.trim();
     if (code == null || code.isEmpty) return;
+    final epoch = _epoch;
     final balance = await _transport.balance(code);
-    final balances = Map<String, String>.from(current.balances)
+    if (epoch != _epoch || balance.providerCode != code) return;
+    final latest = state.valueOrNull;
+    if (latest == null) return;
+    final balances = Map<String, String>.from(latest.balances)
       ..[balance.providerCode] = balance.amount;
-    state = AsyncData(current.copyWith(balances: Map.unmodifiable(balances)));
+    state = AsyncData(latest.copyWith(balances: Map.unmodifiable(balances)));
   }
 
   Future<CryptoIntent> createDeposit({
@@ -152,11 +187,13 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String providerCode,
     required String amount,
   }) async {
+    final owner = _owner();
     final result = await _transport.createDeposit(
       requestId: requestId,
       providerCode: providerCode,
       amount: amount,
     );
+    _checkOwner(owner);
     await _mergeOperation(result, refreshBalance: false);
     return result;
   }
@@ -166,22 +203,30 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String fiatAmount,
     required String fiatCurrency,
   }) async {
+    final owner = _owner();
     final result = await _transport.createFiatPurchase(
       requestId: requestId,
       fiatAmount: fiatAmount,
       fiatCurrency: fiatCurrency,
     );
+    _checkOwner(owner);
     final intent = await _transport.intent(requestId);
+    _checkOwner(owner);
     if (intent != null) {
+      _checkOwner(owner);
       await _mergeOperation(intent, refreshBalance: false);
     }
     return result;
   }
 
   Future<CryptoFiatPurchase> refreshFiatPurchase(String requestId) async {
+    final owner = _owner();
     final purchase = await _transport.refreshFiatPurchase(requestId);
+    _checkOwner(owner);
     final refreshed = await _transport.intent(requestId);
+    _checkOwner(owner);
     if (refreshed != null) {
+      _checkOwner(owner);
       await _mergeOperation(
         refreshed,
         refreshBalance:
@@ -211,6 +256,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String destinationAddress,
     String? stepUpToken,
   }) async {
+    final owner = _owner();
     final result = await _transport.createWithdrawal(
       requestId: requestId,
       providerCode: providerCode,
@@ -218,6 +264,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       destinationAddress: destinationAddress,
       stepUpToken: stepUpToken,
     );
+    _checkOwner(owner);
     await _mergeOperation(result, refreshBalance: true);
     return result;
   }
@@ -240,20 +287,25 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String targetProviderCode,
     required String amount,
   }) async {
+    final owner = _owner();
     final result = await _transport.createConversion(
       requestId: requestId,
       providerCode: providerCode,
       targetProviderCode: targetProviderCode,
       amount: amount,
     );
+    _checkOwner(owner);
     await _mergeOperation(result, refreshBalance: true);
     return result;
   }
 
   Future<CryptoIntent> refreshOperation(CryptoIntent intent) async {
+    final owner = _owner();
     if (intent.operation == 'buy') {
       final purchase = await _transport.refreshFiatPurchase(intent.requestId);
+      _checkOwner(owner);
       final refreshed = await _transport.intent(intent.requestId) ?? intent;
+      _checkOwner(owner);
       await _mergeOperation(
         refreshed,
         refreshBalance:
@@ -268,6 +320,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       'convert' => await _transport.refreshConversion(intent.requestId),
       _ => await _transport.intent(intent.requestId) ?? intent,
     };
+    _checkOwner(owner);
     await _mergeOperation(refreshed, refreshBalance: refreshed.terminal);
     return refreshed;
   }
@@ -276,6 +329,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     CryptoIntent intent, {
     required bool refreshBalance,
   }) async {
+    final owner = _owner();
     final current = state.valueOrNull;
     if (current == null) return;
 
@@ -293,23 +347,29 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         intent.asset,
         if (intent.targetAsset != null) intent.targetAsset!,
       };
-      final balances = Map<String, String>.from(next.balances);
+      final balances = <String, String>{};
       for (final code in codes) {
         try {
           final balance = await _transport.balance(code);
+          if (owner != _owner() || balance.providerCode != code) return;
           balances[balance.providerCode] = balance.amount;
         } catch (_) {
           // The transaction result remains useful even if a balance refresh
           // races provider reconciliation or a route becomes temporarily unavailable.
         }
       }
-      next = next.copyWith(balances: Map.unmodifiable(balances));
+      if (owner != _owner()) return;
+      final latest = state.valueOrNull;
+      if (latest == null) return;
+      next = latest.copyWith(
+        balances: Map.unmodifiable({...latest.balances, ...balances}),
+      );
       state = AsyncData(next);
     }
   }
 }
 
-final cryptoWalletProvider = AsyncNotifierProvider<
-    CryptoWalletController, CryptoWalletSnapshot>(
-  CryptoWalletController.new,
-);
+final cryptoWalletProvider =
+    AsyncNotifierProvider<CryptoWalletController, CryptoWalletSnapshot>(
+      CryptoWalletController.new,
+    );

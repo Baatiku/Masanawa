@@ -11,13 +11,13 @@ import 'wallet_step_up_page.dart';
 import '../core/request_id.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
-import '../tokens/masanawa_tokens.dart';
 import 'crypto_models.dart';
 import 'crypto_state.dart';
 
 class CryptoWalletScreen extends ConsumerStatefulWidget {
-  const CryptoWalletScreen({super.key, this.embedded = false});
+  const CryptoWalletScreen({super.key, this.embedded = false,this.initialProviderCode});
   final bool embedded;
+  final String? initialProviderCode;
 
   static String operationTitle(String operation) {
     switch (operation) {
@@ -484,7 +484,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       final nextAccount = next is SessionSignedIn ? next.user.id : null;
       if (previousAccount != nextAccount) _clearDrafts();
     });
-    final wallet = ref.watch(cryptoWalletProvider);
+    final wallet = ref.watch(cryptoWalletProvider).whenData((data)=>widget.initialProviderCode==null?data:data.copyWith(selectedProviderCode:widget.initialProviderCode));
     final u = context.masanawa;
     final content = wallet.when(
       loading: () => const MasanawaListSkeleton(semanticLabel: 'Loading crypto wallet'),
@@ -496,12 +496,11 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
-              _AssetList(
+              if(widget.initialProviderCode==null) _AssetList(
                 wallet: data,
-                onSelected: (value) {
-                  ref.read(cryptoWalletProvider.notifier).selectAsset(value);
-                },
+                onSelected: (value) => Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>CryptoWalletScreen(initialProviderCode:value))),
               ),
+              if(widget.initialProviderCode!=null)...[
               const SizedBox(height: 10),
               _BalanceSummary(
                 wallet: data,
@@ -539,6 +538,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
                     : null,
               ),
 
+              ],
               const SizedBox(height: 22),
               Text(
                 'Activity',
@@ -553,7 +553,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
                 _EmptyHistory(color: u.textMuted)
               else
                 _ActivityList(
-                  history: data.history,
+                  history: widget.initialProviderCode==null?data.history:data.history.where((entry)=>entry.asset==widget.initialProviderCode||entry.targetAsset==widget.initialProviderCode).toList(),
                   onRefresh: (intent) => _refreshIntent(context, ref, intent),
                 ),
             ],
@@ -572,7 +572,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         foregroundColor: u.textPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Crypto Wallet'),
+        title: Text(widget.initialProviderCode==null?'Crypto assets':wallet.valueOrNull?.selectedRoute?.label??'Asset details'),
         actions: [
           IconButton(
             tooltip: 'Refresh wallet',
@@ -595,26 +595,10 @@ class _AssetList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (wallet.depositRoutes.isEmpty) return const SizedBox.shrink();
-    return RadioGroup<String>(
-      groupValue: wallet.selectedProviderCode,
-      onChanged: (value) {
-        if (value != null) onSelected(value);
-      },
-      child: Column(
-        children: [
-          for (final route in wallet.depositRoutes)
-            RadioListTile<String>(
-              value: route.providerCode,
-              contentPadding: EdgeInsets.zero,
-              title: Text(route.label),
-              subtitle: wallet.balances[route.providerCode] == null
-                  ? null
-                  : Text(wallet.balances[route.providerCode]!),
-              dense: true,
-            ),
-        ],
-      ),
-    );
+    return Column(children:[for(final route in wallet.depositRoutes)ListTile(
+      contentPadding:EdgeInsets.zero,leading:CircleAvatar(child:Text(route.asset.substring(0,1))),title:Text(route.asset,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:route.network==null?null:Text(route.network!),
+      trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text(wallet.balances[route.providerCode]??'—'),const SizedBox(width:8),const Icon(Icons.chevron_right,size:18)]),onTap:()=>onSelected(route.providerCode),
+    )]);
   }
 }
 
@@ -692,45 +676,6 @@ class _CryptoActions extends StatelessWidget {
         icon: Icon(icon, size: 18),
         label: Text(label),
       );
-}
-
-class _CapabilityNotice extends StatelessWidget {
-  const _CapabilityNotice({required this.capabilities});
-  final CryptoCapabilities capabilities;
-
-  @override
-  Widget build(BuildContext context) {
-    final u = context.masanawa;
-    final messages = <String>[
-      if (!capabilities.fiatOnRamp)
-        'Buy with fiat is not available until the provider on-ramp is activated.',
-      if (!capabilities.conversions)
-        'Conversions are not currently qualified for this account.',
-      if (!capabilities.withdrawals)
-        'Withdrawals are not currently qualified for this account.',
-    ];
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: u.surfaceMuted,
-        borderRadius: BorderRadius.circular(MasanawaTokens.radius['lg']!),
-        border: Border.all(color: u.structuralBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.shield_outlined, color: u.brand, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              messages.join(' '),
-              style: TextStyle(color: u.textMuted, height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ActivityList extends StatelessWidget {
@@ -1046,7 +991,7 @@ class _BuySheetState extends State<_BuySheet> {
     return _SheetScaffold(
       title: 'Buy crypto',
       children: [
-        DropdownButtonFormField<String>(
+        WalletSelectionField<String>(
           initialValue: _currency,
           decoration: const InputDecoration(labelText: 'Pay with'),
           items: [
@@ -1060,13 +1005,9 @@ class _BuySheetState extends State<_BuySheet> {
         const SizedBox(height: 12),
         _AmountField(controller: _amount, label: 'Fiat amount'),
         const SizedBox(height: 12),
-        Text(
-          'Your purchase settles as ${widget.settlementAsset} in your Masanawa wallet. You can convert it after settlement.',
-        ),
+        _SummaryRow(label:'Receive',value:widget.settlementAsset),
         const SizedBox(height: 8),
-        const Text(
-          'The secure payment partner may require identity verification before accepting a fiat purchase.',
-        ),
+
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: () {
@@ -1164,7 +1105,7 @@ class _ConvertSheetState extends State<_ConvertSheet> {
       children: [
         _AmountField(controller: _amount),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        WalletSelectionField<String>(
           initialValue: _target,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Convert to'),
@@ -1356,4 +1297,3 @@ class _WithdrawInput {
   final String amount;
   final String address;
 }
-

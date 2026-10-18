@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../finance/identity_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -308,6 +309,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                         ),
                       const SizedBox(height: 22),
+                      ListTile(contentPadding:EdgeInsets.zero,leading:const Icon(Icons.verified_user_outlined),title:const Text('Identity details'),trailing:const Icon(Icons.chevron_right),onTap:_saving?null:()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>const IdentityDetailsScreen()))),
+                      const Divider(),
                       TextFormField(
                         key: const ValueKey('profile-edit-name'),
                         controller: _name,

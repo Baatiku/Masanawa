@@ -145,3 +145,70 @@ Execute relevant tests; review, commit, push and merge compatible source
 normally. Record exact SHAs, PR, results and gaps; release ownership and
 print the next queue-aware continuation prompt directly.
 ```
+
+
+---
+
+# Wallet owner redesign — 2026-10-18
+
+Base: ccf1a2d18293d9574b748f8b739c712d5b06fae4. Source implementation in progress; no APK build.
+
+## Screen and journey contract
+
+All screens use the existing Masanawa primary brand token, white surfaces, charcoal text, 48px controls, concise headings and field labels. No section descriptions. Error/status messages, payment amounts, fees, network labels and explicit authorization remain visible when relevant.
+
+| Screen | Layout and controls | Journey and states |
+|---|---|---|
+| Wallet | Primary-color MSNW balance card, hide/refresh/Fund; Send/Convert/Receive/P2P row; compact bill shortcuts; My assets/Transactions; real token/network balance rows | Existing canonical custody read; authenticated only; zero only from confirmed zero, unavailable shown as dash/retry; independent crypto error cannot hide services or MSNW; preserve tabs and history |
+| Asset details | Asset/network identity, actual balance, Deposit/Withdraw/Convert/Buy actions, asset activity | Tap wallet row opens full page, never a radio selection list; capability/fee/quote/idempotency contracts unchanged; failed reads retry, never invented balances |
+| Fund wallet | Bank transfer account/status; copy number; concise verification action | No personal-details form. Identity needed links to full Identity details page; return refreshes status. Consent is explicit before requesting account; pending payment/backing stays pending |
+| Identity details | Profile entry, state badge, legal name/email/phone prefilled from existing owner data; verified fields locked; missing fields editable; BVN/personal bank details and consent only when required | Owner-authorized existing enrollment API; no BVN returned or saved in local preferences; loading/retry/validation/pending/verified states; account change clears old data; uncertain submission requires status refresh |
+| Bills | Service/category, provider/product selector, recipient, amount, full-screen review and receipt | Data/Airtime/Electricity/TV shortcuts; current MSNW checkout and purchase recovery unchanged; compact inline errors |
+| P2P | Buy/My offers/Orders/Alerts, compact offer rows; full bank verification, sell offer, order/release/dispute/evidence/receipt pages | Existing owner, quote, escrow and step-up authority unchanged; release requires explicit verified-payment acknowledgment; no descriptive section copy |
+| Transactions | Existing full history/filter/search/export/detail | All platform sources preserved; loading, empty, offline retry and account fencing |
+
+No new provider, payment rail, financial ledger, global theme or infrastructure. Existing Flutter/Riverpod/Dio contracts are retained (no new runtime cost). Binance's asset overview → deposit/withdraw → history pattern is adopted without its extra wallet subdivisions. OPay's profile/KYC separation is adopted without copying branding.
+
+References reviewed 2026-10-18: https://www.binance.com/en/academy/articles/your-guide-to-binance-deposit-withdrawal ; https://static.opayweb.com/privacy-policy . Product choices above are our design decisions, not claims about exact competitor screens.
+
+## Verification
+
+Pending scoped Flutter widget/controller/transport tests, analyzer and visual review. Financial/provider/device qualification is separate. Preserve prior wallet/history protections and no APK compilation.
+
+## Owner expansion — sections 12–16 (2026-10-18)
+
+Keep important behavior and existing implementations; inspect source before replacing anything. Statuses describe implementation, not financial qualification. No section descriptions, mandatory tutorials, speculative trading, extra wallet subdivisions or repeated identity forms. Necessary consent, fees, network warnings and irreversible authorization remain concise and contextual. Saved addresses/recipients are optional.
+
+- [ ] 12.1–4 Confirmed zero vs unavailable; available/reserved/pending separated; balanced card; first-use Fund. Never sum pending fiat or external addresses into spendable MSNW.
+- [ ] 12.5 Supported asset rows with network, real balances and detail destinations.
+- [ ] 12.6–8 Server-side reference/recipient/description/asset search; date/category/status/asset/direction/amount filters; date grouping and incoming/outgoing clarity. Extend actual gaps.
+- [ ] 12.9–10 Receipts: gross/fee/net/reference/provider/time/status; concise pending/reserved/processing/reversal/refund/failure status at point of need.
+- [ ] 12.11–12 Preserve CSV/PDF; date presets/filenames and contextual reference-linked help/disputes through existing support.
+- [ ] 13.1–4 Actual chain/contract/custody signer authority/backed issuance and supply/reserve/customer-obligation reconciliation; missing composition/recovery without fabricated deployment or keys.
+- [ ] 13.5–7 Enrollment → assigned account → verified payment → qualified backing/issuance → settled balance; actual lifecycle/minimum/charges supplied by server. KYC in profile; compact funding receipt.
+- [ ] 13.8–12 One authorized custody balance for Send/P2P/bills/conversions; idempotent mint/burn and uncertain recovery; reversals/chargebacks; historical obligations preserved; genuine NGN/fee/rate/issued-MSNW receipt.
+- [ ] 14.1–4 Provider-supported assets/networks, confirmation/credit tracking, conversion/liquidity/limits and authorized/whitelisted payouts. No assumed executable routes.
+- [ ] 14.5–8 Distinct networks; address/copy/QR/minimum/contextual wrong-network warning; source/net/fees/price/expiry quote; full destination/net/fee review and final authorization.
+- [ ] 14.9–11 Optional verified-address book with existing security, original-payout recovery and verified chain explorer links only for actual references.
+- [ ] 15.1 Dedicated P2P pages/choices/reviews; preserve bank, step-up, escrow, dispute, evidence and receipts.
+- [ ] 15.2–4 Legitimate funded order escrow, verified method bound to offer, no release on screenshot/claim. Preserve order reservation; never double-reserve offer inventory and orders.
+- [ ] 15.5–9 Offer rate/range/availability/eligibility; progress and authoritative deadline; copyable order-bound bank; explicit actual-receipt seller authorization.
+- [ ] 15.10–13 Authorized evidence-based dispute freeze/release/refund; late-payment appeal without automatic reopening; contextual safety prompts; active/completed/expired/disputed activity and receipts.
+- [ ] 16.1–2 MSNW reservation → live catalog → fulfillment/reconciliation; supported products only.
+- [ ] 16.3–6 Airtime number/operator/amount; data size/validity/network/cost; electricity meter/customer validation/token; TV customer/package/renewal validation.
+- [ ] 16.7–10 Optional recent/saved recipients, exact fees/totals, original uncertain-request recovery, detailed receipts and reference-linked support.
+
+Order: finish current wallet/profile/full-screen source and checks, then history/receipts/P2P/billing gaps, then financial composition. External chain/provider/custody execution needs real available authority. No APK build.
+
+
+## Implemented source and evidence — current owner redesign
+
+- Wallet now uses the existing primary brand token, contrasted text, compact clickable service/actions, real per-network balances, zero/unavailable separation and account-scoped Hide across balances. Reserved funds never read as an empty wallet. The MSNW asset row reuses the verified card response rather than issuing a second balance read.
+- Profile → Identity details is separate from funding. Existing legal/contact data is projected by the authenticated enrollment API with editability; canonical contacts and committed verified identity stay protected. A searchable bank choice replaces raw bank-code entry. BVN/account inputs clear on submission and are absent from reads/local caches. Uncertain submissions require status recovery.
+- Crypto/bank/billing/history/export choices use full-screen searchable pages. Asset rows open a dedicated asset view rather than a radio list. App-generated financial dialogs/sheets were not introduced. Existing quote/consent/idempotency/step-up and native system share controls remain.
+- Preserved history filters, cursor pages and CSV/PDF exports; added UTC presets and dated filenames; removed export section descriptions and fixed Copy reference to the real receipt reference.
+- Fixed pre-existing malformed duplicate P2P tail and missing WalletStepUpPage closing brace while retaining their complete first implementations/security.
+- Tests: enrollment service/authenticated HTTP 7 passed; strict TypeScript passed. Final Wallet/identity/P2P/balance/history batch 20 passed; additional crypto transport/model and profile regression checks passed (22). Rendered and inspected Wallet at 360px. No physical Android/provider/production qualification or APK compilation is claimed.
+- Owner sections 12–16 remain the checklist above; this delivery closes the current redesign, not token deployment/custody/funding activation or every financial item. Next: trace and implement actual missing server history filters/receipt/support and P2P progress/deadlines/payment-detail UX, then provider/financial authority composition.
+
+Final review additionally fenced late crypto operation results and concurrent balance refreshes against account changes; a delayed operation cannot enter another account history or submit a second time. Three controller tests passed. Final scoped evidence totals 43 unique Flutter checks and seven backend checks; the 84 analyzer findings are style infos, zero errors/warnings. Hosted Foundation CI failed before runner allocation (runner empty, no steps), not a passing CI run.

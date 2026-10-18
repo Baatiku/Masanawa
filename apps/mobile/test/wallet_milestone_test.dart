@@ -17,6 +17,12 @@ class _Adapter implements HttpClientAdapter {
 }
 ResponseBody _json(String s)=>ResponseBody.fromString(s,200,headers:{Headers.contentTypeHeader:[Headers.jsonContentType]});
 void main(){
+  test('statement presets use inclusive UTC dates across year boundaries',(){
+    final now=DateTime.utc(2026,1,4,23);
+    expect(walletStatementRange('Last 7 days',now:now),{'from':'2025-12-29','to':'2026-01-04'});
+    expect(walletStatementRange('Last month',now:now),{'from':'2025-12-01','to':'2025-12-31'});
+    expect(walletStatementRange('Current filters',now:now),isEmpty);
+  });
   test('custody validates asset, scope and exact unsigned atomic values',(){
     final b=MsnwCustodyBalance.fromJson({'asset':'MSNW','scope':'platform_custody','availableMicro':'1000001','reservedMicro':'2000000'});
     expect(formatWalletAtomic(b.available),'1.000001');
@@ -36,7 +42,7 @@ void main(){
       dio:dio,baseUrl:'https://test',accountId:'a',currentUserId:()=>'a',accessToken:()=>'token',onFund:()=>funded++))));
     await tester.pumpAndSettle();
     expect(paths,['https://test/v1/wallet/msnw/custody']);
-    expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('Add money to get started'),findsOneWidget);
+    expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('No funds yet'),findsOneWidget);
     await tester.tap(find.text('Fund'));expect(funded,1);
     await tester.tap(find.byTooltip('Hide balance'));await tester.pump();
     expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••••'),findsOneWidget);

@@ -22,9 +22,15 @@ export function registerMsnwPaystackEnrollmentRoutes(
     return { error: error instanceof MsnwEnrollmentError
       ? error.code : "funding.enrollment_unavailable" };
   }
+  app.get('/v1/wallet/msnw/funding/enrollment/banks',async(request,reply)=>{
+    try{reply.header('Cache-Control','no-store');await session(request.headers.authorization);return {banks:await service.banks()};}
+    catch(error){return fail(reply,error);}
+  });
   app.get("/v1/wallet/msnw/funding/enrollment", async (request, reply) => {
     try {
-      return await service.read(await session(request.headers.authorization));
+      reply.header('Cache-Control','no-store');
+      const identity=await session(request.headers.authorization);
+      return {...await service.read(identity),profile:await service.profile(identity)};
     } catch (error) { return fail(reply, error); }
   });
   app.post("/v1/wallet/msnw/funding/enrollment", {

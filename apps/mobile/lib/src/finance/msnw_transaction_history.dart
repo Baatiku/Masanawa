@@ -223,7 +223,7 @@ class WalletTransactionDetails extends StatelessWidget {
         'Created':e.createdAt?.toLocal().toString()??'Not provided',...e.details}.entries)
         Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(field.key,style:Theme.of(context).textTheme.labelMedium),const SizedBox(height:4),SelectableText(field.value)])),
-      OutlinedButton.icon(onPressed:()async{if(authorized())await Clipboard.setData(ClipboardData(text:e.id));},
+      OutlinedButton.icon(onPressed:()async{if(authorized())await Clipboard.setData(ClipboardData(text:e.details['Reference']??e.id));},
         icon:const Icon(Icons.copy),label:const Text('Copy reference')),
     ]);
   }
@@ -249,10 +249,10 @@ class _FilterState extends State<_FilterPage> {
     Navigator.pop(context,WalletHistoryFilter(category:category,status:status,from:a,to:b));
   }
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
-    DropdownButtonFormField<String>(initialValue:category,decoration:const InputDecoration(labelText:'Transaction type'),
+    WalletSelectionField<String>(initialValue:category,decoration:const InputDecoration(labelText:'Transaction type'),
       items:['All',..._HistoryState.categories].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>category=v!)),
     const SizedBox(height:20),
-    DropdownButtonFormField<String>(initialValue:status,decoration:const InputDecoration(labelText:'Status'),
+    WalletSelectionField<String>(initialValue:status,decoration:const InputDecoration(labelText:'Status'),
       items:['All','Completed','Pending','Failed'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>status=v!)),
     const SizedBox(height:20),TextField(controller:from,decoration:const InputDecoration(labelText:'From (UTC)',hintText:'YYYY-MM-DD')),
     const SizedBox(height:20),TextField(controller:to,decoration:const InputDecoration(labelText:'To (UTC)',hintText:'YYYY-MM-DD')),
@@ -273,7 +273,8 @@ class _ExportPage extends StatefulWidget {
 }
 class _ExportState extends State<_ExportPage> {
   bool busy=false;
-  String format='csv';
+  String format='csv',range='Current filters';
+  Map<String,String> get effectiveQuery=>{...widget.query,...walletStatementRange(range)};
   String? error;
   Future<void> share() async {
     if(busy||!widget.authorized())return;
@@ -282,7 +283,7 @@ class _ExportState extends State<_ExportPage> {
     try {
       final response=await widget.dio.get<List<int>>(
         '${widget.baseUrl.replaceFirst(RegExp(r'/$'),'')}/v1/wallet/msnw/activity/export',
-        queryParameters:{...widget.query,'format':format},
+        queryParameters:{...effectiveQuery,'format':format},
         options:Options(headers:{'Authorization':'Bearer $token','Cache-Control':'no-store'},
           responseType:ResponseType.bytes,followRedirects:false,receiveTimeout:const Duration(seconds:30)));
       if(!mounted||!widget.authorized()||widget.accessToken()!=token)return;
@@ -290,7 +291,7 @@ class _ExportState extends State<_ExportPage> {
       if(bytes==null||bytes.isEmpty||bytes.length>8000000||
         !response.headers.value('content-type').toString().startsWith(format=='csv'?'text/csv':'application/pdf'))throw const FormatException('Invalid statement');
       await SharePlus.instance.share(ShareParams(files:[XFile.fromData(Uint8List.fromList(bytes),mimeType:format=='csv'?'text/csv':'application/pdf')],
-        fileNameOverrides:['masanawa-transactions.$format'],title:'Masanawa transactions'));
+        fileNameOverrides:['masanawa-transactions-${effectiveQuery['from']??'all'}-${effectiveQuery['to']??DateTime.now().toUtc().toIso8601String().substring(0,10)}.$format'],title:'Masanawa transactions'));
     } catch(failure) {
       if(mounted&&widget.authorized())setState(()=>error=failure is DioException&&failure.response?.statusCode==413?
         'Too many transactions match this format. Choose a smaller date range.':'Couldn’t export transactions. Please retry.');
@@ -299,13 +300,29 @@ class _ExportState extends State<_ExportPage> {
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(24),children:[
     const Icon(Icons.description_outlined,size:48),const SizedBox(height:20),
     Text('All matching transactions',style:Theme.of(context).textTheme.titleLarge),
-    const SizedBox(height:12),const Text('Exact amounts · UTC timestamps'),
-    const SizedBox(height:20),DropdownButtonFormField<String>(initialValue:format,decoration:const InputDecoration(labelText:'File format'),
+    const SizedBox(height:20),WalletSelectionField<String>(initialValue:range,decoration:const InputDecoration(labelText:'Date range'),items:[for(final label in ['Current filters','Today','Last 7 days','This month','Last month'])DropdownMenuItem(value:label,child:Text(label))],onChanged:busy?null:(value)=>setState(()=>range=value!)),
+    const SizedBox(height:12),Text('${effectiveQuery['from']??'All dates'} → ${effectiveQuery['to']??'Today'}'),
+    const SizedBox(height:20),WalletSelectionField<String>(initialValue:format,decoration:const InputDecoration(labelText:'File format'),
       items:const [DropdownMenuItem(value:'csv',child:Text('CSV spreadsheet')),DropdownMenuItem(value:'pdf',child:Text('PDF statement'))],
       onChanged:busy?null:(value)=>setState(()=>format=value!)),
-    const SizedBox(height:12),const Text('Includes every transaction matching your filters, including pages you haven’t loaded. Up to 10,000 records in CSV or 1,000 in PDF. Use a date range for larger histories.'),
+
     const SizedBox(height:24),if(error!=null)Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
     if(busy)const LinearProgressIndicator(),
     FilledButton.icon(onPressed:busy?null:share,icon:const Icon(Icons.ios_share),label:const Text('Save or share statement')),
   ]);
+}
+
+/// Inclusive UTC date filters accepted by the canonical statement endpoint.
+Map<String,String> walletStatementRange(String preset,{DateTime? now}){
+ final day=(now??DateTime.now()).toUtc();
+ final today=DateTime.utc(day.year,day.month,day.day);
+ String date(DateTime d)=>d.toIso8601String().substring(0,10);
+ final start=switch(preset){
+  'Today'=>today,'Last 7 days'=>today.subtract(const Duration(days:6)),
+  'This month'=>DateTime.utc(day.year,day.month),
+  'Last month'=>DateTime.utc(day.year,day.month-1),_=>null,
+ };
+ if(start==null)return {};
+ final end=preset=='Last month'?DateTime.utc(day.year,day.month).subtract(const Duration(days:1)):today;
+ return {'from':date(start),'to':date(end)};
 }

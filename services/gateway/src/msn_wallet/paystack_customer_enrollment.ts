@@ -15,7 +15,9 @@ type Row = { state: string; email: string; phone: string; legal_name: string;
 type Customer = { id: string; code: string; identified: boolean };
 export interface MsnwPaystackEnrollmentService {
   readonly sessions: PlatformCustomerSessionAuthorizer;
+  banks(): Promise<readonly {name:string;code:string}[]>;
   read(identity: Identity): Promise<EnrollmentStatus>;
+  profile(identity: Identity): Promise<{legalName:string;email:string;phone:string;legalNameEditable:boolean;emailEditable:boolean;phoneEditable:boolean}>;
   submit(identity: Identity, body: unknown): Promise<EnrollmentStatus>;
   handleProviderIdentification(eventName: "customeridentification.success" | "customeridentification.failed", data: unknown): Promise<boolean>;
 }
@@ -175,6 +177,25 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
 
   return Object.freeze({
     sessions: input.sessions, read,
+    async banks(){
+      const value=await api('/bank?country=nigeria');
+      if(!Array.isArray(value))throw new MsnwEnrollmentError('funding.banks_unavailable');
+      return value.filter((item):item is {name:string;code:string;active?:boolean}=>
+        item!==null&&typeof item==='object'&&typeof item.name==='string'&&typeof item.code==='string'&&/^[0-9]{3,6}$/.test(item.code)&&item.active!==false)
+        .map(item=>({name:item.name,code:item.code}));
+    },
+    async profile(identity: Identity) {
+      const record=await load(identity);
+      if(record)assertStoredIdentity(identity,record);
+      return {
+        legalName:record?.legal_name??identity.profile.name,
+        email:record?.email??identity.profile.email??'',
+        phone:record?.phone??identity.profile.phone??'',
+        legalNameEditable:record===null,
+        emailEditable:record===null&&!identity.profile.email,
+        phoneEditable:record===null&&!identity.profile.phone,
+      };
+    },
     async handleProviderIdentification(
       eventName: "customeridentification.success" | "customeridentification.failed",
       data: unknown,

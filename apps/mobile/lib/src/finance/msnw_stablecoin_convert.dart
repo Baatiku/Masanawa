@@ -177,9 +177,9 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
           Text('Convert MSNW to crypto',
             style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:8),
-          const Text('Choose your crypto asset and network, then review the amount and fees.'),
+
           const SizedBox(height:10),
-          DropdownButtonFormField<String>(
+          WalletSelectionField<String>(
             value:providerCode,
             items:const [
               DropdownMenuItem(value:'USDTTRC20',child:Text('USDT · Tron TRC20')),
@@ -239,4 +239,3 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
     ),
   );
 }
-

@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_wallet_home.dart';
+import '../../finance/wallet_asset_overview.dart';
 import '../../finance/msnw_transaction_history.dart';
 import '../../finance/wallet_flow_page.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
@@ -16,7 +17,6 @@ import '../../finance/msnw_stablecoin_convert.dart';
 import '../../finance/msnw_p2p_screen.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
-import '../../ui/components/masanawa_main_header.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 
 /// Historical credit ledger compatibility only. Never expose a second
@@ -88,6 +88,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   // query, list position and in-flight loading state mounted when switching.
   final Set<int> _visitedWalletTabs = <int>{0};
   int _custodyRefresh = 0;
+  MsnwCustodyBalance? _balance;
+  String? _balanceOwner;
+  bool _hideBalances=false;
+  String? _hiddenOwner;
 
   Future<void> _sendMsnw() async {
     final session = ref.read(sessionProvider);
@@ -249,12 +253,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               currentUserId: () => switch (ref.read(sessionProvider)) {
                 SessionSignedIn(:final user) => user.id, _ => null,
               }, accessToken: () => ref.read(apiClientProvider).accessToken,
-              onFund: _fund),
+              onFund: _fund,
+              onVisibilityChanged:(hidden)=>setState((){_hiddenOwner=accountId;_hideBalances=hidden;}),
+              onBalance:(value){if(mounted&&accountId==switch(ref.read(sessionProvider)){SessionSignedIn(:final user)=>user.id,_=>null})setState((){_balance=value;_balanceOwner=accountId;});}),
             const SizedBox(height: 24),
             WalletActionRow(onSend: accountId == null ? null : _sendMsnw,
               onConvert: accountId == null ? null : _convertMsnw,
               onReceive: accountId == null ? null : _receive,
               onP2p: accountId == null ? null : _openP2p),
+            const SizedBox(height: 24),
+            WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
+              onOpenBillingService: widget.onOpenBillingService),
             const SizedBox(height: 24),
             _tabs(),
             const SizedBox(height: 12),
@@ -263,16 +272,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 child: Text('M', style: TextStyle(color: u.brandStrong, fontWeight: FontWeight.w800))),
               title: const Text('MSNW', style: TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('Masanawa'),
-              trailing: const Icon(Icons.chevron_right), onTap: _receive),
+              trailing: Row(mainAxisSize:MainAxisSize.min,children:[Text(_hiddenOwner==accountId&&_hideBalances?'••••':_balanceOwner==accountId&&_balance!=null?formatWalletAtomic(_balance!.available):'—',style:const TextStyle(fontWeight:FontWeight.w600)),const SizedBox(width:8),const Icon(Icons.chevron_right,size:18)]), onTap: _receive),
             Divider(height: 1, color: u.structuralBorder),
-            ListTile(contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(backgroundColor: u.surfaceMuted,
-                child: Icon(Icons.currency_bitcoin, color: u.textPrimary)),
-              title: const Text('Crypto assets', style: TextStyle(fontWeight: FontWeight.w700)),
-              trailing: const Icon(Icons.chevron_right), onTap: openCrypto),
-            const SizedBox(height: 12),
-            WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
-              onOpenBillingService: widget.onOpenBillingService),
+            WalletAssetOverview(hideBalances:_hiddenOwner==accountId&&_hideBalances),
+            ListTile(contentPadding:EdgeInsets.zero,title:const Text('All crypto assets'),trailing:const Icon(Icons.chevron_right),onTap:openCrypto),
           ]),
           _visitedWalletTabs.contains(1) ? Column(children: [
             Padding(padding: const EdgeInsets.symmetric(horizontal:16), child:_tabs()),
@@ -365,22 +368,15 @@ class WalletServiceShortcuts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final billing = onOpenBillingService ?? (String service) => context.push('/billing?service=$service');
-    return Column(children: [
-      ...[
-        for (final service in [
-          ('data', 'Data bundles', Icons.bolt_outlined),
-          ('airtime', 'Airtime', Icons.phone_android),
-          ('electricity', 'Electricity', Icons.electric_bolt_outlined),
-          ('tv', 'TV', Icons.live_tv_outlined),
-        ]) ...[
-          Divider(height:1,color:context.masanawa.structuralBorder),
-          ListTile(contentPadding:EdgeInsets.zero,
-            leading:CircleAvatar(backgroundColor:context.masanawa.surfaceMuted,
-              child:Icon(service.$3,color:context.masanawa.textPrimary)),
-            title:Text(service.$2,style:const TextStyle(fontWeight:FontWeight.w600)),
-            trailing:const Icon(Icons.chevron_right),onTap:()=>billing(service.$1)),
-        ],
-      ],
+    final u=context.masanawa;
+    return Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      for(final service in [
+        ('data','Data bundles',Icons.wifi_outlined),('airtime','Airtime',Icons.phone_android),
+        ('electricity','Electricity',Icons.bolt_outlined),('tv','TV',Icons.live_tv_outlined),
+      ])Expanded(child:InkWell(borderRadius:BorderRadius.circular(12),onTap:()=>billing(service.$1),child:Padding(padding:const EdgeInsets.symmetric(vertical:4),child:Column(children:[
+        Container(width:52,height:52,decoration:BoxDecoration(color:u.surfaceMuted,borderRadius:BorderRadius.circular(16)),child:Icon(service.$3,color:u.textPrimary)),
+        const SizedBox(height:6),Text(service.$2,textAlign:TextAlign.center,style:const TextStyle(fontSize:12,fontWeight:FontWeight.w600)),
+      ])))),
     ]);
   }
 }
