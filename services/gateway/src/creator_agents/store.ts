@@ -243,7 +243,7 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
     if(item.state!=="draft"||item.revision!==expectedRevision||!item.generated)
       throw new CreatorAgentError("creator.publish_invalid");
     const free=await db.query("SELECT 1 FROM creator.first_free_publications WHERE tenant_id=$1 AND owner_user_id=$2",[owner.tenantId,owner.userId]);
-    if(!free.rowCount)throw new CreatorAgentError("creator.free_entitlement_available");
+    if(free.rows.length===0)throw new CreatorAgentError("creator.free_entitlement_available");
     const p=await db.query("SELECT revision,creation_msnw::text AS fee FROM creator.fee_policies WHERE tenant_id=$1 AND effective_at<=now() ORDER BY effective_at DESC,revision DESC LIMIT 1",[owner.tenantId]);
     const fee=p.rows[0]?.fee??"5000",policyRevision=Number(p.rows[0]?.revision??1);
     if(typeof fee!=="string"||!/^(0|[1-9][0-9]{0,35})$/u.test(fee)||!Number.isSafeInteger(policyRevision)||policyRevision<1)
@@ -304,7 +304,7 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
     if(op.request_hash!==sha([owner.tenantId,owner.userId,item.characterId,expectedRevision,amount,Number(op.policy_revision)]))
       throw new CreatorAgentError("creator.quote_payload_changed");
     const free=await db.query("SELECT 1 FROM creator.first_free_publications WHERE tenant_id=$1 AND owner_user_id=$2",[owner.tenantId,owner.userId]);
-    if(!free.rowCount)throw new CreatorAgentError("creator.free_entitlement_available");
+    if(free.rows.length===0)throw new CreatorAgentError("creator.free_entitlement_available");
     const fee=atomic(amount);let walletRef:string|null=null;
     if(fee>0n){
       const balance=await db.query("SELECT available_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE",[owner.tenantId,owner.userId]);
