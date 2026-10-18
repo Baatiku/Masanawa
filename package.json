@@ -29,16 +29,17 @@
     "alpha:prepare": "pnpm --filter @masanawa/gateway-service... build && pnpm alpha:bootstrap"
   },
   "devDependencies": {
-    "@types/node": "24.13.6",
-    "typescript": "7.0.2",
-    "vitest": "5.0.3",
+    "@electric-sql/pglite": "0.5.10",
+    "@masanawa/agents": "workspace:*",
     "@masanawa/contracts": "workspace:*",
+    "@masanawa/identity": "workspace:*",
+    "@masanawa/postgres": "workspace:*",
     "@masanawa/providers": "workspace:*",
     "@masanawa/security": "workspace:*",
-    "@masanawa/postgres": "workspace:*",
     "@masanawa/skills": "workspace:*",
     "@masanawa/tools": "workspace:*",
-    "@masanawa/agents": "workspace:*",
-    "@masanawa/identity": "workspace:*"
+    "@types/node": "24.13.6",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
   }
 }

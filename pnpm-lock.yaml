@@ -166,6 +166,9 @@ importers:
 
   .:
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.10
+        version: 0.5.10
       '@masanawa/agents':
         specifier: workspace:*
         version: link:packages/agents
@@ -204,15 +207,6 @@ importers:
 
   adapters/storage/postgres:
     dependencies:
-      '@masanawa/feed':
-        specifier: workspace:*
-        version: link:../../../packages/feed
-      '@masanawa/masana':
-        specifier: workspace:*
-        version: link:../../../packages/masana
-      '@masanawa/rooms':
-        specifier: workspace:*
-        version: link:../../../packages/rooms
       '@masanawa/agents':
         specifier: workspace:*
         version: link:../../../packages/agents
@@ -225,15 +219,24 @@ importers:
       '@masanawa/events':
         specifier: workspace:*
         version: link:../../../packages/events
+      '@masanawa/feed':
+        specifier: workspace:*
+        version: link:../../../packages/feed
       '@masanawa/identity':
         specifier: workspace:*
         version: link:../../../packages/identity
+      '@masanawa/masana':
+        specifier: workspace:*
+        version: link:../../../packages/masana
       '@masanawa/memory':
         specifier: workspace:*
         version: link:../../../packages/memory
       '@masanawa/providers':
         specifier: workspace:*
         version: link:../../../packages/providers
+      '@masanawa/rooms':
+        specifier: workspace:*
+        version: link:../../../packages/rooms
       '@masanawa/security':
         specifier: workspace:*
         version: link:../../../packages/security
@@ -378,23 +381,17 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@24.13.6)(vite@8.3.1(@types/node@24.13.6))
 
-  packages/masana:
-    devDependencies:
-      vitest:
-        specifier: 5.0.3
-        version: 5.0.3(@types/node@24.13.6)(vite@8.3.1(@types/node@24.13.6))
-
-  packages/rooms:
-    devDependencies:
-      vitest:
-        specifier: 5.0.3
-        version: 5.0.3(@types/node@24.13.6)(vite@8.3.1(@types/node@24.13.6))
-
   packages/identity:
     dependencies:
       '@masanawa/contracts':
         specifier: workspace:*
         version: link:../contracts
+    devDependencies:
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.13.6)(vite@8.3.1(@types/node@24.13.6))
+
+  packages/masana:
     devDependencies:
       vitest:
         specifier: 5.0.3
@@ -434,6 +431,12 @@ importers:
       '@masanawa/telemetry':
         specifier: workspace:*
         version: link:../telemetry
+    devDependencies:
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.13.6)(vite@8.3.1(@types/node@24.13.6))
+
+  packages/rooms:
     devDependencies:
       vitest:
         specifier: 5.0.3
@@ -680,6 +683,9 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@electric-sql/pglite@0.5.10':
+    resolution: {integrity: sha512-tXc/25U3ulOkiRQuTFdwIv+JhBqtMdAF7Gvo6CfZZWtSB4+hgC4Wr2vwK5ngvvN5PJfAAEGIsfyCVy1JhCOBYw==}
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -2060,6 +2066,8 @@ snapshots:
     dependencies:
       hashery: 1.5.1
       keyv: 5.6.0
+
+  '@electric-sql/pglite@0.5.10': {}
 
   '@emnapi/runtime@1.11.3':
     dependencies:
