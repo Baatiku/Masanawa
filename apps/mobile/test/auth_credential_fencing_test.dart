@@ -56,6 +56,55 @@ void main() {
     api.accessToken = token;
   }
 
+  test('private requests cannot send bearer or payload outside Gateway origin', () async {
+    login('fan-a', 'secret-a');
+    final result = api.dio.post(
+      'https://example.invalid/collect',
+      data: {'private': 'wallet-data'},
+    );
+    await expectLater(result, throwsA(isA<DioException>().having(
+      (e) => (e.error as ApiException).code,
+      'code', 'API_ORIGIN_NOT_ALLOWED')));
+    expect(adapter.requests, isEmpty);
+    expect(api.accessToken, 'secret-a');
+  });
+
+  test('private API requests do not follow credential-bearing redirects', () async {
+    login('fan-a', 'secret-a');
+    final result = api.dio.get('/v1/wallet/msnw/history');
+    await _flush();
+    expect(adapter.requests, hasLength(1));
+    expect(adapter.requests.single.followRedirects, isFalse);
+    adapter.complete(0, 302, data: {'location': 'https://example.invalid'});
+    await expectLater(result, throwsA(isA<DioException>()));
+    expect(adapter.requests, hasLength(1));
+  });
+
+  test('a stale-session 401 never silently resubmits a financial write', () async {
+    login('fan-a', 'a1');
+    var rotations = 0;
+    api.onUnauthorized = () async { rotations++; return 'a2'; };
+    final result = api.dio.post('/v1/wallet/msnw/custody/send',
+        data: {'amount': '1', 'requestId': 'one-time-request'});
+    await _flush();
+    expect(adapter.requests.single.headers['Authorization'], 'Bearer a1');
+    adapter.complete(0, 401, data: {'code': 'UNAUTHORIZED'});
+    await expectLater(result, throwsA(isA<DioException>()));
+    expect(adapter.requests, hasLength(1));
+    expect(rotations, 0);
+    expect(api.accessToken, 'a1');
+  });
+
+  test('nonfinancial mutations also require an explicit retry after 401', () async {
+    login('fan-a', 'a1');
+    api.onUnauthorized = () async => 'a2';
+    final result = api.dio.patch('/v1/account/profile', data: {'name': 'A'});
+    await _flush();
+    adapter.complete(0, 401, data: {'code': 'UNAUTHORIZED'});
+    await expectLater(result, throwsA(isA<DioException>()));
+    expect(adapter.requests, hasLength(1));
+  });
+
   test('old account success cannot read back after replacement', () async {
     login('fan-a', 'a1');
     final result = api.dio.get<Map<String, dynamic>>('/v1/chats');

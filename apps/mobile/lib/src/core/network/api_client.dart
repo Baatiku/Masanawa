@@ -38,13 +38,22 @@ class ApiClient {
     // Auth interceptor: (1) attaches the bearer token to every request from
     // `accessToken` (single source of truth — callers never set the header
     // themselves); (2) on a 401, asks [onUnauthorized] for a fresh token
-    // (the session controller rotates the refresh token), retries the request
-    // once, and otherwise lets the 401 surface as a normal session-expired
-    // error. Refresh/OTP endpoints never self-trigger a refresh (a dead
-    // refresh token must propagate so the session clears).
+    // (the session controller rotates the refresh token), retries only
+    // read-only requests once, and lets any write fail for explicit recovery.
+    // A 401 is not proof that a financial/provider write was never accepted.
+    // Refresh/OTP endpoints never self-trigger a refresh.
     dio.interceptors.add(
       QueuedInterceptorsWrapper(
         onRequest: (options, handler) {
+          // Only this configured Gateway may receive private payloads or bearer
+          // tokens. Absolute request URLs are not implicitly trustworthy.
+          if (!_isTrustedApiOrigin(options.uri)) {
+            handler.reject(_untrustedOrigin(options));
+            return;
+          }
+          // Never follow a 3xx response with credentials or private bodies to
+          // a different origin; the caller must explicitly handle redirects.
+          options.followRedirects = false;
           // A retry retains the original epoch. A queued request from A must
           // never be dispatched using B's bearer after an account switch.
           if (_isProtected(options.path)) {
@@ -85,7 +94,12 @@ class ApiClient {
             return;
           }
           final path = options.path;
-          final canRefresh = onUnauthorized != null &&
+          // No automatic replay of POST/PUT/PATCH/DELETE: a previously
+          // accepted mutation may still have yielded a stale-session 401.
+          final safeRead = options.method.toUpperCase() == 'GET' ||
+              options.method.toUpperCase() == 'HEAD';
+          final canRefresh = safeRead &&
+              onUnauthorized != null &&
               _isProtected(path) &&
               options.headers['Authorization'] is String &&
               !path.contains('/auth/refresh') &&
@@ -174,6 +188,26 @@ class ApiClient {
 
   bool _isProtected(String path) =>
       !path.startsWith('/auth/') && !path.startsWith('/v1/auth/');
+
+  bool _isTrustedApiOrigin(Uri uri) {
+    final base = Uri.tryParse(dio.options.baseUrl);
+    if (base == null) return false;
+    final secure = uri.scheme == 'https' && base.scheme == 'https';
+    final loopback = base.scheme == 'http' && uri.scheme == 'http' &&
+        (base.host == 'localhost' || base.host == '127.0.0.1' ||
+         base.host == '::1');
+    return (secure || loopback) && uri.host == base.host &&
+        uri.port == base.port && uri.userInfo.isEmpty;
+  }
+
+  DioException _untrustedOrigin(RequestOptions request) => DioException(
+        requestOptions: request,
+        type: DioExceptionType.cancel,
+        error: const ApiException(
+          'This link is outside the secure Masanawa connection.',
+          code: 'API_ORIGIN_NOT_ALLOWED',
+        ),
+      );
 
   bool _isStale(RequestOptions request) =>
       _isProtected(request.path) &&

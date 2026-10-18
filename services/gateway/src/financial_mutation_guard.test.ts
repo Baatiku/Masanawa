@@ -24,6 +24,25 @@ describe("financial account-status admission",()=>{
     expect(requiresFinancialCustomerState("POST","/v1/auth/password/recovery/start")).toBe(false);
   });
 
+  it("fails closed when financial routes mount without account-state authority",async()=>{
+    const app=createGatewayApp();
+    try {
+      app.post("/v1/wallet/msnw/custody/send",async()=>({spent:true}));
+      app.post("/v1/financial/nowpayments/ipn",async()=>({accepted:true}));
+      const denied=await app.inject({
+        method:"POST",url:"/v1/wallet/msnw/custody/send",payload:{},
+      });
+      expect(denied.statusCode).toBe(503);
+      expect(denied.json().error.code).toBe("AUTH_UNAVAILABLE");
+      // Webhook exemption is *only* admission here; the mounted provider
+      // route is responsible for authenticating signed raw callbacks.
+      const webhook=await app.inject({
+        method:"POST",url:"/v1/financial/nowpayments/ipn",payload:{},
+      });
+      expect(webhook.statusCode).toBe(200);
+    }finally{ await app.close(); }
+  });
+
   it("permits legitimate reconciliation callbacks without bypassing customer spending holds",async()=>{
     let checked=0;
     const auth={

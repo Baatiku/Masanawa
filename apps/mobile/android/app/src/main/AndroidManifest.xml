@@ -26,6 +26,10 @@
          Re-add FINE/COARSE only with an agent DeviceCapability + runtime prompt. -->
 
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/masanawa_private_backup_rules"
+        android:usesCleartextTraffic="false"
         android:label="Masanawa"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
