@@ -2,6 +2,8 @@ import 'wallet_flow_page.dart';
 import 'p2p_order_presentation.dart';
 import 'wallet_step_up_page.dart';
 import 'dart:convert';
+import 'dart:math';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -61,8 +63,85 @@ class MsnwP2pScreen extends StatefulWidget {
 
 class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   int _tab = 0;
+  String _orderFilter = 'all';
   bool _busy = false;
+  final _cached = <int, List<Map<String, dynamic>>>{};
+  final _secure = const FlutterSecureStorage();
+  Map<String, dynamic>? _pendingOrder;
+  String get _pendingKey => 'masanawa.p2p.order.${widget.expectedUserId}';
   late Future<List<Map<String, dynamic>>> _list = _load();
+
+  @override
+  void initState() {
+    super.initState();
+    _restorePending();
+  }
+
+  Future<void> _restorePending() async {
+    try {
+      final encoded = await _secure.read(key: _pendingKey);
+      if (encoded == null || !_sameAccount) return;
+      final value = _json(jsonDecode(encoded));
+      if (value['requestKey'] is! String ||
+          value['offerId'] is! String || value['amountMicro'] is! String) return;
+      if (mounted && _sameAccount) setState(() => _pendingOrder = value);
+    } catch (_) {
+      // Never create a replacement request if durable recovery cannot be read.
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order recovery is unavailable on this device.')));
+    }
+  }
+
+  Future<void> _savePending(Map<String, dynamic> pending) async {
+    await _secure.write(key: _pendingKey, value: jsonEncode(pending));
+    if (!mounted || !_sameAccount) throw StateError('Account changed.');
+    setState(() => _pendingOrder = pending);
+  }
+
+  Future<void> _clearPending() async {
+    await _secure.delete(key: _pendingKey);
+    if (mounted) setState(() => _pendingOrder = null);
+  }
+
+  /// Never mint a second request identity while the first outcome is unknown.
+  Future<void> _resumePending() async {
+    if (_busy || _pendingOrder == null) return;
+    await _act(() async {
+      final pending = _pendingOrder!;
+      final requestKey = '${pending['requestKey']}';
+      Map<String, dynamic> result;
+      try {
+        result = _json(await _request('GET',
+          '/orders/by-request/$requestKey'));
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 404) rethrow;
+        // A missing durable order may be safely retried only with its ORIGINAL
+        // buyer-authorized payload and idempotency key.
+        try {
+          result = _json(await _request('POST', '/orders', {
+            'offerId': pending['offerId'],
+            'amountMicro': pending['amountMicro'],
+            'expectedRateKoboPerMsnw': pending['expectedRateKoboPerMsnw'],
+            'expectedFeeBps': pending['expectedFeeBps'],
+          }, requestKey));
+        } on DioException catch (retryError) {
+          if (retryError.response?.statusCode == 409 &&
+              retryError.response?.data is Map &&
+              (retryError.response!.data as Map)['error'] == 'p2p.quote_changed') {
+            await _clearPending();
+            throw StateError('The price or fee has changed. Review a new quote before ordering.');
+          }
+          rethrow;
+        }
+      }
+      final orderId = result['orderId'];
+      if (orderId is! String || orderId.isEmpty) {
+        throw StateError('Order result was incomplete. Check again.');
+      }
+      await _clearPending();
+      if (mounted) await _orderDetail(orderId);
+    });
+  }
   bool get _sameAccount => widget.currentUserId() == widget.expectedUserId;
   String get _prefix => '${widget.baseUrl}/v1/wallet/msnw/p2p';
   Options get _headers => Options(headers: {
@@ -89,8 +168,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       0 => '/offers',1 => '/my-offers',2 => '/orders',_ => '/notifications',
     };
     final json = _json(await _request('GET', path));
-    return (json['items'] as List<dynamic>? ?? [])
+    final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
+    if (_sameAccount) _cached[_tab] = items;
+    return items;
   }
   void _reload([int? tab]) {
     setState(() {
@@ -142,34 +223,96 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         ])) ?? false;
   }
   Future<void> _buy(Map<String,dynamic> offer) async {
-    final entered = await _field(title: 'Buy MSNW', label: 'MSNW amount',
-      hint: 'e.g. 10.5');
+    // An uncertain request always takes precedence over placing a new order.
+    if (_pendingOrder != null) { await _resumePending(); return; }
+    final entered = await _field(
+      title: 'Buy MSNW', label: 'How much MSNW?',
+      hint: 'e.g. 10.5',
+    );
     if (entered == null || !mounted) return;
     late final String micro;
-    try { micro = _micro(entered); } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    try { micro = _micro(entered); }
+    catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a positive MSNW amount with up to six decimals.')));
       return;
     }
-    final rate = BigInt.tryParse('${offer['rate_kobo_per_msnw']}');
-    if (rate == null) return;
-    final amount = BigInt.parse(micro);
-    final fiat = (amount * rate + BigInt.from(999999)) ~/ BigInt.from(1000000);
-    final fee = (amount * BigInt.from((offer['fee_bps'] as num?)?.toInt() ?? 50)
-      + BigInt.from(9999)) ~/ BigInt.from(10000);
-    if (!await _confirm('Review P2P order',
-      'You receive ${_msnw(micro)} after verified payment.\n'
-      'Pay ${_ngn(fiat)} directly to the seller.\n'
-      'Seller escrow fee: ${_msnw(fee)}.\n'
-      'Payment deadline: 30 minutes. No screenshot automatically releases escrow.')) return;
-    await _act(() async {
-      final key = 'p2p-${DateTime.now().microsecondsSinceEpoch}-${widget.expectedUserId.hashCode.abs()}';
-      final res = _json(await _request('POST', '/orders', {
-        'offerId': offer['offer_id'], 'amountMicro': micro,
-      },key));
-      if (!mounted) return;
-      await _orderDetail('${res['orderId']}');
-    });
+    late final Map<String, dynamic> quote;
+    try {
+      quote = _json(await _request('GET',
+        '/offers/${offer['offer_id']}/quote?amountMicro=$micro'));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Offer availability or price changed. Refresh offers and try again.')));
+      return;
+    }
+    if (!mounted || !_sameAccount) return;
+    final seconds = quote['paymentWindowSeconds'];
+    final feeBps = quote['feeBps'];
+    if (quote['rateKoboPerMsnw'] is! String ||
+        quote['feeMicro'] is! String || quote['fiatKobo'] is! String ||
+        seconds is! int || seconds <= 0 || feeBps is! int) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Current payment terms are unavailable.')));
+      return;
+    }
+    final approved = await openWalletPage<bool>(
+      context: context,
+      builder: (ctx) => WalletReviewContent(
+        title: const Text('Review P2P order'),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _p2pReviewLine('You receive', _msnw(quote['amountMicro'])),
+            _p2pReviewLine('Pay seller', _ngn(quote['fiatKobo'])),
+            _p2pReviewLine('Seller escrow fee', _msnw(quote['feeMicro'])),
+            _p2pReviewLine('Receiving bank', '${quote['bankName'] ?? 'Verified account'}'),
+            _p2pReviewLine('Payment window', '${seconds ~/ 60} minutes'),
+            const SizedBox(height: 12),
+            const Text('Bank payment is made directly to the seller. '
+              'Only the seller’s confirmed receipt can release escrow.'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Change amount')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Place order')),
+        ],
+      ),
+    ) ?? false;
+    if (!approved || !mounted || !_sameAccount) return;
+    final rng = Random.secure();
+    final bytes = List<int>.generate(18, (_) => rng.nextInt(256));
+    final requestKey = 'p2p-${base64Url.encode(bytes).replaceAll('=', '')}';
+    try {
+      // Durable request identity is saved BEFORE the network write.
+      await _savePending({
+        'requestKey': requestKey,
+        'offerId': quote['offerId'],
+        'amountMicro': quote['amountMicro'],
+        'expectedRateKoboPerMsnw': quote['rateKoboPerMsnw'],
+        'expectedFeeBps': feeBps,
+      });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Secure order recovery is unavailable. No order was sent.')));
+      return;
+    }
+    await _resumePending();
   }
+
+  Widget _p2pReviewLine(String title, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(children: [
+      Expanded(child: Text(title,
+        style: Theme.of(context).textTheme.bodyMedium)),
+      Flexible(child: Text(value, textAlign: TextAlign.end,
+        style: Theme.of(context).textTheme.titleSmall)),
+    ]),
+  );
+
   Future<void> _verifySellerBank() async {
     late final List<Map<String,dynamic>> banks;
     try {
