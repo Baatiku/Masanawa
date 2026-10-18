@@ -1,6 +1,8 @@
 package ng.unigeria.unigeria
 
 import android.Manifest
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -18,12 +20,46 @@ class MainActivity : FlutterActivity() {
     private var liveAudioTrack: AudioTrack? = null
     private var liveSampleRate: Int? = null
     private var deepLinkChannel: MethodChannel? = null
+    private var diagnosticChannel: MethodChannel? = null
     private var callForegroundChannel: MethodChannel? = null
     private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        diagnosticChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "masanawa/diagnostics",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "previousExits") {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        result.success(emptyList<String>())
+                    } else {
+                        try {
+                            val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+                            // Android system records the previous crashes/ANRs.
+                            // Never return descriptions, traces, PIDs, UIDs or timestamps.
+                            val categories = manager.getHistoricalProcessExitReasons(
+                                packageName, 0, 12
+                            ).mapNotNull { entry ->
+                                when (entry.reason) {
+                                    ApplicationExitInfo.REASON_ANR -> "anr"
+                                    ApplicationExitInfo.REASON_CRASH -> "java_crash"
+                                    ApplicationExitInfo.REASON_CRASH_NATIVE -> "native_crash"
+                                    ApplicationExitInfo.REASON_LOW_MEMORY -> "low_memory"
+                                    else -> null
+                                }
+                            }.take(10)
+                            result.success(categories)
+                        } catch (_: RuntimeException) {
+                            result.success(emptyList<String>())
+                        }
+                    }
+                } else result.notImplemented()
+            }
+        }
 
         deepLinkChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -264,6 +300,8 @@ class MainActivity : FlutterActivity() {
         destroyed = true
         stopLivePcm()
         restoreAudioRoute()
+        diagnosticChannel?.setMethodCallHandler(null)
+        diagnosticChannel = null
         deepLinkChannel?.setMethodCallHandler(null)
         deepLinkChannel = null
         callForegroundChannel?.setMethodCallHandler(null)
