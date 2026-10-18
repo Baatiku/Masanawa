@@ -58,4 +58,44 @@ describe("worker service bootstrap", () => {
     ]);
     expect(response.body).not.toContain("secret internal failure");
   });
+  it("keeps job health hidden without an operator credential", async () => {
+    const app = createWorkerApp({
+      jobsHealth: () => [{ name: "status", enabled: true, stuck: 0,
+        runningSeconds: 0, lastSuccessAgeSeconds: 0, consecutiveFailures: 0 }],
+    });
+    apps.push(app);
+    const denied = await app.inject({ method: "GET", url: "/v1/ops/jobs/health" });
+    expect(denied.statusCode).toBe(404);
+  });
+
+  it("fences job scheduler health with an exact bearer and omits private data", async () => {
+    const app = createWorkerApp({
+      opsMonitorToken: "s".repeat(48),
+      jobsHealth: () => [{ name: "msnw_finality", enabled: true,
+        stuck: 1, runningSeconds: 121,
+        lastSuccessAgeSeconds: 60, consecutiveFailures: 2 }],
+    });
+    apps.push(app);
+    const denied = await app.inject({
+      method: "GET", url: "/v1/ops/jobs/health",
+      headers: { authorization: "Bearer invalid" },
+    });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: "GET", url: "/v1/ops/jobs/health",
+      headers: { authorization: "Bearer " + "s".repeat(48) },
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ jobs: [{ name: "msnw_finality",
+      enabled: true, stuck: 1, runningSeconds: 121,
+      lastSuccessAgeSeconds: 60, consecutiveFailures: 2 }] });
+    expect(accepted.body).not.toContain("secret");
+  });
+
+  it("rejects weak operational tokens before serving requests", () => {
+    expect(() => createWorkerApp({
+      opsMonitorToken: "weak", jobsHealth: () => [],
+    })).toThrow("ops_monitor_token_too_short");
+  });
+
 });
