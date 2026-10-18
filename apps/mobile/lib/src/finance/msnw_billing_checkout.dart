@@ -1,8 +1,27 @@
 import 'wallet_flow_page.dart';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/api/billing_models.dart';
 import '../core/network/api_client.dart';
+
+bool isValidMsnwBillRecoveryRecord(Map<String,dynamic> value) {
+    final ref=value['fulfillmentReference'];
+    final quoteId=value['quoteId'];
+    final rev=value['quoteRevision'];
+    final amount=value['expectedAmountMicro'];
+    final rate=value['expectedRateKoboPerMsnw'];
+    return ref is String &&
+        RegExp(r'^msnw-bill-[A-Za-z0-9_-]{5,128}$').hasMatch(ref) &&
+        quoteId is String && ref=='msnw-bill-$quoteId' &&
+        rev is int && rev>=0 &&
+        amount is String && RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(amount) &&
+        rate is String && RegExp(r'^[1-9][0-9]{0,15}$').hasMatch(rate) &&
+        value['customerId'] is String &&
+        value['itemName'] is String && value['totalAmount'] is String;
+  }
 
 /// Confirmed MSNW custody balance only; old NGN/Credits are not spendable here.
 class MsnwBillingCheckoutSheet extends StatefulWidget {
@@ -28,11 +47,19 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   Map<String,dynamic>? price,receipt;
   String? error;
   bool busy=false,uncertain=false;
+  final storage = const FlutterSecureStorage();
+  Map<String,dynamic>? pendingBill;
+  Map<String,dynamic>? settledBill;
+  String get pendingStorageKey =>
+      'msnw.bill.pending.v1.${widget.expectedUserId}';
   @override void initState(){
     super.initState();
     amount=TextEditingController(text:widget.item.variableAmount?'':widget.item.amount);
     if(widget.initialQuote != null){quote=widget.initialQuote;uncertain=true;
       WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted)recover();});}
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if(mounted && widget.initialQuote==null) restorePending();
+    });
   }
   @override void dispose(){amount.dispose();super.dispose();}
   bool same(String token)=>mounted&&widget.currentUserId()==widget.expectedUserId&&
@@ -47,9 +74,140 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       (value%BigInt.from(1000000)).toString().padLeft(6,'0');
   }
 
+  // Never replace an uncertain provider purchase with a new quote.
+  bool terminalReceipt(Object? status) =>
+      const {'succeeded','fulfilled','failed','refunded','cancelled'}
+          .contains(status);
+
+  Future<void> restorePending() async {
+    final token=widget.accessToken()?.trim();
+    if(token==null||token.isEmpty||!same(token))return;
+    try {
+      final raw=await storage.read(key:pendingStorageKey);
+      if(!same(token)||raw==null)return;
+      final parsed=jsonDecode(raw);
+      if(parsed is! Map)throw const FormatException('Malformed pending bill');
+      final saved=parsed.cast<String,dynamic>();
+      if(!isValidMsnwBillRecoveryRecord(saved))
+        throw const FormatException('Malformed pending bill');
+      setState(()=>pendingBill=saved);
+      await recoverPending();
+    }catch(_){
+      if(same(token))setState(()=>error=
+        'Previous bill payment could not be recovered. Check transaction '
+        'history before submitting another payment.');
+    }
+  }
+
+  Future<void> recoverPending() async {
+    final saved=pendingBill,token=widget.accessToken()?.trim();
+    if(busy||saved==null||!isValidMsnwBillRecoveryRecord(saved)||
+       token==null||token.isEmpty||!same(token))return;
+    setState((){busy=true;error=null;});
+    try {
+      final reference=saved['fulfillmentReference'] as String;
+      final response=await widget.dio.get<dynamic>(
+        uri('/v1/wallet/msnw/billing/'+Uri.encodeComponent(reference)),
+        options:auth(token));
+      if(!same(token))return;
+      final v=response.data;
+      if(v is! Map||v['fulfillmentReference']!=reference ||
+         v['state'] is! String)
+        throw const FormatException('Unexpected bill recovery receipt');
+      if(terminalReceipt(v['state'])) {
+        try { await storage.delete(key:pendingStorageKey); }catch(_){}
+      }
+      if(!same(token))return;
+      setState((){
+        receipt=v.cast<String,dynamic>();
+        settledBill=saved;
+        uncertain=!terminalReceipt(v['state']);
+        if(!uncertain)pendingBill=null;
+      });
+    }on DioException catch(e){
+      if(same(token))setState((){
+        uncertain=true;
+        error=e.response?.statusCode==404
+          ? 'No completed purchase found yet. Retry only the original '
+            'quote below, or check status again.'
+          : 'Purchase outcome unavailable. Check status or retry the '
+            'original quote without starting another purchase.';
+      });
+    }catch(_){
+      if(same(token))setState((){
+        uncertain=true;
+        error='Purchase status could not be confirmed. Contact support '
+          'with the original bill reference before paying again.';
+      });
+    }finally{if(same(token))setState(()=>busy=false);}
+  }
+
+  Future<void> submitPending(Map<String,dynamic> saved,String token) async {
+    if(busy||!same(token)||!isValidMsnwBillRecoveryRecord(saved))return;
+    setState((){busy=true;error=null;uncertain=false;});
+    try {
+      final response=await widget.dio.post<dynamic>(
+        uri('/v1/wallet/msnw/billing/execute'),options:auth(token),
+        data:{
+          'quoteId':saved['quoteId'],
+          'quoteRevision':saved['quoteRevision'],
+          'expectedAmountMicro':saved['expectedAmountMicro'],
+          'expectedRateKoboPerMsnw':saved['expectedRateKoboPerMsnw'],
+        });
+      if(!same(token))return;
+      final value=response.data;
+      if(value is! Map||value['state'] is! String||
+         value['fulfillmentReference'] != saved['fulfillmentReference'])
+        throw const FormatException('Invalid provider bill receipt');
+      if(terminalReceipt(value['state'])) {
+        try { await storage.delete(key:pendingStorageKey); }catch(_){}
+      }
+      if(!same(token))return;
+      setState((){
+        receipt=value.cast<String,dynamic>();
+        settledBill=saved;
+        uncertain=!terminalReceipt(value['state']);
+        if(!uncertain)pendingBill=null;
+      });
+    }catch(_){
+      if(same(token))setState((){
+        uncertain=true;
+        error='Payment outcome is uncertain. Check status or retry only '
+          'this exact quote; the same provider purchase reference is reused.';
+      });
+    }finally{if(same(token))setState(()=>busy=false);}
+  }
+
+  Future<void> retryPending() async {
+    final saved=pendingBill,token=widget.accessToken()?.trim();
+    if(busy||saved==null||!isValidMsnwBillRecoveryRecord(saved)||
+       token==null||token.isEmpty||!same(token))return;
+    final approved=await openWalletPage<bool>(context:context,
+      title:'Recover bill payment',
+      builder:(ctx)=>WalletReviewContent(
+        title:const Text('Retry original payment'),
+        content:Column(mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.start,children:[
+            detail('Service',saved['itemName'] as String),
+            detail('Recipient',saved['customerId'] as String),
+            detail('Total','NGN '+(saved['totalAmount'] as String)),
+            detail('Reference',saved['fulfillmentReference'] as String),
+            const Text('This uses your original quote. It cannot create '
+              'a different bill purchase.'),
+          ]),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),
+            child:const Text('Cancel')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),
+            child:const Text('Retry original')),
+        ],
+      ));
+    if(approved==true && same(token))await submitPending(saved,token);
+  }
+
   Future<void> review() async{
     final token=widget.accessToken()?.trim();
-    if(busy||token==null||token.isEmpty||!same(token))return;
+    if(busy||pendingBill!=null||token==null||token.isEmpty||!same(token))return;
     setState((){busy=true;error=null;price=null;receipt=null;});
     try{
       final view=await widget.api.createBillingQuote(
@@ -79,22 +237,24 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     }catch(_){
       if(same(token))setState(()=>error='Bill pricing unavailable. '
         'Check the provider details or your MSNW custody balance.');
-    }finally{if(mounted)setState(()=>busy=false);}
+    }finally{if(same(token))setState(()=>busy=false);}
   }
 
   Future<void> pay() async{
     final token=widget.accessToken()?.trim();
     final v=price,q=quote;
-    if(busy||token==null||!same(token)||v==null||q==null||
-        v['sufficient']!=true)return;
+    if(busy||pendingBill!=null||token==null||!same(token)||v==null||q==null||
+       v['sufficient']!=true)return;
     final choice=await openWalletPage<bool>(context:context,
       builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm MSNW bill'),
         content:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           detail('Product',q.itemName),detail('Recipient',q.customerId),
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
-          detail('Total','NGN '+q.totalAmount),detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
-          detail('Rate','NGN '+units((BigInt.parse(v['rateKoboPerMsnw'] as String)*BigInt.from(10000)).toString())+' / MSNW'),
+          detail('Total','NGN '+q.totalAmount),
+          detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
+          detail('Rate','NGN '+units((BigInt.parse(v['rateKoboPerMsnw'] as String)*
+              BigInt.from(10000)).toString())+' / MSNW'),
         ]),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(ctx,false),
@@ -102,27 +262,33 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           FilledButton(onPressed:()=>Navigator.pop(ctx,true),
             child:const Text('Confirm payment')),
         ]));
-    if(choice!=true||!same(token))return;
-    setState((){busy=true;error=null;uncertain=false;});
-    try{
-      final r=await widget.dio.post<dynamic>(
-        uri('/v1/wallet/msnw/billing/execute'),options:auth(token),
-        data:{'quoteId':q.quoteId,'quoteRevision':q.revision,
-          'expectedAmountMicro':v['amountMicro'],
-          'expectedRateKoboPerMsnw':v['rateKoboPerMsnw']});
-      if(!same(token))return;
-      final response=r.data;
-      if(response is! Map||response['state'] is! String||
-          response['fulfillmentReference'] != 'msnw-bill-'+q.quoteId){
-        throw const FormatException('Invalid provider receipt');
-      }
-      setState(()=>receipt=response.cast<String,dynamic>());
+    if(choice!=true||!same(token)||quote!=q||price!=v)return;
+    final original=<String,dynamic>{
+      'quoteId':q.quoteId,
+      'quoteRevision':q.revision,
+      'expectedAmountMicro':v['amountMicro'],
+      'expectedRateKoboPerMsnw':v['rateKoboPerMsnw'],
+      'fulfillmentReference':'msnw-bill-${q.quoteId}',
+      'itemName':q.itemName,
+      'customerId':q.customerId,
+      'totalAmount':q.totalAmount,
+      'serviceAmount':q.serviceAmount,
+      'feeAmount':q.feeAmount,
+    };
+    if(!isValidMsnwBillRecoveryRecord(original)) {
+      setState(()=>error='Bill reference invalid. Obtain a new verified quote.');
+      return;
+    }
+    try {
+      await storage.write(key:pendingStorageKey,value:jsonEncode(original));
     }catch(_){
-      if(same(token))setState((){
-        uncertain=true;
-        error='Payment status pending. Check this order before buying again.';
-      });
-    }finally{if(mounted)setState(()=>busy=false);}
+      if(same(token))setState(()=>error=
+        'Secure payment recovery storage unavailable. No payment was sent.');
+      return;
+    }
+    if(!same(token))return;
+    setState(()=>pendingBill=original);
+    await submitPending(original,token);
   }
 
   Future<void> recover() async{
@@ -159,7 +325,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(same(token))setState((){
         uncertain=true;error='Order status unavailable. Retry this order.';
       });
-    }finally{if(mounted)setState(()=>busy=false);}
+    }finally{if(same(token))setState(()=>busy=false);}
   }
 
   Widget detail(String label,String value)=>Padding(
@@ -182,9 +348,10 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
         crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(widget.initialQuote != null || receipt != null ? 'Bill receipt' : 'Pay with MSNW',style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:10),
-          Text(widget.item.name),
-          Text('Recipient: '+widget.customerId),
-          if(widget.initialQuote == null && receipt == null) TextField(controller:amount,enabled:quote==null&&!busy,
+          Text('${settledBill?['itemName'] ?? pendingBill?['itemName'] ?? widget.item.name}'),
+          Text('Recipient: ${settledBill?['customerId'] ?? pendingBill?['customerId'] ?? widget.customerId}'),
+          if(widget.initialQuote == null && receipt == null)
+            TextField(controller:amount,enabled:quote==null&&!busy&&pendingBill==null,
             keyboardType:const TextInputType.numberWithOptions(decimal:true),
             decoration:const InputDecoration(labelText:'Bill amount (NGN)')),
           if(price!=null)...[
@@ -202,17 +369,55 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
               color:Theme.of(context).colorScheme.error))),
           if(busy)const LinearProgressIndicator(),
           const SizedBox(height:10),
-          if(quote==null)FilledButton(onPressed:busy?null:review,
+          if(pendingBill!=null)...[
+            const SizedBox(height:12),
+            const Text('Previous bill payment',style:TextStyle(
+              fontWeight:FontWeight.bold)),
+            detail('Product',pendingBill!['itemName'] as String),
+            detail('Recipient',pendingBill!['customerId'] as String),
+            detail('Original reference',
+              pendingBill!['fulfillmentReference'] as String),
+            Wrap(spacing:8,runSpacing:8,children:[
+              OutlinedButton(onPressed:busy?null:recoverPending,
+                child:const Text('Check original status')),
+              if(receipt==null)
+                FilledButton(onPressed:busy?null:retryPending,
+                  child:const Text('Retry original purchase')),
+            ]),
+          ],
+          if(quote==null&&pendingBill==null&&receipt==null)
+            FilledButton(onPressed:busy?null:review,
             child:const Text('Get verified price')),
-          if(quote!=null&&receipt==null&&!uncertain)
+          if(quote!=null&&receipt==null&&!uncertain&&pendingBill==null)
             FilledButton(onPressed:(busy || price?['sufficient'] != true) ? null : pay,
               child:const Text('Review & pay MSNW')),
-          if((uncertain||receipt!=null)&&quote!=null)
+          if((uncertain||receipt!=null)&&quote!=null&&pendingBill==null)
             OutlinedButton(onPressed:busy?null:recover,
               child:const Text('Check payment status')),
           if(receipt!=null)...[
+            if(settledBill!=null)...[
+              if(settledBill!['serviceAmount'] is String)
+                detail('Service','NGN '+(settledBill!['serviceAmount'] as String)),
+              if(settledBill!['feeAmount'] is String)
+                detail('Fee','NGN '+(settledBill!['feeAmount'] as String)),
+              detail('Total','NGN '+(settledBill!['totalAmount'] as String)),
+            ],
             detail('Status',status(receipt!['state'] as String)),
             detail('Reference',receipt!['fulfillmentReference'] as String),
+            TextButton.icon(
+              onPressed:()async {
+                await Clipboard.setData(ClipboardData(
+                  text:receipt!['fulfillmentReference'] as String));
+                if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content:Text('Reference copied')));
+              },
+              icon:const Icon(Icons.copy_outlined),
+              label:const Text('Copy receipt reference')),
+            if(terminalReceipt(receipt!['state']))
+              TextButton.icon(
+                onPressed:()=>Navigator.of(context).pop(),
+                icon:const Icon(Icons.replay_outlined),
+                label:const Text('Buy another bill')),
             if(receipt!['providerReference'] case final String reference when reference.isNotEmpty)
               detail('Provider reference',reference),
             if(receipt!['deliveryCode'] case final String code when code.isNotEmpty)
