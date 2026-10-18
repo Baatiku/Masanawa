@@ -126,6 +126,19 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       (req.params as {requestKey:string}).requestKey);}
     catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/orders/page",async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      const q=req.query as {filter?:unknown;cursor?:unknown;limit?:unknown};
+      const requestedLimit=typeof q.limit==="string"&&/^[0-9]{1,2}$/.test(q.limit)
+        ?Number(q.limit):undefined;
+      return await deps.service.ordersPage(a,{
+        filter:typeof q.filter==="string"?q.filter:undefined,
+        cursor:typeof q.cursor==="string"?q.cursor:undefined,
+        limit:requestedLimit,
+      });
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/orders",async(req,reply)=>{
     try { return {items:await deps.service.orders(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
