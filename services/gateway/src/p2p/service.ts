@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export class P2pError extends Error {
   constructor(readonly code: string, readonly status = 409) { super(code); }
@@ -64,6 +64,19 @@ export function orderAmounts(micro: string, rateKobo: string, feeBps: number) {
   return { amountMicro: amount.toString(), fiatKobo: fiat.toString(),
     feeMicro: fee.toString(), reservedMicro: (amount + fee).toString() };
 }
+/** Stable, opaque UUID per tenant, seller and random authenticated request key. */
+function offerRequestId(actor:P2pActor,requestKey:string):string {
+  const safe=key(requestKey);
+  const digest=createHash("sha256").update("msnw-p2p-offer-v1\u0000")
+    .update(actor.tenantId).update("\u0000")
+    .update(actor.userId).update("\u0000").update(safe).digest();
+  const data=Buffer.from(digest.subarray(0,16));
+  data[6]=(data[6]!&0x0f)|0x40;
+  data[8]=(data[8]!&0x3f)|0x80;
+  const h=data.toString("hex");
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+
 function pageCursor(value?:string):{time:string|null;id:string|null}{
   if(value === undefined)return {time:null,id:null};
   if(value.length===0||value.length>256)
@@ -282,28 +295,61 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       if (!updated.rowCount) throw new P2pError("p2p.offer_not_found",404);
       return {offerId,state:"closed"};
     },
+    async offerByRequest(actor:P2pActor,requestKey:string) {
+      const candidate=offerRequestId(actor,requestKey);
+      const row=take<Record<string,unknown>>(await pool.query(`SELECT offer_id,state
+        FROM commerce.msnw_p2p_offers
+        WHERE tenant_id=$1 AND seller_id=$2 AND offer_id=$3`,
+        [actor.tenantId,actor.userId,candidate]),"p2p.offer_not_found");
+      return {offerId:String(row.offer_id),state:String(row.state)};
+    },
     async createOffer(actor: P2pActor, input: {
       paymentMethodId: string; rateKoboPerMsnw: string;
       minMicro: string; maxMicro: string; inventoryMicro: string;
+      idempotencyKey?: string;
     }) {
-      const rate = positive(input.rateKoboPerMsnw, 10n ** 12n, "p2p.invalid_rate");
-      const min = positive(input.minMicro, 10n ** 18n, "p2p.invalid_limit");
-      const max = positive(input.maxMicro, 10n ** 18n, "p2p.invalid_limit");
-      const inventory = positive(input.inventoryMicro, 10n ** 18n, "p2p.invalid_inventory");
-      if (min > max || min > inventory || max > inventory) throw new P2pError("p2p.invalid_limit", 422);
-      const offerId = randomUUID();
-      return transact(async tx => {
-        const method = await tx.query(`SELECT method_id FROM commerce.msnw_p2p_payment_methods
+      const rate=positive(input.rateKoboPerMsnw,10n**12n,"p2p.invalid_rate");
+      const min=positive(input.minMicro,10n**18n,"p2p.invalid_limit");
+      const max=positive(input.maxMicro,10n**18n,"p2p.invalid_limit");
+      const inventory=positive(input.inventoryMicro,10n**18n,"p2p.invalid_inventory");
+      if(min>max||min>inventory||max>inventory)
+        throw new P2pError("p2p.invalid_limit",422);
+      const paymentMethodId=id(input.paymentMethodId);
+      const requestKey=input.idempotencyKey;
+      const offerId=requestKey===undefined?randomUUID():offerRequestId(actor,requestKey);
+      return transact(async tx=>{
+        if(requestKey!==undefined){
+          await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))",
+            ["msnw-offer:"+actor.tenantId+":"+actor.userId+":"+requestKey]);
+          const existing=await tx.query(`SELECT offer_id,payment_method_id,
+              rate_kobo_per_msnw::text,min_micro::text,max_micro::text,state
+            FROM commerce.msnw_p2p_offers
+            WHERE tenant_id=$1 AND seller_id=$2 AND offer_id=$3 FOR UPDATE`,
+            [actor.tenantId,actor.userId,offerId]);
+          if(existing.rows[0]){
+            const prior=existing.rows[0]!;
+            if(prior.payment_method_id!==paymentMethodId ||
+               String(prior.rate_kobo_per_msnw)!==rate.toString() ||
+               String(prior.min_micro)!==min.toString() ||
+               String(prior.max_micro)!==max.toString())
+              throw new P2pError("p2p.idempotency_conflict",409);
+            // Remaining inventory is mutable after later funded orders, so an
+            // existing request can only return the ORIGINAL offer, never amend it.
+            return {offerId,replay:true,state:String(prior.state)};
+          }
+        }
+        const method=await tx.query(`SELECT method_id
+          FROM commerce.msnw_p2p_payment_methods
           WHERE tenant_id=$1 AND owner_id=$2 AND method_id=$3
           AND verified_at IS NOT NULL AND disabled_at IS NULL FOR SHARE`,
-          [actor.tenantId,actor.userId,id(input.paymentMethodId)]);
-        if (!method.rowCount) throw new P2pError("p2p.verified_method_required", 403);
+          [actor.tenantId,actor.userId,paymentMethodId]);
+        if(!method.rowCount)throw new P2pError("p2p.verified_method_required",403);
         await tx.query(`INSERT INTO commerce.msnw_p2p_offers
           (offer_id,tenant_id,seller_id,payment_method_id,rate_kobo_per_msnw,
             min_micro,max_micro,remaining_micro) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [offerId,actor.tenantId,actor.userId,input.paymentMethodId,
+          [offerId,actor.tenantId,actor.userId,paymentMethodId,
             rate.toString(),min.toString(),max.toString(),inventory.toString()]);
-        return { offerId };
+        return {offerId,replay:false,state:"active"};
       });
     },
     async order(actor: P2pActor, orderId: string) {
