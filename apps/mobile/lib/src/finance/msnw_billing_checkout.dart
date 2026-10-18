@@ -10,12 +10,13 @@ class MsnwBillingCheckoutSheet extends StatefulWidget {
     super.key, required this.api,required this.dio,required this.baseUrl,
     required this.categoryCode,required this.item,required this.customerId,
     required this.expectedUserId,required this.currentUserId,
-    required this.accessToken,required this.onFund,
+    required this.accessToken,required this.onFund,this.initialQuote,
   });
   final ApiClient api;
   final Dio dio;
   final String baseUrl,categoryCode,customerId,expectedUserId;
   final BillItem item;
+  final BillingQuote? initialQuote;
   final String? Function() currentUserId,accessToken;
   final VoidCallback onFund;
   @override
@@ -30,6 +31,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   @override void initState(){
     super.initState();
     amount=TextEditingController(text:widget.item.variableAmount?'':widget.item.amount);
+    if(widget.initialQuote != null){quote=widget.initialQuote;uncertain=true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted)recover();});}
   }
   @override void dispose(){amount.dispose();super.dispose();}
   bool same(String token)=>mounted&&widget.currentUserId()==widget.expectedUserId&&
@@ -87,9 +90,12 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     final choice=await openWalletPage<bool>(context:context,
       builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm MSNW bill'),
-        content:Text('Pay '+units(v['amountMicro'] as String)+' MSNW to '+
-          q.customerId+' for '+q.itemName+
-          '? Funds will be reserved until Flutterwave confirms delivery.'),
+        content:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          detail('Product',q.itemName),detail('Recipient',q.customerId),
+          detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
+          detail('Total','NGN '+q.totalAmount),detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
+          detail('Rate','NGN '+(BigInt.parse(v['rateKoboPerMsnw'] as String)/BigInt.from(100)).toString()+' / MSNW'),
+        ]),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(ctx,false),
             child:const Text('Cancel')),
@@ -107,15 +113,14 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(!same(token))return;
       final response=r.data;
       if(response is! Map||response['state'] is! String||
-          response['fulfillmentReference'] is! String){
+          response['fulfillmentReference'] != 'msnw-bill-'+q.quoteId){
         throw const FormatException('Invalid provider receipt');
       }
       setState(()=>receipt=response.cast<String,dynamic>());
     }catch(_){
       if(same(token))setState((){
         uncertain=true;
-        error='Provider result uncertain. Do not buy again. '
-          'Use Check payment status to reconcile the SAME order.';
+        error='Payment status pending. Check this order before buying again.';
       });
     }finally{if(mounted)setState(()=>busy=false);}
   }
@@ -125,6 +130,20 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     if(busy||q==null||token==null||!same(token))return;
     setState((){busy=true;error=null;});
     try{
+      if(widget.initialQuote != null && !(q.fulfillmentReference?.startsWith('msnw-bill-') ?? false)) {
+        final view=await widget.api.billingQuote(q.quoteId);
+        if(!same(token))return;
+        if(view.quote.quoteId != q.quoteId || view.quote.customerId != q.customerId)
+          throw const FormatException('Invalid original bill receipt');
+        final purchase=view.purchase;
+        setState((){receipt={
+          'state':purchase?.state ?? view.phase,
+          'fulfillmentReference':purchase?.fulfillmentReference ?? view.quote.fulfillmentReference ?? q.quoteId,
+          'providerReference':purchase?.providerReference ?? view.quote.billProviderReference,
+          'deliveryCode':purchase?.deliveryCode,
+        };uncertain=false;});
+        return;
+      }
       final ref='msnw-bill-'+q.quoteId;
       final r=await widget.dio.get<dynamic>(
         uri('/v1/wallet/msnw/billing/'+Uri.encodeComponent(ref)),
@@ -138,31 +157,45 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       setState((){receipt=data.cast<String,dynamic>();uncertain=false;});
     }catch(_){
       if(same(token))setState((){
-        uncertain=true;error='Order status still unavailable. '
-          'Any reserved funds remain protected until provider reconciliation.';
+        uncertain=true;error='Order status unavailable. Retry this order.';
       });
     }finally{if(mounted)setState(()=>busy=false);}
   }
+
+  Widget detail(String label,String value)=>Padding(
+    padding:const EdgeInsets.symmetric(vertical:6),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(label,style:Theme.of(context).textTheme.labelMedium),
+      SelectableText(value),
+    ]));
+  String status(String value)=>switch(value){
+    'succeeded'||'fulfilled'=>'Completed',
+    'failed'=>'Failed','refunded'=>'Refunded','pending'=>'Processing',
+    'dispatching'=>'Processing','uncertain'=>'Verification pending',
+    _=>'Verification pending',
+  };
 
   @override Widget build(BuildContext context)=>SafeArea(
     child:SingleChildScrollView(
       padding:EdgeInsets.fromLTRB(20,12,20,20+MediaQuery.viewInsetsOf(context).bottom),
       child:Column(mainAxisSize:MainAxisSize.min,
         crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Text('Pay with MSNW',style:Theme.of(context).textTheme.titleLarge),
+          Text(widget.initialQuote != null || receipt != null ? 'Bill receipt' : 'Pay with MSNW',style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:10),
           Text(widget.item.name),
           Text('Recipient: '+widget.customerId),
-          TextField(controller:amount,enabled:quote==null&&!busy,
+          if(widget.initialQuote == null && receipt == null) TextField(controller:amount,enabled:quote==null&&!busy,
             keyboardType:const TextInputType.numberWithOptions(decimal:true),
             decoration:const InputDecoration(labelText:'Bill amount (NGN)')),
           if(price!=null)...[
             const SizedBox(height:10),
-            Text('Provider price: ₦'+quote!.totalAmount),
+            detail('Service','NGN '+quote!.serviceAmount),
+            detail('Fee','NGN '+quote!.feeAmount),
+            detail('Total','NGN '+quote!.totalAmount),
             Text('MSNW payment: '+units(price!['amountMicro'] as String)),
-            Text('Available custody: '+units(price!['availableMicro'] as String)),
+            Text('Available: '+units(price!['availableMicro'] as String)+' MSNW'),
             if(price!['sufficient']!=true)
-              const Text('Insufficient settled MSNW in your platform custody wallet.'),
+              const Text('Insufficient available MSNW'),
           ],
           if(error!=null)Padding(padding:const EdgeInsets.only(top:10),
             child:Text(error!,style:TextStyle(
@@ -178,10 +211,18 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             OutlinedButton(onPressed:busy?null:recover,
               child:const Text('Check payment status')),
           if(receipt!=null)...[
-            Text('Provider state: '+(receipt!['state'] as String)),
-            SelectableText('Reference: '+(receipt!['fulfillmentReference'] as String)),
-            if(receipt!['state']=='succeeded')
-              const Text('Bill completed with verified provider confirmation.'),
+            detail('Status',status(receipt!['state'] as String)),
+            detail('Reference',receipt!['fulfillmentReference'] as String),
+            if(receipt!['providerReference'] case final String reference when reference.isNotEmpty)
+              detail('Provider reference',reference),
+            if(receipt!['deliveryCode'] case final String code when code.isNotEmpty)
+              detail('Delivery code / electricity token',code),
+          ],
+          if(widget.initialQuote case final BillingQuote original)...[
+            detail('Service','NGN '+original.serviceAmount),
+            detail('Fee','NGN '+original.feeAmount),
+            detail('Total','NGN '+original.totalAmount),
+            detail('Created',original.createdAt),
           ],
           TextButton.icon(onPressed:busy?null:widget.onFund,
             icon:const Icon(Icons.account_balance),
@@ -191,4 +232,5 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     ),
   );
 }
+
 
