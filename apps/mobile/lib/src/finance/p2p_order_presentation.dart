@@ -98,9 +98,12 @@ class P2pOrderBankDetails extends StatelessWidget {
     required this.accountName,
     required this.accountNumber,
     required this.buyer,
+    this.fiatTotal,
   });
   final String bankName, accountName, accountNumber;
   final bool buyer;
+  /// Server-computed NGN total, never a client estimate.
+  final String? fiatTotal;
   @override
   Widget build(BuildContext context) {
     if (!RegExp(r'^[0-9]{10}$').hasMatch(accountNumber) ||
@@ -151,6 +154,25 @@ class P2pOrderBankDetails extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SelectableText(accountName),
+          if (buyer && fiatTotal != null) ...[
+            const Divider(height: 24),
+            Text('Send exactly',style:Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 5),
+            Row(children:[
+              Expanded(child:Text(fiatTotal!,style:Theme.of(context)
+                .textTheme.titleLarge?.copyWith(fontWeight:FontWeight.w700))),
+              IconButton(
+                tooltip:'Copy exact payment amount',
+                icon:const Icon(Icons.copy_outlined),
+                onPressed:()async{
+                  await Clipboard.setData(ClipboardData(text:fiatTotal!));
+                  if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content:Text('Payment total copied')));
+                },
+              ),
+            ]),
+            const Text('Only mark paid after making the actual bank transfer.'),
+          ],
         ],
       ),
     );
