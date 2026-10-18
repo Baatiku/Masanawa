@@ -1402,6 +1402,22 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     _future=widget.load();
     _evidence=widget.listEvidence();
   });
+  String _attachmentLabel(Map<String,dynamic> item) {
+    final format = item['fileType'];
+    if (format == 'pdf') return 'Bank receipt · PDF';
+    if (format == 'png') return 'Bank receipt · PNG';
+    if (format == 'jpg') return 'Bank receipt · JPG';
+    if (format == 'webp') return 'Bank receipt · WEBP';
+    return 'Bank receipt attachment';
+  }
+
+  String _attachmentSize(Map<String,dynamic> item) {
+    final bytes = item['sizeBytes'];
+    if (bytes is! num || bytes <= 0) return 'Size unavailable';
+    if (bytes >= 1024*1024) return '${(bytes/(1024*1024)).toStringAsFixed(1)} MB';
+    return '${(bytes/1024).toStringAsFixed(0)} KB';
+  }
+
   String _evidenceTime(Object? raw) {
     final date = DateTime.tryParse('${raw ?? ''}')?.toLocal();
     if (date == null) return 'recently';
@@ -1804,11 +1820,13 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               return Column(children:[
                 for(final item in items)
                   ListTile(
-                    leading:const Icon(Icons.insert_drive_file_outlined),
-                     title:const Text('Bank receipt attachment'),
-                     subtitle:Text('Added ${_evidenceTime(item['created_at'])} · '
-                       '${item['submitted_by']==widget.userId?'You':'Counterparty'}',
-                       maxLines:2,overflow:TextOverflow.ellipsis),
+                    leading:Icon(item['fileType']=='pdf'
+                       ?Icons.picture_as_pdf_outlined:Icons.image_outlined),
+                    title:Text(_attachmentLabel(item)),
+                    subtitle:Text('${_attachmentSize(item)} · '
+                      '${_evidenceTime(item['created_at'])} · '
+                      '${item['submitted_by']==widget.userId?'You':'Counterparty'}',
+                      maxLines:2,overflow:TextOverflow.ellipsis),
                     trailing:const Icon(Icons.open_in_new),
                     onTap:()async{
                       try { await widget.openEvidence('${item['evidence_id']}'); }
