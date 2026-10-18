@@ -55,6 +55,10 @@ export function registerPrivateChatMediaRoutes(app: FastifyInstance, media: Serv
           dataBase64:string(body.dataBase64,"dataBase64",11_250_000),
         });
       } catch(error) {
+        if (error instanceof Error && error.message === "chat.media.idempotency_conflict") {
+          reply.code(409);
+          return {error:error.message};
+        }
         if (error instanceof RangeError) {
           reply.code(400);
           return {error:error.message};
