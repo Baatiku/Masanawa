@@ -5,11 +5,13 @@ import type {
   LiveVoiceTokenService,
 } from "./agent_shell_contract.js";
 import type { MobilePushRegistrationService } from "./mobile_push.js";
+import type { AccountNotificationService } from "./notification_preferences.js";
 
 type ShellOptions = {
   readonly agentShell?: AgentShellService;
   readonly liveVoiceTokens?: LiveVoiceTokenService;
   readonly mobilePush?: MobilePushRegistrationService;
+  readonly mobileNotifications?: AccountNotificationService;
 };
 
 function text(value: unknown, name: string, max = 2048): string {
@@ -244,6 +246,25 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
           : { admissionId: text(body.admissionId, "admissionId", 256) }),
         purpose,
       });
+    });
+  }
+
+  if (options.mobileNotifications) {
+    const service = options.mobileNotifications;
+    app.get("/agent/notifications/preferences", async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      return { preferences: await service.preferences(request.headers.authorization) };
+    });
+    app.put("/agent/notifications/preferences", async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const body = request.body as Record<string, unknown> | null;
+      const preferences = await service.update(
+        request.headers.authorization, body?.preferences);
+      return { preferences };
+    });
+    app.get("/agent/notifications/history", async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      return { items: await service.history(request.headers.authorization) };
     });
   }
 
