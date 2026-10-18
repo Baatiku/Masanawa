@@ -187,7 +187,8 @@ void main() {
     expect(find.text('Check unfinished order'),findsOneWidget);
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);
     await t.pumpAndSettle();
-    expect(find.text('Check unfinished order'),findsOneWidget);
+    expect(adapter.calls.any((o)=>o.path.contains(
+      '/orders/by-request/p2p-prior-order-123456')),isTrue);
     expect(adapter.calls.where((o)=>o.method=='POST'),isEmpty);
   });
 
