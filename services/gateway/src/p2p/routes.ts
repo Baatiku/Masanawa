@@ -51,6 +51,27 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     if(!value?.tenantId||!value?.userId)throw new P2pError("p2p.operator_forbidden",403);
     return value;
   };
+  app.get("/v1/wallet/msnw/p2p/offers/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.offersPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/my-offers/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.myOffersPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/notifications/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.notificationsPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/offers", async (req,reply) => {
     try { return {items:await deps.service.offers(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
