@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMsnwCustodyService, MsnwCustodyError } from "./custody_send.js";
+import { createMsnwCustodyService } from "./custody_send.js";
 
 const owner = { tenantId: "tenant-1", userId: "sender-1" };
 const key = "existing-sent-key-123456";
