@@ -128,12 +128,9 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",
         ["msnw:paystack:settlement:" + entry.id]);
       const existing = await client.query(
-        "SELECT 1 AS scanned FROM commerce.msnw_paystack_merchant_settlements " +
-        "WHERE settlement_id=$1", [entry.id]);
-      if (existing.rowCount) {
-        await client.query("COMMIT");began=false;
-        return 0;
-      }
+        "SELECT provider_proof_sha256,gross_processed_kobo::text," +
+        "effective_paid_kobo::text FROM commerce.msnw_paystack_merchant_settlements " +
+        "WHERE settlement_id=$1 FOR UPDATE", [entry.id]);
       const matched = await client.query(
         "SELECT e.reference,e.provider_transaction_id,e.amount_kobo::text " +
         "FROM commerce.msnw_paystack_fiat_evidence e " +
@@ -153,37 +150,58 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
         id:entry.id,domain:entry.domain,total:entry.total,
         effective:entry.effective,settledAt:entry.settledAt,
       })).digest("hex");
-      await client.query(
-        "INSERT INTO commerce.msnw_paystack_merchant_settlements " +
-        "(settlement_id,currency,provider_status,gross_processed_kobo," +
-        "effective_paid_kobo,settlement_date,provider_proof_sha256) " +
-        "VALUES ($1,'NGN','success',$2::bigint,$3::bigint,$4,$5)",
-        [entry.id,entry.total,entry.effective,entry.settledAt,settlementHash],
-      );
+      if (existing.rowCount) {
+        const row = existing.rows[0];
+        // Re-inspect already scanned settlements when fiat evidence arrived
+        // AFTER the original payout scan. Historical payout proof is immutable
+        // and MUST match this freshly authenticated Paystack observation.
+        if (existing.rowCount !== 1 || !row ||
+            row.provider_proof_sha256 !== settlementHash ||
+            String(row.gross_processed_kobo) !== entry.total ||
+            String(row.effective_paid_kobo) !== entry.effective) {
+          throw new MsnwMerchantSettlementError("msnw.paystack_settlement_changed");
+        }
+      } else {
+        await client.query(
+          "INSERT INTO commerce.msnw_paystack_merchant_settlements " +
+          "(settlement_id,currency,provider_status,gross_processed_kobo," +
+          "effective_paid_kobo,settlement_date,provider_proof_sha256) " +
+          "VALUES ($1,'NGN','success',$2::bigint,$3::bigint,$4,$5)",
+          [entry.id,entry.total,entry.effective,entry.settledAt,settlementHash],
+        );
+      }
+      let added = 0;
       for (const payment of qualified) {
         const matchHash = createHash("sha256").update(JSON.stringify({
           settlementId:entry.id,reference:payment.reference,
           transactionId:payment.id,amount:payment.amount,
         })).digest("hex");
-        await client.query(
+        const result = await client.query(
           "INSERT INTO commerce.msnw_paystack_payout_matches " +
           "(reference,settlement_id,provider_transaction_id,original_amount_kobo," +
           "payout_match_sha256) " +
           "SELECT e.reference,$2,e.provider_transaction_id,e.amount_kobo,$3 " +
           "FROM commerce.msnw_paystack_fiat_evidence e " +
           "WHERE e.reference=$1 AND e.provider_transaction_id=$4 " +
-          "AND e.amount_kobo=$5::bigint ON CONFLICT DO NOTHING",
+          "AND e.amount_kobo=$5::bigint ON CONFLICT DO NOTHING " +
+          "RETURNING reference",
           [payment.reference,entry.id,matchHash,payment.id,payment.amount],
         );
+        added += result.rowCount ?? 0;
       }
       await client.query("COMMIT");began=false;
-      return qualified.length;
+      return added;
     } catch (error) {
       if (began) await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {client.release();}
   }
 
+  // Give previously scanned payouts a rotating read-only recheck slot:
+  // late-registered Paystack evidence can then be matched using the SAME
+  // immutable settlement and transaction identifiers. No minting or balance
+  // changes are permitted. The other four slots favor new settlements.
+  let revisitOffset = 0;
   async function runOnce() {
     let scanned=0,matched=0,failed=0;
     const settlements = await listSettlements();
@@ -193,15 +211,22 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
       [settlements.map(x => x.id)],
     );
     const seen = new Set(done.rows.map(row => String(row.settlement_id)));
-    for (const entry of settlements) {
-      if (seen.has(entry.id) || scanned>=5) continue;
+    const fresh = settlements.filter(x => !seen.has(x.id));
+    const prior = settlements.filter(x => seen.has(x.id));
+    const revisit = prior.length
+      ? prior[revisitOffset++ % prior.length] : undefined;
+    const candidates = [
+      ...fresh.slice(0, revisit ? 4 : 5),
+      ...(revisit ? [revisit] : []),
+    ];
+    for (const entry of candidates) {
       try {
         const payouts = await transactions(entry.id);
         matched += await record(entry,payouts);
         scanned++;
       } catch {
-        // A corrupt or incomplete provider batch remains unscanned and
-        // creates zero funding entitlement. Retry on next scheduled pass.
+        // Keep the original immutable settlement and all unmatched funding
+        // obligations intact. A temporary outage cannot assert bank proof.
         failed++;
       }
     }
