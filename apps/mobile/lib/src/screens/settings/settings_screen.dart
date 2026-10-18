@@ -16,6 +16,7 @@ import '../../theme/masanawa_theme.dart';
 import '../../tokens/masanawa_tokens.dart';
 import 'account_deletion_dialog.dart';
 import 'account_data_screen.dart';
+import '../profile/my_masana_screen.dart';
 import 'account_security_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'clear_device_chats_dialog.dart';
@@ -441,6 +442,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-my-masana'),
+                leading: Icon(Icons.auto_awesome_outlined, color:u.brand),
+                title: const Text('My Masana'),
+                subtitle: const Text('Create and manage your AI professionals'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap:user==null?null:()=>Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder:(_)=>const MyMasanaScreen()),
+                ),
+              ),
+              const Divider(height:1),
               ListTile(
                 key: const Key('settings-my-data'),
                 leading:Icon(Icons.manage_accounts_outlined,color:u.brand),
