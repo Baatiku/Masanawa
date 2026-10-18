@@ -52,7 +52,12 @@ export function createP2pEvidenceStorage(input:{
       await input.service.assertEvidenceAllowed(actor,orderId);
       const digest=createHash("sha256").update(bytes).digest("hex");
       const scope=createHash("sha256").update(actor.tenantId).digest("hex").slice(0,24);
-      const path=`p2p/${scope}/${orderId}/${randomUUID()}`;
+      const format=body.contentType==="application/pdf"?"pdf":
+        body.contentType==="image/png"?"png":
+        body.contentType==="image/webp"?"webp":"jpg";
+      // Type and size live in the private immutable object key; existing DB
+      // schema and previous evidence references remain compatible.
+      const path=`p2p/${scope}/${orderId}/${randomUUID()}_${bytes.length}_${format}`;
       try {
         const object=await input.objects.putObject!(path,bytes,body.contentType);
         if(object.sha256!==digest||object.bytes!==bytes.length)
