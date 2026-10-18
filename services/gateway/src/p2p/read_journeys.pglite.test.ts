@@ -17,7 +17,7 @@ function uuid(number: number): string {
 async function fixture() {
   const db = new PGlite();
   await db.exec(`
-    CREATE SCHEMA commerce;
+    CREATE SCHEMA security; CREATE TABLE security.platform_user_profiles(tenant_id text,user_id text,display_name text); CREATE SCHEMA commerce;
     CREATE TABLE commerce.msnw_custody_accounts (
       tenant_id text, user_id text, available_micro numeric(78,0)
     );

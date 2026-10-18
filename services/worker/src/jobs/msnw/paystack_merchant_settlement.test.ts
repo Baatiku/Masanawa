@@ -159,7 +159,7 @@ describe("MSNW Paystack completed merchant payout provenance",()=>{
     };
     const runtime=createMsnwMerchantSettlementRuntime({
       pool:{query,async connect(){return {query,release(){}};}} as unknown as Pool,
-      paystackSecretKey:"sk_test_settlement_backlog",
+      paystackSecretKey:"sk_test_settlementbacklog",
       fetchImpl:fetchImpl as typeof fetch,
     });
     await runtime.runOnce();

@@ -36,8 +36,7 @@ describe("notification settings admission", () => {
     const listNotices = vi.fn(async () => []);
     const service = createAccountNotificationService({
       authorizer: { authorize } as unknown as AgentDirectoryAuthorizer,
-      repository: { readPreferences, writePreferences, listNotices }
-        as unknown as MobilePushRepository,
+      repository: { readPreferences, writePreferences, listNotices } as unknown as MobilePushRepository,
     });
     await expect(service.preferences("Bearer different")).rejects.toThrow();
     await service.preferences("Bearer token-for-owner");

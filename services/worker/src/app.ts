@@ -84,6 +84,10 @@ const JobsResponseSchema = Type.Object({
   ])),
 }, { additionalProperties: false });
 
+const JobsErrorSchema = Type.Object({
+  error: Type.String(),
+}, { additionalProperties: false });
+
 export function createWorkerApp(options: WorkerAppOptions = {}) {
   const app = Fastify({
     logger: false,
@@ -197,7 +201,11 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
     if (opsToken.length < 32) throw new Error("ops_monitor_token_too_short");
     const expected = createHash("sha256").update("Bearer " + opsToken).digest();
     app.get("/v1/ops/jobs/health", {
-      schema: { response: { 200: JobsResponseSchema } },
+      schema: { response: {
+        200: JobsResponseSchema,
+        401: JobsErrorSchema,
+        503: JobsErrorSchema,
+      } },
     }, async (request, reply) => {
       const candidate = createHash("sha256")
         .update(request.headers.authorization ?? "").digest();

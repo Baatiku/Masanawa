@@ -18,6 +18,7 @@ describe("Gateway MSN funding readback composition",()=>{
   it("composes only authenticated owner-scoped readback, not fiat/issuance writes",async()=>{
     const principals:string[]=[];
     const app=createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,
       msnFunding:{
         authorizer:{async authorize({authorizationHeader}){
           if(authorizationHeader!=="Bearer sessionA")throw Error("denied");

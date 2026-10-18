@@ -4,7 +4,7 @@ import {createP2pService,type P2pPool,type MsnwEscrowAuthority} from './service.
 it('reads an owner-bound bank/deadline with database time and never moves escrow',async()=>{
  const db=new PGlite();
  try{
-  await db.exec(`CREATE SCHEMA commerce;
+  await db.exec(`CREATE SCHEMA security; CREATE TABLE security.platform_user_profiles(tenant_id text,user_id text,display_name text); CREATE SCHEMA commerce;
   CREATE TABLE commerce.msnw_p2p_orders(order_id uuid,tenant_id text,offer_id uuid,seller_id text,buyer_id text,amount_micro bigint,fee_micro bigint,fiat_kobo bigint,rate_kobo_per_msnw bigint,payment_deadline timestamptz,state text,version int,receipt_reference text,payment_method_id uuid);
   CREATE TABLE commerce.msnw_p2p_payment_methods(tenant_id text,method_id uuid,bank_name text,account_name text,account_number text,method_type text,owner_id text,verified_at timestamptz,disabled_at timestamptz);
   CREATE TABLE commerce.msnw_p2p_late_payment_cases(case_id uuid,tenant_id text,order_id uuid,state text,created_at timestamptz,updated_at timestamptz);
