@@ -1445,6 +1445,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
                 const Divider(height:25),
                 _reviewRow('Receiving bank',
                   method.isEmpty?'Unavailable':'${method.first['bank_name']} · '
+                    '${method.first['account_name'] ?? 'Verified account'} · '
                     '${_maskedP2pAccount(method.first['account_number'])}'),
                 _reviewRow('Price', '${_rate.text.trim()} NGN / MSNW'),
                 _reviewRow('Minimum', '${_minimum.text.trim()} MSNW'),
@@ -1486,6 +1487,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
                   DropdownMenuItem(
                     value: '${bank['method_id']}',
                     child: Text('${bank['bank_name']} · '
+                        '${bank['account_name'] ?? 'Verified account'} · '
                         '${_maskedP2pAccount(bank['account_number'])}',
                         overflow: TextOverflow.ellipsis),
                   ),
