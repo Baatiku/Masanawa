@@ -103,6 +103,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
   Future<void> _clearHistory() async {
     final owner = _owner;
     if (owner == null) return;
+    final previous = [..._recent];
     setState(() => _recent = []);
     try {
       _historyWrites = _historyWrites.then(
@@ -111,6 +112,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     } catch (_) {
       _historyWrites = Future<void>.value();
       if (mounted && _owner == owner) {
+        setState(() => _recent = previous);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not clear saved searches. Retry.')),
         );
