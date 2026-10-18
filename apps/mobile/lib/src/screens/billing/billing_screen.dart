@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../../finance/wallet_flow_page.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +29,14 @@ BillCategory? billingCategoryForHomeService(
     if (terms.any(haystack.contains)) return value;
   }
   return null;
+}
+
+String? normalizeNigerianBillingPhone(String input) {
+  if (!RegExp(r'^\+?[0-9 ()-]+$').hasMatch(input)) return null;
+  var value = input.replaceAll(RegExp(r'[ ()-]'), '');
+  if (value.startsWith('+234')) value = '0${value.substring(4)}';
+  else if (value.startsWith('234')) value = '0${value.substring(3)}';
+  return RegExp(r'^0[789][01][0-9]{8}$').hasMatch(value) ? value : null;
 }
 
 enum NigerianNetwork {
@@ -85,6 +94,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   BillItem? item;
   BillingCheckoutView? current;
   BillingWalletActionView? walletAction;
+  int _generation = 0;
+  bool _manualNetwork = false;
+  String? historyError;
+  String? get _owner => switch(ref.read(sessionProvider)) {SessionSignedIn(:final user) => user.id, _ => null};
+  bool valid(int generation, String? owner) => mounted && generation == _generation && owner == _owner;
   bool busy = false;
   bool loading = true;
   String? error;
@@ -93,8 +107,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   String selectedFilter = 'All';
 
   ApiClient get api => ref.read(apiClientProvider);
-  bool get mobileCategory => category?.code == 'AIRTIME' ||
-    category?.code == 'MOBILEDATA';
+  bool get mobileCategory => category?.code.replaceAll('_', '') == 'AIRTIME' ||
+    category?.code.replaceAll('_', '') == 'MOBILEDATA';
 
   @override
   void initState() {
@@ -105,7 +119,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   void _onPhoneChanged() {
     final text = customer.text;
-    if (!mobileCategory) return;
+    if (!mobileCategory || _manualNetwork || busy) return;
     final detected = detectNetworkFromPhone(text);
     if (detected != null && detected != selectedNetwork) {
       setState(() {
@@ -127,40 +141,41 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           ? value.message
           : fallback;
 
-  Future<void> load() async {
-    if (mounted) setState(() { loading = true; error = null; });
+  Future<void> refreshHistory() async {
+    final generation = _generation, owner = _owner;
     try {
-      final nextCategories = await api.billingCategories();
-      final nextHistory = await api.billingHistory(limit: 30);
-      if (!mounted) return;
-      setState(() {
-        categories = nextCategories;
-        history = nextHistory;
-        loading = false;
-      });
+      final next = await api.billingHistory(limit: 30);
+      if (!valid(generation, owner)) return;
+      setState(() {history = next; historyError = null;});
+    } catch (_) {
+      if (valid(generation, owner)) setState(() => historyError = 'Receipts unavailable');
+    }
+  }
 
-      // Match category from initialService or default to mobile data
-      final targetCategory = billingCategoryForHomeService(
-            nextCategories,
-            widget.initialService ?? 'data',
-          ) ??
-          (nextCategories.isNotEmpty ? nextCategories.first : null);
-
-      if (targetCategory != null) {
-        await selectCategory(targetCategory);
-      }
+  Future<void> load() async {
+    final generation = ++_generation, owner = _owner;
+    setState(() {loading = true; busy = false; error = null;});
+    unawaited(refreshHistory());
+    try {
+      final next = await api.billingCategories();
+      if (!valid(generation, owner)) return;
+      setState(() {categories = next; loading = false;});
+      final target = billingCategoryForHomeService(next, widget.initialService ?? 'data') ??
+          (next.isEmpty ? null : next.first);
+      if (target != null) await selectCategory(target);
     } catch (value) {
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        error = safeError(value, 'Billing is unavailable right now.');
+      if (valid(generation, owner)) setState(() {
+        loading = false; error = safeError(value, 'Billing is unavailable right now.');
       });
     }
   }
 
   Future<void> selectCategory(BillCategory? value) async {
     if (value == null || busy) return;
+    final generation = _generation, owner = _owner;
     setState(() {
+      selectedFilter = 'All';
+      _manualNetwork = false;
       category = value;
       biller = null;
       item = null;
@@ -171,23 +186,23 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     });
     try {
       final next = await api.billingBillers(value.code);
-      if (mounted) {
+      if (valid(generation, owner)) {
         // Release the category fetch guard before loading the selected biller.
         setState(() { billers = next; busy = false; });
-        if (value.code == 'AIRTIME' || value.code == 'MOBILEDATA') {
-          _matchBillerForNetwork(selectedNetwork);
+        if (mobileCategory) {
+          await _matchBillerForNetwork(selectedNetwork);
         } else if (next.isNotEmpty) {
           await selectBiller(next.first);
         }
       }
     } catch (value) {
-      if (mounted) setState(() => error = safeError(value, 'Could not load providers.'));
+      if (valid(generation, owner)) setState(() => error = safeError(value, 'Could not load providers.'));
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (valid(generation, owner)) setState(() => busy = false);
     }
   }
 
-  void _matchBillerForNetwork(NigerianNetwork network) {
+  Future<void> _matchBillerForNetwork(NigerianNetwork network) async {
     if (billers.isEmpty) return;
     final name = network.label.toLowerCase();
     BillBiller? matched;
@@ -197,12 +212,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         break;
       }
     }
-    matched ??= billers.first;
-    selectBiller(matched);
+    if (matched == null) {
+      setState(() {biller = null; items = const []; error = '${network.label} is unavailable';});
+      return;
+    }
+    await selectBiller(matched);
   }
 
   Future<void> selectBiller(BillBiller? value) async {
     if (value == null || busy) return;
+    final generation = _generation, owner = _owner;
     setState(() {
       biller = value;
       item = null;
@@ -212,11 +231,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     });
     try {
       final next = await api.billingItems(value.billerCode);
-      if (mounted) setState(() => items = next);
+      if (valid(generation, owner)) setState(() => items = next);
     } catch (value) {
-      if (mounted) setState(() => error = safeError(value, 'Could not load services.'));
+      if (valid(generation, owner)) setState(() => error = safeError(value, 'Could not load services.'));
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (valid(generation, owner)) setState(() => busy = false);
     }
   }
 
@@ -226,7 +245,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return items.where((i) {
       final text = i.name.toLowerCase();
       if (selectedFilter == 'Daily') {
-        return text.contains('day') || text.contains('daily') || text.contains('24 hrs');
+        return text.contains('daily') || RegExp(r'\b1 day(s)?\b|\b24 (hrs|hours)\b').hasMatch(text);
       } else if (selectedFilter == 'Weekly') {
         return text.contains('week') || text.contains('7 days') || text.contains('14 days');
       } else if (selectedFilter == 'Monthly') {
@@ -237,8 +256,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   void onSelectBundle(BillItem selected) {
-    final phone = customer.text.trim();
-    if (phone.isEmpty || (mobileCategory && phone.length < 10)) {
+    final raw = customer.text.trim();
+    final phone = mobileCategory ? normalizeNigerianBillingPhone(raw) : raw;
+    if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mobileCategory
           ? 'Please enter a valid Nigerian phone number.'
@@ -268,19 +288,17 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       builder: (sheet) => MsnwBillingCheckoutSheet(
         api: api, dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         categoryCode: chosenCategory.code,
-        item: selected, customerId: customer.text.trim(),
+        item: selected, customerId: mobileCategory ? normalizeNigerianBillingPhone(customer.text.trim())! : customer.text.trim(),
         expectedUserId: expected,
         currentUserId: () => switch (ref.read(sessionProvider)) {
           SessionSignedIn(:final user) => user.id,
           _ => null,
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
-        onFund: () {
-          Navigator.of(sheet).pop();
-          _showFundingSheet();
-        },
+        onFund: _showFundingSheet,
       ),
     );
+    if (mounted && _owner == expected) await refreshHistory();
   }
 
   void _showFundingSheet() {
@@ -309,6 +327,17 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    ref.listen<SessionState>(sessionProvider, (previous, next) {
+      final before = previous is SessionSignedIn ? previous.user.id : null;
+      final after = next is SessionSignedIn ? next.user.id : null;
+      if (before == after) return;
+      ++_generation;
+      customer.clear();
+      setState(() {history = const []; historyError = null; categories = const [];
+        billers = const []; items = const []; category = null; biller = null;
+        item = null; current = null; walletAction = null; loading = true; busy = false;});
+      unawaited(load());
+    });
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -420,8 +449,8 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: InkWell(
-                      onTap: () {
-                        setState(() => selectedNetwork = net);
+                      onTap: busy || !billers.any((b) => b.name.toLowerCase().contains(net.label.toLowerCase())) ? null : () {
+                        setState(() {selectedNetwork = net; _manualNetwork = true;});
                         _matchBillerForNetwork(net);
                       },
                       borderRadius: BorderRadius.circular(10),
@@ -526,10 +555,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             else
               ...filteredItems.map((pkg) => _BundleCard(
                     item: pkg,
-                    network: selectedNetwork,
+                    network: mobileCategory ? selectedNetwork : null,
                     onTap: () => onSelectBundle(pkg),
                   )),
             const SizedBox(height: 20),
+            if (historyError != null) Center(child: TextButton(onPressed: refreshHistory, child: const Text('Retry receipts'))),
             if (history.isNotEmpty) ...[
               Text('Recent bill receipts',
                 style: Theme.of(context).textTheme.titleMedium),
@@ -541,23 +571,21 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   subtitle: Text('Status: '+entry.phase+
                     ' · ₦'+entry.quote.totalAmount+
                     ' · '+entry.quote.customerId),
-                  trailing: const Icon(Icons.refresh),
+                  trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
-                    try {
-                      final updated = await api.billingQuote(entry.quote.quoteId);
-                      if (!mounted) return;
-                      setState(() {
-                        history = history.map((old) =>
-                          old.quote.quoteId == updated.quote.quoteId
-                            ? updated : old).toList(growable: false);
-                      });
-                    } catch (_) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text(
-                          'Bill provider confirmation is still unavailable. '
-                          'The existing order has not been duplicated.')),
-                      );
-                    }
+                    final owner = _owner;
+                    if(owner == null)return;
+                    await openWalletPage<void>(context:context,title:'Bill receipt',
+                      builder:(_)=>MsnwBillingCheckoutSheet(
+                        api:api,dio:ref.read(dioProvider),baseUrl:kApiBaseUrl,
+                        categoryCode:entry.quote.categoryCode ?? '',
+                        item:BillItem(billerCode:entry.quote.billerCode,itemCode:entry.quote.itemCode,
+                          name:entry.quote.itemName,amount:entry.quote.serviceAmount,
+                          currency:entry.quote.currency,labelName:null),
+                        customerId:entry.quote.customerId,expectedUserId:owner,
+                        currentUserId:()=>_owner,accessToken:()=>api.accessToken,
+                        initialQuote:entry.quote,onFund:_showFundingSheet));
+                    if(mounted && _owner == owner)await refreshHistory();
                   },
                 ),
             ],
@@ -576,7 +604,7 @@ class _BundleCard extends StatelessWidget {
   });
 
   final BillItem item;
-  final NigerianNetwork network;
+  final NigerianNetwork? network;
   final VoidCallback onTap;
 
   @override
@@ -598,8 +626,8 @@ class _BundleCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundColor: network.brandColor.withValues(alpha: 0.15),
-                child: Icon(Icons.wifi, color: network.brandColor, size: 20),
+                backgroundColor: u.surfaceMuted,
+                child: Icon(network == null ? Icons.receipt_long : Icons.wifi, color: u.textPrimary, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -616,7 +644,7 @@ class _BundleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Instant Activation',
+                      item.currency,
                       style: TextStyle(fontSize: 12, color: u.textMuted),
                     ),
                   ],
@@ -626,18 +654,14 @@ class _BundleCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₦${item.amount}',
+                    item.variableAmount ? 'Enter amount' : '${item.currency} ${item.amount}',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: u.brand,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Tap to buy',
-                    style: TextStyle(fontSize: 10.5, color: Colors.grey),
-                  ),
+
                 ],
               ),
             ],
@@ -647,3 +671,4 @@ class _BundleCard extends StatelessWidget {
     );
   }
 }
+
