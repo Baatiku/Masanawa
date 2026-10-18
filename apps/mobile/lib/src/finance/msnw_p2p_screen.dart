@@ -65,7 +65,7 @@ class MsnwP2pScreen extends StatefulWidget {
 class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   int _tab = 0;
   String _orderFilter = 'all';
-  String? _nextOrderCursor;
+  final _nextCursors = <int,String?>{};
   bool _loadingMore = false;
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
@@ -179,20 +179,22 @@ n this device.')));
     if (!_sameAccount) throw StateError('Account changed. Please reopen P2P.');
     return r.data;
   }
+  String _listEndpoint(int tab,String filter) => switch(tab) {
+    0 => '/offers/page',
+    1 => '/my-offers/page',
+    2 => '/orders/page?filter=$filter',
+    _ => '/notifications/page',
+  };
+
   Future<List<Map<String, dynamic>>> _load() async {
     final tab = _tab;
     final filter = _orderFilter;
-    final path = switch (tab) {
-      0 => '/offers', 1 => '/my-offers',
-      2 => '/orders/page?filter=$filter',
-      _ => '/notifications',
-    };
-    final json = _json(await _request('GET', path));
+    final json = _json(await _request('GET',_listEndpoint(tab,filter)));
     final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
     if (_sameAccount && (tab != 2 || filter == _orderFilter)) {
       _cached[tab] = items;
-      if (tab == 2) _nextOrderCursor = json['nextCursor'] as String?;
+      _nextCursors[tab] = json['nextCursor'] as String?;
     }
     return items;
   }
@@ -200,32 +202,37 @@ n this device.')));
   void _reload([int? tab]) {
     setState(() {
       if (tab != null) _tab = tab;
-      if (_tab == 2) _nextOrderCursor = null;
+      _nextCursors.remove(_tab);
       _list = _load();
     });
   }
 
-  Future<void> _loadMoreOrders() async {
-    final cursor = _nextOrderCursor;
-    if (_loadingMore || cursor == null || _tab != 2 || !_sameAccount) return;
+  Future<void> _loadMore() async {
+    final tab = _tab;
+    final cursor = _nextCursors[tab];
+    if (_loadingMore || cursor == null || !_sameAccount) return;
     final filter = _orderFilter;
     setState(() => _loadingMore = true);
     try {
+      final base = _listEndpoint(tab,filter);
+      final separator=base.contains('?')?'&':'?';
       final json = _json(await _request('GET',
-        '/orders/page?filter=$filter&cursor=${Uri.encodeComponent(cursor)}'));
+        '$base${separator}cursor=${Uri.encodeComponent(cursor)}'));
       final next = (json['items'] as List<dynamic>? ?? []).map(_json).toList();
-      if (!mounted || !_sameAccount || _tab != 2 || filter != _orderFilter) return;
-      final existing = _cached[2] ?? <Map<String, dynamic>>[];
-      final seen = existing.map((e) => e['order_id']).toSet();
-      final combined = [...existing, ...next.where((e) => seen.add(e['order_id']))];
+      if (!mounted || !_sameAccount || _tab != tab ||
+        (tab == 2 && filter != _orderFilter)) return;
+      final existing = _cached[tab] ?? <Map<String, dynamic>>[];
+      final idKey = switch(tab) {0||1=>'offer_id',2=>'order_id',_=>'event_id'};
+      final seen = existing.map((e) => e[idKey]).toSet();
+      final combined = [...existing,...next.where((e)=>seen.add(e[idKey]))];
       setState(() {
-        _cached[2] = combined;
-        _nextOrderCursor = json['nextCursor'] as String?;
+        _cached[tab] = combined;
+        _nextCursors[tab] = json['nextCursor'] as String?;
         _list = Future.value(combined);
       });
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not load more orders. Try again.')));
+        content: Text('Could not load more results. Retry when connected.')));
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
@@ -741,7 +748,7 @@ n this device.')));
                     setState(() {
                       _orderFilter = filter;
                       _cached.remove(2);
-                      _nextOrderCursor = null;
+                      _nextCursors.remove(2);
                       _list = _load();
                     });
                   }),
@@ -783,12 +790,12 @@ n this device.')));
                       2 => _orderTile(item),
                       _ => _updateTile(item),
                     },
-                  if (_tab == 2 && _nextOrderCursor != null)
+                  if (_nextCursors[_tab] != null)
                     Padding(padding: const EdgeInsets.all(16),
                       child: OutlinedButton.icon(
-                        onPressed: _loadingMore ? null : _loadMoreOrders,
+                        onPressed: _loadingMore ? null : _loadMore,
                         icon: Icon(_loadingMore ? Icons.hourglass_top : Icons.expand_more),
-                        label: Text(_loadingMore ? 'Loading…' : 'Load more orders'),
+                        label: Text(_loadingMore ? 'Loading…' : 'Load more'),
                       )),
                   const SizedBox(height: 30),
                 ],
