@@ -98,7 +98,7 @@ done < <(tar -tzf "$scratch/objects.tar.gz")
 tar -C "$scratch" -xzf "$scratch/objects.tar.gz"
 PGDATABASE="$RESTORE_DATABASE_URL" pg_restore \
   --exit-on-error --single-transaction --no-owner --no-privileges \
-  "$scratch/postgres.dump"
+  --dbname="" "$scratch/postgres.dump"
 aws s3 sync "$scratch/objects" "$RESTORE_OBJECT_URI" --only-show-errors
 
 # Independent object readback confirms every restored object byte, not only
