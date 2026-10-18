@@ -1,4 +1,5 @@
-import { createSign } from "node:crypto";
+import { createSign, randomUUID } from "node:crypto";
+import type { MobileNotificationCategory, MobileNotificationPreferences } from "@masanawa/agents";
 import type {MobilePushRepository, MobileShellScope} from "@masanawa/agents";
 
 export interface MobilePushSender {
@@ -69,6 +70,45 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
+/** Per-category opt-out and quiet hours are enforced where delivery occurs,
+ * so background workers and all Gateway senders use the same policy.
+ */
+export function pushCategory(data: Readonly<Record<string, string>> | undefined):
+    MobileNotificationCategory {
+  const type = data?.type ?? "";
+  if (type === "incoming_call" || type === "missed_call") return "calls";
+  if (type === "p2p_order" || type.startsWith("p2p_")) return "p2p";
+  if (type.startsWith("wallet_") || type.startsWith("funding_") ||
+      type.startsWith("transfer_") || type.startsWith("withdrawal_") ||
+      type.startsWith("settlement_")) return "wallet";
+  if (type.startsWith("room_")) return "rooms";
+  if (type.startsWith("status_") || type.startsWith("post_")) return "status";
+  return "messages";
+}
+
+export function pushAllowed(
+  preferences: MobileNotificationPreferences,
+  category: MobileNotificationCategory,
+  now: Date,
+  data?: Readonly<Record<string, string>>,
+): boolean {
+  if (!preferences[category]) return false;
+  // Fraud/security warnings and money requiring timely action remain audible;
+  // an unrelated caller cannot claim criticality by supplying arbitrary data.
+  const critical = category === "calls" && data?.type === "incoming_call" ||
+    category === "wallet" && data?.type === "wallet_security" ||
+    category === "p2p" && data?.type === "p2p_deadline";
+  if (critical) return true;
+  const from = preferences.quietStart, to = preferences.quietEnd;
+  if (from === null || to === null || from === to) return true;
+  const local = ((now.getUTCHours() * 60 + now.getUTCMinutes() +
+    preferences.utcOffsetMinutes) % 1440 + 1440) % 1440;
+  const within = from < to
+    ? local >= from && local < to
+    : local >= from || local < to;
+  return !within;
+}
+
 export function createFcmPushSender(input: {
   readonly serviceAccountJson: string;
   readonly repository: MobilePushRepository;
@@ -129,6 +169,24 @@ export function createFcmPushSender(input: {
 
   const sender: MobilePushSender = {
     async send(request) {
+      const category = pushCategory(request.data);
+      const preview = mobilePushSafePreview(request.data);
+      // History is durable even when push is disabled, device permission
+      // denied, or quiet hours suppress a nonurgent notification.
+      const eventId = request.data?.eventId ?? `push-${randomUUID()}`;
+      await input.repository.appendNotice({
+        tenantId: request.scope.tenantId,
+        userId: request.scope.userId,
+        eventId: eventId.slice(0, 160),
+        category,
+        title: preview.title,
+        deepLink: request.data?.deepLink?.startsWith("masanawa://")
+          ? request.data.deepLink.slice(0, 300) : null,
+      });
+      const preferences = await input.repository.readPreferences(request.scope);
+      if (!pushAllowed(preferences, category, now(), request.data)) {
+        return Object.freeze({ attempted: 0, delivered: 0 });
+      }
       const registrations = await input.repository.list(request.scope);
       if (registrations.length === 0) {
         return Object.freeze({ attempted: 0, delivered: 0 });
