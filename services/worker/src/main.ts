@@ -25,6 +25,7 @@ import { createMsnwCustodyIssuanceRuntime } from "./jobs/msnw/custody_issuance.j
 import { createMsnwReserveAudit } from "./jobs/msnw/reserve_audit.js";
 import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_merchant_settlement.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
+import { createDurableJobHealth } from "./jobs/durable_health.js";
 import {
   createWorkerApp,
   type WorkerAppOptions,
@@ -322,6 +323,7 @@ export async function startWorkerService(
       ...(env.MASANAWA_OPS_MONITOR_TOKEN?.trim()
         ? { opsMonitorToken: env.MASANAWA_OPS_MONITOR_TOKEN.trim() }
         : {}),
+      databaseJobs: () => createDurableJobHealth(database.pool!).read(),
       jobsHealth: () => [
         schedulerHealth("youtube_outbox", youtubeOutbox),
         schedulerHealth("scheduled_feed", feedPublisher),
