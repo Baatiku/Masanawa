@@ -177,9 +177,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       // reservation remains the sole escrow authority; discovery never moves funds.
       const rows = await pool.query(`SELECT o.offer_id,o.seller_id,o.rate_kobo_per_msnw::text,
         o.min_micro::text,LEAST(o.max_micro,capacity.amount)::text AS max_micro,
-        capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,o.created_at
+        capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,
+        seller.display_name AS seller_display_name,
+        (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
+        o.created_at
         FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
           ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+        LEFT JOIN security.platform_user_profiles seller
+          ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
         JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
         CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
           floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
@@ -193,17 +198,22 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async offersPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
-      const result=await pool.query(`SELECT o.offer_id,
+      const result=await pool.query(`SELECT o.offer_id,o.seller_id,
         o.rate_kobo_per_msnw::text,o.min_micro::text,
         LEAST(o.max_micro,capacity.amount)::text AS max_micro,
         capacity.amount::text AS remaining_micro,o.fee_bps,
-        p.bank_name,p.method_type,o.created_at,
+        p.bank_name,p.method_type,
+        seller.display_name AS seller_display_name,
+        (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
+        o.created_at,
         to_char(o.created_at AT TIME ZONE 'UTC',
           'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
         FROM commerce.msnw_p2p_offers o
         JOIN commerce.msnw_p2p_payment_methods p
           ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id
           AND p.owner_id=o.seller_id
+        LEFT JOIN security.platform_user_profiles seller
+          ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
         JOIN commerce.msnw_custody_accounts c
           ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
         CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,

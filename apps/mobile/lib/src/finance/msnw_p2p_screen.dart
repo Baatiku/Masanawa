@@ -13,6 +13,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// This is a public profile display label, not a verified legal identity.
+String p2pSafeTraderDisplay(Object? raw) {
+  if(raw is! String)return 'Masanawa trader';
+  final clean=raw.trim().replaceAll(RegExp(r'\s+'),' ');
+  if(clean.isEmpty)return 'Masanawa trader';
+  return clean.length>48?'${clean.substring(0,48)}…':clean;
+}
+
 String _maskedP2pAccount(Object? value) {
   final number=value?.toString()??'';
   return RegExp(r'^[0-9]{10}$').hasMatch(number)
@@ -771,6 +779,24 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           : item['state']=='paused' ? 'Paused' : 'Closed') : 'Buy',
             style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
         ]),
+        if(!own)...[
+          const SizedBox(height:7),
+          Text(p2pSafeTraderDisplay(item['seller_display_name']),
+            maxLines:1,overflow:TextOverflow.ellipsis,
+            style:Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight:FontWeight.w600)),
+          if(item['bank_method_verified']==true)
+            Padding(
+              padding:const EdgeInsets.only(top:3),
+              child:Row(mainAxisSize:MainAxisSize.min,children:[
+                Icon(Icons.verified_user_outlined,size:14,
+                  color:Theme.of(context).colorScheme.primary),
+                const SizedBox(width:4),
+                Flexible(child:Text('Bank method verified',
+                  style:Theme.of(context).textTheme.labelSmall)),
+              ]),
+            ),
+        ],
         const SizedBox(height: 7),
         Text('Available  ${_msnw(item['remaining_micro'])}'),
         const SizedBox(height: 5),
@@ -801,16 +827,28 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(buyer ? 'Buy MSNW' : 'Sell MSNW',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700)),
+          Row(children:[
+            Expanded(child:Text(buyer ? 'Buy MSNW' : 'Sell MSNW',
+              style:Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight:FontWeight.w700))),
+            const Icon(Icons.lock_outline,size:16),
+          ]),
           const SizedBox(height: 4),
           Text(_msnw(item['amount_micro']),
             style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Wrap(spacing: 10, runSpacing: 4, children: [
-            Text(p2pOrderStatus('${item['state'] ?? ''}'),
-              style: Theme.of(context).textTheme.bodySmall),
+            DecoratedBox(
+              decoration:BoxDecoration(
+                color:Theme.of(context).colorScheme.primary.withValues(alpha:.08),
+                borderRadius:BorderRadius.circular(20)),
+              child:Padding(
+                padding:const EdgeInsets.symmetric(horizontal:9,vertical:5),
+                child:Text(p2pOrderStatus('${item['state'] ?? ''}'),
+                  style:Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight:FontWeight.w600)),
+              )),
+
             Text(_ngn(item['fiat_kobo']),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w600)),
