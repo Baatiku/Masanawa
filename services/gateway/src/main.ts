@@ -136,6 +136,7 @@ import {
 import { createCreatorEconomyService } from "./creator_economy.js";
 import { createGeminiCreatorGenerator, CreatorGenerationError } from "./creator_agents/generator.js";
 import { createPostgresCreatorAgentService, type CreatorPool } from "./creator_agents/store.js";
+import { createCreatorPolicyService } from "./creator_agents/policy.js";
 import { createCreatorSkillService } from "./creator_skills.js";
 import {
   createCommerceCatalogService,
@@ -2671,6 +2672,16 @@ export async function startGatewayService(
             } },
       }),
     } : undefined);
+  const creatorPolicy: GatewayAppOptions["creatorPolicy"] = options.appOptions?.creatorPolicy ??
+    (featurePool && sessions && featureTenant ? {
+      service: createCreatorPolicyService(featurePool as unknown as CreatorPool),
+      fan: resolveFeatureFan,
+      staff: async(header:string|undefined)=>{
+        const actor=await resolveFeatureFan(header);
+        if(!editors.has(actor.userId))throw new CustomerAuthError("FORBIDDEN",403);
+        return actor;
+      },
+    } : undefined);
   const masana: GatewayAppOptions["masana"] = options.appOptions?.masana ??
     (featurePool && sessions && featureTenant ? {
       auth:{
@@ -2731,6 +2742,7 @@ export async function startGatewayService(
       ...(rooms ? {rooms} : {}),
       ...(masana ? {masana} : {}),
       ...(creatorAgents ? {creatorAgents} : {}),
+      ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
