@@ -153,7 +153,18 @@ class P2pOrderBankDetails extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SelectableText(accountName),
+          Row(children: [
+            Expanded(child: SelectableText(accountName)),
+            IconButton(
+              tooltip:'Copy verified recipient name',
+              icon:const Icon(Icons.copy_outlined),
+              onPressed:()async{
+                await Clipboard.setData(ClipboardData(text:accountName));
+                if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content:Text('Recipient name copied')));
+              },
+            ),
+          ]),
           if (buyer && fiatTotal != null) ...[
             const Divider(height: 24),
             Text('Send exactly',style:Theme.of(context).textTheme.labelMedium),
@@ -165,7 +176,7 @@ class P2pOrderBankDetails extends StatelessWidget {
                 tooltip:'Copy exact payment amount',
                 icon:const Icon(Icons.copy_outlined),
                 onPressed:()async{
-                  await Clipboard.setData(ClipboardData(text:fiatTotal!));
+                  await Clipboard.setData(ClipboardData(text:fiatTotal!.replaceAll('₦','').replaceAll(',','')));
                   if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content:Text('Payment total copied')));
                 },
