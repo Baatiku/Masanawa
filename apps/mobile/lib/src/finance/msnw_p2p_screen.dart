@@ -874,40 +874,72 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       const Icon(Icons.chevron_right),
     ]), _busy ? null : () => _orderDetail('${item['order_id']}'));
 
-  Future<void> _manageOffer(Map<String, dynamic> offer) async {
-    await openWalletPage<void>(context: context, title: 'My sell offer',
-      builder: (route) => WalletReviewContent(
-        title: const Text('Offer details'),
-        content: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _p2pReviewLine('Price', '${_ngn(offer['rate_kobo_per_msnw'])} / MSNW'),
-          _p2pReviewLine('Available', _msnw(offer['remaining_micro'])),
-          _p2pReviewLine('Minimum', _msnw(offer['min_micro'])),
-          _p2pReviewLine('Maximum', _msnw(offer['max_micro'])),
-          const SizedBox(height: 10),
-          const Text('Closing stops new orders, but never changes existing escrow.'),
+  Future<void> _manageOffer(Map<String,dynamic> offer) async {
+    final offerId='${offer['offer_id'] ?? ''}';
+    if(!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(offerId))return;
+    Future<void> updateOffer(BuildContext route,String action) async {
+      if(_busy||!_sameAccount)return;
+      final label=switch(action){
+        'pause'=>'Pause this offer?',
+        'resume'=>'Resume this offer?',
+        _=>'Close this offer?',
+      };
+      final message=action=='resume'
+        ? 'Resume using your existing verified bank, current offer limits '
+          'and available MSNW. Buyers must still review a new price.'
+        : 'New orders will stop. Existing P2P orders, disputes and escrow '
+          'will not be changed.';
+      final approved=await _confirm(label,message);
+      if(!approved||!mounted||!_sameAccount)return;
+      setState(()=>_busy=true);
+      try {
+        final result=_json(await _request('POST','/offers/$offerId/$action',{}));
+        if(result['offerId']!=offerId ||
+           result['state']!=switch(action){
+             'pause'=>'paused','resume'=>'active',_=>'closed',
+           })throw const FormatException('Unexpected offer result');
+        if(!mounted||!_sameAccount||!route.mounted)return;
+        Navigator.pop(route);
+        _reload(1);
+      } catch (_) {
+        if(mounted&&_sameAccount)ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content:Text(
+            'Offer change not confirmed. Refresh My Offers and try again.')));
+      } finally {
+        if(mounted)setState(()=>_busy=false);
+      }
+    }
+    await openWalletPage<void>(context:context,title:'My sell offer',
+      builder:(route)=>WalletReviewContent(
+        title:const Text('Offer details'),
+        content:Column(mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.start,children:[
+          _p2pReviewLine('Price','${_ngn(offer['rate_kobo_per_msnw'])} / MSNW'),
+          _p2pReviewLine('Available',_msnw(offer['remaining_micro'])),
+          _p2pReviewLine('Minimum',_msnw(offer['min_micro'])),
+          _p2pReviewLine('Maximum',_msnw(offer['max_micro'])),
+          const SizedBox(height:10),
+          const Text('Changes affect new buyers only. Existing P2P orders '
+            'and MSNW escrow continue normally.'),
         ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(route),
-            child: const Text('Back')),
-          if (offer['state'] == 'active') OutlinedButton.icon(
-            icon: const Icon(Icons.block_outlined),
-            label: const Text('Close offer'),
-            onPressed: () async {
-              final approved = await _confirm('Close offer?',
-                'Existing escrow and orders are unaffected.');
-              if (!approved || !mounted) return;
-              try {
-                await _request('POST', '/offers/${offer['offer_id']}/close', {});
-                if (!mounted) return;
-                Navigator.pop(route);
-                _reload(1);
-              } catch (_) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Could not close offer. Refresh its status.')));
-              }
-            },
-          ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(route),
+            child:const Text('Back')),
+          if(offer['state']=='active')
+            OutlinedButton.icon(
+              icon:const Icon(Icons.pause_circle_outline),
+              label:const Text('Pause'),
+              onPressed:()=>updateOffer(route,'pause')),
+          if(offer['state']=='paused')
+            FilledButton.icon(
+              icon:const Icon(Icons.play_circle_outline),
+              label:const Text('Resume'),
+              onPressed:()=>updateOffer(route,'resume')),
+          if(offer['state']=='active'||offer['state']=='paused')
+            OutlinedButton.icon(
+              icon:const Icon(Icons.block_outlined),
+              label:const Text('Close offer'),
+              onPressed:()=>updateOffer(route,'close')),
         ],
       ),
     );
