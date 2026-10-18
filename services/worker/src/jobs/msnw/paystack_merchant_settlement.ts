@@ -89,16 +89,23 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
   let nextDeepPage = 2;
   async function listSettlements(): Promise<readonly ProviderSettlement[]> {
     const found: ProviderSettlement[] = [];
-    const seen = new Set<string>();
+    const seen = new Map<string,ProviderSettlement>();
     async function appendPage(page: number): Promise<number> {
       const raw = await api("/settlement?status=success&perPage=50&page=" + page);
       for (const value of raw) {
         const entry = settlement(value,domain);
-        // Pages can shift when Paystack inserts new settlements during a
-        // scan. Deduplicate by provider ID and verify the immutable proof
-        // independently before writing.
-        if (seen.has(entry.id)) continue;
-        seen.add(entry.id);
+        // Pages can shift during provider pagination. A repeated identical
+        // settlement is harmless; a changed amount/date is not.
+        const previous = seen.get(entry.id);
+        if (previous) {
+          if (previous.total !== entry.total ||
+              previous.effective !== entry.effective ||
+              previous.settledAt !== entry.settledAt ||
+              previous.domain !== entry.domain)
+            throw new MsnwMerchantSettlementError("msnw.paystack_settlement_changed");
+          continue;
+        }
+        seen.set(entry.id,entry);
         found.push(entry);
       }
       return raw.length;
