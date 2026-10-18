@@ -101,8 +101,10 @@ class MsnwP2pScreen extends StatefulWidget {
 }
 
 class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserver {
-  int _tab = 0;
-  String _orderFilter = 'all';
+  static final _tabMemory = <String,int>{};
+  static final _filterMemory = <String,String>{};
+  late int _tab;
+  late String _orderFilter;
   final _nextCursors = <int,String?>{};
   bool _loadingMore = false;
   bool _busy = false;
@@ -121,6 +123,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    _tab=_tabMemory[widget.expectedUserId]??0;
+    _orderFilter=_filterMemory[widget.expectedUserId]??'all';
     WidgetsBinding.instance.addObserver(this);
     _restorePending();
     _restorePendingOffer();
@@ -146,7 +150,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       _pendingOffer = null;
       _recoveryReady = false;
       _offerRecoveryReady = false;
-      _reload(0);
+      _tab=_tabMemory[widget.expectedUserId]??0;
+      _orderFilter=_filterMemory[widget.expectedUserId]??'all';
+      _reload();
       _restorePending();
       _restorePendingOffer();
     }
@@ -343,7 +349,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
 
   void _reload([int? tab]) {
     setState(() {
-      if (tab != null) _tab = tab;
+      if (tab != null) {
+        _tab = tab;
+        _tabMemory[widget.expectedUserId] = tab;
+      }
       _nextCursors.remove(_tab);
       _list = _load();
     });
@@ -690,7 +699,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         Row(children: [
           Expanded(child: Text('${_ngn(item['rate_kobo_per_msnw'])} / MSNW',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-          Text(own ? (item['state'] == 'active' ? 'Active' : 'Closed') : 'Buy',
+          Text(own ? (item['state'] == 'active'
+          ? ('${item['remaining_micro']}'=='0' ? 'No capacity' : 'Active')
+          : item['state']=='paused' ? 'Paused' : 'Closed') : 'Buy',
             style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 7),
@@ -931,6 +942,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
                     if (_orderFilter == filter) return;
                     setState(() {
                       _orderFilter = filter;
+                      _filterMemory[widget.expectedUserId] = filter;
                       _cached.remove(2);
                       _nextCursors.remove(2);
                       _list = _load();
