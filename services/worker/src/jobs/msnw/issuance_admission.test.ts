@@ -1,4 +1,4 @@
-import { createHash,generateKeyPairSync,sign } from "node:crypto";
+import { generateKeyPairSync,sign } from "node:crypto";
 import { describe,expect,it } from "vitest";
 import type { Pool } from "@masanawa/postgres";
 import {
