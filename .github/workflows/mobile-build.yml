@@ -37,13 +37,30 @@ jobs:
         run: flutter test
       - name: Phone (production APK)
         run: flutter build apk --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+      - name: Verify provenance script contracts
+        run: node --test ../../scripts/reliability/release-provenance.test.mjs
+      - name: Record signed APK identity and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          test -n "$APKSIGNER"
+          node ../../scripts/reliability/release-provenance.mjs \
+            --apk build/app/outputs/flutter-apk/app-release.apk \
+            --pubspec pubspec.yaml --lockfile pubspec.lock \
+            --apksigner "$APKSIGNER" \
+            --output build/app/outputs/flutter-apk/release-evidence.json
+          (cd build/app/outputs/flutter-apk && sha256sum app-release.apk > app-release.apk.sha256)
       - name: Web (release)
         run: flutter build web --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: masanawa-production-apk
-          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/mobile/build/app/outputs/flutter-apk/release-evidence.json
       - name: Upload web
         uses: actions/upload-artifact@v4
         with:
