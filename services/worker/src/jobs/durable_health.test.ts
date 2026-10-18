@@ -10,7 +10,7 @@ describe("durable operational backlog authority", () => {
   ];
 
   it("queries canonical tables only and returns aggregate ages/counts, not identities", async () => {
-    const query = vi.fn(async (_sql: string) => ({ rows: complete }));
+    const query = vi.fn(async (_config: { text: string }) => ({ rows: complete }));
     const reported = await createDurableJobHealth({ query } as never).read();
     expect(reported).toEqual([
       { name: "db_scheduled_feed", stuck: 2, oldestPendingSeconds: 690 },
@@ -18,7 +18,7 @@ describe("durable operational backlog authority", () => {
       { name: "db_p2p_dead_letter", stuck: 1, oldestPendingSeconds: 0 },
       { name: "db_p2p_custody_anomalies", stuck: 0, oldestPendingSeconds: 0 },
     ]);
-    const sql = String((query.mock.calls[0]?.[0] as {text: string}).text);
+    const sql = String(query.mock.calls[0]?.[0]?.text);
     expect(sql).toContain("FROM feed.posts");
     expect(sql).toContain("FROM commerce.msnw_p2p_orders");
     expect(sql).toContain("FROM events.outbox");
