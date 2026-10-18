@@ -138,6 +138,7 @@ import { createGeminiCreatorGenerator, CreatorGenerationError } from "./creator_
 import { createPostgresCreatorAgentService, type CreatorPool } from "./creator_agents/store.js";
 import { createCreatorPolicyService } from "./creator_agents/policy.js";
 import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
+import { createPgCreatorVoiceReader } from "./creator_agents/voice.js";
 import { createCreatorSkillService } from "./creator_skills.js";
 import {
   createCommerceCatalogService,
@@ -734,6 +735,9 @@ export async function startGatewayService(
   const databaseFactory =
     options.databaseFactory ?? createDefaultDatabaseDependency;
   const database = databaseFactory(env);
+  const creatorVoiceReader = database.featurePool
+    ? createPgCreatorVoiceReader(database.featurePool as unknown as
+        Parameters<typeof createPgCreatorVoiceReader>[0]) : undefined;
   const appFactory = options.appFactory ?? createGatewayApp;
 
   let directoryAuthorizer = options.agentDirectoryAuthorizer;
@@ -879,6 +883,7 @@ export async function startGatewayService(
       ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
       ...(database.callHistory ? { callHistory: database.callHistory } : {}),
       ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
+          ...(creatorVoiceReader ? { creatorVoiceReader } : {}),
       model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
@@ -1391,6 +1396,7 @@ export async function startGatewayService(
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.callHistory ? { callHistory: database.callHistory } : {}),
           ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
+          ...(creatorVoiceReader ? { creatorVoiceReader } : {}),
           model: liveModel,
           voiceName: liveVoice,
           ...(twinProduction
@@ -1898,7 +1904,10 @@ export async function startGatewayService(
           ...(nativeAudio ? { nativeAudio } : {}),
           voiceForCharacter: async (scope) => {
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
-            return profile?.voiceProvider.toLowerCase() === "gemini" ? profile.voiceName : undefined;
+            if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
+            return await creatorVoiceReader?.readPublished({
+              tenantId:scope.tenantId,characterId:scope.characterId,
+            }) ?? undefined;
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(twinConversationObserver ? { twinObserver: twinConversationObserver } : {}),

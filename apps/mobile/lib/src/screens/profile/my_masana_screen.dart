@@ -490,6 +490,12 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
                 ],
               ),
             const SizedBox(height: 18),
+            if (_draft?['voiceName'] is String)
+              Text(
+                'Suggested voice: ${_draft!['voiceName']} (provider availability may vary)',
+                style: TextStyle(color: u.textMuted),
+              ),
+            const SizedBox(height: 12),
             Text(
               'Your Masana will be labeled as an AI character.',
               style: TextStyle(color: u.textMuted),
