@@ -170,4 +170,31 @@ describe("MSNW P2P exact money and escrow",()=>{
     expect(statements.every(s=>!s.includes("UPDATE")&&!s.includes("INSERT"))).toBe(true);
   });
 
+  it("pages funded public offers without exposing own or unbacked sellers",async()=>{
+    const {pool,statements}=mock(sql=>sql.includes("CROSS JOIN LATERAL")&&
+      sql.includes("ORDER BY o.created_at DESC,o.offer_id DESC")
+      ?[{offer_id:offerId,seller_id:"seller-b",created_at:"2026-10-18T04:00:00Z",
+        min_micro:"1000000",max_micro:"2000000",remaining_micro:"2000000"}]:[]);
+    const pages=await createP2pService(pool,deniedWallet).offersPage(actor);
+    expect(pages.items).toHaveLength(1);
+    expect(pages.nextCursor).toBeNull();
+    expect(statements.some(sql=>sql.includes("o.tenant_id=$1")&&
+      sql.includes("o.seller_id<>$2")&&
+      sql.includes("capacity.amount>=o.min_micro")&&
+      sql.includes("p.verified_at IS NOT NULL"))).toBe(true);
+  });
+  it("seller offer and notification pages are scoped to the current account",async()=>{
+    const {pool,statements}=mock(()=>[]);
+    const service=createP2pService(pool,deniedWallet);
+    await service.myOffersPage(actor);
+    await service.notificationsPage(actor);
+    expect(statements.some(sql=>sql.includes("o.seller_id=$2")&&
+      sql.includes("o.tenant_id=$1"))).toBe(true);
+    expect(statements.some(sql=>sql.includes("user_id=$2")&&
+      sql.includes("tenant_id=$1")&&
+      sql.includes("ORDER BY created_at DESC,event_id DESC"))).toBe(true);
+    await expect(service.offersPage(actor,{cursor:"invalid"}))
+      .rejects.toMatchObject({code:"p2p.invalid_cursor"});
+  });
+
 });
