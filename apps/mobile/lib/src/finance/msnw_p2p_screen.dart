@@ -1949,11 +1949,39 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               icon:const Icon(Icons.report_outlined),
               label:const Text('Report bank payment sent')),
         ],
-        if(late.isNotEmpty)ListTile(
-          leading:const Icon(Icons.support_agent_outlined),
-          title:Text('Late-payment case: ${late['state']}'),
-          subtitle:const Text('A support case does not move MSNW. '
-            'Keep your bank transaction reference and evidence available.')),
+        if (late.isNotEmpty) Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color:Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius:BorderRadius.circular(12)),
+          child: Column(children:[
+            ListTile(
+              leading:const Icon(Icons.support_agent_outlined),
+              title:Text(switch('${late['state']}'){
+                'open'=>'Late-payment case open',
+                'escalated'=>'Late-payment case under review',
+                'closed'=>'Late-payment case closed',
+                _=>'Late-payment support case',
+              }),
+              subtitle:const Text('This case does not reopen or move '
+                'a previously refunded MSNW escrow.'),
+            ),
+            if(late['case_id']!=null)
+              ListTile(
+                title:const Text('Support case reference'),
+                subtitle:SelectableText('${late['case_id']}'),
+                trailing:IconButton(
+                  tooltip:'Copy support case reference',
+                  icon:const Icon(Icons.copy_outlined),
+                  onPressed:()async{
+                    await Clipboard.setData(ClipboardData(
+                      text:'${late['case_id']}'));
+                    if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content:Text('Case reference copied')));
+                  }),
+              ),
+          ]),
+        ),
         if(!buyer&&state=='payment_claimed') ...[
           const ListTile(
             title:Text('Seller confirmation pending'),
