@@ -307,6 +307,40 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         input.bankName.trim(),input.bankCode,input.accountName.trim(),input.accountNumber,
         input.verificationReference]);
     },
+    async pauseOffer(actor:P2pActor,offerId:string) {
+      // New orders stop immediately; existing accepted orders and escrow
+      // never change their bank instructions, reservation or deadlines.
+      const updated=await pool.query(`UPDATE commerce.msnw_p2p_offers
+        SET state='paused',updated_at=statement_timestamp()
+        WHERE tenant_id=$1 AND seller_id=$2 AND offer_id=$3
+          AND state='active' RETURNING offer_id`,
+        [actor.tenantId,actor.userId,id(offerId)]);
+      if(updated.rowCount!==1)
+        throw new P2pError("p2p.offer_not_active",409);
+      return {offerId,state:"paused" as const};
+    },
+    async resumeOffer(actor:P2pActor,offerId:string) {
+      // Refuse resuming an unfunded or no-longer-verified bank offer.
+      // Capacity is checked again when any buyer obtains a new quote and
+      // inside the order's locked custody reservation.
+      const updated=await pool.query(`UPDATE commerce.msnw_p2p_offers o
+        SET state='active',updated_at=statement_timestamp()
+        FROM commerce.msnw_p2p_payment_methods p,
+             commerce.msnw_custody_accounts c
+        WHERE o.tenant_id=$1 AND o.seller_id=$2 AND o.offer_id=$3
+          AND o.state='paused' AND o.remaining_micro>=o.min_micro
+          AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+          AND p.method_id=o.payment_method_id
+          AND p.verified_at IS NOT NULL AND p.disabled_at IS NULL
+          AND c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+          AND floor(c.available_micro::numeric*10000/(10000+o.fee_bps))
+              >= o.min_micro
+        RETURNING o.offer_id`,
+        [actor.tenantId,actor.userId,id(offerId)]);
+      if(updated.rowCount!==1)
+        throw new P2pError("p2p.offer_resume_unavailable",409);
+      return {offerId,state:"active" as const};
+    },
     async closeOffer(actor: P2pActor, offerId: string) {
       // No existing order or its reserved funds are affected; only future
       // bookings are paused. All order resolution routes remain available.
