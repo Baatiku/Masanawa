@@ -61,7 +61,8 @@ class WalletHistoryFilter {
 class MsnwTransactionHistory extends StatefulWidget {
   const MsnwTransactionHistory({super.key, required this.dio, required this.baseUrl,
     required this.expectedUserId, required this.currentUserId, required this.accessToken,
-    this.refreshKey = 0});
+    this.refreshKey = 0, this.initialSearch});
+  final String? initialSearch;
   final Dio dio;
   final String baseUrl, expectedUserId;
   final int refreshKey;
@@ -71,7 +72,7 @@ class MsnwTransactionHistory extends StatefulWidget {
 class _HistoryState extends State<MsnwTransactionHistory> with WidgetsBindingObserver {
   List<WalletTransaction> entries = [];
   List<String> assets=[];
-  final search = TextEditingController();
+  late final search = TextEditingController(text: widget.initialSearch ?? '');
   List<String> failed = [];
   bool busy = true;
   int generation = 0;
@@ -92,7 +93,10 @@ class _HistoryState extends State<MsnwTransactionHistory> with WidgetsBindingObs
   }
   @override void didUpdateWidget(covariant MsnwTransactionHistory old) {
     super.didUpdateWidget(old);
-    if (old.expectedUserId != widget.expectedUserId) {
+    if (old.initialSearch != widget.initialSearch) {
+      search.text = widget.initialSearch ?? '';
+      load();
+    } else if (old.expectedUserId != widget.expectedUserId) {
       search.clear();
       entries=[];nextCursor=null;loadedScope=null;
       assets=[];

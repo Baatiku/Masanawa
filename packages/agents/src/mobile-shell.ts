@@ -156,7 +156,53 @@ export interface MobilePushRegistration {
   readonly updatedAt: Instant;
 }
 
+export type MobileNotificationCategory = "messages" | "calls" | "rooms" |
+  "status" | "wallet" | "p2p";
+
+export interface MobileNotificationPreferences {
+  readonly messages: boolean;
+  readonly calls: boolean;
+  readonly rooms: boolean;
+  readonly status: boolean;
+  readonly wallet: boolean;
+  readonly p2p: boolean;
+  /// Null endpoints disable quiet hours. Clock minutes are in the user's
+  /// selected UTC offset, never inferred from server geography.
+  readonly quietStart: number | null;
+  readonly quietEnd: number | null;
+  readonly utcOffsetMinutes: number;
+}
+
+export interface MobileNotificationRecord {
+  readonly id: string;
+  readonly category: MobileNotificationCategory;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly deepLink: string | null;
+}
+
 export interface MobilePushRepository {
+  readPreferences(input: {
+    readonly tenantId: TenantId;
+    readonly userId: UserId;
+  }): Promise<MobileNotificationPreferences>;
+  writePreferences(input: {
+    readonly tenantId: TenantId;
+    readonly userId: UserId;
+    readonly preferences: MobileNotificationPreferences;
+  }): Promise<MobileNotificationPreferences>;
+  appendNotice(input: {
+    readonly tenantId: TenantId;
+    readonly userId: UserId;
+    readonly eventId: string;
+    readonly category: MobileNotificationCategory;
+    readonly title: string;
+    readonly deepLink: string | null;
+  }): Promise<void>;
+  listNotices(input: {
+    readonly tenantId: TenantId;
+    readonly userId: UserId;
+  }): Promise<readonly MobileNotificationRecord[]>;
   register(input: {
     readonly tenantId: TenantId;
     readonly userId: UserId;

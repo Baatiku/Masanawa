@@ -73,7 +73,22 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     final session = ref.watch(sessionProvider);
     final accountKey = session is SessionSignedIn ? session.user.id : 'signed-out';
     return Scaffold(
-      appBar: _index == 1 || _index == 2 ? masanawaMainHeader(context) : null,
+      appBar: _index == 1 || _index == 2
+          ? masanawaMainHeader(context, actions: [
+              IconButton(
+                tooltip: 'Search Masanawa',
+                icon: const Icon(Icons.search_outlined),
+                onPressed: accountKey == 'signed-out'
+                    ? null : () => context.push('/search'),
+              ),
+              IconButton(
+                tooltip: 'Notification activity',
+                icon: const Icon(Icons.notifications_none_outlined),
+                onPressed: accountKey == 'signed-out'
+                    ? null : () => context.push('/notifications'),
+              ),
+            ])
+          : null,
       body: PageStorage(
         bucket: _pageStorageBucket,
         child: IndexedStack(

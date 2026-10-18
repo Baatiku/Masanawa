@@ -37,6 +37,12 @@ class CallsScreen extends ConsumerWidget {
       appBar: masanawaMainHeader(
         context,
         actions: [
+          IconButton(
+            tooltip: 'Search Masana and Rooms',
+            icon: const Icon(Icons.search),
+            onPressed: session is SessionSignedIn
+              ? () => context.push('/search') : null,
+          ),
           IconButton(tooltip:'Call recordings',icon:const Icon(Icons.graphic_eq),
             onPressed:session is SessionSignedIn?()=>Navigator.push<void>(context,MaterialPageRoute(builder:(_)=>CallRecordingsScreen(ownerId:session.user.id))):null),
           IconButton(

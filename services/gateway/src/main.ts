@@ -199,6 +199,7 @@ import { createPostgresGroupCallRepository } from "./group_calls/postgres_reposi
 import { createGroupCallService, GroupCallError, type GroupCallRepository } from "./group_calls/service.js";
 import { createPostgresCallHistoryRepository } from "./call_history/postgres_repository.js";
 import { createCallHistoryService, type CallHistoryRepository, type CallHistoryRecorder } from "./call_history/service.js";
+import { createAccountNotificationService } from "./notification_preferences.js";
 import {
   createMobilePushRegistrationService,
   createFcmPushSender,
@@ -2891,6 +2892,14 @@ export async function startGatewayService(
       ...(composedShell ? { agentShell: composedShell } : {}),
       ...(liveVoiceTokens ? { liveVoiceTokens } : {}),
       ...(composedPush ? { mobilePush: composedPush } : {}),
+      ...(options.appOptions?.mobileNotifications
+        ? { mobileNotifications: options.appOptions.mobileNotifications }
+        : directoryAuthorizer && database.mobilePush
+        ? { mobileNotifications: createAccountNotificationService({
+            authorizer: directoryAuthorizer,
+            repository: database.mobilePush,
+          }) }
+        : {}),
       ...(composedCreatorClone ? { creatorClone: composedCreatorClone } : {}),
       ...(composedCreatorEconomy
         ? { creatorEconomy: composedCreatorEconomy }

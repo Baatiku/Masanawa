@@ -47,6 +47,41 @@ void main() {
     expect(shellDeepLinkRoute(Uri.parse('masanawa://masana/untrusted')), isNull);
   });
 
+  test('modern resource links resolve to authenticated destination routes', () {
+    for (final item in <String, String>{
+      'masanawa://rooms/room_123': '/rooms/room_123',
+      'masanawa://masana/character_abc': '/masana/character_abc',
+      'masanawa://status/post_123': '/status/post_123',
+      'masanawa://calls/history': '/home?tab=calls',
+      'masanawa://wallet/transaction/order_123': '/wallet/transactions/order_123',
+      'masanawa://search': '/search',
+      'https://masanawa.com/room/room_123': '/rooms/room_123',
+      'https://masanawa.com/masana/character_abc': '/masana/character_abc',
+      'https://masanawa.com/status/post_123': '/status/post_123',
+      'https://masanawa.com/transaction/order_123': '/wallet/transactions/order_123',
+    }.entries) {
+      expect(shellDeepLinkRoute(Uri.parse(item.key)), item.value,
+          reason: item.key);
+    }
+  });
+
+  test('resource routes reject injection and unauthorized query parameters', () {
+    for (final raw in [
+      'masanawa://rooms/room_abc?accessToken=secret',
+      'masanawa://rooms/room%2Fprivate',
+      'masanawa://masana/character_abc%2Fother',
+      'masanawa://masana/character_abc?admin=true',
+      'masanawa://wallet/transaction/order_1?paid=1',
+      'masanawa://status/post_abc?token=x',
+      'https://evil.example/room/room_abc',
+      'https://masanawa.com/room/room_abc?secret=1',
+      'masanawa://user@rooms/room_abc',
+      'masanawa://calls/history/extra',
+    ]) {
+      expect(shellDeepLinkRoute(Uri.parse(raw)), isNull, reason: raw);
+    }
+  });
+
   test('retired owner-session links no longer resolve', () {
     expect(
       shellDeepLinkRoute(

@@ -14,6 +14,7 @@ import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
 import { createP2pNoticeRuntime } from "./jobs/msnw/p2p_notifications.js";
+import { createFinancialNotificationRuntime } from "./jobs/notifications/outbox.js";
 import { createP2pExpiryRuntime } from "./jobs/msnw/p2p_expiry.js";
 import { createP2pCustodyReconciliation } from "./jobs/msnw/p2p_reconciliation.js";
 import { createYouTubeSyncRuntime } from "./jobs/youtube_websub/runtime.js";
@@ -123,6 +124,7 @@ export async function startWorkerService(
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let financialNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pExpiry: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pAudit: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
@@ -293,6 +295,23 @@ export async function startWorkerService(
         })+"\n"),
       });
     }
+    if (env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON?.trim()) {
+      const financial = createFinancialNotificationRuntime({
+        pool: database.pool,
+        sender: createFcmPushSender({
+          serviceAccountJson: env.MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON,
+          repository: createPostgresMobilePushRepository(database.pool),
+        }),
+      });
+      financialNotices = createYouTubeOutboxScheduler({
+        runOnce: financial.runOnce,
+        enabled: () => !drain.isDraining(),
+        intervalMs: 15000,
+        onError: () => process.stderr.write(JSON.stringify({
+          event: "notifications.financial.retry", reason: "batch_failed",
+        }) + "\n"),
+      });
+    }
     // No separate escrow scheduler authority: the canonical PG function
     // takes bounded SKIP LOCKED order claims and performs refund+event
     // postings in the same transaction. No backend feature flag.
@@ -384,6 +403,7 @@ export async function startWorkerService(
         await msnwFinality?.stop();
         await roomNotices?.stop();
         await p2pNotices?.stop();
+        await financialNotices?.stop();
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
         await privacyDeletion?.stop();
@@ -402,6 +422,7 @@ export async function startWorkerService(
     msnwFinality?.start();
     roomNotices?.start();
     p2pNotices?.start();
+    financialNotices?.start();
     p2pExpiry?.start();
     p2pAudit?.start();
     privacyDeletion?.start();
@@ -413,6 +434,7 @@ export async function startWorkerService(
     await msnwFinality?.stop();
     await roomNotices?.stop();
     await p2pNotices?.stop();
+        await financialNotices?.stop();
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
         await privacyDeletion?.stop();

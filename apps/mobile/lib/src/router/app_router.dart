@@ -12,8 +12,11 @@ import '../screens/onboarding/password_screen.dart';
 import '../screens/onboarding/phone_login_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/settings/notification_preferences_screen.dart';
 import '../core/startup_metrics.dart';
 import '../screens/chat/masana_list_screen.dart';
+import '../screens/search/unified_search_screen.dart';
+import '../screens/search/resource_link_screens.dart';
 import '../screens/rooms/rooms_screen.dart' show MasanaRoomDetailScreen;
 import '../screens/twin/shell_tab.dart';
 import '../shell/five_tab_shell.dart';
@@ -110,9 +113,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final protected = path.startsWith('/calls/incoming/') ||
+          path.startsWith('/status/') ||
+          path.startsWith('/masana/') ||
+          path.startsWith('/wallet/transactions/') ||
           path == '/home' ||
           path == '/activity' ||
           path == '/search' ||
+          path == '/notifications' ||
           path == '/chats' ||
           path.startsWith('/chat/') ||
           path.startsWith('/rooms/') ||
@@ -177,7 +184,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/activity',
         redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/search',
-        redirect: (_, __) => '/home?tab=status'),
+        builder: (_, __) => const UnifiedSearchScreen()),
+      GoRoute(path: '/notifications',
+        builder: (_, __) => const NotificationPreferencesScreen()),
       GoRoute(path: '/talk/create',
         redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/talk/:id',
@@ -186,6 +195,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (_, __) => '/masana'),
       GoRoute(path: '/persona/:publicId',
         redirect: (_, __) => '/masana'),
+      GoRoute(
+        path: '/wallet/transactions/:id',
+        builder: (context, state) => WalletScreen(
+          initialTransactionId: state.pathParameters['id'],
+          onBuyBills: () => context.push('/billing'),
+          onOpenCrypto: () => context.push('/crypto'),
+        ),
+      ),
       GoRoute(
         path: '/wallet',
         builder: (context, _) => WalletScreen(
@@ -221,6 +238,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/agents', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/masana', builder: (_, _) => const MasanaListScreen()),
+      GoRoute(path: '/masana/:id', builder: (_, state) =>
+        MasanaResourceLinkScreen(characterId: state.pathParameters['id']!)),
+      GoRoute(path: '/status/:postId', builder: (_, state) =>
+        StatusResourceLinkScreen(postId: state.pathParameters['postId']!)),
       GoRoute(path:'/rooms/:id',builder:(_,state)=>MasanaRoomDetailScreen(roomId:state.pathParameters['id']!)),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(

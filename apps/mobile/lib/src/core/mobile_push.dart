@@ -66,6 +66,7 @@ const _callNotificationDetails = NotificationDetails(
     importance: Importance.max,
     priority: Priority.max,
     playSound: true,
+    visibility: NotificationVisibility.private,
   ),
   iOS: DarwinNotificationDetails(presentSound: true),
 );
@@ -78,6 +79,7 @@ const _workNotificationDetails = NotificationDetails(
     icon: 'ic_stat_masanawa',
     importance: Importance.high,
     priority: Priority.high,
+    visibility: NotificationVisibility.private,
   ),
   iOS: DarwinNotificationDetails(),
 );
@@ -237,12 +239,15 @@ class MobilePushService {
       await _notifications.show(
         id: isCall
             ? (message.data['callId'] as String).hashCode
-            : (message.messageId?.hashCode ??
+            : ((message.data['eventId'] is String
+                    ? (message.data['eventId'] as String).hashCode
+                    : message.messageId?.hashCode) ??
                 DateTime.now().millisecondsSinceEpoch),
-        title: notification?.title ??
-            (isCall ? 'Incoming Masana call' : 'Masanawa'),
-        body: notification?.body ??
-            (isCall ? 'Open Calls to respond' : null),
+        // Foreground FCM payload text is untrusted and may contain private
+        // message or money details. Keep both device states preview-safe.
+        title: isCall ? 'Incoming Masana call' : 'Masanawa',
+        body: isCall ? 'Open Calls to respond'
+            : 'Open the app to view your update',
         notificationDetails: isCall
             ? _callNotificationDetails
             : _workNotificationDetails,

@@ -25,7 +25,15 @@ it("uses account registrations and one bounded deadline for OAuth and delivery",
       client_email: "test@example.invalid",
       private_key: privateKey.export({ type: "pkcs8", format: "pem" }),
     }),
-    repository: { list } as unknown as MobilePushRepository,
+    repository: {
+      list,
+      readPreferences: vi.fn(async () => ({
+        messages: true, calls: true, rooms: true, status: true,
+        wallet: true, p2p: true,
+        quietStart: null, quietEnd: null, utcOffsetMinutes: 0,
+      })),
+      appendNotice: vi.fn(async () => {}),
+    } as unknown as MobilePushRepository,
     fetchImpl,
   });
   expect(
@@ -45,4 +53,9 @@ it("uses account registrations and one bounded deadline for OAuth and delivery",
     data: { type: "incoming_call", callId: "invitation", masanawa: "1" },
   });
   expect(JSON.stringify(payload)).not.toContain("server-oauth");
+  expect(payload.message.notification).toEqual({
+    title: "Masanawa",
+    body: "Open the app to view your update",
+  });
+  expect(payload.message.android.notification.visibility).toBe("PRIVATE");
 });

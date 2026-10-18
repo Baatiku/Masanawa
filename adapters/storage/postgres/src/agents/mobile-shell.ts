@@ -7,6 +7,7 @@ import type {
   MobileShellRepository,
   MobileTurnCommand,
   MobilePushRepository,
+  MobileNotificationPreferences,
   MobileAgentActivityRepository,
 } from "@masanawa/agents";
 import { withTransaction } from "../transaction.js";
@@ -291,8 +292,94 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
 }
 
 
+const defaultNotificationPreferences: MobileNotificationPreferences = Object.freeze({
+  messages: true, calls: true, rooms: true, status: true, wallet: true,
+  p2p: true, quietStart: null, quietEnd: null, utcOffsetMinutes: 0,
+});
+
+function notificationPreferences(row: any): MobileNotificationPreferences {
+  if (!row) return defaultNotificationPreferences;
+  return Object.freeze({
+    messages: row.messages === true,
+    calls: row.calls === true,
+    rooms: row.rooms === true,
+    status: row.status === true,
+    wallet: row.wallet === true,
+    p2p: row.p2p === true,
+    quietStart: row.quiet_start ?? null,
+    quietEnd: row.quiet_end ?? null,
+    utcOffsetMinutes: row.utc_offset_minutes,
+  });
+}
+
 export function createPostgresMobilePushRepository(pool: Pool): MobilePushRepository {
   return Object.freeze({
+    async readPreferences(scope: Parameters<MobilePushRepository["readPreferences"]>[0]) {
+      const result = await pool.query(
+        `SELECT messages,calls,rooms,status,wallet,p2p,quiet_start,quiet_end,utc_offset_minutes
+           FROM agents.mobile_notification_preferences
+          WHERE tenant_id=$1 AND user_id=$2`,
+        [scope.tenantId,scope.userId],
+      );
+      return notificationPreferences(result.rows[0]);
+    },
+    async writePreferences(input: Parameters<MobilePushRepository["writePreferences"]>[0]) {
+      const p = input.preferences;
+      if (![p.messages,p.calls,p.rooms,p.status,p.wallet,p.p2p].every(
+        (value) => typeof value === "boolean") ||
+        (p.quietStart === null) !== (p.quietEnd === null) ||
+        !Number.isInteger(p.utcOffsetMinutes) || p.utcOffsetMinutes < -840 ||
+        p.utcOffsetMinutes > 840 ||
+        [p.quietStart,p.quietEnd].some((v) =>
+          v !== null && (!Number.isInteger(v) || v < 0 || v > 1439))) {
+        throw new TypeError("notification.preferences_invalid");
+      }
+      const result = await pool.query(
+        `INSERT INTO agents.mobile_notification_preferences
+          (tenant_id,user_id,messages,calls,rooms,status,wallet,p2p,
+           quiet_start,quiet_end,utc_offset_minutes)
+         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+         WHERE EXISTS(SELECT 1 FROM identity.users
+          WHERE tenant_id=$1 AND user_id=$2 AND state='active')
+         ON CONFLICT (tenant_id,user_id) DO UPDATE SET
+           messages=EXCLUDED.messages,calls=EXCLUDED.calls,
+           rooms=EXCLUDED.rooms,status=EXCLUDED.status,
+           wallet=EXCLUDED.wallet,p2p=EXCLUDED.p2p,
+           quiet_start=EXCLUDED.quiet_start,quiet_end=EXCLUDED.quiet_end,
+           utc_offset_minutes=EXCLUDED.utc_offset_minutes,
+           updated_at=clock_timestamp() RETURNING *`,
+        [input.tenantId,input.userId,p.messages,p.calls,p.rooms,p.status,
+         p.wallet,p.p2p,p.quietStart,p.quietEnd,p.utcOffsetMinutes],
+      );
+      if (!result.rows[0]) throw Error("notification.account_inactive");
+      return notificationPreferences(result.rows[0]);
+    },
+    async appendNotice(input: Parameters<MobilePushRepository["appendNotice"]>[0]) {
+      await pool.query(
+        `INSERT INTO agents.mobile_notification_history
+          (tenant_id,user_id,event_id,category,title,deep_link)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (tenant_id,user_id,event_id) DO NOTHING`,
+        [input.tenantId,input.userId,input.eventId,input.category,
+         input.title,input.deepLink],
+      );
+    },
+    async listNotices(scope: Parameters<MobilePushRepository["listNotices"]>[0]) {
+      const result = await pool.query(
+        `SELECT event_id,category,title,deep_link,created_at
+           FROM agents.mobile_notification_history
+          WHERE tenant_id=$1 AND user_id=$2
+          ORDER BY created_at DESC,event_id DESC LIMIT 100`,
+        [scope.tenantId,scope.userId],
+      );
+      return Object.freeze(result.rows.map((row: any) => Object.freeze({
+        id: row.event_id,
+        category: row.category,
+        title: row.title,
+        deepLink: row.deep_link,
+        createdAt: new Date(row.created_at).toISOString(),
+      })));
+    },
     async register(input: Parameters<MobilePushRepository["register"]>[0]) {
       if (
         input.installationId.trim().length < 16 ||
@@ -313,6 +400,22 @@ export function createPostgresMobilePushRepository(pool: Pool): MobilePushReposi
         if (user.rows[0]?.state !== "active") {
           throw new Error("push.account_inactive");
         }
+        // Serialize ownership transfers of this physical FCM token even
+        // across tenants and concurrent sign-ins on the same handset.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-install:" + input.installationId],
+        );
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-token:" + input.token],
+        );
+        await client.query(
+          `DELETE FROM agents.mobile_push_registrations
+           WHERE (tenant_id<>$1 OR user_id<>$4)
+             AND (token=$2 OR installation_id=$3)`,
+          [input.tenantId,input.token,input.installationId,input.userId],
+        );
         return client.query(
           `INSERT INTO agents.mobile_push_registrations(
              tenant_id,user_id,installation_id,platform,token

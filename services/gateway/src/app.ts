@@ -102,6 +102,7 @@ import type { BillingCheckoutService } from "./billing_checkout.js";
 import type { BillingFinancialService } from "./financial_billing.js";
 import type { BillingWalletService } from "./billing_wallet.js";
 import type { MobilePushRegistrationService } from "./mobile_push.js";
+import type { AccountNotificationService } from "./notification_preferences.js";
 import type { FinancialService } from "./financial_service.js";
 import {
   registerCustomerChannelRoutes,
@@ -165,6 +166,7 @@ export interface GatewayAppOptions {
   readonly privateChatMedia?: ReturnType<typeof createPrivateChatMediaService>;
   readonly liveVoiceTokens?: LiveVoiceTokenService;
   readonly mobilePush?: MobilePushRegistrationService;
+  readonly mobileNotifications?: AccountNotificationService;
   readonly customerAuth?: CustomerAuthService;
   readonly accountDataExports?: AccountDataExports;
   readonly accountDeletion?: AccountDeletionService;
@@ -1795,6 +1797,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       ? { liveVoiceTokens: options.liveVoiceTokens }
       : {}),
     ...(options.mobilePush ? { mobilePush: options.mobilePush } : {}),
+    ...(options.mobileNotifications
+      ? { mobileNotifications: options.mobileNotifications } : {}),
   });
 
   if (options.talks) {

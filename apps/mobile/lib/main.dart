@@ -110,7 +110,9 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   @override
   Widget build(BuildContext context) {
     ref.listen(sessionProvider, (previous, next) {
-      if (previous is SessionSignedIn && next is SessionSignedOut) {
+      if (previous is SessionSignedIn &&
+          (next is! SessionSignedIn || next.user.id != previous.user.id)) {
+        // A queued private navigation hint cannot cross accounts.
         _pendingLink.clear();
       }
       _scheduleLinkDrain();
