@@ -37,6 +37,9 @@ String? shellDeepLinkRoute(Uri uri) {
     if (uri.host == 'search' && segments.isEmpty) {
       return '/search';
     }
+    if (uri.host == 'notifications' && segments.isEmpty) {
+      return '/notifications';
+    }
   }
 
   // P2P notifications must open only the authenticated Wallet surface;
