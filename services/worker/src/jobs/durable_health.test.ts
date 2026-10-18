@@ -18,7 +18,7 @@ describe("durable operational backlog authority", () => {
       { name: "db_p2p_dead_letter", stuck: 1, oldestPendingSeconds: 0 },
       { name: "db_p2p_custody_anomalies", stuck: 0, oldestPendingSeconds: 0 },
     ]);
-    const sql = String(query.mock.calls[0]?.[0]);
+    const sql = String((query.mock.calls[0]?.[0] as {text: string}).text);
     expect(sql).toContain("FROM feed.posts");
     expect(sql).toContain("FROM commerce.msnw_p2p_orders");
     expect(sql).toContain("FROM events.outbox");
