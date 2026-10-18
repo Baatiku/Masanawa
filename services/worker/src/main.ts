@@ -304,8 +304,35 @@ export async function startWorkerService(
         event:"p2p.custody_reconciliation.retry",reason:"audit_unavailable",
       })+"\\n"),
     });
+    const schedulerHealth = (
+      name: string,
+      scheduler: ReturnType<typeof createYouTubeOutboxScheduler> | undefined,
+    ) => ({
+      name,
+      ...(scheduler?.health() ?? {
+        enabled: false,
+        runningSeconds: 0,
+        lastSuccessAgeSeconds: null,
+        stuck: 0,
+        consecutiveFailures: 0,
+      }),
+    });
     app = appFactory({
       ...(options.appOptions ?? {}),
+      ...(env.MASANAWA_OPS_MONITOR_TOKEN?.trim()
+        ? { opsMonitorToken: env.MASANAWA_OPS_MONITOR_TOKEN.trim() }
+        : {}),
+      jobsHealth: () => [
+        schedulerHealth("youtube_outbox", youtubeOutbox),
+        schedulerHealth("scheduled_feed", feedPublisher),
+        schedulerHealth("msnw_obligations", msnwObligationRecovery),
+        schedulerHealth("msnw_merchant_settlement", msnwMerchantSettlements),
+        schedulerHealth("msnw_finality", msnwFinality),
+        schedulerHealth("room_notices", roomNotices),
+        schedulerHealth("p2p_notices", p2pNotices),
+        schedulerHealth("p2p_expiry", p2pExpiry),
+        schedulerHealth("p2p_custody_audit", p2pAudit),
+      ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
         database.readinessCheck,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { probe, evaluateJobs, stateFingerprint, safeHttps, alertWebhook } from './readiness-watch.mjs';
+import { probe, probeJobs, evaluateJobs, stateFingerprint, safeHttps, alertWebhook } from './readiness-watch.mjs';
 
 test('readiness requires ready status and all advertised dependency checks', async () => {
   const get = async () => ({ ok: true, status: 200,
@@ -23,6 +23,27 @@ test('job health rejects malformed or delayed records', () => {
   assert.equal(evaluateJobs({ jobs: [{ name: 'settlement', stuck: 0, oldestPendingSeconds: 360 }] }), 'delayed');
   assert.equal(evaluateJobs({ jobs: [{ name: 'settlement', stuck: -1, oldestPendingSeconds: 0 }] }), 'invalid');
   assert.equal(evaluateJobs({ status: 'ready' }), 'unknown');
+});
+test('worker scheduler jobs require authorization and separate process health from DB backlog', async () => {
+  const token = 'x'.repeat(48);
+  const jobs = [{ name: 'scheduled_feed', enabled: true, runningSeconds: 0,
+    lastSuccessAgeSeconds: 2, consecutiveFailures: 0, stuck: 0 }];
+  assert.equal(evaluateJobs({ jobs }), 'ready');
+  assert.equal(evaluateJobs({ jobs: [{ ...jobs[0], consecutiveFailures: 3 }] }), 'delayed');
+  assert.equal(evaluateJobs({ jobs: [{ ...jobs[0], stuck: 1 }] }), 'delayed');
+  assert.equal(evaluateJobs({ jobs: [{ ...jobs[0], lastSuccessAgeSeconds: null }] }), 'unknown');
+  assert.equal(evaluateJobs({ jobs: [{ ...jobs[0], enabled: false }] }), 'unknown');
+  assert.equal(evaluateJobs({ jobs: [{ ...jobs[0], consecutiveFailures: -1 }] }), 'invalid');
+  let header = null;
+  const response = await probeJobs('https://worker.example.invalid/v1/ops/jobs/health', token,
+    async (_url, init) => {
+      header = init.headers.authorization;
+      return { ok: true, status: 200, json: async () => ({ jobs }) };
+    });
+  assert.deepEqual(response, { service: 'jobs', state: 'ready' });
+  assert.equal(header, 'Bearer ' + token);
+  assert.deepEqual(await probeJobs('https://worker.example.invalid/v1/ops/jobs/health', ''),
+    { service: 'jobs', state: 'unauthorized' });
 });
 test('URLs cannot leak credentials or insecure endpoints', () => {
   assert.throws(() => safeHttps('http://example.test'), /HTTPS/);

@@ -15,21 +15,49 @@ export function createYouTubeOutboxScheduler(input: {
   let interval: ReturnType<typeof setInterval> | undefined;
   let current: Promise<unknown> | undefined;
   let stopped = false;
+  let activeSince: number | null = null;
+  let lastSuccess: number | null = null;
+  let consecutiveFailures = 0;
 
   async function tick(): Promise<"disabled" | "busy" | "processed"> {
     if (stopped || !input.enabled()) return "disabled";
     if (current) return "busy";
     const work = Promise.resolve().then(input.runOnce);
     current = work;
+    activeSince = Date.now();
     try {
       await work;
+      lastSuccess = Date.now();
+      consecutiveFailures = 0;
       return "processed";
+    } catch (error) {
+      consecutiveFailures++;
+      throw error;
     } finally {
-      if (current === work) current = undefined;
+      if (current === work) {
+        current = undefined;
+        activeSince = null;
+      }
     }
   }
   return Object.freeze({
     tick,
+    // Process-local scheduler facts only. Durable pending/backlog counts
+    // belong to the PostgreSQL job authority, not this timer.
+    health() {
+      const now = Date.now();
+      const runningSeconds = activeSince === null
+        ? 0 : Math.max(0, Math.floor((now - activeSince) / 1000));
+      const lastSuccessAgeSeconds = lastSuccess === null
+        ? null : Math.max(0, Math.floor((now - lastSuccess) / 1000));
+      return {
+        enabled: !stopped && Boolean(interval) && input.enabled(),
+        runningSeconds,
+        lastSuccessAgeSeconds,
+        stuck: activeSince !== null && now - activeSince > Math.max(delay * 3, 60000) ? 1 : 0,
+        consecutiveFailures,
+      };
+    },
     start(): void {
       if (interval || stopped || !input.enabled()) return;
       interval = setInterval(() => {
