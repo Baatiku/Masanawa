@@ -1,0 +1,24 @@
+# Temporary, isolated Android APK delivery build.
+# App source is identical to parent main commit 95af3d018d568113b9c8ef3833830d5d162ef3f8.
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+USER root
+ENV CI=true FLUTTER_SUPPRESS_ANALYTICS=true DART_SUPPRESS_ANALYTICS=true
+WORKDIR /workspace
+COPY apps/mobile /workspace/apps/mobile
+WORKDIR /workspace/apps/mobile
+RUN flutter --version && flutter pub get
+RUN flutter build apk --release \
+      --build-name=1.0.6 --build-number=106018 \
+      --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app \
+      --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+RUN test -s build/app/outputs/flutter-apk/app-release.apk && \
+    sha256sum build/app/outputs/flutter-apk/app-release.apk > /tmp/masanawa.sha256 && \
+    printf 'SOURCE_MAIN_SHA=95af3d018d568113b9c8ef3833830d5d162ef3f8\nAPP_VERSION=1.0.6\nAPP_BUILD_NUMBER=106018\nBUILD_TYPE=Android-release-apk-handset-test\n' > /tmp/masanawa-build.txt
+
+FROM nginx:alpine
+COPY --from=builder /workspace/apps/mobile/build/app/outputs/flutter-apk/app-release.apk /usr/share/nginx/html/masanawa-95af3d0.apk
+COPY --from=builder /tmp/masanawa.sha256 /usr/share/nginx/html/masanawa-95af3d0.sha256
+COPY --from=builder /tmp/masanawa-build.txt /usr/share/nginx/html/build-provenance.txt
+RUN printf '%s\n' '<!doctype html><title>Masanawa Android build 95af3d0</title><a href="/masanawa-95af3d0.apk">APK</a> | <a href="/masanawa-95af3d0.sha256">SHA-256</a> | <a href="/build-provenance.txt">Provenance</a>' > /usr/share/nginx/html/index.html
+EXPOSE 80
+CMD ["nginx","-g","daemon off;"]
