@@ -57,6 +57,14 @@ export function registerMsnwUsdtConversionRoutes(
       });
     }catch(e){return failed(reply,e);}
   });
+  app.get("/v1/wallet/msnw/convert/status/:idempotencyKey",async(request,reply)=>{
+    reply.header("Cache-Control","private, no-store");
+    try {
+      const who=await owner(request.headers.authorization);
+      const key=(request.params as {idempotencyKey?:unknown}).idempotencyKey;
+      return await input.service.lookup(who,key);
+    } catch(e){return failed(reply,e);}
+  });
   app.get("/v1/wallet/msnw/convert/history",async(request,reply)=>{
     try{
       return {items:await input.service.history(await owner(request.headers.authorization))};
