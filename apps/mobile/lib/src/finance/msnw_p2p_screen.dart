@@ -16,7 +16,7 @@ import 'package:flutter/services.dart';
 /// This is a public profile display label, not a verified legal identity.
 String p2pSafeTraderDisplay(Object? raw) {
   if(raw is! String)return 'Masanawa trader';
-  final clean=raw.trim().replaceAll(RegExp(r'\\s+'),' ');
+  final clean=raw.trim().replaceAll(RegExp(r'\s+'),' ');
   if(clean.isEmpty)return 'Masanawa trader';
   return clean.length>48?'${clean.substring(0,48)}…':clean;
 }
