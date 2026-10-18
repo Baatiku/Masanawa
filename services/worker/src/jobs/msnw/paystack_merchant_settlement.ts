@@ -98,6 +98,7 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
           !Number.isSafeInteger(perPage) || perPage < 1 ||
           !Number.isSafeInteger(meta.page) || meta.page !== page ||
           !Number.isSafeInteger(meta.perPage) || meta.perPage !== perPage ||
+          typeof meta.pageCount !== "number" ||
           !Number.isSafeInteger(meta.pageCount) || meta.pageCount < 0 ||
           (meta.pageCount < page && body.data.length > 0) ||
           (meta.pageCount > page && body.data.length < perPage)) {

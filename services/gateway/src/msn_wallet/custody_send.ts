@@ -1,6 +1,6 @@
 import { createWalletActivity } from './wallet_activity.js';
 import { randomUUID } from "node:crypto";
-import type { Pool } from "@masanawa/postgres";
+import type { Pool, PoolClient } from "@masanawa/postgres";
 
 export class MsnwCustodyError extends Error {
   constructor(readonly code: string, readonly statusCode = 503) { super(code); }
@@ -41,7 +41,7 @@ function recipient(raw: unknown) {
 
 export function createMsnwCustodyService(pool: Pool) {
   async function resolve(owner: Owner, value: unknown,
-    db?: Awaited<ReturnType<Pool["connect"]>>) {
+    db?: PoolClient) {
     const identifier = recipient(value);
     const r = await (db ?? pool).query(
       "SELECT user_id,display_name FROM security.platform_user_profiles " +

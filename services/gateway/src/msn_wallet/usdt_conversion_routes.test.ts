@@ -5,7 +5,8 @@ import { MsnwConversionError } from "./usdt_conversion.js";
 describe("MSNW stablecoin provider payout routes",()=>{
   it("requires an authenticated customer and never accepts client injected reserve authority",async()=>{
     const actions:string[]=[];
-    const app=createGatewayApp({msnwConversion:{
+    const app=createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,msnwConversion:{
       authorizer:{
         async authorize({authorizationHeader}:any){
           if(authorizationHeader!=="Bearer genuine-session")
@@ -37,7 +38,8 @@ describe("MSNW stablecoin provider payout routes",()=>{
     await app.close();
   });
   it("propagates missing treasury readiness as unavailable, not a completed payout",async()=>{
-    const app=createGatewayApp({msnwConversion:{
+    const app=createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,msnwConversion:{
       authorizer:{
         async authorize(){return {tenantId:"tenant",userId:"owner"};},
       },

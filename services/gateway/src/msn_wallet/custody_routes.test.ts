@@ -6,6 +6,7 @@ describe("canonical MSNW custody Gateway routes", () => {
   it("requires a real platform session for custody and all Send operations", async () => {
     const seen: string[] = [];
     const app = createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,
       msnwCustody: {
         authorizer: { async authorize({ authorizationHeader }) {
           if (authorizationHeader !== "Bearer session") throw new Error("denied");
@@ -55,6 +56,7 @@ describe("canonical MSNW custody Gateway routes", () => {
   it("recovers only the authenticated sender's completed operation and never mutates custody", async () => {
     const owners: string[] = [];
     const app=createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,
       msnwCustody: {
         authorizer: { async authorize({ authorizationHeader }) {
           if (authorizationHeader !== "Bearer trusted") throw new Error("denied");
@@ -98,6 +100,7 @@ describe("canonical MSNW custody Gateway routes", () => {
 
   it("rejects unexpected user-controlled money movement fields", async () => {
     const app = createGatewayApp({
+      customerAuth: { async authorizeSensitiveMutation() {} } as never,
       msnwCustody: {
         authorizer: { async authorize() { return { tenantId: "t1", userId: "u1" }; } },
         ledger: {

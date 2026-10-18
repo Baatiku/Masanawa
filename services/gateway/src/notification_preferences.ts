@@ -51,15 +51,15 @@ export function createAccountNotificationService(input: {
     return { tenantId: scope.tenantId, userId: scope.userId };
   }
   return Object.freeze({
-    async preferences(header) {
+    async preferences(header: string | undefined) {
       return input.repository.readPreferences(await owner(header));
     },
-    async update(header, raw) {
+    async update(header: string | undefined, raw: unknown) {
       const settings = parseNotificationPreferences(raw);
       const scope = await owner(header);
       return input.repository.writePreferences({ ...scope, preferences: settings });
     },
-    async history(header) {
+    async history(header: string | undefined) {
       return input.repository.listNotices(await owner(header));
     },
   });

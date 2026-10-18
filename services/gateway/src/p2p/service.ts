@@ -198,7 +198,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async offersPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
-      const result=await pool.query(`SELECT o.offer_id,o.seller_id,
+      const result=await pool.query(`SELECT o.offer_id,
         o.rate_kobo_per_msnw::text,o.min_micro::text,
         LEAST(o.max_micro,capacity.amount)::text AS max_micro,
         capacity.amount::text AS remaining_micro,o.fee_bps,

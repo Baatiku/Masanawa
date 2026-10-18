@@ -43,8 +43,7 @@ function setup(reserve: string, previous = false) {
   const pool = { async connect() { return db; },
     async query() { return {rowCount:0,rows:[]}; },
   } as unknown as Pool;
-  const verifier = { async verify() { return proof; } }
-    as unknown as ReturnType<typeof createMsnwFinalityVerifier>;
+  const verifier = { async verify() { return proof; } } as unknown as ReturnType<typeof createMsnwFinalityVerifier>;
   return { sql,runtime:createMsnwCustodyIssuanceRuntime({pool,verifier}) };
 }
 

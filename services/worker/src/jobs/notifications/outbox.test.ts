@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createFinancialNotificationRuntime } from "./outbox.js";
 
 const event = {
-  tenant_id: "tenant_test",
+  tenant_id: "tenant_0199ea9d-60c5-7c69-8bbb-0f5d119fc204",
   user_id: "user_0199ea9d-60c5-7c69-8bbb-0f5d119fc203",
   event_id: "finance-receive-7",
   category: "wallet",

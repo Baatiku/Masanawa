@@ -14,6 +14,7 @@ function harness(financial:boolean) {
   let phase=owner.phase,revision=owner.revision;
   const client={
     async query(sql:string,params:unknown[]=[]):Promise<any>{
+      sql=sql.replace(/\s+/g," ").trim();
       calls.push({sql,params});
       if(sql.includes("FROM pg_catalog.pg_class"))return {rows:[
         {name:"msnw_usdt_payouts",columns:["tenant_id","user_id","state"]},
