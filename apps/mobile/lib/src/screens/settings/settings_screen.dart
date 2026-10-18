@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../account_preferences/notification_switch_controller.dart';
 import '../../core/mobile_push.dart';
+import '../../core/mobile_diagnostics.dart';
 import '../../core/providers.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
@@ -115,6 +117,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted && ticket == _supportMutationEpoch) {
         setState(() => _savingDefaultAgentId = null);
       }
+    }
+  }
+
+  Future<void> _shareDiagnostics() async {
+    try {
+      final report = await MasanawaDiagnostics.instance.exportSanitizedReport();
+      if (!mounted) return;
+      await SharePlus.instance.share(ShareParams(text: report,
+        subject: 'Masanawa anonymous diagnostic report'));
+    } catch (_) {
+      _showFeedback('Diagnostics are unavailable right now.');
+    }
+  }
+
+  Future<void> _clearDiagnostics() async {
+    try {
+      await MasanawaDiagnostics.instance.clear();
+      _showFeedback('Local diagnostics cleared.');
+    } catch (_) {
+      _showFeedback('Could not clear diagnostics on this device.');
     }
   }
 
@@ -346,6 +368,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: const Text('Retry permission check'),
                   ),
                 ),
+              const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-share-diagnostics'),
+                leading: Icon(Icons.bug_report_outlined, color: u.brand),
+                title: const Text('Share app diagnostics'),
+                subtitle: const Text(
+                  'Review and choose whether to share anonymous crash and ANR summaries. No messages or account details.',
+                ),
+                onTap: () => unawaited(_shareDiagnostics()),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-clear-diagnostics'),
+                leading: Icon(Icons.delete_sweep_outlined, color: u.brand),
+                title: const Text('Clear app diagnostics'),
+                subtitle: const Text('Remove only diagnostic records stored on this device'),
+                onTap: () => unawaited(_clearDiagnostics()),
+              ),
               const Divider(height: 1),
               ListTile(
                 key: const Key('settings-clear-device-chats'),
