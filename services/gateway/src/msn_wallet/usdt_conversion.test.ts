@@ -76,6 +76,47 @@ describe("MSNW independently prefunded NOWPayments crypto payout",()=>{
     expect(f.calls).toContain("balance");
     expect(f.calls).not.toContain("POST");
   });
+  it("recovers only the authenticated owner's exact idempotency key without another provider payout",async()=>{
+    const sql:string[]=[];
+    const calls:string[]=[];
+    const pool={
+      async query(statement:string,params?:unknown[]) {
+        sql.push(statement);
+        if(statement.includes("idempotency_key=$3")) {
+          expect(params).toEqual(["tenant","user","original-convert-key-123"]);
+          return {rowCount:1,rows:[{conversion_id:"eaa745c9-2f56-4f6a-989c-098153dcfdd0"}]};
+        }
+        if(statement.includes("WHERE conversion_id=$1 AND tenant_id=$2 AND user_id=$3")) {
+          return {rowCount:1,rows:[{
+            conversion_id:"eaa745c9-2f56-4f6a-989c-098153dcfdd0",
+            tenant_id:"tenant",user_id:"user",provider_code:"USDTTRC20",
+            destination_address:"T".repeat(34),source_micro:"1000000",
+            target_micro:"1000000",fee_estimate_micro:"10000",
+            state:"manual_review",created_at:new Date("2026-10-18T08:00:00Z"),
+            provider_batch_id:null,provider_withdrawal_id:null,
+          }]};
+        }
+        throw Error("Unexpected SQL "+statement);
+      },
+    };
+    const service=createMsnwUsdtConversion({
+      pool:pool as unknown as Pool,
+      payout:{ async createPayout(){calls.push("post");throw Error("do not submit");} } as never,
+      custody:{async readBalances(){throw Error("do not request balances");}} as never,
+      rateUsdMicroPerMsnw:"1000000",verificationCode:"123456",
+      enabledRoutes:["USDTTRC20"],approvedDestination:()=>true,
+    });
+    await expect(service.lookup(owner,"bad")).rejects.toMatchObject({
+      code:"msnw.convert.idempotency_invalid",statusCode:400,
+    });
+    const result=await service.lookup(owner,"original-convert-key-123");
+    expect(result).toMatchObject({
+      conversionId:"eaa745c9-2f56-4f6a-989c-098153dcfdd0",
+      asset:"MSNW",sourceMicro:"1000000",state:"manual_review",
+    });
+    expect(sql.every(stmt=>!stmt.includes("INSERT INTO"))).toBe(true);
+    expect(calls).toEqual([]);
+  });
   it("refuses unapproved network, unavailable liquidity and inadequate MSNW",async()=>{
     const f=mock({treasury:"0.2",ownerBalance:"1"});
     const quote=await f.service.quote(owner,inputs);
