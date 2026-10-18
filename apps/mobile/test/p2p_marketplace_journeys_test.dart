@@ -130,9 +130,12 @@ void main() {
     final adapter = _P2pAdapter();
     await t.pumpWidget(_app(adapter));
     await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(ChoiceChip, 'Buy'));
+    await t.pumpAndSettle();
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);
     await t.pumpAndSettle();
     await t.enterText(find.byType(TextField).last, '1');
+    await t.pump();
     await t.tap(find.text('Review price and fees'));
     await t.pumpAndSettle();
     expect(find.text('Review P2P order'), findsOneWidget);
@@ -155,6 +158,9 @@ void main() {
     await t.tap(find.text('Sell'));
     await t.pumpAndSettle();
     expect(find.text('Create offer'), findsOneWidget);
+    await t.ensureVisible(find.text('Create offer'));
+    await t.pumpAndSettle();
+    expect(find.text('Create offer').hitTestable(), findsOneWidget);
     expect(t.takeException(), isNull);
     expect(adapter.calls.every((r) => r.method == 'GET'), isTrue);
   });
@@ -198,6 +204,8 @@ void main() {
     await t.pumpWidget(_app(adapter));
     await t.pumpAndSettle();
     expect(find.text('Check unfinished order'),findsOneWidget);
+    await t.tap(find.widgetWithText(ChoiceChip, 'Buy'));
+    await t.pumpAndSettle();
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);
     await t.pumpAndSettle();
     expect(adapter.calls.any((o)=>o.path.contains(

@@ -104,11 +104,10 @@ describe("Gemini Live ephemeral token compatibility", () => {
     });
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      await expect(service.mint({ characterId })).rejects.toThrow("expired");
+      await expect(service.mint({ characterId, authorizationHeader: undefined })).rejects.toThrow("expired");
       expect(fetchImpl).not.toHaveBeenCalled();
     } finally {
       stderr.mockRestore();
     }
   });
 });
-

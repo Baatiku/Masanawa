@@ -6,7 +6,7 @@ import type {CreatorAgentView} from "./store.js";
 const result:CreatorAgentView={
  characterId:"character_test123",state:"draft",revision:1,handle:"prof-amina-1",
  seed:{name:"Professor Amina",profession:"Physics tutor",languages:["en"],gender:"female",ageRange:"40-59",portraitMediaId:null},
- generated:null,statusEnabled:false,publishedAt:null,
+ generated:null,voiceName:"Fora",statusEnabled:false,publishedAt:null,
 };
 type Service=Parameters<typeof registerCreatorAgentRoutes>[1]["service"];
 function fixture(){
@@ -43,7 +43,7 @@ describe("creator agent owner-scoped routes",()=>{
   const {server,events}=fixture();
   const r=await server.inject({method:"POST",url:"/v1/creator/masana/character_test123/publish-free",headers:{authorization:"Bearer owner"},
    payload:{expectedRevision:1}});
-  expect(r.statusCode).toBe(200);expect(events).toEqual(["publish:owner_test"]);await server.close();
+  expect(r.statusCode).toBe(200);expect(r.json().voiceName).toBe("Fora");expect(events).toEqual(["publish:owner_test"]);await server.close();
  });
  it("refuses missing revision without publishing",async()=>{
   const {server,events}=fixture();

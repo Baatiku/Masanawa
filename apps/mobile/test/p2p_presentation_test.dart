@@ -12,7 +12,7 @@ void main(){testWidgets('P2P opens directly on trading controls without introduc
  final dio=Dio()..httpClientAdapter=_Adapter();
  await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:MsnwP2pScreen(dio:dio,baseUrl:'https://gateway.example.test',expectedUserId:'user',currentUserId:()=>'user',accessToken:()=>'token')));
  await tester.pumpAndSettle();
- expect(find.text('Buy'),findsOneWidget);expect(find.text('Sell'),findsOneWidget);expect(find.text('My orders'),findsOneWidget);
+ expect(find.text('Buy'),findsOneWidget);expect(find.text('Sell'),findsOneWidget);expect(find.text('Orders'),findsOneWidget);
  expect(find.textContaining('Trade MSNW directly'),findsNothing);
  expect(tester.takeException(),isNull);
 });}
