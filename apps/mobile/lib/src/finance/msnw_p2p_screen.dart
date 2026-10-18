@@ -457,19 +457,19 @@ n this device.')));
   }
   Widget _orderView(String id)=>_P2pOrderDetail(
         load: () async => _json(await _request('GET','/orders/$id')),
-        act: (action, [reason]) => _act(() async {
+        act: (action, [reason]) async {
           await _request('POST','/orders/$id/$action',
             reason == null ? {} : {'reason': reason});
-        }),
+        },
         userId: widget.expectedUserId,
         loadReceipt: () async => _json(await _request('GET','/orders/$id/receipt')),
         listEvidence: () async {
           final data=_json(await _request('GET','/orders/$id/evidence'));
           return (data['items'] as List<dynamic>? ?? []).map(_json).toList();
         },
-        uploadEvidence: (data)=>_act(() async {
+        uploadEvidence: (data) async {
           await _request('POST','/orders/$id/evidence/upload',data);
-        }),
+        },
         openEvidence: (evidenceId) async {
           final link=_json(await _request('GET',
             '/orders/$id/evidence/$evidenceId'));
@@ -479,7 +479,7 @@ n this device.')));
             throw StateError('Unable to open private evidence');
           }
         },
-        confirmReceipt: (order) => _act(() async {
+        confirmReceipt: (order) async {
           await _request('POST','/orders/$id/confirm-receipt',{
             'confirmation':{
               'orderId':id,
@@ -487,7 +487,7 @@ n this device.')));
               'attestation':'I HAVE RECEIVED PAYMENT',
             },
           });
-        }),
+        },
       );
   String _time(Object? value) {
     final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
@@ -1536,8 +1536,20 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Confirm'))]));
       if(yes!=true)return;
     }
-    await widget.act(action,reason);
-    if(mounted) { _reasonDraft = ''; _refresh(); }
+    try {
+      await widget.act(action,reason);
+      if (mounted) {
+        _reasonDraft = '';
+        _refresh();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      // Do not claim a failed request was accepted; preserve the explanation
+      // and re-read the ORIGINAL order to reconcile an unknown server outcome.
+      _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Action not confirmed. Check the current order state before retrying.')));
+    }
   }
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
     final typed = TextEditingController();
@@ -1614,7 +1626,12 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         ),
       ) ?? false;
       if (!accepted) return;
-      await widget.confirmReceipt(order);
+      try {
+        await widget.confirmReceipt(order);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Release result not confirmed. Refresh the original order before any retry.')));
+      }
       if (mounted) _refresh();
     } finally {
       typed.dispose();
