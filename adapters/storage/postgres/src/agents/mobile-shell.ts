@@ -404,6 +404,10 @@ export function createPostgresMobilePushRepository(pool: Pool): MobilePushReposi
         // across tenants and concurrent sign-ins on the same handset.
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-install:" + input.installationId],
+        );
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
           ["masanawa:push-token:" + input.token],
         );
         await client.query(
