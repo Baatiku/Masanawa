@@ -57,7 +57,7 @@ function admission(raw: unknown): SignedMsnwAdmission {
         (typeof obj.txHash !== "string" || !txPattern.test(obj.txHash)))) {
     fail("msnw.admission.invalid");
   }
-  return obj as SignedMsnwAdmission;
+  return obj as unknown as SignedMsnwAdmission;
 }
 /** Stable cross-language detached Ed25519 signing contract.
  * Sign exactly the UTF-8 bytes of JSON.stringify of this array.
@@ -197,6 +197,15 @@ export function createMsnwIssuanceAdmission(input: Readonly<{
       if (previous.rowCount) {
         if (previous.rowCount!==1 || previous.rows[0]?.event_sha256!==eventSha)
           fail("msnw.admission.idempotency_conflict");
+        const signed = await db.query(
+          "SELECT signed_payload_sha256,detached_signature_base64 " +
+          "FROM commerce.msnw_signed_admissions WHERE event_sha256=$1",
+          [eventSha],
+        );
+        if (signed.rowCount!==1 ||
+            signed.rows[0]?.signed_payload_sha256!==createHash("sha256").update(msnwAdmissionMessage(doc)).digest("hex") ||
+            signed.rows[0]?.detached_signature_base64!==doc.signature)
+          fail("msnw.admission.signature_journal_mismatch");
         await db.query("COMMIT"); begun=false;
         return Object.freeze({reference:doc.reference,stage:doc.stage,
           state:"already_recorded" as const,eventSha256:eventSha});
@@ -212,6 +221,19 @@ export function createMsnwIssuanceAdmission(input: Readonly<{
           doc.txHash??null],
       );
       if (inserted.rowCount!==1) fail("msnw.admission.journal_unavailable");
+      const sig=await db.query(
+        "INSERT INTO commerce.msnw_signed_admissions " +
+        "(event_sha256,reference,stage,signed_payload_sha256," +
+        "signer_public_key_sha256,detached_signature_base64) " +
+        "VALUES ($1,$2,$3,$4,$5,$6) RETURNING event_sha256",
+        [eventSha,doc.reference,doc.stage,
+          createHash("sha256").update(msnwAdmissionMessage(doc)).digest("hex"),
+          createHash("sha256").update(
+            (doc.stage==="backing_qualified"
+              ?input.reserveApproverPublicKey:input.mintApproverPublicKey).trim()
+          ).digest("hex"),doc.signature],
+      );
+      if(sig.rowCount!==1) fail("msnw.admission.signature_journal_unavailable");
       await db.query("COMMIT"); begun=false;
       return Object.freeze({reference:doc.reference,stage:doc.stage,
         state:"recorded" as const,eventSha256:eventSha});
