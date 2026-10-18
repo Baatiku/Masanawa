@@ -62,7 +62,7 @@ class MsnwP2pScreen extends StatefulWidget {
   @override State<MsnwP2pScreen> createState() => _MsnwP2pScreenState();
 }
 
-class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
+class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserver {
   int _tab = 0;
   String _orderFilter = 'all';
   final _nextCursors = <int,String?>{};
@@ -82,8 +82,40 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _restorePending();
     _restorePendingOffer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && _sameAccount) {
+      _reload();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MsnwP2pScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.expectedUserId != widget.expectedUserId ||
+        oldWidget.baseUrl != widget.baseUrl) {
+      _cached.clear();
+      _buyDrafts.clear();
+      _nextCursors.clear();
+      _pendingOrder = null;
+      _pendingOffer = null;
+      _recoveryReady = false;
+      _offerRecoveryReady = false;
+      _reload(0);
+      _restorePending();
+      _restorePendingOffer();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _restorePending() async {
@@ -764,8 +796,17 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
       }
       return _orderView(initial);
     }
-    if (!_sameAccount) return const Scaffold(body: Center(
-      child: Text('Sign in again to continue')));
+    if (!_sameAccount) {
+      _cached.clear();
+      _buyDrafts.clear();
+      _nextCursors.clear();
+      _pendingOrder = null;
+      _pendingOffer = null;
+      _recoveryReady = false;
+      _offerRecoveryReady = false;
+      return const Scaffold(body: Center(
+        child: Text('Sign in again to continue'));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('MSNW P2P')),
       body: Column(children: [
