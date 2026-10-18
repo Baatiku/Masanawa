@@ -44,6 +44,16 @@ class _P2pAdapter implements HttpClientAdapter {
           'remaining_micro': '100000000',
           'bank_name': 'A genuine verified bank account name',
         }]}
+      : path.contains('/offers/by-request/')
+      ? <String,dynamic>{
+          'offerId':'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          'state':'active',
+        }
+      : path.contains('/orders/by-request/')
+      ? <String,dynamic>{
+          'orderId':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          'state':'awaiting_payment',
+        }
       : path.contains('/quote')
       ? <String, dynamic>{
           'offerId':'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -134,6 +144,51 @@ void main() {
     expect(find.text('Create offer'), findsOneWidget);
     expect(t.takeException(), isNull);
     expect(adapter.calls.every((r) => r.method == 'GET'), isTrue);
+  });
+
+  testWidgets('restored offer recovers original request without a second POST', (t) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'masanawa.p2p.offer.buyer': jsonEncode({
+        'requestKey': 'p2p-recover-unique-123',
+        'payload': {
+          'paymentMethodId':'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          'rateKoboPerMsnw':'150000',
+          'minMicro':'1000000', 'maxMicro':'10000000',
+          'inventoryMicro':'10000000',
+        },
+      }),
+    });
+    final adapter=_P2pAdapter();
+    await t.pumpWidget(_app(adapter));
+    await t.pumpAndSettle();
+    expect(find.text('Check unfinished sell offer'),findsOneWidget);
+    await t.tap(find.text('Check unfinished sell offer'));
+    await t.pumpAndSettle();
+    expect(adapter.calls.any((o)=>o.path.contains(
+      '/offers/by-request/p2p-recover-unique-123')),isTrue);
+    expect(adapter.calls.where((o)=>o.method=='POST'),isEmpty);
+    expect(find.text('Check unfinished sell offer'),findsNothing);
+    expect(t.takeException(),isNull);
+  });
+
+  testWidgets('an unfinished buy request blocks new buyer order until recovered', (t) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'masanawa.p2p.order.buyer': jsonEncode({
+        'requestKey':'p2p-prior-order-123456',
+        'offerId':'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        'amountMicro':'1000000',
+        'expectedRateKoboPerMsnw':'150000',
+        'expectedFeeBps':50,
+      }),
+    });
+    final adapter=_P2pAdapter();
+    await t.pumpWidget(_app(adapter));
+    await t.pumpAndSettle();
+    expect(find.text('Check unfinished order'),findsOneWidget);
+    await t.tap(find.textContaining('₦1500.00 / MSNW').first);
+    await t.pumpAndSettle();
+    expect(find.text('Check unfinished order'),findsOneWidget);
+    expect(adapter.calls.where((o)=>o.method=='POST'),isEmpty);
   });
 
 }
