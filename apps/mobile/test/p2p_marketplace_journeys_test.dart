@@ -108,7 +108,7 @@ void main() {
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);
     await t.pumpAndSettle();
     await t.enterText(find.byType(TextField).last, '1');
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Review price and fees'));
     await t.pumpAndSettle();
     expect(find.text('Review P2P order'), findsOneWidget);
     expect(find.text('₦1500.00'), findsOneWidget);
