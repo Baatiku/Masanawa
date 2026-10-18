@@ -1540,39 +1540,82 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     if(mounted) { _reasonDraft = ''; _refresh(); }
   }
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
-    final typed=TextEditingController();
+    final typed = TextEditingController();
     try {
-      final accepted=await openWalletPage<bool>(context:context,
-        builder:(ctx)=>StatefulBuilder(builder:(ctx,update)=>WalletReviewContent(
-          title:const Text('Confirm bank payment received'),
-          content:SingleChildScrollView(child:Column(
-            mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
-            children:[
-              Text('Order: ${order['order_id']}'),
-              Text('Expected bank payment: ${_ngn(order['fiat_kobo'])}'),
-              const SizedBox(height:12),
-              const Text('Check your own bank account or bank transaction '
-                'records. Do not rely on the buyer’s message or screenshot. '
-                'Once released, MSNW goes to the buyer and cannot be '
-                'reclaimed simply by cancelling this order.'),
-              const SizedBox(height:16),
-              const Text('Type RECEIVED to explicitly authorize release:'),
-              TextField(controller:typed,onChanged:(_)=>update((){}),
-                decoration:const InputDecoration(hintText:'RECEIVED'),
-                textCapitalization:TextCapitalization.characters),
-            ])),
-          actions:[
-            TextButton(onPressed:()=>Navigator.pop(ctx,false),
-              child:const Text('Not received')),
-            FilledButton(
-              onPressed:typed.text.trim()=='RECEIVED'
-                ? ()=>Navigator.pop(ctx,true):null,
-              child:const Text('Authorize MSNW release')),
-          ],
-        )))??false;
-      if(!accepted)return;
+      final accepted = await openWalletPage<bool>(
+        context: context,
+        title: 'Confirm bank receipt',
+        builder: (page) => StatefulBuilder(
+          builder: (page, update) => WalletReviewContent(
+            title: const Text('Confirm bank payment'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Expected bank receipt',
+                        style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 8),
+                      Text(_ngn(order['fiat_kobo']),
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      Text('Release: ${_msnw(order['amount_micro'])}'),
+                      const SizedBox(height: 5),
+                      Text('Order ${order['order_id']}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Row(children: [
+                  Icon(Icons.verified_user_outlined),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Check your own bank transaction records. '
+                    'The buyer’s report and screenshots are not proof of receipt.')),
+                ]),
+                const SizedBox(height: 15),
+                const Text('Releasing MSNW to the buyer cannot be undone '
+                  'by cancelling this order.'),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: typed,
+                  onChanged: (_) => update(() {}),
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Type RECEIVED',
+                    hintText: 'RECEIVED',
+                    helperText: 'Only after the actual bank payment is received',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              FilledButton.icon(
+                onPressed: typed.text.trim() == 'RECEIVED'
+                  ? () => Navigator.pop(page, true) : null,
+                icon: const Icon(Icons.lock_open_outlined),
+                label: const Text('Authorize MSNW release'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(page, false),
+                child: const Text('I have not received payment'),
+              ),
+            ],
+          ),
+        ),
+      ) ?? false;
+      if (!accepted) return;
       await widget.confirmReceipt(order);
-      if(mounted)_refresh();
+      if (mounted) _refresh();
     } finally {
       typed.dispose();
     }
