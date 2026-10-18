@@ -42,9 +42,14 @@ export function createDurableJobHealth(pool: Pick<Pool, "query">) {
         SELECT 'p2p_dead_letter', count(*)::text, 0::text
         FROM events.outbox
         WHERE destination='notifications.p2p' AND state='dead-letter'
+        UNION ALL
+        SELECT 'p2p_custody_anomalies',
+          (inconsistent_orders + under_reserved_sellers + undelivered_dead_letters)::text,
+          0::text
+        FROM commerce.msnw_p2p_reconciliation_counts(NULL::text)
       `);
-      const names = new Set(["scheduled_feed", "p2p_expiry", "p2p_dead_letter"]);
-      if (result.rows.length !== 3) throw new Error("durable_job_health_incomplete");
+      const names = new Set(["scheduled_feed", "p2p_expiry", "p2p_dead_letter", "p2p_custody_anomalies"]);
+      if (result.rows.length !== 4) throw new Error("durable_job_health_incomplete");
       const output: DurableQueueHealth[] = [];
       for (const row of result.rows) {
         if (!names.delete(row.queue)) throw new Error("durable_job_health_invalid");
