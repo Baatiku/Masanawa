@@ -153,6 +153,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         FROM commerce.msnw_p2p_offers WHERE tenant_id=$1 AND seller_id=$2
         ORDER BY created_at DESC LIMIT 100`,[actor.tenantId,actor.userId])).rows;
     },
+    async sellerCapacity(actor:P2pActor) {
+      const funds=await pool.query(`SELECT available_micro::text AS available_micro
+        FROM commerce.msnw_custody_accounts
+        WHERE tenant_id=$1 AND user_id=$2`,[actor.tenantId,actor.userId]);
+      const amount=String(funds.rows[0]?.available_micro??"0");
+      if(!/^[0-9]+$/.test(amount))throw new P2pError("p2p.wallet_unavailable",503);
+      return {availableMicro:amount};
+    },
     async methods(actor: P2pActor) {
       const rows = await pool.query(`SELECT method_id,method_type,bank_name,account_name,
         account_number,verified_at FROM commerce.msnw_p2p_payment_methods
