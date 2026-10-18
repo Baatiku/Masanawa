@@ -5,6 +5,7 @@ import type {CharacterId, TenantId} from "@masanawa/contracts";
 export interface CreatorPublicReader {
   listPublished(tenantId:TenantId):Promise<readonly CharacterId[]>;
   canChat(input:{tenantId:TenantId;characterId:CharacterId}):Promise<boolean>;
+  isCreator(input:{tenantId:TenantId;characterId:CharacterId}):Promise<boolean>;
 }
 export function createPgCreatorPublicReader(db:{
   query(sql:string,params:unknown[]):Promise<{rows:Record<string,unknown>[]}>
@@ -30,6 +31,10 @@ export function createPgCreatorPublicReader(db:{
         if(typeof row.character_id!=="string")throw new Error("creator.public_projection_invalid");
         return row.character_id as CharacterId;
       }));
+    },
+    async isCreator({tenantId,characterId}){
+      const r=await db.query("SELECT 1 FROM identity.character_ownership WHERE tenant_id=$1 AND character_id=$2 AND kind='creator-agent' LIMIT 1",[tenantId,characterId]);
+      return r.rows.length===1;
     },
     async canChat({tenantId,characterId}){
       const result=await db.query(visible+" AND a.character_id=$2 LIMIT 1",[tenantId,characterId]);
