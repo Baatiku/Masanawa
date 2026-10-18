@@ -68,22 +68,33 @@ class MsnwTransactionHistory extends StatefulWidget {
   final String? Function() currentUserId, accessToken;
   @override State<MsnwTransactionHistory> createState() => _HistoryState();
 }
-class _HistoryState extends State<MsnwTransactionHistory> {
+class _HistoryState extends State<MsnwTransactionHistory> with WidgetsBindingObserver {
   List<WalletTransaction> entries = [];
   List<String> assets=[];
   final search = TextEditingController();
   List<String> failed = [];
   bool busy = true;
   int generation = 0;
-  String? nextCursor;
+  String? nextCursor,loadedScope;
   Timer? debounce;
   WalletHistoryFilter filter = const WalletHistoryFilter();
   static const categories=['Transfers','Funding','Bills','Conversions','P2P','Crypto','Calls','Rooms','Archive'];
-  @override void initState() { super.initState(); load(); }
+  @override void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    load();
+  }
+  @override void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state==AppLifecycleState.resumed && !busy &&
+        widget.currentUserId()==widget.expectedUserId) {
+      load();
+    }
+  }
   @override void didUpdateWidget(covariant MsnwTransactionHistory old) {
     super.didUpdateWidget(old);
     if (old.expectedUserId != widget.expectedUserId) {
       search.clear();
+      entries=[];nextCursor=null;loadedScope=null;
       assets=[];
       filter = const WalletHistoryFilter();
       load();
@@ -92,7 +103,10 @@ class _HistoryState extends State<MsnwTransactionHistory> {
       load();
     }
   }
-  @override void dispose() { debounce?.cancel(); search.dispose(); super.dispose(); }
+  @override void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    debounce?.cancel();search.dispose();super.dispose();
+  }
   bool same(String? token) => mounted && widget.currentUserId() == widget.expectedUserId &&
     token != null && token.isNotEmpty && token == widget.accessToken()?.trim();
   Map<String,String> get query => {
@@ -110,8 +124,22 @@ class _HistoryState extends State<MsnwTransactionHistory> {
     if(more&&(busy||nextCursor==null))return;
     final run=++generation,token=widget.accessToken()?.trim();
     final cursor=more?nextCursor:null;
-    setState(() {busy=true;failed=[];if(!more){entries=[];nextCursor=null;}});
-    if(!same(token)){setState((){busy=false;failed=['Sign in again'];});return;}
+    final requestScope=query.entries.map((e)=>'${e.key}=${e.value}').join('&');
+    final sameReadScope=loadedScope==requestScope;
+    setState(() {
+      busy=true;failed=[];
+      if(!more) {
+        nextCursor=null;
+        if(!sameReadScope)entries=[];
+      }
+    });
+    if(!same(token)){
+      setState((){
+        busy=false;entries=[];loadedScope=null;nextCursor=null;
+        failed=['Sign in again'];
+      });
+      return;
+    }
     try {
       final response=await widget.dio.get<dynamic>(
         '${widget.baseUrl.replaceFirst(RegExp(r'/$'),'')}/v1/wallet/msnw/activity',
@@ -126,7 +154,9 @@ class _HistoryState extends State<MsnwTransactionHistory> {
       setState(() {
         entries={for(final e in [...(more?entries:<WalletTransaction>[]),...values])e.id:e}.values.toList();
         assets=(raw['assets'] is List?(raw['assets'] as List).whereType<String>().where((a)=>a.length<=40):values.map((v)=>v.asset)).toSet().toList()..sort();
-        nextCursor=raw['nextCursor'] as String?;busy=false;
+        nextCursor=raw['nextCursor'] as String?;
+        loadedScope=requestScope;
+        busy=false;
       });
     } catch(_) {
       if(!mounted||run!=generation)return;
@@ -167,8 +197,18 @@ class _HistoryState extends State<MsnwTransactionHistory> {
             accessToken:widget.accessToken,authorized:()=>same(widget.accessToken()?.trim()))),icon:const Icon(Icons.ios_share)),
       ])),
       if (busy) const LinearProgressIndicator(minHeight:2),
-      if (failed.isNotEmpty) Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
-        child:const Text('Couldn’t refresh transactions. Check your connection and retry.',textAlign:TextAlign.center)),
+      if (failed.isNotEmpty) Padding(
+        padding:const EdgeInsets.symmetric(horizontal:16,vertical:8),
+        child:Semantics(liveRegion:true,child:Column(children:[
+          Text(rows.isNotEmpty
+            ? 'Showing previously loaded transactions. These are not live.'
+            : 'Couldn’t refresh transactions. Check your connection and retry.',
+            textAlign:TextAlign.center),
+          if(rows.isNotEmpty)TextButton.icon(
+            onPressed:busy?null:()=>load(),
+            icon:const Icon(Icons.refresh),
+            label:const Text('Try again')),
+        ]))),
       Expanded(child:rows.isEmpty
         ? busy
           ? const MasanawaListSkeleton(semanticLabel: 'Loading transactions')
