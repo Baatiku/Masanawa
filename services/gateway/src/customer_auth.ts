@@ -1226,6 +1226,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
   publicCreatorAdmission?: {
     listPublished(tenantId:TenantId):Promise<readonly CharacterId[]>;
     canChat(input:{tenantId:TenantId;characterId:CharacterId}):Promise<boolean>;
+    isCreator(input:{tenantId:TenantId;characterId:CharacterId}):Promise<boolean>;
   };
   publicTwinAdmission?: {
     canChat(input: Readonly<{
@@ -1358,17 +1359,12 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
         throw new CustomerAuthError("FORBIDDEN", 403);
       }
 
-      // A revoked or paused character stays inaccessible even if a
-      // relationship predates the moderation decision.
-      if (input.publicCreatorAdmission && !creatorOwnership) {
-        // Existing platform agents and legacy eligible entities follow
-        // their original gates; never authorize a creator via that fallback.
-        const eligiblePlatform = await input.platformProfiles.readForCharacter({
-          tenantId: identity.tenantId, characterId,
-        });
-        if (!eligiblePlatform && !input.publicTwinAdmission) {
-          throw new CustomerAuthError("FORBIDDEN",403);
-        }
+      // Revocation must gate previously established conversations too.
+      if (input.publicCreatorAdmission &&
+          await input.publicCreatorAdmission.isCreator({
+            tenantId: identity.tenantId, characterId,
+          }) && !creatorOwnership) {
+        throw new CustomerAuthError("FORBIDDEN", 403);
       }
       const assignment = await input.skillAssignments.readForCharacter({
         tenantId: identity.tenantId,
