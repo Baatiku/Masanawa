@@ -47,6 +47,21 @@ CREATE UNIQUE INDEX creator_agent_public_handle
 CREATE INDEX creator_agents_by_owner
   ON creator.agents(tenant_id,owner_user_id,created_at DESC);
 
+-- Bounded daily model calls: no free unlimited generation or retries.
+CREATE TABLE creator.generation_attempts(
+ tenant_id text NOT NULL,
+ attempt_id uuid NOT NULL,
+ owner_user_id text NOT NULL,
+ character_id text NOT NULL,
+ draft_revision bigint NOT NULL CHECK(draft_revision>0),
+ attempted_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,attempt_id),
+ FOREIGN KEY(tenant_id,character_id,owner_user_id)
+  REFERENCES creator.agents(tenant_id,character_id,owner_user_id)
+);
+CREATE INDEX creator_daily_generations
+ ON creator.generation_attempts(tenant_id,owner_user_id,attempted_at DESC);
+
 CREATE OR REPLACE FUNCTION creator.enforce_agent_owner()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
