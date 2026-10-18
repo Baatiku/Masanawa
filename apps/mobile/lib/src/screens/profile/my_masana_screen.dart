@@ -155,7 +155,8 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
 }
 
 class _CreateMasanaScreen extends ConsumerStatefulWidget {
-  const _CreateMasanaScreen();
+  const _CreateMasanaScreen({this.initialDraft});
+  final Map<String, dynamic>? initialDraft;
   @override
   ConsumerState<_CreateMasanaScreen> createState() =>
       _CreateMasanaScreenState();
@@ -169,6 +170,23 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
   String? _draftKey, _error;
   Map<String, dynamic>? _draft;
   bool _busy = false;
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialDraft;
+    if (initial != null) {
+      _draft = Map<String, dynamic>.from(initial);
+      final seed = initial['seed'] as Map? ?? {};
+      _name.text = seed['name']?.toString() ?? '';
+      _profession.text = seed['profession']?.toString() ?? '';
+      final languageList = seed['languages'];
+      if (languageList is List) {
+        _languages.text = languageList.map((value) => value.toString()).join(', ');
+      }
+      _gender = seed['gender']?.toString() ?? _gender;
+      _age = seed['ageRange']?.toString() ?? _age;
+    }
+  }
   @override
   void dispose() {
     _name.dispose();
@@ -202,22 +220,33 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
     });
     try {
       final dio = ref.read(apiClientProvider).dio;
-      _draftKey ??= _key();
-      final draft = await dio.post<Map<String, dynamic>>(
-        '/v1/creator/masana/drafts',
-        data: {
-          'idempotencyKey': _draftKey,
-          'seed': {
-            'name': name,
-            'profession': profession,
-            'languages': languages,
-            'gender': _gender,
-            'ageRange': _age,
-            'portraitMediaId': null,
-          },
-        },
-      );
-      final id = draft.data?['characterId'], revision = draft.data?['revision'];
+      final seed = {
+        'name': name,
+        'profession': profession,
+        'languages': languages,
+        'gender': _gender,
+        'ageRange': _age,
+        'portraitMediaId': null,
+      };
+      Map<String, dynamic>? saved = _draft;
+      final existingId = saved?['characterId'];
+      if (existingId is String) {
+        final edited = await dio.patch<Map<String, dynamic>>(
+          '/v1/creator/masana/${Uri.encodeComponent(existingId)}/draft',
+          data: {'expectedRevision': saved?['revision'], 'seed': seed},
+        );
+        saved = edited.data;
+      } else {
+        _draftKey ??= _key();
+        final created = await dio.post<Map<String, dynamic>>(
+          '/v1/creator/masana/drafts',
+          data: {'idempotencyKey': _draftKey, 'seed': seed},
+        );
+        saved = created.data;
+      }
+      if (saved == null) throw const FormatException('Invalid draft');
+      _draft = saved;
+      final id = saved['characterId'], revision = saved['revision'];
       if (id is! String || revision is! int) {
         throw const FormatException('Invalid draft');
       }
@@ -570,10 +599,19 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
               onTap: _busy ? null : _toggle,
             ),
           if (state == 'draft')
-            const ListTile(
-              leading: Icon(Icons.edit_outlined),
-              title: Text('Unpublished draft'),
-              subtitle: Text('No publication charge has been applied.'),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Continue draft'),
+              subtitle: const Text('Complete your Masana without starting over.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final saved = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => _CreateMasanaScreen(initialDraft: _agent),
+                  ),
+                );
+                if (saved == true && context.mounted) Navigator.pop(context);
+              },
             ),
           if (_error != null)
             Padding(
