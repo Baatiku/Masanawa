@@ -25,7 +25,7 @@ export function createDurableJobHealth(pool: Pick<Pool, "query">) {
     async read(): Promise<readonly DurableQueueHealth[]> {
       const result = await pool.query<{
         queue: string; pending: string; oldest_seconds: string;
-      }>(String.raw`
+      }>({ text: String.raw`
         SELECT 'scheduled_feed' AS queue,
           count(*)::text AS pending,
           coalesce(greatest(0, floor(extract(epoch from
@@ -47,7 +47,7 @@ export function createDurableJobHealth(pool: Pick<Pool, "query">) {
           (inconsistent_orders + under_reserved_sellers + undelivered_dead_letters)::text,
           0::text
         FROM commerce.msnw_p2p_reconciliation_counts(NULL::text)
-      `);
+      `, query_timeout: 4000, statement_timeout: 4000 });
       const names = new Set(["scheduled_feed", "p2p_expiry", "p2p_dead_letter", "p2p_custody_anomalies"]);
       if (result.rows.length !== 4) throw new Error("durable_job_health_incomplete");
       const output: DurableQueueHealth[] = [];
