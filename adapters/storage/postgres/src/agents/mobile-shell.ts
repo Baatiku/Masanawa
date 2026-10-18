@@ -400,12 +400,15 @@ export function createPostgresMobilePushRepository(pool: Pool): MobilePushReposi
         if (user.rows[0]?.state !== "active") {
           throw new Error("push.account_inactive");
         }
-        // The same physical FCM token or installation must never remain
-        // subscribed to a previously signed-in account. Rotate ownership
-        // before inserting the new account's registration.
+        // Serialize ownership transfers of this physical FCM token even
+        // across tenants and concurrent sign-ins on the same handset.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-token:" + input.token],
+        );
         await client.query(
           `DELETE FROM agents.mobile_push_registrations
-           WHERE tenant_id=$1 AND user_id<>$4
+           WHERE (tenant_id<>$1 OR user_id<>$4)
              AND (token=$2 OR installation_id=$3)`,
           [input.tenantId,input.token,input.installationId,input.userId],
         );
