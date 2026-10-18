@@ -137,6 +137,11 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
      await db.query("COMMIT");begun=false;
      return view(existing.rows[0]);
     }
+    const count=await db.query(
+      "SELECT count(*)::int AS draft_count FROM creator.agents WHERE tenant_id=$1 AND owner_user_id=$2 AND state='draft'",
+      [owner.tenantId,owner.userId]);
+    if(Number(count.rows[0]?.draft_count??0)>=20)
+      throw new CreatorAgentError("creator.draft_limit",429);
     const characterId=createCanonicalId("character");
     const now=new Date().toISOString();
     await db.query("INSERT INTO identity.characters(tenant_id,character_id,created_at,updated_at) VALUES($1,$2,$3,$3)",
