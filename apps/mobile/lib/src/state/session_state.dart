@@ -8,6 +8,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/api/models.dart';
 import '../core/network/api_client.dart';
 import '../core/providers.dart';
+import '../chat/shell_action_journal.dart';
+import '../chat/shell_secure_storage.dart';
 
 const _storage = FlutterSecureStorage(
   aOptions: AndroidOptions(),
@@ -429,6 +431,7 @@ class SessionController extends Notifier<SessionState> {
   Future<void> _persist(AuthTokens tokens, {int? expectedEpoch}) async {
     if (expectedEpoch != null && expectedEpoch != _authEpoch) return;
     final client = ref.read(apiClientProvider);
+    final previousOwnerId = client.authenticatedAccountId;
     if (expectedEpoch == null) {
       _authEpoch++; // New login, even if the same fan signs in again.
       client.authenticatedAccountId = null;
@@ -441,6 +444,15 @@ class SessionController extends Notifier<SessionState> {
     // One encrypted record, with serialized epochs to prevent a refresh
     // from racing a logout or a new account's credential storage.
     await _writeCredentials(() async {
+      if (epoch != _authEpoch) return;
+      // A fresh sign-in replaces the previous session's opaque action grants.
+      // Never preserve a previous account's private form values on-device.
+      if (expectedEpoch == null && previousOwnerId != null) {
+        await EncryptedShellActionJournal.clearOwner(
+          store: FlutterShellEncryptedStore(storage: _storage),
+          ownerId: previousOwnerId,
+        );
+      }
       if (epoch != _authEpoch) return;
       await _storage.write(
         key: _kSession,
@@ -543,6 +555,7 @@ class SessionController extends Notifier<SessionState> {
   Future<void> _clear() async {
     final epoch = ++_authEpoch;
     final client = ref.read(apiClientProvider);
+    final previousOwnerId = client.authenticatedAccountId;
     client.authenticatedAccountId = null;
     client.accessToken = null;
     client.onUnauthorized = null;
@@ -555,6 +568,14 @@ class SessionController extends Notifier<SessionState> {
         _storage.delete(key: _kExpiry),
         _storage.delete(key: _kUser),
       ]);
+      // Purge user-scoped ephemeral action tokens/values, but do NOT delete
+      // an unresolved MSNW idempotency journal needed to recover a transfer.
+      if (previousOwnerId != null) {
+        await EncryptedShellActionJournal.clearOwner(
+          store: FlutterShellEncryptedStore(storage: _storage),
+          ownerId: previousOwnerId,
+        );
+      }
     });
   }
 }
