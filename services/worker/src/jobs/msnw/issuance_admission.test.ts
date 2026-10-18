@@ -60,14 +60,14 @@ function setup() {
     }
     if(sql.startsWith("INSERT INTO commerce.msnw_settlement_events")) {
       const [event_sha256,reference,stage,reserve_proof_sha256,quote_sha256,
-        amount_micro,chain_id,contract_address]=args as string[];
+        amount_micro,chain_id,contract_address]=args as [string,string,string,string,string,string,string,string];
       events.set(stage,{event_sha256,reference,stage,reserve_proof_sha256,
         quote_sha256,amount_micro,chain_id,contract_address});
       return {rowCount:1,rows:[{reference}]};
     }
     if(sql.startsWith("INSERT INTO commerce.msnw_signed_admissions")) {
       const [event_sha256,,stage,signed_payload_sha256,,
-        detached_signature_base64]=args as string[];
+        detached_signature_base64]=args as [string,string,string,string,string,string];
       signatures.set(event_sha256,{signed_payload_sha256,detached_signature_base64});
       return {rowCount:1,rows:[{event_sha256}]};
     }

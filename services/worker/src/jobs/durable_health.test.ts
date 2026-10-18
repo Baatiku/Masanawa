@@ -7,9 +7,9 @@ describe("durable operational backlog authority", () => {
     { queue: "p2p_expiry", pending: "0", oldest_seconds: "0" },
     { queue: "p2p_dead_letter", pending: "1", oldest_seconds: "0" },
     { queue: "p2p_custody_anomalies", pending: "0", oldest_seconds: "0" },
-  ];
+  ] as const;
 
-  function fixture(rows: typeof complete) {
+  function fixture(rows: readonly { queue: string; pending: string; oldest_seconds: string }[]) {
     const release = vi.fn();
     const query = vi.fn(async (sql: string) => ({
       rows: sql.includes("SELECT 'scheduled_feed'") ? rows : [],

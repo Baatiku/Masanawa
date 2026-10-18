@@ -38,6 +38,7 @@
     "@masanawa/security": "workspace:*",
     "@masanawa/skills": "workspace:*",
     "@masanawa/tools": "workspace:*",
+    "@types/emscripten": "1.41.6",
     "@types/node": "24.13.6",
     "typescript": "7.0.2",
     "vitest": "5.0.3"

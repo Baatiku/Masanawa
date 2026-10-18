@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "variables": [
     {
+      "name": "MASANAWA_CREATOR_GENERATION_MODEL",
+      "owner": "gateway/creator-agents",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional creator profile generation model; falls back to MASANAWA_GEMINI_MODEL, then gemini-2.5-flash."
+    },
+    {
       "name": "CREDENTIAL_ENCRYPTION_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",
