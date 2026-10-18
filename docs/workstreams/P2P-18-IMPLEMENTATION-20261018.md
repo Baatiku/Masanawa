@@ -1,6 +1,6 @@
 # P2P-01–18: implementation handoff — 2026-10-18
 
-**Status: IMPLEMENTED_UNVERIFIED / PARTIAL_IMPLEMENTATION.** This is code delivery, not user/handset/provider acceptance. Source branch: `feat/p2p-chat-style-recovery-20261018`; PR #183 against `main`. Original branch baseline `20159f616fdfcb962c0308a8ebe6444d55e04a2c`. Obtain **fresh PR head SHA** before executing or merging. Canonical requirements remain in `docs/workstreams/UI-MUI-07-wallet.md`. Do not convert their 18 open checkbox rows to DONE without actual tests and visual review.
+**Status: IMPLEMENTED_UNVERIFIED — owner-authorized merge despite unavailable test runners.** This is code delivery, not user/handset/provider acceptance. Source branch: `feat/p2p-chat-style-recovery-20261018`; PR #183 against `main`. Original branch baseline `20159f616fdfcb962c0308a8ebe6444d55e04a2c`. Obtain **fresh PR head SHA** before executing or merging. Canonical requirements remain in `docs/workstreams/UI-MUI-07-wallet.md`. Do not convert their 18 open checkbox rows to DONE without actual tests and visual review.
 
 ## Source coverage, with honest acceptance state
 
@@ -70,9 +70,9 @@ flutter test test/p2p_amount_bounds_test.dart test/p2p_marketplace_journeys_test
 
 ## Execution/merge evidence
 
-GitHub Actions on the first PR #183 head failed before job steps (no actual test result; runner allocation unavailable). The assistant environment used for this PR lacks Flutter/Dart and GitHub network access from its container, so no local toolchain run, rendered UI acceptance, or E2E claim is possible here. Earlier malformed source was repaired in commit `83ab1aa`; that repair was not a compiler run. Leave PR as draft until an actual compiler/test executor examines the final head. Missing runner is not a failing assertion; also not a passing test.
+GitHub Actions on the first PR #183 head failed before job steps (no actual test result; runner allocation unavailable). The assistant environment used for this PR lacks Flutter/Dart and GitHub network access from its container, so no local toolchain run, rendered UI acceptance, or E2E claim is possible here. Earlier malformed source was repaired in commit `83ab1aa`; that repair was not a compiler run. The owner explicitly authorized integrating source despite unavailable runners on 2026-10-18; do not represent this as compiled, tested, qualified, or deployed. Missing runner is not a failing assertion; also not a passing test.
 
-**Next exact step:** checkout the latest PR #183 head, run the commands above, address compiler or regression failures, inspect the full PR diff against updated main and current workstream claims, then merge only after a qualified review. Final device/provider acceptance remains a separate release gate.
+**Next acceptance step:** after the owner-authorized development merge, run the commands above against integrated main, fix any compiler or regression failures, and perform rendered phone-size/device/provider acceptance. This acceptance does not block the owner's requested source integration. Final device/provider acceptance remains a separate release gate.
 
 ## Customer security invariants
 
@@ -82,3 +82,8 @@ GitHub Actions on the first PR #183 head failed before job steps (no actual test
 - No finance action uses device countdown, local prices or local capacity as settlement authority.
 - Missing/uncertain operations retain their original owner-scoped request identity; do not fabricate receipts or balances.
 - Actual custody, bank settlement, reconciliation and authorized release must be independently verified.
+
+
+## 2026-10-18 owner integration decision
+
+The owner explicitly requested: **merge the implementation now**, leaving unexecuted test and handset checks for subsequent review. GitHub Actions jobs for this milestone failed before executing tests; code must remain designated **IMPLEMENTED_UNVERIFIED** after merge. No APK, customer custody validation, bank/provider confirmation, or signed handset qualification has been demonstrated by the merge. Carry these checks to the next work window without relabeling them as passed. Preserve financial safeguards, tenant fencing, prior financial records and original request identities.
