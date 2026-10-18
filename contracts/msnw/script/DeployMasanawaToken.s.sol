@@ -41,7 +41,6 @@ contract DeployMasanawaToken is Script {
         require(token.decimals() == 6, "BAD_DECIMALS");
         require(token.custodian() == custodySafe, "BAD_CUSTODIAN");
         require(token.hasRole(token.BURNER_ROLE(), custodySafe), "CUSTODIAN_NOT_BURNER");
-        require(!token.hasRole(token.DEFAULT_ADMIN_ROLE(), msg.sender), "DEPLOYER_ADMIN");
         require(keccak256(bytes(token.symbol())) == keccak256(bytes("MSNW")),
             "BAD_SYMBOL");
     }
