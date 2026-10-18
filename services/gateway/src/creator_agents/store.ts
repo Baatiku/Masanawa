@@ -1,4 +1,4 @@
-import {createHash,randomBytes} from "node:crypto";
+import {createHash,randomBytes,randomUUID} from "node:crypto";
 import {createCanonicalId} from "@masanawa/contracts";
 import {
  validateCreatorSeed, validateCreatorGeneration,
@@ -113,6 +113,26 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
    if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)throw new CreatorAgentError("creator.revision_invalid",400);
    const source=await own(owner,characterId);
    if(source.state!=="draft"||source.revision!==expectedRevision)throw new CreatorAgentError("creator.stale_draft");
+   // Serialize per user so concurrent devices cannot bypass the daily budget.
+   const budget=await pool.connect();let budgetBegun=false;
+   try {
+    await budget.query("BEGIN");budgetBegun=true;
+    const identity=await budget.query(
+      "SELECT state FROM identity.users WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE",
+      [owner.tenantId,owner.userId]);
+    if(identity.rows[0]?.state!=="active")throw new CreatorAgentError("creator.owner_not_active",403);
+    const spent=await budget.query(
+      "SELECT count(*)::int AS attempts FROM creator.generation_attempts "+
+      "WHERE tenant_id=$1 AND owner_user_id=$2 AND attempted_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'",
+      [owner.tenantId,owner.userId]);
+    if(Number(spent.rows[0]?.attempts??0)>=3)throw new CreatorAgentError("creator.daily_generation_limit",429);
+    await budget.query(
+      "INSERT INTO creator.generation_attempts(tenant_id,attempt_id,owner_user_id,character_id,draft_revision) "+
+      "VALUES($1,$2,$3,$4,$5)",
+      [owner.tenantId,randomUUID(),owner.userId,id(characterId),expectedRevision]);
+    await budget.query("COMMIT");budgetBegun=false;
+   }catch(error){if(budgetBegun)await budget.query("ROLLBACK").catch(()=>{});throw error;}
+   finally{budget.release();}
    const generated=await input.generator.generate(source.seed);
    const r=await pool.query(
     "UPDATE creator.agents SET generated=$4::jsonb,revision=revision+1,updated_at=statement_timestamp() "+
