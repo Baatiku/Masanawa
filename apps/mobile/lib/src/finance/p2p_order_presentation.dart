@@ -44,7 +44,7 @@ class P2pOrderProgress extends StatelessWidget {
     final stage = state == 'completed'
         ? 3
         : state == 'release_pending'
-        ? 2
+        ? 1
         : state == 'payment_claimed'
         ? 1
         : 0;
