@@ -60,10 +60,27 @@ jobs:
           --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
       - name: Inspect APK result
         run: test -s build/app/outputs/flutter-apk/app-release.apk
+      - name: Verify provenance script contracts
+        run: node --test ../../scripts/reliability/release-provenance.test.mjs
+      - name: Record signed APK identity and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          test -n "$APKSIGNER"
+          node ../../scripts/reliability/release-provenance.mjs \
+            --apk build/app/outputs/flutter-apk/app-release.apk \
+            --pubspec pubspec.yaml --lockfile pubspec.lock \
+            --apksigner "$APKSIGNER" \
+            --output build/app/outputs/flutter-apk/release-evidence.json
+          (cd build/app/outputs/flutter-apk && sha256sum app-release.apk > app-release.apk.sha256)
       - name: Preserve compiled handset APK
         uses: actions/upload-artifact@v4
         with:
           name: masanawa-26-masana-handset-apk
-          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/mobile/build/app/outputs/flutter-apk/release-evidence.json
           if-no-files-found: error
           retention-days: 7
