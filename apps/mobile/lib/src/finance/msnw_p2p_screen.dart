@@ -249,21 +249,6 @@ n this device.')));
       if (mounted) setState(() => _busy = false);
     }
   }
-  Future<String?> _field({required String title, required String label,
-      String? hint, String? initial}) async {
-    final controller = TextEditingController(text: initial);
-    try {
-      return await openWalletPage<String>(context: context,
-        builder: (ctx) => WalletReviewContent(title: Text(title), content: TextField(
-          controller: controller, autofocus: true,
-          decoration: InputDecoration(labelText: label, hintText: hint),
-        ), actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Back')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Continue')),
-        ]));
-    } finally { controller.dispose(); }
-  }
   Future<bool> _confirm(String title, String details) async {
     return await openWalletPage<bool>(context: context,
       builder: (ctx) => WalletReviewContent(title: Text(title), content: Text(details),
