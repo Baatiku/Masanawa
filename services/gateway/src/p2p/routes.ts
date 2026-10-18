@@ -51,6 +51,27 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     if(!value?.tenantId||!value?.userId)throw new P2pError("p2p.operator_forbidden",403);
     return value;
   };
+  app.get("/v1/wallet/msnw/p2p/offers/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.offersPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/my-offers/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.myOffersPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/notifications/page",async(req,reply)=>{
+    try {
+      const query=req.query as {cursor?:unknown};
+      return await deps.service.notificationsPage(await actor(req.headers.authorization),{
+        cursor:typeof query.cursor==="string"?query.cursor:undefined});
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/offers", async (req,reply) => {
     try { return {items:await deps.service.offers(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
@@ -88,9 +109,19 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return reply.code(201).send(method);
     }catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/seller-capacity",async(req,reply)=>{
+    try {return await deps.service.sellerCapacity(await actor(req.headers.authorization));}
+    catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/methods", async (req,reply) => {
     try { return {items:await deps.service.methods(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/offers/by-request/:requestKey",async(req,reply)=>{
+    try {
+      return await deps.service.offerByRequest(await actor(req.headers.authorization),
+        (req.params as {requestKey:string}).requestKey);
+    }catch(error){return respond(error,reply);}
   });
   app.post("/v1/wallet/msnw/p2p/offers", async (req,reply) => {
     try {
@@ -98,18 +129,49 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       const body=req.body as Record<string,unknown>|null;
       if(!body||typeof body!=="object"||Array.isArray(body))
         throw new P2pError("p2p.invalid_offer",422);
-      return reply.code(201).send(await deps.service.createOffer(a,{
+      const requestKey=req.headers["idempotency-key"];
+      const created=await deps.service.createOffer(a,{
         paymentMethodId:String(body.paymentMethodId??""),
         rateKoboPerMsnw:String(body.rateKoboPerMsnw??""),
         minMicro:String(body.minMicro??""),
         maxMicro:String(body.maxMicro??""),
         inventoryMicro:String(body.inventoryMicro??""),
-      }));
+        idempotencyKey:typeof requestKey==="string"?requestKey:undefined,
+      });
+      return reply.code(created.replay?200:201).send(created);
     } catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/notifications",async(req,reply)=>{
     try {return {items:await deps.service.notifications(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/offers/:offerId/quote",async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      const offerId=(req.params as {offerId:string}).offerId;
+      const q=req.query as {amountMicro?:unknown};
+      return await deps.service.quote(a,{
+        offerId,amountMicro:typeof q.amountMicro==="string"?q.amountMicro:"",
+      });
+    } catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/orders/by-request/:requestKey",async(req,reply)=>{
+    try {return await deps.service.orderByRequest(await actor(req.headers.authorization),
+      (req.params as {requestKey:string}).requestKey);}
+    catch(error){return respond(error,reply);}
+  });
+  app.get("/v1/wallet/msnw/p2p/orders/page",async(req,reply)=>{
+    try {
+      const a=await actor(req.headers.authorization);
+      const q=req.query as {filter?:unknown;cursor?:unknown;limit?:unknown};
+      const requestedLimit=typeof q.limit==="string"&&/^[0-9]{1,2}$/.test(q.limit)
+        ?Number(q.limit):undefined;
+      return await deps.service.ordersPage(a,{
+        filter:typeof q.filter==="string"?q.filter:undefined,
+        cursor:typeof q.cursor==="string"?q.cursor:undefined,
+        limit:requestedLimit,
+      });
+    }catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/orders",async(req,reply)=>{
     try { return {items:await deps.service.orders(await actor(req.headers.authorization))};}
@@ -125,6 +187,10 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       const result=await deps.service.createOrder(a,{
         offerId:String(body.offerId??""),amountMicro:String(body.amountMicro??""),
         idempotencyKey:typeof key==="string"?key:"",
+        expectedRateKoboPerMsnw:typeof body.expectedRateKoboPerMsnw==="string"
+          ?body.expectedRateKoboPerMsnw:undefined,
+        expectedFeeBps:typeof body.expectedFeeBps==="number"
+          ?body.expectedFeeBps:undefined,
       });
       return reply.code(result.replay?200:201).send(result);
     }catch(error){return respond(error,reply);}

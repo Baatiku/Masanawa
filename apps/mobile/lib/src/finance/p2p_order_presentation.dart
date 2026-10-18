@@ -13,12 +13,16 @@ Duration p2pPaymentRemaining(
 
 String p2pOrderStatus(String state) =>
     const {
+      'reserving': 'Securing seller funds',
       'awaiting_payment': 'Awaiting bank transfer',
       'payment_claimed': 'Buyer reported payment',
+      'release_pending': 'Checking release',
+      'refund_pending': 'Refund processing',
       'completed': 'Trade completed',
       'disputed': 'Under review',
       'expired': 'Order expired',
       'cancelled': 'Order cancelled',
+      'failed': 'Order could not be placed',
     }[state] ??
     state.replaceAll('_', ' ');
 
@@ -38,18 +42,19 @@ class P2pOrderProgress extends StatelessWidget {
         title: Text(p2pOrderStatus(state)),
       );
     final stage = state == 'completed'
-        ? 4
+        ? 3
+        : state == 'release_pending'
+        ? 1
         : state == 'payment_claimed'
-        ? 2
-        : 1;
+        ? 1
+        : 0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final step in [
-          (0, 'Created'),
-          (1, 'Reported'),
-          (2, 'Bank check'),
-          (3, 'Complete'),
+          (0, 'Buyer reports'),
+          (1, 'Seller checks'),
+          (2, 'Complete'),
         ])
           Expanded(
             child: Semantics(
@@ -93,9 +98,12 @@ class P2pOrderBankDetails extends StatelessWidget {
     required this.accountName,
     required this.accountNumber,
     required this.buyer,
+    this.fiatTotal,
   });
   final String bankName, accountName, accountNumber;
   final bool buyer;
+  /// Server-computed NGN total, never a client estimate.
+  final String? fiatTotal;
   @override
   Widget build(BuildContext context) {
     if (!RegExp(r'^[0-9]{10}$').hasMatch(accountNumber) ||
@@ -145,7 +153,37 @@ class P2pOrderBankDetails extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SelectableText(accountName),
+          Row(children: [
+            Expanded(child: SelectableText(accountName)),
+            IconButton(
+              tooltip:'Copy verified recipient name',
+              icon:const Icon(Icons.copy_outlined),
+              onPressed:()async{
+                await Clipboard.setData(ClipboardData(text:accountName));
+                if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content:Text('Recipient name copied')));
+              },
+            ),
+          ]),
+          if (buyer && fiatTotal != null) ...[
+            const Divider(height: 24),
+            Text('Send exactly',style:Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 5),
+            Row(children:[
+              Expanded(child:Text(fiatTotal!,style:Theme.of(context)
+                .textTheme.titleLarge?.copyWith(fontWeight:FontWeight.w700))),
+              IconButton(
+                tooltip:'Copy exact payment amount',
+                icon:const Icon(Icons.copy_outlined),
+                onPressed:()async{
+                  await Clipboard.setData(ClipboardData(text:fiatTotal!.replaceAll('₦','').replaceAll(',','')));
+                  if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content:Text('Payment total copied')));
+                },
+              ),
+            ]),
+            const Text('Only mark paid after making the actual bank transfer.'),
+          ],
         ],
       ),
     );
