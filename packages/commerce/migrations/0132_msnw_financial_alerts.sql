@@ -79,7 +79,7 @@ CREATE OR REPLACE FUNCTION commerce.queue_msnw_bill_alert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF NEW.state IS DISTINCT FROM OLD.state AND
-    NEW.state IN ('fulfilled','failed','refunded') THEN
+    NEW.state IN ('fulfilled','refunded') THEN
    PERFORM agents.queue_mobile_notice(NEW.tenant_id,NEW.user_id,
      'finance-bill-'||NEW.fulfillment_reference||'-'||NEW.state,
      'wallet',CASE WHEN NEW.state='fulfilled' THEN 'Bill payment completed'
