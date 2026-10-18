@@ -1,0 +1,45 @@
+name: Worker Job Health Regression
+on:
+  pull_request:
+    paths:
+      - "services/worker/src/app.ts"
+      - "services/worker/src/app.test.ts"
+      - "services/worker/src/main.ts"
+      - "services/worker/src/jobs/youtube_websub/scheduler.ts"
+      - "services/worker/src/jobs/youtube_websub/scheduler.test.ts"
+      - "scripts/reliability/readiness-watch*"
+      - ".github/workflows/worker-job-health.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/worker/src/app.ts"
+      - "services/worker/src/app.test.ts"
+      - "services/worker/src/main.ts"
+      - "services/worker/src/jobs/youtube_websub/scheduler.ts"
+      - "services/worker/src/jobs/youtube_websub/scheduler.test.ts"
+      - "scripts/reliability/readiness-watch*"
+      - ".github/workflows/worker-job-health.yml"
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.8.2"
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Enforce Worker endpoint and scheduler recovery tests
+        run: pnpm exec vitest run services/worker/src/app.test.ts services/worker/src/jobs/youtube_websub/scheduler.test.ts
+      - name: Check monitor contract and token behavior
+        run: node --test scripts/reliability/readiness-watch.test.mjs
+      - name: Compile canonical Worker
+        run: pnpm --filter @masanawa/worker-service... build
