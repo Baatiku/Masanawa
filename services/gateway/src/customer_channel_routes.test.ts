@@ -2,10 +2,12 @@ import { createHmac } from "node:crypto";
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { registerCustomerChannelRoutes } from "./customer_channel_routes.js";
+import type { CustomerChannelBridge } from "./customer_channel_bridge.js";
 
 function bridge() {
   return {
-    handle: vi.fn(async () => ({
+    handle: vi.fn<CustomerChannelBridge["handle"]>(async () => ({
+      handled: true,
       duplicate: false,
       reply: "",
       shouldDeliver: false,
@@ -39,7 +41,7 @@ function whatsappPayload() {
 describe("customer channel webhook routes", () => {
   it.each([false,true])("keeps failed audio-only replies retryable; text fallback=%s",async(hasText)=>{
     const app=Fastify();const channelBridge=bridge();
-    channelBridge.handle.mockResolvedValue({duplicate:false,reply:hasText?"Voice transcript":"",shouldDeliver:true,requestContact:false,
+    channelBridge.handle.mockResolvedValue({handled:true,duplicate:false,reply:hasText?"Voice transcript":"",shouldDeliver:true,requestContact:false,
       audio:{bytes:Buffer.from("audio"),mimeType:"audio/wav",fileName:"reply.wav"}} as never);
     vi.stubGlobal("fetch",vi.fn(async(input)=>new Response(JSON.stringify(
       String(input).includes("sendDocument")?{ok:false}:{ok:true}),{status:200})));
@@ -53,7 +55,7 @@ describe("customer channel webhook routes", () => {
   });
   it("aborts stalled provider delivery without acknowledging the receipt",async()=>{
     const app=Fastify();const channelBridge=bridge();const controller=new AbortController();
-    channelBridge.handle.mockResolvedValue({duplicate:false,reply:"Pending reply",shouldDeliver:true,requestContact:false});
+    channelBridge.handle.mockResolvedValue({handled:true,duplicate:false,reply:"Pending reply",shouldDeliver:true,requestContact:false});
     let entered!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;});
     let signal:AbortSignal|undefined;
     const deadline=vi.spyOn(AbortSignal,"timeout").mockReturnValue(controller.signal);
@@ -331,13 +333,14 @@ describe("customer channel webhook routes", () => {
     const app = Fastify();
     const channelBridge = bridge();
     channelBridge.handle.mockResolvedValueOnce({
+      handled: true,
       duplicate: false,
       reply: "Several Masana match. Choose one by full name:\n1. chat with Dr. Amina Yusuf\n2. chat with Dr. Aisha Tanko",
       shouldDeliver: true,
       requestContact: false,
     });
     const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
         new Response(JSON.stringify({ ok: true, result: {} }), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -429,7 +432,7 @@ describe("customer channel webhook routes", () => {
     const app = Fastify();
     const channelBridge = bridge();
     const bytes = Buffer.from("sample-media-content");
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.includes("/getFile?")) {
         return new Response(JSON.stringify({
@@ -487,7 +490,7 @@ describe("customer channel webhook routes", () => {
     const app = Fastify();
     const channelBridge = bridge();
     const oversizedBytes = "x".repeat(8 * 1024 * 1024 + 1);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/getFile?")) {
         return new Response(JSON.stringify({
@@ -537,6 +540,7 @@ describe("customer channel webhook routes", () => {
     const app = Fastify();
     const channelBridge = bridge();
     channelBridge.handle.mockResolvedValueOnce({
+      handled: true,
       duplicate: false,
       reply: "The canonical reply",
       shouldDeliver: true,
@@ -583,7 +587,7 @@ describe("customer channel webhook routes", () => {
 
 it("does not bypass a recovery lease held by another worker",async()=>{
  const app=Fastify();const channelBridge=bridge();
- channelBridge.handle.mockResolvedValue({duplicate:false,reply:"Saved reply",shouldDeliver:true,requestContact:false});
+ channelBridge.handle.mockResolvedValue({handled:true,duplicate:false,reply:"Saved reply",shouldDeliver:true,requestContact:false});
  const claimed=vi.fn(async()=>false);
  const fetchImpl=vi.fn();vi.stubGlobal("fetch",fetchImpl);
  try {

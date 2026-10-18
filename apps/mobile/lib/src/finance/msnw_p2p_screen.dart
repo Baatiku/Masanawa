@@ -1003,7 +1003,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     }
     return Scaffold(
       appBar: AppBar(title: const Text('MSNW P2P')),
-      body: Column(children: [
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverToBoxAdapter(child: Column(children: [
         SingleChildScrollView(scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Row(children: [
@@ -1086,7 +1088,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
                     });
                   }),
             ]))),
-        Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
+          ])),
+        ],
+        body: FutureBuilder<List<Map<String, dynamic>>>(
           future: _list,
           builder: (context, snapshot) {
             final cached = _cached[_tab] ?? <Map<String, dynamic>>[];
@@ -1140,8 +1144,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
               ),
             );
           },
-        )),
-      ]),
+        ),
+      ),
     );
   }
 }

@@ -8,7 +8,7 @@ function setup(){
  const app=Fastify();
  app.setErrorHandler((error,_request,reply)=>reply
    .code((error as {statusCode?:number}).statusCode??500)
-   .send({code:error.message}));
+   .send({code:error instanceof Error ? error.message : "unknown"}));
  const submit=vi.fn(async()=>({accepted:true as const}));
  const summary=vi.fn(async()=>({characterId:"character_amina",windowDays:30 as const,
    counts:{factual_error:1,off_topic:0,repetition:0,unhelpful:0,unprofessional:0}}));
