@@ -56,6 +56,7 @@ class WalletScreen extends ConsumerStatefulWidget {
     this.onOpenCrypto,
     this.onOpenBillingService,
     this.embeddedInShell = false,
+    this.initialTransactionId,
     this.walletCreditSendEnabled = kWalletCreditSendEnabled,
     this.walletMsnBalanceEnabled = kWalletMsnBalanceEnabled,
     this.walletMsnFundingStatusEnabled = kWalletMsnFundingStatusEnabled,
@@ -73,6 +74,8 @@ class WalletScreen extends ConsumerStatefulWidget {
 
   /// Root owns the header when this surface is selected as a bottom tab.
   final bool embeddedInShell;
+  /// An authorized receipt hint; never itself a spend or payment approval.
+  final String? initialTransactionId;
   final bool walletCreditSendEnabled;
   final bool walletMsnBalanceEnabled;
   final bool walletMsnFundingStatusEnabled;
@@ -84,6 +87,14 @@ class WalletScreen extends ConsumerStatefulWidget {
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   int _tab = 0;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialTransactionId != null) {
+      _tab = 1;
+      _visitedWalletTabs.add(1);
+    }
+  }
   // Build the history tab only after its first visit, then keep its filters,
   // query, list position and in-flight loading state mounted when switching.
   final Set<int> _visitedWalletTabs = <int>{0};
@@ -212,6 +223,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     child: MsnwTransactionHistory(
       key: ValueKey('history-$accountId'),
       refreshKey: _custodyRefresh,
+      initialSearch: widget.initialTransactionId,
       dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
       expectedUserId: accountId,
       currentUserId: () => switch (ref.read(sessionProvider)) {
