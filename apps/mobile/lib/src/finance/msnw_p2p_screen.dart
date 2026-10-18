@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1206,38 +1207,76 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   );
   Future<void> _showReceipt() async {
     try {
-      final receipt=await widget.loadReceipt();
-      if(!mounted)return;
-      final ref='${receipt['receiptReference'] ?? ''}';
-      await openWalletPage<void>(context:context,builder:(dialog)=>WalletReviewContent(
-        title:const Text('Verified MSNW escrow receipt'),
-        content:SingleChildScrollView(child:Column(
-          mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
-          children:[
-            Text('Reference: $ref'),
-            Text('Status: ${receipt['status']}'),
-            Text('Result: ${receipt['stage']=='refund'?'Returned to seller':receipt['stage']=='release'?'Released':receipt['stage']}'),
-            Text('MSNW amount: ${_msnw(receipt['amountMicro'])}'),
-            Text('Seller fee: ${_msnw(receipt['feeMicro'])}'),
-            Text('Bank payment: ${_ngn(receipt['fiatKobo'])}'),
-            Text('Posted: ${receipt['recordedAt']}'),
-            const SizedBox(height:12),
-          ])),
-        actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialog),
-            child:const Text('Close')),
-          TextButton.icon(onPressed:(){
-            Clipboard.setData(ClipboardData(text:ref));
-            Navigator.pop(dialog);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content:Text('Receipt reference copied')));
-          },icon:const Icon(Icons.copy_outlined),
-            label:const Text('Copy reference')),
-        ],
-      ));
-    }catch(error){
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:Text('Receipt unavailable: $error')));
+      final receipt = await widget.loadReceipt();
+      if (!mounted) return;
+      final reference = '${receipt['receiptReference'] ?? ''}';
+      final result = receipt['stage'] == 'refund'
+        ? 'Escrow returned to seller' : receipt['stage'] == 'release'
+        ? 'Escrow released to buyer' : 'Escrow processing';
+      final amount = _msnw(receipt['amountMicro']);
+      final fee = _msnw(receipt['feeMicro']);
+      final fiat = _ngn(receipt['fiatKobo']);
+      final time = _evidenceTime(receipt['recordedAt']);
+      final shareText = 'Masanawa P2P receipt\n'
+        'Reference: $reference\nResult: $result\n'
+        'MSNW: $amount\nEscrow fee: $fee\n'
+        'Bank payment: $fiat\nDate: $time';
+      await openWalletPage<void>(
+        context: context,
+        title: 'P2P receipt',
+        builder: (page) => WalletReviewContent(
+          title: const Text('MSNW escrow receipt'),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.receipt_long_outlined, size: 34),
+                  const SizedBox(height: 12),
+                  Text(result, style: Theme.of(context).textTheme.titleLarge),
+                  const Divider(height: 26),
+                  _summaryLine('MSNW amount', amount),
+                  _summaryLine('Escrow fee', fee),
+                  _summaryLine('Fiat payment', fiat),
+                  _summaryLine('Recorded', time),
+                ]),
+              ),
+              const SizedBox(height: 18),
+              const Text('Receipt reference'),
+              SelectableText(reference),
+            ],
+          ),
+          actions: [
+            FilledButton.icon(
+              onPressed: reference.isEmpty ? null : () async {
+                await Clipboard.setData(ClipboardData(text: reference));
+                if (page.mounted) ScaffoldMessenger.of(page).showSnackBar(
+                  const SnackBar(content: Text('Receipt reference copied')));
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy reference'),
+            ),
+            OutlinedButton.icon(
+              onPressed: reference.isEmpty ? null : () async {
+                await SharePlus.instance.share(ShareParams(
+                  title: 'Masanawa P2P receipt', text: shareText));
+              },
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Share receipt'),
+            ),
+            TextButton(onPressed: () => Navigator.pop(page),
+              child: const Text('Done')),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Receipt unavailable. Refresh this order and try again.')));
     }
   }
   Future<void> _uploadEvidence() async {
