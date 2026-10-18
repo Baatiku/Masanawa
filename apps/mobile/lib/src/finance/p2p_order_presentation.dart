@@ -52,7 +52,7 @@ class P2pOrderProgress extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final step in [
-          (0, 'Pay seller'),
+          (0, 'Buyer reports'),
           (1, 'Seller checks'),
           (2, 'Complete'),
         ])
