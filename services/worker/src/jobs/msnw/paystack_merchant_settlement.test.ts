@@ -114,6 +114,35 @@ describe("MSNW Paystack completed merchant payout provenance",()=>{
     expect(t.writes.some(x=>x.includes(
       "UPDATE commerce.msnw_custody_accounts"))).toBe(false);
   });
+  it("rotates through older provider settlement pages after scanning the newest page",async()=>{
+    const visited:number[]=[];
+    const fetchImpl = async (url:string) => {
+      const path=new URL(url);
+      if (path.pathname !== "/settlement") {
+        return new Response(JSON.stringify({status:true,data:[]}),{status:200});
+      }
+      const page=Number(path.searchParams.get("page"));
+      visited.push(page);
+      const data=page<=9 ? Array.from({length:50},(_,i)=>({
+        ...settlement,id:100000+page*100+i,
+      })) : [];
+      return new Response(JSON.stringify({status:true,data}),{status:200});
+    };
+    const query=async(sql:string)=>{
+      if (sql.startsWith("SELECT settlement_id FROM") ||
+          sql.startsWith("SELECT provider_proof_sha256") ||
+          sql.startsWith("SELECT e.reference")) return {rowCount:0,rows:[]};
+      return {rowCount:1,rows:[]};
+    };
+    const runtime=createMsnwMerchantSettlementRuntime({
+      pool:{query,async connect(){return {query,release(){}};}} as unknown as Pool,
+      paystackSecretKey:"sk_test_settlement_backlog",
+      fetchImpl:fetchImpl as typeof fetch,
+    });
+    await runtime.runOnce();
+    await runtime.runOnce();
+    expect(visited).toEqual([1,2,3,4,5,1,6,7,8,9]);
+  });
   it("refuses a changed provider payout without modifying the immutable original",async()=>{
     const t=fake({existing:true,corruptedExisting:true});
     expect(await t.runtime.runOnce()).toEqual({scanned:0,matched:0,failed:1});
