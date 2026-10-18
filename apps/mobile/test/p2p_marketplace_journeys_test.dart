@@ -60,11 +60,17 @@ class _P2pAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Widget _app(_P2pAdapter adapter) {
+Widget _app(_P2pAdapter adapter, {double textScale = 1}) {
   final dio = Dio()..httpClientAdapter = adapter;
   return ProviderScope(
     overrides: [sessionProvider.overrideWith(_Session.new)],
-    child: MaterialApp(home: MsnwP2pScreen(
+    child: MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: MsnwP2pScreen(
       dio: dio, baseUrl: 'https://test',
       expectedUserId: 'buyer', currentUserId: () => 'buyer',
       accessToken: () => 'token')),
@@ -113,4 +119,21 @@ void main() {
     expect(adapter.calls.where((o) => o.method == 'POST'), isEmpty);
     expect(t.takeException(), isNull);
   });
+  testWidgets('small Android screen with 200 percent text keeps P2P usable', (t) async {
+    _mockSecureRecovery();
+    t.view.physicalSize = const Size(320, 700);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.view.resetDevicePixelRatio);
+    final adapter = _P2pAdapter();
+    await t.pumpWidget(_app(adapter, textScale: 2));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    await t.tap(find.text('Sell'));
+    await t.pumpAndSettle();
+    expect(find.text('Create offer'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    expect(adapter.calls.every((r) => r.method == 'GET'), isTrue);
+  });
+
 }
