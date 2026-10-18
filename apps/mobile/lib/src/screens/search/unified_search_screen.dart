@@ -32,6 +32,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
   bool _loading = false;
   String? _error;
   List<String> _recent = [];
+  Future<void> _historyWrites = Future<void>.value();
   List<MasanaInboxSearchItem> _chats = [];
   List<RoomInfo> _rooms = [];
   List<FeedPost> _posts = [];
@@ -88,11 +89,15 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     ].take(8).toList();
     if (_owner != owner) return;
     setState(() => _recent = updated);
-    try {
-      await _store.write(key: _key(owner), value: jsonEncode(updated));
-    } catch (_) {
-      // History is a convenience, not a reason to reject discovery.
-    }
+    // Serialize writes and deletes: clearing history cannot be undone by
+    // an older in-flight encrypted storage write.
+    final payload = jsonEncode(updated);
+    _historyWrites = _historyWrites.then((_) async {
+      if (_owner == owner) {
+        await _store.write(key: _key(owner), value: payload);
+      }
+    }).catchError((Object _) {});
+    await _historyWrites;
   }
 
   Future<void> _clearHistory() async {
@@ -100,8 +105,11 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     if (owner == null) return;
     setState(() => _recent = []);
     try {
-      await _store.delete(key: _key(owner));
+      _historyWrites = _historyWrites.then(
+        (_) => _store.delete(key: _key(owner)));
+      await _historyWrites;
     } catch (_) {
+      _historyWrites = Future<void>.value();
       if (mounted && _owner == owner) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not clear saved searches. Retry.')),
