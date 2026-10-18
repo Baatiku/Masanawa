@@ -50,15 +50,46 @@ jobs:
       - name: Resolve Flutter packages
         run: flutter pub get
       - name: Verify all 26 packaged persona portraits
-        run: flutter test --no-pub test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/features/rooms/room_auto_answer_test.dart test/masana_room_link_test.dart
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          flutter test --no-pub --reporter expanded test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/features/rooms/room_auto_answer_test.dart test/masana_room_link_test.dart > "$RUNNER_TEMP/flutter-tests.log" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/flutter-tests.log"
+          if [ "$result" -ne 0 ]; then
+            python3 - "$RUNNER_TEMP/flutter-tests.log" <<'PYLOG'
+          import sys
+          text = open(sys.argv[1]).read()[-24000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Flutter test failure::' + text)
+          PYLOG
+          fi
+          exit "$result"
       # Independent from the existing whole-project analyzer debt. The
       # Mobile Build workflow still reports those issues and remains required
       # for clean release qualification; this job proves an actual APK.
       - name: Compile Android release APK for handset testing
-        run: >-
-          flutter build apk --release --no-pub
-          --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
-          --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          flutter build apk --release --no-pub \
+            --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app \
+            --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app > "$RUNNER_TEMP/flutter-build.log" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/flutter-build.log"
+          if [ "$result" -ne 0 ]; then
+            python3 - "$RUNNER_TEMP/flutter-build.log" <<'PYLOG'
+          import sys
+          text = open(sys.argv[1]).read()[-24000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Flutter build failure::' + text)
+          PYLOG
+          fi
+          exit "$result"
       - name: Inspect APK result
         run: test -s build/app/outputs/flutter-apk/app-release.apk
       - name: Verify provenance script contracts
