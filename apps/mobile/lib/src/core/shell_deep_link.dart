@@ -31,7 +31,7 @@ String? shellDeepLinkRoute(Uri uri) {
     }
     if (uri.host == 'wallet' && segments.length == 2 &&
         segments.first == 'transaction' &&
-        _validResourceId(segments.last)) {
+        _validTransactionId(segments.last)) {
       return '/wallet/transactions/${Uri.encodeComponent(segments.last)}';
     }
     if (uri.host == 'search' && segments.isEmpty) {
@@ -85,7 +85,7 @@ String? shellDeepLinkRoute(Uri uri) {
     if (kind == 'status' && _validResourceId(id)) {
       return '/status/${Uri.encodeComponent(id)}';
     }
-    if (kind == 'transaction' && _validResourceId(id)) {
+    if (kind == 'transaction' && _validTransactionId(id)) {
       return '/wallet/transactions/${Uri.encodeComponent(id)}';
     }
     if (kind == 'twin') {
@@ -152,6 +152,56 @@ String? shellDeepLinkRoute(Uri uri) {
   if (!_validCharacterId(characterId)) return null;
   return '/chat/${Uri.encodeComponent(characterId)}';
 }
+
+bool _validTransactionId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{1,159}
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}
+    RegExp(r'^character_[A-Za-z0-9_-]+$').hasMatch(value);
+
+bool _validPublicId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$').hasMatch(value);
+
+bool _validTalkId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}$').hasMatch(value);
+
+/// Incoming hints cannot replace a voice destination or another active call.
+/// Conversation routes can own inline audio; the caller supplies imperative
+/// group/modal ownership separately. Other destinations retain normal routing.
+bool canOpenIncomingCallRoute({
+  required String currentPath,
+  required String targetPath,
+  bool hasActiveCall = false,
+}) {
+  if (!targetPath.startsWith('/calls/incoming/')) return true;
+  return !hasActiveCall &&
+      !currentPath.startsWith('/calls/incoming/') &&
+      !currentPath.startsWith('/chat/');
+}
+).hasMatch(value);
+
+bool _validCharacterId(String value) =>
+    RegExp(r'^character_[A-Za-z0-9_-]+$').hasMatch(value);
+
+bool _validPublicId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$').hasMatch(value);
+
+bool _validTalkId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}$').hasMatch(value);
+
+/// Incoming hints cannot replace a voice destination or another active call.
+/// Conversation routes can own inline audio; the caller supplies imperative
+/// group/modal ownership separately. Other destinations retain normal routing.
+bool canOpenIncomingCallRoute({
+  required String currentPath,
+  required String targetPath,
+  bool hasActiveCall = false,
+}) {
+  if (!targetPath.startsWith('/calls/incoming/')) return true;
+  return !hasActiveCall &&
+      !currentPath.startsWith('/calls/incoming/') &&
+      !currentPath.startsWith('/chat/');
+}
+).hasMatch(value);
 
 bool _validResourceId(String value) =>
     RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}
