@@ -82,21 +82,39 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
       throw new MsnwMerchantSettlementError("msnw.paystack_payload_invalid");
     return body.data;
   }
+  // Always recheck the newest page; rotate the remaining read budget
+  // through deeper history so a long-lived settlement archive does not
+  // permanently strand evidence after the first 250 provider records.
+  // The cursor is only a paging optimization, not settlement authority.
+  let nextDeepPage = 2;
   async function listSettlements(): Promise<readonly ProviderSettlement[]> {
     const found: ProviderSettlement[] = [];
     const seen = new Set<string>();
-    // Bounded investigation, not a claim that all historical settlements
-    // have been scanned. Additional pages are retried in later passes.
-    for (let page=1;page<=5;page++) {
+    async function appendPage(page: number): Promise<number> {
       const raw = await api("/settlement?status=success&perPage=50&page=" + page);
       for (const value of raw) {
         const entry = settlement(value,domain);
-        if (seen.has(entry.id))
-          throw new MsnwMerchantSettlementError("msnw.paystack_settlement_duplicate");
+        // Pages can shift when Paystack inserts new settlements during a
+        // scan. Deduplicate by provider ID and verify the immutable proof
+        // independently before writing.
+        if (seen.has(entry.id)) continue;
         seen.add(entry.id);
         found.push(entry);
       }
-      if (raw.length < 50) break;
+      return raw.length;
+    }
+    if (await appendPage(1) < 50) {
+      nextDeepPage = 2;
+      return found;
+    }
+    for (let i = 0; i < 4; i++) {
+      const currentPage = nextDeepPage;
+      const count = await appendPage(currentPage);
+      if (count < 50 || currentPage >= 10000) {
+        nextDeepPage = 2;
+        break;
+      }
+      nextDeepPage = currentPage + 1;
     }
     return found;
   }
