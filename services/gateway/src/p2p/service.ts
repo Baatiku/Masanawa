@@ -429,10 +429,10 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         await tx.query(`INSERT INTO commerce.msnw_p2p_orders
           (order_id,tenant_id,offer_id,seller_id,buyer_id,payment_method_id,
             amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,statement_timestamp()+interval '30 minutes',$11)`,
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,statement_timestamp()+($12::integer*interval '1 second'),$11)`,
           [orderId,actor.tenantId,offerId,offer.seller_id,actor.userId,
             offer.payment_method_id,amounts.amountMicro,amounts.feeMicro,
-            amounts.fiatKobo,offer.rate_kobo_per_msnw,orderKey]);
+            amounts.fiatKobo,offer.rate_kobo_per_msnw,orderKey,P2P_PAYMENT_WINDOW_SECONDS]);
         await tx.query(`UPDATE commerce.msnw_p2p_offers SET
           remaining_micro=remaining_micro-$3,updated_at=statement_timestamp()
           WHERE tenant_id=$1 AND offer_id=$2`,[actor.tenantId,offerId,amounts.amountMicro]);
