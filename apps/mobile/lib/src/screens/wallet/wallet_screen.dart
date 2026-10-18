@@ -139,7 +139,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       return;
     }
     final expectedId = session.user.id;
-    Navigator.of(context).push(MaterialPageRoute<void>(
+    openWalletPage<void>(context:context,title:'P2P',wrapScaffold:false,
       builder: (_) => MsnwP2pScreen(
         dio: ref.read(dioProvider),
         baseUrl: kApiBaseUrl,
@@ -150,7 +150,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
       ),
-    ));
+    );
   }
 
   void _openCrypto() {

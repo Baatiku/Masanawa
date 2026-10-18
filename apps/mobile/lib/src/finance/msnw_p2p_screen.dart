@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import 'p2p_order_presentation.dart';
 import 'wallet_step_up_page.dart';
 import 'dart:convert';
 
@@ -48,10 +49,11 @@ Map<String, dynamic> _json(dynamic data) =>
 
 class MsnwP2pScreen extends StatefulWidget {
   const MsnwP2pScreen({super.key, required this.dio, required this.baseUrl,
-    required this.expectedUserId, required this.currentUserId, required this.accessToken});
+    required this.expectedUserId, required this.currentUserId, required this.accessToken,this.initialOrderId});
   final Dio dio;
   final String baseUrl;
   final String expectedUserId;
+  final String? initialOrderId;
   final String? Function() currentUserId;
   final String? Function() accessToken;
   @override State<MsnwP2pScreen> createState() => _MsnwP2pScreenState();
@@ -101,7 +103,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     setState(() => _busy = true);
     try {
       await action();
-      if (mounted && _sameAccount) _reload();
+      if (mounted && _sameAccount && widget.initialOrderId==null) _reload();
     } catch (error) {
       if (mounted) {
         final message = error is DioException
@@ -195,7 +197,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           );
           if(!mounted || !_sameAccount)throw StateError('Account changed.');
           final code=await openWalletPage<String>(
-            context:context,title:'Verify bank details',
+            context:context,title:'Verify bank details',wrapScaffold:false,
             builder:(_)=>const WalletStepUpPage(bankDetails:true),
           );
           if(code==null)throw StateError('Bank verification cancelled.');
@@ -258,9 +260,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   }
 
   Future<void> _orderDetail(String id) async {
-    if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (ctx) => _P2pOrderDetail(
+    if(!mounted)return;
+    await openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>_orderView(id));
+  }
+  Widget _orderView(String id)=>_P2pOrderDetail(
         load: () async => _json(await _request('GET','/orders/$id')),
         act: (action, [reason]) => _act(() async {
           await _request('POST','/orders/$id/$action',
@@ -293,9 +296,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
             },
           });
         }),
-      )));
-  }
-  @override Widget build(BuildContext context) => Scaffold(
+      );
+  @override Widget build(BuildContext context) {
+    final initial=widget.initialOrderId;
+    if(initial!=null){
+      if(!RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(initial))return const Scaffold(body:Center(child:Text('Order unavailable')));
+      return _orderView(initial);
+    }
+    return Scaffold(
     appBar: AppBar(title: const Text('MSNW P2P')),
     body: Column(children: [
       SegmentedButton<int>(segments: const [
@@ -312,7 +320,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           if(snapshot.hasError) { return Center(child:Padding(
             padding:const EdgeInsets.all(20),
             child:Column(mainAxisSize:MainAxisSize.min,children:[
-              Text('P2P is unavailable: ${snapshot.error}',textAlign:TextAlign.center),
+              const Text('Could not load P2P',textAlign:TextAlign.center),
               TextButton(onPressed:()=>_reload(),child:const Text('Retry')),
             ])));
           }
@@ -340,7 +348,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                     : 'Order ${item['state'] ?? 'updated'}'),
               subtitle:Text(_tab==0
                 ? 'Available: ${_msnw(item['remaining_micro'])}  · '
-                  'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])}'
+                  'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])} · ${item['bank_name']??''}'
                 : _tab==1
                     ? 'Remaining ${_msnw(item['remaining_micro'])} · ${item['state']}'
                     : _tab==2 ? 'Fiat ${_ngn(item['fiat_kobo'])}'
@@ -361,6 +369,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         })),
     ]),
   );
+  }
 }
 
 /// Dedicated identity-consented bank verification page. An unsuccessful
@@ -678,7 +687,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 10),
           if (_reviewing && _payload != null) ...[
-            Text('Buyer bank: ${method.isEmpty ? 'Unavailable' : method.first['bank_name']}'),
+            Text('Receiving bank: ${method.isEmpty ? 'Unavailable' : method.first['bank_name']}'),
             const SizedBox(height: 10),
             Text('Your price: ${_rate.text.trim()} NGN per MSNW'),
             Text('Minimum: ${_minimum.text.trim()} MSNW'),
@@ -791,8 +800,6 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       final receipt=await widget.loadReceipt();
       if(!mounted)return;
       final ref='${receipt['receiptReference'] ?? ''}';
-      final postings=receipt['postings'] is List
-        ? receipt['postings'] as List<dynamic> : const <dynamic>[];
       await openWalletPage<void>(context:context,builder:(dialog)=>WalletReviewContent(
         title:const Text('Verified MSNW escrow receipt'),
         content:SingleChildScrollView(child:Column(
@@ -800,20 +807,12 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           children:[
             Text('Reference: $ref'),
             Text('Status: ${receipt['status']}'),
-            Text('Settlement: ${receipt['stage']}'),
-            Text('MSNW principal: ${_msnw(receipt['amountMicro'])}'),
-            Text('MSNW fee: ${_msnw(receipt['feeMicro'])}'),
-            Text('NGN consideration: ${_ngn(receipt['fiatKobo'])}'),
+            Text('Result: ${receipt['stage']=='refund'?'Returned to seller':receipt['stage']=='release'?'Released':receipt['stage']}'),
+            Text('MSNW amount: ${_msnw(receipt['amountMicro'])}'),
+            Text('Seller fee: ${_msnw(receipt['feeMicro'])}'),
+            Text('Bank payment: ${_ngn(receipt['fiatKobo'])}'),
             Text('Posted: ${receipt['recordedAt']}'),
             const SizedBox(height:12),
-            const Text('Custody postings',style:TextStyle(fontWeight:FontWeight.bold)),
-            for(final posting in postings)
-              Text('${(posting as Map)['bucket']}: '
-                '${posting['deltaMicro']} micro-MSNW'
-                ' (${posting['ownerKind']})'),
-            const SizedBox(height:12),
-            const Text('Only finalized release or refund postings produce '
-              'this receipt. A payment claim or screenshot is not settlement.'),
           ])),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(dialog),
@@ -932,8 +931,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh)),
     ]),
     body:FutureBuilder<Map<String,dynamic>>(future:_future,builder:(context,s){
-      if(!s.hasData)return Center(child:s.hasError?Text('Could not read order: ${s.error}')
-        :const CircularProgressIndicator());
+      if(!s.hasData)return s.hasError?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[const Text('Could not load order'),TextButton(onPressed:_refresh,child:const Text('Retry'))])):const Center(child:CircularProgressIndicator());
       final o=s.data!;
       final buyer=o['buyer_id']==widget.userId;
       final state='${o['state']}';
@@ -942,18 +940,17 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         ? _json(o['latePayment']) : <String,dynamic>{};
       final lateOpen=['open','escalated'].contains(late['state']);
       return ListView(padding:const EdgeInsets.all(18),children:[
-        Text('Status: $state',style:Theme.of(context).textTheme.titleLarge),
+        Text(p2pOrderStatus(state),style:Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height:20),P2pOrderProgress(state:state),
+        const SizedBox(height:12),
         const SizedBox(height:12),
         Text('MSNW: ${_msnw(o['amount_micro'])}'),
         Text('Seller fee: ${_msnw(o['fee_micro'])}'),
         Text('Fiat payment: ${_ngn(o['fiat_kobo'])}'),
         const Divider(height:32),
-        const Text('Pay only to these order-bound bank details:'),
-        SelectableText('${p['bank_name']??'Unavailable'}\n'
-          '${p['account_name']??'Unavailable'}\n'
-          '${p['account_number']??'Unavailable'}'),
+        P2pOrderBankDetails(bankName:'${p['bank_name']??''}',accountName:'${p['account_name']??''}',accountNumber:'${p['account_number']??''}',buyer:buyer),
         const SizedBox(height:12),
-        Text('Deadline: ${o['payment_deadline']}'),
+        P2pPaymentDeadline(deadline:DateTime.tryParse('${o['payment_deadline']}'),serverNow:DateTime.tryParse('${o['server_now']}'),active:state=='awaiting_payment',onRefresh:_refresh),
         if(buyer&&state=='awaiting_payment') ...[
           FilledButton(onPressed:()=>_perform('claim'),child:const Text('I have paid')),
           TextButton(onPressed:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
