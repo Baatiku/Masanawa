@@ -547,28 +547,34 @@ n this device.')));
 
   Widget _orderTile(Map<String, dynamic> item) {
     final buyer = item['buyer_id'] == widget.expectedUserId;
-    return _tile(Row(children: [
+    return _tile(Row(crossAxisAlignment: CrossAxisAlignment.start,children: [
       CircleAvatar(
         backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
         foregroundColor: Theme.of(context).colorScheme.primary,
         child: Icon(buyer ? Icons.south_west : Icons.north_east),
       ),
       const SizedBox(width: 12),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(buyer ? 'Buy MSNW' : 'Sell MSNW',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
-          Text(_msnw(item['amount_micro']), style: Theme.of(context).textTheme.titleSmall),
-        ]),
-        const SizedBox(height: 5),
-        Row(children: [
-          Expanded(child: Text(p2pOrderStatus('${item['state'] ?? ''}'),
-            maxLines: 1, overflow: TextOverflow.ellipsis)),
-          Text(_ngn(item['fiat_kobo']), style: Theme.of(context).textTheme.bodySmall),
-        ]),
-        const SizedBox(height: 5),
-        Text(_time(item['created_at']), style: Theme.of(context).textTheme.labelSmall),
-      ])),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(buyer ? 'Buy MSNW' : 'Sell MSNW',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(_msnw(item['amount_micro']),
+            style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          Wrap(spacing: 10, runSpacing: 4, children: [
+            Text(p2pOrderStatus('${item['state'] ?? ''}'),
+              style: Theme.of(context).textTheme.bodySmall),
+            Text(_ngn(item['fiat_kobo']),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 5),
+          Text(_time(item['created_at']),
+            style: Theme.of(context).textTheme.labelSmall),
+        ])),
+      const SizedBox(width: 6),
       const Icon(Icons.chevron_right, size: 18),
     ]), _busy ? null : () => _orderDetail('${item['order_id']}'));
   }
@@ -702,16 +708,26 @@ n this device.')));
         ),
         if (_tab == 1) Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-          child: Row(children: [
-            Expanded(child: OutlinedButton.icon(
+          child: LayoutBuilder(builder: (context, box) {
+            final narrow=box.maxWidth<340||
+              MediaQuery.textScalerOf(context).scale(1)>1.4;
+            final verify=OutlinedButton.icon(
               onPressed: _busy ? null : _verifySellerBank,
               icon: const Icon(Icons.account_balance_outlined),
-              label: const Text('Verify bank'))),
-            const SizedBox(width: 8),
-            Expanded(child: FilledButton.icon(
+              label: const Text('Verify bank'));
+            final create=FilledButton.icon(
               onPressed: _busy ? null : _sell,
-              icon: const Icon(Icons.add), label: const Text('Create offer'))),
-          ])),
+              icon: const Icon(Icons.add),
+              label: const Text('Create offer'));
+            return narrow?Column(crossAxisAlignment:CrossAxisAlignment.stretch,
+              children:[verify,const SizedBox(height:8),create])
+              :Row(children:[
+                Expanded(child:verify),
+                const SizedBox(width:8),
+                Expanded(child:create),
+              ]);
+          }),
+        ),
         if (_tab == 2) Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
           child: Align(alignment: Alignment.centerLeft,
