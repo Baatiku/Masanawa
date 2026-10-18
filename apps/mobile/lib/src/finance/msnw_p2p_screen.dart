@@ -64,6 +64,8 @@ class MsnwP2pScreen extends StatefulWidget {
 class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   int _tab = 0;
   String _orderFilter = 'all';
+  String? _nextOrderCursor;
+  bool _loadingMore = false;
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _secure = const FlutterSecureStorage();
@@ -164,21 +166,55 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
     return r.data;
   }
   Future<List<Map<String, dynamic>>> _load() async {
-    final requestedTab = _tab;
-    final path = switch (requestedTab) {
-      0 => '/offers',1 => '/my-offers',2 => '/orders',_ => '/notifications',
+    final tab = _tab;
+    final filter = _orderFilter;
+    final path = switch (tab) {
+      0 => '/offers', 1 => '/my-offers',
+      2 => '/orders/page?filter=$filter',
+      _ => '/notifications',
     };
     final json = _json(await _request('GET', path));
     final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
-    if (_sameAccount) _cached[requestedTab] = items;
+    if (_sameAccount && (tab != 2 || filter == _orderFilter)) {
+      _cached[tab] = items;
+      if (tab == 2) _nextOrderCursor = json['nextCursor'] as String?;
+    }
     return items;
   }
+
   void _reload([int? tab]) {
     setState(() {
       if (tab != null) _tab = tab;
+      if (_tab == 2) _nextOrderCursor = null;
       _list = _load();
     });
+  }
+
+  Future<void> _loadMoreOrders() async {
+    final cursor = _nextOrderCursor;
+    if (_loadingMore || cursor == null || _tab != 2 || !_sameAccount) return;
+    final filter = _orderFilter;
+    setState(() => _loadingMore = true);
+    try {
+      final json = _json(await _request('GET',
+        '/orders/page?filter=$filter&cursor=${Uri.encodeComponent(cursor)}'));
+      final next = (json['items'] as List<dynamic>? ?? []).map(_json).toList();
+      if (!mounted || !_sameAccount || _tab != 2 || filter != _orderFilter) return;
+      final existing = _cached[2] ?? <Map<String, dynamic>>[];
+      final seen = existing.map((e) => e['order_id']).toSet();
+      final combined = [...existing, ...next.where((e) => seen.add(e['order_id']))];
+      setState(() {
+        _cached[2] = combined;
+        _nextOrderCursor = json['nextCursor'] as String?;
+        _list = Future.value(combined);
+      });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not load more orders. Try again.')));
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
   Future<void> _act(Future<void> Function() action) async {
     if (_busy) return;
@@ -662,7 +698,15 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                 ChoiceChip(label: Text(switch(filter) {
                     'active' => 'Active', 'finished' => 'Finished', _ => 'All',
                   }), selected: _orderFilter == filter, showCheckmark: false,
-                  onSelected: (_) => setState(() => _orderFilter = filter)),
+                  onSelected: (_) {
+                    if (_orderFilter == filter) return;
+                    setState(() {
+                      _orderFilter = filter;
+                      _cached.remove(2);
+                      _nextOrderCursor = null;
+                      _list = _load();
+                    });
+                  }),
             ]))),
         Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _list,
@@ -679,13 +723,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                 TextButton.icon(onPressed: () => _reload(),
                   icon: const Icon(Icons.refresh), label: const Text('Retry')),
               ]));
-            final filtered = _tab != 2 || _orderFilter == 'all' ? items :
-              items.where((o) {
-                const finished = ['completed', 'expired', 'cancelled'];
-                return _orderFilter == 'finished'
-                    ? finished.contains(o['state'])
-                    : !finished.contains(o['state']);
-              }).toList();
+            final filtered = items;
             return RefreshIndicator(
               onRefresh: () async { _reload(); try { await _list; } catch (_) {} },
               child: ListView(
@@ -707,6 +745,13 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                       2 => _orderTile(item),
                       _ => _updateTile(item),
                     },
+                  if (_tab == 2 && _nextOrderCursor != null)
+                    Padding(padding: const EdgeInsets.all(16),
+                      child: OutlinedButton.icon(
+                        onPressed: _loadingMore ? null : _loadMoreOrders,
+                        icon: Icon(_loadingMore ? Icons.hourglass_top : Icons.expand_more),
+                        label: Text(_loadingMore ? 'Loading…' : 'Load more orders'),
+                      )),
                   const SizedBox(height: 30),
                 ],
               ),
