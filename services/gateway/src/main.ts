@@ -137,6 +137,7 @@ import { createCreatorEconomyService } from "./creator_economy.js";
 import { createGeminiCreatorGenerator, CreatorGenerationError } from "./creator_agents/generator.js";
 import { createPostgresCreatorAgentService, type CreatorPool } from "./creator_agents/store.js";
 import { createCreatorPolicyService } from "./creator_agents/policy.js";
+import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
 import { createCreatorSkillService } from "./creator_skills.js";
 import {
   createCommerceCatalogService,
@@ -1064,6 +1065,10 @@ export async function startGatewayService(
             },
           }
         : {}),
+      ...(database.featurePool ? {
+        publicCreatorAdmission: createPgCreatorPublicReader(
+          database.featurePool as unknown as Parameters<typeof createPgCreatorPublicReader>[0]),
+      } : {}),
       policyRevision: platformPolicyRevision,
     });
     if (!options.agentDirectoryAuthorizer) {
