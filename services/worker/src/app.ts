@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import Fastify from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant } from "@masanawa/contracts";
@@ -13,10 +14,21 @@ export interface ReadinessCheck {
   check(): Promise<{ readonly ready: boolean; readonly reason?: string }>;
 }
 
+export interface JobHealthSnapshot {
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly runningSeconds: number;
+  readonly lastSuccessAgeSeconds: number | null;
+  readonly stuck: number;
+  readonly consecutiveFailures: number;
+}
+
 export interface WorkerAppOptions {
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
+  readonly opsMonitorToken?: string;
+  readonly jobsHealth?: () => readonly JobHealthSnapshot[];
 }
 
 const HealthResponseSchema = Type.Object(
@@ -46,6 +58,17 @@ const ReadinessResponseSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+const JobsResponseSchema = Type.Object({
+  jobs: Type.Array(Type.Object({
+    name: Type.String(),
+    enabled: Type.Boolean(),
+    runningSeconds: Type.Number(),
+    lastSuccessAgeSeconds: Type.Union([Type.Number(), Type.Null()]),
+    stuck: Type.Integer(),
+    consecutiveFailures: Type.Integer(),
+  }, { additionalProperties: false })),
+}, { additionalProperties: false });
 
 export function createWorkerApp(options: WorkerAppOptions = {}) {
   const app = Fastify({
@@ -151,6 +174,26 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       };
     },
   );
+
+  // Never expose operational job data without an operator-secret. Public
+  // readiness stays separate, so a missing monitor credential cannot reveal
+  // financial queues or change the readiness lifecycle.
+  const opsToken = options.opsMonitorToken;
+  if (opsToken) {
+    if (opsToken.length < 32) throw new Error("ops_monitor_token_too_short");
+    const expected = createHash("sha256").update("Bearer " + opsToken).digest();
+    app.get("/v1/ops/jobs/health", {
+      schema: { response: { 200: JobsResponseSchema } },
+    }, async (request, reply) => {
+      const candidate = createHash("sha256")
+        .update(request.headers.authorization ?? "").digest();
+      if (!timingSafeEqual(candidate, expected)) {
+        reply.code(401);
+        return { error: "unauthorized" };
+      }
+      return { jobs: options.jobsHealth?.() ?? [] };
+    });
+  }
 
   return app;
 }
