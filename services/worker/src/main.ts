@@ -22,6 +22,7 @@ import { createScheduledFeedRuntime } from "./jobs/home_feed/postgres_runtime.js
 import { createMsnwFundingObligationRecovery } from "./jobs/msnw/funding_obligations.js";
 import { createMsnwFinalityVerifier } from "./jobs/msnw/chain_finality.js";
 import { createMsnwCustodyIssuanceRuntime } from "./jobs/msnw/custody_issuance.js";
+import { createMsnwReserveAudit } from "./jobs/msnw/reserve_audit.js";
 import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_merchant_settlement.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import {
@@ -196,8 +197,17 @@ export async function startWorkerService(
         bytecodeSha256: env.MSNW_TOKEN_BYTECODE_SHA256!,
       });
       const issuer = createMsnwCustodyIssuanceRuntime({pool:database.pool,verifier});
+      const reserveAudit = createMsnwReserveAudit({pool:database.pool,verifier});
       msnwFinality = createYouTubeOutboxScheduler({
-        runOnce: issuer.runOnce,enabled:() => !drain.isDraining(),
+        runOnce: async () => {
+          // Before attempting more custody issuance recovery, prove that
+          // current ledger liabilities fit the official finalized on-chain
+          // custodian's real balance. A shortfall cannot be ignored or
+          // converted into spendable customer funds.
+          await reserveAudit.runOnce();
+          return issuer.runOnce();
+        },
+        enabled:() => !drain.isDraining(),
         intervalMs: 30000,
         onError: () => process.stderr.write(JSON.stringify({
           event: "msnw_issuance.recovery_pending",reason:"verification_or_ledger_failed",

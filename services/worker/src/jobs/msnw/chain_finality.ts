@@ -27,6 +27,16 @@ export type VerifiedMsnwMint = Readonly<{
   receiptSha256: string;
   custodyBalanceMicro: string;
 }>;
+/** A read-only chain-qualified reserve attestation, never mint authority. */
+export type VerifiedMsnwReserve = Readonly<{
+  chainId: string;
+  contract: string;
+  custody: string;
+  blockNumber: string;
+  blockHash: string;
+  custodyBalanceMicro: string;
+  totalSupplyMicro: string;
+}>;
 export function settlementMintReference(reference: string): string {
   if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(reference))
     throw new MsnwFinalityError("msnw.mint_reference_invalid");
@@ -154,5 +164,42 @@ export function createMsnwFinalityVerifier(input: Readonly<{
       blockHash,receiptSha256,custodyBalanceMicro,
     });
   }
-  return Object.freeze({ verify });
+  async function readReserve(): Promise<VerifiedMsnwReserve> {
+    const [networkRaw, finalityRaw] = await Promise.all([
+      rpc("eth_chainId", []),
+      rpc("eth_getBlockByNumber", ["finalized", false]),
+    ]);
+    if (hexBigInt(networkRaw) !== BigInt(chainId))
+      throw new MsnwFinalityError("msnw.finality_wrong_chain");
+    const finalized = row(finalityRaw);
+    const blockNumber = String(finalized.number ?? "").toLowerCase();
+    const blockHash = String(finalized.hash ?? "").toLowerCase();
+    if (!hexInt.test(blockNumber) || !bytes32.test(blockHash))
+      throw new MsnwFinalityError("msnw.finality_unconfirmed");
+    const [codeRaw, balanceRaw, totalSupplyRaw, decimalsRaw] = await Promise.all([
+      rpc("eth_getCode", [contract,blockNumber]),
+      rpc("eth_call", [{
+        to:contract,data:"0x70a08231" + custody.slice(2).padStart(64,"0"),
+      },blockNumber]),
+      rpc("eth_call", [{to:contract,data:"0x18160ddd"},blockNumber]),
+      rpc("eth_call", [{to:contract,data:"0x313ce567"},blockNumber]),
+    ]);
+    const code = String(codeRaw ?? "").toLowerCase();
+    if (!/^0x(?:[0-9a-f]{2})+$/.test(code) ||
+        createHash("sha256").update(Buffer.from(code.slice(2),"hex"))
+          .digest("hex") !== bytecodeSha)
+      throw new MsnwFinalityError("msnw.finality_bytecode_mismatch");
+    if (hexBigInt(decimalsRaw) !== 6n)
+      throw new MsnwFinalityError("msnw.finality_token_decimals_mismatch");
+    const custodyBalance = hexBigInt(balanceRaw);
+    const supply = hexBigInt(totalSupplyRaw);
+    if (custodyBalance > supply || supply.toString().length > 78)
+      throw new MsnwFinalityError("msnw.finality_supply_invalid");
+    return Object.freeze({
+      chainId,contract,custody,blockNumber:BigInt(blockNumber).toString(),
+      blockHash,custodyBalanceMicro:custodyBalance.toString(),
+      totalSupplyMicro:supply.toString(),
+    });
+  }
+  return Object.freeze({ verify, readReserve });
 }
