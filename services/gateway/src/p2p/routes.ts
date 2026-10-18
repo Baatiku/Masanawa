@@ -80,6 +80,16 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try {return {items:await deps.service.myOffers(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
   });
+  app.post("/v1/wallet/msnw/p2p/offers/:offerId/pause",async(req,reply)=>{
+    try {return await deps.service.pauseOffer(await actor(req.headers.authorization),
+      (req.params as {offerId:string}).offerId);}
+    catch(error){return respond(error,reply);}
+  });
+  app.post("/v1/wallet/msnw/p2p/offers/:offerId/resume",async(req,reply)=>{
+    try {return await deps.service.resumeOffer(await actor(req.headers.authorization),
+      (req.params as {offerId:string}).offerId);}
+    catch(error){return respond(error,reply);}
+  });
   app.post("/v1/wallet/msnw/p2p/offers/:offerId/close",async(req,reply)=>{
     try {return await deps.service.closeOffer(await actor(req.headers.authorization),
       (req.params as {offerId:string}).offerId);}
