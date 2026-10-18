@@ -440,78 +440,280 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
           });
         }),
       );
+  String _time(Object? value) {
+    final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
+    if (date == null) return '';
+    final local = MaterialLocalizations.of(context);
+    return '${local.formatMediumDate(date)} · '
+        '${local.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+  }
+
+  Widget _tile(Widget child, VoidCallback? onTap) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    child: Material(
+      color: Theme.of(context).colorScheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: .45)),
+      ),
+      child: InkWell(onTap: onTap,
+        child: Padding(padding: const EdgeInsets.all(14), child: child)),
+    ),
+  );
+
+  Widget _offerTile(Map<String, dynamic> item, bool own) => _tile(
+    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+        foregroundColor: Theme.of(context).colorScheme.primary,
+        child: Icon(own ? Icons.account_balance_wallet_outlined : Icons.swap_horiz),
+      ),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('${_ngn(item['rate_kobo_per_msnw'])} / MSNW',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+          Text(own ? (item['state'] == 'active' ? 'Active' : 'Closed') : 'Buy',
+            style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 7),
+        Text('Available  ${_msnw(item['remaining_micro'])}'),
+        const SizedBox(height: 5),
+        Text('Limit  ${_msnw(item['min_micro'])} – ${_msnw(item['max_micro'])}',
+          style: Theme.of(context).textTheme.bodySmall),
+        if (item['bank_name'] is String) ...[
+          const SizedBox(height: 7),
+          Row(children: [
+            const Icon(Icons.account_balance_outlined, size: 16),
+            const SizedBox(width: 5),
+            Expanded(child: Text('${item['bank_name']}',
+              maxLines: 1, overflow: TextOverflow.ellipsis)),
+          ]),
+        ],
+      ])),
+    ]),
+    _busy ? null : () => own ? _manageOffer(item) : _buy(item),
+  );
+
+  Widget _orderTile(Map<String, dynamic> item) {
+    final buyer = item['buyer_id'] == widget.expectedUserId;
+    return _tile(Row(children: [
+      CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+        foregroundColor: Theme.of(context).colorScheme.primary,
+        child: Icon(buyer ? Icons.south_west : Icons.north_east),
+      ),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(buyer ? 'Buy MSNW' : 'Sell MSNW',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+          Text(_msnw(item['amount_micro']), style: Theme.of(context).textTheme.titleSmall),
+        ]),
+        const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: Text(p2pOrderStatus('${item['state'] ?? ''}'),
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Text(_ngn(item['fiat_kobo']), style: Theme.of(context).textTheme.bodySmall),
+        ]),
+        const SizedBox(height: 5),
+        Text(_time(item['created_at']), style: Theme.of(context).textTheme.labelSmall),
+      ])),
+      const Icon(Icons.chevron_right, size: 18),
+    ]), _busy ? null : () => _orderDetail('${item['order_id']}'));
+  }
+
+  Widget _updateTile(Map<String, dynamic> item) => _tile(
+    Row(children: [
+      const CircleAvatar(child: Icon(Icons.notifications_none)),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(p2pOrderStatus('${item['state'] ?? ''}')),
+        const SizedBox(height: 5),
+        Text(_time(item['created_at']), style: Theme.of(context).textTheme.bodySmall),
+      ])),
+      const Icon(Icons.chevron_right),
+    ]), _busy ? null : () => _orderDetail('${item['order_id']}'));
+
+  Future<void> _manageOffer(Map<String, dynamic> offer) async {
+    await openWalletPage<void>(context: context, title: 'My sell offer',
+      builder: (route) => WalletReviewContent(
+        title: const Text('Offer details'),
+        content: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _p2pReviewLine('Price', '${_ngn(offer['rate_kobo_per_msnw'])} / MSNW'),
+          _p2pReviewLine('Available', _msnw(offer['remaining_micro'])),
+          _p2pReviewLine('Minimum', _msnw(offer['min_micro'])),
+          _p2pReviewLine('Maximum', _msnw(offer['max_micro'])),
+          const SizedBox(height: 10),
+          const Text('Closing stops new orders, but never changes existing escrow.'),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(route),
+            child: const Text('Back')),
+          if (offer['state'] == 'active') OutlinedButton.icon(
+            icon: const Icon(Icons.block_outlined),
+            label: const Text('Close offer'),
+            onPressed: () async {
+              final approved = await _confirm('Close offer?',
+                'Existing escrow and orders are unaffected.');
+              if (!approved || !mounted) return;
+              try {
+                await _request('POST', '/offers/${offer['offer_id']}/close', {});
+                if (!mounted) return;
+                Navigator.pop(route);
+                _reload(1);
+              } catch (_) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not close offer. Refresh its status.')));
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _empty() {
+    final title = ['No offers available', 'No sell offers yet',
+      'No P2P orders yet', 'No updates yet'][_tab];
+    final description = ['Sellers with funded capacity appear here.',
+      'Create an offer to sell MSNW using your verified bank.',
+      'Your purchases and sales appear here.', 'Order activity appears here.'][_tab];
+    return Padding(padding: const EdgeInsets.all(35),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.receipt_long_outlined, size: 38,
+          color: Theme.of(context).colorScheme.outline),
+        const SizedBox(height: 12),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        Text(description, textAlign: TextAlign.center),
+        TextButton.icon(onPressed: () => _reload(), icon: const Icon(Icons.refresh),
+          label: const Text('Refresh')),
+      ]));
+  }
+
+  Widget _loading() => ListView.builder(itemCount: 4,
+    itemBuilder: (_, index) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Container(height: 95,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(width: 160, height: 14,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest),
+          const SizedBox(height: 12),
+          Container(width: 215, height: 10,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest),
+        ]),
+      )));
+
   @override Widget build(BuildContext context) {
-    final initial=widget.initialOrderId;
-    if(initial!=null){
-      if(!RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(initial))return const Scaffold(body:Center(child:Text('Order unavailable')));
+    final initial = widget.initialOrderId;
+    if (initial != null) {
+      if (!RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(initial)) {
+        return const Scaffold(body: Center(child: Text('Order unavailable')));
+      }
       return _orderView(initial);
     }
+    if (!_sameAccount) return const Scaffold(body: Center(
+      child: Text('Sign in again to continue')));
     return Scaffold(
-    appBar: AppBar(title: const Text('MSNW P2P')),
-    body: Column(children: [
-      SegmentedButton<int>(segments: const [
-        ButtonSegment(value:0,label:Text('Buy')),
-        ButtonSegment(value:1,label:Text('Sell')),
-        ButtonSegment(value:2,label:Text('My orders')),
-        ButtonSegment(value:3,label:Text('Updates')),
-      ],selected:{_tab},onSelectionChanged: (v)=>_reload(v.first)),
-      Expanded(child: FutureBuilder<List<Map<String,dynamic>>>(future:_list,
-        builder:(context,snapshot) {
-          if(snapshot.connectionState!=ConnectionState.done) {
-            return const Center(child:CircularProgressIndicator());
-          }
-          if(snapshot.hasError) { return Center(child:Padding(
-            padding:const EdgeInsets.all(20),
-            child:Column(mainAxisSize:MainAxisSize.min,children:[
-              const Text('Could not load P2P',textAlign:TextAlign.center),
-              TextButton(onPressed:()=>_reload(),child:const Text('Retry')),
-            ])));
-          }
-          final items=snapshot.data ?? [];
-          return RefreshIndicator(onRefresh:()async{
-            _reload();await _list;
-          },child:ListView(children:[
-            if(_tab==1) Padding(padding:const EdgeInsets.all(12),
-              child:Wrap(spacing:8,runSpacing:8,children:[
-                OutlinedButton.icon(onPressed:_busy?null:_verifySellerBank,
-                  icon:const Icon(Icons.account_balance_outlined),
-                  label:const Text('Verify bank')),
-                FilledButton.icon(onPressed:_busy?null:_sell,
-                  icon:const Icon(Icons.add),label:const Text('Create sell offer')),
-              ])),
-            if(items.isEmpty) const Padding(padding:EdgeInsets.all(28),
-              child:Text('Nothing here yet. Pull down to refresh.',
-                textAlign:TextAlign.center)),
-            for(final item in items) Card(child:ListTile(
-              title:Text(_tab==0
-                  ? '${_ngn(item['rate_kobo_per_msnw'])} / MSNW'
-                  : _tab==1
-                    ? '${_ngn(item['rate_kobo_per_msnw'])} per MSNW'
-                    : _tab==2 ? '${_msnw(item['amount_micro'])} · ${item['state']}'
-                    : 'Order ${item['state'] ?? 'updated'}'),
-              subtitle:Text(_tab==0
-                ? 'Available: ${_msnw(item['remaining_micro'])}  · '
-                  'Trade ${_msnw(item['min_micro'])}–${_msnw(item['max_micro'])} · ${item['bank_name']??''}'
-                : _tab==1
-                    ? 'Remaining ${_msnw(item['remaining_micro'])} · ${item['state']}'
-                    : _tab==2 ? 'Fiat ${_ngn(item['fiat_kobo'])}'
-                    : '${item['action'] ?? 'State change'} · ${item['created_at'] ?? ''}'),
-              trailing:const Icon(Icons.chevron_right),
-              onTap: _busy?null: () {
-                if(_tab==0) {_buy(item);}
-                if(_tab==1 && item['state']=='active') {
-                  _confirm('Close this offer', 'Existing escrow orders will not be affected.')
-                    .then((yes){if(yes)_act(()async{
-                      await _request('POST','/offers/${item['offer_id']}/close',{});
-                    });});
-                }
-                if(_tab==2||_tab==3) {_orderDetail('${item['order_id']}');}
-              },
-            )),
-          ]));
-        })),
-    ]),
-  );
+      appBar: AppBar(title: const Text('MSNW P2P')),
+      body: Column(children: [
+        SingleChildScrollView(scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(children: [
+            for (final (index, title) in [(0, 'Buy'), (1, 'Sell'),
+              (2, 'Orders'), (3, 'Updates')])
+              Padding(padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(label: Text(title), showCheckmark: false,
+                  selected: _tab == index,
+                  onSelected: (_) { if (_tab != index) _reload(index); })),
+          ])),
+        if (_pendingOrder != null) ListTile(
+          leading: const Icon(Icons.sync_outlined),
+          title: const Text('Check unfinished order'),
+          subtitle: const Text('Recover the original request before placing another.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: _busy ? null : _resumePending,
+        ),
+        if (_tab == 1) Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          child: Row(children: [
+            Expanded(child: OutlinedButton.icon(
+              onPressed: _busy ? null : _verifySellerBank,
+              icon: const Icon(Icons.account_balance_outlined),
+              label: const Text('Verify bank'))),
+            const SizedBox(width: 8),
+            Expanded(child: FilledButton.icon(
+              onPressed: _busy ? null : _sell,
+              icon: const Icon(Icons.add), label: const Text('Create offer'))),
+          ])),
+        if (_tab == 2) Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+          child: Align(alignment: Alignment.centerLeft,
+            child: Wrap(spacing: 8, children: [
+              for (final filter in ['all', 'active', 'finished'])
+                ChoiceChip(label: Text(switch(filter) {
+                    'active' => 'Active', 'finished' => 'Finished', _ => 'All',
+                  }), selected: _orderFilter == filter, showCheckmark: false,
+                  onSelected: (_) => setState(() => _orderFilter = filter)),
+            ]))),
+        Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _list,
+          builder: (context, snapshot) {
+            final cached = _cached[_tab] ?? <Map<String, dynamic>>[];
+            if (snapshot.connectionState != ConnectionState.done &&
+                cached.isEmpty) return _loading();
+            final items = snapshot.hasData ? snapshot.data! : cached;
+            if (snapshot.hasError && items.isEmpty) return Center(child: Column(
+              mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.wifi_off_outlined, size: 32),
+                const SizedBox(height: 12),
+                const Text('Unable to load P2P'),
+                TextButton.icon(onPressed: () => _reload(),
+                  icon: const Icon(Icons.refresh), label: const Text('Retry')),
+              ]));
+            final filtered = _tab != 2 || _orderFilter == 'all' ? items :
+              items.where((o) {
+                const finished = ['completed', 'expired', 'cancelled'];
+                return _orderFilter == 'finished'
+                    ? finished.contains(o['state'])
+                    : !finished.contains(o['state']);
+              }).toList();
+            return RefreshIndicator(
+              onRefresh: () async { _reload(); try { await _list; } catch (_) {} },
+              child: ListView(
+                key: PageStorageKey<String>('p2p-$_tab-$_orderFilter'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  if (snapshot.hasError || (cached.isNotEmpty &&
+                    snapshot.connectionState != ConnectionState.done))
+                    ListTile(leading: const Icon(Icons.wifi_off_outlined),
+                      title: const Text('Showing saved results'),
+                      subtitle: const Text('Refresh when your connection returns.'),
+                      trailing: TextButton(onPressed: () => _reload(),
+                        child: const Text('Retry'))),
+                  if (filtered.isEmpty) _empty(),
+                  for (final item in filtered)
+                    switch (_tab) {
+                      0 => _offerTile(item, false),
+                      1 => _offerTile(item, true),
+                      2 => _orderTile(item),
+                      _ => _updateTile(item),
+                    },
+                  const SizedBox(height: 30),
+                ],
+              ),
+            );
+          },
+        )),
+      ]),
+    );
   }
 }
 
