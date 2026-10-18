@@ -63,6 +63,16 @@ class AdminMasanaApi {
       throw _error(e);
     }
   }
+  Future<Map<String,dynamic>> creatorPolicy() async {
+    final r=await _request(()=>_dio.get<dynamic>(
+      '/v1/creator/policy',options:_auth));
+    return Map<String,dynamic>.from(r.data as Map);
+  }
+  Future<Map<String,dynamic>> setCreatorPolicy(Map<String,dynamic> values) async {
+    final r=await _request(()=>_dio.put<dynamic>(
+      '/v1/admin/creator/policy',options:_auth,data:values));
+    return Map<String,dynamic>.from(r.data as Map);
+  }
   Future<List<AdminMasanaRevision>> list()async{
     final response=await _request(()=>_dio.get<dynamic>(
       '/v1/admin/masana',options:_auth));
