@@ -68,6 +68,49 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
   if(!response.rows[0])throw new CreatorAgentError("creator.agent_not_found",404);
   return view(response.rows[0]);
  }
+  async function commitCharacterPublication(db:CreatorQuery,owner:Owner,item:CreatorAgentView,expectedRevision:number):Promise<CreatorAgentView>{
+    if(!item.generated)throw new CreatorAgentError("creator.profile_not_generated",409);
+    const charVersionId=createCanonicalId("character-version");
+    const at=new Date().toISOString();
+    const g=item.generated;
+    const constitution={
+     schemaVersion:1,displayName:g.name,biography:g.biography,personality:[g.manner],
+     boundaries:["This is an AI professional, not a licensed human.",
+      "Never fabricate professional credentials or completed actions.",
+      "Users must authorize consequential spending in the Wallet."],
+     disclosurePolicy:{ai:true,creatorOwned:true},languages:g.languages,
+     voiceReferences:[],appearanceReferences:[],expertise:g.specializations,
+    };
+    await db.query(
+     "INSERT INTO identity.character_versions(tenant_id,character_version_id,character_id,version_number,state,constitution,created_at,published_at) "+
+     "VALUES($1,$2,$3,1,'published',$4::jsonb,$5,$5)",
+     [owner.tenantId,charVersionId,item.characterId,JSON.stringify(constitution),at]);
+    await db.query(
+     "UPDATE identity.characters SET active_character_version_id=$3,revision=revision+1,updated_at=$4 "+
+     "WHERE tenant_id=$1 AND character_id=$2 AND state='active'",
+     [owner.tenantId,item.characterId,charVersionId,at]);
+    const advanced=await db.query(
+     "UPDATE creator.agents SET state='published',revision=revision+1,published_at=$4,updated_at=$4 "+
+     "WHERE tenant_id=$1 AND owner_user_id=$2 AND character_id=$3 AND state='draft' AND revision=$5 "+
+     "RETURNING character_id,state,revision,handle,seed,generated,status_enabled,published_at",
+     [owner.tenantId,owner.userId,item.characterId,at,expectedRevision]);
+    if(!advanced.rows[0])throw new CreatorAgentError("creator.stale_draft");
+    const profile={
+     handle:item.handle,displayName:g.name,profession:g.profession,biography:g.biography,
+     lifeStory:"This fictional Masana persona was generated for professional educational assistance.",
+     languages:g.languages,talents:g.specializations,goals:g.statusTopics,
+     roomId:null,portraitMediaId:null,bannerMediaId:null,socialChannels:[],
+    };
+    await db.query(
+     "INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at) "+
+     "VALUES($1,$2,1,'approved',$3::jsonb,$4,$5)",
+     [owner.tenantId,item.characterId,JSON.stringify(profile),owner.userId,at]);
+    await db.query(
+     "INSERT INTO agents.agent_presentations(tenant_id,character_id,character_version_id,display_name,role_label,about,greeting,visible_in_user_app,sort_order) "+
+     "VALUES($1,$2,$3,$4,$5,$6,$7,true,100)",
+     [owner.tenantId,item.characterId,charVersionId,g.name,g.profession,g.biography.slice(0,500),g.greeting]);
+    return view(advanced.rows[0]!);
+  }
  return Object.freeze({
   async list(owner:Owner):Promise<readonly CreatorAgentView[]> {
    const r=await pool.query(ownSelect+" ORDER BY created_at DESC LIMIT 100",[owner.tenantId,owner.userId]);
@@ -176,49 +219,11 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
     const consumed=await db.query("SELECT character_id FROM creator.first_free_publications WHERE tenant_id=$1 AND owner_user_id=$2",
       [owner.tenantId,owner.userId]);
     if(consumed.rows.length)throw new CreatorAgentError("creator.payment_required",402);
-    const charVersionId=createCanonicalId("character-version");
-    const at=new Date().toISOString();
-    const g=item.generated;
-    const constitution={
-     schemaVersion:1,displayName:g.name,biography:g.biography,personality:[g.manner],
-     boundaries:["This is an AI professional, not a licensed human.",
-      "Never fabricate professional credentials or completed actions.",
-      "Users must authorize consequential spending in the Wallet."],
-     disclosurePolicy:{ai:true,creatorOwned:true},languages:g.languages,
-     voiceReferences:[],appearanceReferences:[],expertise:g.specializations,
-    };
-    await db.query(
-     "INSERT INTO identity.character_versions(tenant_id,character_version_id,character_id,version_number,state,constitution,created_at,published_at) "+
-     "VALUES($1,$2,$3,1,'published',$4::jsonb,$5,$5)",
-     [owner.tenantId,charVersionId,item.characterId,JSON.stringify(constitution),at]);
-    await db.query(
-     "UPDATE identity.characters SET active_character_version_id=$3,revision=revision+1,updated_at=$4 "+
-     "WHERE tenant_id=$1 AND character_id=$2 AND state='active'",
-     [owner.tenantId,item.characterId,charVersionId,at]);
-    const advanced=await db.query(
-     "UPDATE creator.agents SET state='published',revision=revision+1,published_at=$4,updated_at=$4 "+
-     "WHERE tenant_id=$1 AND owner_user_id=$2 AND character_id=$3 AND state='draft' AND revision=$5 "+
-     "RETURNING character_id,state,revision,handle,seed,generated,status_enabled,published_at",
-     [owner.tenantId,owner.userId,item.characterId,at,expectedRevision]);
-    if(!advanced.rows[0])throw new CreatorAgentError("creator.stale_draft");
-    const profile={
-     handle:item.handle,displayName:g.name,profession:g.profession,biography:g.biography,
-     lifeStory:"This fictional Masana persona was generated for professional educational assistance.",
-     languages:g.languages,talents:g.specializations,goals:g.statusTopics,
-     roomId:null,portraitMediaId:null,bannerMediaId:null,socialChannels:[],
-    };
-    await db.query(
-     "INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at) "+
-     "VALUES($1,$2,1,'approved',$3::jsonb,$4,$5)",
-     [owner.tenantId,item.characterId,JSON.stringify(profile),owner.userId,at]);
-    await db.query(
-     "INSERT INTO agents.agent_presentations(tenant_id,character_id,character_version_id,display_name,role_label,about,greeting,visible_in_user_app,sort_order) "+
-     "VALUES($1,$2,$3,$4,$5,$6,$7,true,100)",
-     [owner.tenantId,item.characterId,charVersionId,g.name,g.profession,g.biography.slice(0,500),g.greeting]);
+    const published=await commitCharacterPublication(db,owner,item,expectedRevision);
     await db.query(
      "INSERT INTO creator.first_free_publications(tenant_id,owner_user_id,character_id,operation_id) VALUES($1,$2,$3,$4)",
      [owner.tenantId,owner.userId,item.characterId,"free:"+item.characterId]);
-    await db.query("COMMIT");begun=false;return view(advanced.rows[0]);
+    await db.query("COMMIT");begun=false;return published;
    }catch(error){if(begun)await db.query("ROLLBACK").catch(()=>{});throw error;}
    finally{db.release();}
   },
