@@ -212,3 +212,12 @@ Order: finish current wallet/profile/full-screen source and checks, then history
 - Owner sections 12–16 remain the checklist above; this delivery closes the current redesign, not token deployment/custody/funding activation or every financial item. Next: trace and implement actual missing server history filters/receipt/support and P2P progress/deadlines/payment-detail UX, then provider/financial authority composition.
 
 Final review additionally fenced late crypto operation results and concurrent balance refreshes against account changes; a delayed operation cannot enter another account history or submit a second time. Three controller tests passed. Final scoped evidence totals 43 unique Flutter checks and seven backend checks; the 84 analyzer findings are style infos, zero errors/warnings. Hosted Foundation CI failed before runner allocation (runner empty, no steps), not a passing CI run.
+
+
+## Section 12 history continuation — 2026-10-18
+
+- Server-side asset, direction and exact decimal amount-range filters apply before cursor pagination and to complete CSV/PDF statements. Amount ranges require one asset so unlike units are never compared. Cursor scope includes all filters.
+- Search includes receipt details and owner-associated recipient/sender names and IDs; both tenant and owner predicates remain enforced. Transfer receipt gross/net/zero fee reflect the actual in-platform Send policy. Other receipts retain only real available financial detail.
+- Full-screen filter choices use owner-history asset options. Date grouping, original historical units, filters during custody refresh and exports are preserved. Concise point-of-need status labels explain reserved/processing/settlement/refund/reversal/dispute states; no section-description text added.
+- Verification: 11 PGlite/HTTP/export checks and strict TS passed. Three new Flutter filter/query/exact-value/reference-copy checks plus 14 Wallet/history regressions passed (17 unique); scoped analysis zero errors/warnings, seven infos. No APK, deployment or live-provider qualification claimed.
+- Remaining section12 gap: contextual support for categories without an existing reference-linked case flow, and complete fees/net where the source does not yet supply evidence. Next source is P2P order progress/authoritative deadlines/copyable bank detail and contextual order help; financial issuance/provider work remains separate.

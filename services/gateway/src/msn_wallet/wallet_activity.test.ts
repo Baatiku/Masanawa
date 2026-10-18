@@ -7,7 +7,10 @@ import {registerMsnwCustodyRoutes} from './custody_routes.js';
 const db=new PGlite(),owner={tenantId:'t',userId:'u'},now=()=>new Date('2026-10-17T12:00:00.000Z');
 const pool={query:(s:string,a:unknown[])=>db.query(s,a),async connect(){return{query:(s:string,a:unknown[])=>db.query(s,a),release(){}};}} as any;
 const service=createWalletActivity(pool,now);
-beforeAll(async()=>db.exec(`CREATE SCHEMA commerce;
+beforeAll(async()=>db.exec(`CREATE SCHEMA security;
+CREATE TABLE security.platform_user_profiles(tenant_id text,user_id text,display_name text);
+INSERT INTO security.platform_user_profiles VALUES('t','u','Owner'),('t','v','Amina Yusuf'),('other','v','Wrong tenant');
+CREATE SCHEMA commerce;
 CREATE TABLE commerce.msnw_custody_operations(operation_id uuid,tenant_id text,actor_user_id text,recipient_user_id text,amount_micro numeric(78,0),created_at timestamptz);
 CREATE TABLE commerce.msnw_paystack_fiat_evidence(reference text,tenant_id text,user_id text,amount_kobo bigint,created_at timestamptz);
 CREATE TABLE commerce.msnw_custody_issuances(reference text,tenant_id text,user_id text,amount_micro numeric(78,0));
@@ -88,4 +91,22 @@ it('generates a paginated PDF with complete references and correct xref offsets'
  if(process.env.MASANAWA_PDF_TEST_OUTPUT)await writeFile(process.env.MASANAWA_PDF_TEST_OUTPUT,result.pdf);
  const app=Fastify();registerMsnwCustodyRoutes(app,{authorizer:{async authorize(){return owner;}},ledger:{activity:service} as any});
  const answer=await app.inject('/v1/wallet/msnw/activity/export?format=pdf');expect(answer.statusCode).toBe(200);expect(answer.headers['content-type']).toBe('application/pdf');expect(answer.rawPayload.subarray(0,8).toString()).toBe('%PDF-1.4');await app.close();
+});
+
+it('filters exact asset amounts/direction before pagination and binds every filter to its cursor',async()=>{
+ const p=await service.list(owner,{asset:'MSNW',direction:'out',minAmount:'1',maxAmount:'5',limit:1});
+ expect(p.items).toHaveLength(1);expect(p.items[0]?.incoming).toBe(false);expect(p.assets).toContain('USDT');expect(p.assets).toContain('Cr (historical)');
+ const all=await service.list(owner,{asset:'MSNW',direction:'out',minAmount:'1',maxAmount:'5'});
+ for(const row of all.items){expect(row.asset).toBe('MSNW');expect(row.incoming).toBe(false);expect(BigInt(row.amountAtomic)).toBeGreaterThanOrEqual(1000000n);expect(BigInt(row.amountAtomic)).toBeLessThanOrEqual(5000000n);}
+ if(p.nextCursor)await expect(service.list(owner,{asset:'MSNW',direction:'in',minAmount:'1',maxAmount:'5',cursor:p.nextCursor})).rejects.toThrow('wallet.cursor_invalid');
+ for(const query of [{minAmount:'1'},{asset:'MSNW',minAmount:'5',maxAmount:'1'},{asset:'MSNW',minAmount:'1e4'},{asset:'MSNW',minAmount:'-1'},{direction:'invalid'}])await expect(service.list(owner,query)).rejects.toThrow();
+ const tiny=await service.list(owner,{asset:'USDT',minAmount:'0.000000000000000001',maxAmount:'0.000000000000000001'});expect(tiny.items).toHaveLength(1);
+ const exported=await service.exportCsv(owner,{asset:'USDT',minAmount:'0.000000000000000001'});expect(exported.count).toBe(1);
+});
+it('searches owner-scoped recipient names and receipt details without leaking another tenant',async()=>{
+ const result=await service.list(owner,{category:'Transfers',search:'Amina Yusuf'});expect(result.items).toHaveLength(3);
+ expect(result.items[0]?.details).toMatchObject({'Recipient':'Amina Yusuf','Fee':'0 MSNW','Gross amount':'1.000001 MSNW','Net amount':'1.000001 MSNW'});
+ expect((await service.list(owner,{search:'Wrong tenant'})).items).toHaveLength(0);
+ expect((await service.list({...owner,userId:'nobody'},{search:'Amina Yusuf'})).items).toHaveLength(0);
+ expect((await service.list(owner,{search:'customer'})).items.some(row=>row.category==='Bills')).toBe(true);
 });

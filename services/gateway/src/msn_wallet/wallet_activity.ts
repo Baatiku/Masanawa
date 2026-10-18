@@ -6,7 +6,7 @@ export class WalletActivityError extends Error {
 }
 type Owner = Readonly<{tenantId:string;userId:string}>;
 const categories = ['Transfers','Funding','Bills','Conversions','P2P','Crypto','Calls','Rooms','Archive'] as const;
-type Filter = Readonly<{category:string;status:string;search:string;from:string|null;to:string|null}>;
+type Filter = Readonly<{category:string;status:string;search:string;from:string|null;to:string|null;asset:string;direction:string;minAmount:string|null;maxAmount:string|null}>;
 type Cursor = Readonly<{version:1;at:string;id:string;snapshot:string;scope:string}>;
 export interface WalletActivityRecord {
   readonly id:string; readonly reference:string; readonly category:string;
@@ -31,7 +31,18 @@ function filters(query:Readonly<Record<string,unknown>>):Filter {
   const from=date(query.from),last=date(query.to);
   const to=last===null?null:new Date(Date.parse(last)+86400000).toISOString();
   if(from!==null&&to!==null&&from>=to)throw new WalletActivityError('wallet.date_range_invalid');
-  return {category,status,search:search.trim(),from,to};
+  const asset=query.asset??'All',direction=query.direction??'All';
+  if(typeof asset!=='string'||!(/^[A-Za-z0-9][A-Za-z0-9 ()_-]{0,39}$/).test(asset)||typeof direction!=='string'||!['All','in','out'].includes(direction))throw new WalletActivityError('wallet.filter_invalid');
+  function amount(raw:unknown):string|null{
+    if(raw===undefined||raw==='')return null;
+    if(typeof raw!=='string'||!(/^[0-9]{1,40}(\.[0-9]{1,36})?$/).test(raw))throw new WalletActivityError('wallet.amount_invalid');
+    const [whole,fraction='']=raw.split('.');const tail=fraction.replace(/0+$/,'');return BigInt(whole!).toString()+(tail?'.'+tail:'');
+  }
+  const minAmount=amount(query.minAmount),maxAmount=amount(query.maxAmount);
+  if((minAmount!==null||maxAmount!==null)&&asset==='All')throw new WalletActivityError('wallet.amount_asset_required');
+  const scaled=(value:string)=>{const [a,b='']=value.split('.');return BigInt(a!+b.padEnd(36,'0'));};
+  if(minAmount!==null&&maxAmount!==null&&scaled(minAmount)>scaled(maxAmount))throw new WalletActivityError('wallet.amount_range_invalid');
+  return {category,status,search:search.trim(),from,to,asset,direction,minAmount,maxAmount};
 }
 function scope(owner:Owner,filter:Filter):string {
   return createHash('sha256').update(JSON.stringify([owner.tenantId,owner.userId,filter])).digest('hex');
@@ -51,13 +62,16 @@ function readCursor(raw:unknown,owner:Owner,filter:Filter,now:Date):Cursor|null 
 // One row per customer operation. Funding and final issuance correlate on the
 // same reference; reserve/release audit postings never become duplicate rows.
 // Every branch binds BOTH tenant and authenticated owner before unioning.
-export const walletActivitySql = `WITH activity AS (
+const walletActivitySourceSql = `WITH activity AS (
  SELECT 'Transfers:'||operation_id::text AS id,operation_id::text AS reference,
  'Transfers'::text AS category,CASE WHEN recipient_user_id=$2 THEN 'MSNW received' ELSE 'MSNW sent' END AS title,
  amount_micro::text AS amount_atomic,6 AS decimals,'MSNW'::text AS asset,
  recipient_user_id=$2 AS incoming,'completed'::text AS status,created_at,
- jsonb_build_object('Fee','0 MSNW') AS details
- FROM commerce.msnw_custody_operations WHERE tenant_id=$1 AND (actor_user_id=$2 OR recipient_user_id=$2)
+ jsonb_strip_nulls(jsonb_build_object('Fee','0 MSNW','Gross MSNW atomic',amount_micro::text,'Net MSNW atomic',amount_micro::text,
+ 'Recipient ID',recipient_user_id,'Sender ID',actor_user_id,
+ 'Recipient',(SELECT display_name FROM security.platform_user_profiles p WHERE p.tenant_id=o.tenant_id AND p.user_id=o.recipient_user_id),
+ 'Sender',(SELECT display_name FROM security.platform_user_profiles p WHERE p.tenant_id=o.tenant_id AND p.user_id=o.actor_user_id))) AS details
+ FROM commerce.msnw_custody_operations o WHERE o.tenant_id=$1 AND (actor_user_id=$2 OR recipient_user_id=$2)
  UNION ALL
  SELECT 'Funding:'||f.reference,f.reference,'Funding','Bank funding',f.amount_kobo::text,2,'NGN',true,
  CASE WHEN i.reference IS NOT NULL THEN 'completed' ELSE 'backing_pending' END,f.created_at,
@@ -99,7 +113,8 @@ export const walletActivitySql = `WITH activity AS (
  SELECT 'Archive NGN:'||entry_id,reference,'Archive','Historical NGN '||replace(reason,'-',' '),
  amount_kobo::text,2,'NGN (historical)',direction='credit','recorded',created_at,'{}'::jsonb
  FROM commerce.ngn_wallet_entries WHERE tenant_id=$1 AND user_id=$2
-) SELECT id,reference,category,title,amount_atomic,decimals,asset,incoming,status,
+)`;
+export const walletActivitySql = `${walletActivitySourceSql} SELECT id,reference,category,title,amount_atomic,decimals,asset,incoming,status,
  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,details
  FROM activity WHERE created_at<=$3::timestamptz
  AND ($4::timestamptz IS NULL OR created_at>=$4) AND ($5::timestamptz IS NULL OR created_at<$5)
@@ -107,7 +122,11 @@ export const walletActivitySql = `WITH activity AS (
  AND ($7='All' OR ($7='Completed' AND status IN ('completed','finished','succeeded','settled','released','recorded'))
   OR ($7='Failed' AND status IN ('failed','cancelled','rejected','expired','refunded'))
   OR ($7='Pending' AND status NOT IN ('completed','finished','succeeded','settled','released','recorded','failed','cancelled','rejected','expired','refunded')))
- AND ($8='' OR strpos(lower(title||' '||reference||' '||asset),lower($8))>0)
+ AND ($8='' OR strpos(lower(title||' '||reference||' '||asset||' '||details::text),lower($8))>0)
+ AND ($12='All' OR asset=$12)
+ AND ($13='All' OR incoming=($13='in'))
+ AND ($14::numeric IS NULL OR amount_atomic::numeric >= $14::numeric*power(10::numeric,decimals))
+ AND ($15::numeric IS NULL OR amount_atomic::numeric <= $15::numeric*power(10::numeric,decimals))
  AND ($9::timestamptz IS NULL OR (created_at,id COLLATE "C")<($9::timestamptz,$10::text COLLATE "C"))
  ORDER BY created_at DESC,id COLLATE "C" DESC LIMIT $11`;
 
@@ -119,6 +138,7 @@ function normalize(row:Record<string,unknown>):WalletActivityRecord {
     row.details===null||typeof row.details!=='object'||Array.isArray(row.details))throw new WalletActivityError('wallet.record_invalid',503);
   const details=Object.fromEntries(Object.entries(row.details).filter((v):v is [string,string]=>typeof v[1]==='string'));
   for(const [key,label,decimals,asset] of [
+    ['Gross MSNW atomic','Gross amount',6,'MSNW'],['Net MSNW atomic','Net amount',6,'MSNW'],
     ['MSNW credited atomic','MSNW credited',6,'MSNW'],['Crypto amount atomic','Crypto amount',6,details.Network??''],
     ['Fee MSNW atomic','Fee',6,'MSNW'],['Provider NGN atomic','Provider price',2,'NGN'],['Total NGN atomic','Total price',2,'NGN'],
   ] as const) {
@@ -186,11 +206,11 @@ export function activityPdf(rows:readonly WalletActivityRecord[],snapshot:string
 export function createWalletActivity(pool:Pool,clock:()=>Date=()=>new Date()) {
   async function queryRows(owner:Owner,filter:Filter,snapshot:string,cursor:Cursor|null,limit:number,db:Pick<Pool,'query'>=pool) {
     const result=await db.query(walletActivitySql,[owner.tenantId,owner.userId,snapshot,filter.from,filter.to,
-      filter.category,filter.status,filter.search,cursor?.at??null,cursor?.id??null,limit]);
+      filter.category,filter.status,filter.search,cursor?.at??null,cursor?.id??null,limit,filter.asset,filter.direction,filter.minAmount,filter.maxAmount]);
     return result.rows.map(normalize);
   }
   async function statement(owner:Owner,query:Readonly<Record<string,unknown>>,maximum:number) {
-    if(Object.keys(query).some(k=>!['category','status','search','from','to'].includes(k)))throw new WalletActivityError('wallet.filter_invalid');
+    if(Object.keys(query).some(k=>!['category','status','search','from','to','asset','direction','minAmount','maxAmount'].includes(k)))throw new WalletActivityError('wallet.filter_invalid');
     const filter=filters(query),snapshot=clock().toISOString(),client=await pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -202,7 +222,7 @@ export function createWalletActivity(pool:Pool,clock:()=>Date=()=>new Date()) {
   }
   return {
     async list(owner:Owner,query:Readonly<Record<string,unknown>>) {
-      if(Object.keys(query).some(k=>!['category','status','search','from','to','cursor','limit'].includes(k)))throw new WalletActivityError('wallet.filter_invalid');
+      if(Object.keys(query).some(k=>!['category','status','search','from','to','asset','direction','minAmount','maxAmount','cursor','limit'].includes(k)))throw new WalletActivityError('wallet.filter_invalid');
       const filter=filters(query),now=clock(),cursor=readCursor(query.cursor,owner,filter,now);
       const limit=query.limit===undefined?50:Number(query.limit);
       if(!Number.isSafeInteger(limit)||limit<1||limit>100)throw new WalletActivityError('wallet.limit_invalid');
@@ -210,7 +230,9 @@ export function createWalletActivity(pool:Pool,clock:()=>Date=()=>new Date()) {
       const records=await queryRows(owner,filter,snapshot,cursor,limit+1),items=records.slice(0,limit),last=items.at(-1);
       const nextCursor=records.length>limit&&last?Buffer.from(JSON.stringify({version:1,at:last.createdAt,id:last.id,
         snapshot,scope:scope(owner,filter)} satisfies Cursor)).toString('base64url'):null;
-      return {items,nextCursor,snapshot};
+      const options=await pool.query(`${walletActivitySourceSql} SELECT DISTINCT asset FROM activity ORDER BY asset`,[owner.tenantId,owner.userId]);
+      const assets=options.rows.map(row=>row.asset).filter((value):value is string=>typeof value==='string');
+      return {items,nextCursor,snapshot,assets};
     },
     async exportCsv(owner:Owner,query:Readonly<Record<string,unknown>>) {
       const {items,snapshot}=await statement(owner,query,10000);

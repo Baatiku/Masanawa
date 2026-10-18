@@ -44,10 +44,12 @@ WalletTransaction parseWalletActivity(dynamic row) {
 }
 
 class WalletHistoryFilter {
-  const WalletHistoryFilter({this.category = 'All', this.status = 'All', this.from, this.to});
-  final String category, status;
+  const WalletHistoryFilter({this.category = 'All', this.status = 'All', this.from, this.to,this.asset='All',this.direction='All',this.minAmount,this.maxAmount});
+  final String category, status,asset,direction;
+  final String? minAmount,maxAmount;
+  bool get active=>category!='All'||status!='All'||asset!='All'||direction!='All'||from!=null||to!=null||minAmount!=null||maxAmount!=null;
   final DateTime? from, to;
-  bool matches(WalletTransaction e) => (category == 'All' || e.category == category) &&
+  bool matches(WalletTransaction e) => (asset=='All'||e.asset==asset)&&(direction=='All'||e.incoming==(direction=='in'))&&walletAmountInRange(e.amount,minAmount,maxAmount)&&(category == 'All' || e.category == category) &&
     (status == 'All' || (status == 'Completed' ? ['completed','succeeded','settled','released','finished'].contains(e.status) :
       status == 'Failed' ? ['failed','cancelled','rejected','expired','refunded'].contains(e.status) :
       !['completed','succeeded','settled','released','finished','failed','cancelled','rejected','expired','refunded','recorded'].contains(e.status))) &&
@@ -67,6 +69,7 @@ class MsnwTransactionHistory extends StatefulWidget {
 }
 class _HistoryState extends State<MsnwTransactionHistory> {
   List<WalletTransaction> entries = [];
+  List<String> assets=[];
   final search = TextEditingController();
   List<String> failed = [];
   bool busy = true;
@@ -80,6 +83,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
     super.didUpdateWidget(old);
     if (old.expectedUserId != widget.expectedUserId) {
       search.clear();
+      assets=[];
       filter = const WalletHistoryFilter();
       load();
     } else if (old.refreshKey != widget.refreshKey) {
@@ -93,6 +97,10 @@ class _HistoryState extends State<MsnwTransactionHistory> {
   Map<String,String> get query => {
     if(filter.category!='All') 'category':filter.category,
     if(filter.status!='All') 'status':filter.status,
+    if(filter.asset!='All') 'asset':filter.asset,
+    if(filter.direction!='All') 'direction':filter.direction,
+    if(filter.minAmount!=null) 'minAmount':filter.minAmount!,
+    if(filter.maxAmount!=null) 'maxAmount':filter.maxAmount!,
     if(search.text.trim().isNotEmpty) 'search':search.text.trim(),
     if(filter.from!=null) 'from':filter.from!.toIso8601String().substring(0,10),
     if(filter.to!=null) 'to':filter.to!.toIso8601String().substring(0,10),
@@ -116,6 +124,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
       if(!same(token)||run!=generation)return;
       setState(() {
         entries={for(final e in [...(more?entries:<WalletTransaction>[]),...values])e.id:e}.values.toList();
+        assets=(raw['assets'] is List?(raw['assets'] as List).whereType<String>().where((a)=>a.length<=40):values.map((v)=>v.asset)).toSet().toList()..sort();
         nextCursor=raw['nextCursor'] as String?;busy=false;
       });
     } catch(_) {
@@ -135,7 +144,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
   List<WalletTransaction> get visible=>entries;
   Future<void> filters() async {
     final next = await openWalletPage<WalletHistoryFilter>(context:context,title:'Filter transactions',
-      builder: (_) => _FilterPage(initial:filter));
+      builder: (_) => _FilterPage(initial:filter,assets:assets));
     if (mounted && next != null) setState(() => filter = next);
     if(mounted && next!=null) await load();
   }
@@ -168,7 +177,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
                 const SizedBox(height:12),
                 Text(failed.isNotEmpty
                   ? 'Couldn’t load transactions. Check your connection and retry.'
-                  : filter.category != 'All' || filter.status != 'All' || search.text.trim().isNotEmpty
+                  : filter.active || search.text.trim().isNotEmpty
                     ? 'No transactions match your filters.'
                     : 'No transactions yet. Fund your MSNW wallet to get started.',
                   textAlign:TextAlign.center),
@@ -176,7 +185,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
                 if(failed.isNotEmpty)
                   OutlinedButton.icon(onPressed:()=>load(),
                     icon:const Icon(Icons.refresh),label:const Text('Retry'))
-                else if(filter.category!='All'||filter.status!='All'||search.text.trim().isNotEmpty)
+                else if(filter.active||search.text.trim().isNotEmpty)
                   TextButton(onPressed:(){debounce?.cancel();search.clear();setState(()=>filter=const WalletHistoryFilter());load();},
                     child:const Text('Clear filters'))
               ])))
@@ -196,7 +205,7 @@ class _HistoryState extends State<MsnwTransactionHistory> {
             ListTile(leading:CircleAvatar(backgroundColor:Theme.of(context).colorScheme.surfaceContainerLow,
               child:Icon(e.incoming?Icons.south_west:Icons.north_east,size:20)),
               title:Text(e.title,maxLines:1,overflow:TextOverflow.ellipsis),
-              subtitle:Text(e.status.replaceAll('_',' '),maxLines:1),
+              subtitle:Text(walletTransactionStatus(e.status),maxLines:1),
               trailing:ConstrainedBox(constraints:const BoxConstraints(maxWidth:130),child:Text(e.displayAmount,
                 textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w700))),
               onTap:()=>openWalletPage<void>(context:context,title:'Transaction details',builder:(_)=>WalletTransactionDetails(
@@ -217,7 +226,8 @@ class WalletTransactionDetails extends StatelessWidget {
     return ListView(padding:const EdgeInsets.all(24),children:[
       const Icon(Icons.receipt_long_outlined,size:48),const SizedBox(height:16),
       Text(e.displayAmount,textAlign:TextAlign.center,style:Theme.of(context).textTheme.headlineMedium),
-      const SizedBox(height:8),Text(e.status.replaceAll('_',' '),textAlign:TextAlign.center),
+      const SizedBox(height:8),Text(walletTransactionStatus(e.status),textAlign:TextAlign.center),
+      if(walletTransactionStatusDetail(e.status)!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(walletTransactionStatusDetail(e.status)!,textAlign:TextAlign.center)),
       const SizedBox(height:24),
       for(final field in {'Type':e.title,'Reference':e.id,'Asset':e.asset,
         'Created':e.createdAt?.toLocal().toString()??'Not provided',...e.details}.entries)
@@ -229,16 +239,18 @@ class WalletTransactionDetails extends StatelessWidget {
   }
 }
 class _FilterPage extends StatefulWidget {
-  const _FilterPage({required this.initial});
+  const _FilterPage({required this.initial,required this.assets});
   final WalletHistoryFilter initial;
+  final List<String> assets;
   @override State<_FilterPage> createState()=>_FilterState();
 }
 class _FilterState extends State<_FilterPage> {
-  late String category=widget.initial.category,status=widget.initial.status;
+  late String category=widget.initial.category,status=widget.initial.status,asset=widget.initial.asset,direction=widget.initial.direction;
+  late final minimum=TextEditingController(text:widget.initial.minAmount??''),maximum=TextEditingController(text:widget.initial.maxAmount??'');
   late final from=TextEditingController(text:widget.initial.from?.toIso8601String().substring(0,10)??'');
   late final to=TextEditingController(text:widget.initial.to?.toIso8601String().substring(0,10)??'');
   String? error;
-  @override void dispose(){from.dispose();to.dispose();super.dispose();}
+  @override void dispose(){from.dispose();to.dispose();minimum.dispose();maximum.dispose();super.dispose();}
   void apply(){
     DateTime? date(String v)=>v.isEmpty?null:RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v)?DateTime.tryParse('${v}T00:00:00Z'):null;
     final a=date(from.text.trim()),b=date(to.text.trim());
@@ -246,7 +258,13 @@ class _FilterState extends State<_FilterPage> {
     if(!valid(a,from.text)||!valid(b,to.text)||a!=null&&b!=null&&b.isBefore(a)){
       setState(()=>error='Use YYYY-MM-DD and an end date after the start date.');return;
     }
-    Navigator.pop(context,WalletHistoryFilter(category:category,status:status,from:a,to:b));
+    final min=minimum.text.trim(),max=maximum.text.trim();
+    final amountPattern=RegExp(r'^[0-9]{1,40}(\.[0-9]{1,36})?$');
+    if((min.isNotEmpty||max.isNotEmpty)&&asset=='All'){setState(()=>error='Choose an asset for the amount range');return;}
+    if(min.isNotEmpty&&!amountPattern.hasMatch(min)||max.isNotEmpty&&!amountPattern.hasMatch(max)){setState(()=>error='Enter valid amounts');return;}
+    BigInt scaled(String v){final p=v.split('.');return BigInt.parse(p[0]+(p.length==2?p[1]:'').padRight(36,'0'));}
+    if(min.isNotEmpty&&max.isNotEmpty&&scaled(min)>scaled(max)){setState(()=>error='Maximum must be at least the minimum');return;}
+    Navigator.pop(context,WalletHistoryFilter(category:category,status:status,from:a,to:b,asset:asset,direction:direction,minAmount:min.isEmpty?null:min,maxAmount:max.isEmpty?null:max));
   }
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
     WalletSelectionField<String>(initialValue:category,decoration:const InputDecoration(labelText:'Transaction type'),
@@ -254,6 +272,9 @@ class _FilterState extends State<_FilterPage> {
     const SizedBox(height:20),
     WalletSelectionField<String>(initialValue:status,decoration:const InputDecoration(labelText:'Status'),
       items:['All','Completed','Pending','Failed'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>status=v!)),
+    const SizedBox(height:20),WalletSelectionField<String>(initialValue:asset,decoration:const InputDecoration(labelText:'Asset'),items:[for(final v in {'All',...widget.assets,if(asset!='All')asset})DropdownMenuItem(value:v,child:Text(v))],onChanged:(v)=>setState(()=>asset=v!)),
+    const SizedBox(height:20),WalletSelectionField<String>(initialValue:direction,decoration:const InputDecoration(labelText:'Direction'),items:const [DropdownMenuItem(value:'All',child:Text('All')),DropdownMenuItem(value:'in',child:Text('Incoming')),DropdownMenuItem(value:'out',child:Text('Outgoing'))],onChanged:(v)=>setState(()=>direction=v!)),
+    const SizedBox(height:20),Row(children:[Expanded(child:TextField(controller:minimum,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Minimum amount'))),const SizedBox(width:12),Expanded(child:TextField(controller:maximum,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Maximum amount')))]),
     const SizedBox(height:20),TextField(controller:from,decoration:const InputDecoration(labelText:'From (UTC)',hintText:'YYYY-MM-DD')),
     const SizedBox(height:20),TextField(controller:to,decoration:const InputDecoration(labelText:'To (UTC)',hintText:'YYYY-MM-DD')),
     if(error!=null)Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
@@ -325,4 +346,28 @@ Map<String,String> walletStatementRange(String preset,{DateTime? now}){
  if(start==null)return {};
  final end=preset=='Last month'?DateTime.utc(day.year,day.month).subtract(const Duration(days:1)):today;
  return {'from':date(start),'to':date(end)};
+}
+
+String walletTransactionStatus(String status)=>const {
+ 'backing_pending':'Awaiting MSNW settlement','reserved':'Funds reserved',
+ 'processing':'Processing','provider_pending':'Processing','submitted':'Processing',
+ 'awaiting_payment':'Awaiting payment','payment_claimed':'Awaiting seller confirmation',
+ 'disputed':'Under review','recorded':'Historical record',
+}[status]??status.replaceAll('_',' ');
+String? walletTransactionStatusDetail(String status)=>const {
+ 'backing_pending':'Payment verified. MSNW is not available until settlement finishes.',
+ 'reserved':'Held for this transaction; not available to spend.',
+ 'processing':'Awaiting the provider’s final result.',
+ 'provider_pending':'Awaiting the provider’s final result.',
+ 'submitted':'Awaiting the provider’s final result.',
+ 'reversed':'The original transaction was reversed.',
+ 'refunded':'Funds were returned by the recorded refund.',
+ 'failed':'The transaction did not complete. Check the receipt before retrying.',
+ 'payment_claimed':'The buyer reported payment. Seller bank confirmation is still required.',
+ 'disputed':'Support is reviewing this order. Escrow remains protected.',
+}[status];
+
+bool walletAmountInRange(String amount,String? minimum,String? maximum){
+ BigInt scaled(String value){final p=value.split('.');return BigInt.parse(p[0]+(p.length>1?p[1]:'').padRight(36,'0'));}
+ try{final n=scaled(amount);return (minimum==null||n>=scaled(minimum))&&(maximum==null||n<=scaled(maximum));}catch(_){return false;}
 }
