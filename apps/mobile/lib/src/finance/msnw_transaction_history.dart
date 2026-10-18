@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'msnw_wallet_home.dart';
 import 'wallet_flow_page.dart';
+import 'msnw_p2p_screen.dart';
 import '../ui/components/masanawa_list_skeleton.dart';
 
 class WalletTransaction {
@@ -209,7 +210,8 @@ class _HistoryState extends State<MsnwTransactionHistory> {
               trailing:ConstrainedBox(constraints:const BoxConstraints(maxWidth:130),child:Text(e.displayAmount,
                 textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w700))),
               onTap:()=>openWalletPage<void>(context:context,title:'Transaction details',builder:(_)=>WalletTransactionDetails(
-                entry:e,authorized:()=>same(widget.accessToken()?.trim())))),
+                entry:e,authorized:()=>same(widget.accessToken()?.trim()),
+                onSupport:e.category=='P2P'?()=>openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>MsnwP2pScreen(dio:widget.dio,baseUrl:widget.baseUrl,expectedUserId:widget.expectedUserId,currentUserId:widget.currentUserId,accessToken:widget.accessToken,initialOrderId:e.details['Reference'])):null))),
           ]);
         })),
     ]);
@@ -217,9 +219,10 @@ class _HistoryState extends State<MsnwTransactionHistory> {
 }
 
 class WalletTransactionDetails extends StatelessWidget {
-  const WalletTransactionDetails({super.key,required this.entry,required this.authorized});
+  const WalletTransactionDetails({super.key,required this.entry,required this.authorized,this.onSupport});
   final WalletTransaction entry;
   final bool Function() authorized;
+  final VoidCallback? onSupport;
   @override Widget build(BuildContext context) {
     if (!authorized()) return const Center(child:Text('Sign in to view this transaction'));
     final e=entry;
@@ -235,6 +238,7 @@ class WalletTransactionDetails extends StatelessWidget {
           Text(field.key,style:Theme.of(context).textTheme.labelMedium),const SizedBox(height:4),SelectableText(field.value)])),
       OutlinedButton.icon(onPressed:()async{if(authorized())await Clipboard.setData(ClipboardData(text:e.details['Reference']??e.id));},
         icon:const Icon(Icons.copy),label:const Text('Copy reference')),
+      if(onSupport!=null)OutlinedButton.icon(onPressed:authorized()?onSupport:null,icon:const Icon(Icons.support_agent_outlined),label:const Text('Order help')),
     ]);
   }
 }

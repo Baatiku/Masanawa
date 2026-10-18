@@ -8,6 +8,7 @@ Future<T?> openWalletPage<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   String title = 'Wallet',
+  bool wrapScaffold = true,
 }) {
   ProviderContainer? container;
   try {
@@ -22,24 +23,32 @@ Future<T?> openWalletPage<T>({
       settings: RouteSettings(
         name: '/wallet/${title.toLowerCase().replaceAll(' ', '-')}',
       ),
-      builder: (routeContext) => Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: SafeArea(
-          child: expected == null
-              ? builder(routeContext)
-              : Consumer(
-                  builder: (context, ref, _) {
-                    final current = ref.watch(sessionProvider);
-                    return current is SessionSignedIn &&
-                            current.user.id == expected
-                        ? builder(context)
-                        : const Center(
-                            child: Text('Sign in again to continue'),
-                          );
-                  },
-                ),
-        ),
-      ),
+      builder: (routeContext) {
+        final content = expected == null
+            ? builder(routeContext)
+            : Consumer(
+                builder: (context, ref, _) {
+                  final current = ref.watch(sessionProvider);
+                  if (current is SessionSignedIn && current.user.id == expected)
+                    return builder(context);
+                  const denied = Center(
+                    child: Text('Sign in again to continue'),
+                  );
+                  return wrapScaffold
+                      ? denied
+                      : Scaffold(
+                          appBar: AppBar(title: Text(title)),
+                          body: denied,
+                        );
+                },
+              );
+        return wrapScaffold
+            ? Scaffold(
+                appBar: AppBar(title: Text(title)),
+                body: SafeArea(child: content),
+              )
+            : content;
+      },
     ),
   );
 }

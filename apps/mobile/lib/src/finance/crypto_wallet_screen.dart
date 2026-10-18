@@ -411,7 +411,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       );
       if(!context.mounted)return;
       final code=await openWalletPage<String>(
-        context:context,builder:(_)=>const WalletStepUpPage(),
+        context:context,wrapScaffold:false,title:'Verify withdrawal',builder:(_)=>const WalletStepUpPage(),
       );
       if(code==null || !context.mounted)return;
       final grant=await api.confirmWithdrawalStepUp(

@@ -128,15 +128,20 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
   }
   return Object.freeze({
     async offers(actor: P2pActor) {
+      // Display only presently funded capacity. The existing per-order locked
+      // reservation remains the sole escrow authority; discovery never moves funds.
       const rows = await pool.query(`SELECT o.offer_id,o.seller_id,o.rate_kobo_per_msnw::text,
-        o.min_micro::text,o.max_micro::text,o.remaining_micro::text,o.fee_bps,
-        p.bank_name,p.method_type,o.created_at
+        o.min_micro::text,LEAST(o.max_micro,capacity.amount)::text AS max_micro,
+        capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,o.created_at
         FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
-          ON p.method_id=o.payment_method_id
-        WHERE o.tenant_id=$1 AND o.state='active' AND o.remaining_micro>0
+          ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+        JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+        CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
+          floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
+          AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
-        ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId]);
-      // Account number and holder name are deliberately NOT exposed in discovery.
+        ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId,actor.userId]);
       return rows.rows;
     },
     async myOffers(actor: P2pActor) {
@@ -211,7 +216,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async order(actor: P2pActor, orderId: string) {
       const order = take<P2pOrder>(await pool.query(`SELECT order_id,tenant_id,offer_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,
-        payment_deadline,state,version,receipt_reference
+        payment_deadline,state,version,receipt_reference,statement_timestamp() AS server_now
         FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND order_id=$2
           AND (seller_id=$3 OR buyer_id=$3)`, [actor.tenantId,id(orderId),actor.userId]));
       const method = take<Record<string,unknown>>(await pool.query(`SELECT bank_name,account_name,
