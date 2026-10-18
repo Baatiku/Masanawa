@@ -81,6 +81,11 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Search all Masanawa',
+            icon: const Icon(Icons.manage_search_outlined),
+            onPressed: () => context.push('/search'),
+          ),
+          IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: () =>
