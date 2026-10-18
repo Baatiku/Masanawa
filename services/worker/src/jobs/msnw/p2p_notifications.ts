@@ -59,7 +59,7 @@ export function createP2pNoticeRuntime(input:Readonly<{
               title:"MSNW P2P order update",
               body:"Open Wallet to review your current order status.",
               data:{type:"p2p_order",orderId:p.orderId,eventId:event.outboxEventId,
-                deepLink:"masanawa://wallet"},
+                deepLink:"masanawa://wallet/transaction/"+p.orderId},
             });
             stats.delivered+=sent.delivered;
             deliveredNow=sent.delivered>0;
