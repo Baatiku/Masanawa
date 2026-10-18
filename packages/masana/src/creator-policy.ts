@@ -14,17 +14,18 @@ export interface CreatorPolicy {
   readonly maxPostsPerWeek: number;
 }
 
-export const DEFAULT_CREATOR_POLICY: CreatorPolicy = Object.freeze({
-  revision: 1,
-  // MSNW precision must be obtained from the verified asset registry.
-  // The user-visible 5000 MSNW target is NOT automatically 5000 atomic units.
-  creationFeeAtomic: "0",
-  firstFreeAgentCount: 1,
-  freeSubstantiveEdits: 3,
-  paidEditFeeAtomic: "0",
-  creatorRevenueShareBps: 3000,
-  maxPostsPerWeek: 2,
-});
+/** Refuse to guess token precision. The caller obtains it from the live MSNW asset registry. */
+export function creatorDefaultPolicy(msnwPrecision: number): CreatorPolicy {
+  return Object.freeze({
+    revision: 1,
+    creationFeeAtomic: creationFeeForPrecision(msnwPrecision, 5000),
+    firstFreeAgentCount: 1,
+    freeSubstantiveEdits: 3,
+    paidEditFeeAtomic: creationFeeForPrecision(msnwPrecision, 100),
+    creatorRevenueShareBps: 3000,
+    maxPostsPerWeek: 2,
+  });
+}
 
 export function atomic(value: string): bigint {
   if (typeof value !== "string" || !/^(0|[1-9][0-9]{0,77})$/u.test(value)) {
