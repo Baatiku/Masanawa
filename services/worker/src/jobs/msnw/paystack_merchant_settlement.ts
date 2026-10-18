@@ -38,8 +38,14 @@ function settlement(value: unknown, domain: "live" | "test"): ProviderSettlement
       typeof v.settlement_date !== "string" ||
       !Number.isFinite(Date.parse(v.settlement_date)))
     throw new MsnwMerchantSettlementError("msnw.paystack_settlement_invalid");
-  const total = kobo(v.total_processed), effective = kobo(v.effective_amount);
-  if (BigInt(total) === 0n || BigInt(effective) > BigInt(total))
+  // Provider "success" can still mean zero naira reached the merchant
+  // (all proceeds consumed by fees/deductions). Such a settlement must not
+  // become verified bank-payout evidence for MSNW funding.
+  const total = kobo(v.total_processed);
+  const net = kobo(v.total_amount);
+  const effective = kobo(v.effective_amount);
+  if (BigInt(total) === 0n || BigInt(effective) === 0n ||
+      BigInt(net) > BigInt(total) || BigInt(effective) > BigInt(net))
     throw new MsnwMerchantSettlementError("msnw.paystack_settlement_invalid");
   return Object.freeze({ id:id(v.id),domain,total,effective,
     settledAt:v.settlement_date });
@@ -91,7 +97,7 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
     const found: ProviderSettlement[] = [];
     const seen = new Map<string,ProviderSettlement>();
     async function appendPage(page: number): Promise<number> {
-      const raw = await api("/settlement?status=success&perPage=50&page=" + page);
+      const raw = await api("/settlement?status=success&subaccount=none&perPage=50&page=" + page);
       for (const value of raw) {
         const entry = settlement(value,domain);
         // Pages can shift during provider pagination. A repeated identical
@@ -128,9 +134,11 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
   async function transactions(settlementId: string) {
     const found: ProviderTransaction[] = [];
     const seen = new Set<string>();
-    for (let page=1;page<=10;page++) {
+    // Paystack documents 50 per page. Avoid asking for 100 and then
+    // mistaking a provider-capped page of 50 for the final page.
+    for (let page=1;page<=20;page++) {
       const raw = await api("/settlement/" + settlementId +
-        "/transactions?perPage=100&page=" + page);
+        "/transactions?perPage=50&page=" + page);
       for (const value of raw) {
         const item = transaction(value,domain);
         if (!item) continue;
@@ -139,13 +147,20 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
         seen.add(item.id);
         found.push(item);
       }
-      if (raw.length < 100) return found;
+      if (raw.length < 50) return found;
     }
     // Never mark a partially paged merchant payout as fully scanned.
     throw new MsnwMerchantSettlementError("msnw.paystack_settlement_truncated");
   }
 
   async function record(entry: ProviderSettlement, rows: readonly ProviderTransaction[]) {
+    // Reconcile the COMPLETE payout's transaction amounts before treating
+    // any constituent customer payment as merchant bank-payout proof. A
+    // partially paginated, altered or cross-currency batch is not qualified.
+    const gross = rows.reduce((sum,item)=>sum+BigInt(item.amount),0n);
+    if (gross !== BigInt(entry.total)) {
+      throw new MsnwMerchantSettlementError("msnw.paystack_payout_sum_mismatch");
+    }
     const client = await input.pool.connect();
     let began = false;
     try {
