@@ -134,4 +134,29 @@ describe("MSNW P2P exact money and escrow",()=>{
     expect(statements.some(s=>s.includes("INSERT INTO commerce.msnw_p2p_orders"))).toBe(false);
   });
 
+  it("paginates participant orders with a stable seek cursor and server-side status scope",async()=>{
+    const idA="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const idB="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const rows=[
+      {order_id:idA,state:"completed",created_at:"2026-10-18T05:00:00Z"},
+      {order_id:idB,state:"expired",created_at:"2026-10-17T05:00:00Z"},
+    ];
+    const {pool,statements}=mock(sql=>sql.includes("ORDER BY created_at DESC,order_id DESC")
+      ?rows:[]);
+    const service=createP2pService(pool,deniedWallet);
+    const page=await service.ordersPage(actor,{filter:"finished",limit:1});
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).toBeTruthy();
+    expect(statements.some(sql=>sql.includes("tenant_id=$1")&&
+      sql.includes("(seller_id=$2 OR buyer_id=$2)")&&
+      sql.includes("state IN ('completed','cancelled','expired')"))).toBe(true);
+    expect((await service.ordersPage(actor,{
+      filter:"finished",cursor:page.nextCursor!,limit:1,
+    })).items).toHaveLength(1);
+    await expect(service.ordersPage(actor,{filter:"unknown"})).rejects
+      .toMatchObject({code:"p2p.invalid_filter"});
+    await expect(service.ordersPage(actor,{cursor:"not-a-cursor"})).rejects
+      .toMatchObject({code:"p2p.invalid_cursor"});
+  });
+
 });
