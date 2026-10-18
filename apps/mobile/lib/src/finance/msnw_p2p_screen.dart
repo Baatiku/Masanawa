@@ -3,6 +3,7 @@ import 'p2p_order_presentation.dart';
 import 'wallet_step_up_page.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:dio/dio.dart';
@@ -646,13 +647,79 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         uploadEvidence: (data) async {
           await _request('POST','/orders/$id/evidence/upload',data);
         },
-        openEvidence: (evidenceId) async {
+        openEvidence: (pageContext, evidenceId, fileType) async {
+          // A fresh owner-scoped signed URL is requested for every open.
+          // Never cache or store that URL, and never forward account bearer
+          // headers to its storage origin.
           final link=_json(await _request('GET',
             '/orders/$id/evidence/$evidenceId'));
+          if(!mounted || !_sameAccount || !pageContext.mounted)return;
           final uri=Uri.tryParse('${link['url'] ?? ''}');
-          if(uri==null||uri.scheme!='https')throw StateError('Evidence link unavailable');
-          if(!await launchUrl(uri,mode:LaunchMode.externalApplication)) {
-            throw StateError('Unable to open private evidence');
+          if(uri==null||uri.scheme!='https'||uri.host.isEmpty||
+             uri.userInfo.isNotEmpty||uri.hasFragment) {
+            throw StateError('Evidence link unavailable');
+          }
+          if(fileType=='pdf') {
+            if(!await launchUrl(uri,mode:LaunchMode.externalApplication)) {
+              throw StateError('Unable to open PDF in a document viewer');
+            }
+            return;
+          }
+          if(!const {'png','jpg','jpeg','webp'}.contains(fileType)) {
+            throw StateError('Unsupported evidence format');
+          }
+          // Images are kept in RAM only. Avoid platform browser/download
+          // history, disk image caches, redirects and signed-URL leakage.
+          final client=Dio();
+          Uint8List imageBytes;
+          try {
+            final response=await client.get<List<int>>(uri.toString(),
+              options:Options(responseType:ResponseType.bytes,
+                followRedirects:false, maxRedirects:0,
+                receiveTimeout:const Duration(seconds:20)));
+            if(!mounted||!_sameAccount||!pageContext.mounted)return;
+            final bytes=response.data;
+            if(bytes==null||bytes.isEmpty||bytes.length>2*1024*1024) {
+              throw StateError('Evidence image unavailable or exceeds 2 MB');
+            }
+            final mime=response.headers.value('content-type')?.split(';').first.trim();
+            if(mime!=null&&mime.isNotEmpty&&
+               !const {'image/png','image/jpeg','image/webp',
+                 'application/octet-stream'}.contains(mime)) {
+              throw StateError('Evidence is not a supported image');
+            }
+            imageBytes=Uint8List.fromList(bytes);
+          } finally { client.close(force:true); }
+          if(!pageContext.mounted || !_sameAccount)return;
+          final provider=MemoryImage(imageBytes);
+          try {
+            await openWalletPage<void>(context:pageContext,
+              title:'Evidence preview',
+              builder:(ctx)=>WalletReviewContent(
+                title:const Text('Bank receipt preview'),
+                content:Column(mainAxisSize:MainAxisSize.min,
+                  crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Semantics(
+                      label:'Private bank receipt image. Not proof of payment.',
+                      child:Image(image:provider,fit:BoxFit.contain,
+                        width:double.infinity,
+                        height:MediaQuery.sizeOf(ctx).height*0.52,
+                        errorBuilder:(_,__,___)=>const Text(
+                          'Image could not be displayed.'),
+                      ),
+                    ),
+                    const SizedBox(height:10),
+                    const Text('Evidence assists a dispute. Only a seller '
+                      'confirming actual bank receipt can release escrow.'),
+                  ]),
+                actions:[
+                  TextButton(onPressed:()=>Navigator.pop(ctx),
+                    child:const Text('Close preview')),
+                ],
+              ),
+            );
+          } finally {
+            await provider.evict();
           }
         },
         confirmReceipt: (order) async {
@@ -1642,7 +1709,7 @@ class _P2pOrderDetail extends StatefulWidget {
   final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(Map<String,dynamic>) uploadEvidence;
-  final Future<void> Function(String) openEvidence;
+  final Future<void> Function(BuildContext,String,String) openEvidence;
   final String userId;
   @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
 }
@@ -2110,9 +2177,11 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
                       '${_evidenceTime(item['created_at'])} · '
                       '${item['submitted_by']==widget.userId?'You':'Counterparty'}',
                       maxLines:2,overflow:TextOverflow.ellipsis),
-                    trailing:const Icon(Icons.open_in_new),
+                    trailing:Icon(item['fileType']=='pdf'
+                      ? Icons.open_in_new : Icons.visibility_outlined),
                     onTap:()async{
-                      try { await widget.openEvidence('${item['evidence_id']}'); }
+                      try { await widget.openEvidence(context,
+                            '${item['evidence_id']}', '${item['fileType']}'); }
                       catch(error) {
                         if(mounted)ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content:Text(p2pUserMessage(error))));
