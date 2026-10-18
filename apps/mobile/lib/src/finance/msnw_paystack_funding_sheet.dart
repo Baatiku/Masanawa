@@ -4,6 +4,35 @@ import 'package:flutter/services.dart';
 import 'identity_details_screen.dart';
 import 'wallet_flow_page.dart';
 
+/// A fiat provider receipt is not MSNW issuance. Only a server-linked
+/// custody issuance row can be presented as issued MSNW.
+String msnwVerifiedFundingReceiptMessage(Map<dynamic,dynamic> response) {
+  if(response['state']!='fiat_verified_backing_pending' ||
+      response['reference'] is! String ||
+      response['amountKobo'] is! String ||
+      !RegExp(r'^[1-9][0-9]*$').hasMatch(response['amountKobo'] as String)) {
+    throw const FormatException('Untrusted funding status');
+  }
+  switch(response['obligationState']) {
+    case 'msnw_issued':
+      final value=response['issuedMicro'];
+      if(value is! String || !RegExp(r'^[1-9][0-9]*$').hasMatch(value))
+        throw const FormatException('Issued MSNW amount unavailable');
+      final n=BigInt.parse(value);
+      final major=n~/BigInt.from(1000000);
+      final fraction=(n%BigInt.from(1000000)).toString().padLeft(6,'0');
+      return 'MSNW issued · $major.$fraction MSNW';
+    case 'merchant_payout_verified':
+      return 'Bank payout verified · MSNW issuance pending';
+    case 'backing_pending':
+      return 'Payment verified · reserve confirmation pending';
+    case 'registration_pending':
+      return 'Payment verified · funding registration pending';
+    default:
+      throw const FormatException('Unknown funding lifecycle state');
+  }
+}
+
 /// Bank transfer only. Paystack DVA assignment does not issue MSNW tokens.
 const bool kMsnwPaystackVerifyEnabled = bool.fromEnvironment(
   'MASANAWA_MSNW_PAYSTACK_VERIFY_ENABLED',
@@ -88,10 +117,8 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
           raw['amountKobo'] is! String) {
         throw const FormatException('Unverified transfer');
       }
-      setState(
-        () =>
-            _verificationResult = 'Payment verified · MSNW settlement pending',
-      );
+      final message=msnwVerifiedFundingReceiptMessage(raw);
+      setState(() => _verificationResult=message);
     } catch (_) {
       if (mounted)
         setState(
@@ -234,11 +261,20 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
                     },
               child: Text(_verifying ? 'Checking…' : 'Check transfer'),
             ),
-            if (_verificationResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 20),
-                child: Text(_verificationResult!, textAlign: TextAlign.center),
+            if (_verificationResult != null) ...[
+              const SizedBox(height:20),
+              Semantics(
+                liveRegion:true,
+                child:Text(_verificationResult!,textAlign:TextAlign.center),
               ),
+              if(_reference.text.trim().isNotEmpty)
+                TextButton.icon(
+                  onPressed:()=>Clipboard.setData(ClipboardData(
+                    text:_reference.text.trim())),
+                  icon:const Icon(Icons.copy_outlined),
+                  label:const Text('Copy payment reference'),
+                ),
+            ],
           ],
         ),
       ),

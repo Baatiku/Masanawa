@@ -1142,17 +1142,48 @@ final res = await _get(
 
   // ---- Transport helpers ----
 
+  /// Retry only transport/read failures on GET. POST/PATCH/DELETE (including
+  /// financial work) never get automatic replay. The originating session epoch
+  /// is retained across delays so account A cannot retry under account B.
   Future<Map<String, dynamic>> _get(String path,
       {Map<String, dynamic>? queryParameters}) async {
-    try {
-      final res = await dio.get<Map<String, dynamic>>(
-        path,
-        queryParameters: queryParameters,
-      );
-      return _body(res);
-    } on DioException catch (e) {
-      throw mapDioError(e);
+    final initiatingEpoch = _sessionEpoch;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (_sessionEpoch != initiatingEpoch) {
+        throw const ApiException(
+          'Account changed. Please open this page again.',
+          code: 'ACCOUNT_CHANGED',
+        );
+      }
+      try {
+        final res = await dio.get<Map<String, dynamic>>(
+          path,
+          queryParameters: queryParameters,
+        );
+        if (_sessionEpoch != initiatingEpoch) {
+          throw const ApiException(
+            'Account changed. Please open this page again.',
+            code: 'ACCOUNT_CHANGED',
+          );
+        }
+        return _body(res);
+      } on DioException catch (e) {
+        if (_sessionEpoch != initiatingEpoch) {
+          throw const ApiException(
+            'Account changed. Please open this page again.',
+            code: 'ACCOUNT_CHANGED',
+          );
+        }
+        final status = e.response?.statusCode;
+        final retryable = e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            status == 429 || status == 502 || status == 503 || status == 504;
+        if (!retryable || attempt == 2) throw mapDioError(e);
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+      }
     }
+    throw StateError('Unreachable GET retry state');
   }
 
   Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {

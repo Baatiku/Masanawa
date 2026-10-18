@@ -1,0 +1,34 @@
+name: Reliability Source Contracts
+
+on:
+  pull_request:
+    paths:
+      - "scripts/reliability/**"
+      - ".github/workflows/reliability-contract.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/reliability/**"
+      - ".github/workflows/reliability-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Verify release provenance and health-watch behavior
+        run: node --test scripts/reliability/*.test.mjs
+      - name: Validate backup/restore shell syntax
+        run: bash -n scripts/reliability/backup-restore.sh
+      - name: Assert backup rehearsal never contains destructive restores
+        shell: bash
+        run: |
+          ! grep -En '(dropdb|--clean|--if-exists|aws s3 rm|aws s3 sync .*--delete|pg_restore .*--clean)' scripts/reliability/backup-restore.sh

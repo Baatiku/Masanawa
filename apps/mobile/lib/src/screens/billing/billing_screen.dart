@@ -73,6 +73,19 @@ NigerianNetwork? detectNetworkFromPhone(String phone) {
   return null;
 }
 
+/// Repeating a bill never reuses an expired amount or historical package.
+BillItem? billingCurrentRepeatProduct(
+  List<BillItem> currentItems,
+  BillingQuote historical,
+) {
+  final matches=currentItems.where((candidate) =>
+    candidate.itemCode==historical.itemCode &&
+    candidate.billerCode==historical.billerCode &&
+    candidate.currency.toUpperCase()==historical.currency.toUpperCase(),
+  ).toList(growable:false);
+  return matches.length==1?matches.first:null;
+}
+
 class BillingScreen extends ConsumerStatefulWidget {
   const BillingScreen({super.key, this.initialService});
 
@@ -299,6 +312,67 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       ),
     );
     if (mounted && _owner == expected) await refreshHistory();
+  }
+
+  /// Reload provider catalog, match original recipient and product by
+  /// server IDs, then request a NEW quote with current provider terms.
+  Future<void> repeatPreviousBill(BillingCheckoutView historical) async {
+    if (busy) return;
+    final owner=_owner, previous=historical.quote;
+    final code=previous.categoryCode;
+    if(owner==null || code==null || code.isEmpty){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('Sign in again to repeat this bill.')));
+      return;
+    }
+    final generation=++_generation;
+    setState((){busy=true;error=null;});
+    try {
+      final freshCategories=await api.billingCategories();
+      if(!valid(generation,owner))return;
+      final candidates=freshCategories.where((c)=>c.code==code).toList();
+      if(candidates.length!=1)throw StateError('Previous category no longer available');
+      final freshBillers=await api.billingBillers(code);
+      if(!valid(generation,owner))return;
+      final selectedBillers=freshBillers.where(
+        (v)=>v.billerCode==previous.billerCode).toList();
+      if(selectedBillers.length!=1)
+        throw StateError('Previous provider no longer available');
+      final freshItems=await api.billingItems(previous.billerCode);
+      if(!valid(generation,owner))return;
+      final selected=billingCurrentRepeatProduct(freshItems,previous);
+      if(selected==null)throw StateError('Previous package no longer available');
+      final phone=(code.replaceAll('_','')=='AIRTIME' ||
+        code.replaceAll('_','')=='MOBILEDATA');
+      final recipient=phone
+        ? normalizeNigerianBillingPhone(previous.customerId)
+        : previous.customerId.trim();
+      if(recipient==null||recipient.isEmpty)
+        throw StateError('Previous recipient needs correction');
+      setState((){
+        category=candidates.single;
+        billers=freshBillers;biller=selectedBillers.single;
+        items=freshItems;item=selected;
+        categories=freshCategories;
+        selectedFilter='All';
+        _manualNetwork=true;
+        customer.text=recipient;
+        if(phone){
+          selectedNetwork=detectNetworkFromPhone(recipient)??selectedNetwork;
+        }
+        busy=false;
+      });
+      if(valid(generation,owner)){
+        await _showPurchaseConfirmation(selected);
+      }
+    }catch(_){
+      if(valid(generation,owner))setState((){
+        error='This old bill cannot be repeated using its saved price. '
+          'Choose a current package and check the recipient again.';
+      });
+    }finally {
+      if(valid(generation,owner) && busy)setState(()=>busy=false);
+    }
   }
 
   void _showFundingSheet() {
@@ -571,7 +645,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   subtitle: Text('Status: '+entry.phase+
                     ' · ₦'+entry.quote.totalAmount+
                     ' · '+entry.quote.customerId),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing: IconButton(
+                    tooltip:'Buy again at current price',
+                    icon:const Icon(Icons.replay_outlined),
+                    onPressed:busy?null:()=>repeatPreviousBill(entry),
+                  ),
                   onTap: () async {
                     final owner = _owner;
                     if(owner == null)return;
