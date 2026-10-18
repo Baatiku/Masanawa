@@ -25,18 +25,18 @@ export function createPgCreatorPublicReader(db:{
         AND p.character_id=a.character_id AND p.visible_in_user_app=true
     WHERE a.tenant_id=$1 AND a.state='published'`;
   return Object.freeze({
-    async listPublished(tenantId){
+    async listPublished(tenantId:TenantId){
       const result=await db.query(visible+" ORDER BY a.published_at DESC,a.character_id LIMIT 500",[tenantId]);
       return Object.freeze(result.rows.map(row=>{
         if(typeof row.character_id!=="string")throw new Error("creator.public_projection_invalid");
         return row.character_id as CharacterId;
       }));
     },
-    async isCreator({tenantId,characterId}){
+    async isCreator({tenantId,characterId}:{tenantId:TenantId;characterId:CharacterId}){
       const r=await db.query("SELECT 1 FROM identity.character_ownership WHERE tenant_id=$1 AND character_id=$2 AND kind='creator-agent' LIMIT 1",[tenantId,characterId]);
       return r.rows.length===1;
     },
-    async canChat({tenantId,characterId}){
+    async canChat({tenantId,characterId}:{tenantId:TenantId;characterId:CharacterId}){
       const result=await db.query(visible+" AND a.character_id=$2 LIMIT 1",[tenantId,characterId]);
       return result.rows.length===1;
     },
