@@ -1358,6 +1358,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   late Future<Map<String,dynamic>> _future=widget.load();
   late Future<List<Map<String,dynamic>>> _evidence=widget.listEvidence();
   bool _uploading = false;
+  bool _working = false;
   String _reasonDraft = '';
   void _refresh()=>setState((){
     _future=widget.load();
@@ -1485,6 +1486,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   }
 
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
+    if (_working) return;
     String? reason;
     if(reasonRequired) {
       final input = TextEditingController(text: _reasonDraft);
@@ -1536,6 +1538,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Confirm'))]));
       if(yes!=true)return;
     }
+    if (!mounted || _working) return;
+    setState(() => _working = true);
     try {
       await widget.act(action,reason);
       if (mounted) {
@@ -1549,9 +1553,12 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       _refresh();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Action not confirmed. Check the current order state before retrying.')));
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
+    if (_working) return;
     final typed = TextEditingController();
     try {
       final accepted = await openWalletPage<bool>(
@@ -1626,13 +1633,19 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         ),
       ) ?? false;
       if (!accepted) return;
+      if (!mounted || _working) return;
+      setState(() => _working = true);
       try {
         await widget.confirmReceipt(order);
       } catch (_) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Release result not confirmed. Refresh the original order before any retry.')));
+      } finally {
+        if (mounted) {
+          _refresh();
+          setState(() => _working = false);
+        }
       }
-      if (mounted) _refresh();
     } finally {
       typed.dispose();
     }
@@ -1698,11 +1711,11 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
             }),
         ),
         if(buyer&&state=='awaiting_payment') ...[
-          FilledButton(onPressed:()=>_perform('claim'),child:const Text('I have paid')),
-          TextButton(onPressed:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
+          FilledButton(onPressed:_working?null:()=>_perform('claim'),child:const Text('I have paid')),
+          TextButton(onPressed:_working?null:()=>_perform('cancel'),child:const Text('Cancel unpaid order')),
         ],
         if(state=='awaiting_payment'||state=='payment_claimed') ...[
-          OutlinedButton(onPressed:()=>_perform('dispute',reasonRequired:true),
+          OutlinedButton(onPressed:_working?null:()=>_perform('dispute',reasonRequired:true),
             child:const Text('Open dispute')),
         ],
         if(buyer&&(state=='expired'||state=='cancelled')) ...[
@@ -1714,7 +1727,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               'operator review. This does not reopen the MSNW escrow.')),
           if(late.isEmpty)
             OutlinedButton.icon(
-              onPressed:()=>_perform('late-payment',reasonRequired:true),
+              onPressed:_working?null:()=>_perform('late-payment',reasonRequired:true),
               icon:const Icon(Icons.report_outlined),
               label:const Text('Report bank payment sent')),
         ],
@@ -1730,7 +1743,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               'the correct transfer credited in your own bank account. '
               'A screenshot or buyer claim is not enough.')),
           FilledButton(
-            onPressed:()=>_sellerConfirm(o),
+            onPressed:_working?null:()=>_sellerConfirm(o),
             child:const Text('I received the bank payment')),
         ],
         if(state=='payment_claimed'||state=='disputed'||
