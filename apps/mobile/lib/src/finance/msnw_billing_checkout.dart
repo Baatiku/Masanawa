@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/api/billing_models.dart';
 import '../core/network/api_client.dart';
 
@@ -32,6 +33,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   bool busy=false,uncertain=false;
   final storage = const FlutterSecureStorage();
   Map<String,dynamic>? pendingBill;
+  Map<String,dynamic>? settledBill;
   String get pendingStorageKey =>
       'msnw.bill.pending.v1.${widget.expectedUserId}';
   @override void initState(){
@@ -117,6 +119,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(!same(token))return;
       setState((){
         receipt=v.cast<String,dynamic>();
+        settledBill=saved;
         uncertain=!terminalReceipt(v['state']);
         if(!uncertain)pendingBill=null;
       });
@@ -161,6 +164,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(!same(token))return;
       setState((){
         receipt=value.cast<String,dynamic>();
+        settledBill=saved;
         uncertain=!terminalReceipt(value['state']);
         if(!uncertain)pendingBill=null;
       });
@@ -267,6 +271,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       'itemName':q.itemName,
       'customerId':q.customerId,
       'totalAmount':q.totalAmount,
+      'serviceAmount':q.serviceAmount,
+      'feeAmount':q.feeAmount,
     };
     if(!validPendingBill(original)) {
       setState(()=>error='Bill reference invalid. Obtain a new verified quote.');
@@ -341,8 +347,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
         crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(widget.initialQuote != null || receipt != null ? 'Bill receipt' : 'Pay with MSNW',style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:10),
-          Text(widget.item.name),
-          Text('Recipient: '+widget.customerId),
+          Text('${settledBill?['itemName'] ?? pendingBill?['itemName'] ?? widget.item.name}'),
+          Text('Recipient: ${settledBill?['customerId'] ?? pendingBill?['customerId'] ?? widget.customerId}'),
           if(widget.initialQuote == null && receipt == null)
             TextField(controller:amount,enabled:quote==null&&!busy&&pendingBill==null,
             keyboardType:const TextInputType.numberWithOptions(decimal:true),
@@ -388,8 +394,29 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             OutlinedButton(onPressed:busy?null:recover,
               child:const Text('Check payment status')),
           if(receipt!=null)...[
+            if(settledBill!=null)...[
+              if(settledBill!['serviceAmount'] is String)
+                detail('Service','NGN '+(settledBill!['serviceAmount'] as String)),
+              if(settledBill!['feeAmount'] is String)
+                detail('Fee','NGN '+(settledBill!['feeAmount'] as String)),
+              detail('Total','NGN '+(settledBill!['totalAmount'] as String)),
+            ],
             detail('Status',status(receipt!['state'] as String)),
             detail('Reference',receipt!['fulfillmentReference'] as String),
+            TextButton.icon(
+              onPressed:()async {
+                await Clipboard.setData(ClipboardData(
+                  text:receipt!['fulfillmentReference'] as String));
+                if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content:Text('Reference copied')));
+              },
+              icon:const Icon(Icons.copy_outlined),
+              label:const Text('Copy receipt reference')),
+            if(terminalReceipt(receipt!['state']))
+              TextButton.icon(
+                onPressed:()=>Navigator.of(context).pop(),
+                icon:const Icon(Icons.replay_outlined),
+                label:const Text('Buy another bill')),
             if(receipt!['providerReference'] case final String reference when reference.isNotEmpty)
               detail('Provider reference',reference),
             if(receipt!['deliveryCode'] case final String code when code.isNotEmpty)
