@@ -29,6 +29,8 @@ export interface P2pOrder {
 export type P2pAction = "claim" | "dispute" | "cancel" | "confirm" | "release" | "refund";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const safeKey = /^[A-Za-z0-9_-]{8,128}$/;
+/** Source of truth for new-order payment timing. Never infer from a device clock. */
+export const P2P_PAYMENT_WINDOW_SECONDS = 30 * 60;
 const positiveInt = /^[1-9][0-9]*$/;
 function positive(value: unknown, max: bigint, code: string): bigint {
   if (typeof value !== "string" || !positiveInt.test(value)) throw new P2pError(code, 422);
@@ -290,7 +292,49 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         })),
       };
     },
-    async createOrder(actor: P2pActor, input: { offerId: string; amountMicro: string; idempotencyKey: string }) {
+    /** Read-only preview; the final reservation rechecks every term under lock. */
+    async quote(actor: P2pActor, input: { offerId: string; amountMicro: string }) {
+      const offerId=id(input.offerId);
+      const rows=await pool.query(`SELECT o.offer_id,o.seller_id,
+        o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
+        o.remaining_micro::text,o.fee_bps,o.state,p.bank_name,
+        p.verified_at,p.disabled_at,
+        LEAST(o.remaining_micro::numeric,
+          floor(c.available_micro::numeric * 10000 / (10000+o.fee_bps)))::text AS funded_micro
+        FROM commerce.msnw_p2p_offers o
+        JOIN commerce.msnw_p2p_payment_methods p ON p.method_id=o.payment_method_id
+          AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+        JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id
+          AND c.user_id=o.seller_id
+        WHERE o.tenant_id=$1 AND o.offer_id=$2`,[actor.tenantId,offerId]);
+      const offer=take<Record<string,unknown>>(rows,"p2p.offer_not_found");
+      if(offer.seller_id===actor.userId)throw new P2pError("p2p.self_trade_forbidden",422);
+      if(offer.state!=="active"||!offer.verified_at||offer.disabled_at)
+        throw new P2pError("p2p.offer_unavailable",409);
+      const amounts=orderAmounts(input.amountMicro,String(offer.rate_kobo_per_msnw),Number(offer.fee_bps));
+      const amount=BigInt(amounts.amountMicro);
+      if(amount<BigInt(String(offer.min_micro))||amount>BigInt(String(offer.max_micro))||
+        amount>BigInt(String(offer.funded_micro)))throw new P2pError("p2p.offer_limit",422);
+      return {
+        offerId,amountMicro:amounts.amountMicro,fiatKobo:amounts.fiatKobo,
+        feeMicro:amounts.feeMicro,rateKoboPerMsnw:String(offer.rate_kobo_per_msnw),
+        feeBps:Number(offer.fee_bps),minMicro:String(offer.min_micro),
+        maxMicro:String(offer.max_micro),availableMicro:String(offer.funded_micro),
+        bankName:String(offer.bank_name),
+        paymentWindowSeconds:P2P_PAYMENT_WINDOW_SECONDS,
+      };
+    },
+    /** Exact buyer+tenant request lookup for interrupted POST recovery. */
+    async orderByRequest(actor:P2pActor, requestKey:string) {
+      const request=key(requestKey);
+      const row=take<Record<string,unknown>>(await pool.query(`SELECT order_id,state
+        FROM commerce.msnw_p2p_orders
+        WHERE tenant_id=$1 AND buyer_id=$2 AND idempotency_key=$3`,
+        [actor.tenantId,actor.userId,request]),"p2p.order_not_found");
+      return {orderId:String(row.order_id),state:String(row.state)};
+    },
+    async createOrder(actor: P2pActor, input: { offerId: string; amountMicro: string;
+      idempotencyKey: string; expectedRateKoboPerMsnw?: string; expectedFeeBps?: number }) {
       const orderKey = key(input.idempotencyKey), offerId = id(input.offerId);
       return transact(async tx => {
         // Serialization covers *both* duplicate requests and concurrent offers.
@@ -315,6 +359,12 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         if (offer.seller_id===actor.userId) throw new P2pError("p2p.self_trade_forbidden",422);
         if (offer.state!=="active" || offer.disabled_at || !offer.verified_at)
           throw new P2pError("p2p.offer_unavailable",409);
+        if ((input.expectedRateKoboPerMsnw !== undefined &&
+            input.expectedRateKoboPerMsnw !== String(offer.rate_kobo_per_msnw)) ||
+            (input.expectedFeeBps !== undefined &&
+            input.expectedFeeBps !== Number(offer.fee_bps))) {
+          throw new P2pError("p2p.quote_changed",409);
+        }
         const amounts=orderAmounts(input.amountMicro,String(offer.rate_kobo_per_msnw),Number(offer.fee_bps));
         const a=BigInt(amounts.amountMicro);
         if(a<BigInt(String(offer.min_micro)) || a>BigInt(String(offer.max_micro)) ||
