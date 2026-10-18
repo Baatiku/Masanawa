@@ -62,8 +62,9 @@ jobs:
             python3 - "$RUNNER_TEMP/flutter-tests.log" <<'PYLOG'
           import sys
           text = open(sys.argv[1]).read()[-24000:]
-          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print('::error title=Flutter test failure::' + text)
+          for start in range(0, len(text), 3000):
+              chunk = text[start:start + 3000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error title=Flutter test failure::' + chunk)
           PYLOG
           fi
           exit "$result"
@@ -85,8 +86,9 @@ jobs:
             python3 - "$RUNNER_TEMP/flutter-build.log" <<'PYLOG'
           import sys
           text = open(sys.argv[1]).read()[-24000:]
-          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print('::error title=Flutter build failure::' + text)
+          for start in range(0, len(text), 3000):
+              chunk = text[start:start + 3000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error title=Flutter build failure::' + chunk)
           PYLOG
           fi
           exit "$result"
