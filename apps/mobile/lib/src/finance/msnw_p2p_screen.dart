@@ -69,6 +69,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   bool _loadingMore = false;
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
+  final _buyDrafts = <String, String>{};
   final _secure = const FlutterSecureStorage();
   Map<String, dynamic>? _pendingOrder;
   bool _recoveryReady = false;
@@ -280,9 +281,15 @@ n this device.')));
     }
     // An uncertain request always takes precedence over placing a new order.
     if (_pendingOrder != null) { await _resumePending(); return; }
-    final entered = await _field(
-      title: 'Buy MSNW', label: 'How much MSNW?',
-      hint: 'e.g. 10.5',
+    final offerId = '${offer['offer_id']}';
+    final entered = await openWalletPage<String>(
+      context: context,
+      title: 'Buy MSNW',
+      builder: (_) => MsnwP2pBuyAmountForm(
+        offer: offer,
+        initialAmount: _buyDrafts[offerId],
+        onChanged: (text) => _buyDrafts[offerId] = text,
+      ),
     );
     if (entered == null || !mounted) return;
     late final String micro;
@@ -789,6 +796,132 @@ n this device.')));
           },
         )),
       ]),
+    );
+  }
+}
+
+/// Amount and bounds are validated using exact integer MSNW units.
+/// Final fiat, fee and payment window are obtained from the server afterwards.
+class MsnwP2pBuyAmountForm extends StatefulWidget {
+  const MsnwP2pBuyAmountForm({
+    super.key,
+    required this.offer,
+    this.initialAmount,
+    this.onChanged,
+  });
+  final Map<String, dynamic> offer;
+  final String? initialAmount;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  State<MsnwP2pBuyAmountForm> createState() => _MsnwP2pBuyAmountFormState();
+}
+
+class _MsnwP2pBuyAmountFormState extends State<MsnwP2pBuyAmountForm> {
+  late final TextEditingController _amount;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(text: widget.initialAmount);
+    _amount.addListener(_changed);
+  }
+
+  void _changed() {
+    widget.onChanged?.call(_amount.text);
+    if (mounted) setState(() => _error = _validate());
+  }
+
+  String? _validate() {
+    try {
+      final amount = BigInt.parse(_micro(_amount.text));
+      final min = BigInt.tryParse('${widget.offer['min_micro']}');
+      final max = BigInt.tryParse('${widget.offer['max_micro']}');
+      final available = BigInt.tryParse('${widget.offer['remaining_micro']}');
+      if (min == null || max == null || available == null) {
+        return 'Offer limits are unavailable. Refresh offers.';
+      }
+      if (amount < min) return 'Below the seller’s minimum amount.';
+      if (amount > max || amount > available) {
+        return 'Amount exceeds the available offer limit.';
+      }
+      return null;
+    } catch (_) {
+      return 'Enter a positive amount with up to six decimals.';
+    }
+  }
+
+  @override
+  void dispose() {
+    _amount.removeListener(_changed);
+    _amount.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rate = _ngn(widget.offer['rate_kobo_per_msnw']);
+    return WalletReviewContent(
+      title: const Text('Buy MSNW'),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Seller’s rate', style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text('$rate per MSNW',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700)),
+              const Divider(height: 22),
+              Text('Available: ${_msnw(widget.offer['remaining_micro'])}'),
+              const SizedBox(height: 5),
+              Text('Minimum: ${_msnw(widget.offer['min_micro'])}'),
+              Text('Maximum: ${_msnw(widget.offer['max_micro'])}'),
+              if (widget.offer['bank_name'] is String) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Icon(Icons.account_balance_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('${widget.offer['bank_name']}')),
+                ]),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 22),
+          TextField(
+            key: const ValueKey('p2p-buy-amount'),
+            controller: _amount,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: 'Amount in MSNW',
+              hintText: 'e.g. 10.5',
+              errorText: _amount.text.isEmpty ? null : _error,
+            ),
+            onSubmitted: (_) {
+              if (_validate() == null) Navigator.of(context).pop(_amount.text.trim());
+            },
+          ),
+          const SizedBox(height: 12),
+          const Text('The next screen confirms current bank-payment totals, '
+            'escrow fees and deadline before you place an order.'),
+        ],
+      ),
+      actions: [
+        FilledButton(
+          onPressed: _validate() == null
+            ? () => Navigator.of(context).pop(_amount.text.trim()) : null,
+          child: const Text('Review price and fees'),
+        ),
+      ],
     );
   }
 }
