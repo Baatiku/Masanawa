@@ -159,4 +159,15 @@ describe("MSNW P2P exact money and escrow",()=>{
       .toMatchObject({code:"p2p.invalid_cursor"});
   });
 
+  it("seller balance read uses canonical own tenant-scoped custody",async()=>{
+    const {pool,statements}=mock(sql=>
+      sql.includes("FROM commerce.msnw_custody_accounts")
+        ?[{available_micro:"12345678"}]:[]);
+    const result=await createP2pService(pool,deniedWallet)
+      .sellerCapacity({tenantId:"tenant-a",userId:"seller-b"});
+    expect(result).toEqual({availableMicro:"12345678"});
+    expect(statements.some(s=>s.includes("tenant_id=$1 AND user_id=$2"))).toBe(true);
+    expect(statements.every(s=>!s.includes("UPDATE")&&!s.includes("INSERT"))).toBe(true);
+  });
+
 });
