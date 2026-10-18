@@ -1,71 +1,136 @@
-# MSNW token deployment — source only
+# MSNW token — global asset and canonical Base deployment
 
-The official customer-facing asset is MSNW. This non-upgradeable ERC-20 uses six
-decimals, separate governance/mint/burn/pause roles, unique cross-operation
-settlement references and an initial zero token supply. The burner may destroy
-its own balance only. It cannot seize customer balances.
+**Recommended network:** Base (chain ID 8453). Test first on Base Sepolia
+(chain ID 84532). The Ethereum-compatible MSNW contract is not denominated in
+NGN, USD or any other national currency. Paystack/Flutterwave are optional
+regional payment adapters; they do not determine the token's market or unit.
 
-## Local contracts toolchain
+**Source status:** not deployed merely because code is present in GitHub.
+No token supply, market price, reserve guarantee, or customer balance should be
+claimed before real chain, custody and funding evidence.
 
-Requires Foundry (forge/cast) and external, pinned OpenZeppelin Contracts 5.x
-and forge-std libraries installed under this directory's lib/. The dependencies
-are not vendored and must be installed/pinned by the release integrator. From
-contracts/msnw, run forge build and forge test. Do not commit private keys or
-any wallet seed. Environment requires MSNW_CHAIN_ID and four distinct role
-addresses: MSNW_GOVERNANCE_ADDRESS (audited multisig), MSNW_MINTER_ADDRESS,
-MSNW_BURNER_ADDRESS and MSNW_PAUSER_ADDRESS.
+Full deployment and global operating specification:
+[MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md](../../docs/token/MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md)
 
-Dry-run the script with a chosen RPC and a secure signing strategy before
-any on-chain broadcast:
+## Immutable contract profile
 
-  forge script script/DeployMasanawaToken.s.sol:DeployMasanawaToken --rpc-url RPC_URL
+- Name: **Masanawa Wallet**; symbol: **MSNW**.
+- Standard: ERC-20, Solidity 0.8.24, OpenZeppelin Contracts 5.x.
+- Precision: six decimals; initial supply: **zero**.
+- No country-specific denomination, fiat peg hardcoded in contract, transfer
+  fee, reflection tokenomics, presale allocation or arbitrary customer burn.
+- `custodian()`: immutable approved custody Safe. Every settlement mint goes
+  to that address and only that Safe can burn its own held tokens.
+- Governance: separate audited multisig with
+  `AccessControlDefaultAdminRules` two-day transfer delay.
+- Minter: separately authorized role (prefer a second multisig with dual
+  approvals); its sole permitted recipient is the custody Safe. It does not
+  prove payment or reserve backing.
+- Emergency PAUSER_ROLE: **pause only**. Unpause requires DEFAULT_ADMIN_ROLE
+  governance approval.
+- Duplicate settlement reference protection across mint and burn.
+- Source is **non-upgradeable**. If custody must migrate, use a documented
+  audited on-chain migration with customer reconciliation; do not silently
+  remap contract balances.
 
-A deployment requires separate authorization and --broadcast. Record the actual
-network, confirmed receipt, contract address, source/compiler verification and
-replay protection; populate Gateway MSNW_CHAIN_ID, MSNW_TOKEN_CONTRACT and
-MSNW_RPC_URL ONLY with confirmed matching values.
+## Build and test
 
-## Issuance rules
+Use Foundry. From `contracts/msnw`:
 
-On-chain MINTER_ROLE is not backing proof. Worker must first reconcile a
-specific immutable Paystack success reference, exact NGN reserve, exchange
-quote, unique account binding, and role authority. Unique SHA-256 settlement
-references prevent duplicate mint/burn execution on-chain but do not replace
-idempotency and provider reversal handling in PostgreSQL. Match totalSupply
-against real custody reserves and finalized chain receipts. Before refund/burn,
-collect the user's MSNW into the authorized burner/custody wallet; the burner
-cannot burn a customer's balance directly. Never burn for a fiat screenshot,
-user claim, webhook alone, or unconfirmed token receipt. The off-chain Worker
-and reserve accounting remain outstanding and MUST be finished before launch.
+```sh
+forge --version
+# Install and record immutable, reviewed commits for BOTH dependencies;
+# do not use mutable master as a production release lock.
+forge install OpenZeppelin/openzeppelin-contracts --no-commit
+forge install foundry-rs/forge-std --no-commit
+forge build
+forge test -vvv
+```
 
-This repository change does not deploy a token, create reserves, or authorize
-minting. Do not invent an address, private key, total supply or current chain.
+Keep actual reviewed dependency SHAs in the release manifest. `lib/` is not
+vendored; dependency retrieval is needed before `forge build` works. Include
+the Forge version, compiler version, optimizer settings, source commit, and
+full production deployment transaction in the release record.
 
+## Deploy with approved addresses
 
-## Reproducible finalized issuance binding
+Prepare a funded, secure Foundry deployer **separate from every token role**.
+Never put private keys in git, Railway, mobile binaries, markdown or logs.
+The script reads these non-secret role/network values:
 
-The Worker admits only an existing operator-authorized Paystack
-settlement in PostgreSQL that has progressed through backing_qualified,
-mint_authorized, and chain_submitted. For each chain_submitted reference:
+```env
+MSNW_CHAIN_ID=84532
+MSNW_GOVERNANCE_ADDRESS=
+MSNW_MINTER_ADDRESS=
+MSNW_CUSTODY_ADDRESS=
+MSNW_PAUSER_ADDRESS=
+```
 
-- settlementReference = SHA256(UTF8("masanawa:msnw:mint:v1") || 0x00 || UTF8(reference))
-- recipient = MSNW_CUSTODY_ADDRESS (platform custodian, not a self-custody customer address)
-- amountMicro = settlement.amount_micro (approved, exact six-decimal amount)
-- chain and contract must match the independently verified deployment
+All four addresses must be non-zero and mutually distinct. The custody
+address is **also** the BURNER_ROLE holder; there is deliberately no
+`MSNW_BURNER_ADDRESS` variable or autonomous burner hot wallet. Use one
+custody Safe whose transaction threshold is independently enforced.
 
-The Worker validates the finalized block and canonical receipt hash,
-chain ID, deployed code SHA-256, correct SettledMint event topic
-0x66a5f8fb8e9eb955e066808e11058dfbe29c4982773a75e58462c333c35d5bd1,
-recipient, settlement reference, token amount, and the actual finalized
-custody token balance against all existing customer custody liabilities
-plus the candidate credit. Untrusted customers never supply mint receipts.
+From `contracts/msnw` (after checking these variables):
 
-Additional Worker variables: MSNW_CUSTODY_ADDRESS and
-MSNW_TOKEN_BYTECODE_SHA256 (SHA-256 of exact deployed runtime bytecode
-returned by eth_getCode), alongside MSNW_CHAIN_ID, MSNW_TOKEN_CONTRACT,
-MSNW_RPC_URL. Do not set fabricated addresses/hashes/networks.
-A partial configuration does not enable the Worker.
+```sh
+# Base Sepolia dry run. No broadcast:
+forge script script/DeployMasanawaToken.s.sol:DeployMasanawaToken \
+  --rpc-url "$BASE_SEPOLIA_RPC_URL"
 
-Automated Paystack merchant settlement proof, MSNW pricing policy,
-custody signer and mint authorization are still outstanding external and
-implementation dependencies. Source integration is not an executed mint.
+# Actual testnet broadcast, only after dry run and review:
+forge script script/DeployMasanawaToken.s.sol:DeployMasanawaToken \
+  --rpc-url "$BASE_SEPOLIA_RPC_URL" --account msnw-deployer --broadcast
+```
+
+Confirm the real receipt and contract source on the explorer, all role
+assignments, `custodian()`, `decimals()==6`, and `totalSupply()==0`.
+Prove an actual approved mint and burn on **testnet** with a distinct
+settlement reference, including a customer transfer and pause/recovery.
+
+Only after testnet, custody/off-chain reconciler, reserve governance,
+provider acceptance, external security review and jurisdictional legal
+assessment should `MSNW_CHAIN_ID=8453` and the corresponding mainnet RPC
+be used for an **independent** mainnet deployment. Copy values from actual
+receipts and `eth_getCode`, not proposed addresses.
+
+## Funding and global markets
+
+Paystack-backed NGN admissions remain intentionally NGN-specific:
+`MSNW_MINT_PRICE_KOBO_PER_MSNW` is **only** the exact conversion unit used
+by that adapter; it is not a global MSNW peg or token definition.
+
+For other currencies, add provider-neutral funding obligations with
+`currency ISO code, minor-unit scale, exact paid amount, independent verified
+settlement, payout/reserve account, fee, FX/asset quote, expiry, and approved
+MSNW atomic output`. Each adapter must meet the same signed reserve
+admission, finality, idempotency and custody reconciliation rules. No fiat
+currency, payout route or USDC/USDT pair is presumed supported without live
+provider qualification.
+
+A nominal price or dollar reference is not the same as a legally enforceable
+stablecoin redemption promise. Decide and disclose the token's actual rights,
+reserve assets, customer redemption process and exchange/liquidity model
+before marketing it internationally. Apply applicable rules **per served
+jurisdiction**, not a single-country interpretation.
+
+## Runtime authority
+
+The Worker uses `MSNW_CHAIN_ID`, `MSNW_TOKEN_CONTRACT`,
+`MSNW_RPC_URL`, `MSNW_CUSTODY_ADDRESS`,
+`MSNW_TOKEN_BYTECODE_SHA256`. It verifies the finalized chain, exact
+mint reference, on-chain `SettledMint` event, recipient, token amount,
+deployed bytecode hash and sufficient custody reserve before crediting
+the existing customer ledger. Never make the issuance available from
+unqualified payment notifications.
+
+The signed approval workflow is in
+[MSNW-SIGNED-ISSUANCE-OPERATIONS-20261018.md](../../docs/workstreams/MSNW-SIGNED-ISSUANCE-OPERATIONS-20261018.md).
+The verified payout/fiat adapter currently supports Paystack NGN and is not
+evidence that international providers or minting have been qualified.
+
+Official references:
+- https://docs.base.org/base-chain/api-reference/ethereum-json-rpc-api/eth_chainId
+- https://docs.openzeppelin.com/contracts/5.x/access-control
+- https://docs.openzeppelin.com/contracts/5.x/api/token/erc20
+- https://docs.safe.global/advanced/smart-account-supported-networks
