@@ -76,7 +76,8 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          flutter build apk --release --no-pub \
+          # Regenerate release plugin registrants after tests; --no-pub leaves dev-only Patrol registered.
+          flutter build apk --release \
             --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app \
             --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app > "$RUNNER_TEMP/flutter-build.log" 2>&1
           result=$?
