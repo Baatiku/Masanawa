@@ -72,6 +72,22 @@ export function createMsnwCustodyService(pool: Pool) {
     return Object.freeze({ asset: "MSNW" as const, recipientUserId: target.userId,
       recipientName: target.displayName, amountMicro: micro, feeMicro: "0" as const });
   }
+  async function lookup(owner: Owner, rawKey: unknown) {
+    if (typeof rawKey !== "string" || !keyPattern.test(rawKey))
+      throw new MsnwCustodyError("msnw.idempotency_key_invalid",400);
+    const r = await pool.query(
+      "SELECT operation_id::text,recipient_user_id,amount_micro::text,created_at " +
+      "FROM commerce.msnw_custody_operations WHERE tenant_id=$1 " +
+      "AND actor_user_id=$2 AND idempotency_key=$3 AND kind='send' LIMIT 1",
+      [owner.tenantId,owner.userId,rawKey]);
+    if (!r.rowCount) return null;
+    const item = r.rows[0]!;
+    return Object.freeze({ operationId: String(item.operation_id),
+      recipientUserId: String(item.recipient_user_id),
+      amountMicro: amount(String(item.amount_micro)), feeMicro: "0" as const,
+      asset: "MSNW" as const, state: "completed" as const,
+      createdAt: at(item.created_at) });
+  }
   async function send(owner: Owner, input: Readonly<{
     recipient: unknown; recipientUserId: unknown;
     amountMicro: unknown; idempotencyKey: unknown;
@@ -81,9 +97,6 @@ export function createMsnwCustodyService(pool: Pool) {
         !keyPattern.test(input.idempotencyKey) ||
         typeof input.recipientUserId !== "string")
       throw new MsnwCustodyError("msnw.confirmation_invalid",400);
-    const target = await resolve(owner,input.recipient);
-    if (target.userId !== input.recipientUserId)
-      throw new MsnwCustodyError("msnw.recipient_changed",409);
     const db = await pool.connect();
     let began = false;
     try {
@@ -98,14 +111,22 @@ export function createMsnwCustodyService(pool: Pool) {
         [owner.tenantId,owner.userId,input.idempotencyKey]);
       if (replay.rowCount) {
         const item = replay.rows[0]!;
-        if (item.recipient_user_id !== target.userId || item.amount_micro !== micro)
+        // A committed result remains retrievable even if a recipient's
+        // email/phone is later changed or their profile becomes unavailable.
+        // Never resolve the recipient or dispatch a second debit on replay.
+        if (item.recipient_user_id !== input.recipientUserId ||
+            item.amount_micro !== micro)
           throw new MsnwCustodyError("msnw.idempotency_conflict",409);
         await db.query("COMMIT"); began = false;
         return Object.freeze({ operationId: String(item.operation_id),
-          recipientUserId: target.userId, amountMicro: micro, feeMicro: "0" as const,
+          recipientUserId: String(item.recipient_user_id),
+          amountMicro: micro, feeMicro: "0" as const,
           asset: "MSNW" as const, state: "completed" as const,
           createdAt: at(item.created_at) });
       }
+      const target = await resolve(owner,input.recipient);
+      if (target.userId !== input.recipientUserId)
+        throw new MsnwCustodyError("msnw.recipient_changed",409);
       // Creating an empty receiving account is not issuance.
       await db.query(
         "INSERT INTO commerce.msnw_custody_accounts (tenant_id,user_id) " +
@@ -170,6 +191,6 @@ export function createMsnwCustodyService(pool: Pool) {
       asset: "MSNW" as const, state: "completed" as const,
     })));
   }
-  return Object.freeze({ balance, preview, send, history, activity: createWalletActivity(pool) });
+  return Object.freeze({ balance, preview, send, lookup, history, activity: createWalletActivity(pool) });
 }
 
