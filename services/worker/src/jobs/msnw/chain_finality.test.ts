@@ -31,11 +31,14 @@ function config(changes: Record<string, unknown> = {}) {
   const fetchImpl = async (_url: string, init?: RequestInit): Promise<Response> => {
     const body = JSON.parse(String(init?.body ?? "{}"));
     methods.push(body.method);
+    const selector = body.method === "eth_call" ? body.params?.[0]?.data : null;
+    const result = selector === "0x18160ddd"
+      ? "0x" + BigInt(5000000).toString(16)
+      : selector === "0x313ce567" ? "0x6"
+      : body.method === "eth_getBlockByNumber" && body.params?.[0] === "0x63"
+        ? { number: "0x63",hash: blockHash } : value[body.method];
     return new Response(JSON.stringify({
-      jsonrpc: "2.0",id: body.id,result: body.method === "eth_getBlockByNumber" &&
-        body.params?.[0] === "0x63"
-        ? { number: "0x63",hash: blockHash }
-        : value[body.method],
+      jsonrpc: "2.0",id: body.id,result,
     }), { status: 200,headers: { "content-type": "application/json" } });
   };
   const verifier = createMsnwFinalityVerifier({
@@ -63,6 +66,24 @@ describe("MSNW on-chain finalized mint attestation", () => {
     expect(methods).toContain("eth_getTransactionReceipt");
     expect(methods).toContain("eth_getCode");
     expect(methods).toContain("eth_call");
+  });
+  it("attests finalized custody balance, supply, decimals and contract bytecode",async()=>{
+    const {verifier,methods}=config();
+    const result=await verifier.readReserve();
+    expect(result).toMatchObject({
+      blockNumber:"100",blockHash,chainId:"8453",
+      custodyBalanceMicro:"3000000",totalSupplyMicro:"5000000",
+      contract,custody,
+    });
+    expect(methods).toContain("eth_getBlockByNumber");
+    expect(methods).toContain("eth_getCode");
+    expect(methods).toContain("eth_call");
+  });
+  it("fails closed for a wrong chain or modified audited bytecode",async()=>{
+    await expect(config({eth_chainId:"0x1"}).verifier.readReserve())
+      .rejects.toMatchObject({code:"msnw.finality_wrong_chain"});
+    await expect(config({eth_getCode:"0x6000"}).verifier.readReserve())
+      .rejects.toMatchObject({code:"msnw.finality_bytecode_mismatch"});
   });
   it("rejects wrong contract bytecode and unrelated mint receipts", async () => {
     const fakeCode = config({ eth_getCode: "0x6000" });
