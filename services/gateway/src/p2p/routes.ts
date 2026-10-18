@@ -88,6 +88,10 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return reply.code(201).send(method);
     }catch(error){return respond(error,reply);}
   });
+  app.get("/v1/wallet/msnw/p2p/seller-capacity",async(req,reply)=>{
+    try {return await deps.service.sellerCapacity(await actor(req.headers.authorization));}
+    catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/methods", async (req,reply) => {
     try { return {items:await deps.service.methods(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
