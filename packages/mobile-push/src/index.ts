@@ -56,6 +56,19 @@ export function mobilePushAndroidChannel(
     : "masanawa_work";
 }
 
+/** Locked screens must never disclose a sender, message, balance or order.
+ * Until a verified per-account private-preview opt-in exists, send only
+ * generic OS-visible copy. Full context stays in the authorized app.
+ */
+export function mobilePushSafePreview(data: Readonly<Record<string, string>> | undefined): {
+  readonly title: string;
+  readonly body: string;
+} {
+  return mobilePushAndroidChannel(data) === "masanawa_calls"
+    ? { title: "Incoming Masana call", body: "Open Calls to respond" }
+    : { title: "Masanawa", body: "Open the app to view your update" };
+}
+
 export function createFcmPushSender(input: {
   readonly serviceAccountJson: string;
   readonly repository: MobilePushRepository;
@@ -123,6 +136,7 @@ export function createFcmPushSender(input: {
       const signal = AbortSignal.timeout(10_000);
       const bearer = await accessToken(signal);
       let delivered = 0;
+      const safePreview = mobilePushSafePreview(request.data);
       for (const registration of registrations) {
         const response = await fetchImpl(
           `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
@@ -139,8 +153,8 @@ export function createFcmPushSender(input: {
               message: {
                 token: registration.token,
                 notification: {
-                  title: request.title.slice(0, 120),
-                  body: request.body.slice(0, 1000),
+                  title: safePreview.title,
+                  body: safePreview.body,
                 },
                 data: {
                   ...(request.data ?? {}),
@@ -153,6 +167,7 @@ export function createFcmPushSender(input: {
                     : {}),
                   notification: {
                     channel_id: mobilePushAndroidChannel(request.data),
+                    visibility: "PRIVATE",
                     ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
                       ? {
                           sound: "default",
