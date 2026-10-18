@@ -1,5 +1,8 @@
 # MUI-07 / AF03 — mounted Wallet presentation and account-isolated reads
 
+**Current remaining work:** [Active remaining checklist and P2P design audit](#active-remaining-checklist-and-p2p-design-audit--2026-10-18). Updated from main 3d1b6bf on2026-10-18; earlier delivery/evidence sections are retained below.
+
+
 ## Delivered identity and status
 
 - Starting fresh `origin/main`: **`52c6b5a9afe83d40d1c7ee28ef5d8e7b837e5788`**. This includes MUI-01 #678, MUI-02 #680/#681, partial MUI-03 #682/#683, and MUI-05 #684/#685. All were preserved.
@@ -243,3 +246,99 @@ Final review additionally fenced late crypto operation results and concurrent ba
 - Checklist interpretation: grouped unchecked rows are partial, not untouched. Sections12 card/filter/export/receipt usability and section15 order progress/deadline/bank/help have source evidence in the preceding checkpoints; unchecked groups retain their remaining financial/support/activity gaps. No live chain, reserve backing or provider execution is claimed from source tests.
 
 Final review retained exact integer arithmetic for the displayed MSNW rate and fenced a late provider-loading completion. Final eight focused tests pass. Foundation CI on the original immutable PR head failed before runner allocation (runner empty, no steps); hosted CI is unavailable, not passing. No workflow retry or APK build was requested.
+
+
+## Active remaining checklist and P2P design audit — 2026-10-18
+
+Owner priority: P2P must feel like the same familiar, simple messaging application as Chats. Visual quality is a required customer milestone, not an optional polish pass.
+
+Audit base: main `3d1b6bfec54dcbcfc8e01c54c376165eae82d54d` (PRs178–181 integrated). This is a source/design audit, not a new rendered, handset or live-provider acceptance. The earlier 360px renders remain historical evidence for their exact source. All unchecked items below are remaining work; an existing helper or test does not complete its parent journey. This section is the current execution order; older grouped section12–16 boxes remain scope/history rather than a claim that nothing was implemented.
+
+### Preserve completed foundations
+
+- [x] Integrated source: primary-brand Wallet, real per-network asset rows, zero/unavailable separation, hide balances, Fund on card, Send/Convert/Receive/P2P and Assets/Transactions.
+- [x] Integrated source: separate profile identity collection/prefill, compact funding; full-screen financial pickers/reviews and account fences.
+- [x] Integrated source: server history search/filter/cursor/export improvements, date grouping/presets and actual reference copying.
+- [x] Integrated source: dedicated P2P routes, funded-capacity offer discovery, owner-bound banks, server-time order countdown, progress, bank copy and receipt→original-order help.
+- [x] Integrated source: billing category/network/phone/filter fixes, catalogue independent of history failures, exact review amounts, real electricity delivery codes and original-order receipt recovery.
+- [ ] Visual acceptance of the complete P2P family against the design contract below. Existing source integration is not visual completion.
+
+### Concrete findings in current source
+
+| Finding | Evidence | Required adjustment |
+|---|---|---|
+| Marketplace has four tightly packed segmented choices and generic Card/ListTile rows | `msnw_p2p_screen.dart`, marketplace build | Use compact familiar filter pills, flat white list surfaces and clear primary actions; keep Updates accessible without crowding the main task |
+| Offer subtitles combine availability, min/max and bank into one long sentence | Same offer-list builder | Give price, limits, availability and bank separate aligned positions; make offers comparable at a glance |
+| Order rows show raw state identifiers and omit a clear role, reference and readable time | Same order-list builder | Buyer/seller role, friendly state, amount, fiat total, counterparty where genuinely available, short reference and local time |
+| Order details use several plain text lines, duplicate vertical spacing and actions scattered through the list | `_P2pOrderDetail.build` | One amount/status summary, compact progress, payment card and one state-appropriate primary action; secondary help stays secondary |
+| Buy entry/review are generic field and paragraph pages; deadline is hardcoded and fee has a fallback | `_buy`, `_field`, `_confirm` | A coherent amount→review journey with structured rows, actual offer bounds and authoritative fees/deadline; no guessed financial terms |
+| Sell form exposes minimum/maximum/inventory without a simple available-funds hierarchy | `MsnwP2pSellerOfferForm` | Group related fields, show real capacity, prevent impossible ranges, keep verified bank visible and preserve the draft |
+| Evidence UI shows SHA256, raw timestamps, generic verified-user icons and technical exception strings | Evidence list / request catches | Friendly filename/type/size/date/upload state; preserve hashes internally; readable safe errors; never imply attachment authenticity |
+| Status and progress information can repeat, and the entire four-stage stepper appears for ordinary orders | `P2pOrderProgress` and order heading | One compact current-state summary with meaningful completed/current/pending steps; no false indication that buyer-reported payment equals bank receipt |
+| List loading is an indefinite spinner and empty state is generic for every tab | Marketplace FutureBuilder | Stable row skeletons, distinct empty states, one useful next action and centered retry/offline feedback |
+| Current account/route guards exist, but full visual state preservation and interruption journeys need acceptance | Screen loaders, full-page wrapper and existing tests | Preserve tab/filter/scroll/drafts; revalidate after resume; clear private state on account change; never repeat a financial action |
+
+### P2P design and journey work — implement first
+
+- [ ] **P2P-01 · P1 · Shared visual language.** White light-mode surfaces; canonical Masanawa green only for primary actions, subtle selected pills and meaningful status; charcoal labels/icons; muted gray search/field surfaces; consistent outlined rounded icons, border treatment, typography and spacing with Chats. No gradients, exchange-dashboard styling, decorative charts or blocks of explanatory copy.
+- [ ] **P2P-02 · P1 · Navigation.** One app bar/back arrow per full page, concise titles, familiar pill selection, persistent selected state, consistent transitions and predictable Android Back. Keep Buy, Sell and Orders easy to reach; Updates remains a dedicated accessible destination. Preserve shell navigation rather than adding another bottom navbar.
+- [ ] **P2P-03 · P1 · Offer cards.** Compact white rows/lightly grouped cards: actual counterparty identity if safely exposed, dominant NGN-per-MSNW rate, clear available amount and min/max, bank badge, one Buy affordance. No invented ratings, trust badges, volume or completion statistics; expose approved public data before displaying it.
+- [ ] **P2P-04 · P1 · My-offer cards.** Same visual structure; clearly distinguish active/closed/unavailable capacity, rate and remaining amount. Opening a row shows offer details/manage actions; tapping a whole row must not immediately start closing an offer.
+- [ ] **P2P-05 · P1 · Order cards.** Same density and alignment as a chat-list row: role/identity, prominent MSNW amount, fiat total, friendly status and readable time. Group active versus finished orders with simple filters; show disputed/expired states clearly. Full reference is copyable on details, not a UUID wall in the list.
+- [ ] **P2P-06 · P1 · Buy amount/review.** Show selected offer/bank, min/max, editable amount and exact payable/receivable values together; structured review instead of prose; explicit final authorization. Inline bounds/precision validation, correct keyboard and retained draft after Back or network failure.
+- [ ] **P2P-07 · P1 · Sell offer/bank.** Clean full-screen form and compact review; real spendable capacity and fee coverage; selected verified receiving bank visible; collect only missing bank details. Preserve required consent/step-up and use account-name verification results, not an invented verified state.
+- [ ] **P2P-08 · P1 · Order detail hierarchy.** Top status + amount + role, compact current progress, prominent bound payment details, deadline and one primary action appropriate to the state. Place receipt/help/dispute in consistent secondary positions. Avoid displaying inactive bank-payment instructions as a call to pay after expiry/completion.
+- [ ] **P2P-09 · P1 · Buyer payment.** Large copyable account number/name, bank and exact NGN total; order reference copy if the payment rail supports using it. Clear copy feedback. Compact contextual safety notice; no automatic “paid” state from copying details or attaching a screenshot.
+- [ ] **P2P-10 · P0/P1 · Seller release.** Clearly separate “Buyer reported payment” from “Payment received.” Dedicated review with expected bank amount, order and actual-receipt acknowledgment; retain existing step-up/explicit release safeguards. Review repeated confirmation friction only against the current security contract; never remove authority checks as cosmetic cleanup.
+- [ ] **P2P-11 · P1 · Dispute/late-payment pages.** Dedicated reason/evidence form, short field labels, retained draft, clear submission state, case reference and existing outcome. Explain refund/freeze/release only at the relevant state; no repeated warnings on every screen and no implication an expired refunded order automatically reopens.
+- [ ] **P2P-12 · P1 · Evidence.** Document-style attachment rows/thumbnail where appropriate, file metadata, upload progress, retry, permission denied and expired-link recovery. Hide implementation hashes from normal UI. Failed upload must not look attached; preview remains owner-authorized.
+- [ ] **P2P-13 · P1 · Receipts/updates.** Consistent receipt summary, amount/fee/net/fiat, original order/provider references, readable local time and copy/share through supported native controls. Updates open the exact original order, show friendly states and never simulate a new chat message or provider result.
+- [ ] **P2P-14 · P1 · Loading/empty/error/offline.** Separate no offers, no own offers, no orders, no updates and partial failure; use centered feedback, matched skeletons and one relevant action. Retain valid loaded content with a stale/offline indication; payment/release needs server authorization. Failed refresh never resets confirmed balances to zero.
+- [ ] **P2P-15 · P0 · Uncertain creation/action recovery.** Inspect and close the new-idempotency-key-on-re-entry gap for order creation and significant actions. Persist/recover the original owner-scoped request/order identity as appropriate; prevent duplicate submissions, reconcile unknown outcomes before creating another order, show in-progress state and prevent repeated taps.
+- [ ] **P2P-16 · P0 · Server-authoritative terms.** Replace the mobile hardcoded 30-minute review deadline/default fee with returned policy/quote terms; atomically validate offer bounds/capacity/fees on create. If terms changed, show the actual revised review before another authorization. Preserve existing canonical per-order reservation and all settlement invariants.
+- [ ] **P2P-17 · P1 · Activity.** Server-side pagination/filtering for larger offer/order/update histories, useful Active/Finished/All choices, accessible disputed/expired cases, pull-to-refresh and stable scroll. Preserve authoritative expiry; no local timer-driven refund/settlement.
+- [ ] **P2P-18 · P1 · Accessibility and low-end Android.** 48dp touch targets, visible focus, screen-reader labels for amounts/status/copy, non-color status cues, large-font wrapping, keyboard-safe bottom actions, safe areas, RTL/localized dates and exact decimals. Verify narrow 320/360px layouts, 200% text and low-connectivity/resume behavior. Announce meaningful state changes rather than the countdown every second.
+
+### P2P page contract for the next implementation
+
+| Page | Top-to-bottom layout and primary control | States/back behavior that must work |
+|---|---|---|
+| Marketplace / Buy | App bar → subtle search/filter when useful → selection pills → comparable offer rows | Skeleton, no supported offers, stale/offline, retry; selection/scroll retained |
+| Sell / My offers | Same header/pills → verified-bank entry → own-offer rows → Create offer | No bank/no offers/capacity unavailable; no accidental close from row tap |
+| Offer details / amount | Offer summary → bank/rate/limits → amount + exact totals → Continue | Invalid amount, changed/closed offer, insufficient capacity; Back retains input |
+| Buy review | Pay/receive summary → fees/bank/terms → Confirm order | Unknown creation outcome resolves original request; no second order |
+| Create/edit sell offer and review | Selected verified bank → rate/range/capacity → structured review → Publish | Validation, step-up cancelled, insufficient capacity, unknown publish; retain draft |
+| Bank selection/verification | Searchable list → account input → returned account name/consent → verification | Provider failure, mismatch, missing identity, denied/expired step-up; no duplicate KYC |
+| Orders | Simple activity filters → grouped order rows | Pagination, no matching orders, partial refresh; stable state |
+| Order details / buyer payment | State/amount/role → progress → bound bank/total → deadline → I have paid | Awaiting/reporting/claimed/disputed/completed/expired/cancelled; valid primary action only |
+| Seller release review | Actual expected receipt/amount → acknowledgment → Authorize release | Step-up, double tap, timeout, stale state; original order recovery |
+| Dispute / late-payment case | State + original reference → reason/evidence → Submit or existing case outcome | Upload permission/failure, existing case, frozen/refunded escrow; Back preserves draft |
+| Evidence viewer | File metadata → authorized preview/open → native share if supported | Unavailable/expired link, unsupported type, denied access; private data fenced |
+| Receipt / Updates | Receipt or dated update rows → original order → contextual help | Original reference, localization, no provider/reference fabrication; no financial writes from viewing |
+
+Every page uses the same app bar, type scale, field surfaces, action treatment and spacing as Chats/Wallet. No popups for these application flows. Native permission/file/share controls remain platform-owned. No new user-to-user chat, ratings system, tutorials or trading products are required.
+
+### Remaining Wallet/services/financial work after the P2P milestone
+
+- [ ] **FIN-01 · P0 · MSNW issuance/custody completion.** Establish actual chain/verified contract and deployment authority, controlled custody/signers, verified funding/backing, issuance and supply/treasury/customer-obligation reconciliation. Inspect existing implementations and complete missing composition; retain separate source and live-execution evidence.
+- [ ] **FIN-02 · P0 · Full funding lifecycle.** Payment detected → verification → issuance pending → settled/reversed/failed; derive exact fees/rate/issued MSNW from canonical evidence. Compact first-funding facts (minimum/charges/expected time) only when provided by actual policy, with a complete funding receipt.
+- [ ] **FIN-03 · P0 · One balance and recovery.** Send/P2P/bills/conversion use the same authorized spendable balance; mint/burn and payout uncertainty recover existing submissions; reversals/chargebacks reconcile safely. Preserve historical Credits/MSN/NGN obligations without relabeling them as MSNW.
+- [ ] **FIN-04 · P0 · Real crypto availability.** Connected-account supported assets/networks, limits/liquidity/conversion routes and authorized/whitelisted withdrawals. Listed support is not evidence of executable capability.
+- [ ] **FIN-05 · P1 · Crypto details/review.** Real deposit address/QR/network/minimum/confirmation progress; exact source/received/fees/rate/expiry; full destination/network/net review; genuine explorer links. Saved verified addresses remain optional and reuse current step-up.
+- [ ] **WAL-01 · P1 · Complete receipts/status/help.** Fill remaining gross/fee/net/provider/time evidence gaps across categories; distinguish available/reserved/pending without adding pending to spendable money; reference-linked help/cases beyond existing P2P help, with case progress/outcome.
+- [ ] **BILL-01 · P0 · Cross-quote duplicate recovery.** Prevent a second charge when another quote/device already has an uncertain matching purchase; reconcile the original provider request. Existing same-quote replay protection remains.
+- [ ] **BILL-02 · P1 · Complete service journeys.** Actual provider meter/customer and TV/smartcard/renewal validation; product-supplied package size/validity/network/eligibility; exact fees/total before authorization; original receipts/tokens/status/support.
+- [ ] **BILL-03 · P1 · Easy repeat purchases.** Optional recent/saved recipient reuse from owner-scoped history; editable recipient/product and a fresh authorized quote, never automatic repeat spending.
+- [ ] **APP-01 · P1 · Cross-screen visual continuity.** Apply this same contract to Wallet home, asset detail, funding, Send/Receive/Convert/Withdraw, history/filter/export, billing and identity pages. Audit default Material controls, duplicate headings, oversized inputs, body-copy walls, inconsistent radii and cramped search wherever they remain.
+- [ ] **APP-02 · P1 · State/accessibility acceptance.** Preserve drafts/tab/filter/scroll; revalidate after account switch, logout, interruption and resume; friendly centered network/error states; large-text/screen-reader/narrow-phone acceptance and appropriate light/dark contrast.
+
+### Implementation order and completion evidence
+
+1. P2P visual milestone: P2P-01–14 and18, with connected page journeys; implement P2P-15–16 alongside the affected create/release flows rather than postponing demonstrated duplicate/terms risks.
+2. P2P activity/pagination and contextual support; complete WAL-01 and billing source gaps.
+3. Complete provider/custody/funding/crypto authority composition from actual current source; independent UI/source work continues while external credentials or device acceptance are pending.
+4. Owner handset acceptance. No APK compilation requested in this audit.
+
+For each delivered milestone: inspect current main/claims; own exact files; preserve recent work; test buyer and seller journeys, denied/expired step-up, stale terms, duplicate taps, uncertain result, cancelled/expired/disputed order, missing bank/receipt, offline/resume and account isolation. Render/review the entire page family at phone sizes before marking visual acceptance. Record source SHA, integrated SHA, screenshots/test results and remaining device/provider checks separately.
+
+Design reference reviewed 2026-10-18: [Meta, Keeping WhatsApp fresh, simple and approachable](https://www.meta.com/design-at-meta/blog/whatsapp-user-interface-update/) (published2024-05-09). Adopt its documented simplicity, neutral surfaces, selective unified green, rounded outlined icons and familiar navigation. The P2P layout/details above are Masanawa-specific proposals, not claims that WhatsApp ships these financial features. Avoid chasing unconfirmed beta styling or adding friction to imitate a screenshot.
