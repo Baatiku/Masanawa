@@ -1137,10 +1137,19 @@ class _P2pOrderDetail extends StatefulWidget {
 class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   late Future<Map<String,dynamic>> _future=widget.load();
   late Future<List<Map<String,dynamic>>> _evidence=widget.listEvidence();
+  bool _uploading = false;
   void _refresh()=>setState((){
     _future=widget.load();
     _evidence=widget.listEvidence();
   });
+  String _evidenceTime(Object? raw) {
+    final date = DateTime.tryParse('${raw ?? ''}')?.toLocal();
+    if (date == null) return 'recently';
+    final locale = MaterialLocalizations.of(context);
+    return '${locale.formatMediumDate(date)} · '
+      '${locale.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+  }
+
   Future<void> _showReceipt() async {
     try {
       final receipt=await widget.loadReceipt();
@@ -1178,6 +1187,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     }
   }
   Future<void> _uploadEvidence() async {
+    if (_uploading) return;
+    setState(() => _uploading = true);
     try {
       final file=await FilePicker.pickFile(
         type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf']);
@@ -1198,9 +1209,11 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         'contentType':contentType,'contentBase64':base64Encode(bytes),
       });
       if(mounted)_refresh();
-    } catch(error) {
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:Text('Could not attach evidence: $error')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Attachment failed. Check file permissions, connection and the 2 MB limit.')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -1339,9 +1352,10 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           Text('Payment evidence',style:Theme.of(context).textTheme.titleMedium),
           const Text('Optional. Attach a bank receipt only to assist a dispute. '
             'Screenshots and attachments never release MSNW escrow.'),
-          OutlinedButton.icon(onPressed:_uploadEvidence,
-            icon:const Icon(Icons.upload_file_outlined),
-            label:const Text('Attach receipt (2 MB max)')),
+          OutlinedButton.icon(onPressed:_uploading?null:_uploadEvidence,
+             icon:Icon(_uploading?Icons.hourglass_top:Icons.upload_file_outlined),
+             label:Text(_uploading?'Uploading receipt…':'Attach receipt (2 MB max)')),
+           if(_uploading)const LinearProgressIndicator(),
           FutureBuilder<List<Map<String,dynamic>>>(future:_evidence,
             builder:(ctx,snapshot){
               if(snapshot.connectionState!=ConnectionState.done)
@@ -1352,10 +1366,11 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               return Column(children:[
                 for(final item in items)
                   ListTile(
-                    leading:const Icon(Icons.verified_user_outlined),
-                    title:Text('Evidence ${item['created_at'] ?? ''}'),
-                    subtitle:Text('SHA256: ${item['sha256'] ?? ''}',
-                      maxLines:1,overflow:TextOverflow.ellipsis),
+                    leading:const Icon(Icons.insert_drive_file_outlined),
+                     title:const Text('Bank receipt attachment'),
+                     subtitle:Text('Added ${_evidenceTime(item['created_at'])} · '
+                       '${item['submitted_by']==widget.userId?'You':'Counterparty'}',
+                       maxLines:2,overflow:TextOverflow.ellipsis),
                     trailing:const Icon(Icons.open_in_new),
                     onTap:()async{
                       try { await widget.openEvidence('${item['evidence_id']}'); }
