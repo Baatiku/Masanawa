@@ -86,6 +86,24 @@ export function createMsnwMerchantSettlementRuntime(input: Readonly<{
     catch { throw new MsnwMerchantSettlementError("msnw.paystack_payload_invalid"); }
     if (body.status !== true || !Array.isArray(body.data))
       throw new MsnwMerchantSettlementError("msnw.paystack_payload_invalid");
+    // Real Paystack responses provide page/pageCount/perPage. Never mark a
+    // provider settlement completely scanned if metadata says another page
+    // exists but the response was silently truncated or capped.
+    if (body.meta !== undefined) {
+      const meta = object(body.meta);
+      const requested = new URL("https://api.paystack.co" + path);
+      const page = Number(requested.searchParams.get("page"));
+      const perPage = Number(requested.searchParams.get("perPage"));
+      if (!Number.isSafeInteger(page) || page < 1 ||
+          !Number.isSafeInteger(perPage) || perPage < 1 ||
+          !Number.isSafeInteger(meta.page) || meta.page !== page ||
+          !Number.isSafeInteger(meta.perPage) || meta.perPage !== perPage ||
+          !Number.isSafeInteger(meta.pageCount) || meta.pageCount < 0 ||
+          (meta.pageCount < page && body.data.length > 0) ||
+          (meta.pageCount > page && body.data.length < perPage)) {
+        throw new MsnwMerchantSettlementError("msnw.paystack_pagination_invalid");
+      }
+    }
     return body.data;
   }
   // Always recheck the newest page; rotate the remaining read budget
