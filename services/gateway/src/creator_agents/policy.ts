@@ -63,6 +63,9 @@ export function createCreatorPolicyService(pool:CreatorPool) {
     freeSubstantiveEdits=num(v.freeSubstantiveEdits,"free_edits",100),
     revenueShareBps=num(v.revenueShareBps,"revenue_share",10000),
     maxPostsWeekly=num(v.maxPostsWeekly,"post_cap",21);
+   // The canonical lifetime entitlement table grants exactly one free Masana.
+   // Keep the UI and policy coherent until a reviewed multi-slot migration exists.
+   if (firstFreeCount !== 1) throw new CreatorAgentError("creator.first_free_count_fixed",400);
    if(typeof v.reason!=="string"||v.reason.trim().length<8||v.reason.length>300)
     throw new CreatorAgentError("creator.invalid_policy_reason",400);
    const client=await pool.connect();let active=false;
