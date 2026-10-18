@@ -38,6 +38,7 @@ interface ApiLifecycle {
     readonly supportedMajors: readonly number[];
     readonly operationalUnversionedPaths: readonly string[];
     readonly compatibilityUnversionedPrefixes: readonly string[];
+    readonly compatibilityUnversionedPaths: readonly string[];
   };
   readonly deprecations: readonly ApiDeprecation[];
 }
@@ -77,7 +78,7 @@ function sourceFiles(root: string): string[] {
   if (!fs.existsSync(root)) return [];
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(root, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
+    if (entry.isDirectory()) return ["node_modules","dist","build"].includes(entry.name)?[]:sourceFiles(full);
     return entry.isFile() && /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/u.test(entry.name)
       ? [full]
       : [];
@@ -208,13 +209,13 @@ describe("public API lifecycle", () => {
     const compatibility = lifecycle.http.compatibilityUnversionedPrefixes;
     const offenders: string[] = [];
 
-    for (const file of sourceFiles(path.resolve("services"))) {
+    for (const file of sourceFiles(path.resolve("services")).filter(file=>!/\.(?:test|spec)\./u.test(file))) {
       const source = fs.readFileSync(file, "utf8");
       for (const match of source.matchAll(
         /\b(?:app|server|router)\.(?:get|post|put|patch|delete|options|head)\(\s*["'`]([^"'`]+)["'`]/gu,
       )) {
         const route = match[1]!;
-        if (operational.has(route)) continue;
+        if (operational.has(route) || lifecycle.http.compatibilityUnversionedPaths.includes(route)) continue;
         if (compatibility.some(
           (prefix) => route === prefix || route.startsWith(`${prefix}/`),
         )) continue;

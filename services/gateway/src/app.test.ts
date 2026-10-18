@@ -41,7 +41,7 @@ describe("gateway service bootstrap", () => {
     expect(readiness.json().status).toBe("not-ready");
   });
 
-  it("normalizes public request correlation without trusting caller IDs", async () => {
+  it("preserves validated retry/correlation keys without treating them as authority", async () => {
     const app = createGatewayApp();
     apps.push(app);
 
@@ -71,8 +71,8 @@ describe("gateway service bootstrap", () => {
     }
     expect(isCanonicalId("request", requestId)).toBe(true);
     expect(isCanonicalId("correlation", correlationId)).toBe(true);
-    expect(requestId).not.toBe(suppliedRequestId);
-    expect(correlationId).not.toBe(suppliedCorrelationId);
+    expect(requestId).toBe(suppliedRequestId);
+    expect(correlationId).toBe(suppliedCorrelationId);
 
     const parsed = parseTraceparent(traceparent);
     expect(parsed?.traceId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");

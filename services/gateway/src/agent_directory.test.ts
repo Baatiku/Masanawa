@@ -79,7 +79,8 @@ describe("mobile agent directory", () => {
         supportAgent: false,
         defaultPlatformAgent: false,
         voiceProvider: null,
-        voiceName: null,
+        voiceName: null, countryCode:null,countryName:null,
+        following:false,conversationStarters:[],socialChannels:[],
       },
     ]);
     expect(entries[0]).not.toHaveProperty("skillVersionIds");
@@ -202,4 +203,14 @@ describe("mobile agent directory", () => {
     ).rejects.toThrow("denied");
     expect(reads).toBe(0);
   });
+});
+
+it("projects authored country metadata only after directory authorization",async()=>{
+ const scope={tenantId,userId};
+ const service=createAgentDirectoryService({
+  presentations:{async listVisible(){return [{...presentation,countryCode:"NG",countryName:"Nigeria"}];}} as never,
+  authorizer:{async authorize(input){if(input.authorizationHeader!=="Bearer session")throw Error("unauthorized");return scope;}},
+ });
+ await expect(service.list({authorizationHeader:"Bearer forged"})).rejects.toThrow("unauthorized");
+ expect((await service.list({authorizationHeader:"Bearer session"}))[0]).toMatchObject({countryCode:"NG",countryName:"Nigeria"});
 });

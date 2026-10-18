@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { beforeAll, afterAll, it, expect } from "vitest";
+import { beforeAll, afterAll, it as test, expect } from "vitest";
 import { createPostgresPool, type Pool } from "@masanawa/postgres";
 import { createPostgresGroupCallRepository } from "./postgres_repository.js";
+const it=test.skipIf(!process.env.MASANAWA_TEST_DATABASE_URL);
 let admin: Pool;
 let pool: Pool;
 const name = `group_calls_${randomUUID().replaceAll("-", "")}`;

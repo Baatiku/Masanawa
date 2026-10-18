@@ -22,6 +22,14 @@ export function registerTalkGiftRoutes(
   app.post(
     "/talks/:talkId/gifts",
     {
+      preValidation: async (request) => {
+        const body = request.body;
+        if (body !== null && typeof body === "object" && !Array.isArray(body) &&
+            Object.keys(body).some((key) =>
+              !["requestId", "catalogItemId", "amountCredits"].includes(key))) {
+          throw Object.assign(new Error("Invalid request"), { statusCode: 400 });
+        }
+      },
       schema: {
         params: Type.Object(
           { talkId: Type.String({ minLength: 1, maxLength: 160 }) },

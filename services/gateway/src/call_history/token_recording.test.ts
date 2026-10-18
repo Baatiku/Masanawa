@@ -4,7 +4,7 @@ import { createGeminiLiveTokenService } from "../live_voice_token.js";
 const characterId = "character_0199a000-0000-7000-8000-000000000001";
 function setup(ok = true) {
   const recordIssued = vi.fn(async () => "0199a000-0000-7000-8000-000000000002");
-  const authorize = vi.fn(async () => ({ scope: { tenantId: "tenant-a", userId: "user-a" } }));
+  const authorize = vi.fn(async () => ({ scope: { tenantId: "tenant-a", userId: "user-a" }, presentation: {displayName:"Malam Musa",roleLabel:"Teacher",about:"Teaches clearly"} }));
   const readForCharacter = vi.fn(async (): Promise<{ voiceProvider: string; voiceName: string } | null> => ({ voiceProvider: "gemini", voiceName: "Kore" }));
   const fetchImpl = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(JSON.stringify({ name: "ephemeral-test-token-value" }), { status: ok ? 200 : 503 }));
   const service = createGeminiLiveTokenService({
@@ -39,7 +39,9 @@ describe("server-issued call history", () => {
   });
   it("does not record a successful call attempt when provider provisioning fails", async () => {
     const { service, recordIssued } = setup(false);
-    await expect(service.mint({ characterId, authorizationHeader: undefined })).rejects.toThrow("provisioning failed");
+    await expect(service.mint({ characterId, authorizationHeader: undefined })).rejects.toMatchObject({
+      code: "agent.provider_unavailable", statusCode: 503, providerStatus: 503,
+    });
     expect(recordIssued).not.toHaveBeenCalled();
   });
   it("does not return credentials if persistence fails", async () => {

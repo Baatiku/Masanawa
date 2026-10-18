@@ -20,7 +20,10 @@ describe("Railway recovery contracts (no production side effects)", () => {
     expect(gateway.scripts.start).toBe("node --conditions=production dist/main.js");
     expect(gateway.scripts.migrate).toBe("node --conditions=production dist/migrate.js");
     expect(gateway.scripts.start).not.toMatch(/migrate|bootstrap|alpha:prepare/u);
-    expect(gatewayRailway).toContain('startCommand = "pnpm --filter @masanawa/gateway-service start"');
+    expect(gatewayRailway).toContain('startCommand = "bash infra/deployment/gateway/start-with-presence.sh"');
+    const startup=source("infra/deployment/gateway/start-with-presence.sh");
+    expect(startup).toContain("pnpm --filter @masanawa/gateway-service migrate");
+    expect(startup.indexOf("gateway-service migrate")).toBeLessThan(startup.indexOf("gateway-service start"));
     // Health alone is not proof the schema matches this deployed release.
     expect(gatewayRailway).toContain('healthcheckPath = "/readyz"');
   });

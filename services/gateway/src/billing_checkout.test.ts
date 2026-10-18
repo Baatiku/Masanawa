@@ -639,19 +639,12 @@ describe("billing checkout", () => {
       customerId: "+2348012345678",
       amount: "100",
     });
-    const quotedDoc = quoted.document as {
-      id: string;
-      revision: number;
-      nodes: Array<{ action?: string; token?: string }>;
-    };
-    const start = quotedDoc.nodes.find((node) => node.action === "billing.checkout.start")!;
     at = "2026-10-04T20:00:30.000Z";
-    const checkoutExecution = await service.executeShellAction({
-      authorizationHeader: "Bearer session",
-      documentId: quotedDoc.id,
-      revision: quotedDoc.revision,
-      actionId: "billing.checkout.start",
-      token: start.token!,
+    // Hosted checkout API remains recoverable; the current quote UI uses
+    // wallet confirmation, so do not invent a removed checkout button.
+    const checkoutExecution=await service.startCheckout({
+      authorizationHeader:"Bearer session",quoteId:quoted.quote.quoteId,
+      quoteRevision:quoted.quote.revision,
     });
     const checkoutDoc = checkoutExecution.document as {
       id: string;

@@ -34,7 +34,8 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   // The server checks author ownership and published visibility in the same
   // tenant-scoped read. A client query never authorizes unpublished content.
   const author=q.authorMasanaId;
-  if(author!==undefined&&(typeof author!=="string"||author.length>128))
+  if(Object.keys(q).some(key=>key.startsWith("authorMasanaId[")||key.startsWith("authorMasanaId."))||
+    (author!==undefined&&(typeof author!=="string"||author.length>128)))
     return rep.code(422).send({code:"invalid_author"});
   return o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
     typeof author==="string"?author:undefined);
