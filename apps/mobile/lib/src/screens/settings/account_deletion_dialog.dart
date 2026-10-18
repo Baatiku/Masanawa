@@ -249,11 +249,24 @@ class _AccountDeletionDialogState extends ConsumerState<AccountDeletionDialog> {
                     'Your request needs attention before it can be completed. '
                     'Your account has not been confirmed deleted.',
                   )
+                else if (request.phase == 'awaiting-settlement')
+                  const Text(
+                    'Your request has been verified. Financial or subscription '
+                    'records still need settlement and retention review. '
+                    'Your money, receipts and disputes remain protected while '
+                    'the request is on hold. Your account is not yet deleted.',
+                  )
+                else if (request.phase == 'processing')
+                  const Text(
+                    'Your request is being processed. We are revoking access '
+                    'and removing eligible personal data, while retaining '
+                    'records required for security and lawful obligations.',
+                  )
                 else
                   const Text(
                     'Your deletion request is verified and recorded. '
-                    'Processing and any legally required financial reconciliation '
-                    'are still pending. Your account is not yet confirmed deleted.',
+                    'Processing has not finished, and your account has not '
+                    'yet been confirmed deleted.',
                   ),
                 const SizedBox(height: 10),
                 SelectableText(
