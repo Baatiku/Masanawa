@@ -507,21 +507,34 @@ class SessionController extends Notifier<SessionState> {
         ),
       );
 
-      // Migration must never delay the first useful screen.
-      unawaited(
-        _storage
-            .write(
-              key: _kSession,
-              value: jsonEncode({
-                'accessToken': tokens.accessToken,
-                'refreshToken': tokens.refreshToken,
-                'accessExpiresIn': tokens.accessExpiresIn,
-                'user': tokens.user.toJson(),
-              }),
-            )
-            .catchError((_) {}),
-      );
-      return tokens;
+      // The old fire-and-forget write could race sign-out and recreate a
+      // deleted bearer record. Migrate once through the same serialized queue
+      // as refresh/login/logout; never write credentials after epoch change.
+      final migrationEpoch = _authEpoch;
+      try {
+        await _writeCredentials(() async {
+          if (migrationEpoch != _authEpoch) return;
+          await _storage.write(
+            key: _kSession,
+            value: jsonEncode({
+              'accessToken': tokens.accessToken,
+              'refreshToken': tokens.refreshToken,
+              'accessExpiresIn': tokens.accessExpiresIn,
+              'user': tokens.user.toJson(),
+            }),
+          );
+          // Only delete legacy records after the new encrypted record is
+          // durable. A failed migration keeps the old valid credentials.
+          await _storage.delete(key: _kAccess);
+          await _storage.delete(key: _kRefresh);
+          await _storage.delete(key: _kExpiry);
+          await _storage.delete(key: _kUser);
+        });
+      } catch (_) {
+        // A secure-store migration failure is not permission to sign out a
+        // valid legacy session; retry on a later launch.
+      }
+      return migrationEpoch == _authEpoch ? tokens : null;
     } catch (_) {
       return null;
     }
