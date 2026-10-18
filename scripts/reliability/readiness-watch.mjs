@@ -43,22 +43,46 @@ export async function probe(name, baseUrl, fetchImpl = fetch) {
 }
 
 export function evaluateJobs(report, maxLagSeconds = 300) {
-  if (!report || !Array.isArray(report.jobs)) return 'unknown';
+  if (!report || !Array.isArray(report.jobs) || report.jobs.length === 0) return 'unknown';
+  let enabled = 0;
+  let unstarted = 0;
   for (const job of report.jobs) {
-    if (typeof job.name !== 'string' || !Number.isInteger(job.stuck) ||
-      !Number.isFinite(job.oldestPendingSeconds) ||
-      job.stuck < 0 || job.oldestPendingSeconds < 0) return 'invalid';
+    if (typeof job.name !== 'string' || !job.name ||
+        !Number.isInteger(job.stuck) || job.stuck < 0) return 'invalid';
+    // The worker's canonical scheduler reports process-local activity.
+    if (typeof job.enabled === 'boolean') {
+      if (!Number.isInteger(job.consecutiveFailures) || job.consecutiveFailures < 0 ||
+          !Number.isFinite(job.runningSeconds) || job.runningSeconds < 0 ||
+          (job.lastSuccessAgeSeconds !== null &&
+           (!Number.isFinite(job.lastSuccessAgeSeconds) || job.lastSuccessAgeSeconds < 0))) {
+        return 'invalid';
+      }
+      if (!job.enabled) continue; // absent optional adapter, not a stuck lease
+      enabled++;
+      if (job.stuck > 0 || job.consecutiveFailures >= 3 ||
+          job.runningSeconds > maxLagSeconds ||
+          (job.lastSuccessAgeSeconds !== null &&
+           job.lastSuccessAgeSeconds > maxLagSeconds)) return 'delayed';
+      if (job.lastSuccessAgeSeconds === null) unstarted++;
+      continue;
+    }
+    // Compatible with a future authoritative DB-queue report.
+    if (!Number.isFinite(job.oldestPendingSeconds) ||
+        job.oldestPendingSeconds < 0) return 'invalid';
+    enabled++;
     if (job.stuck > 0 || job.oldestPendingSeconds > maxLagSeconds) return 'delayed';
   }
+  if (enabled === 0 || unstarted > 0) return 'unknown';
   return 'ready';
 }
 
-export async function probeJobs(baseUrl, fetchImpl = fetch, maxLagSeconds = 300) {
+export async function probeJobs(baseUrl, token, fetchImpl = fetch, maxLagSeconds = 300) {
   const url = safeHttps(baseUrl);
+  if (!token || token.length < 32) return { service: 'jobs', state: 'unauthorized' };
   try {
     const response = await fetchImpl(url, {
       method: 'GET', redirect: 'error',
-      headers: { accept: 'application/json' },
+      headers: { accept: 'application/json', authorization: 'Bearer ' + token },
       signal: AbortSignal.timeout(4000),
     });
     if (!response.ok) return { service: 'jobs', state: 'http_' + response.status };
@@ -107,7 +131,7 @@ export async function main(env = process.env, fetchImpl = fetch) {
     probe('gateway', env.MASANAWA_GATEWAY_URL, fetchImpl),
     probe('worker', env.MASANAWA_WORKER_URL, fetchImpl),
     ...(env.MASANAWA_JOB_HEALTH_URL
-      ? [probeJobs(env.MASANAWA_JOB_HEALTH_URL, fetchImpl)]
+      ? [probeJobs(env.MASANAWA_JOB_HEALTH_URL, env.MASANAWA_JOB_HEALTH_TOKEN, fetchImpl)]
       : []),
   ]);
   const healthy = results.every((x) => x.state === 'ready');
