@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/admin_api.dart';
 import '../core/admin_masana_api.dart';
 import 'admin_masana_forms.dart';
+import 'admin_creator_policy_page.dart';
 
 class AdminMasanaPage extends StatefulWidget {
   const AdminMasanaPage({super.key,required this.api});
@@ -89,6 +90,13 @@ class _AdminMasanaPageState extends State<AdminMasanaPage> {
     Padding(padding:const EdgeInsets.all(12),child:Row(children:[
       Expanded(child:Text('Professional Masana profiles',
         style:Theme.of(context).textTheme.titleLarge)),
+      IconButton(
+        tooltip:'Creator fee and earnings settings',
+        icon:const Icon(Icons.tune_outlined),
+        onPressed:()=>Navigator.of(context).push(
+          MaterialPageRoute<void>(builder:(_)=>AdminCreatorPolicyPage(api:_api)),
+        ),
+      ),
       IconButton(onPressed:_busy?null:_refresh,tooltip:'Refresh profiles',
         icon:const Icon(Icons.refresh)),
       if(_busy)const SizedBox(width:16,height:16,
