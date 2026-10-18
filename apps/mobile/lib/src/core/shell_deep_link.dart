@@ -9,6 +9,36 @@ String? shellDeepLinkRoute(Uri uri) {
     return null;
   }
 
+  // Navigation hints never grant access. The target screen loads its own
+  // authorized resource after sign-in; no caller-supplied tokens or queries.
+  if (uri.scheme == 'masanawa' && uri.queryParameters.isEmpty) {
+    final segments = uri.pathSegments;
+    if (uri.host == 'rooms' && segments.length == 1 &&
+        _validResourceId(segments.single)) {
+      return '/rooms/${Uri.encodeComponent(segments.single)}';
+    }
+    if (uri.host == 'masana' && segments.length == 1 &&
+        _validCharacterId(segments.single)) {
+      return '/masana/${Uri.encodeComponent(segments.single)}';
+    }
+    if (uri.host == 'status' && segments.length == 1 &&
+        _validResourceId(segments.single)) {
+      return '/status/${Uri.encodeComponent(segments.single)}';
+    }
+    if (uri.host == 'calls' && segments.length == 1 &&
+        segments.single == 'history') {
+      return '/home?tab=calls';
+    }
+    if (uri.host == 'wallet' && segments.length == 2 &&
+        segments.first == 'transaction' &&
+        _validResourceId(segments.last)) {
+      return '/wallet/transactions/${Uri.encodeComponent(segments.last)}';
+    }
+    if (uri.host == 'search' && segments.isEmpty) {
+      return '/search';
+    }
+  }
+
   // P2P notifications must open only the authenticated Wallet surface;
   // the link is a navigation hint and never a payment authorization.
   if (uri.scheme == 'masanawa' && uri.host == 'wallet') {
@@ -46,6 +76,18 @@ String? shellDeepLinkRoute(Uri uri) {
     }
     final kind = uri.pathSegments.first;
     final id = uri.pathSegments[1];
+    if (kind == 'room' && _validResourceId(id)) {
+      return '/rooms/${Uri.encodeComponent(id)}';
+    }
+    if (kind == 'masana' && _validCharacterId(id)) {
+      return '/masana/${Uri.encodeComponent(id)}';
+    }
+    if (kind == 'status' && _validResourceId(id)) {
+      return '/status/${Uri.encodeComponent(id)}';
+    }
+    if (kind == 'transaction' && _validResourceId(id)) {
+      return '/wallet/transactions/${Uri.encodeComponent(id)}';
+    }
     if (kind == 'twin') {
       if (!_validPublicId(id)) return null;
       return '/persona/${Uri.encodeComponent(id)}';
@@ -110,6 +152,31 @@ String? shellDeepLinkRoute(Uri uri) {
   if (!_validCharacterId(characterId)) return null;
   return '/chat/${Uri.encodeComponent(characterId)}';
 }
+
+bool _validResourceId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}
+    RegExp(r'^character_[A-Za-z0-9_-]+$').hasMatch(value);
+
+bool _validPublicId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$').hasMatch(value);
+
+bool _validTalkId(String value) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{2,159}$').hasMatch(value);
+
+/// Incoming hints cannot replace a voice destination or another active call.
+/// Conversation routes can own inline audio; the caller supplies imperative
+/// group/modal ownership separately. Other destinations retain normal routing.
+bool canOpenIncomingCallRoute({
+  required String currentPath,
+  required String targetPath,
+  bool hasActiveCall = false,
+}) {
+  if (!targetPath.startsWith('/calls/incoming/')) return true;
+  return !hasActiveCall &&
+      !currentPath.startsWith('/calls/incoming/') &&
+      !currentPath.startsWith('/chat/');
+}
+).hasMatch(value);
 
 bool _validCharacterId(String value) =>
     RegExp(r'^character_[A-Za-z0-9_-]+$').hasMatch(value);
