@@ -1223,6 +1223,10 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
   relationshipProvisioner: UserRelationshipProvisioner;
   platformProfiles: PlatformAgentProfileRepository;
   policyRevision: string;
+  publicCreatorAdmission?: {
+    listPublished(tenantId:TenantId):Promise<readonly CharacterId[]>;
+    canChat(input:{tenantId:TenantId;characterId:CharacterId}):Promise<boolean>;
+  };
   publicTwinAdmission?: {
     canChat(input: Readonly<{
       tenantId: TenantId;
@@ -1258,11 +1262,13 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
     tenantId: Parameters<UserRelationshipReader["listForUser"]>[0]["tenantId"],
     userId: Parameters<UserRelationshipReader["listForUser"]>[0]["userId"],
   ): Promise<readonly CharacterId[]> {
-    const [relationships, platformAgents] = await Promise.all([
+    const [relationships, platformAgents, creatorAgents] = await Promise.all([
+
       input.relationships.listForUser({ tenantId, userId }),
       input.platformProfiles.listPlatformAgents
         ? input.platformProfiles.listPlatformAgents({ tenantId })
         : input.platformProfiles.listSupportAgents({ tenantId }),
+      input.publicCreatorAdmission?.listPublished(tenantId) ?? Promise.resolve([]),
     ]);
     const characterIds = new Set<CharacterId>();
     for (const relationship of relationships) {
@@ -1271,6 +1277,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
     for (const profile of platformAgents) {
       characterIds.add(profile.characterId);
     }
+    for (const id of creatorAgents) characterIds.add(id);
     return Object.freeze([...characterIds]);
   }
 
@@ -1300,6 +1307,12 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
         throw new CustomerAuthError("FORBIDDEN", 403);
       }
 
+      // Previously established relationships do not override a paused or
+      // restricted creator agent: re-evaluate canonical publication each turn.
+      const creatorOwnership = await input.publicCreatorAdmission?.canChat({
+        tenantId: identity.tenantId,
+        characterId,
+      }) ?? false;
       let relationship = await input.relationships.readForUserCharacter({
         tenantId: identity.tenantId,
         userId: identity.userId,
@@ -1322,7 +1335,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
                   characterId,
                 })
               : false;
-          if (!publicTwinAllowed) {
+          if (!publicTwinAllowed && !creatorOwnership) {
             throw new CustomerAuthError("FORBIDDEN", 403);
           }
         }
@@ -1345,6 +1358,18 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
         throw new CustomerAuthError("FORBIDDEN", 403);
       }
 
+      // A revoked or paused character stays inaccessible even if a
+      // relationship predates the moderation decision.
+      if (input.publicCreatorAdmission && !creatorOwnership) {
+        // Existing platform agents and legacy eligible entities follow
+        // their original gates; never authorize a creator via that fallback.
+        const eligiblePlatform = await input.platformProfiles.readForCharacter({
+          tenantId: identity.tenantId, characterId,
+        });
+        if (!eligiblePlatform && !input.publicTwinAdmission) {
+          throw new CustomerAuthError("FORBIDDEN",403);
+        }
+      }
       const assignment = await input.skillAssignments.readForCharacter({
         tenantId: identity.tenantId,
         characterId,
