@@ -22,6 +22,10 @@ const copy: Readonly<Record<string, { title: string; body: string }>> = {
     title: "Missed Masana call",
     body: "Open Calls to view your call history",
   },
+  p2p: {
+    title: "P2P deadline",
+    body: "Open Wallet to review your order",
+  },
 };
 
 /** Durable, fenced worker. A notification must never re-run a financial
@@ -33,6 +37,21 @@ export function createFinancialNotificationRuntime(input: {
 }) {
   return Object.freeze({
     async runOnce(): Promise<{ claimed: number; delivered: number; retried: number }> {
+      // Remind the payer once, based only on an active escrow's canonical
+      // server-side deadline. This does not extend or mutate any order.
+      await input.pool.query(`
+        SELECT agents.queue_mobile_notice(
+          o.tenant_id,o.buyer_id,
+          'p2p-deadline-'||o.order_id::text,'p2p',
+          'P2P payment deadline approaching','p2p_deadline',
+          'masanawa://wallet/transaction/'||o.order_id::text)
+        FROM commerce.msnw_p2p_orders o
+        JOIN identity.users u
+          ON u.tenant_id=o.tenant_id AND u.user_id=o.buyer_id
+        WHERE u.state='active' AND o.state='awaiting_payment'
+          AND o.payment_deadline>clock_timestamp()
+          AND o.payment_deadline<=clock_timestamp()+interval '30 minutes'
+        ORDER BY o.payment_deadline LIMIT 50`);
       const result = await input.pool.query<ClaimedNotice>(`
         WITH candidate AS (
           SELECT o.tenant_id,o.user_id,o.event_id
