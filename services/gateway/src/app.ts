@@ -456,7 +456,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     // login is restricted or recovering. The callback handler separately
     // authenticates the provider signature against the original payload.
     if(!requiresFinancialCustomerState(request.method,request.url))return;
-    if(!options.customerAuth)return; // Preserve optional test/legacy composition.
+    // A missing customer-auth component is a production configuration failure,
+    // not permission to spend. Never silently bypass suspended/recovery holds.
+    if (!options.customerAuth) {
+      throw new CustomerAuthError("AUTH_UNAVAILABLE", 503);
+    }
     await options.customerAuth.authorizeSensitiveMutation({
       authorizationHeader:request.headers.authorization,
     });
