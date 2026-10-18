@@ -1207,6 +1207,25 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
     }
   }
 
+  Widget _reviewRow(String label,String value) => Padding(
+    padding:const EdgeInsets.symmetric(vertical:7),
+    child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Expanded(child:Text(label,style:Theme.of(context).textTheme.bodyMedium)),
+      Expanded(child:Text(value,textAlign:TextAlign.end,
+        style:Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight:FontWeight.w600))),
+    ]),
+  );
+
+  Widget _sectionTitle(String title,String note) => Padding(
+    padding:const EdgeInsets.fromLTRB(0,18,0,12),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(title,style:Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontWeight:FontWeight.w700)),
+      const SizedBox(height:5),
+      Text(note,style:Theme.of(context).textTheme.bodySmall),
+    ]),
+  );
+
   Widget _entry(String title, TextEditingController controller,
       String? Function(String?) validate, String hint) => Padding(
     padding: const EdgeInsets.only(bottom: 14),
@@ -1253,15 +1272,28 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
           ),
           const SizedBox(height: 12),
           if (_reviewing && _payload != null) ...[
-            Text('Receiving bank: ${method.isEmpty ? 'Unavailable' : method.first['bank_name']}'),
-            const SizedBox(height: 10),
-            Text('Your price: ${_rate.text.trim()} NGN per MSNW'),
-            Text('Minimum: ${_minimum.text.trim()} MSNW'),
-            Text('Maximum: ${_maximum.text.trim()} MSNW'),
-            Text('Inventory: ${_inventory.text.trim()} MSNW'),
-            const SizedBox(height: 16),
-            const Text('Escrow reserves MSNW only after a buyer creates a '
-                'funded order. Do not treat a screenshot as payment proof.'),
+            Container(
+              padding:const EdgeInsets.all(18),
+              decoration:BoxDecoration(
+                color:Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius:BorderRadius.circular(16)),
+              child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text('Your sell offer',
+                  style:Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight:FontWeight.w700)),
+                const Divider(height:25),
+                _reviewRow('Receiving bank',
+                  method.isEmpty?'Unavailable':'${method.first['bank_name']} · '
+                    '${_maskedP2pAccount(method.first['account_number'])}'),
+                _reviewRow('Price', '${_rate.text.trim()} NGN / MSNW'),
+                _reviewRow('Minimum', '${_minimum.text.trim()} MSNW'),
+                _reviewRow('Maximum', '${_maximum.text.trim()} MSNW'),
+                _reviewRow('Inventory', '${_inventory.text.trim()} MSNW'),
+              ]),
+            ),
+            const SizedBox(height:16),
+            const Text('Your available funds cover accepted orders and seller fees. '
+              'Never release MSNW based only on a screenshot.'),
             if (!_uncertain) ...[
               const SizedBox(height: 20),
               OutlinedButton(
@@ -1281,7 +1313,8 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
             ],
           ] else ...[
 
-            const SizedBox(height: 18),
+            _sectionTitle('Receiving account',
+              'Buyers pay the verified bank account you select.'),
             WalletSelectionField<String>(
               key: const ValueKey('p2p-seller-bank'),
               initialValue: _paymentMethodId,
@@ -1303,10 +1336,15 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
               validator: (value) => value == null
                   ? 'Select the bank receiving payments.' : null,
             ),
-            const SizedBox(height: 14),
+            _sectionTitle('Your price',
+              'Set the bank payment required for each MSNW.'),
             _entry('NGN per MSNW', _rate, _validRate, 'e.g. 1500.00'),
+            _sectionTitle('Offer limits',
+              'Choose the smallest and largest amount for one buyer.'),
             _entry('Minimum MSNW', _minimum, _validAmount, 'e.g. 1'),
             _entry('Maximum MSNW', _maximum, _validAmount, 'e.g. 100'),
+            _sectionTitle('Total offered',
+              'Cannot exceed your spendable balance; fees also consume capacity.'),
             _entry('Inventory MSNW', _inventory, _validAmount, 'e.g. 100'),
             const SizedBox(height: 12),
             FilledButton.icon(
