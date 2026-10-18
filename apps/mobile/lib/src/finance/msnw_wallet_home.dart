@@ -318,13 +318,28 @@ class WalletActionRow extends StatelessWidget {
         ),
       ),
     );
-    return Row(
-      children: [
-        action('Send', Icons.north_east, onSend),
-        action('Convert', Icons.swap_horiz, onConvert),
-        action('Receive', Icons.south_west, onReceive),
-        action('P2P', Icons.people_alt_outlined, onP2p),
-      ],
-    );
+    return LayoutBuilder(builder:(context,constraints) {
+      final narrow=constraints.maxWidth<360 ||
+        MediaQuery.textScalerOf(context).scale(1)>1.35;
+      if(narrow) {
+        return Column(children:[
+          Row(children:[
+            action('Send',Icons.north_east,onSend),
+            action('Convert',Icons.swap_horiz,onConvert),
+          ]),
+          const SizedBox(height:14),
+          Row(children:[
+            action('Receive',Icons.south_west,onReceive),
+            action('P2P',Icons.people_alt_outlined,onP2p),
+          ]),
+        ]);
+      }
+      return Row(children:[
+        action('Send',Icons.north_east,onSend),
+        action('Convert',Icons.swap_horiz,onConvert),
+        action('Receive',Icons.south_west,onReceive),
+        action('P2P',Icons.people_alt_outlined,onP2p),
+      ]);
+    });
   }
 }
