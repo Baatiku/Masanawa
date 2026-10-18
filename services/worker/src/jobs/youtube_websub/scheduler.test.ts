@@ -48,4 +48,28 @@ describe("YouTube outbox scheduler", () => {
       runOnce: async () => undefined, enabled: () => true, intervalMs: 10,
     })).toThrow("youtube_poll_interval_invalid");
   });
+  it("reports active work, prior failure and recovery without logging secrets", async () => {
+    let finish!: () => void;
+    const unfinished = new Promise<void>(resolve => { finish = resolve; });
+    const runOnce = vi.fn()
+      .mockRejectedValueOnce(new Error("do not log secret"))
+      .mockImplementationOnce(() => unfinished);
+    const scheduler = createYouTubeOutboxScheduler({
+      runOnce, enabled: () => true, intervalMs: 60_000,
+    });
+    expect(scheduler.health().enabled).toBe(false);
+    await expect(scheduler.tick()).rejects.toThrow();
+    expect(scheduler.health().consecutiveFailures).toBe(1);
+    expect(scheduler.health().lastSuccessAgeSeconds).toBe(null);
+    const running = scheduler.tick();
+    await Promise.resolve();
+    expect(scheduler.health().runningSeconds).toBeGreaterThanOrEqual(0);
+    finish();
+    await running;
+    expect(scheduler.health().consecutiveFailures).toBe(0);
+    expect(scheduler.health().lastSuccessAgeSeconds).toBe(0);
+    await scheduler.stop();
+    expect(scheduler.health().enabled).toBe(false);
+  });
+
 });
