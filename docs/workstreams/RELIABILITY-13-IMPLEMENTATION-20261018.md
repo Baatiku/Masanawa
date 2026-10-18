@@ -60,12 +60,69 @@ Retain age keys offline, enforce encrypted storage and retention/access controls
 | 4 | Safe schema changes | Existing canonical additive migrator retained; **no new schema migration needed by these changes** | real production schema drift/preflight/upgrade checks |
 | 5 | Five providers | No provider side-effect calls added | OWNER: authorized Paystack/Flutterwave/Gemini/LiveKit/NOWPayments |
 | 6 | Network resilience | Typed GET retries and account fence implemented; writes left no-replay | real offline/reconnect + financial idempotency |
-| 7 | Crash/ANR reporting | **Not implemented**: needs consent/retention/sanitized crash pipeline and Android ANR transport | device crash/ANR evidence |
-| 8 | Resource budget | APK bytes/hash, startup/PSS sampler | battery, media transfer bytes and bandwidth |
-| 9 | Job health | Secret-protected Worker scheduler metrics and bounded monitor wired; durable PostgreSQL backlog/lease metrics not implemented | authenticated live Worker readback and durable stuck lease checks |
-| 10 | Admin incidents | Configurable sanitized transition webhook | durable scheduler, real incident webhook and on-call drill |
+| 7 | Crash/ANR reporting | Local encrypted crash categories, Android API 30+ ANR/exit reason retrieval, Share/Clear Settings; automatic fleet crash aggregation not implemented | device crash/ANR evidence |
+| 8 | Resource budget | APK bytes/hash, startup/PSS/CPU/jank/battery percentage/per-UID networking samples (where supported) | battery, media transfer bytes and bandwidth |
+| 9 | Job health | Secret-protected Worker scheduler plus read-only PostgreSQL scheduled feed, overdue P2P, dead letters and custody discrepancy counts | authenticated live Worker readback and durable stuck lease checks |
+| 10 | Admin incidents | Configurable transition webhook with optional five-minute systemd scheduling | durable scheduler, real incident webhook and on-call drill |
 | 11 | Full restore | Executable paired encrypted backup/isolated restore script | real fenced backup, decrypt/readback, receipts/media/auth and RPO/RTO |
 | 12 | Rollback | Non-destructive forward/rollback recovery sequence | live staging rollback and financial no-duplicate exercise |
-| 13 | Integrated regression | Source-specific tests added; existing alpha session smoke preserved | full installed client → Gateway → DB/provider → receipt readback + denied/offline/account isolation |
+| 13 | Integrated regression | Added read-only authenticated Gateway integration smoke and existing alpha session smoke | full installed client → Gateway → DB/provider → receipt readback + denied/offline/account isolation |
 
 **Do not mark items 2, 4, 5, 7, 9, 10, 11, 12 or 13 VERIFIED_E2E without the corresponding executed evidence.** This is an honest boundary, not an approval gate for independent source merges.
+
+
+## Reliability source continuation — 2026-10-18
+
+The Flutter main() installs a non-blocking local diagnostics collector. It keeps
+at most 20 sanitized exception type + first-party code frame + UTC day records
+in device secure storage. Android 11+ uses ApplicationExitInfo to read coarse
+historical crash, ANR and low-memory causes. Settings provides explicit Share
+and Clear controls. No identifiers, tokens, exception messages, personal
+records, native traces or arbitrary stack contents are exported. **This is
+user-initiated device reporting, not fleet Crashlytics/Sentry reporting.**
+
+The Worker authenticated health endpoint now combines process-local scheduler
+activity with read-only PostgreSQL aggregates for due Status posts, overdue
+P2P expiry, P2P notification dead letters, and custody discrepancies from
+the existing canonical reconciliation function. SQL is bounded to four seconds;
+missing schema/reconciliation failures return an unavailable HTTP response.
+The existing health watcher can notify configured operators on changes.
+Deployable five-minute systemd service/timer templates are in
+ops/reliability/. Merge does NOT install/activate these units or configure
+webhook credentials.
+
+Paired recovery runner: the restore now renders SQL on an explicitly secured
+encrypted scratch volume, then executes it via PostgreSQL psql under one
+transaction using the environment-supplied connection string (not a URL
+argument). This corrects the former empty-database pg_restore call. It does
+not qualify backup restoration without executing a separate private object
+readback, receipt/account/escrow check and provider-outbound network fence.
+
+Read-only unified smoke: scripts/reliability/integrated-readonly-smoke.mjs
+accepts MASANAWA_GATEWAY_URL and MASANAWA_TEST_ACCOUNT_TOKEN and performs
+five ordered GET checks against one authorized Gateway. Its unit tests use
+fakes; actual provider/Android/live finance integration is an owner test.
+
+Handset metrics add optional CPU, jank, battery percentage and per-UID
+network counters to APK size/sha256, process startup and PSS. Unsupported
+Android measurements remain null; no claim of measured battery power or
+individual media downloads is made.
+
+Rollback: official Railway deployment history has a Rollback action that
+restores previous image and variables; see
+https://docs.railway.com/guides/roll-back-bad-deploy .
+Historical rollback is selected in Railway's Dashboard, not with
+railway redeploy (which targets the latest deployment). Neither restoring
+a previous image nor rolling back SQL should overwrite financial receipts.
+Verify schema forward compatibility, hold old/new payout reconciliation,
+confirm readiness and business reads before new transactions resume.
+
+Source tests/manual commands: Node reliability tests by
+node --test scripts/reliability/*.test.mjs ; Worker Vitest for
+services/worker/src/jobs/durable_health.test.ts plus app and scheduler tests;
+Flutter diagnostics and network tests via flutter test; bash -n for
+backup-restore.sh; actual Android, PostgreSQL, signed builds, providers,
+systemd alerts and rollback must be executed separately.
+
+No live restoration, provider spend, signed APK qualification, Railway
+production deployment or source CI pass is asserted by these changes.

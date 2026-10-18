@@ -98,4 +98,33 @@ describe("worker service bootstrap", () => {
     })).toThrow("ops_monitor_token_too_short");
   });
 
+  it("joins durable queue health and fails closed when database aggregates fail", async () => {
+    const token = "z".repeat(48);
+    let fail = false;
+    const app = createWorkerApp({
+      opsMonitorToken: token,
+      jobsHealth: () => [{
+        name: "scheduled_feed", enabled: true, runningSeconds: 1,
+        lastSuccessAgeSeconds: 0, stuck: 0, consecutiveFailures: 0,
+      }],
+      databaseJobs: async () => {
+        if (fail) throw new Error("database password is secret");
+        return [{ name: "db_p2p_expiry", stuck: 3, oldestPendingSeconds: 500 }];
+      },
+    });
+    apps.push(app);
+    const options = { method: "GET" as const, url: "/v1/ops/jobs/health",
+      headers: { authorization: "Bearer " + token } };
+    const good = await app.inject(options);
+    expect(good.statusCode).toBe(200);
+    expect(good.json().jobs).toHaveLength(2);
+    expect(good.json().jobs[1]).toEqual({
+      name: "db_p2p_expiry", stuck: 3, oldestPendingSeconds: 500,
+    });
+    fail = true;
+    const unavailable = await app.inject(options);
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain("password");
+  });
+
 });

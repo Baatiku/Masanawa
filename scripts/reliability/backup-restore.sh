@@ -68,6 +68,10 @@ require RESTORE_OBJECT_URI
 [[ "$BACKUP_SET" == /* ]] || die "BACKUP_SET must be an absolute secure directory"
 [[ -f "$BACKUP_SET/SHA256SUMS" && -f "$BACKUP_SET/postgres.dump.age" &&
   -f "$BACKUP_SET/objects.tar.gz.age" ]] || die "incomplete backup set"
+# Ensure even missing SOURCE_* variables cannot enable a production
+# destination by accidental variable copy. The explicit isolation ack is
+# required as an additional human gate, not destination proof.
+[[ "$RESTORE_DATABASE_URL" != "${SOURCE_DATABASE_URL:-}" ]] || die "source and restore database match"
 if [[ -n "${SOURCE_DATABASE_URL:-}" && "$SOURCE_DATABASE_URL" == "$RESTORE_DATABASE_URL" ]]; then
   die "refusing to restore to source database"
 fi
@@ -99,9 +103,14 @@ while IFS= read -r member; do
   case "/$member/" in *'/../'*|*'/./'*) die "unsafe object archive path" ;; esac
 done < <(tar -tzf "$scratch/objects.tar.gz")
 tar -C "$scratch" -xzf "$scratch/objects.tar.gz"
-PGDATABASE="$RESTORE_DATABASE_URL" pg_restore \
-  --exit-on-error --single-transaction --no-owner --no-privileges \
-  --dbname="" "$scratch/postgres.dump"
+# Render SQL to the encrypted scratch directory, then execute it through
+# psql's env-only libpq connection. pg_restore without a DB writes SQL rather
+# than restoring it; --dbname with a URL leaks credentials in argv.
+pg_restore --no-owner --no-privileges \
+  --file="$scratch/restore.sql" "$scratch/postgres.dump"
+PGDATABASE="$RESTORE_DATABASE_URL" psql -X -v ON_ERROR_STOP=1 \
+  --single-transaction --file="$scratch/restore.sql"
+rm -f -- "$scratch/restore.sql"
 aws s3 sync "$scratch/objects" "$RESTORE_OBJECT_URI" --only-show-errors
 
 # Independent object readback confirms every restored object byte, not only

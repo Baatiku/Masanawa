@@ -26,6 +26,7 @@ import { createMsnwReserveAudit } from "./jobs/msnw/reserve_audit.js";
 import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_merchant_settlement.js";
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import { createAccountDeletionFinancialClearance, createAccountDeletionPrivacyWorker } from "./jobs/privacy/account_deletion.js";
+import { createDurableJobHealth } from "./jobs/durable_health.js";
 import {
   createWorkerApp,
   type WorkerAppOptions,
@@ -132,8 +133,7 @@ export async function startWorkerService(
   let app: ManagedNodeServer;
   try {
     if (!database.pool) throw new Error("rooms_teacher_postgres_pool_required");
-    // The canonical revoker blocks deletion unless all financial owners are
-    // cleared. Historical ledger and provider evidence are never erased.
+    // Account deletion only after exact financial clearance and owner OTP.
     const accessRevoker = createPostgresAccountDeletionAccessRevoker(
       database.pool, createAccountDeletionFinancialClearance(),
     );
@@ -341,6 +341,7 @@ export async function startWorkerService(
       ...(env.MASANAWA_OPS_MONITOR_TOKEN?.trim()
         ? { opsMonitorToken: env.MASANAWA_OPS_MONITOR_TOKEN.trim() }
         : {}),
+      databaseJobs: () => createDurableJobHealth(database.pool!).read(),
       jobsHealth: () => [
         schedulerHealth("youtube_outbox", youtubeOutbox),
         schedulerHealth("scheduled_feed", feedPublisher),
@@ -385,7 +386,7 @@ export async function startWorkerService(
         await p2pNotices?.stop();
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
-         await privacyDeletion?.stop();
+        await privacyDeletion?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -414,7 +415,7 @@ export async function startWorkerService(
     await p2pNotices?.stop();
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
-         await privacyDeletion?.stop();
+        await privacyDeletion?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;

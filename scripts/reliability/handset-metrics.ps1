@@ -40,11 +40,41 @@ foreach ($mode in @("cold", "returning")) {
     if (-not $pss.Success) {
       $pss = [regex]::Match($memory, "(?m)^\s*TOTAL:\s*(\d+)")
     }
+    # Coarse optional signals. The per-app battery/network counters may be
+    # unavailable on some vendor builds; missing numbers must stay null.
+    $batteryDump = (& adb shell dumpsys battery | Out-String)
+    $batteryLevel = [regex]::Match($batteryDump, "(?m)^\s*level:\s*(\d+)\s*$")
+    $gfx = (& adb shell dumpsys gfxinfo $Package | Out-String)
+    $janky = [regex]::Match($gfx, "(?m)^\s*Janky frames:\s*(\d+)")
+    $cpuInfo = (& adb shell dumpsys cpuinfo | Out-String)
+    $escapedPackage = [regex]::Escape($Package)
+    $appCpu = [regex]::Match($cpuInfo, "(?m)^\s*([\d.]+)%\s+\d+/$escapedPackage(?:\s|:)")
+    $netRx = $null
+    $netTx = $null
+    $uid = [regex]::Match($identity, "(?m)^\s*userId=(\d+)\s*$")
+    if ($uid.Success) {
+      $netDump = (& adb shell dumpsys netstats detail | Out-String)
+      $netEntries = [regex]::Matches($netDump,
+        "uid=$($uid.Groups[1].Value)\b[^\r\n]*rxBytes=(\d+)[^\r\n]*txBytes=(\d+)")
+      if ($netEntries.Count -gt 0) {
+        $netRx = [long]0
+        $netTx = [long]0
+        foreach ($e in $netEntries) {
+          $netRx += [long]$e.Groups[1].Value
+          $netTx += [long]$e.Groups[2].Value
+        }
+      }
+    }
     $measurements += [pscustomobject]@{
       mode = $mode
       run = $n
       androidTotalMs = [int]$duration.Groups[1].Value
       totalPssKb = $(if ($pss.Success) { [int]$pss.Groups[1].Value } else { $null })
+      batteryLevelPercent = $(if ($batteryLevel.Success) { [int]$batteryLevel.Groups[1].Value } else { $null })
+      jankyFrames = $(if ($janky.Success) { [int]$janky.Groups[1].Value } else { $null })
+      cpuPercentSample = $(if ($appCpu.Success) { [double]$appCpu.Groups[1].Value } else { $null })
+      rxBytesDeviceUidCumulative = $netRx
+      txBytesDeviceUidCumulative = $netTx
     }
   }
 }
@@ -64,7 +94,7 @@ $summary = [pscustomobject]@{
   releaseApk = $apkEvidence
   measurements = $measurements
   physicalDeviceQualified = $false
-  notes = "Android process launch and approximate PSS only; does not qualify CPU, battery, bandwidth, Flutter first-use, provider, calls or low-memory survival."
+  notes = "Android launch, approximate PSS, sampled CPU/jank, battery level, and optional cumulative per-UID netstats. Battery percentage is not power draw; network totals are not individual media downloads. Missing signals are null and do not pass any qualification."
 }
 $summary | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 $Output
 Write-Host "Privacy-minimized handset timings written to $Output. No serials, logs, tokens or personal messages collected."
