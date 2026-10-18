@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/models.dart';
@@ -72,11 +72,7 @@ Widget _app(_P2pAdapter adapter) {
 }
 
 void _mockSecureRecovery() {
-  const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(channel, (_) async => null);
-  addTearDown(() => TestDefaultBinaryMessengerBinding.instance
-      .defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+  FlutterSecureStorage.setMockInitialValues({});
 }
 
 void main() {
