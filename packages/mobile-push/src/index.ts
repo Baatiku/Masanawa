@@ -226,6 +226,8 @@ export function createFcmPushSender(input: {
                   notification: {
                     channel_id: mobilePushAndroidChannel(request.data),
                     visibility: "PRIVATE",
+                    ...(request.data?.eventId
+                      ? { tag: request.data.eventId.slice(0, 80) } : {}),
                     ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
                       ? {
                           sound: "default",
