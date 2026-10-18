@@ -117,6 +117,8 @@ export function createAccountDeletionPrivacyWorker(input:{
         "DELETE FROM agents.private_chat_media WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM masana.fan_hidden_turns WHERE tenant_id=$1 AND fan_user_id=$2",
         "DELETE FROM masana.fan_chat_preferences WHERE tenant_id=$1 AND fan_user_id=$2",
+        // Deleting a follow also cascades to its per-fan mute preferences.
+        "DELETE FROM masana.follows WHERE tenant_id=$1 AND fan_user_id=$2",
         "DELETE FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM agents.mobile_shell_events WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM agents.mobile_shell_actions WHERE tenant_id=$1 AND user_id=$2",
