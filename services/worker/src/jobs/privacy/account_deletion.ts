@@ -35,7 +35,13 @@ export async function hasFinancialFootprint(
         WHERE tenant_id=$1 AND (${predicates}) LIMIT 1`,[tenantId,userId]);
     if (rows.rows.length) return true;
   }
-  return false;
+  // Play Store entitlements are financial obligations outside commerce.
+  // Even an expired purchase may require lawful chargeback/retention handling.
+  const subscriptions=await client.query(
+    "SELECT 1 FROM rooms.entitlements WHERE tenant_id=$1 AND user_id=$2 LIMIT 1",
+    [tenantId,userId],
+  );
+  return subscriptions.rows.length>0;
 }
 
 /** Runs inside the canonical access revoker's locked PG transaction. */
@@ -119,6 +125,10 @@ export function createAccountDeletionPrivacyWorker(input:{
         "DELETE FROM masana.fan_chat_preferences WHERE tenant_id=$1 AND fan_user_id=$2",
         // Deleting a follow also cascades to its per-fan mute preferences.
         "DELETE FROM masana.follows WHERE tenant_id=$1 AND fan_user_id=$2",
+        "DELETE FROM feed.likes WHERE tenant_id=$1 AND fan_id=$2",
+        "DELETE FROM feed.saves WHERE tenant_id=$1 AND fan_id=$2",
+        "DELETE FROM feed.saved_videos WHERE tenant_id=$1 AND fan_id=$2",
+        "DELETE FROM rooms.lesson_bookmarks WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM agents.mobile_shell_events WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM agents.mobile_shell_actions WHERE tenant_id=$1 AND user_id=$2",
@@ -126,6 +136,20 @@ export function createAccountDeletionPrivacyWorker(input:{
         "DELETE FROM security.platform_device_passwords WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM identity.external_user_identities WHERE tenant_id=$1 AND user_id=$2",
       ])await client.query(sql,scope);
+      // Preserve public thread integrity without retaining deleted users'
+      // comment or question text. Do not erase other participants' replies.
+      await client.query(`UPDATE feed.comments SET body='[deleted]',
+          state='removed' WHERE tenant_id=$1 AND fan_id=$2`,scope);
+      await client.query(`UPDATE rooms.discussion_replies SET body='[deleted]',
+          moderation_state='removed' WHERE tenant_id=$1 AND user_id=$2`,scope);
+      await client.query(`UPDATE rooms.questions SET body='[deleted]',
+          state='rejected' WHERE tenant_id=$1 AND user_id=$2
+          AND state IN ('queued','answering','needs_staff')`,scope);
+      await client.query(`UPDATE rooms.questions SET body='[deleted]'
+          WHERE tenant_id=$1 AND user_id=$2`,scope);
+      await client.query(`UPDATE rooms.memberships SET state='left',
+          updated_at=GREATEST(updated_at,$3::timestamptz)
+          WHERE tenant_id=$1 AND user_id=$2 AND state='active'`,[...scope,now()]);
       await client.query(`UPDATE identity.relationships SET
           preferences='{}'::jsonb,disclosures='{}'::jsonb,
           permissions='{}'::jsonb,revision=revision+1,
