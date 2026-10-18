@@ -13,12 +13,16 @@ Duration p2pPaymentRemaining(
 
 String p2pOrderStatus(String state) =>
     const {
+      'reserving': 'Securing seller funds',
       'awaiting_payment': 'Awaiting bank transfer',
       'payment_claimed': 'Buyer reported payment',
+      'release_pending': 'Checking release',
+      'refund_pending': 'Refund processing',
       'completed': 'Trade completed',
       'disputed': 'Under review',
       'expired': 'Order expired',
       'cancelled': 'Order cancelled',
+      'failed': 'Order could not be placed',
     }[state] ??
     state.replaceAll('_', ' ');
 
@@ -38,18 +42,19 @@ class P2pOrderProgress extends StatelessWidget {
         title: Text(p2pOrderStatus(state)),
       );
     final stage = state == 'completed'
-        ? 4
-        : state == 'payment_claimed'
+        ? 3
+        : state == 'release_pending'
         ? 2
-        : 1;
+        : state == 'payment_claimed'
+        ? 1
+        : 0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final step in [
-          (0, 'Created'),
-          (1, 'Reported'),
-          (2, 'Bank check'),
-          (3, 'Complete'),
+          (0, 'Pay seller'),
+          (1, 'Seller checks'),
+          (2, 'Complete'),
         ])
           Expanded(
             child: Semantics(
