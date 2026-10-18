@@ -24,7 +24,7 @@ function fixture() {
       const scoped = sql.includes("tenant_id=$1") &&
         sql.includes("user_id=$2") &&
         sql.includes("character_id=$3") &&
-        sql.includes("request_id=$4") &&
+        (sql.includes("request_id=$4") || sql.includes("request_id=ANY($4::text[])")) &&
         params[0] === tenantId && params[1] === ownerId &&
         params[2] === characterId &&
         (Array.isArray(params[3]) ? params[3].includes(requestId) : params[3] === requestId);
@@ -69,15 +69,20 @@ describe("private chat attachments: horizontal authorization", () => {
         headers: { authorization: "Bearer other" } });
       expect(other.statusCode).toBe(404);
       expect(other.headers["cache-control"]).toBe("private, no-store");
+      const ownerManifest = await app.inject({ method: "POST", url: "/agent/media/list",
+        headers: { authorization: "Bearer owner" },
+        payload: { characterId, requestIds: [requestId] } });
+      expect(ownerManifest.statusCode).toBe(200);
+      expect(ownerManifest.json().items).toHaveLength(1);
       const manifest = await app.inject({ method: "POST", url: "/agent/media/list",
         headers: { authorization: "Bearer other" },
         payload: { characterId, requestIds: [requestId] } });
       expect(manifest.statusCode).toBe(200);
       expect(manifest.json()).toEqual({ items: [] });
-      expect(reads).toHaveLength(3);
-      expect(reads[0]?.params[1]).toBe(ownerId);
-      expect(reads[1]?.params[1]).toBe(otherId);
-      expect(reads[2]?.params[1]).toBe(otherId);
+      expect(reads).toHaveLength(4);
+      expect(reads.map(read => read.params[1])).toEqual([
+        ownerId, otherId, ownerId, otherId,
+      ]);
       expect(reads.every(read => read.sql.includes("user_id=$2"))).toBe(true);
     } finally { await app.close(); }
   });
