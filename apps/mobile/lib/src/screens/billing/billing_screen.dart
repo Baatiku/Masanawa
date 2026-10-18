@@ -235,7 +235,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     } catch (value) {
       if (valid(generation, owner)) setState(() => error = safeError(value, 'Could not load services.'));
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (valid(generation, owner)) setState(() => busy = false);
     }
   }
 

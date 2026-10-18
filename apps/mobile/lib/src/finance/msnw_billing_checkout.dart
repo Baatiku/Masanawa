@@ -94,7 +94,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           detail('Product',q.itemName),detail('Recipient',q.customerId),
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
           detail('Total','NGN '+q.totalAmount),detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
-          detail('Rate','NGN '+(BigInt.parse(v['rateKoboPerMsnw'] as String)/BigInt.from(100)).toString()+' / MSNW'),
+          detail('Rate','NGN '+units((BigInt.parse(v['rateKoboPerMsnw'] as String)*BigInt.from(10000)).toString())+' / MSNW'),
         ]),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(ctx,false),
