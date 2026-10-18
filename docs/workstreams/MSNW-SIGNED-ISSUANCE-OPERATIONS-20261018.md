@@ -1,5 +1,18 @@
 # Signed MSNW issuance operator workflow — source admission
 
+> **Scope: one currency-specific funding adapter, NOT the token definition.**
+> This runbook describes the existing NGN-denominated Paystack bank funding
+> and `rateKoboPerMsnw` operator admission. Masanawa targets a global market.
+> The on-chain MSNW asset is currency-neutral. Additional fiat/stablecoin
+> funding adapters require their own signed settlement and exact FX/quote
+> records before issuance, following
+> [MSNW Global Token Creation Guide](../token/MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md).
+> Do not interpret this example rate as a naira peg or exclusive market.
+>
+> The reviewed token contract has an **immutable custody Safe**: that Safe
+> receives mintSettled and alone performs burnSettled of its own tokens.
+> The minter, governance Safe and emergency pauser are distinct.
+
 **Security boundary:** this command never holds a blockchain private key and cannot mint. It records three independently approved stages in the existing append-only settlement journal. The current Worker only credits custody accounts when it independently verifies a successfully finalized on-chain mint to the official custodian, with adequate reserved assets and the correct code hash.
 
 ## Prerequisites
