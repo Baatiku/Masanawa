@@ -1,5 +1,4 @@
 import type {FastifyInstance} from "fastify";
-import type {MasanaAuth} from "../modules/masana/service.js";
 import {CreatorAgentError,createPostgresCreatorAgentService} from "./store.js";
 import {CreatorGenerationError} from "./generator.js";
 
@@ -30,7 +29,7 @@ function report(reply:{code(status:number):unknown},error:unknown) {
 }
 /** All mutating routes bind the actor exclusively to authenticated session. */
 export function registerCreatorAgentRoutes(app:FastifyInstance,deps:{
- readonly auth:Pick<MasanaAuth,"fan">;
+ readonly auth:{fan(header:string|undefined):Promise<{tenantId:string;userId:string}>};
  readonly service:CreatorService;
 }):void {
  app.get("/v1/creator/masana",async(request,reply)=>{
