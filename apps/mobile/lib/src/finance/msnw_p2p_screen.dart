@@ -71,27 +71,39 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _secure = const FlutterSecureStorage();
   Map<String, dynamic>? _pendingOrder;
+  bool _recoveryReady = false;
   String get _pendingKey => 'masanawa.p2p.order.${widget.expectedUserId}';
   late Future<List<Map<String, dynamic>>> _list = _load();
 
   @override
   void initState() {
-    super.initState();
-    _restorePending();
-  }
-
-  Future<void> _restorePending() async {
+    super.initState(  Future<void> _restorePending() async {
     try {
       final encoded = await _secure.read(key: _pendingKey);
-      if (encoded == null || !_sameAccount) return;
-      final value = _json(jsonDecode(encoded));
-      if (value['requestKey'] is! String ||
-          value['offerId'] is! String || value['amountMicro'] is! String) return;
-      if (mounted && _sameAccount) setState(() => _pendingOrder = value);
+      if (!_sameAccount || !mounted) return;
+      Map<String, dynamic>? recovered;
+      if (encoded != null) {
+        final value = _json(jsonDecode(encoded));
+        if (value['requestKey'] is! String ||
+            value['offerId'] is! String || value['amountMicro'] is! String ||
+            value['expectedRateKoboPerMsnw'] is! String ||
+            value['expectedFeeBps'] is! int) {
+          throw const FormatException('Invalid recovery record');
+        }
+        recovered = value;
+      }
+      setState(() {
+        _pendingOrder = recovered;
+        _recoveryReady = true;
+      });
     } catch (_) {
-      // Never create a replacement request if durable recovery cannot be read.
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order recovery is unavailable on this device.')));
+        const SnackBar(content: Text(
+          'Secure order recovery could not be checked. Buying is paused.')));
+    }
+  }
+
+n this device.')));
     }
   }
 
@@ -261,6 +273,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
         ])) ?? false;
   }
   Future<void> _buy(Map<String,dynamic> offer) async {
+    if (!_recoveryReady) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Check unfinished orders before starting a new purchase.')));
+      return;
+    }
     // An uncertain request always takes precedence over placing a new order.
     if (_pendingOrder != null) { await _resumePending(); return; }
     final entered = await _field(
@@ -672,6 +689,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> {
                   selected: _tab == index,
                   onSelected: (_) { if (_tab != index) _reload(index); })),
           ])),
+        if (!_recoveryReady) ListTile(
+          leading: const Icon(Icons.lock_clock_outlined),
+          title: const Text('Checking unfinished orders'),
+          subtitle: const Text('Buying is paused until secure recovery is available.'),
+          trailing: IconButton(
+            tooltip: 'Retry secure recovery',
+            icon: const Icon(Icons.refresh),
+            onPressed: _restorePending,
+          ),
+        ),
         if (_pendingOrder != null) ListTile(
           leading: const Icon(Icons.sync_outlined),
           title: const Text('Check unfinished order'),
