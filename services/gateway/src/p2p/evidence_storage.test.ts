@@ -35,7 +35,7 @@ describe("P2P private evidence",()=>{
     expect(t.service.assertEvidenceAllowed).toHaveBeenCalledWith(actor,orderId);
     expect(t.service.recordEvidence).toHaveBeenCalledOnce();
     expect(t.objects.putObject).toHaveBeenCalledOnce();
-    const objectKey=vi.mocked(t.objects.putObject).mock.calls[0]![0];
+    const objectKey=vi.mocked(t.objects.putObject!).mock.calls[0]![0];
     expect(objectKey).toMatch(new RegExp('_'+pdf.length+'_pdf
   });
   it("rejects MIME spoof, extra fields and malformed bytes before upload",async()=>{
