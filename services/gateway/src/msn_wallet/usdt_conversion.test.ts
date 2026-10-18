@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Pool } from "@masanawa/postgres";
 import { createMsnwUsdtConversion, parseStableMicro, stableDecimal } from "./usdt_conversion.js";
 
-function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean;} = {}) {
+function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; active?:boolean;} = {}) {
   const commands:string[]=[];
   const calls:string[]=[];
   const providerCode="USDTTRC20";
@@ -11,6 +11,9 @@ function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean;} 
   const pool={
     async query(sql:string){
       commands.push(sql);
+      if(sql.includes("SELECT conversion_id FROM commerce.msnw_usdt_payouts"))
+        return {rows:opts.active?[{conversion_id:"previous-conversion"}]:[],
+          rowCount:opts.active?1:0};
       if(sql.includes("FROM commerce.msnw_custody_accounts"))
         return {rows:[{available_micro:opts.ownerBalance??"2000000"}],rowCount:1};
       if(sql.includes("AS queued"))
@@ -116,6 +119,15 @@ describe("MSNW independently prefunded NOWPayments crypto payout",()=>{
     });
     expect(sql.every(stmt=>!stmt.includes("INSERT INTO"))).toBe(true);
     expect(calls).toEqual([]);
+  });
+  it("prevents another payout from a different device while the first is unresolved",async()=>{
+    const f=mock({active:true});
+    await expect(f.service.quote(owner,inputs)).rejects.toMatchObject({
+      code:"msnw.convert.previous_unresolved",statusCode:409,
+    });
+    expect(f.calls).toEqual([]);
+    expect(f.commands.some(x=>x.includes(
+      "state IN ('reserved','submitting'"))).toBe(true);
   });
   it("refuses unapproved network, unavailable liquidity and inadequate MSNW",async()=>{
     const f=mock({treasury:"0.2",ownerBalance:"1"});
