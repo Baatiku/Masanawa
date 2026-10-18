@@ -397,6 +397,21 @@ export function createMsnwUsdtConversion(input: Readonly<{
     await mark(conversionId,text(current.state),"processing");
     return show(await find(owner,conversionId));
   }
+  async function lookup(owner:Owner,rawKey:unknown) {
+    if(typeof rawKey!=="string" || !keyPattern.test(rawKey))
+      throw new MsnwConversionError("msnw.convert.idempotency_invalid",400);
+    const result=await input.pool.query(
+      "SELECT conversion_id::text FROM commerce.msnw_usdt_payouts " +
+      "WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3 LIMIT 1",
+      [owner.tenantId,owner.userId,rawKey],
+    );
+    if(result.rowCount!==1 || typeof result.rows[0]?.conversion_id!=="string")
+      throw new MsnwConversionError("msnw.convert.not_found",404);
+    // A known original payout is reconciled using its authenticated provider
+    // evidence. No new provider payout can ever originate from a status read.
+    return refresh(owner,result.rows[0].conversion_id);
+  }
+
   async function history(owner:Owner) {
     const result=await input.pool.query(
       "SELECT conversion_id::text,tenant_id,user_id,provider_code," +
@@ -408,5 +423,5 @@ export function createMsnwUsdtConversion(input: Readonly<{
     );
     return Object.freeze(result.rows.map(show));
   }
-  return Object.freeze({quote,confirm,refresh,history});
+  return Object.freeze({quote,confirm,refresh,lookup,history});
 }
