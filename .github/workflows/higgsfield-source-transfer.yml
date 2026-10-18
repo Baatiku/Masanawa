@@ -1,0 +1,32 @@
+name: Higgsfield source transfer
+on:
+  push:
+    branches: [build/higgsfield-source-95af3d0-20261018]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 95af3d018d568113b9c8ef3833830d5d162ef3f8
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Export original source and commit metadata
+        run: |
+          test "$(git rev-parse HEAD)" = 95af3d018d568113b9c8ef3833830d5d162ef3f8
+          git bundle create masanawa-main.bundle HEAD
+          git archive --format=tar.gz HEAD > masanawa-main.tar.gz
+          git rev-parse HEAD > SOURCE_COMMIT.txt
+          sha256sum masanawa-main.bundle masanawa-main.tar.gz > SOURCE_SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: masanawa-current-main-source
+          path: |
+            masanawa-main.bundle
+            masanawa-main.tar.gz
+            SOURCE_COMMIT.txt
+            SOURCE_SHA256SUMS.txt
+          retention-days: 1
