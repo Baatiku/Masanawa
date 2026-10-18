@@ -242,4 +242,30 @@ describe("MSNW P2P exact money and escrow",()=>{
       .rejects.toMatchObject({code:"p2p.idempotency_required"});
   });
 
+  it("retains PostgreSQL microsecond precision in a busy offer seek cursor",async()=>{
+    const page=mock(sql=>sql.includes("ORDER BY o.created_at DESC,o.offer_id DESC")
+      ?[{
+        offer_id:offerId,created_at:"2026-10-18T04:00:00.123Z",
+        created_at_cursor:"2026-10-18T04:00:00.123456Z",
+      },{
+        offer_id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        created_at:"2026-10-18T04:00:00.123Z",
+        created_at_cursor:"2026-10-18T04:00:00.123123Z",
+      },
+      ...Array.from({length:19},(_,i)=>({
+        offer_id:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        created_at:"2026-10-18T03:00:00.000Z",
+        created_at_cursor:"2026-10-18T03:00:00.000000Z",
+        n:i,
+      }))]:[]);
+    const service=createP2pService(page.pool,deniedWallet);
+    const first=await service.offersPage(actor);
+    expect(first.items).toHaveLength(20);
+    expect(first.nextCursor).toBeTruthy();
+    const payload=JSON.parse(Buffer.from(first.nextCursor!,"base64url").toString());
+    expect(payload.time).toBe("2026-10-18T03:00:00.000000Z");
+    await service.offersPage(actor,{cursor:first.nextCursor!});
+    expect(page.statements.some(sql=>sql.includes("AS created_at_cursor"))).toBe(true);
+  });
+
 });
