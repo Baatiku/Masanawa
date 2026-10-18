@@ -161,6 +161,30 @@ export function createMsnwPaystackFiatService(input: Readonly<{
     });
   }
 
+  // Re-read the financial lifecycle after registration or idempotent replay.
+  // A previous Paystack receipt can now be settled or issued; returning a
+  // hardcoded "backing_pending" hides the actual customer obligation state.
+  async function readStatus(tenantId: string, userId: string, reference: string) {
+    const result = await input.pool.query(
+      `SELECT e.reference,e.amount_kobo::text,e.provider_paid_at,
+              i.amount_micro::text AS issued_micro,
+              CASE WHEN i.reference IS NOT NULL THEN 'msnw_issued'
+                   WHEN p.reference IS NOT NULL THEN 'merchant_payout_verified'
+                   WHEN o.reference IS NOT NULL THEN 'backing_pending'
+                   ELSE 'registration_pending' END AS obligation_state
+         FROM commerce.msnw_paystack_fiat_evidence e
+         LEFT JOIN commerce.msnw_funding_obligations o ON o.reference=e.reference
+         LEFT JOIN commerce.msnw_paystack_payout_matches p ON p.reference=e.reference
+         LEFT JOIN commerce.msnw_custody_issuances i ON i.reference=e.reference
+        WHERE e.tenant_id=$1 AND e.user_id=$2 AND e.reference=$3 LIMIT 1`,
+      [tenantId, userId, reference],
+    );
+    if (result.rowCount !== 1 || !result.rows[0]) {
+      throw new PaystackEvidenceError("funding.readback_unavailable");
+    }
+    return toStatus(result.rows[0]);
+  }
+
   return Object.freeze({
     authorizer: input.authorizer,
     async verify(tenantId: string, userId: string, reference: string) {
@@ -184,7 +208,7 @@ export function createMsnwPaystackFiatService(input: Readonly<{
       );
       if (result.rowCount === 1 && result.rows[0]) {
         await ensureMsnwFundingObligation(input.pool, { tenantId, userId, reference });
-        return { ...toStatus(result.rows[0]), obligationState: "backing_pending" as const };
+        return readStatus(tenantId, userId, reference);
       }
       // Global references may only be replayed by the EXACT same owner,
       // transaction, amount, Paystack evidence and destination bank account.
@@ -206,7 +230,7 @@ export function createMsnwPaystackFiatService(input: Readonly<{
         throw new PaystackEvidenceError("funding.replay_conflict", 409);
       }
       await ensureMsnwFundingObligation(input.pool, { tenantId, userId, reference });
-      return { ...toStatus(row), obligationState: "backing_pending" as const };
+      return readStatus(tenantId, userId, reference);
     },
     async handleSignedWebhook(rawBody: Buffer, signature: unknown) {
       // Paystack signs the ORIGINAL UTF-8 request bytes with HMAC-SHA512.
