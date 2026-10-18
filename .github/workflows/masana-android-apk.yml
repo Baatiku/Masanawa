@@ -103,13 +103,20 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
           test -n "$APKSIGNER"
+          trap 'echo "::error title=APK provenance failure::Failed at workflow line $LINENO"' ERR
+          "$APKSIGNER" verify --verbose build/app/outputs/flutter-apk/app-release.apk
           node ../../scripts/reliability/release-provenance.mjs \
             --apk build/app/outputs/flutter-apk/app-release.apk \
             --pubspec pubspec.yaml --lockfile pubspec.lock \
             --apksigner "$APKSIGNER" \
-            --output build/app/outputs/flutter-apk/release-evidence.json
+            --output build/app/outputs/flutter-apk/release-evidence.json 2> "$RUNNER_TEMP/provenance-error.log" || {
+              message="$(cat "$RUNNER_TEMP/provenance-error.log")"
+              echo "::error title=APK provenance failure::$message"
+              exit 1
+            }
           (cd build/app/outputs/flutter-apk && sha256sum app-release.apk > app-release.apk.sha256)
       - name: Preserve compiled handset APK
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: masanawa-26-masana-handset-apk
