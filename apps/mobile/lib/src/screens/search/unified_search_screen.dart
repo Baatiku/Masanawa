@@ -136,10 +136,17 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     final chatsApi = ref.read(masanaInboxSearchProvider);
     final roomApi = ref.read(roomsClientProvider);
     final feedApi = ref.read(statusFeedApiProvider);
+    Future<Object?> safely(Future<Object?> Function() read) async {
+      try {
+        return await read();
+      } catch (_) {
+        return null;
+      }
+    }
     final results = await Future.wait<Object?>([
-      chatsApi.search(bearer: token, query: term).catchError((Object _) => null),
-      roomApi.list(joined: false, query: term).catchError((Object _) => null),
-      feedApi.list(mode: 'for_you').catchError((Object _) => null),
+      safely(() => chatsApi.search(bearer: token, query: term)),
+      safely(() => roomApi.list(joined: false, query: term)),
+      safely(() => feedApi.list(mode: 'for_you')),
     ]);
     if (!mounted || ticket != _generation || _owner != owner ||
         ref.read(sessionProvider) is! SessionSignedIn ||
