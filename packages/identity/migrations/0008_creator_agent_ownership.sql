@@ -137,6 +137,7 @@ CREATE TABLE creator.operations(
   state text NOT NULL CHECK(state IN ('quoted','reserved','captured','free_granted','reversed','failed')),
   wallet_ledger_ref text,
   authorization_ref text,
+  expires_at timestamptz,
   idempotency_key text NOT NULL,
   request_hash text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -145,7 +146,8 @@ CREATE TABLE creator.operations(
   UNIQUE(tenant_id,owner_user_id,kind,idempotency_key),
   FOREIGN KEY(tenant_id,character_id,owner_user_id)
     REFERENCES creator.agents(tenant_id,character_id,owner_user_id),
-  CHECK(state NOT IN ('captured','reversed') OR wallet_ledger_ref IS NOT NULL)
+  CHECK(state NOT IN ('captured','reversed') OR wallet_ledger_ref IS NOT NULL),
+  CHECK(state <> 'quoted' OR (authorization_ref IS NOT NULL AND expires_at IS NOT NULL))
 );
 
 CREATE TABLE creator.substantive_edits(
