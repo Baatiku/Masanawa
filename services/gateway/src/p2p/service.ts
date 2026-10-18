@@ -662,7 +662,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async listEvidence(actor:P2pActor,orderId:string) {
       // Keep historical evidence readable to either participant even after a
       // completed/refunded dispute. The upload permission is stricter.
-      const evidence=await pool.query(`SELECT e.evidence_id,e.submitted_by,e.sha256,e.created_at
+      const evidence=await pool.query(`SELECT e.evidence_id,e.submitted_by,e.sha256,e.created_at,e.object_ref
         FROM commerce.msnw_p2p_evidence e
         JOIN commerce.msnw_p2p_orders o
           ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
@@ -670,7 +670,17 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           AND (o.seller_id=$3 OR o.buyer_id=$3)
         ORDER BY e.created_at ASC LIMIT 100`,
         [actor.tenantId,id(orderId),actor.userId]);
-      return evidence.rows;
+      return evidence.rows.map(row=>{
+        const ref=String(row.object_ref??"");
+        const metadata=ref.match(/_([1-9][0-9]{0,6})_(pdf|png|jpg|webp)$/);
+        // Never send an object-store reference or hash to the consumer UI.
+        const {object_ref:_privateRef,sha256:_digest,...safe}=row;
+        return {
+          ...safe,
+          fileType:metadata?.[2]??null,
+          sizeBytes:metadata?Number(metadata[1]):null,
+        };
+      });
     },
     async evidenceFor(actor:P2pActor,orderId:string,evidenceId:string,operator=false) {
       const value=await pool.query(`SELECT e.object_ref,e.sha256,e.submitted_by,
