@@ -14,7 +14,10 @@ mode="$1"
 [[ "$mode" == "backup" || "$mode" == "restore" ]] || die "unrecognized mode"
 for tool in age aws pg_dump pg_restore psql tar sha256sum; do command_required "$tool"; done
 
-scratch="$(mktemp -d)"
+require MASANAWA_SECURE_TMPDIR
+[[ "$MASANAWA_SECURE_TMPDIR" == /* && -d "$MASANAWA_SECURE_TMPDIR" && -w "$MASANAWA_SECURE_TMPDIR" ]] ||
+  die "provide an absolute, encrypted private scratch directory"
+scratch="$(mktemp -d "$MASANAWA_SECURE_TMPDIR/masanawa-recovery.XXXXXXXX")"
 cleanup() { rm -rf -- "$scratch"; }
 trap cleanup EXIT
 mkdir -m 700 "$scratch/objects"
