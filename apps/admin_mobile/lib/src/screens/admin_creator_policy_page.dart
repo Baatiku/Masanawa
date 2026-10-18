@@ -128,6 +128,7 @@ class _AdminCreatorPolicyPageState extends State<AdminCreatorPolicyPage> {
       child: TextFormField(
         controller: controller,
         keyboardType: TextInputType.number,
+        readOnly: label == 'Free Masana per account',
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
