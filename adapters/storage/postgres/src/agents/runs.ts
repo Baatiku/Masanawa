@@ -182,12 +182,13 @@ async function admit(
   request: AgentRunRequest,
   action: AgentRunAction,
   trace: AgentRun["trace"],
+  lockPolicyRevision = true,
 ): Promise<void> {
   const at = await clock(client);
   assertAgentRunAccess(request.authority, request.scope, action, trace, at);
   await assertCurrentAuthority(
     request.authority,
-    createPostgresCurrentAuthoritySource(client),
+    createPostgresCurrentAuthoritySource(client, { lockPolicyRevision }),
     at,
   );
 }
@@ -417,10 +418,10 @@ export function createPostgresAgentRunRepository(
       return withTransaction(
         pool,
         async (client) => {
-          await admit(client, request, "read", admissionTrace(request));
+          await admit(client, request, "read", admissionTrace(request), false);
           const row = await loadRun(client, request, false);
           const run = rowToRun(row);
-          await admit(client, request, "read", run.trace);
+          await admit(client, request, "read", run.trace, false);
           return run;
         },
         { isolation: "repeatable read", readOnly: true },

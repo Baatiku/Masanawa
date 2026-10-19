@@ -172,6 +172,7 @@ void main() {
                 ),
               );
             }
+            session.change('fixture-start');
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
@@ -236,7 +237,10 @@ void main() {
             await tester.enterText(field, 'private query B');
             session.signOut();
             await tester.pumpAndSettle();
-            expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+            expect(find.byType(TextField), findsNothing);
+            expect(find.text('Sign in to see your conversations.'), findsOneWidget);
+            session.change('fixture-return');
+            await tester.pumpAndSettle();
             await tester.enterText(field, 'no authorized match');
             // Simulated software keyboard inset, not a real IME.
             tester.view.viewInsets = const FakeViewPadding(bottom: 300);
@@ -261,6 +265,8 @@ void main() {
               expect(tester.takeException(), isNull);
             }
 
+            session.signOut();
+            await tester.pumpAndSettle();
             await tab(2);
             await save('wallet-outage');
             expect(

@@ -251,7 +251,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
         if (_query.isNotEmpty &&
-            !'${agent?.displayName ?? ''} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
+            !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
                 .toLowerCase()
                 .contains(_query))
           continue;
@@ -348,11 +348,11 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                 if (server?.hasError == true)
                   ListTile(
                     title: const Text(
-                      'Server search unavailable. Showing saved conversations.',
+                      'Server conversations are not available yet. Showing saved conversations.',
                     ),
                     trailing: TextButton(
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
-                      child: const Text('Retry'),
+                      child: const Text('Retry server search'),
                     ),
                   ),
                 if (serverRows.isNotEmpty)

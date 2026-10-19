@@ -91,9 +91,11 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
         observedAt: instant(2),
       },
     });
-    expect(await repository.readBalance({
+    // Compare PostgreSQL NUMERIC precisely; its trailing zero scale is benign.
+    const actual = await repository.readBalance({
       tenantId, userId, asset: "USDTTRC20", network: "tron",
-    })).toBe(balance);
+    });
+    expect(actual?.replace(/\.0+$/, "")).toBe(balance);
     return { repository, tenantId, userId, fundingRequestId, fundingPaymentId };
   }
 

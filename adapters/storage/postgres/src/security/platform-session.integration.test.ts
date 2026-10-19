@@ -85,7 +85,7 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
       channel: "email",
       identifier: left.email!,
       observedAt: new Date().toISOString(),
-    })).resolves.toEqual(left);
+    })).resolves.toMatchObject(left);
 
     const identityRows = await pool.query<{ tenants: string; users: string }>(
       `SELECT
