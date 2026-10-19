@@ -44,6 +44,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   Timer? _timer;
   static final _key = jsonEncode(['all', '']);
   bool _foreground = true;
+  final Map<String, MasanaInboxSearchItem> _confirmedPinUpdates = {};
   @override
   void initState() {
     super.initState();
@@ -74,6 +75,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     setState(() {
       _query = raw.trim().toLowerCase();
       _remoteQuery = '';
+      _confirmedPinUpdates.clear();
     });
     if (_query.isNotEmpty && _query.length <= 80)
       _searchDebounce = Timer(const Duration(milliseconds: 350), () {
@@ -223,6 +225,11 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               !savedIds.contains(r.characterId) &&
               (_filter != 'Unread' || r.unreadCount > 0),
         )
+        .map((r) {
+          final confirmed = _confirmedPinUpdates[r.characterId];
+          return confirmed != null && confirmed.revision > r.revision
+              ? confirmed : r;
+        })
         .toList();
     final humans = ref.watch(humanInboxProvider(_key));
     final people = humans.valueOrNull ?? const <HumanConversation>[];
@@ -398,15 +405,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                         final owner = ref.read(sessionProvider);
                         final access = ref.read(masanaInboxSearchProvider);
                         try {
-                          await access.setPinned(
+                          final nextRevision = await access.setPinned(
                             bearer: session.tokens.accessToken,
                             characterId: result.characterId,
                             pinned: !result.pinned,
                             expectedRevision: result.revision,
                           );
                           if (mounted &&
-                              identical(owner, ref.read(sessionProvider)))
+                              identical(owner, ref.read(sessionProvider))) {
+                            setState(() => _confirmedPinUpdates[result.characterId] =
+                                result.withPin(!result.pinned, nextRevision));
                             ref.invalidate(_serverSearch(serverKey));
+                          }
                         } catch (_) {
                           if (mounted &&
                               identical(owner, ref.read(sessionProvider)))
