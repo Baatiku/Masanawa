@@ -89,7 +89,11 @@ describe("test topology", () => {
       "utf8",
     );
     expect(workflow).toContain("- name: Typecheck\n        run: pnpm typecheck");
-    expect(workflow).toContain("- name: Test\n        run: pnpm test:ci");
+    // CI deliberately serializes database suites to avoid races between
+    // PostgreSQL migration/teardown tests. Keep that distinction explicit.
+    expect(workflow).toMatch(
+      /- name: Test\n(?:[^\n]*\n)*?\s+run: pnpm exec vitest run --no-file-parallelism/u,
+    );
     expect(workflow).toContain("- name: Build\n        run: pnpm build");
     expect(workflow).not.toContain("run: pnpm check");
   });

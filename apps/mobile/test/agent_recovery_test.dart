@@ -113,9 +113,15 @@ class RetryDirectory implements AgentDirectoryTransport {
 
 class RecoveringShellTransport extends RecoveringTransport implements AgentShellTransport {
   final checkedRequests = <String>[];
+  String serverStatus = 'missing';
   @override Future<AgentTurnStatus> turnStatus(String characterId, String requestId) async {
     checkedRequests.add(requestId);
-    return const AgentTurnStatus(state: 'missing');
+    // A newly authorized retry is a distinct request; it cannot inherit the
+    // original request's terminal failure from the canonical server.
+    if (serverStatus == 'failed' && checkedRequests.first != requestId) {
+      return const AgentTurnStatus(state: 'missing');
+    }
+    return AgentTurnStatus(state: serverStatus);
   }
   @override Future<AgentShellConfig> loadShellConfig(String characterId) async =>
       const AgentShellConfig(shellVersion: 1, minimumAppVersion: '0.0.0', recommendedAppVersion: '0.0.0', features: {});
@@ -527,7 +533,12 @@ void main() {
       await controller.retryMessage('character-1', userId);
       final thread = c.read(aiChatProvider).threads['character-1']!;
       expect(transport.turns, 2);
-      expect(transport.checkedRequests, [thread.messages.first.requestId]);
+      // Explicit Retry and the durable queue each check authoritative status.
+      // Both checks must preserve the original idempotency key.
+      expect(transport.checkedRequests, [
+        thread.messages.first.requestId,
+        thread.messages.first.requestId,
+      ]);
       expect(thread.messages.where((m) => m.isUser), hasLength(1));
       expect(thread.messages.last.text, 'Real Gateway reply');
       expect(thread.characterSessionId, 'session-1');
@@ -535,6 +546,50 @@ void main() {
       expect(c.read(aiChatProvider).sendingIn, isEmpty);
     },
   );
+
+  test('server-confirmed failure requires a fresh visible customer retry request', () async {
+    final transport = RecoveringShellTransport()..serverStatus = 'failed';
+    final c = ProviderContainer(overrides: [
+      agentTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SignedInSessionController.new),
+    ]);
+    addTearDown(c.dispose);
+    final controller = c.read(aiChatProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.sendText('character-1', 'hello');
+    final before = c.read(aiChatProvider).threads['character-1']!;
+    final original = before.messages.first;
+    expect(original.deliveryStatus, 'failed');
+    await controller.retryMessage('character-1', original.id);
+    final after = c.read(aiChatProvider).threads['character-1']!;
+    final userTurns = after.messages.where((m) => m.isUser).toList();
+    expect(userTurns, hasLength(2));
+    expect(userTurns.first.requestId, original.requestId);
+    expect(userTurns.last.requestId, isNot(original.requestId));
+    expect(userTurns.last.text, original.text);
+    expect(transport.checkedRequests, [original.requestId, userTurns.last.requestId]);
+    expect(transport.turns, 2);
+    expect(after.messages.last.text, 'Real Gateway reply');
+  });
+
+  test('a pending server receipt prohibits a second inference', () async {
+    final transport = RecoveringShellTransport()..serverStatus = 'pending';
+    final c = ProviderContainer(overrides: [
+      agentTransportProvider.overrideWithValue(transport),
+      sessionProvider.overrideWith(_SignedInSessionController.new),
+    ]);
+    addTearDown(c.dispose);
+    final controller = c.read(aiChatProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.sendText('character-1', 'hello');
+    final before = c.read(aiChatProvider).threads['character-1']!;
+    await controller.retryMessage('character-1', before.messages.first.id);
+    final after = c.read(aiChatProvider).threads['character-1']!;
+    expect(transport.turns, 1);
+    expect(after.messages.where((m) => m.isUser), hasLength(1));
+    expect(after.messages.first.deliveryStatus, 'processing');
+    expect(transport.checkedRequests, [before.messages.first.requestId]);
+  });
 
   test('clearing a thread prevents a late result from recreating it', () async {
     final pending = Completer<AgentTurnResult>();
