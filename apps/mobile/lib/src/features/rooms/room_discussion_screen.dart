@@ -1,9 +1,10 @@
+import '../../tokens/feature_colors.dart';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'room_discussion_api.dart';
 
-const _blue=Color(0xFF1E63D6);
+const _blue=MasanawaFeatureColors.informationBlue;
 String roomDiscussionError(Object e){
  if(e is DioException){
   if(e.response?.statusCode==410)return 'Discussion is not available yet.';

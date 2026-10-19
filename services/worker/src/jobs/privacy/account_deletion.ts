@@ -1,6 +1,21 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "@masanawa/postgres";
 
+/** Remove public personal identity only after canonical account disablement. */
+export async function redactDeletedPublicProfile(
+  client: Pick<PoolClient, "query">, tenantId: string, userId: string,
+  alias: string, timestamp: string,
+): Promise<void> {
+  await client.query(`UPDATE talks.public_profiles
+    SET handle=$3,display_name='Deleted account',bio='',avatar_url=NULL,
+        live_talk_id=NULL,twin_public_id=NULL,twin_display_name=NULL,
+        talks_json='[]'::jsonb,updated_at=GREATEST(updated_at,$4::timestamptz)
+    WHERE tenant_id=$1 AND user_id=$2
+      AND EXISTS(SELECT 1 FROM identity.users
+        WHERE tenant_id=$1 AND user_id=$2 AND state='disabled')`,
+    [tenantId,userId,'deleted_'+alias.slice(0,22),timestamp]);
+}
+
 /**
  * Fail-closed financial preflight. All owner-associated commerce tables are
  * discovered from the schema, so a new payment rail is included automatically.
@@ -157,6 +172,7 @@ export function createAccountDeletionPrivacyWorker(input:{
           WHERE tenant_id=$1 AND user_id=$2`,[...scope,now()]);
       const alias=createHash("sha256")
         .update(["redacted",...scope].join(":")).digest("hex");
+      await redactDeletedPublicProfile(client,row.tenant_id,row.user_id,alias,now());
       const erased=await client.query(`UPDATE security.platform_user_profiles
            SET display_name='Deleted account',phone=NULL,email=$3,
              updated_at=GREATEST(updated_at,$4::timestamptz)

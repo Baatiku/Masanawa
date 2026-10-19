@@ -1,3 +1,4 @@
+import '../../tokens/feature_colors.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -679,7 +680,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.insert_drive_file_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF5B51D8), Color(0xFF833AB4)],
+                    colors: [MasanawaFeatureColors.instagramPurple, MasanawaFeatureColors.instagramViolet],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -692,7 +693,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.camera_alt_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFE1306C), Color(0xFFFD1D1D)],
+                    colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -705,7 +706,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.photo_library_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF833AB4), Color(0xFF405DE6)],
+                    colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -718,7 +719,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.headphones_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFF7E5F), Color(0xFFFEB47B)],
+                    colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -731,7 +732,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.videocam_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
+                    colors: [MasanawaFeatureColors.cyan, MasanawaFeatureColors.deepCyan],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -744,7 +745,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.location_on_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF0F9D58), Color(0xFF00E676)],
+                    colors: [MasanawaFeatureColors.emerald, MasanawaFeatureColors.brightEmerald],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -757,7 +758,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.person_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF00897B), Color(0xFF00BFA5)],
+                    colors: [MasanawaFeatureColors.teal, MasanawaFeatureColors.brightTeal],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -770,7 +771,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 _AttachOption(
                   icon: Icons.poll_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFFB300), Color(0xFFF57C00)],
+                    colors: [MasanawaFeatureColors.amber, MasanawaFeatureColors.deepAmber],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -1295,7 +1296,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
-                    fillColor: Color(0xFFF1F4F3),
+                    fillColor: MasanawaFeatureColors.searchFill,
                     border: InputBorder.none,
                   ),
                   onChanged: (_) {

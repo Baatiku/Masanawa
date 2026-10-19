@@ -43,22 +43,26 @@ jobs:
           result=$?
           python3 - "$RUNNER_TEMP/flutter-tests.jsonl" <<'PY'
           import json,sys
-          tests={};counts={};errors=[]
+          tests={};counts={};errors={};printed={};failed=[];raw=[]
+          def escape(text): return text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
           for line in open(sys.argv[1]):
               try: e=json.loads(line)
               except ValueError:
-                  if line.strip(): errors.append(line.strip())
+                  if line.strip(): raw.append(line.strip())
                   continue
+              tid=e.get('testID',-1)
               if e.get('type')=='testStart':tests[e['test']['id']]=e['test']['name']
-              if e.get('type')=='print' and ('Error:' in e.get('message','') or 'Failed to load' in e.get('message','')):errors.append(e['message'])
-              if e.get('type')=='error':errors.append(e.get('error','')+'\n'+e.get('stackTrace',''))
+              if e.get('type')=='print':printed[tid]=(printed.get(tid,'')+'\n'+e.get('message',''))[-6000:]
+              if e.get('type')=='error':errors[tid]=errors.get(tid,'')+'\n'+e.get('error','')+'\n'+e.get('stackTrace','')
               if e.get('type')=='testDone':
                   key='skipped' if e.get('skipped') else e.get('result','unknown');counts[key]=counts.get(key,0)+1
-                  if key=='error' or key=='failure':errors.append('Failed: '+tests.get(e['testID'],str(e['testID'])))
-          print('Flutter results: '+json.dumps(counts))
-          for error in errors:
-              for start in range(0,min(len(error),12000),2800):
-                  text=error[start:start+2800].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
-                  print('::error title=Flutter regression::'+text)
+                  if key in ('error','failure'):failed.append(tid)
+          print('::notice title=Flutter results::'+json.dumps(counts))
+          names='\n'.join('Failed: '+tests.get(t,str(t)) for t in failed)
+          if failed: print('::error title=Failed Flutter tests::'+escape(names[:3000]))
+          for tid in failed[:8]:
+              detail=(printed.get(tid,'')+'\n'+errors.get(tid,''))
+              print('::error title=Flutter regression::'+escape((tests.get(tid,str(tid))+'\n'+detail)[:3000]))
+          if raw:print('::error title=Flutter runner output::'+escape('\n'.join(raw)[-3000:]))
           PY
           exit "$result"

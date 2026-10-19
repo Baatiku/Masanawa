@@ -34,6 +34,6 @@ void main() {
     final indicators = tester.widgetList<NavigationIndicator>(find.byType(NavigationIndicator));
     expect(indicators.any((indicator) => indicator.color == theme.navigationBarTheme.indicatorColor), isTrue);
     expect(theme.navigationBarTheme.indicatorColor!.a, greaterThan(0));
-    expect(theme.navigationBarTheme.iconTheme!.resolve({WidgetState.selected})!.color, theme.extension<MasanawaColors>()!.textPrimary);
+    expect(theme.navigationBarTheme.iconTheme!.resolve({WidgetState.selected})!.color, theme.extension<MasanawaColors>()!.brandStrong);
   });
 }
