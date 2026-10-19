@@ -1,3 +1,4 @@
+import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import { RoomError } from "@masanawa/rooms";
@@ -1780,6 +1781,7 @@ export async function startGatewayService(
           ...(database.featurePool ? {
             rooms: createPgAgentRoomDirectory(database.featurePool),
             identities: createPgAgentMasanaIdentityReader(database.featurePool),
+            creators: createPgMasanaCreatorDirectory(database.featurePool),
           } : {}),
         })
       : undefined);

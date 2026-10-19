@@ -13,6 +13,7 @@ void main() {
       ]),
     ))));
     expect(find.text('Masanawa'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Masanawa')).style!.color, theme.extension<MasanawaColors>()!.brand);
     expect(find.text('Agents'), findsNothing);
     final colors = theme.extension<MasanawaColors>()!;
     for (final icon in [Icons.account_balance_wallet_outlined, Icons.people_outline]) {

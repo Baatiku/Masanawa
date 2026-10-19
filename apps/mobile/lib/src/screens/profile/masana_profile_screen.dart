@@ -11,6 +11,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import 'masana_status_posts_screen.dart';
 import 'masana_quality_feedback_screen.dart';
+import 'person_profile_screen.dart';
 
 /// All actions use the canonical server Character ID; the visual portrait
 /// and Room link are approved projections, never display-name-derived routes.
@@ -177,6 +178,15 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                 ),
             ],
           ),
+          if (agent.creatorHandle != null)
+            ListTile(contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Creator'),
+              subtitle: Text(agent.creatorName?.isNotEmpty == true
+                ? agent.creatorName! : '@${agent.creatorHandle}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => PersonProfileScreen(handle: agent.creatorHandle!)))),
           if (agent.socialChannels.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text('Official channels',

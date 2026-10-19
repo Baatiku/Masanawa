@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import 'msnw_wallet_home.dart' show formatWalletAtomic;
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -298,17 +299,27 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     child: Column(mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Send MSNW', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-
-        const SizedBox(height: 10),
-        TextField(controller: recipient, enabled: !busy && receipt == null && pending == null,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Recipient email or +234 phone')),
-        TextField(controller: quantity, enabled: !busy && receipt == null && pending == null,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Amount (MSNW)')),
+        const WalletFlowHeader(title:'Send MSNW',
+          subtitle:'Send to another Masanawa account. Check the recipient and exact amount before confirming.',
+          icon:Icons.north_east_rounded),
+        if (receipt == null && pending == null) ...[
+          WalletFormSection(title:'1. Recipient',children:[
+            TextField(controller: recipient, enabled: !busy,
+              textInputAction: TextInputAction.next,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                prefixIcon:Icon(Icons.person_outline),
+                labelText:'Recipient email or +234 phone',
+                helperText:'Use the registered email or full international phone number.',
+                helperMaxLines:3)),
+          ]),
+          WalletFormSection(title:'2. Amount',children:[
+            TextField(controller: quantity, enabled: !busy,
+              keyboardType:const TextInputType.numberWithOptions(decimal:true),
+              decoration:const InputDecoration(labelText:'Amount (MSNW)',
+                suffixText:'MSNW',hintText:'0.00')),
+          ]),
+        ],
         if (error != null) Padding(padding: const EdgeInsets.only(top: 8),
           child: Text(error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error))),
@@ -317,6 +328,9 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           const SizedBox(height: 12),
           const Text('Previous transfer needs confirmation',
               style: TextStyle(fontWeight: FontWeight.bold)),
+          Text('To: ${pending!['recipient']}'),
+          Text('Amount: ${formatWalletAtomic(pending!['amountMicro'] as String)} MSNW'),
+          const SizedBox(height:8),
           SelectableText('Request: ' +
               (pending!['idempotencyKey'] as String)),
           Wrap(spacing: 8, runSpacing: 8, children: [
@@ -339,7 +353,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           const Text('Transfer completed',
             style: TextStyle(fontWeight: FontWeight.bold)),
           SelectableText('Receipt: ' + (receipt!['operationId'] as String)),
-          Text('MSNW sent: ' + quantity.text.trim()),
+          Text('MSNW sent: ' + formatWalletAtomic(receipt!['amountMicro'] as String)),
           FilledButton(onPressed: () => Navigator.pop(context),
             child: const Text('Done')),
         ],
