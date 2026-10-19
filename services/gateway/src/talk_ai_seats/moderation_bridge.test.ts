@@ -9,6 +9,12 @@ function repository() {
     mediaActions: [],
   }));
   const repo: TalkModerationRepository = {
+    async leaveHumanSeat() { throw new Error("unexpected leaveHumanSeat"); },
+    async submitQuestion() { throw new Error("unexpected submitQuestion"); },
+    async listQuestions() { throw new Error("unexpected listQuestions"); },
+    async resolveQuestion() { throw new Error("unexpected resolveQuestion"); },
+    async inviteHuman() { throw new Error("unexpected inviteHuman"); },
+    async respondHumanInvitation() { throw new Error("unexpected respondHumanInvitation"); },
     async participation() { return { handStatus: "idle" }; },
     async setReaction() { return { handStatus: "idle" }; },
     async setRaised() { return { handStatus: "idle" }; },

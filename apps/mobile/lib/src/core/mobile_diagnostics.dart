@@ -5,6 +5,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Diagnostics are local-only and never transmit automatically.
 class MasanawaDiagnostics {
@@ -15,6 +16,15 @@ class MasanawaDiagnostics {
   static const _native = MethodChannel('masanawa/diagnostics');
   Future<void> _pending = Future<void>.value();
   bool _installed = false;
+
+  /// Release metadata is bounded and never accepts free-form text or URLs.
+  static String safeReleaseValue(String value) =>
+      RegExp(r'^[0-9][0-9A-Za-z.+_-]{0,47}$').hasMatch(value)
+          ? value : 'unknown';
+
+  static String safeSourceCommit(String value) =>
+      RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(value)
+          ? value.toLowerCase() : 'unknown';
 
   static String safeErrorType(Object error) {
     final type = error.runtimeType.toString();
@@ -86,8 +96,19 @@ class MasanawaDiagnostics {
     final lines = <String>[
       'Masanawa support diagnostics: local, anonymous, user-initiated export',
       'No account, device identifiers, conversations, tokens, URLs or raw stacks.',
-      'Flutter exceptions:',
+      'Source commit: ${safeSourceCommit(const String.fromEnvironment('MASANAWA_SOURCE_SHA'))}',
     ];
+    try {
+      // Read the installed binary identity; pubspec alone misses build overrides.
+      final info = await PackageInfo.fromPlatform().timeout(const Duration(seconds: 2));
+      lines.add('App version: ${safeReleaseValue(info.version)}');
+      lines.add('App build: ${safeReleaseValue(info.buildNumber)}');
+    } catch (_) {
+      lines.add('App version: unknown');
+      lines.add('App build: unknown');
+    }
+    lines.add('Flutter exceptions:');
+
     for (final entry in stored.take(20)) {
       if (entry is! Map) continue;
       final type = entry['type'], frame = entry['frame'], day = entry['day'];

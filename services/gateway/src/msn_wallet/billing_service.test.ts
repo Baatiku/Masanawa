@@ -20,7 +20,7 @@ function fixture(existing = false) {
   };
   const service=createMsnwBillingService({
     authorizer:{
-      async authorize({authorizationHeader}) {
+      async authorize({authorizationHeader}: {authorizationHeader: string | undefined}) {
         if(authorizationHeader!=="Bearer owner")throw new Error("denied");
         return owner;
       },
@@ -38,13 +38,13 @@ function fixture(existing = false) {
       },
     } as any,
     billing:{
-      async purchaseMsnwOwned(request) {
+      async purchaseMsnwOwned(request: Parameters<NonNullable<Parameters<typeof createMsnwBillingService>[0]["billing"]["purchaseMsnwOwned"]>>[0]) {
         calls.push("execute");
         expect(request.requestId).toBe("msnw-bill-quote-1");
         expect(request.amount).toBe("500");
         return {fulfillmentReference:request.requestId,state:"succeeded"};
       },
-      async readPurchase(request) {
+      async readPurchase(request: Parameters<Parameters<typeof createMsnwBillingService>[0]["billing"]["readPurchase"]>[0]) {
         calls.push("reconcile");
         expect(request.reference).toBe("msnw-bill-quote-1");
         return {fulfillmentReference:request.reference,state:"pending"};

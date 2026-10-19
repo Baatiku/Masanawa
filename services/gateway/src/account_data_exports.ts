@@ -42,7 +42,8 @@ export function createAccountDataExports(
         avatar_url:string|null;state:string;deletion_phase:string|null;
         control_state:string|null;recent_reset:boolean;
       }>(
-        `SELECT p.display_name,p.email,p.phone,t.avatar_url,u.state,
+        `SELECT COALESCE(NULLIF(btrim(t.display_name),''),p.display_name) AS display_name,
+                p.email,p.phone,t.avatar_url,u.state,
                 d.phase AS deletion_phase,c.state AS control_state,
                 EXISTS(
                   SELECT 1 FROM security.platform_auth_events e

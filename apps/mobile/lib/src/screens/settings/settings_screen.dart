@@ -154,14 +154,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           if (now is! SessionSignedIn || now.user.id != ownerId) {
             throw StateError('Account changed before local cleanup');
           }
-          await ref.read(aiChatProvider.notifier).clearAll();
+          await ref.read(aiChatProvider.notifier).clearDownloadedMediaCache();
         },
       ),
     );
     if (!mounted || cleared != true) return;
     final now = ref.read(sessionProvider);
     if (now is SessionSignedIn && now.user.id == ownerId) {
-      _showFeedback('Conversations cached on this device were cleared.');
+      _showFeedback('Downloaded chat media cache was cleared.');
     }
   }
 
@@ -402,9 +402,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 key: const Key('settings-clear-device-chats'),
                 leading: Icon(Icons.delete_outline, color: u.brand),
-                title: const Text('Clear chats on this device'),
+                title: const Text('Clear downloaded chat media'),
                 subtitle: const Text(
-                  'Remove locally cached Masana conversations, not server history or receipts',
+                  'Keep messages, drafts, retryable uploads and receipts',
                 ),
                 onTap: user == null
                     ? null

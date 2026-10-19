@@ -8,7 +8,7 @@ function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; a
   const providerCode="USDTTRC20";
   const amountMicro="1000000";
   const usd="1";
-  const pool={
+  const mockPool={
     async query(sql:string){
       commands.push(sql);
       if(sql.includes("SELECT conversion_id FROM commerce.msnw_usdt_payouts"))
@@ -20,10 +20,11 @@ function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; a
         return {rows:[{queued:"0"}],rowCount:1};
       return {rows:[],rowCount:0};
     },
-    async connect(){return {query:this.query,release(){}};},
-  } as unknown as Pool;
+    async connect(){return {query:mockPool.query,release(){}};},
+  };
+  const pool = mockPool as unknown as Pool;
   const payout={
-    async validateAddress(){calls.push("validate");return {valid:true,address:"T".repeat(34),currency:providerCode};},
+    async validateAddress(){calls.push("validate");return {valid:true as const,address:"T".repeat(34),currency:providerCode};},
     async getMinimumPayoutAmount(){calls.push("minimum");return {currency:providerCode,minimumAmount:"0.1"};},
     async getPayoutFeeEstimate(){calls.push("fee");return {currency:providerCode,amount:usd,fee:"0.01"};},
     async createPayout(){calls.push("POST");return {payoutId:"batch123",withdrawalId:"tx123",status:"waiting"};},

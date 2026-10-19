@@ -155,8 +155,10 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
      all[at]=presentation;changed=true;
    }
    // Explicit affiliation for the fictional stock catalog. Never replace an
-   // administrator's existing country or backfill an unrelated custom name.
-   if(presentation.countryCode==null && presentation.displayName===seed.displayName) {
+   // administrator's existing country. A renamed approved identity retains
+   // its catalog affiliation through its canonical ID, never its display name.
+   if(presentation.countryCode==null &&
+      (presentation.characterId===canonicalId || presentation.displayName===seed.displayName)) {
      const at=all.indexOf(presentation);
      presentation=await input.presentations.put({expectedRevision:presentation.revision,
        presentation:{...presentation,countryCode:seed.countryCode,countryName:seed.countryName}});

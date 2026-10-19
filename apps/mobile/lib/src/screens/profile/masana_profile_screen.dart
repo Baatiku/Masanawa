@@ -7,6 +7,7 @@ import '../../agents/masana_portrait_avatar.dart';
 import '../../core/providers.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
+import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import 'masana_status_posts_screen.dart';
 import 'masana_quality_feedback_screen.dart';
@@ -23,15 +24,22 @@ class MasanaProfileScreen extends ConsumerStatefulWidget {
 class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
   late bool _following;
   bool _followPending = false;
+  String? _owner;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
 
   @override
   void initState() {
     super.initState();
     _following = widget.agent.following;
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
   }
 
   Future<void> _toggleFollow() async {
-    if (_followPending) return;
+    if (_followPending || !_sameAccount) return;
     setState(() => _followPending = true);
     try {
       final api = ref.read(apiClientProvider);
@@ -39,19 +47,19 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
       final response = _following
           ? await api.dio.delete<Map<String, dynamic>>(path)
           : await api.dio.post<Map<String, dynamic>>(path);
-      if (!mounted) return;
+      if (!_sameAccount) return;
       final value = response.data?['following'];
       if (value is! bool) throw const FormatException('Invalid follow response');
       setState(() => _following = value);
       ref.read(agentDirectoryProvider.notifier).refresh();
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not update Following. Please retry.')),
         );
       }
     } finally {
-      if (mounted) setState(() => _followPending = false);
+      if (_sameAccount) setState(() => _followPending = false);
     }
   }
 
@@ -93,6 +101,18 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
       (directory) => directory.find(widget.agent.characterId),
     )) ?? widget.agent;
     final colors = context.masanawa;
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('Masana profile')),
+        body: const Center(child: Text('Sign in to view this profile.')));
+    }
+    ref.listen(agentDirectoryProvider, (previous, next) {
+      if (_followPending || !_sameAccount) return;
+      final refreshed = next.find(widget.agent.characterId);
+      if (refreshed != null && refreshed.following != _following) {
+        setState(() => _following = refreshed.following);
+      }
+    });
     return Scaffold(
       backgroundColor: colors.surfaceCard,
       appBar: AppBar(title: const Text('Masana profile')),

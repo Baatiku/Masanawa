@@ -123,7 +123,7 @@ export function createReplayObjectStore(input:Readonly<{
       const response=await fetchImpl(url,{
         method:"PUT",
         headers:{...authHeaders(url,now(),"PUT",digest),"content-type":contentType},
-        body,
+        body: Uint8Array.from(body),
         redirect:"error",
         signal:AbortSignal.timeout(20000),
       });

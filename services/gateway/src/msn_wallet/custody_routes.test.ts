@@ -13,7 +13,7 @@ describe("canonical MSNW custody Gateway routes", () => {
           return { tenantId: "t1", userId: "u1" };
         } },
         ledger: {
-          async balance(owner) {
+          async balance(owner: {tenantId: string; userId: string}) {
             seen.push(owner.userId);
             return { asset: "MSNW", scope: "platform_custody",
               availableMicro: "0", reservedMicro: "0" };
@@ -63,7 +63,7 @@ describe("canonical MSNW custody Gateway routes", () => {
           return { tenantId: "tenantA", userId: "senderA" };
         }},
         ledger: {
-          async lookup(owner, key) {
+          async lookup(owner: {tenantId: string; userId: string}, key: string) {
             owners.push(owner.tenantId, owner.userId, String(key));
             return key === "original-send-key-001" ? {
               operationId: "committed-001", recipientUserId: "recipientB",

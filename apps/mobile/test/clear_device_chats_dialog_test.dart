@@ -37,7 +37,7 @@ void main() {
     );
     expect(find.text('server-held history', findRichText: true), findsNothing);
     expect(find.textContaining('financial receipts'), findsOneWidget);
-    await tester.tap(find.text('Keep chats'));
+    await tester.tap(find.text('Keep media'));
     await tester.pumpAndSettle();
     expect(writes, 0);
     expect(result, isFalse);
@@ -63,12 +63,12 @@ void main() {
       ).onPressed,
       isNull,
     );
-    expect(find.text('Clear chats on this device?'), findsOneWidget);
+    expect(find.text('Clear downloaded chat media?'), findsOneWidget);
     pending.complete();
     await tester.pumpAndSettle();
     expect(result, isTrue);
     expect(writes, 1);
-    expect(find.text('Clear chats on this device?'), findsNothing);
+    expect(find.text('Clear downloaded chat media?'), findsNothing);
   });
 
   testWidgets('failed cleanup stays open for explicit retry', (tester) async {
@@ -82,13 +82,13 @@ void main() {
       },
       onResult: (value) => result = value,
     );
-    await tester.tap(find.text('Clear local chats'));
+    await tester.tap(find.text('Clear downloaded media'));
     await tester.pumpAndSettle();
     expect(attempts, 1);
     expect(result, isNull);
     expect(find.byKey(const Key('clear-device-chats-error')), findsOneWidget);
     expect(find.textContaining('private storage details'), findsNothing);
-    await tester.tap(find.text('Clear local chats'));
+    await tester.tap(find.text('Clear downloaded media'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(result, isTrue);
@@ -104,7 +104,7 @@ void main() {
       onConfirm: () async {},
       onResult: (_) {},
     );
-    expect(find.text('Keep chats'), findsOneWidget);
+    expect(find.text('Keep media'), findsOneWidget);
     expect(find.byKey(const Key('confirm-clear-device-chats')),
         findsOneWidget);
     expect(tester.takeException(), isNull);

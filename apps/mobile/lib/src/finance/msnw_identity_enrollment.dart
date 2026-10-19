@@ -124,6 +124,8 @@ class _IdentityState extends State<MsnwIdentityEnrollment> {
       });
       return;
     }
+    final expectedUserId = widget.expectedUserId;
+    String? rejectionMessage;
     final run = ++generation;
     final cancel = CancelToken();
     cancellation = cancel;
@@ -211,10 +213,20 @@ class _IdentityState extends State<MsnwIdentityEnrollment> {
         bankCode.clear();
         consent = false;
       }
-    } catch (_) {
+    } catch (failure) {
+      final rejected = failure is DioException &&
+          failure.response?.statusCode == 422 &&
+          failure.response?.data is Map &&
+          (failure.response!.data as Map)['error'] ==
+              'funding.bank_identity_rejected';
+      if (rejected) {
+        rejectionMessage =
+            'Bank identity details were not accepted. Your name and contact '
+            'details are saved. Check your bank details and submit again.';
+      }
       if (same())
         setState(() {
-          uncertain = submit;
+          uncertain = submit && !rejected;
           error = submit
               ? 'Could not confirm submission. Refresh status.'
               : 'Could not load identity details';
@@ -224,6 +236,7 @@ class _IdentityState extends State<MsnwIdentityEnrollment> {
         bvn.clear();
         bankAccount.clear();
         bankCode.clear();
+        consent = false;
       }
       if (current && run == generation)
         setState(() {
@@ -231,7 +244,14 @@ class _IdentityState extends State<MsnwIdentityEnrollment> {
           loading = false;
         });
     }
-    if (submit && current && !uncertain) await refresh();
+    if (submit && current && !uncertain) {
+      await refresh();
+      if (current && widget.expectedUserId == expectedUserId &&
+          widget.accessToken()?.trim() == token &&
+          rejectionMessage != null) {
+        setState(() => error = rejectionMessage);
+      }
+    }
   }
 
   @override
@@ -312,6 +332,13 @@ class _IdentityState extends State<MsnwIdentityEnrollment> {
                 icon: const Icon(Icons.refresh),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Identity verification is separate from your public profile. '
+            'Submitted name and contact details are saved securely. '
+            'BVN and bank account details are cleared after submission; '
+            'enter them again only if verification needs correction.',
           ),
           const SizedBox(height: 24),
           if (state != null) ...[
