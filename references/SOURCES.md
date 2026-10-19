@@ -1,6 +1,6 @@
 # Reference Sources
 
-This is the human navigation index for **optional external donor projects**. These projects are no longer checked out as Git submodules. The reference keys below preserve the former directory names for navigation; use upstream links to read them. Exact pinned revisions are authoritative in `docs/migration/SOURCE-LOCK.md`.
+This is the human navigation index for **optional external donor projects**. These projects are no longer checked out as Git submodules. The reference keys below preserve the former directory names for navigation; use upstream links to read them. Previously reviewed commit revisions are retained in [PINNED-SOURCES.md](PINNED-SOURCES.md).
 
 | Category | Reference key (not a local directory) | Upstream repository | Primary questions for Masanawa |
 |---|---|---|---|

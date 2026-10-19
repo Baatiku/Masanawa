@@ -1,10 +1,10 @@
-# Backend, database and storage closure plan — 2026-10-09
+# Backend, database and storage operational safeguards
 
-Status: design requirements and source findings; production SQL/storage/provider checks NOT_RUN. Baseline `44d75253cd9196db395662187a10aaaf39cc31c1`. Read [source audit](WHOLE-APP-SOURCE-AUDIT-20261009.md), [money contract](MSN-WALLET-P2P-CONTRACT.md), [data architecture](DATA-ARCHITECTURE.md) and relevant existing recovery/restore runbooks. Keep current architecture and real adapters; do not migrate providers or add another database because the product is changing.
+Use [current roadmap](PRODUCT-ROADMAP-20261019.md), [financial and security authority](SECURITY-AUTHORITY.md) and the [database restore runbook](DATABASE-REDEPLOYMENT-AND-RESTORE-RUNBOOK.md) before changes. This is a technical checklist; validate actual deployment source, schema, operators and backups at an exact SHA.
 
 ## What exists and what remains unqualified
 
-- Gateway has a dedicated migration CLI; package start is `pnpm migrate && node --conditions=production dist/main.js`. The Docker presence wrapper calls that package start. Correct the historical 2026-10-08 audit: “startup never migrates” is no longer true in current source. Deployed artifact/command/database state is still unverified.
+- Gateway has a dedicated migration CLI. Inspect current service build/start/pre-deploy commands and checksum-locked migrations before making changes; do not infer migration execution from a health endpoint or an outdated startup description.
 - Migration runner hashes SQL, refuses changed applied migrations, records owner/name, and applies batches within an advisory-locked transaction. Fresh cluster, existing-data upgrade, cross-domain FK ordering, concurrent starters and lock duration require actual PostgreSQL evidence.
 - Readiness checks expected schema/checksums and narrowly requires PostgreSQL 18. Gateway platform roots and worker default foundation roots differ. Inventory each service's actual queried schemas, including memory/world and pending modules, before deciding omissions are intentional or bugs.
 - Gateway deployment config probes /healthz. Readiness is a separate capability, not proof supplied by a process-only health check.

@@ -1,16 +1,12 @@
 # Flutter-first mobile release and Shorebird update policy
 
-## Device Contacts privacy and native release gate — 2026-10-08
+## Native permissions and update safety
 
-The owner now explicitly wants a familiar Contacts directory in Chats and optional consented **local device-phonebook** viewing/invitations, as specified by [Contacts contract](CONTACTS-AND-ADDRESS-BOOK-EXPERIENCE-20261008.md). Android Contacts permissions, native plugin additions and iOS Info.plist/entitlements are **native signed binary updates**, never Shorebird Dart OTA patches. Require security/privacy/store disclosures, permission-denial usability, account-change purge, real physical Android/iPhone evidence before exposing phonebook claims. Matching uploaded address books to Masanawa users is **not automatically approved** by UI choice. The corrected [U21–U30/F01–F18](ADDITIONAL-U21-U30-AND-FOUNDATION-F01-F18-20261008.md) and [full unfinished audit](UNFINISHED-SCOPE-RECONCILIATION-20261008.md) do not change existing release/signing/update safety.
+The active consumer app may request media, microphone, push and other explicitly qualified native permissions. Each permission needs clear purpose, denied-state usability, account-bound cache cleanup, appropriate store/privacy disclosures, and tests on real devices. **Adding a native dependency, permission, entitlements, Android assets or plugin functionality needs a new signed binary**, never a Dart-only Shorebird patch.
 
+Consult the [canonical product roadmap](PRODUCT-ROADMAP-20261019.md) and [acceptance journeys](SCREEN-JOURNEYS.md) for current app scope. Retired prototype features and dated U-series workstreams are not release criteria.
 
-## Owner-approved U01–U20 expansion — 2026-10-08
-
-New U01–U20 work is source-only until independently integrated/qualified. Flutter-first Shorebird signing, exact version compatibility, QA patch/restart/rollback and native/asset/engine app-store release rules remain unchanged. CI/device/provider/finance/voice qualification still mandatory. U20 owns release evidence, not production patch keys or deployment authority. See [development plan](20-WINDOW-AI-CHAT-EXECUTION-20261008.md) and [acceptance](20-WINDOW-INTEGRATION-AND-ACCEPTANCE-20261008.md).
-
-
-**Status: owner-approved policy / implementation NOT STARTED / verification NOT DONE.** Adopted 2026-10-08. This document is the canonical release/update policy for the **consumer Flutter app** at `apps/mobile`. It is not evidence that Shorebird has been initialized, that a patchable APK exists, or that a production release is safe. The separate Flutter admin app at `apps/admin_mobile` needs an independent release/patching qualification before inclusion. Web and desktop deployments follow their own pipelines.
+**Policy status: active safeguards; Shorebird activation and any APK-specific qualification must be proved separately.** This document is the canonical release/update policy for the **consumer Flutter app** at `apps/mobile`. It is not evidence that Shorebird has been initialized, that a patchable APK exists, or that a production release is safe. The separate Flutter admin app at `apps/admin_mobile` needs an independent release/patching qualification before inclusion. Web and desktop deployments follow their own pipelines.
 
 ## 1. Architectural decision and non-goals
 
@@ -61,9 +57,9 @@ On regression: invoke server-side disable/stop affected action (where needed), *
 
 ## 6. Verification gate and explicit handoff
 
-Operational checklist, sample CLI sequence and acceptance matrix: [`../apps/mobile/docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md`](../apps/mobile/docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md). Existing mobile build procedures: [`../apps/mobile/docs/BUILDS.md`](../apps/mobile/docs/BUILDS.md). Product evidence: [`MOBILE-READINESS-PLAN.md`](MOBILE-READINESS-PLAN.md), [`REQUIREMENTS-RELEASE-GATE-CHECKLIST-20261008.md`](REQUIREMENTS-RELEASE-GATE-CHECKLIST-20261008.md), and [`WHOLE-PRODUCT-ACCEPTANCE-JOURNEYS.md`](WHOLE-PRODUCT-ACCEPTANCE-JOURNEYS.md). Unresolved Firebase values/device acceptance live in Work PR #497 (`docs/FIREBASE-LOCAL-COMPILATION-HANDOFF.md` on that branch), not on main.
+Operational checklist, sample CLI sequence and acceptance matrix: [`../apps/mobile/docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md`](../apps/mobile/docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md). Existing mobile build procedures: [`../apps/mobile/docs/BUILDS.md`](../apps/mobile/docs/BUILDS.md). Product acceptance: [current roadmap](PRODUCT-ROADMAP-20261019.md) and [screen/journey matrix](SCREEN-JOURNEYS.md). Release environment configuration must be read from the exact deployed commit; no previous handoff establishes final device, Firebase or provider qualification.
 
-**Current verified state at policy creation:** main `226d0c58632b243661ab24904cca75700ed474d4`; freeze active, Work #497 draft/unmerged, hosted Actions issue #457 unresolved, provider and device verification absent. **No Shorebird command, build, signing, patch or deployment was executed by this documentation change.** Do not turn this policy into a `DONE` lane without live evidence.
+**Verification note:** This document itself does not prove an APK build, signed patch or provider acceptance. Record the exact release SHA, signing certificate, rollout plan and installed-device results.
 
 ## Official operating sources (review for CLI changes before execution)
 
