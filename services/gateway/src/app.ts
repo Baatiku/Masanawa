@@ -1,3 +1,4 @@
+import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
@@ -158,6 +159,7 @@ export interface GatewayAppOptions {
   readonly callHistory?: CallHistoryService;
   readonly groupCalls?: GroupCallService;
   readonly incomingCalls?: IncomingCallService;
+  readonly humanCommunication?: HumanCommunicationService;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
@@ -1797,6 +1799,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
   if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
   if (options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
+  if (options.humanCommunication) registerHumanCommunicationRoutes(app, options.humanCommunication);
   if (options.incomingCalls) registerIncomingCallRoutes(app, options.incomingCalls);
   if (options.privateChatMedia) {
     registerPrivateChatMediaRoutes(app, options.privateChatMedia);

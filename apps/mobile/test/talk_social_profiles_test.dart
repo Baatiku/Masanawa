@@ -177,10 +177,7 @@ void main() {
 
       expect(find.text('Amina Twin'), findsNothing);
       expect(find.text('Public activity'), findsNothing);
-      expect(
-        find.text('Message'),
-        findsNothing,
-      ); // Human admission not wired yet.
+      expect(find.text('Message'), findsOneWidget);
     },
   );
 

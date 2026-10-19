@@ -1,3 +1,6 @@
+import 'src/core/live_call_foreground.dart';
+import 'src/human_calls/human_calls.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -78,9 +81,7 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
       final session = ref.read(sessionProvider);
       final router = ref.read(appRouterProvider);
       final uri = _pendingLink.take(
-        ready:
-            session is SessionSignedIn &&
-            !session.user.isNewUser,
+        ready: session is SessionSignedIn && !session.user.isNewUser,
       );
       if (uri != null) {
         final route = shellDeepLinkRoute(uri);
@@ -89,8 +90,8 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
               currentPath: router.routeInformationProvider.value.uri.path,
               targetPath: route,
               hasActiveCall:
-                  router.routerDelegate.navigatorKey.currentState?.canPop() ??
-                  false,
+                  LiveCallForeground.active ||
+                  ref.read(humanCallControllerProvider).active,
             )) {
           router.go(route);
         }
@@ -139,6 +140,8 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
                 supportedLocales,
               ),
           routerConfig: router,
+          builder: (context, child) =>
+              HumanCallCoordinator(child: child ?? const SizedBox.shrink()),
         ),
       ),
     );

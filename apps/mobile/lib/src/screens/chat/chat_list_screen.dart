@@ -1,6 +1,5 @@
-import 'dart:async';
+import 'unified_chat_inbox.dart';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,14 +8,11 @@ import '../../chat/chat_format.dart';
 import '../../core/startup_metrics.dart';
 import '../../chat/message_parts.dart';
 import '../wallet/wallet_screen.dart';
-import '../../features/masana_chat/inbox_search.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
-import '../../ui/components/conversation_search_field.dart';
-import '../../ui/components/masanawa_list_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
 
 class ChatListScreen extends ConsumerWidget {
@@ -48,7 +44,8 @@ class ChatListScreen extends ConsumerWidget {
   }
 
   Widget _buildSubtitle(MasanawaColors u, ChatThread thread) {
-    final isDraft = thread.draft.trim().isNotEmpty ||
+    final isDraft =
+        thread.draft.trim().isNotEmpty ||
         thread.draftVoice != null ||
         thread.draftAttachments.isNotEmpty;
     if (isDraft) {
@@ -67,9 +64,17 @@ class ChatListScreen extends ConsumerWidget {
     Widget? tick;
     if (last != null && last.isUser) {
       tick = switch (last.deliveryStatus) {
-        'pending' => Icon(Icons.access_time_rounded, size: 13, color: u.textMuted),
+        'pending' => Icon(
+          Icons.access_time_rounded,
+          size: 13,
+          color: u.textMuted,
+        ),
         'sent' => Icon(Icons.done_rounded, size: 14, color: u.textMuted),
-        'delivered' => Icon(Icons.done_all_rounded, size: 14, color: u.textMuted),
+        'delivered' => Icon(
+          Icons.done_all_rounded,
+          size: 14,
+          color: u.textMuted,
+        ),
         'read' => Icon(Icons.done_all_rounded, size: 14, color: u.tickRead),
         _ => Icon(Icons.done_rounded, size: 14, color: u.textMuted),
       };
@@ -77,34 +82,39 @@ class ChatListScreen extends ConsumerWidget {
 
     Widget? attachIcon;
     if (last != null) {
-      final voice = last.allAttachments.any((a) => a.kind == 'voice') ||
+      final voice =
+          last.allAttachments.any((a) => a.kind == 'voice') ||
           last.parts.any((p) => p.kind == AgentMessagePartKind.audio);
-      final image = last.allAttachments.any((a) => a.kind == 'image') ||
+      final image =
+          last.allAttachments.any((a) => a.kind == 'image') ||
           last.parts.any((p) => p.kind == AgentMessagePartKind.image);
       final video = last.allAttachments.any((a) => a.kind == 'video');
-      final doc = last.allAttachments.isNotEmpty ||
+      final doc =
+          last.allAttachments.isNotEmpty ||
           last.parts.any((p) => p.kind == AgentMessagePartKind.file);
       if (voice) {
         attachIcon = Icon(Icons.mic_rounded, size: 14, color: u.textMuted);
       } else if (image) {
-        attachIcon = Icon(Icons.photo_camera_rounded, size: 14, color: u.textMuted);
+        attachIcon = Icon(
+          Icons.photo_camera_rounded,
+          size: 14,
+          color: u.textMuted,
+        );
       } else if (video) {
         attachIcon = Icon(Icons.videocam_rounded, size: 14, color: u.textMuted);
       } else if (doc) {
-        attachIcon = Icon(Icons.insert_drive_file_rounded, size: 14, color: u.textMuted);
+        attachIcon = Icon(
+          Icons.insert_drive_file_rounded,
+          size: 14,
+          color: u.textMuted,
+        );
       }
     }
 
     return Row(
       children: [
-        if (tick != null) ...[
-          tick,
-          const SizedBox(width: 3),
-        ],
-        if (attachIcon != null) ...[
-          attachIcon,
-          const SizedBox(width: 3),
-        ],
+        if (tick != null) ...[tick, const SizedBox(width: 3)],
+        if (attachIcon != null) ...[attachIcon, const SizedBox(width: 3)],
         Expanded(
           child: Text(
             _snippet(thread),
@@ -364,7 +374,9 @@ class ChatListScreen extends ConsumerWidget {
     final chat = ref.watch(aiChatProvider);
     final directory = ref.watch(agentDirectoryProvider);
     final session = ref.watch(sessionProvider);
-    final accountKey = session is SessionSignedIn ? session.user.id : 'signed-out';
+    final accountKey = session is SessionSignedIn
+        ? session.user.id
+        : 'signed-out';
     final userName = session is SessionSignedIn
         ? session.user.name
         : 'Masanawa';
@@ -423,11 +435,9 @@ class ChatListScreen extends ConsumerWidget {
             tooltip: 'Wallet',
             icon: const Icon(Icons.account_balance_wallet_outlined),
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => WalletScreen(),
-                ),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute<void>(builder: (_) => WalletScreen()));
             },
           ),
           IconButton(
@@ -458,560 +468,130 @@ class ChatListScreen extends ConsumerWidget {
                 child: Semantics(
                   liveRegion: true,
                   child: InkWell(
-                    onTap: activity.isEmpty ? null
+                    onTap: activity.isEmpty
+                        ? null
                         : () => _showActivity(context, directory, activity),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      child: Row(children: [
-                        Icon(chat.online ? Icons.pending_actions : Icons.cloud_off_outlined,
-                          size: 17, color: u.textMuted),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(activityLabel, style: activityStyle)),
-                        if (activity.isNotEmpty)
-                          Icon(Icons.chevron_right, size: 18, color: u.textMuted),
-                      ]),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            chat.online
+                                ? Icons.pending_actions
+                                : Icons.cloud_off_outlined,
+                            size: 17,
+                            color: u.textMuted,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(activityLabel, style: activityStyle),
+                          ),
+                          if (activity.isNotEmpty)
+                            Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: u.textMuted,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ) : null,
+              )
+            : null,
       ),
-      body: _ChatsSearchPane(
-        key: ValueKey(session is SessionSignedIn ? session.user.id : 'signed-out'),
-        threads: session is SessionSignedIn ? threads : const <ChatThread>[],
-        directory: directory,
-        online: chat.online,
-        accountId: session is SessionSignedIn ? session.user.id : '',
-        accessToken: session is SessionSignedIn ? session.tokens.accessToken : '',
-        inbox: ref.watch(masanaInboxSearchProvider),
-        onOpenRemote: (remote) => context.push('/chat/${remote.characterId}'),
-        onRetry: () => ref.read(agentDirectoryProvider.notifier).refresh(),
-        resultsBuilder: (visibleThreads) => visibleThreads.isEmpty
-          ? _EmptyChats(
-              loading: directory.loading,
-              error: directory.error,
-              hasAgents: directory.agents.isNotEmpty,
-              onStart: () => context.push('/masana'),
-              onRetry: () => ref.read(agentDirectoryProvider.notifier).refresh(),
-            )
-          : RefreshIndicator(
-              onRefresh: () =>
-                  ref.read(agentDirectoryProvider.notifier).refresh(),
-              child: ListView.separated(
-                key: PageStorageKey<String>('chats-scroll-$accountKey'),
-                itemCount: visibleThreads.length,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, indent: 76, color: u.structuralBorder),
-                itemBuilder: (context, index) {
-                  final thread = visibleThreads[index];
-                  final agent = directory.find(thread.characterId)!;
-                  final last = thread.lastMessage;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    leading: MasanaPortraitAvatar(
-                      agent: agent,
-                      size: 52,
-                    ),
-                    title: Row(
-                      children: [
-                        if (thread.pinned) ...[
-                          Icon(Icons.push_pin, size: 14, color: u.brandStrong),
-                          const SizedBox(width: 5),
-                        ],
-                        Expanded(
-                          child: Text(
-                            thread.title?.trim().isNotEmpty == true
-                                ? thread.title!
-                                : agent.displayName,
-                            style: TextStyle(
-                              color: u.textPrimary,
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: _buildSubtitle(u, thread),
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          last == null ? '' : formatChatTime(last.createdAt),
-                          style: TextStyle(
-                            color: thread.unread > 0 ? u.brandStrong : u.textMuted,
-                            fontSize: 12,
-                            fontWeight: thread.unread > 0
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        if (thread.unread > 0) ...[
-                          const SizedBox(height: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: u.brandStrong,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '${thread.unread}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    onLongPress: () => _threadActions(context, ref, thread),
-                    onTap: () => context.push('/chat/${thread.characterId}'),
-                  );
-                },
-              ),
+      body: UnifiedChatInbox(
+        key: ValueKey(accountKey),
+        masanaThreads: session is SessionSignedIn
+            ? chat.threads.values
+                  .where((t) => directory.find(t.characterId) != null)
+                  .toList()
+            : const [],
+        masanaRow: (thread) {
+          final agent = directory.find(thread.characterId)!;
+          final last = thread.lastMessage;
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 6,
             ),
+            leading: MasanaPortraitAvatar(agent: agent, size: 52),
+            title: Row(
+              children: [
+                if (thread.pinned) ...[
+                  Icon(Icons.push_pin, size: 14, color: u.brandStrong),
+                  const SizedBox(width: 5),
+                ],
+                Expanded(
+                  child: Text(
+                    thread.title?.trim().isNotEmpty == true
+                        ? thread.title!
+                        : agent.displayName,
+                    style: TextStyle(
+                      color: u.textPrimary,
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: _buildSubtitle(u, thread),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  last == null ? '' : formatChatTime(last.createdAt),
+                  style: TextStyle(
+                    color: thread.unread > 0 ? u.brandStrong : u.textMuted,
+                    fontSize: 12,
+                    fontWeight: thread.unread > 0
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+                if (thread.unread > 0) ...[
+                  const SizedBox(height: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: u.brandStrong,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${thread.unread}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            onLongPress: () => _threadActions(context, ref, thread),
+            onTap: () => context.push('/chat/${thread.characterId}'),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Start conversation',
         backgroundColor: u.brand,
         foregroundColor: u.textPrimary,
         onPressed: () => context.push('/masana'),
-        child: const Icon(Icons.mic_none_outlined),
+        child: const Icon(Icons.chat_outlined),
       ),
     );
   }
 }
-
-
-/* Keep zero-network initial rendering from locally authorized chats; C10
- * remote lookups run only for typed searches. Server results use one authenticated
- * tenant/fan authority, and stale query/account/token responses are discarded.
- * AF08 owns shared interceptor refresh hardening, so C10 pins one credential
- * and never retries across an identity replacement. */
-class _ChatsSearchPane extends StatefulWidget {
-  const _ChatsSearchPane({
-    super.key,
-    required this.threads,
-    required this.directory,
-    required this.online,
-    required this.accountId,
-    required this.accessToken,
-    required this.inbox,
-    required this.onOpenRemote,
-    required this.onRetry,
-    required this.resultsBuilder,
-  });
-
-  final List<ChatThread> threads;
-  final AgentDirectoryState directory;
-  final bool online;
-  final String accountId;
-  final String accessToken;
-  final MasanaInboxSearchAccess inbox;
-  final void Function(MasanaInboxSearchItem) onOpenRemote;
-  final VoidCallback onRetry;
-  final Widget Function(List<ChatThread> visibleThreads) resultsBuilder;
-
-  @override
-  State<_ChatsSearchPane> createState() => _ChatsSearchPaneState();
-}
-
-class _ChatsSearchPaneState extends State<_ChatsSearchPane> {
-  final TextEditingController _search = TextEditingController();
-  Timer? _debounce;
-  int _generation = 0;
-  String _query = '';
-  List<MasanaInboxSearchItem> _remote = const [];
-  bool _serverLoading = false;
-  String? _serverError;
-
-  @override
-  void didUpdateWidget(covariant _ChatsSearchPane oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.accountId != oldWidget.accountId ||
-        widget.accessToken != oldWidget.accessToken) {
-      _debounce?.cancel();
-      _generation++;
-      _remote = const [];
-      _serverLoading = false;
-      _serverError = null;
-      if (widget.accountId != oldWidget.accountId) {
-        _search.clear();
-        _query = '';
-      } else if (_query.isNotEmpty && widget.online) {
-        _queueRemote();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _generation++;
-    _debounce?.cancel();
-    _search.dispose();
-    super.dispose();
-  }
-
-  bool _current(int generation, String account, String token, String query) =>
-      mounted &&
-      generation == _generation &&
-      account == widget.accountId &&
-      token == widget.accessToken &&
-      query == _query;
-
-  void _queueRemote() {
-    _debounce?.cancel();
-    final generation = ++_generation;
-    final query = _query;
-    final account = widget.accountId;
-    final token = widget.accessToken;
-    if (query.isEmpty || !widget.online || account.isEmpty || token.isEmpty) {
-      _serverLoading = false;
-      return;
-    }
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      unawaited(_fetchRemote(generation, account, token, query));
-    });
-  }
-
-  Future<void> _fetchRemote(
-      int generation, String account, String token, String query) async {
-    if (!_current(generation, account, token, query)) return;
-    setState(() => _serverLoading = true);
-    try {
-      final items = await widget.inbox.search(bearer: token, query: query);
-      if (!_current(generation, account, token, query)) return;
-      setState(() {
-        _remote = items;
-        _serverError = null;
-        _serverLoading = false;
-      });
-    } on DioException catch (error) {
-      if (!_current(generation, account, token, query)) return;
-      final status = error.response?.statusCode;
-      setState(() {
-        _remote = const [];
-        _serverLoading = false;
-        _serverError = status == 401 || status == 403
-            ? 'Authorization required for server search.'
-            : status == 503 || status == 410 || status == 404
-                ? 'Server conversations are not available yet. Showing saved chats.'
-                : 'Server search unavailable. Showing saved chats.';
-      });
-    } catch (_) {
-      if (!_current(generation, account, token, query)) return;
-      setState(() {
-        _remote = const [];
-        _serverLoading = false;
-        _serverError = 'Could not search server conversations. Showing saved chats.';
-      });
-    }
-  }
-
-  void _changed(String raw) {
-    final query = raw.trim().toLowerCase();
-    if (query == _query) return;
-    setState(() {
-      _query = query;
-      _remote = const [];
-      _serverError = null;
-      _serverLoading = false;
-      _queueRemote();
-    });
-  }
-
-  void _clear() {
-    _search.clear();
-    _debounce?.cancel();
-    _generation++;
-    setState(() {
-      _query = '';
-      _remote = const [];
-      _serverLoading = false;
-      _serverError = null;
-    });
-  }
-
-  void _retryRemote() {
-    if (_query.isEmpty || !widget.online) return;
-    setState(() {
-      _serverError = null;
-      _queueRemote();
-    });
-  }
-
-  Future<void> _toggleRemotePin(MasanaInboxSearchItem item) async {
-    final account = widget.accountId;
-    final token = widget.accessToken;
-    try {
-      final revision = await widget.inbox.setPinned(
-        bearer: token,
-        characterId: item.characterId,
-        pinned: !item.pinned,
-        expectedRevision: item.revision,
-      );
-      if (!mounted || account != widget.accountId ||
-          token != widget.accessToken) {
-        return;
-      }
-      setState(() {
-        _remote = [
-          for (final entry in _remote)
-            if (entry.characterId == item.characterId)
-              entry.withPin(!item.pinned, revision)
-            else
-              entry,
-        ];
-      });
-    } catch (_) {
-      if (!mounted || account != widget.accountId ||
-          token != widget.accessToken) {
-        return;
-      }
-      setState(() => _serverError = 'Could not update pin. Retry search.');
-    }
-  }
-
-  void _openRemote(MasanaInboxSearchItem item) {
-    final account = widget.accountId;
-    final token = widget.accessToken;
-    widget.onOpenRemote(item);
-    unawaited(widget.inbox.markRead(
-      bearer: token,
-      characterId: item.characterId,
-    ).then((_) {
-      if (mounted && account == widget.accountId &&
-          token == widget.accessToken) {
-        _retryRemote();
-      }
-    }).catchError((Object _) {
-      // Keep unread visible on failed receipt; do not fabricate a read.
-    }));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = widget.threads.where((thread) {
-      final authorized = widget.directory.find(thread.characterId);
-      if (authorized == null) return false;
-      if (_query.isEmpty) return true;
-      return authorized.displayName.toLowerCase().contains(_query) ||
-          (thread.title?.toLowerCase().contains(_query) ?? false) ||
-          thread.characterId.toLowerCase().contains(_query);
-    }).toList(growable: false);
-    final visibleIds = visible.map((item) => item.characterId).toSet();
-    final remote = _query.isEmpty
-        ? const <MasanaInboxSearchItem>[]
-        : _remote.where((row) => !visibleIds.contains(row.characterId))
-            .take(50).toList(growable: false);
-
-    return Column(
-      children: [
-        ConversationSearchField(
-          controller: _search,
-          hintText: 'Search Masana conversations',
-          clearTooltip: 'Clear chat search',
-          onChanged: _changed,
-          onClear: _clear,
-        ),
-        if (widget.directory.loading || _serverLoading)
-          const LinearProgressIndicator(minHeight: 2),
-        if (_query.isNotEmpty && _serverError != null)
-          MaterialBanner(
-            content: Center(child: Text(_serverError!, textAlign: TextAlign.center)),
-            actions: [
-              TextButton(onPressed: _retryRemote, child: const Text('Retry server search')),
-            ],
-          ),
-        if (remote.isNotEmpty)
-          SizedBox(
-            height: remote.length == 1 ? 106 : 232,
-            child: ListView.builder(
-              itemCount: remote.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text('Other server conversations',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                  );
-                }
-                final result = remote[index - 1];
-                return ListTile(
-                  dense: true,
-                  key: ValueKey('remote-${result.characterId}'),
-                  leading: MasanaPortraitAvatar(
-                    characterId: result.characterId,
-                    agent: widget.directory.find(result.characterId),
-                    displayName: result.displayName,
-                    size: 40,
-                  ),
-                  title: Text(result.displayName),
-                  subtitle: Text(result.lastMessage.isNotEmpty
-                      ? result.lastMessage : result.profession,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: IconButton(
-                    tooltip: result.pinned ? 'Unpin server conversation'
-                        : 'Pin server conversation',
-                    icon: Icon(result.pinned ? Icons.push_pin
-                        : Icons.push_pin_outlined),
-                    onPressed: () => _toggleRemotePin(result),
-                  ),
-                  onTap: () => _openRemote(result),
-                );
-              },
-            ),
-          ),
-        if (widget.directory.error != null && widget.threads.isNotEmpty)
-          MaterialBanner(
-            content: const Text(
-              'Could not refresh Masana contacts. Showing saved conversations.',
-            ),
-            actions: [
-              TextButton(onPressed: widget.onRetry, child: const Text('Retry')),
-            ],
-          ),
-        Expanded(
-          child: remote.isNotEmpty && visible.isEmpty
-              ? const SizedBox.shrink()
-              : _query.isNotEmpty &&
-                  visible.isEmpty &&
-                  widget.threads.isNotEmpty &&
-                  !widget.directory.loading &&
-                  !_serverLoading
-              ? Center(
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Semantics(
-                        liveRegion: true,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.search_off_outlined, size: 42),
-                            const SizedBox(height: 12),
-                            Text(
-                              widget.online
-                                  ? 'No matching conversations'
-                                  : 'No matches in saved conversations',
-                              textAlign: TextAlign.center,
-                            ),
-                            if (!widget.online) ...[
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Offline searches only include chats saved on this device.',
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: _clear,
-                              child: const Text('Clear search'),
-                            ),
-                            if (!widget.online)
-                              TextButton(
-                                onPressed: widget.onRetry,
-                                child: const Text('Retry contacts'),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              : widget.resultsBuilder(visible),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyChats extends StatelessWidget {
-  const _EmptyChats({
-    required this.loading,
-    required this.onStart,
-    required this.onRetry,
-    required this.hasAgents,
-    this.error,
-  });
-
-  final bool loading;
-  final VoidCallback onStart;
-  final VoidCallback onRetry;
-  final bool hasAgents;
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    final u = context.masanawa;
-    if (loading && !hasAgents && error == null) {
-      return const MasanawaListSkeleton(semanticLabel: 'Loading Masana conversations');
-    }
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.mic_none_outlined, size: 58, color: u.brand),
-              const SizedBox(height: 18),
-              Text(
-                loading && !hasAgents
-                    ? 'Loading Masana conversations…'
-                    : error != null
-                        ? 'Could not load Masana contacts'
-                        : (hasAgents
-                            ? 'Start a Masana conversation'
-                            : 'No Masana contacts available right now.'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: u.textPrimary,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error != null
-                    ? 'Check your connection and retry. Saved conversations are kept on this device.'
-                    : hasAgents
-                        ? 'Choose a Masana to start a conversation.'
-                        : 'Please try again shortly, or browse available Masana.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: u.textMuted, fontSize: 14, height: 1.5),
-              ),
-              const SizedBox(height: 20),
-              if (error != null) ...[
-                OutlinedButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry contacts'),
-                ),
-                const SizedBox(height: 8),
-              ],
-              FilledButton.icon(
-                onPressed: loading && !hasAgents ? null : onStart,
-                icon: const Icon(Icons.groups_outlined),
-                label: Text(hasAgents ? 'Choose a Masana' : 'Browse Masana'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-

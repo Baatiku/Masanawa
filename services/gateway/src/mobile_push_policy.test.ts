@@ -15,6 +15,8 @@ describe("FCM notification policy", () => {
     expect(pushCategory({ type: "missed_call" })).toBe("calls");
     expect(pushCategory({ type: "status_post" })).toBe("status");
     expect(pushCategory({ type: "incoming_call" })).toBe("calls");
+    expect(pushCategory({ type: "human_call" })).toBe("calls");
+    expect(pushAllowed({...prefs,calls:false}, "calls", new Date(), {type:"human_call"})).toBe(false);
     expect(pushCategory(undefined)).toBe("messages");
   });
 

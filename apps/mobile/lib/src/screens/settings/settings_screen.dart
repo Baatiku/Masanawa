@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../core/request_id.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -86,9 +88,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _showFeedback(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _chooseSupportAgent({
@@ -100,18 +101,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final ticket = ++_supportMutationEpoch;
     setState(() => _savingDefaultAgentId = characterId);
     try {
-      await ref.read(agentDirectoryTransportProvider)
+      await ref
+          .read(agentDirectoryTransportProvider)
           .setDefaultPlatformAgent(characterId);
       await ref.read(agentDirectoryProvider.notifier).refresh();
       if (!mounted) return;
       final current = ref.read(sessionProvider);
       if (current is! SessionSignedIn || current.user.id != accountId) return;
-      final confirmed = ref.read(agentDirectoryProvider).agents.any(
-        (agent) => agent.characterId == characterId && agent.defaultPlatformAgent,
+      final confirmed = ref
+          .read(agentDirectoryProvider)
+          .agents
+          .any(
+            (agent) =>
+                agent.characterId == characterId && agent.defaultPlatformAgent,
+          );
+      _showFeedback(
+        confirmed
+            ? '$displayName is your default Masanawa agent.'
+            : 'The change could not be confirmed. Refresh and try again.',
       );
-      _showFeedback(confirmed
-          ? '$displayName is your default Masanawa agent.'
-          : 'The change could not be confirmed. Refresh and try again.');
     } catch (_) {
       if (!mounted) return;
       final current = ref.read(sessionProvider);
@@ -129,8 +137,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final report = await MasanawaDiagnostics.instance.exportSanitizedReport();
       if (!mounted) return;
-      await SharePlus.instance.share(ShareParams(text: report,
-        subject: 'Masanawa anonymous diagnostic report'));
+      await SharePlus.instance.share(
+        ShareParams(
+          text: report,
+          subject: 'Masanawa anonymous diagnostic report',
+        ),
+      );
     } catch (_) {
       _showFeedback('Diagnostics are unavailable right now.');
     }
@@ -141,36 +153,69 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final initial = ref.read(sessionProvider);
     if (initial is! SessionSignedIn) return;
     final owner = initial.user.id;
-    bool sameOwner() => mounted && switch (ref.read(sessionProvider)) {
-      SessionSignedIn(:final user) => user.id == owner, _ => false,
-    };
+    bool sameOwner() =>
+        mounted &&
+        switch (ref.read(sessionProvider)) {
+          SessionSignedIn(:final user) => user.id == owner,
+          _ => false,
+        };
     setState(() => _sendingDiagnostics = true);
     try {
       final report = await MasanawaDiagnostics.instance.exportSanitizedReport();
       if (!mounted || !sameOwner()) return;
-      final approved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (ctx) => Scaffold(
-          appBar: AppBar(title: const Text('Review app diagnostics')),
-          body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
-            const Text('Send this anonymous summary to Masanawa support. It contains error categories, app source locations and build details. No messages, tokens, account details or raw exception text are sent.'),
-            const SizedBox(height: 20), SelectableText(report), const SizedBox(height: 24),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send report')),
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ])),
+      final approved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (ctx) => Scaffold(
+            appBar: AppBar(title: const Text('Review app diagnostics')),
+            body: SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const Text(
+                    'Send this anonymous summary to Masanawa support. It contains error categories, app source locations and build details. No messages, tokens, account details or raw exception text are sent.',
+                  ),
+                  const SizedBox(height: 20),
+                  SelectableText(report),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Send report'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      ));
+      );
       if (!mounted || approved != true || !sameOwner()) return;
-      final reference = await ref.read(apiClientProvider).sendSupportDiagnostics(
-        MasanawaDiagnostics.supportPayload(report, createRequestId()));
+      final reference = await ref
+          .read(apiClientProvider)
+          .sendSupportDiagnostics(
+            MasanawaDiagnostics.supportPayload(report, createRequestId()),
+          );
       if (!mounted || !sameOwner()) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Report sent. Support reference: $reference'),
-        duration: const Duration(seconds: 15),
-        action: SnackBarAction(label: 'Copy', onPressed: () => Clipboard.setData(ClipboardData(text: reference))),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Report sent. Support reference: $reference'),
+          duration: const Duration(seconds: 15),
+          action: SnackBarAction(
+            label: 'Copy',
+            onPressed: () => Clipboard.setData(ClipboardData(text: reference)),
+          ),
+        ),
+      );
     } catch (_) {
-      if (sameOwner()) _showFeedback('Could not send diagnostics. Your local report is retained; try again when connected.');
-    } finally { if (mounted) setState(() => _sendingDiagnostics = false); }
+      if (sameOwner())
+        _showFeedback(
+          'Could not send diagnostics. Your local report is retained; try again when connected.',
+        );
+    } finally {
+      if (mounted) setState(() => _sendingDiagnostics = false);
+    }
   }
 
   Future<void> _clearDiagnostics() async {
@@ -241,7 +286,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: Text(
           'Settings',
@@ -261,51 +307,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: InkWell(
               onTap: () => context.push('/profile'),
               child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: u.surfaceCard,
-              borderRadius:
-                  BorderRadius.circular(MasanawaTokens.radius['2xl']!),
-              border: Border.all(color: u.structuralBorder),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: u.brand.withValues(alpha: 0.15),
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                    style: TextStyle(
-                      color: u.brand,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                    ),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: u.surfaceCard,
+                  borderRadius: BorderRadius.circular(
+                    MasanawaTokens.radius['2xl']!,
                   ),
+                  border: Border.all(color: u.structuralBorder),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: u.brand.withValues(alpha: 0.15),
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'U',
                         style: TextStyle(
-                          fontSize: 17,
+                          color: u.brand,
+                          fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: u.textPrimary,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        contact,
-                        style: TextStyle(color: u.textMuted, fontSize: 13),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: u.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            contact,
+                            style: TextStyle(color: u.textMuted, fontSize: 13),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
               ),
             ),
           ),
@@ -324,7 +371,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 RadioGroup<String>(
                   groupValue: selectedSupportAgentId,
                   onChanged: (value) {
-                    if (value == null || user == null ||
+                    if (value == null ||
+                        user == null ||
                         _savingDefaultAgentId != null) {
                       return;
                     }
@@ -333,26 +381,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           agent.defaultPlatformAgent) {
                         continue;
                       }
-                      unawaited(_chooseSupportAgent(
-                        accountId: user.id,
-                        characterId: value,
-                        displayName: agent.displayName,
-                      ));
+                      unawaited(
+                        _chooseSupportAgent(
+                          accountId: user.id,
+                          characterId: value,
+                          displayName: agent.displayName,
+                        ),
+                      );
                       break;
                     }
                   },
                   child: Column(
                     children: [
-                      for (var index = 0; index < supportAgents.length; index++) ...[
+                      for (
+                        var index = 0;
+                        index < supportAgents.length;
+                        index++
+                      ) ...[
                         Builder(
                           builder: (context) {
                             final agent = supportAgents[index];
                             return RadioListTile<String>(
                               value: agent.characterId,
-                              enabled: user != null &&
-                                  _savingDefaultAgentId == null,
+                              enabled:
+                                  user != null && _savingDefaultAgentId == null,
                               secondary: CircleAvatar(
-                                backgroundColor: u.brand.withValues(alpha: 0.12),
+                                backgroundColor: u.brand.withValues(
+                                  alpha: 0.12,
+                                ),
                                 child: Text(
                                   agent.initial,
                                   style: TextStyle(color: u.brand),
@@ -375,6 +431,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           _Card(
             children: [
+              ListTile(
+                leading: Icon(Icons.privacy_tip_outlined, color: u.brand),
+                title: const Text('Privacy'),
+                subtitle: const Text(
+                  'Messages, calls, presence and blocked people',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/privacy'),
+              ),
               SwitchListTile(
                 key: const Key('settings-notifications-toggle'),
                 secondary: Icon(Icons.notifications_outlined, color: u.brand),
@@ -383,17 +448,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   !MobilePushService.instance.configured
                       ? 'Not available in this build'
                       : _notificationController.loading ||
-                              _notificationController.saving
-                          ? 'Checking notification permission…'
-                          : _notificationController.error ??
-                              'Device permission; delivery also requires a connection',
+                            _notificationController.saving
+                      ? 'Checking notification permission…'
+                      : _notificationController.error ?? 'Device permission; delivery also requires a connection',
                 ),
-                value: MobilePushService.instance.configured &&
-                    _notificationController.accountId == _notificationAccountId &&
+                value:
+                    MobilePushService.instance.configured &&
+                    _notificationController.accountId ==
+                        _notificationAccountId &&
                     _notificationController.enabled,
-                onChanged: !MobilePushService.instance.configured ||
+                onChanged:
+                    !MobilePushService.instance.configured ||
                         user == null ||
-                        _notificationController.accountId != _notificationAccountId ||
+                        _notificationController.accountId !=
+                            _notificationAccountId ||
                         !_notificationController.canChange
                     ? null
                     : (value) => unawaited(_setNotifications(value)),
@@ -402,11 +470,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('settings-notification-preferences'),
                 leading: Icon(Icons.tune_outlined, color: u.brand),
                 title: const Text('Notification preferences & activity'),
-                subtitle: const Text('Messages, calls, Rooms, Wallet, quiet hours and alert history'),
+                subtitle: const Text(
+                  'Messages, calls, Rooms, Wallet, quiet hours and alert history',
+                ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: user == null ? null : () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const NotificationPreferencesScreen())),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const NotificationPreferencesScreen(),
+                        ),
+                      ),
               ),
               if (_notificationController.error != null &&
                   MobilePushService.instance.configured)
@@ -424,9 +498,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 key: const Key('settings-send-diagnostics'),
                 leading: Icon(Icons.support_agent_outlined, color: u.brand),
-                title: Text(_sendingDiagnostics ? 'Preparing diagnostics…' : 'Send diagnostics to support'),
-                subtitle: const Text('Review an anonymous summary before sending. Receive a support reference.'),
-                onTap: user == null || _sendingDiagnostics ? null : () => unawaited(_sendDiagnostics()),
+                title: Text(
+                  _sendingDiagnostics
+                      ? 'Preparing diagnostics…'
+                      : 'Send diagnostics to support',
+                ),
+                subtitle: const Text(
+                  'Review an anonymous summary before sending. Receive a support reference.',
+                ),
+                onTap: user == null || _sendingDiagnostics
+                    ? null
+                    : () => unawaited(_sendDiagnostics()),
               ),
               const Divider(height: 1),
               ListTile(
@@ -443,7 +525,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('settings-clear-diagnostics'),
                 leading: Icon(Icons.delete_sweep_outlined, color: u.brand),
                 title: const Text('Clear app diagnostics'),
-                subtitle: const Text('Remove only diagnostic records stored on this device'),
+                subtitle: const Text(
+                  'Remove only diagnostic records stored on this device',
+                ),
                 onTap: () => unawaited(_clearDiagnostics()),
               ),
               const Divider(height: 1),
@@ -482,35 +566,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('settings-account-security'),
                 leading: Icon(Icons.security_outlined, color: u.brand),
                 title: const Text('Account security'),
-                subtitle: const Text('Devices, sign-out everywhere and recent sign-ins'),
-                onTap: user == null ? null : () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AccountSecurityScreen(),
-                  ),
+                subtitle: const Text(
+                  'Devices, sign-out everywhere and recent sign-ins',
                 ),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AccountSecurityScreen(),
+                        ),
+                      ),
               ),
               const Divider(height: 1),
               ListTile(
                 key: const Key('settings-my-masana'),
-                leading: Icon(Icons.auto_awesome_outlined, color:u.brand),
+                leading: Icon(Icons.auto_awesome_outlined, color: u.brand),
                 title: const Text('My Masana'),
                 subtitle: const Text('Create and manage your AI professionals'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap:user==null?null:()=>Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder:(_)=>const MyMasanaScreen()),
-                ),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MyMasanaScreen(),
+                        ),
+                      ),
               ),
-              const Divider(height:1),
+              const Divider(height: 1),
               ListTile(
                 key: const Key('settings-my-data'),
-                leading:Icon(Icons.manage_accounts_outlined,color:u.brand),
-                title:const Text('Account and my data'),
-                subtitle:const Text('Profile completion, account status and exports'),
-                onTap:user==null?null:()=>Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder:(_)=>const AccountDataScreen()),
+                leading: Icon(Icons.manage_accounts_outlined, color: u.brand),
+                title: const Text('Account and my data'),
+                subtitle: const Text(
+                  'Profile completion, account status and exports',
                 ),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AccountDataScreen(),
+                        ),
+                      ),
               ),
-              const Divider(height:1),
+              const Divider(height: 1),
               ListTile(
                 key: const Key('settings-delete-account'),
                 leading: Icon(Icons.person_remove_outlined, color: u.emergency),
@@ -519,12 +617,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: TextStyle(color: u.emergency),
                 ),
                 subtitle: const Text('Account and data deletion options'),
-                onTap: user == null ? null : () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    settings: const RouteSettings(name: '/settings/account-deletion'),
-                    builder: (_) => const AccountDeletionDialog(),
-                  ),
-                ),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          settings: const RouteSettings(
+                            name: '/settings/account-deletion',
+                          ),
+                          builder: (_) => const AccountDeletionDialog(),
+                        ),
+                      ),
               ),
             ],
           ),

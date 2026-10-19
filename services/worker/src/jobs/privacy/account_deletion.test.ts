@@ -104,3 +104,10 @@ describe("account deletion financial and privacy holds",()=>{
     await expect(h.worker.runOnce(100)).rejects.toThrow("batch_limit_invalid");
   });
 });
+
+it("runs scoped human content redaction only after qualified deletion clearance",async()=>{
+  const h=harness(false);expect(await h.worker.runOnce()).toEqual({completed:1,held:0,failed:0});
+  const index=h.calls.findIndex(c=>c.sql.includes("talks.redact_human_account"));expect(index).toBeGreaterThan(-1);
+  expect(h.calls[index]!.params).toEqual(["tenant-a","user-a"]);
+  expect(h.calls.slice(0,index).some(c=>c.sql.includes("account_deletion_access_revocations"))).toBe(true);
+});

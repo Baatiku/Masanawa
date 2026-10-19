@@ -1,3 +1,6 @@
+import '../../human_calls/human_calls.dart';
+import '../../human_chat/human_chat.dart';
+
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -41,10 +44,22 @@ class CallsScreen extends ConsumerWidget {
             tooltip: 'Search Masana and Rooms',
             icon: const Icon(Icons.search),
             onPressed: session is SessionSignedIn
-              ? () => context.push('/search') : null,
+                ? () => context.push('/search')
+                : null,
           ),
-          IconButton(tooltip:'Call recordings',icon:const Icon(Icons.graphic_eq),
-            onPressed:session is SessionSignedIn?()=>Navigator.push<void>(context,MaterialPageRoute(builder:(_)=>CallRecordingsScreen(ownerId:session.user.id))):null),
+          IconButton(
+            tooltip: 'Call recordings',
+            icon: const Icon(Icons.graphic_eq),
+            onPressed: session is SessionSignedIn
+                ? () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CallRecordingsScreen(ownerId: session.user.id),
+                    ),
+                  )
+                : null,
+          ),
           IconButton(
             tooltip: 'Call multiple Masana',
             icon: const Icon(Icons.groups_outlined),
@@ -53,7 +68,7 @@ class CallsScreen extends ConsumerWidget {
                 : null,
           ),
           IconButton(
-            tooltip: 'Choose a Masana',
+            tooltip: 'Choose a contact',
             icon: const Icon(Icons.add_call),
             onPressed: session is SessionSignedIn
                 ? () => context.push('/masana')
@@ -70,7 +85,9 @@ class CallsScreen extends ConsumerWidget {
               sessionIdentity: session.tokens,
             )
           : session is SessionRestoring
-          ? const MasanawaListSkeleton(semanticLabel: 'Restoring call history session')
+          ? const MasanawaListSkeleton(
+              semanticLabel: 'Restoring call history session',
+            )
           : const Center(child: Text('Sign in to see your calls.')),
     );
   }
@@ -224,7 +241,25 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
   String _query = '';
   bool _invalidQuery = false;
   List<CallHistoryItem> _calls = [];
-  String? _nextCursor;
+  List<HumanCallRecord> _humanCalls = [];
+  bool _humanFailed = false;
+  List<Object> get _timeline {
+    final q = _query.toLowerCase();
+    final rows = <Object>[
+      ..._calls,
+      ..._humanCalls.where(
+        (c) =>
+            q.isEmpty ||
+            '${c.name} ${c.handle} ${c.state}'.toLowerCase().contains(q),
+      ),
+    ];
+    DateTime at(Object c) =>
+        c is HumanCallRecord ? c.createdAt : (c as CallHistoryItem).createdAt;
+    rows.sort((a, b) => at(b).compareTo(at(a)));
+    return rows;
+  }
+
+  String? _nextCursor, _humanNextCursor;
   bool _loading = true;
   bool _failed = false;
   bool _retryRefresh = true;
@@ -308,6 +343,44 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
       _failed = false;
     });
     try {
+      if (refresh || _humanNextCursor != null) {
+        try {
+          final human = await ref
+              .read(humanCallsTransportProvider)
+              .request(
+                'GET',
+                refresh || _humanNextCursor == null
+                    ? '/calls'
+                    : '/calls?after=${Uri.encodeComponent(_humanNextCursor!)}',
+              );
+          if (!mounted || generation != _generation || !_sameAccount) return;
+          final previousHuman = refresh ? <HumanCallRecord>[] : _humanCalls;
+          final newHuman = (human['items'] as List)
+              .map(
+                (r) => HumanCallRecord.fromJson(
+                  Map<String, dynamic>.from(r as Map),
+                ),
+              )
+              .toList();
+          _humanCalls = {
+            for (final c in [...previousHuman, ...newHuman]) c.id: c,
+          }.values.toList();
+          _humanNextCursor = human['nextCursor'] as String?;
+          _humanFailed = false;
+        } catch (_) {
+          if (!mounted || generation != _generation || !_sameAccount) return;
+          if (refresh) {
+            _humanCalls = [];
+            _humanNextCursor = null;
+          }
+          _humanFailed = true;
+        }
+      }
+      if (!refresh && _nextCursor == null) {
+        if (mounted && generation == _generation && _sameAccount)
+          setState(() => _loading = false);
+        return;
+      }
       final page = await ref
           .read(callHistoryTransportProvider)
           .loadPage(
@@ -364,7 +437,11 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
               itemCount: 5,
               semanticLabel: 'Loading call history',
             ),
-          if (!_loading && !_failed && !_invalidQuery && _calls.isEmpty)
+          if (!_loading &&
+              !_failed &&
+              !_invalidQuery &&
+              _calls.isEmpty &&
+              _humanCalls.isEmpty)
             Padding(
               padding: const EdgeInsets.all(32),
               child: Column(
@@ -373,12 +450,15 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                   const SizedBox(height: 18),
                   Text(
                     _query.isEmpty ? 'No recent calls' : 'No matching calls',
-                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _query.isEmpty
-                        ? 'Your calls with Masana will appear here.'
+                        ? 'Your calls with people and Masana will appear here.'
                         : 'Try a different name, state, or call identifier.',
                     textAlign: TextAlign.center,
                   ),
@@ -387,59 +467,84 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                     OutlinedButton.icon(
                       onPressed: () => context.push('/masana'),
                       icon: const Icon(Icons.people_outline),
-                      label: const Text('Choose a Masana'),
+                      label: const Text('Choose a contact'),
                     )
                   else
                     OutlinedButton.icon(
-                      onPressed: () { _search.clear(); _searchChanged(''); },
+                      onPressed: () {
+                        _search.clear();
+                        _searchChanged('');
+                      },
                       icon: const Icon(Icons.clear),
                       label: const Text('Clear call search'),
                     ),
                 ],
               ),
             ),
-          for (final call in _calls)
+          if (_humanFailed)
             ListTile(
-              leading: MasanaPortraitAvatar(
-                characterId: call.characterId,
-                agent: ref.watch(agentDirectoryProvider).find(call.characterId),
-                displayName: call.displayName,
-                size: 44,
+              title: const Text('Could not refresh people calls.'),
+              trailing: TextButton(
+                onPressed: () => _load(refresh: true),
+                child: const Text('Retry'),
               ),
-              title: Text(
-                call.displayName,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Row(
-                children: [
-                  Icon(
-                    call.missed
-                        ? Icons.call_missed
-                        : call.incoming
+            ),
+          for (final item in _timeline)
+            if (item is HumanCallRecord)
+              _humanRow(item)
+            else
+              for (final call in [item as CallHistoryItem])
+                ListTile(
+                  leading: MasanaPortraitAvatar(
+                    characterId: call.characterId,
+                    agent: ref
+                        .watch(agentDirectoryProvider)
+                        .find(call.characterId),
+                    displayName: call.displayName,
+                    size: 44,
+                  ),
+                  title: Text(
+                    call.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Row(
+                    children: [
+                      Icon(
+                        call.missed
+                            ? Icons.call_missed
+                            : call.incoming
                             ? Icons.call_received
                             : Icons.call_made,
-                    size: 16,
-                    color: call.missed ? u.emergency : u.brand,
+                        size: 16,
+                        color: call.missed ? u.emergency : u.brand,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${call.isGroupCall ? 'Group · ' : ''}${_label(call.state)}${call.duration == null ? '' : ' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
+                          style: TextStyle(color: u.textMuted, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${call.isGroupCall?'Group · ':''}${_label(call.state)}${call.duration==null?'':' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
-                      style: TextStyle(color: u.textMuted, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
+                  trailing: IconButton(
+                    icon: Icon(Icons.call, color: u.brand),
+                    tooltip: 'Call ${call.displayName}',
+                    onPressed: () => context.push(
+                      '/chat/${Uri.encodeComponent(call.characterId)}?mode=liveVoice',
                     ),
                   ),
-                ],
-              ),
-              trailing: IconButton(
-                icon: Icon(Icons.call, color: u.brand),
-                tooltip: 'Call ${call.displayName}',
-                onPressed: () => context.push(
-                  '/chat/${Uri.encodeComponent(call.characterId)}?mode=liveVoice',
+                  onTap: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CallDetailsScreen(
+                        ownerId: widget.accountId,
+                        initial: call,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              onTap: () => Navigator.push<void>(context,MaterialPageRoute(builder:(_)=>CallDetailsScreen(ownerId:widget.accountId,initial:call))),
-            ),
           if (_failed && !_invalidQuery)
             Padding(
               padding: const EdgeInsets.all(24),
@@ -456,9 +561,100 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                 ],
               ),
             ),
-          if (!_loading && !_failed && !_invalidQuery && _nextCursor != null)
+          if (!_loading &&
+              !_failed &&
+              !_invalidQuery &&
+              (_nextCursor != null || _humanNextCursor != null))
             TextButton(onPressed: _load, child: const Text('Load more')),
         ],
+      ),
+    );
+  }
+
+  Widget _humanRow(HumanCallRecord call) {
+    final missed = call.incoming && call.state == 'missed';
+    final avatar = call.avatarUrl;
+    return ListTile(
+      leading: GestureDetector(
+        onTap: () => context.push('/u/${Uri.encodeComponent(call.handle)}'),
+        child: CircleAvatar(
+          foregroundImage: avatar?.isNotEmpty == true
+              ? NetworkImage(avatar!)
+              : null,
+          onForegroundImageError: avatar?.isNotEmpty == true
+              ? (_, __) {}
+              : null,
+          child: Text(call.name.isEmpty ? '?' : call.name.characters.first),
+        ),
+      ),
+      title: Text(call.name),
+      subtitle: Row(
+        children: [
+          Icon(
+            missed
+                ? Icons.call_missed
+                : call.incoming
+                ? Icons.call_received
+                : Icons.call_made,
+            size: 16,
+            color: missed
+                ? Theme.of(context).colorScheme.error
+                : Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              '${call.state} · ${_date(context, call.createdAt)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      trailing: IconButton(
+        tooltip: 'Call ${call.name}',
+        icon: const Icon(Icons.call),
+        onPressed: () => humanCallStart(context, ref, call.handle),
+      ),
+      onTap: () => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheet) => SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                title: Text(call.name),
+                subtitle: Text(
+                  '${call.direction} · ${call.state}\n${_date(context, call.createdAt)}${call.answeredAt != null && call.endedAt != null ? '\n${call.endedAt!.difference(call.answeredAt!).inSeconds} seconds' : ''}',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Profile'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  context.push('/u/${Uri.encodeComponent(call.handle)}');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.chat_outlined),
+                title: const Text('Message'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  humanConversationStart(context, ref, call.handle);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.call),
+                title: const Text('Call back'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  humanCallStart(context, ref, call.handle);
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -478,5 +674,3 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     return '${strings.formatMediumDate(local)} ${strings.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
   }
 }
-
-

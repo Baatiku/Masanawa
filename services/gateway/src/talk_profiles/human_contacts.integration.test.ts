@@ -10,7 +10,7 @@ const db = new PGlite();
 const app = Fastify();
 beforeAll(async () => {
   await db.exec('CREATE SCHEMA talks; CREATE SCHEMA identity; CREATE TABLE identity.users(tenant_id text,user_id text,state text);');
-  for (const name of ['0003_talk_profiles.sql', '0009_talk_safety.sql']) {
+  for (const name of ['0003_talk_profiles.sql', '0009_talk_safety.sql', '0015_human_communication.sql']) {
     await db.exec(await readFile(new URL('../../../../packages/talks/migrations/' + name, import.meta.url), 'utf8'));
   }
   const profiles = [
@@ -89,4 +89,19 @@ it('cannot follow blocked or inactive people through either target route', async
   }
   const follows=await db.query("SELECT followed_user_id FROM talks.follows WHERE follower_user_id='viewer' ORDER BY followed_user_id");
   expect(follows.rows).toEqual([{followed_user_id:'alice'}]);
+});
+
+it('includes accepted conversation peers without turning pending requests into contacts', async () => {
+  await db.exec(`INSERT INTO talks.human_conversations VALUES
+    ('tenant','accepted-bob','bob','viewer','viewer','accepted',now()),
+    ('tenant','accepted-alice','alice','viewer','viewer','accepted',now()),
+    ('tenant','pending-hidden','hidden','viewer','hidden','pending',now()),
+    ('tenant','accepted-blocked','blocked','viewer','viewer','accepted',now()),
+    ('tenant','accepted-inactive','inactive','viewer','viewer','accepted',now()),
+    ('elsewhere','cross-tenant','bob','viewer','viewer','accepted',now());`);
+  const response=await app.inject({url:'/v1/profiles/contacts',headers});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().items.map((x:{handle:string})=>x.handle)).toEqual(['alice','bob']);
+  await db.exec("UPDATE talks.human_conversations SET state='declined' WHERE id='accepted-bob'");
+  expect((await app.inject({url:'/v1/profiles/contacts',headers})).json().items.map((x:{handle:string})=>x.handle)).toEqual(['alice']);
 });

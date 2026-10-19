@@ -51,7 +51,7 @@ function serviceAccount(raw: string): ServiceAccount {
 export function mobilePushAndroidChannel(
   data: Readonly<Record<string, string>> | undefined,
 ): "masanawa_calls" | "masanawa_work" {
-  return data?.type === "incoming_call" && typeof data.callId === "string" &&
+  return (data?.type === "incoming_call" || data?.type === "human_call") && typeof data.callId === "string" &&
       /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/u.test(data.callId)
     ? "masanawa_calls"
     : "masanawa_work";
@@ -66,7 +66,7 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
   readonly body: string;
 } {
   return mobilePushAndroidChannel(data) === "masanawa_calls"
-    ? { title: "Incoming Masana call", body: "Open Calls to respond" }
+    ? { title: "Incoming call", body: "Open Calls to respond" }
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
@@ -76,7 +76,7 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
 export function pushCategory(data: Readonly<Record<string, string>> | undefined):
     MobileNotificationCategory {
   const type = data?.type ?? "";
-  if (type === "incoming_call" || type === "missed_call") return "calls";
+  if (type === "incoming_call" || type === "human_call" || type === "missed_call") return "calls";
   if (type === "p2p_order" || type.startsWith("p2p_")) return "p2p";
   if (type.startsWith("wallet_") || type.startsWith("funding_") ||
       type.startsWith("transfer_") || type.startsWith("withdrawal_") ||
@@ -95,7 +95,7 @@ export function pushAllowed(
   if (!preferences[category]) return false;
   // Fraud/security warnings and money requiring timely action remain audible;
   // an unrelated caller cannot claim criticality by supplying arbitrary data.
-  const critical = category === "calls" && data?.type === "incoming_call" ||
+  const critical = category === "calls" && (data?.type === "incoming_call" || data?.type === "human_call") ||
     category === "wallet" && data?.type === "wallet_security" ||
     category === "p2p" && data?.type === "p2p_deadline";
   if (critical) return true;

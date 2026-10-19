@@ -1,3 +1,8 @@
+import 'package:flutter/services.dart';
+
+import '../../human_chat/human_chat.dart';
+import '../../human_calls/human_calls.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +17,18 @@ import 'package:go_router/go_router.dart';
 import '../../state/agent_directory_state.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import 'my_masana_screen.dart';
+
+final _profileRoomsProvider = FutureProvider.autoDispose
+    .family<List<HumanJson>, String>((ref, handle) async {
+      final transport = ref.watch(humanCommunicationTransportProvider);
+      final response = await transport.request(
+        'GET',
+        '/profiles/${Uri.encodeComponent(handle)}/rooms',
+      );
+      return (response['items'] as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    });
 
 class PersonProfileScreen extends ConsumerStatefulWidget {
   const PersonProfileScreen({super.key, required this.handle});
@@ -143,7 +160,27 @@ class _PersonProfileBody extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
-      appBar: AppBar(title: Text('@' + profile.handle)),
+      appBar: AppBar(
+        title: Text('@' + profile.handle),
+        actions: [
+          IconButton(
+            tooltip: 'Copy profile link',
+            icon: const Icon(Icons.link),
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(
+                  text:
+                      'https://masanawa.com/u/${Uri.encodeComponent(profile.handle)}',
+                ),
+              );
+              if (context.mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile link copied.')),
+                );
+            },
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: onRefresh,
         child: ListView(
@@ -277,20 +314,36 @@ class _PersonProfileBody extends ConsumerWidget {
             else
               Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: OutlinedButton(
-                  key: const ValueKey('person-profile-follow'),
-                  onPressed: followBusy ? null : onFollow,
-                  child: Text(
-                    followBusy
-                        ? 'Updating…'
-                        : profile.isFollowing
-                        ? 'Following'
-                        : 'Follow',
-                  ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () =>
+                          humanConversationStart(context, ref, profile.handle),
+                      icon: const Icon(Icons.chat_outlined),
+                      label: const Text('Message'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          humanCallStart(context, ref, profile.handle),
+                      icon: const Icon(Icons.call_outlined),
+                      label: const Text('Call'),
+                    ),
+                    OutlinedButton(
+                      key: const ValueKey('person-profile-follow'),
+                      onPressed: followBusy ? null : onFollow,
+                      child: Text(
+                        followBusy
+                            ? 'Updating…'
+                            : profile.isFollowing
+                            ? 'Following'
+                            : 'Follow',
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            // Message and Call actions are composed here only when their real
-            // human transports land; no agent route or disabled fake action.
             if (agents.isNotEmpty) ...[
               const SizedBox(height: 20),
               Text('Masana', style: Theme.of(context).textTheme.titleMedium),
@@ -311,6 +364,38 @@ class _PersonProfileBody extends ConsumerWidget {
                   ),
                 ),
             ],
+            if (signedIn)
+              ref
+                  .watch(_profileRoomsProvider(profile.handle))
+                  .when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => TextButton(
+                      onPressed: () =>
+                          ref.invalidate(_profileRoomsProvider(profile.handle)),
+                      child: const Text('Retry shared Rooms'),
+                    ),
+                    data: (rooms) => rooms.isEmpty
+                        ? const SizedBox.shrink()
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 20),
+                              Text(
+                                'Rooms',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              for (final room in rooms)
+                                ListTile(
+                                  leading: const Icon(Icons.forum_outlined),
+                                  title: Text(room['name'] as String),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => context.push(
+                                    '/rooms/${Uri.encodeComponent(room['id'] as String)}',
+                                  ),
+                                ),
+                            ],
+                          ),
+                  ),
             if (directory?.error != null) ...[
               const SizedBox(height: 12),
               Text(

@@ -1,3 +1,5 @@
+import { createHumanCommunicationService } from "./human_communication/index.js";
+import { createHumanCallRoomTerminator } from "./human_call_media.js";
 import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
@@ -755,6 +757,8 @@ export async function startGatewayService(
     options.appOptions?.twinProduction;
   let pushSender: MobilePushSender | undefined;
   let ownerAccessSweepTenantId: TenantId | undefined;
+  let humanRecoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let humanRecovery: Promise<void> | undefined;
   let incomingRecoveryTimer: ReturnType<typeof setInterval> | undefined;
   let incomingRecovery: Promise<void> | undefined;
   let channelRecoveryTimer: ReturnType<typeof setInterval> | undefined;
@@ -2252,6 +2256,34 @@ export async function startGatewayService(
           apiSecret: liveKitApiSecret,
         })
       : undefined;
+  const humanCommunication = options.appOptions?.humanCommunication ??
+    (database.featurePool && talkProfileAuthorizer
+      ? createHumanCommunicationService({
+          pool: database.featurePool,
+          authorizer: talkProfileAuthorizer,
+          ...(talkMediaTokens ? { mediaTokens: talkMediaTokens } : {}),
+          ...(liveKitServerUrl && liveKitApiKey && liveKitApiSecret ? {
+            endMediaRoom: createHumanCallRoomTerminator({
+              serverUrl: liveKitServerUrl, apiKey: liveKitApiKey, apiSecret: liveKitApiSecret,
+            }),
+          } : {}),
+          ...(pushSender ? { push: async (notice) => {
+            const match = /^\/human\/(call|chat)\/([0-9a-f-]{36})$/u.exec(notice.deepLink);
+            if (!match) throw new Error("Invalid human notification route");
+            const result = await pushSender!.send({
+              scope: { tenantId: parseCanonicalId("tenant", notice.tenantId), userId: parseCanonicalId("user", notice.userId) },
+              title: notice.title, body: notice.body,
+              data: {
+                type: notice.category === "calls" ? "human_call" : "human_message",
+                eventId: `human-${notice.eventId}`,
+                deepLink: `masanawa://human/${match[1]}/${match[2]}`,
+                ...(notice.category === "calls" ? {callId: match[2]!} : {conversationId: match[2]!}),
+              },
+            });
+            if (result.attempted > result.delivered) throw new Error("Human notification delivery incomplete");
+          } } : {}),
+        })
+      : undefined);
   const talkMediaAdmin =
     liveKitServerUrl && liveKitApiKey && liveKitApiSecret
       ? createLiveKitTalkMediaAdmin({
@@ -2912,6 +2944,7 @@ export async function startGatewayService(
       walletCreditSendEnabled: env.MASANAWA_WALLET_CREDIT_SEND_ENABLED === "true" && !!twinProduction,
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
+      ...(humanCommunication ? { humanCommunication } : {}),
       ...(incomingCalls ? { incomingCalls } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
@@ -2996,6 +3029,7 @@ export async function startGatewayService(
     ...(options.logger ? { logger: options.logger } : {}),
     onDraining: () => {
       drain.beginDraining();
+      if (humanRecoveryTimer) clearInterval(humanRecoveryTimer);
       if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
       if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
       if (linkedWhatsAppController) {
@@ -3011,7 +3045,10 @@ export async function startGatewayService(
       }
     },
     onAfterClose: async () => {
+      if (humanRecoveryTimer) clearInterval(humanRecoveryTimer);
       if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
+      await humanRecovery;
+      await humanCommunication?.close();
       await incomingRecovery;
       if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
       await channelRecovery;
@@ -3042,6 +3079,17 @@ export async function startGatewayService(
     }
   }
 
+  if (humanCommunication) {
+    const recover = () => {
+      if (humanRecovery || drain.isDraining()) return;
+      humanRecovery = humanCommunication.recover().catch(() => {
+        // Durable events, call teardown and outbox leases retry on the next sweep.
+      }).finally(() => { humanRecovery = undefined; });
+    };
+    humanRecoveryTimer = setInterval(recover, 2000);
+    humanRecoveryTimer.unref();
+    recover();
+  }
   const runIncomingRecovery = () => {
     if (!incomingCalls || incomingRecovery || drain.isDraining()) return;
     incomingRecovery = incomingCalls.recover().catch(() => {

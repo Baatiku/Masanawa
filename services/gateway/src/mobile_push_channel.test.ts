@@ -20,7 +20,13 @@ describe("mobile FCM call channels", () => {
     });
     expect(JSON.stringify(preview)).not.toMatch(/100000|Private person/);
     expect(mobilePushSafePreview({ type: "incoming_call", callId: uuid }))
-      .toEqual({ title: "Incoming Masana call", body: "Open Calls to respond" });
+      .toEqual({ title: "Incoming call", body: "Open Calls to respond" });
+  });
+
+  it("classifies human invitations as calls with private previews", () => {
+    expect(mobilePushAndroidChannel({type:"human_call",callId:uuid})).toBe("masanawa_calls");
+    expect(mobilePushSafePreview({type:"human_call",callId:uuid,sender:"Private"})).toEqual({title:"Incoming call",body:"Open Calls to respond"});
+    expect(mobilePushAndroidChannel({type:"human_call",callId:"invalid"})).toBe("masanawa_work");
   });
 
   it("never promotes ordinary updates or spoofed IDs to call priority", () => {

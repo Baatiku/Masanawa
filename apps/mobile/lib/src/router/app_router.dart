@@ -1,6 +1,9 @@
+import '../human_chat/human_chat.dart';
+import '../human_calls/human_calls.dart';
 import '../screens/profile/person_profile_screen.dart';
 import '../calls/incoming_call_coordinator.dart';
 import '../calls/incoming_call_screen.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -27,19 +30,18 @@ import '../state/session_state.dart';
 
 /// The five canonical root destinations. These are navigation indices only,
 /// not a pricing, identity or task-authority contract.
-int shellRootTabIndex(String? tab) =>
-    MasanawaRootTab.fromQuery(tab).index;
+int shellRootTabIndex(String? tab) => MasanawaRootTab.fromQuery(tab).index;
 
 /// Retired shell links land on their closest current tab.
 String? legacyShellDestination(String? tab) => switch (tab) {
-      'create' => '/home?tab=status',
-      'activity' => '/home?tab=status',
-      'agents' => '/home?tab=chats',
-      'wallet' => '/home?tab=wallet',
-      'talk' => '/home?tab=status',
-      'home' => '/home?tab=chats',
-      _ => null,
-    };
+  'create' => '/home?tab=status',
+  'activity' => '/home?tab=status',
+  'agents' => '/home?tab=chats',
+  'wallet' => '/home?tab=wallet',
+  'talk' => '/home?tab=status',
+  'home' => '/home?tab=chats',
+  _ => null,
+};
 
 /// Chats-first router. Secure local session restoration happens inline on
 /// /home, not through a separate branded splash screen or a fixed timer.
@@ -61,19 +63,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // Redirect only to internal protected paths, and only after the same
       // account returns. A different account must not inherit a private route.
-      if (isSignedIn && resumeLocation != null &&
-          (path == '/chats' || path == '/phone-login' ||
-           path == '/otp' || path == '/home')) {
+      if (isSignedIn &&
+          resumeLocation != null &&
+          (path == '/chats' ||
+              path == '/phone-login' ||
+              path == '/otp' ||
+              path == '/home')) {
         final target = resumeLocation;
         final owner = resumeOwner;
         resumeLocation = null;
         resumeOwner = null;
-        if (owner == session.user.id && target != null &&
-            target.length <= 300 && target.startsWith('/')) {
+        if (owner == session.user.id &&
+            target != null &&
+            target.length <= 300 &&
+            target.startsWith('/')) {
           if (target != state.uri.toString()) return target;
         }
       }
-      if (!isSignedIn && path == '/phone-login' &&
+      if (!isSignedIn &&
+          path == '/phone-login' &&
           ref.read(sessionProvider.notifier).recentlyExpiredOwnerId == null) {
         resumeLocation = null;
         resumeOwner = null;
@@ -113,7 +121,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/phone-login';
       }
 
-      final protected = path.startsWith('/calls/incoming/') ||
+      final protected =
+          path.startsWith('/calls/incoming/') ||
           path.startsWith('/status/') ||
           path.startsWith('/masana/') ||
           path.startsWith('/wallet/transactions/') ||
@@ -135,10 +144,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path == '/crypto' ||
           path == '/profile';
       if (!isSignedIn && protected) {
-        final expiredOwner=ref.read(sessionProvider.notifier).recentlyExpiredOwnerId;
-        if(expiredOwner!=null && state.uri.toString().length<=300) {
-          resumeLocation=state.uri.toString();
-          resumeOwner=expiredOwner;
+        final expiredOwner = ref
+            .read(sessionProvider.notifier)
+            .recentlyExpiredOwnerId;
+        if (expiredOwner != null && state.uri.toString().length <= 300) {
+          resumeLocation = state.uri.toString();
+          resumeOwner = expiredOwner;
         }
         return '/phone-login';
       }
@@ -146,7 +157,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Retired shell deep links land on their closest current tab.
       if (path == '/home') {
         final oldDestination = legacyShellDestination(
-          state.uri.queryParameters['tab']);
+          state.uri.queryParameters['tab'],
+        );
         if (oldDestination != null) return oldDestination;
       }
       return null;
@@ -170,8 +182,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/home',
         builder: (_, state) {
-          final index = shellRootTabIndex(
-            state.uri.queryParameters['tab']);
+          final index = shellRootTabIndex(state.uri.queryParameters['tab']);
           return StartupGate(
             child: IncomingCallCoordinator(
               child: FiveTabShell(initialIndex: index),
@@ -182,20 +193,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Legacy publishing, user-to-user Talks, personal
       // Twins are retired. Preserve inbound URLs without mounting forbidden
       // workflows or implying that users may create content.
-      GoRoute(path: '/activity',
-        redirect: (_, __) => '/home?tab=status'),
-      GoRoute(path: '/search',
-        builder: (_, __) => const UnifiedSearchScreen()),
-      GoRoute(path: '/notifications',
-        builder: (_, __) => const NotificationPreferencesScreen()),
-      GoRoute(path: '/talk/create',
-        redirect: (_, __) => '/home?tab=status'),
-      GoRoute(path: '/talk/:id',
-        redirect: (_, __) => '/home?tab=status'),
-      GoRoute(path: '/u/:handle',
-        builder: (_, state) => PersonProfileScreen(handle: state.pathParameters['handle']!)),
-      GoRoute(path: '/persona/:publicId',
-        redirect: (_, __) => '/masana'),
+      GoRoute(path: '/activity', redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/search', builder: (_, __) => const UnifiedSearchScreen()),
+      GoRoute(
+        path: '/notifications',
+        builder: (_, __) => const NotificationPreferencesScreen(),
+      ),
+      GoRoute(path: '/talk/create', redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/talk/:id', redirect: (_, __) => '/home?tab=status'),
+      GoRoute(
+        path: '/u/:handle',
+        builder: (_, state) =>
+            PersonProfileScreen(handle: state.pathParameters['handle']!),
+      ),
+      GoRoute(path: '/persona/:publicId', redirect: (_, __) => '/masana'),
       GoRoute(
         path: '/wallet/transactions/:id',
         builder: (context, state) => WalletScreen(
@@ -213,9 +224,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/calls/incoming/:callId',
-        builder: (context, state) => IncomingCallScreen(
-          callId: state.pathParameters['callId']!,
-        ),
+        builder: (context, state) =>
+            IncomingCallScreen(callId: state.pathParameters['callId']!),
       ),
       GoRoute(path: '/chats', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(
@@ -236,20 +246,43 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-        path: '/agents', redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(path: '/agents', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/masana', builder: (_, _) => const MasanaListScreen()),
-      GoRoute(path: '/masana/:id', builder: (_, state) =>
-        MasanaResourceLinkScreen(characterId: state.pathParameters['id']!)),
-      GoRoute(path: '/status/:postId', builder: (_, state) =>
-        StatusResourceLinkScreen(postId: state.pathParameters['postId']!)),
-      GoRoute(path:'/rooms/:id',builder:(_,state)=>MasanaRoomDetailScreen(roomId:state.pathParameters['id']!)),
+      GoRoute(
+        path: '/masana/:id',
+        builder: (_, state) =>
+            MasanaResourceLinkScreen(characterId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/status/:postId',
+        builder: (_, state) =>
+            StatusResourceLinkScreen(postId: state.pathParameters['postId']!),
+      ),
+      GoRoute(
+        path: '/rooms/:id',
+        builder: (_, state) =>
+            MasanaRoomDetailScreen(roomId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/human/chat/:id',
+        builder: (_, state) =>
+            HumanChatScreen(conversationId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/human/call/:id',
+        builder: (_, state) =>
+            HumanCallScreen(callId: state.pathParameters['id']!),
+      ),
+      GoRoute(path: '/privacy', builder: (_, _) => const HumanPrivacyScreen()),
+      GoRoute(
+        path: '/human/requests',
+        builder: (_, _) => const HumanInboxScreen(filter: 'requests'),
+      ),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(
         path: '/billing',
-        builder: (_, state) => BillingScreen(
-          initialService: state.uri.queryParameters['service'],
-        ),
+        builder: (_, state) =>
+            BillingScreen(initialService: state.uri.queryParameters['service']),
       ),
       GoRoute(path: '/crypto', builder: (_, _) => const CryptoWalletScreen()),
       GoRoute(path: '/profile', builder: (_, _) => const EditProfileScreen()),

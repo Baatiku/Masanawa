@@ -43,8 +43,8 @@ FirebaseOptions get _firebaseOptions => const FirebaseOptions(
 
 const _incomingCallChannel = AndroidNotificationChannel(
   'masanawa_calls',
-  'Incoming Masana calls',
-  description: 'Ringing invitations from your Masana contacts',
+  'Incoming calls',
+  description: 'Ringing invitations from your contacts',
   importance: Importance.max,
   playSound: true,
 );
@@ -59,10 +59,11 @@ const _workChannel = AndroidNotificationChannel(
 const _callNotificationDetails = NotificationDetails(
   android: AndroidNotificationDetails(
     'masanawa_calls',
-    'Incoming Masana calls',
-    channelDescription: 'Ringing invitations from your Masana contacts',
+    'Incoming calls',
+    channelDescription: 'Ringing invitations from your contacts',
     icon: 'ic_stat_masanawa',
     category: AndroidNotificationCategory.call,
+    fullScreenIntent: true,
     importance: Importance.max,
     priority: Priority.max,
     playSound: true,
@@ -84,7 +85,18 @@ const _workNotificationDetails = NotificationDetails(
   iOS: DarwinNotificationDetails(),
 );
 
+String? humanIncomingCallLink(Map<String, dynamic> data) {
+  final raw = data['deepLink'];
+  if (data['type'] != 'human_call' || raw is! String) return null;
+  final uri = Uri.tryParse(raw);
+  return uri != null &&
+          shellDeepLinkRoute(uri)?.startsWith('/human/call/') == true
+      ? raw
+      : null;
+}
+
 bool isIncomingCallPush(Map<String, dynamic> data) {
+  if (humanIncomingCallLink(data) != null) return true;
   if (data['type'] != 'incoming_call' || data['callId'] is! String) {
     return false;
   }
@@ -112,16 +124,20 @@ Future<void> masanawaFirebaseBackgroundMessage(RemoteMessage message) async {
       iOS: DarwinInitializationSettings(),
     ),
   );
-  final android = notifications.resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>();
+  final android = notifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
   await android?.createNotificationChannel(_incomingCallChannel);
-  final callId = message.data['callId'] as String;
+  final humanLink = humanIncomingCallLink(message.data);
+  final callId = humanLink ?? message.data['callId'] as String;
   await notifications.show(
     id: callId.hashCode,
-    title: 'Incoming Masana call',
+    title: 'Incoming call',
     body: 'Open Calls to respond',
     notificationDetails: _callNotificationDetails,
-    payload: 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
+    payload:
+        humanLink ?? 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
   );
 }
 
@@ -210,8 +226,10 @@ class MobilePushService {
     // FCM background notification payloads reference these exact channel IDs.
     // Register them before token registration; otherwise Android may silently
     // fall back to a generic system channel for incoming calls.
-    final channels = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final channels = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await channels?.createNotificationChannel(_workChannel);
     await channels?.createNotificationChannel(_incomingCallChannel);
 
@@ -229,7 +247,8 @@ class MobilePushService {
       if (hint != null) {
         final uri = Uri.tryParse(hint);
         if (uri != null &&
-            shellDeepLinkRoute(uri)?.startsWith('/calls/incoming/') == true) {
+            (shellDeepLinkRoute(uri)?.startsWith('/calls/incoming/') == true ||
+                shellDeepLinkRoute(uri)?.startsWith('/human/call/') == true)) {
           _incomingHints.add(uri);
         }
       }
@@ -238,15 +257,18 @@ class MobilePushService {
       if (notification == null && !isCall) return;
       await _notifications.show(
         id: isCall
-            ? (message.data['callId'] as String).hashCode
+            ? (humanIncomingCallLink(message.data) ??
+                      message.data['callId'] as String)
+                  .hashCode
             : ((message.data['eventId'] is String
-                    ? (message.data['eventId'] as String).hashCode
-                    : message.messageId?.hashCode) ??
-                DateTime.now().millisecondsSinceEpoch),
+                      ? (message.data['eventId'] as String).hashCode
+                      : message.messageId?.hashCode) ??
+                  DateTime.now().millisecondsSinceEpoch),
         // Foreground FCM payload text is untrusted and may contain private
         // message or money details. Keep both device states preview-safe.
-        title: isCall ? 'Incoming Masana call' : 'Masanawa',
-        body: isCall ? 'Open Calls to respond'
+        title: isCall ? 'Incoming call' : 'Masanawa',
+        body: isCall
+            ? 'Open Calls to respond'
             : 'Open the app to view your update',
         notificationDetails: isCall
             ? _callNotificationDetails
