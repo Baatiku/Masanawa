@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../core/request_id.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -36,6 +38,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _notificationAccountId;
   int _supportMutationEpoch = 0;
   String? _savingDefaultAgentId;
+  bool _sendingDiagnostics = false;
 
   @override
   void initState() {
@@ -131,6 +134,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       _showFeedback('Diagnostics are unavailable right now.');
     }
+  }
+
+  Future<void> _sendDiagnostics() async {
+    if (_sendingDiagnostics) return;
+    final initial = ref.read(sessionProvider);
+    if (initial is! SessionSignedIn) return;
+    final owner = initial.user.id;
+    bool sameOwner() => mounted && switch (ref.read(sessionProvider)) {
+      SessionSignedIn(:final user) => user.id == owner, _ => false,
+    };
+    setState(() => _sendingDiagnostics = true);
+    try {
+      final report = await MasanawaDiagnostics.instance.exportSanitizedReport();
+      if (!sameOwner()) return;
+      final approved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(title: const Text('Review app diagnostics')),
+          body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
+            const Text('Send this anonymous summary to Masanawa support. It contains error categories, app source locations and build details. No messages, tokens, account details or raw exception text are sent.'),
+            const SizedBox(height: 20), SelectableText(report), const SizedBox(height: 24),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send report')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ])),
+        ),
+      ));
+      if (approved != true || !sameOwner()) return;
+      final reference = await ref.read(apiClientProvider).sendSupportDiagnostics(
+        MasanawaDiagnostics.supportPayload(report, createRequestId()));
+      if (!sameOwner()) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Report sent. Support reference: $reference'),
+        duration: const Duration(seconds: 15),
+        action: SnackBarAction(label: 'Copy', onPressed: () => Clipboard.setData(ClipboardData(text: reference))),
+      ));
+    } catch (_) {
+      if (sameOwner()) _showFeedback('Could not send diagnostics. Your local report is retained; try again when connected.');
+    } finally { if (mounted) setState(() => _sendingDiagnostics = false); }
   }
 
   Future<void> _clearDiagnostics() async {
@@ -380,6 +420,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: const Text('Retry permission check'),
                   ),
                 ),
+              const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-send-diagnostics'),
+                leading: Icon(Icons.support_agent_outlined, color: u.brand),
+                title: Text(_sendingDiagnostics ? 'Preparing diagnostics…' : 'Send diagnostics to support'),
+                subtitle: const Text('Review an anonymous summary before sending. Receive a support reference.'),
+                onTap: user == null || _sendingDiagnostics ? null : () => unawaited(_sendDiagnostics()),
+              ),
               const Divider(height: 1),
               ListTile(
                 key: const Key('settings-share-diagnostics'),

@@ -2763,6 +2763,10 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
+      ...(sessions ? { mobileDiagnostics: {
+        sessions,
+        observe: (report) => { process.stdout.write(JSON.stringify(report) + "\n"); },
+      } } : {}),
       ...(database.featurePool && sessions
         ? { accountDataExports: createAccountDataExports(database.featurePool,sessions) }
         : {}),

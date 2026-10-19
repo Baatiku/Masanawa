@@ -27,6 +27,19 @@ void main() {
     expect(report, isNot(contains('Private App Name')));
   });
 
+  test('support projection rejects raw data and bounds captured error vocabulary', () {
+    final payload = MasanawaDiagnostics.supportPayload(
+      'App version: 1.0.4\nApp build: 42\nSource commit: ${'a' * 40}\n'
+      '2026-10-19 PrivateUserName src/core/client.dart:42\n'
+      '2026-02-30 StateError src/core/client.dart:42\n'
+      'Bearer customer-token\nhttps://private.invalid\nanr\n', 'request_test');
+    expect(payload['events'], [{'day':'2026-10-19','type':'OtherError','frame':'src/core/client.dart:42'}]);
+    expect(payload['exits'], ['anr']);
+    expect(payload.toString(), isNot(contains('customer-token')));
+    expect(payload.toString(), isNot(contains('PrivateUserName')));
+    expect(payload['source'], 'a' * 40);
+  });
+
   test('release metadata rejects injected text, overlong values and non-SHA source', () {
     expect(MasanawaDiagnostics.safeReleaseValue('1.2.3-beta.1'), '1.2.3-beta.1');
     expect(MasanawaDiagnostics.safeReleaseValue('1.2.3\nBearer secret'), 'unknown');

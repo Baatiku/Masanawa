@@ -441,18 +441,7 @@ try {
     await identity.createTenant({ tenantId, createdAt: at });
     await identity.createUser({ tenantId, userId, createdAt: at });
 
-    for (const [index, item] of paidSkills.entries()) {
-    await distribution.put({
-      schemaVersion: 1,
-      skillVersionId: item.version.skillVersionId,
-      audiences: ["personal-clone", "platform-support"],
-      installMode: "optional",
-      category: "business-services",
-      sortOrder: 100 + index,
-    });
-  }
-
-  for (const character of characters) {
+      for (const character of characters) {
       await identity.createCharacter({
         tenantId,
         characterId: character.characterId,
@@ -539,6 +528,17 @@ try {
         reasonCode: null,
         checkedAt: at,
       },
+    });
+  }
+
+  for (const [index, item] of paidSkills.entries()) {
+    await distribution.put({
+      schemaVersion: 1,
+      skillVersionId: item.version.skillVersionId,
+      audiences: ["personal-clone", "platform-support"],
+      installMode: "optional",
+      category: "business-services",
+      sortOrder: 100 + index,
     });
   }
 

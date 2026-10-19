@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// Diagnostics are local-only and never transmit automatically.
+/// Capture is local; sharing or sending requires an explicit user action.
 class MasanawaDiagnostics {
   MasanawaDiagnostics._();
   static final instance = MasanawaDiagnostics._();
@@ -134,6 +134,35 @@ class MasanawaDiagnostics {
     }
     if (stored.isEmpty) lines.add('No local Flutter errors.');
     return lines.join('\n');
+  }
+
+  /// Strict projection used for the opt-in Gateway support collector.
+  static Map<String, dynamic> supportPayload(String report, String reportId) {
+    const types = {'StateError','ApiException','FormatException','AssertionError',
+      'TypeError','FlutterError','RangeError','ArgumentError','SocketException',
+      'TimeoutException','PlatformException','OtherError'};
+    const exitTypes = {'anr','java_crash','native_crash','low_memory'};
+    final lines = report.split('\n');
+    String metadata(String prefix) {
+      for (final line in lines) {
+        if (line.startsWith(prefix)) return safeReleaseValue(line.substring(prefix.length));
+      }
+      return 'unknown';
+    }
+    final events = <Map<String, String>>[];
+    final exits = <String>[];
+    var source = 'unknown';
+    for (final line in lines) {
+      if (line.startsWith('Source commit: ')) source = safeSourceCommit(line.substring(15));
+      if (exitTypes.contains(line) && exits.length < 10) exits.add(line);
+      final match = RegExp(r'^(\d{4}-\d{2}-\d{2}) ([A-Za-z_][A-Za-z0-9_]{0,47}) (unknown|src/[a-zA-Z0-9_/-]+\.dart:[0-9]{1,6})$').firstMatch(line);
+      if (match == null || events.length >= 20) continue;
+      final day = DateTime.tryParse(match[1]!);
+      if (day == null || day.toIso8601String().substring(0, 10) != match[1]) continue;
+      events.add({'day':match[1]!, 'type':types.contains(match[2]) ? match[2]! : 'OtherError', 'frame':match[3]!});
+    }
+    return {'reportId':reportId,'consent':true,'version':metadata('App version: '),
+      'build':metadata('App build: '),'source':source,'events':events,'exits':exits};
   }
 
   Future<void> clear() async {

@@ -422,6 +422,15 @@ class ApiClient {
         if(to!=null)'to':to,
       });
 
+  Future<String> sendSupportDiagnostics(Map<String, dynamic> report) async {
+    final result = await _post('/v1/support/diagnostics', report);
+    final reference = result['reference'];
+    if (reference is! String || !RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$').hasMatch(reference)) {
+      throw const ApiException('Support could not confirm the diagnostic report.');
+    }
+    return reference;
+  }
+
   Future<void> startContactChange({
     required String channel,required String nextIdentifier,
   }) async {

@@ -27,6 +27,10 @@ jobs:
           package-manager-cache: false
       - name: Verify release provenance and health-watch behavior
         run: node --test scripts/reliability/*.test.mjs
+      - name: Install libpq for connection environment regressions
+        run: sudo apt-get update && sudo apt-get install -y libpq5
+      - name: Verify private PostgreSQL URI decoding and shell quoting
+        run: python3 -m unittest discover -s scripts/reliability -p '*_test.py'
       - name: Validate backup/restore shell syntax
         run: bash -n scripts/reliability/backup-restore.sh
       - name: Assert backup rehearsal never contains destructive restores

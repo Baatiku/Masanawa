@@ -268,6 +268,7 @@ void main() {
               findsOneWidget,
             );
             await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
+            await tester.pumpAndSettle();
             await tester.tap(find.text('All crypto assets'));
             await tester.pumpAndSettle();
             expect(find.byType(CryptoWalletScreen), findsOneWidget);
