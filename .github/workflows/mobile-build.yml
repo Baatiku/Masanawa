@@ -1,6 +1,7 @@
 name: Mobile Build
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -36,10 +37,12 @@ jobs:
       - name: Test
         run: flutter test
       - name: Phone (production APK)
+        if: github.event_name == 'workflow_dispatch'
         run: flutter build apk --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
       - name: Verify provenance script contracts
         run: node --test ../../scripts/reliability/release-provenance.test.mjs
       - name: Record signed APK identity and checksum
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +57,7 @@ jobs:
       - name: Web (release)
         run: flutter build web --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
       - name: Upload APK
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: masanawa-production-apk

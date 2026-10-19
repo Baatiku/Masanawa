@@ -1,0 +1,61 @@
+name: Checklist Flutter verification (no APK)
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/checklist-implementation-20261019]
+    paths: ['apps/mobile/**', '.github/workflows/checklist-verification.yml']
+permissions:
+  contents: read
+jobs:
+  flutter-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze errors
+        shell: bash
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings > "$RUNNER_TEMP/analysis.log" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/analysis.log"
+          python3 - "$RUNNER_TEMP/analysis.log" <<'PY'
+          import sys
+          for line in open(sys.argv[1]):
+              if 'error •' in line or 'error -' in line:
+                  print('::error title=Dart analysis::'+line.strip().replace('%','%25'))
+          PY
+          exit "$result"
+      - name: Full Flutter regressions
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set +e
+          flutter test --no-pub --machine > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
+          result=$?
+          python3 - "$RUNNER_TEMP/flutter-tests.jsonl" <<'PY'
+          import json,sys
+          tests={};counts={};errors=[]
+          for line in open(sys.argv[1]):
+              try: e=json.loads(line)
+              except ValueError: continue
+              if e.get('type')=='testStart':tests[e['test']['id']]=e['test']['name']
+              if e.get('type')=='error':errors.append(e.get('error','')+'\n'+e.get('stackTrace',''))
+              if e.get('type')=='testDone':
+                  key='skipped' if e.get('skipped') else e.get('result','unknown');counts[key]=counts.get(key,0)+1
+                  if key=='error' or key=='failure':errors.append('Failed: '+tests.get(e['testID'],str(e['testID'])))
+          print('Flutter results: '+json.dumps(counts))
+          for error in errors:
+              for start in range(0,min(len(error),12000),2800):
+                  text=error[start:start+2800].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+                  print('::error title=Flutter regression::'+text)
+          PY
+          exit "$result"
