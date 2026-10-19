@@ -113,13 +113,14 @@ class _MasanaMemoryScreenState extends ConsumerState<MasanaMemoryScreen> {
   }
 
   Future<void> _edit(Map<String, dynamic> item) async {
-    final field = TextEditingController(text: item['content'] as String? ?? '');
+    var draft = item['content'] as String? ?? '';
     final changed = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Correct memory'),
-        content: TextField(
-          controller: field,
+        content: TextFormField(
+          initialValue: draft,
+          onChanged: (value) => draft = value,
           minLines: 2,
           maxLines: 5,
           maxLength: 1200,
@@ -131,13 +132,12 @@ class _MasanaMemoryScreenState extends ConsumerState<MasanaMemoryScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, field.text.trim()),
+            onPressed: () => Navigator.pop(ctx, draft.trim()),
             child: const Text('Save'),
           ),
         ],
       ),
     );
-    field.dispose();
     if (changed == null || changed.length < 3 || _busy) return;
     setState(() => _busy = true);
     try {
