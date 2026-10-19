@@ -17,6 +17,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../core/request_id.dart';
+import '../theme/masanawa_theme.dart';
 import '../human_calls/human_calls.dart';
 import '../core/voice_note_recorder.dart';
 import 'controller.dart';
@@ -894,7 +895,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                               recorder.state == VoiceNoteState.stopping
                           ? null
                           : _send,
-                      icon: const Icon(Icons.send, color: Color(0xff128c7e)),
+                      icon: Icon(Icons.send, color: context.masanawa.brandStrong),
                     ),
                   ],
                 ),
@@ -928,7 +929,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: m.mine
-                ? const Color(0xffdcf8c6)
+                ? context.masanawa.bubbleOut
                 : Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
           ),

@@ -495,7 +495,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                 ],
               ),
             ),
-          if (_humanFailed)
+          if (_humanFailed && !_failed)
             ListTile(
               title: const Text('Could not refresh people calls.'),
               trailing: TextButton(

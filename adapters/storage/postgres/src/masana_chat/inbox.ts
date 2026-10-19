@@ -146,7 +146,7 @@ ${previewHideFence}
            WHERE p.tenant_id=$1 AND p.fan_user_id=$2 AND p.character_id=$3
              AND p.revision=$5 AND ${eligibleSession}
            RETURNING p.revision::text AS revision`;
-      const result = await db.query<{revision: string}>(sql, params);
+      const result = await db.query<{revision: string}>(sql, expectedRevision === 0 ? params.slice(0, 4) : params);
       const value = result.rows[0]?.revision;
       return value === undefined ? null : Number(value);
     },
