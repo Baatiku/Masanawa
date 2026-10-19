@@ -19,6 +19,7 @@ Map<String, dynamic> record([String state = 'ringing']) => {
 class _Api implements HumanCallsTransport {
   Map<String, dynamic> current = record();
   final actions = <String>[];
+  Future<void> Function(String, String)? before;
   @override
   Future<Map<String, dynamic>> request(
     String method,
@@ -26,6 +27,7 @@ class _Api implements HumanCallsTransport {
     Map<String, dynamic>? data,
   }) async {
     actions.add('$method $path');
+    await before?.call(method, path);
     if (path.endsWith('/token'))
       return {
         'server_url': 'wss://live.example.test',
@@ -45,6 +47,7 @@ class _Api implements HumanCallsTransport {
 
 class _Audio implements HumanCallAudio {
   bool closed = false, microphone = false;
+  void Function(String)? statusCallback;
   @override
   Future<void> connect(
     Map<String, dynamic> token,
@@ -52,6 +55,7 @@ class _Audio implements HumanCallAudio {
     bool microphoneEnabled = true,
     bool speakerEnabled = false,
   }) async {
+    statusCallback = status;
     microphone = microphoneEnabled;
     status('connected');
   }
@@ -165,4 +169,57 @@ void main() {
       await c.close();
     },
   );
+  test('late token after hangup cannot open audio', () async {
+    final api = _Api()..current = record('accepted');
+    final token = Completer<void>();
+    api.before = (_, path) async {
+      if (path.endsWith('/token')) await token.future;
+    };
+    final audio = _Audio();
+    var stops = 0;
+    final c = HumanCallController(
+      api: api,
+      audioFactory: () => audio,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {
+        stops++;
+      },
+      autoPoll: false,
+    );
+    final opening = c.open('call-one');
+    while (!api.actions.any((p) => p.endsWith('/token'))) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    await c.end();
+    token.complete();
+    await opening;
+    expect(audio.microphone, isFalse);
+    expect(stops, 1);
+    await c.close();
+  });
+  test('disconnected media releases microphone and exposes retry', () async {
+    final api = _Api()..current = record('accepted');
+    final audio = _Audio();
+    final c = HumanCallController(
+      api: api,
+      audioFactory: () => audio,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    audio.statusCallback!('disconnected');
+    await Future<void>.delayed(Duration.zero);
+    expect(audio.closed, isTrue);
+    expect(audio.microphone, isFalse);
+    expect(c.mediaState, 'failed');
+    expect(c.error, isNotNull);
+    await c.close();
+  });
 }

@@ -627,3 +627,15 @@ it('exposes only published Rooms shared through active memberships',async()=>{
   expect((await send(eve,'GET','profiles/bob/rooms')).items).toEqual([]);
 }
 );
+
+it('enforces Room invitation privacy through the canonical SQL admission function',async()=>{
+ await db.exec("INSERT INTO identity.users VALUES('t','room-sender','active'),('t','room-recipient','active');INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('t','room-sender','roomsender','Sender'),('t','room-recipient','roomrecipient','Recipient');INSERT INTO talks.human_privacy VALUES('t','room-recipient','{\"roomInvites\":\"nobody\"}');");
+ const check=async()=> (await db.query<{allowed:boolean}>("SELECT talks.human_contact_allowed('t','room-sender','room-recipient','roomInvites') AS allowed")).rows[0]!.allowed;
+ expect(await check()).toBe(false);
+ await db.exec("UPDATE talks.human_privacy SET value='{\"roomInvites\":\"contacts\"}' WHERE user_id='room-recipient';");
+ expect(await check()).toBe(false);
+ await db.exec("INSERT INTO talks.follows VALUES('t','room-recipient','room-sender',clock_timestamp());");
+ expect(await check()).toBe(true);
+ await db.exec("INSERT INTO talks.safety_preferences VALUES('t','room-sender','room-recipient',true,false,clock_timestamp());");
+ expect(await check()).toBe(false);
+});

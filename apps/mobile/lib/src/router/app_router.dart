@@ -122,6 +122,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final protected =
+          path.startsWith('/human/') ||
+          path == '/privacy' ||
           path.startsWith('/calls/incoming/') ||
           path.startsWith('/status/') ||
           path.startsWith('/masana/') ||

@@ -196,6 +196,7 @@ export function createFcmPushSender(input: {
       let delivered = 0;
       const safePreview = mobilePushSafePreview(request.data);
       for (const registration of registrations) {
+        const nativeHumanCall = registration.platform === "android" && request.data?.type === "human_call" && mobilePushAndroidChannel(request.data) === "masanawa_calls";
         const response = await fetchImpl(
           `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
             credentials.project_id,
@@ -210,10 +211,10 @@ export function createFcmPushSender(input: {
             body: JSON.stringify({
               message: {
                 token: registration.token,
-                notification: {
+                ...(nativeHumanCall ? {} : {notification: {
                   title: safePreview.title,
                   body: safePreview.body,
-                },
+                }}),
                 data: {
                   ...(request.data ?? {}),
                   masanawa: "1",
@@ -223,7 +224,7 @@ export function createFcmPushSender(input: {
                   ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
-                  notification: {
+                  ...(nativeHumanCall ? {} : {notification: {
                     channel_id: mobilePushAndroidChannel(request.data),
                     visibility: "PRIVATE",
                     ...(request.data?.eventId
@@ -235,7 +236,7 @@ export function createFcmPushSender(input: {
                           tag: `masanawa-call-${request.data?.callId}`,
                         }
                       : {}),
-                  },
+                  }}),
                 },
                 apns: {
                   payload: { aps: { sound: "default" } },

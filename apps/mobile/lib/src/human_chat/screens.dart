@@ -1,3 +1,5 @@
+// Private audio uses the installed just_audio byte-stream API.
+// ignore_for_file: experimental_member_use
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -423,18 +425,15 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     setState(() => picking = true);
     await _run(() async {
       if (kind == 'doc') {
-        final result = await FilePicker.platform.pickFiles(
-          withData: true,
+        final f = await FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: ['pdf'],
         );
-        if (result == null || !mounted || controller != c || !c.current) return;
-        final f = result.files.single;
-        await _upload(
-          f.bytes ?? await File(f.path!).readAsBytes(),
-          f.name,
-          'doc',
-        );
+        if (f == null || !mounted || controller != c || !c.current) return;
+        final size = await f.length();
+        if (size == null || size > 20000000)
+          throw StateError('Choose a PDF smaller than 20 MB.');
+        await _upload(await f.readAsBytes(), f.name, 'doc');
       } else {
         final p = ImagePicker();
         final f = kind == 'video'
@@ -1278,7 +1277,7 @@ class _HumanVideoState extends State<_HumanVideo> with WidgetsBindingObserver {
                           : player!.play();
                     });
                   },
-                  icon: const Icon(Icons.play_pause),
+                  icon: const Icon(Icons.play_circle_outline),
                 ),
               ],
             )

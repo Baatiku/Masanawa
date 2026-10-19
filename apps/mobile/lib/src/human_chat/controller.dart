@@ -98,7 +98,7 @@ class HumanThreadController extends ChangeNotifier {
         });
       }
     } catch (e) {
-      error = 'Could not restore private conversation. $e';
+      error = 'Could not restore this private conversation. Please retry.';
     } finally {
       loading = false;
       changed();
@@ -157,7 +157,7 @@ class HumanThreadController extends ChangeNotifier {
       error = null;
     } catch (e) {
       if (current && epoch == _loadEpoch) {
-        error = 'Conversation unavailable. $e';
+        error = 'Conversation unavailable. Check your connection or return to Chats.';
         messages = [];
         conversation = null;
       }
