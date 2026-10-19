@@ -226,6 +226,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         .toList();
     final humans = ref.watch(humanInboxProvider(_key));
     final people = humans.valueOrNull ?? const <HumanConversation>[];
+    final offline = !ref.watch(aiChatProvider).online;
     final rows = <({DateTime at, bool pinned, String id, Widget row})>[];
     final archived = _filter == 'Archived';
     if (_filter != 'Masana')
@@ -273,6 +274,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         ConversationSearchField(
           controller: _search,
           hintText: 'Search conversations',
+          clearTooltip: 'Clear chat search',
           onChanged: _changed,
           onClear: () {
             _search.clear();
@@ -333,8 +335,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                         Text(
                           _query.isEmpty
                               ? 'No conversations yet'
+                              : offline
+                              ? 'No matches in saved conversations'
                               : 'No matching conversations',
                         ),
+                        if (offline && _query.isNotEmpty)
+                          const Text('Offline searches only include saved conversations.'),
                         TextButton(
                           onPressed: () => context.push('/masana'),
                           child: const Text('Find a contact'),

@@ -79,7 +79,7 @@ describe("C10 tenant-private canonical chat inbox", () => {
     const [insertSql,values]=query.mock.calls[0] as unknown as [string,unknown[]];
     expect(insertSql).toContain("FROM agents.character_sessions");
     expect(insertSql).toContain("ON CONFLICT");
-    expect(values).toEqual(["tenant-a","fan-a",character,true,0]);
+    expect(values).toEqual(["tenant-a","fan-a",character,true]);
     query.mockClear();
     expect(await inbox.setPinned(scope,character,false,1)).toBe(1);
     expect(String(query.mock.calls[0]?.[0])).toContain("p.revision=$5");

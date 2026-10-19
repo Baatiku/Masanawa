@@ -3,24 +3,29 @@ import { readFile } from "node:fs/promises";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
 import { createPostgresVideoStore } from "./repository.js";
+import { createIsolatedPostgresTestDatabase } from "../home_feed/isolated_test_database.js";
 
 const database = process.env.MASANAWA_TEST_DATABASE_URL;
 const testWithDb = database ? describe : describe.skip;
 
 testWithDb("J15 external videos PG18 — audited, tenant-fenced manual approval", () => {
-  const pool = new Pool({ connectionString: database });
-  const repo = createPostgresVideoStore(pool);
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
+  let pool: Pool;
+  let repo: ReturnType<typeof createPostgresVideoStore>;
   const tenantId = "video-test-" + randomUUID();
   const otherTenant = "video-test-" + randomUUID();
   const actorId = "staff-" + randomUUID();
   const id = randomUUID();
   beforeAll(async () => {
+    isolated = await createIsolatedPostgresTestDatabase(database!);
+    pool = isolated.pool;
+    repo = createPostgresVideoStore(pool);
     const url = new URL("../../../../../packages/external-videos/migrations/0001_external_videos.sql", import.meta.url);
     await pool.query(await readFile(url, "utf8"));
     const recovery = new URL("../../../../../packages/external-videos/migrations/0004_video_recovery.sql", import.meta.url);
     await pool.query(await readFile(recovery, "utf8"));
   });
-  afterAll(async () => { await pool.end(); });
+  afterAll(async () => { await isolated?.close(); });
 
   it("does not show pending videos, verifies on approve, hides on revoke and audits all transitions", async () => {
     const original = {

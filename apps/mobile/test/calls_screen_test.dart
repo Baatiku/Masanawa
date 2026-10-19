@@ -208,7 +208,7 @@ void main() {
     expect(find.text('First page'), findsOneWidget);
     expect(queries, contains('/null'));
     expect(find.byTooltip('Call multiple Masana'), findsOneWidget);
-    expect(find.byTooltip('Choose a Masana'), findsOneWidget);
+    expect(find.byTooltip('Choose a contact'), findsOneWidget);
   });
 
   testWidgets('stale query A result is fenced as soon as B is typed', (tester) async {
