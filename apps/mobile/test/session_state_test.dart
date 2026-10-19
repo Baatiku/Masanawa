@@ -308,7 +308,8 @@ void main() {
     await controller.verifyOtp(code, email: email);
     adapter.respond('/auth/verify', {'code': 'AUTH_UNAVAILABLE'}, statusCode: 503);
     await controller.submitProfile(name: 'Ada Obi', phone: phone);
-    expect(adapter.bodies.last, {'email': email, 'code': code, 'name': 'Ada Obi'});
+    expect(adapter.bodies.last, {'email': email, 'code': code, 'name': 'Ada Obi',
+      'deviceId': isA<String>().having((value) => value.isNotEmpty, 'nonempty', true)});
     final pending = container.read(sessionProvider) as SessionNameRequired;
     expect(pending.channel, OtpChannel.email);
     expect(pending.identifier, email);
@@ -317,7 +318,8 @@ void main() {
       'accessExpiresIn': 900, 'user': user.toJson(),
     });
     await controller.submitProfile(name: 'Ada Obi');
-    expect(adapter.bodies.last, {'email': email, 'code': code, 'name': 'Ada Obi'});
+    expect(adapter.bodies.last, {'email': email, 'code': code, 'name': 'Ada Obi',
+      'deviceId': isA<String>().having((value) => value.isNotEmpty, 'nonempty', true)});
     expect(container.read(sessionProvider), isA<SessionSignedIn>());
   });
 

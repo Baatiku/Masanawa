@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:masanawa/src/core/providers.dart';
+import 'package:masanawa/src/core/network/api_client.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -70,6 +72,7 @@ Future<void> mount(
   double scale = 1,
   TextDirection direction = TextDirection.ltr,
   CryptoWalletSnapshot? value,
+  bool assetDetails = true,
   CryptoWalletController Function()? controller,
 }) async {
   tester.view.physicalSize = Size(width, 900);
@@ -80,6 +83,7 @@ Future<void> mount(
     ProviderScope(
       key: UniqueKey(),
       overrides: [
+        apiClientProvider.overrideWithValue(FixtureApprovalApi()),
         cryptoWalletProvider.overrideWith(
           controller ?? () => FixtureWallet(value ?? snapshot()),
         ),
@@ -95,7 +99,7 @@ Future<void> mount(
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: Directionality(textDirection: direction, child: child!),
           ),
-          home: const CryptoWalletScreen(),
+          home: CryptoWalletScreen(initialProviderCode: assetDetails ? route.providerCode : null),
         ),
       ),
     ),
@@ -130,6 +134,22 @@ Future<void> capture(WidgetTester tester, String name) async {
   });
 }
 
+class FixtureApprovalApi extends ApiClient {
+  String? startedRequest;
+  @override Future<void> beginWithdrawalStepUp({
+    required String requestId, required String providerCode,
+    required String amount, required String destinationAddress,
+  }) async { startedRequest = requestId; }
+  @override Future<String> confirmWithdrawalStepUp({
+    required String requestId, required String providerCode,
+    required String amount, required String destinationAddress, required String code,
+  }) async {
+    expect(requestId, startedRequest);
+    expect(code, '123456');
+    return 'fixture-approval';
+  }
+}
+
 class DeferredWallet extends FixtureWallet {
   DeferredWallet() : super(snapshot());
   final quote = Completer<CryptoWithdrawalQuote>();
@@ -153,6 +173,7 @@ class DeferredWallet extends FixtureWallet {
     required String destinationAddress,
     String? stepUpToken,
   }) async {
+    expect(stepUpToken, 'fixture-approval');
     executions++;
     return value.history.first;
   }
@@ -229,6 +250,12 @@ void main() {
       }
     }
   }
+  testWidgets('asset list wraps exact balances on a narrow large-text screen', (tester) async {
+    await mount(tester, width: 320, scale: 2, assetDetails: false);
+    expect(find.text(exact), findsWidgets);
+    expect(find.text('USDT'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('unavailable balance differs from actual zero', (tester) async {
     await mount(tester, value: snapshot(balance: null));
     expect(find.text('Balance unavailable'), findsOneWidget);
@@ -335,7 +362,12 @@ void main() {
       expect(find.text('fixture-recipient'), findsOneWidget);
       await capture(tester, 'withdraw-review-320-2');
       expect(wallet.executions, 0);
+      await tester.ensureVisible(find.text('Withdraw').last);
       await tester.tap(find.text('Withdraw').last);
+      await tester.pumpAndSettle();
+      expect(wallet.executions, 0);
+      await tester.enterText(find.byKey(const Key('withdrawal-step-up-code')), '123456');
+      await tester.tap(find.text('Verify and proceed'));
       await tester.pumpAndSettle();
       expect(wallet.executions, 1);
       expect(
