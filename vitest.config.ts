@@ -15,5 +15,9 @@ export default defineConfig({
     passWithNoTests: false,
     restoreMocks: true,
     clearMocks: true,
+    // PostgreSQL acceptance suites rebuild shared schemas and migration ledger.
+    // Concurrent files race on those global objects; run files serially only
+    // when the real PostgreSQL acceptance URL is present (e.g. CI).
+    fileParallelism: !process.env.MASANAWA_TEST_DATABASE_URL,
   },
 });
