@@ -18,6 +18,7 @@ import type {
   AgentConversationAuthorizer,
   AgentConversationService,
 } from "./agent_conversation_contract.js";
+import type { ConsumerMasanaMemoryStore } from "@masanawa/postgres";
 import type { NativeAudioRenderer } from "./native_audio.js";
 import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
 import type { AgentTeachingAssistant } from "./agent_teaching_assistant.js";
@@ -91,6 +92,7 @@ export interface TwinConversationObserver {
 
 export function createAgentConversationService(input: {
   readonly sessions: CharacterSessionRepository;
+  readonly memory?: ConsumerMasanaMemoryStore;
   readonly runs: AgentRunRepository;
   readonly authorizer: AgentConversationAuthorizer;
   readonly strategy: AgentStrategy;
@@ -138,7 +140,42 @@ export function createAgentConversationService(input: {
     return compileConversationHistory(await input.mobileShell.listHistory({scope,limit:16}),requestId);
   }
 
+  async function recall(scope: import("@masanawa/agents").CharacterSessionScope, query:string) {
+    if(!input.memory || !query.trim())return Object.freeze([] as string[]);
+    try { return await input.memory.recall(scope,query); }
+    catch { console.warn("Masana relationship memory retrieval unavailable"); return Object.freeze([] as string[]); }
+  }
+  async function ingest(scope: import("@masanawa/agents").CharacterSessionScope, requestId:import("@masanawa/contracts").RequestId, text:string) {
+    if(!input.memory)return;
+    try { await input.memory.ingest(scope,{requestId,text}); }
+    catch { console.warn("Masana memory extraction needs recovery"); }
+  }
+
   const service: AgentConversationService = {
+    ...(input.memory ? {
+      async memoryList(req:{authorizationHeader:string|undefined;characterId:string}) {
+        const admission=await input.authorizer.authorize({authorizationHeader:req.authorizationHeader,
+          characterId:parseCanonicalId("character",req.characterId)});
+        const [preferences,items]=await Promise.all([
+          input.memory!.preferences(admission.scope),input.memory!.list(admission.scope)]);
+        return {automaticLearning:preferences.automaticLearning,items};
+      },
+      async memoryPreferences(req:{authorizationHeader:string|undefined;characterId:string;automaticLearning:boolean}) {
+        const admission=await input.authorizer.authorize({authorizationHeader:req.authorizationHeader,
+          characterId:parseCanonicalId("character",req.characterId)});
+        return input.memory!.setPreferences(admission.scope,req.automaticLearning);
+      },
+      async memoryCorrect(req:{authorizationHeader:string|undefined;characterId:string;recordId:string;content:string;expectedRevision:number}) {
+        const admission=await input.authorizer.authorize({authorizationHeader:req.authorizationHeader,
+          characterId:parseCanonicalId("character",req.characterId)});
+        return input.memory!.correct(admission.scope,req.recordId,req.content,req.expectedRevision);
+      },
+      async memoryForget(req:{authorizationHeader:string|undefined;characterId:string;recordId:string;expectedLifecycleRevision:number}) {
+        const admission=await input.authorizer.authorize({authorizationHeader:req.authorizationHeader,
+          characterId:parseCanonicalId("character",req.characterId)});
+        return input.memory!.forget(admission.scope,req.recordId,req.expectedLifecycleRevision);
+      },
+    } : {}),
     async open(request) {
       const characterId = parseCanonicalId("character", request.characterId);
       const admission = await observeSessionOpen("admission", () => input.authorizer.authorize({
@@ -256,6 +293,7 @@ export function createAgentConversationService(input: {
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
+          rememberedFacts: await recall(admission.scope, inferenceText),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
@@ -322,6 +360,8 @@ export function createAgentConversationService(input: {
             },
           });
         }
+
+        if (input.mobileShell && !direct && !teachingPreparation) await ingest(admission.scope,request.requestId,text);
 
         await input.twinObserver?.completed({
           tenantId: admission.scope.tenantId,
@@ -464,6 +504,7 @@ export function createAgentConversationService(input: {
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
+          rememberedFacts: await recall(admission.scope, caption),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
@@ -520,6 +561,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
+        if (input.mobileShell && caption) await ingest(admission.scope,request.requestId,caption);
         const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
         return Object.freeze({
           reply,
@@ -661,6 +703,7 @@ export function createAgentConversationService(input: {
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
+          rememberedFacts: await recall(admission.scope, caption),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
           ...(request.signal ? { signal: request.signal } : {}),
@@ -708,6 +751,7 @@ export function createAgentConversationService(input: {
           });
         }
 
+        if (input.mobileShell && caption) await ingest(admission.scope,request.requestId,caption);
         const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
         return Object.freeze({
           reply,

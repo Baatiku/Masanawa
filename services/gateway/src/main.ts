@@ -110,6 +110,7 @@ import {
   createPostgresCustomerChannelRepository,
   createPostgresServiceDependency,
   createPostgresMobileShellRepository,
+  createPostgresConsumerMasanaMemoryStore,
   createPostgresMobilePushRepository,
   createPostgresMobileAgentActivityRepository,
   createPostgresBillingQuoteRepository,
@@ -381,6 +382,7 @@ export interface ServiceDatabaseDependency {
   readonly cryptoChatActions?: CryptoChatActionRepository;
   readonly ownerships?: CharacterOwnershipReader;
   readonly mobileShell?: MobileShellRepository;
+  readonly consumerMasanaMemory?: ReturnType<typeof createPostgresConsumerMasanaMemoryStore>;
   readonly mobilePush?: MobilePushRepository;
   readonly mobileActivity?: MobileAgentActivityRepository;
   readonly billingQuotes?: BillingQuoteRepository;
@@ -577,6 +579,7 @@ function createDefaultDatabaseDependency(
     cryptoChatActions: createPostgresCryptoChatActionRepository(database.pool),
     ownerships: createPostgresCharacterOwnershipReader(database.pool),
     mobileShell: createPostgresMobileShellRepository(database.pool),
+    consumerMasanaMemory: createPostgresConsumerMasanaMemoryStore(database.pool),
     mobilePush: createPostgresMobilePushRepository(database.pool),
     mobileActivity: createPostgresMobileAgentActivityRepository(database.pool),
     billingQuotes: createPostgresBillingQuoteRepository(database.pool),
@@ -879,6 +882,7 @@ export async function startGatewayService(
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
     liveVoiceTokens = createGeminiLiveTokenService({
+          ...(database.consumerMasanaMemory ? {memory:database.consumerMasanaMemory} : {}),
       apiKey: alphaGeminiApiKey,
       authorizer: conversationAuthorizer!,
       ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
@@ -1392,6 +1396,7 @@ export async function startGatewayService(
       });
       if (conversationAuthorizer) {
         liveVoiceTokens = createGeminiLiveTokenService({
+          ...(database.consumerMasanaMemory ? {memory:database.consumerMasanaMemory} : {}),
           apiKey: liveApiKey,
           authorizer: conversationAuthorizer,
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
@@ -1912,6 +1917,7 @@ export async function startGatewayService(
             }) ?? undefined;
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
+          ...(database.consumerMasanaMemory ? {memory:database.consumerMasanaMemory} : {}),
           ...(twinConversationObserver ? { twinObserver: twinConversationObserver } : {}),
           ...(composedBillingAssistant ? { billingAssistant: composedBillingAssistant } : {}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),

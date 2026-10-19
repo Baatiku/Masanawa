@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "@masanawa/postgres";
+import { purgeConsumerMasanaMemoriesForAccount } from "@masanawa/postgres";
 
 /** Remove public personal identity only after canonical account disablement. */
 export async function redactDeletedPublicProfile(
@@ -134,6 +135,11 @@ export function createAccountDeletionPrivacyWorker(input:{
       if(await hasFinancialFootprint(client,row.tenant_id,row.user_id))
         throw Error("account_deletion.financial_change_after_revocation");
       const scope=[row.tenant_id,row.user_id];
+      const consumerSchema=await client.query<{present:boolean}>(
+        "SELECT to_regclass('memory.consumer_relationship_preferences') IS NOT NULL AS present");
+      if(consumerSchema.rows[0]?.present) {
+        await purgeConsumerMasanaMemoriesForAccount(client,row.tenant_id,row.user_id);
+      }
       for(const sql of [
         "DELETE FROM agents.private_chat_media WHERE tenant_id=$1 AND user_id=$2",
         "DELETE FROM masana.fan_hidden_turns WHERE tenant_id=$1 AND fan_user_id=$2",

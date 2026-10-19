@@ -11,3 +11,4 @@ export * from "./tombstone.js";
 export * from "./context.js";
 export * from "./reflection.js";
 export * from "./compaction.js";
+export * from "./consumer.js";

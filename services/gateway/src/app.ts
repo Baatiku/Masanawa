@@ -1535,6 +1535,55 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
+  // Owner-controlled, relationship-scoped memory. Every operation reauthorizes
+  // the character through the same server admission used for a conversation.
+  if (options.agentConversation?.memoryList && options.agentConversation.memoryPreferences &&
+      options.agentConversation.memoryCorrect && options.agentConversation.memoryForget) {
+    const memory = options.agentConversation;
+    const params=Type.Object({characterId:Type.String({minLength:1,maxLength:100})});
+    const itemParams=Type.Object({characterId:Type.String({minLength:1,maxLength:100}),recordId:Type.String({minLength:1,maxLength:100})});
+    const item=Type.Object({
+      memoryRecordId:Type.String(),content:Type.String(),type:Type.String(),
+      revision:Type.Number(),lifecycleRevision:Type.Number(),updatedAt:Type.String(),
+    });
+    app.get("/v1/agent/characters/:characterId/memories",{
+      schema:{params,response:{200:Type.Object({automaticLearning:Type.Boolean(),items:Type.Array(item)})}},
+    },async request=>{
+      const result=await memory.memoryList!({
+        authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
+      });
+      return {automaticLearning:result.automaticLearning,items:[...result.items]};
+    });
+    app.put("/v1/agent/characters/:characterId/memory-preferences",{
+      schema:{params,body:Type.Object({automaticLearning:Type.Boolean()},{additionalProperties:false}),
+        response:{200:Type.Object({automaticLearning:Type.Boolean()})}},
+    },async request=>memory.memoryPreferences!({
+      authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
+      automaticLearning:request.body.automaticLearning,
+    }));
+    app.patch("/v1/agent/characters/:characterId/memories/:recordId",{
+      schema:{params:itemParams,body:Type.Object({
+        content:Type.String({minLength:3,maxLength:1200}),expectedRevision:Type.Integer({minimum:1}),
+      },{additionalProperties:false}),response:{200:Type.Object({updated:Type.Literal(true)})}},
+    },async request=>{
+      await memory.memoryCorrect!({
+        authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
+        recordId:request.params.recordId,content:request.body.content,expectedRevision:request.body.expectedRevision,
+      });
+      return {updated:true as const};
+    });
+    app.delete("/v1/agent/characters/:characterId/memories/:recordId",{
+      schema:{params:itemParams,body:Type.Object({expectedLifecycleRevision:Type.Integer({minimum:1})},
+        {additionalProperties:false}),response:{200:Type.Object({forgotten:Type.Literal(true)})}},
+    },async request=>{
+      await memory.memoryForget!({
+        authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
+        recordId:request.params.recordId,expectedLifecycleRevision:request.body.expectedLifecycleRevision,
+      });
+      return {forgotten:true as const};
+    });
+  }
+
   if (options.financial) {
     const financial = options.financial;
     const auth = (request: { headers: { authorization?: string | undefined } }) =>

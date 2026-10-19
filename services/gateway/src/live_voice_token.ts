@@ -1,6 +1,7 @@
 import { livePersonaInstruction } from './persona_continuity.js';
 import { compileConversationHistory } from './conversation_history.js';
 import type { MobileShellRepository } from '@masanawa/agents';
+import type { ConsumerMasanaMemoryStore } from '@masanawa/postgres';
 import type { AgentConversationAuthorizer } from "./agent_conversation_contract.js";
 import type { PlatformAgentProfileRepository } from "@masanawa/agents";
 import type { LiveVoiceTokenService } from "./agent_shell_contract.js";
@@ -13,6 +14,7 @@ import {
 
 export function createGeminiLiveTokenService(input: {
   readonly mobileShell?: MobileShellRepository;
+  readonly memory?: ConsumerMasanaMemoryStore;
   readonly apiKey: string;
   readonly authorizer: AgentConversationAuthorizer;
   readonly platformProfiles?: PlatformAgentProfileRepository;
@@ -122,7 +124,12 @@ export function createGeminiLiveTokenService(input: {
       }
 
       const saved=input.mobileShell?await observe('conversation-context',()=>input.mobileShell!.listHistory({scope:admission.scope,limit:64})):[];
-      const systemInstruction=livePersonaInstruction(admission.presentation,compileConversationHistory(saved,''));
+      let remembered:readonly string[]=[];
+      if (input.memory) {
+        try { remembered=await input.memory.recall(admission.scope,"continue"); }
+        catch { console.warn("Masana Live remembered context unavailable"); }
+      }
+      const systemInstruction=livePersonaInstruction(admission.presentation,compileConversationHistory(saved,''),remembered);
       const issued = now();
       const expiresAt = new Date(issued.getTime() + 30 * 60 * 1000);
       const newSessionExpireTime = new Date(issued.getTime() + 60 * 1000);
