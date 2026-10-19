@@ -9,6 +9,13 @@ function walk(root: string): string[] {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
+      // The policy covers maintained production imports, not transitive
+      // packages or build output written by Next/Vite/TypeScript. Scanning
+      // those files made this synchronous test time out after a build.
+      if ([
+        "node_modules", "dist", "build", ".next", ".nuxt", ".vercel",
+        "coverage", ".turbo", ".dart_tool",
+      ].includes(entry.name)) return [];
       return walk(full);
     }
     return entry.isFile() && /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/u.test(entry.name)
@@ -18,6 +25,21 @@ function walk(root: string): string[] {
 }
 
 describe("reference vault isolation", () => {
+  it("excludes generated output but checks maintained code", () => {
+    const root = fs.mkdtempSync(path.join(process.cwd(), "test", "references-walk-"));
+    try {
+      fs.mkdirSync(path.join(root, ".next", "server"), { recursive: true });
+      fs.mkdirSync(path.join(root, "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".next", "server", "index.js"),
+        'import "references/sources/ignored";');
+      fs.writeFileSync(path.join(root, "src", "index.ts"), 'export const owner = 1;');
+      expect(walk(root).map((file) => path.relative(root, file))).toEqual([
+        path.join("src", "index.ts"),
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("production code never imports references/sources", () => {
     const productionRoots = ["packages", "services", "apps", "adapters", "infra"];
     const offenders: string[] = [];

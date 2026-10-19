@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { describe, expect, it } from "vitest";
 
 interface EnvEntry {
@@ -15,7 +16,13 @@ function walk(root: string): string[] {
   if (!fs.existsSync(root)) return [];
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(root, entry.name);
-    if (entry.isDirectory()) return ["node_modules","dist","build"].includes(entry.name)?[]:walk(full);
+    // Inspect maintained source, never compiled or framework-generated output.
+    // Next writes .next/server/*.js containing its own internal env reads;
+    // scanning it made the same repository fail only *after* pnpm build.
+    if (entry.isDirectory()) return [
+      "node_modules", "dist", "build", ".next", ".nuxt", ".vercel",
+      "coverage", ".turbo", ".dart_tool",
+    ].includes(entry.name) ? [] : walk(full);
     return entry.isFile() ? [full] : [];
   });
 }
@@ -33,6 +40,23 @@ describe("production environment contracts", () => {
       expect(entry.description.trim()).not.toBe("");
       expect(["public", "secret"]).toContain(entry.classification);
       expect(new Set(entry.requiredIn).size).toBe(entry.requiredIn.length);
+    }
+  });
+
+  it("never treats framework-generated build output as maintained source", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "masanawa-env-contract-"));
+    try {
+      fs.mkdirSync(path.join(root, ".next", "server"), { recursive: true });
+      fs.mkdirSync(path.join(root, "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".next", "server", "index.js"),
+        "process.env.NEXT_FRAMEWORK_INTERNAL");
+      fs.writeFileSync(path.join(root, "src", "index.ts"),
+        "process.env.MASANAWA_OWNED_VARIABLE");
+      expect(walk(root).map((file) => path.relative(root, file))).toEqual([
+        path.join("src", "index.ts"),
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 
