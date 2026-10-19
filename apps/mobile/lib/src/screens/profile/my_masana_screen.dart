@@ -564,10 +564,22 @@ class _ManageMasanaScreen extends ConsumerStatefulWidget {
 }
 
 class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
+  String? _owner;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
+  @override void initState() {
+    super.initState();
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
+  }
+
   late Map<String, dynamic> _agent = widget.agent;
   bool _busy = false;
   String? _error;
   Future<void> _toggle() async {
+    if (!_sameAccount || _busy) return;
     final state = _agent['state'];
     if (state != 'paused' && state != 'published') return;
     final action = state == 'paused' ? 'resume' : 'pause';
@@ -600,6 +612,11 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('My Masana')),
+        body: const Center(child: Text('Sign in to manage your Masana.')));
+    }
     final u = context.masanawa, seed = _agent['seed'] as Map? ?? {};
     final state = _agent['state']?.toString() ?? 'draft';
     return Scaffold(

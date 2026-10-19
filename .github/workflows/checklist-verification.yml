@@ -46,11 +46,11 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter test --no-pub --reporter json > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
+          flutter test --no-pub --reporter json --timeout 60s > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
           result=$?
           python3 - "$RUNNER_TEMP/flutter-tests.jsonl" <<'PY'
           import json,sys,os
-          tests={};counts={};errors={};printed={};failed=[];raw=[]
+          tests={};suites={};owners={};counts={};errors={};printed={};failed=[];raw=[]
           def escape(text): return text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
           for line in open(sys.argv[1]):
               try: e=json.loads(line)
@@ -58,8 +58,10 @@ jobs:
                   if line.strip(): raw.append(line.strip())
                   continue
               tid=e.get('testID',-1)
-              if e.get('type')=='testStart':tests[e['test']['id']]=e['test']['name']
-              if e.get('type')=='print':printed[tid]=(printed.get(tid,'')+'\n'+e.get('message',''))[-6000:]
+              if e.get('type')=='suite':suites[e['suite']['id']]=e['suite'].get('path','unknown')
+              if e.get('type')=='testStart':
+                  tests[e['test']['id']]=e['test']['name'];owners[e['test']['id']]=e['test'].get('suiteID',-1)
+              if e.get('type')=='print':printed[tid]=(printed.get(tid,'')+'\n'+e.get('message',''))[:12000]
               if e.get('type')=='error':errors[tid]=errors.get(tid,'')+'\n'+e.get('error','')+'\n'+e.get('stackTrace','')
               if e.get('type')=='testDone':
                   key='skipped' if e.get('skipped') else e.get('result','unknown');counts[key]=counts.get(key,0)+1
@@ -71,7 +73,9 @@ jobs:
               detail=(printed.get(tid,'')+'\n'+errors.get(tid,''))
               print('::error title=Flutter regression::'+escape((tests.get(tid,str(tid))+'\n'+detail)[:3000]))
           if raw:print('::error title=Flutter runner output::'+escape('\n'.join(raw)[-3000:]))
-          details='\n\n'.join(tests.get(t,str(t))+'\n'+printed.get(t,'')+'\n'+errors.get(t,'') for t in failed)
+          grouped={}
+          for t in failed:grouped.setdefault(owners.get(t,-1),[]).append(t)
+          details=names[:10000]+'\n\n'+'\n\n'.join(suites.get(s,'unknown')+'\n'+tests.get(t,str(t))+'\n'+printed.get(t,'')[:1800]+'\n'+errors.get(t,'')[:300] for s,ts in grouped.items() for t in ts[:2])
           payload={'name':'Flutter regression details','head_sha':os.environ['SOURCE_SHA'],'status':'completed','conclusion':'failure' if failed or not counts else 'success','output':{'title':'Full Flutter results','summary':json.dumps(counts),'text':details[:60000] or '\n'.join(raw)[-60000:] or 'All executed tests passed.'}}
           with open(os.path.join(os.environ['RUNNER_TEMP'],'flutter-check.json'),'w') as f:json.dump(payload,f)
           PY

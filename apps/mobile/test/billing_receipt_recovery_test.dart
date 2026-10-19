@@ -21,19 +21,19 @@ class _Adapter implements HttpClientAdapter{
 }
 void main(){
  testWidgets('foreign provider reference stays unconfirmed and never offers another charge',(t)async{
-  final adapter=_Adapter(badReference:true),dio=Dio();dio.httpClientAdapter=adapter;
+  final adapter=_Adapter(badReference:true),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){},initialQuote:BillingQuote.fromJson({...quoteJson,'fulfillmentReference':'msnw-bill-test-quote'})))));
   await t.pumpAndSettle();expect(find.text('Order status unavailable. Retry this order.'),findsOneWidget);expect(find.text('1234-5678-9012-3456'),findsNothing);expect(find.text('Review & pay MSNW'),findsNothing);expect(adapter.calls.every((o)=>o.method=='GET'),isTrue);
  });
 
  testWidgets('returning to original pending receipt only reconciles its GET reference',(t)async{
-  final adapter=_Adapter(),dio=Dio();dio.httpClientAdapter=adapter;
+  final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){},initialQuote:BillingQuote.fromJson({...quoteJson,'fulfillmentReference':'msnw-bill-test-quote'})))));
   await t.pumpAndSettle();expect(adapter.calls.length,1);expect(adapter.calls.single.method,'GET');expect(adapter.calls.single.path.endsWith('/msnw-bill-test-quote'),isTrue);expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('Review & pay MSNW'),findsNothing);
  });
 
  testWidgets('completed electricity receipt exposes actual token and exact original reference',(t)async{
-  final adapter=_Adapter(),dio=Dio();dio.httpClientAdapter=adapter;
+  final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
   await t.tap(find.text('Get verified price'));await t.pumpAndSettle();await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
   expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('provider-verified'),findsOneWidget);expect(find.text('msnw-bill-test-quote'),findsOneWidget);
