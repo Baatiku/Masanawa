@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../state/session_state.dart';
+import 'creator_earnings_screen.dart';
 
 /// Reuses current WhatsApp-like profile patterns and the existing MSNW Wallet.
 /// Only authenticated server operations can publish or charge a character.
@@ -634,6 +635,24 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
             subtitle: Text('${seed['profession']?.toString() ?? ''} · $state'),
           ),
           const Divider(),
+          if (state != 'draft')
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: const Text('Creator earnings'),
+              subtitle: const Text('MSNW allocations and Wallet receipts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                final id = _agent['characterId'];
+                if (id is! String || !_sameAccount) return;
+                Navigator.of(context).push(MaterialPageRoute(
+                  settings: RouteSettings(name: '/creator/masana/' + id + '/earnings'),
+                  builder: (_) => CreatorEarningsScreen(
+                    characterId: id,
+                    displayName: seed['name']?.toString() ?? 'Masana',
+                  ),
+                ));
+              },
+            ),
           if (state == 'published' || state == 'paused')
             ListTile(
               leading: Icon(

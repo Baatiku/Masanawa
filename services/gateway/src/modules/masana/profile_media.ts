@@ -36,10 +36,16 @@ export function createApprovedMasanaMediaPort(
          ON c.tenant_id=m.tenant_id AND c.character_id=m.character_id
        JOIN identity.character_ownership o
          ON o.tenant_id=m.tenant_id AND o.character_id=m.character_id
+       LEFT JOIN creator.agents ca
+         ON ca.tenant_id=m.tenant_id AND ca.character_id=m.character_id
+          AND ca.owner_user_id=o.owner_user_id
+       LEFT JOIN identity.users u
+         ON u.tenant_id=ca.tenant_id AND u.user_id=ca.owner_user_id
      WHERE m.tenant_id=$1 AND m.character_id=$2 AND m.media_id=$3
        AND m.kind=$4 AND r.state='approved'
        AND r.profile->>$5=m.media_id
-       AND c.state='active' AND o.kind='platform'
+       AND c.state='active' AND (o.kind='platform' OR
+         (o.kind='creator-agent' AND ca.state='published' AND u.state='active'))
        AND length(btrim(m.rights_note))>4
        AND length(btrim(m.approved_by))>0
        AND length(btrim(m.object_key))>0

@@ -55,6 +55,16 @@ export function registerCreatorAgentRoutes(app:FastifyInstance,deps:{
    return await deps.service.read(owner,ident(obj(request.params).id));
   }catch(error){return report(reply,error);}
  });
+ app.get("/v1/creator/masana/:id/earnings",async(request,reply)=>{
+  reply.header("Cache-Control","private, no-store");
+  try{
+   const owner=await deps.auth.fan(request.headers.authorization);
+   const query=obj(request.query);
+   if(Object.keys(query).some(key=>key!=="cursor"))
+    throw new CreatorAgentError("creator.earnings_cursor_invalid",400);
+   return await deps.service.earnings(owner,ident(obj(request.params).id),query.cursor);
+  }catch(error){return report(reply,error);}
+ });
  app.patch("/v1/creator/masana/:id/draft",{bodyLimit:4096},async(request,reply)=>{
   reply.header("Cache-Control","private, no-store");
   try{
