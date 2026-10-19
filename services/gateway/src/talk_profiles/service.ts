@@ -1,5 +1,6 @@
 import type { PlatformSessionIdentity } from "@masanawa/security";
 import type {
+  HumanContactPage,
   HumanProfileRecord,
   HumanProfileView,
   PersonaProfileRecord,
@@ -21,6 +22,9 @@ export class TalkProfileError extends Error {
 }
 
 export interface TalkProfileService {
+  contacts(input: Readonly<{
+    authorizationHeader: string | undefined; query?: string; after?: string;
+  }>): Promise<HumanContactPage>;
   self(input: Readonly<{
     authorizationHeader: string | undefined;
   }>): Promise<HumanProfileView>;
@@ -94,6 +98,17 @@ export function createTalkProfileService(input: Readonly<{
   }
 
   return Object.freeze<TalkProfileService>({
+    async contacts(request) {
+      const viewer = await identity(request.authorizationHeader);
+      const query = (request.query ?? '').trim().toLowerCase().replace(/^@/u, '');
+      if (query.length > 80 || (query.length > 0 && query.length < 2)) {
+        throw new TalkProfileError('profiles.search_invalid', 400);
+      }
+      const after = request.after === undefined ? null : normalizeHandle(request.after);
+      return input.repository.listHumanContacts({
+        tenantId: viewer.tenantId, viewerUserId: viewer.userId, query, after,
+      });
+    },
     async self(request) {
       const viewer = await identity(request.authorizationHeader);
       const profile = await input.repository.readHumanByUserId({

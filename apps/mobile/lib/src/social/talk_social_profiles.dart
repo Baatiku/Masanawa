@@ -9,6 +9,7 @@ class HumanProfile {
     required this.followerCount,
     required this.followingCount,
     required this.isFollowing,
+    this.isSelf = false,
     this.bio = '',
     this.avatarUrl,
     this.isLive = false,
@@ -18,6 +19,7 @@ class HumanProfile {
     this.talks = const [],
   });
 
+  final bool isSelf;
   final String handle;
   final String displayName;
   final String bio;
@@ -34,6 +36,7 @@ class HumanProfile {
   factory HumanProfile.fromJson(Map<String, dynamic> json) {
     final rawTalks = json['talks'];
     return HumanProfile(
+      isSelf: json['isSelf'] == true,
       handle: json['handle'] as String? ?? '',
       displayName: json['displayName'] as String? ?? '',
       bio: json['bio'] as String? ?? '',

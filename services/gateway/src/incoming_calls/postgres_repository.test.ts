@@ -1,27 +1,18 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { createPostgresPool, type Pool } from "@masanawa/postgres";
+import { type Pool } from "@masanawa/postgres";
+import { createIsolatedPostgresTestDatabase } from "../../../../adapters/storage/postgres/src/home_feed/isolated_test_database.js";
 import { createPostgresIncomingCallRepository } from "./postgres_repository.js";
 import { createPostgresCallHistoryRepository } from "../call_history/postgres_repository.js";
 const url = process.env.MASANAWA_TEST_DATABASE_URL;
 describe.skipIf(!url)("incoming PostgreSQL authority and races", () => {
-  let admin: Pool, pool: Pool;
+  let pool: Pool;
+  let database: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>> | undefined;
   let repo: ReturnType<typeof createPostgresIncomingCallRepository>;
-  const name = "incoming_" + randomUUID().replaceAll("-", "");
   const actor = { tenantId: "a", userId: "u", characterIds: null };
   beforeAll(async () => {
-    admin = createPostgresPool({
-      connectionString: url!,
-      applicationName: "incoming-admin",
-    });
-    await admin.query(`CREATE DATABASE "${name}"`);
-    const u = new URL(url!);
-    u.pathname = "/" + name;
-    pool = createPostgresPool({
-      connectionString: u.toString(),
-      applicationName: "incoming-tests",
-    });
+    database = await createIsolatedPostgresTestDatabase(url!);
+    pool = database.pool;
     await pool.query("CREATE SCHEMA agents");
     for (const f of [
       "0002_agent_configurations.sql",
@@ -46,9 +37,9 @@ describe.skipIf(!url)("incoming PostgreSQL authority and races", () => {
     repo = createPostgresIncomingCallRepository(pool);
   });
   afterAll(async () => {
-    await pool?.end();
-    await admin?.query(`DROP DATABASE IF EXISTS "${name}" WITH(FORCE)`);
-    await admin?.end();
+    // Reuse canonical bounded idle-drain cleanup; FORCE can terminate a
+    // PG18 client before its asynchronous shutdown completes (57P01).
+    await database?.close();
   });
   const initiate = (requestId: string) =>
     repo.initiate({

@@ -1362,18 +1362,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 onPressed: () => setState(_selectedMessageIds.clear),
               ),
             ] else ...[
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: u.brandStrong,
-                backgroundColor: u.brand.withValues(alpha: .10),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                minimumSize: const Size(72, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => context.push('/billing?service=data'),
-              child: const SizedBox(width: 64, child: Text('Data Bundles',
-                textAlign: TextAlign.center, maxLines: 2,
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700))),
+            IconButton(
+              tooltip: 'Wallet',
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              onPressed: () => context.push('/wallet'),
             ),
             IconButton(
               tooltip: 'Call',

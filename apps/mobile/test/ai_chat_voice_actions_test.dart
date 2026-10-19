@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -117,18 +118,32 @@ void main() {
   expect(find.byTooltip('Call'), findsOneWidget);
   expect(tester.takeException(), isNull);
  });
- testWidgets('Data Bundles remains visible before call and search at phone width', (tester) async {
+ testWidgets('Wallet icon replaces bundles before call and search at phone width', (tester) async {
   tester.view.physicalSize=const Size(360,800);tester.view.devicePixelRatio=1;
   addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
-  final bundles=find.text('Data Bundles');
+  final bundles=find.byTooltip('Wallet');
+  expect(find.text('Data Bundles'), findsNothing);
   expect(bundles, findsOneWidget);
   expect(tester.getCenter(bundles).dx,lessThan(tester.getCenter(find.byTooltip('Call')).dx));
   expect(tester.getCenter(find.byTooltip('Call')).dx,lessThan(tester.getCenter(find.byTooltip('Search')).dx));
-  final button=tester.widget<TextButton>(find.ancestor(of:bundles,matching:find.byType(TextButton)).first);
-  expect(button.style!.foregroundColor!.resolve({}), isNot(Colors.white));
+  expect(find.byIcon(Icons.account_balance_wallet_outlined), findsOneWidget);
   expect(tester.takeException(),isNull);
+ });
+ testWidgets('Wallet shortcut opens Wallet and returns to the same conversation', (tester) async {
+  final router=GoRouter(initialLocation:'/chat',routes:[
+    GoRoute(path:'/chat',builder:(_,__)=>const AiChatScreen(characterId:'agent')),
+    GoRoute(path:'/wallet',builder:(_,__)=>Scaffold(appBar:AppBar(title:const Text('Wallet destination')))),
+  ]);
+  addTearDown(router.dispose);
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp.router(theme:buildMasanawaTheme(brightness:Brightness.light),routerConfig:router)));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Wallet')); await tester.pumpAndSettle();
+  expect(find.text('Wallet destination'),findsOneWidget);
+  router.pop(); await tester.pumpAndSettle();
+  expect(find.text('Amina'),findsWidgets);
+  expect(find.byTooltip('Wallet'),findsOneWidget);
  });
  testWidgets('chat avatar opens this Masana profile callback', (tester) async {
   var opened=0;

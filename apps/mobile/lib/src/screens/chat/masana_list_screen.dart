@@ -1,3 +1,5 @@
+import 'human_contacts_list.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +31,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _filter = 'all';
+  int _tab = 0;
+  String _humanQuery = '';
+  bool _humansVisited = false;
 
   @override
   void dispose() {
@@ -41,72 +46,144 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
     final u = context.masanawa;
     final directory = ref.watch(agentDirectoryProvider);
     final session = ref.watch(sessionProvider);
-    final accountId = session is SessionSignedIn ? session.user.id : 'signed-out';
+    final accountId = session is SessionSignedIn
+        ? session.user.id
+        : 'signed-out';
     ref.listen<SessionState>(sessionProvider, (previous, next) {
       final oldId = previous is SessionSignedIn ? previous.user.id : null;
       final newId = next is SessionSignedIn ? next.user.id : null;
       if (oldId != newId && mounted) {
         _searchController.clear();
-        setState(() { _query = ''; _filter = 'all'; });
+        setState(() {
+          _query = '';
+          _humanQuery = '';
+          _filter = 'all';
+        });
       }
     });
 
-    return Scaffold(
-      backgroundColor: u.surfaceBg,
-      appBar: AppBar(
-        backgroundColor: u.surfaceCard,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/home?tab=chats'),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Masana',
-              style: TextStyle(
-                color: u.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: u.surfaceBg,
+        appBar: AppBar(
+          backgroundColor: u.surfaceCard,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.canPop()
+                ? context.pop()
+                : context.go('/home?tab=chats'),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Contacts',
+                style: TextStyle(
+                  color: u.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+              Text(
+                _tab == 1
+                    ? 'People and creators'
+                    : directory.loading && directory.agents.isEmpty
+                    ? 'Loading…'
+                    : '${directory.agents.length} Masana${directory.loading ? ' · refreshing…' : ''}',
+                style: TextStyle(color: u.textMuted, fontSize: 12.5),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Search all Masanawa',
+              icon: const Icon(Icons.manage_search_outlined),
+              onPressed: () => context.push('/search'),
             ),
-            Text(
-              directory.loading && directory.agents.isEmpty
-                  ? 'Loading…'
-                  : '${directory.agents.length} Masana${directory.loading ? ' · refreshing…' : ''}',
-              style: TextStyle(color: u.textMuted, fontSize: 12.5),
+            if (_tab == 0)
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: () =>
+                    ref.read(agentDirectoryProvider.notifier).refresh(),
+              ),
+          ],
+        ),
+        body: Column(
+          children: [
+            TabBar(
+              tabs: const [
+                Tab(text: 'Masana'),
+                Tab(text: 'Humans'),
+              ],
+              onTap: (index) {
+                if (index == _tab) return;
+                setState(() {
+                  _tab = index;
+                  _humansVisited = _humansVisited || index == 1;
+                  _searchController.text = index == 0 ? _query : _humanQuery;
+                });
+              },
+            ),
+            ConversationSearchField(
+              controller: _searchController,
+              hintText: _tab == 0
+                  ? 'Search Masana contacts'
+                  : 'Find people by name or @username',
+              clearTooltip: 'Clear contact search',
+              onChanged: (value) => setState(() {
+                if (_tab == 0) {
+                  _query = value.trim().toLowerCase();
+                } else {
+                  _humanQuery = value;
+                }
+              }),
+              onClear: () => setState(() {
+                _searchController.clear();
+                if (_tab == 0) {
+                  _query = '';
+                } else {
+                  _humanQuery = '';
+                }
+              }),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _tab,
+                children: [
+                  _body(context, directory, accountId),
+                  if (_humansVisited)
+                    HumanContactsList(
+                      key: ValueKey('human-contacts-$accountId'),
+                      query: _humanQuery,
+                    )
+                  else
+                    const SizedBox.shrink(),
+                ],
+              ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Search all Masanawa',
-            icon: const Icon(Icons.manage_search_outlined),
-            onPressed: () => context.push('/search'),
-          ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                ref.read(agentDirectoryProvider.notifier).refresh(),
-          ),
-        ],
+        floatingActionButton: session is! SessionSignedIn || _tab != 0
+            ? null
+            : FloatingActionButton.extended(
+                tooltip: 'Create a new Masana',
+                icon: const Icon(Icons.add),
+                label: const Text('Create Masana'),
+                onPressed: () async {
+                  final saved = await MyMasanaScreen.openCreate(context);
+                  final active = ref.read(sessionProvider);
+                  if (!mounted ||
+                      active is! SessionSignedIn ||
+                      active.user.id != accountId)
+                    return;
+                  if (saved == true)
+                    await ref.read(agentDirectoryProvider.notifier).refresh();
+                },
+              ),
       ),
-      body: _body(context, directory, accountId),
-      floatingActionButton: session is! SessionSignedIn ? null
-          : FloatingActionButton.extended(
-              tooltip: 'Create a new Masana',
-              icon: const Icon(Icons.add),
-              label: const Text('Create Masana'),
-              onPressed: () async {
-                final saved = await MyMasanaScreen.openCreate(context);
-                final active = ref.read(sessionProvider);
-                if (!mounted || active is! SessionSignedIn || active.user.id != accountId) return;
-                if (saved == true) await ref.read(agentDirectoryProvider.notifier).refresh();
-              },
-            ),
     );
   }
 
@@ -117,7 +194,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   ) {
     final u = context.masanawa;
     if (directory.loading && directory.agents.isEmpty) {
-      return const MasanawaListSkeleton(semanticLabel: 'Loading Masana contacts');
+      return const MasanawaListSkeleton(
+        semanticLabel: 'Loading Masana contacts',
+      );
     }
     if (directory.agents.isEmpty) {
       return Center(
@@ -171,15 +250,19 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
     }
 
     final chatThreads = ref.watch(aiChatProvider).threads;
-    final filtered = directory.agents.where((agent) {
-      if (_filter == 'following' && !agent.following) return false;
-      if (_filter == 'recent' && !(chatThreads[agent.characterId]?.messages.isNotEmpty ?? false)) return false;
-      if (_query.isEmpty) return true;
-      return agent.displayName.toLowerCase().contains(_query) ||
-          agent.roleLabel.toLowerCase().contains(_query) ||
-          agent.about.toLowerCase().contains(_query) ||
-          agent.countrySearchText.contains(_query);
-    }).toList(growable: false);
+    final filtered = directory.agents
+        .where((agent) {
+          if (_filter == 'following' && !agent.following) return false;
+          if (_filter == 'recent' &&
+              !(chatThreads[agent.characterId]?.messages.isNotEmpty ?? false))
+            return false;
+          if (_query.isEmpty) return true;
+          return agent.displayName.toLowerCase().contains(_query) ||
+              agent.roleLabel.toLowerCase().contains(_query) ||
+              agent.about.toLowerCase().contains(_query) ||
+              agent.countrySearchText.contains(_query);
+        })
+        .toList(growable: false);
     filtered.sort((a, b) {
       // Explicit follows first; otherwise recent real conversations first.
       if (a.following != b.following) return a.following ? -1 : 1;
@@ -193,28 +276,23 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
 
     return Column(
       children: [
-        ConversationSearchField(
-          controller: _searchController,
-          hintText: 'Search Masana contacts',
-          clearTooltip: 'Clear contact search',
-          onChanged: (val) => setState(() => _query = val.trim().toLowerCase()),
-          onClear: () => setState(() {
-            _searchController.clear();
-            _query = '';
-          }),
-        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 5, 14, 7),
-          child: Wrap(spacing: 8, children: [
-            for (final choice in const [
-              ('all', 'All'), ('following', 'Following'), ('recent', 'Recent')
-            ])
-              ChoiceChip(
-                label: Text(choice.$2),
-                selected: _filter == choice.$1,
-                onSelected: (_) => setState(() => _filter = choice.$1),
-              ),
-          ]),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              for (final choice in const [
+                ('all', 'All'),
+                ('following', 'Following'),
+                ('recent', 'Recent'),
+              ])
+                ChoiceChip(
+                  label: Text(choice.$2),
+                  selected: _filter == choice.$1,
+                  onSelected: (_) => setState(() => _filter = choice.$1),
+                ),
+            ],
+          ),
         ),
         if (directory.error != null)
           MaterialBanner(
@@ -239,8 +317,10 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                         const Icon(Icons.search_off_outlined, size: 42),
                         const SizedBox(height: 12),
                         Text(
-                          _filter == 'following' ? 'No followed Masana yet. Open a profile to follow one.'
-                              : _filter == 'recent' ? 'No conversations yet. Start a chat with a Masana.'
+                          _filter == 'following'
+                              ? 'No followed Masana yet. Open a profile to follow one.'
+                              : _filter == 'recent'
+                              ? 'No conversations yet. Start a chat with a Masana.'
                               : 'No matching Masana contacts for "$_query"',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: u.textPrimary, fontSize: 16),
@@ -263,56 +343,77 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                       ref.read(agentDirectoryProvider.notifier).refresh(),
                   child: ListView.separated(
                     padding: const EdgeInsets.only(bottom: 96),
-                    key: PageStorageKey<String>('masana-contacts-$accountId-$_filter-$_query'),
+                    key: PageStorageKey<String>(
+                      'masana-contacts-$accountId-$_filter-$_query',
+                    ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: filtered.length,
-                    separatorBuilder: (_, _) =>
-                        Divider(height: 1, indent: 76, color: u.structuralBorder),
+                    separatorBuilder: (_, _) => Divider(
+                      height: 1,
+                      indent: 76,
+                      color: u.structuralBorder,
+                    ),
                     itemBuilder: (context, index) {
                       final agent = filtered[index];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        leading: _MasanaAvatar(agent: agent),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                agent.displayName,
+                                style: TextStyle(
+                                  color: u.textPrimary,
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (agent.following)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 5),
+                                child: Icon(Icons.star_rounded, size: 16),
+                              ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            agent.roleLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: u.textMuted, fontSize: 14),
+                          ),
+                        ),
+                        trailing: Tooltip(
+                          message: agent.countryName ?? 'Country not specified',
+                          child: Semantics(
+                            label: agent.countryName ?? 'Country not specified',
+                            child: agent.countryFlag == null
+                                ? Icon(
+                                    Icons.public_outlined,
+                                    color: u.textMuted,
+                                  )
+                                : Text(
+                                    agent.countryFlag!,
+                                    style: const TextStyle(fontSize: 25),
+                                  ),
+                          ),
+                        ),
+                        onTap: () {
+                          ref
+                              .read(aiChatProvider.notifier)
+                              .seedGreeting(agent.characterId, agent.greeting);
+                          context.push('/chat/${agent.characterId}');
+                        },
+                      );
+                    },
                   ),
-                  leading: _MasanaAvatar(agent: agent),
-                  title: Row(children: [
-                    Flexible(child: Text(
-                    agent.displayName,
-                    style: TextStyle(
-                      color: u.textPrimary,
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    )),
-                    if(agent.following) const Padding(
-                      padding: EdgeInsets.only(left: 5),
-                      child: Icon(Icons.star_rounded, size: 16),
-                    ),
-                  ]),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Text(
-                      agent.roleLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: u.textMuted, fontSize: 14),
-                    ),
-                  ),
-                  trailing: Tooltip(message:agent.countryName??'Country not specified',
-                    child:Semantics(label:agent.countryName??'Country not specified',
-                      child:agent.countryFlag==null?Icon(Icons.public_outlined,color:u.textMuted):
-                        Text(agent.countryFlag!,style:const TextStyle(fontSize:25)))),
-                  onTap: () {
-                    ref
-                        .read(aiChatProvider.notifier)
-                        .seedGreeting(agent.characterId, agent.greeting);
-                    context.push('/chat/${agent.characterId}');
-                  },
-                );
-              },
-            ),
-          ),
+                ),
         ),
       ],
     );
@@ -327,7 +428,10 @@ class _MasanaAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    final strings = Localizations.of<AppLocalizations>(context, AppLocalizations);
+    final strings = Localizations.of<AppLocalizations>(
+      context,
+      AppLocalizations,
+    );
     final presence = strings == null
         ? agent.presenceLabel
         : localizedAgentPresence(strings, agent);
@@ -358,4 +462,3 @@ class _MasanaAvatar extends StatelessWidget {
     );
   }
 }
-

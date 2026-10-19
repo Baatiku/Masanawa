@@ -6,6 +6,18 @@ export function registerTalkProfileRoutes(
   app: FastifyInstance,
   service: TalkProfileService,
 ): void {
+  app.get('/v1/profiles/contacts', {
+    schema: { querystring: Type.Object({
+      q: Type.Optional(Type.String({ maxLength: 81 })),
+      after: Type.Optional(Type.String({ minLength: 2, maxLength: 40 })),
+    }, { additionalProperties: false }) },
+  }, async (request) => {
+    const query = request.query as { q?: string; after?: string };
+    return service.contacts({ authorizationHeader: request.headers.authorization,
+      ...(query.q === undefined ? {} : { query: query.q }),
+      ...(query.after === undefined ? {} : { after: query.after }),
+    });
+  });
   app.get("/profiles/me", async (request) => {
     return service.self({
       authorizationHeader: request.headers.authorization,

@@ -2,7 +2,7 @@
 
 **Read the [one active product roadmap](docs/PRODUCT-ROADMAP-20261019.md), [screen/journey contract](docs/SCREEN-JOURNEYS.md) and [current handoff](CONTINUE-HERE.md) before working.** Older dated product plans, historic handoffs and Alpha/Twin tools have been removed from the current tree. Do not recreate an archive or restore their superseded UX rules.
 
-1. Product: global Masana characters and creators; Chats · Status · Wallet · Calls · Rooms; Chats default. One strong green/white WhatsApp-like design system. Secondary details do not become additional root tabs.
+1. Product: human and Masana communication and creators; Chats · Status · Wallet · Calls · Rooms; Chats default. One strong green/white WhatsApp-like design system. Secondary details do not become additional root tabs.
 2. Preserve users and finances: **MSNW** only as customer-facing Wallet/token identity. Historical Credits/Cr/MSN liabilities remain intact, separately reconciled; never rename into MSNW, wipe/transfer or claim supply based on UI changes. On-chain token source is not proof of mainnet deployment.
 3. Creator ownership: one successfully published Masana free for account lifetime; next publication default 5,000 MSNW, server-quoted and captured once under finance controls. Creation/voice/earnings/permission authority remains server-side. Bodi male and Fora female approved voices, no user-visible blanket promise of voice cloning.
 4. Security: canonical ledger/task/auth/media contracts and exact account/session fencing. Every money, asset, provider or escrow operation needs server-bound authorization, idempotency, signed/verified external proof, timeouts, reconciliation, post-action readback and durable receipt. Models may propose; users authorize consequential actions. Payment screenshots/marked-paid flags alone cannot release escrow.
@@ -14,3 +14,5 @@
 10. Source-of-truth order: executable behavior at exact SHA → roadmap/owner decisions → current technical/API/security/financial contracts → actual PR evidence. No historical branch, Git commit or external document may override current owner authorization.
 11. Keep approved implementation practical: no duplicate backend providers/ledgers, unnecessary microservices, expensive dormant services, forced custom voice onboarding, synthetic fund claims or undisclosed hidden fees.
 12. Handoff must identify base/head SHA, actual PR, touched paths, phase/task IDs, relevant commands/results, current deployment status, remaining source/verification, next action and safe merge target. Update checkboxes **in the same roadmap**, not new dated checklists.
+
+13. Owner revision (2026-10-19): human messaging/calls and user-created channel-style **Rooms** are approved. Contacts tabs **Masana / Humans**; one human/creator public profile. No sixth tab or Channels rename. Follow revised Phases 4–8; preserve open source/device/provider work carried from Phase 3.
