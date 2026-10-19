@@ -27,7 +27,7 @@ void main() {
       'Inventory MSNW': '100',
     }.entries) {
       final field = find.widgetWithText(TextFormField, entry.key);
-      await tester.scrollUntilVisible(field, 120);
+      await tester.scrollUntilVisible(field, 120, scrollable: find.byType(Scrollable).first);
       await tester.enterText(field, entry.value);
     }
     await tester.ensureVisible(find.byKey(const ValueKey('p2p-review-offer')));

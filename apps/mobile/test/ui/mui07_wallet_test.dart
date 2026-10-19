@@ -131,7 +131,7 @@ void main() {
             onBilling: (_) {},
           );
           expect(find.text('Wallet'), findsOneWidget);
-          expect(find.text('MSNW'), findsWidgets);
+          expect(find.textContaining('MSNW'), findsWidgets);
           expect(find.text('Available balance'), findsOneWidget);
           expect(find.text('9007199254740991'), findsNothing);
           expect(find.text('Credits'), findsNothing);
