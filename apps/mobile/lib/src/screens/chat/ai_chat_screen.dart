@@ -973,8 +973,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           kind:'image',path:file.path,name:name,sizeBytes:size));
       }
       if (!mounted) return;
-      active = ref.read(sessionProvider);
-      if (active is! SessionSignedIn || active.user.id != ownerId) return;
+      final currentSession = ref.read(sessionProvider);
+      if (currentSession is! SessionSignedIn || currentSession.user.id != ownerId) return;
       _stageAttachments(attachments);
       if (attachments.length < selected.length) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

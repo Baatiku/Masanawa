@@ -14,6 +14,27 @@ void main() {
     expect(theme.splashFactory, InkRipple.splashFactory);
   });
 
+  testWidgets('reduced-motion transition returns the child at animation zero',
+      (tester) async {
+    const child = Text('No transition artwork');
+    Widget? result;
+    final route = MaterialPageRoute<void>(builder: (_) => child);
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(disableAnimations: true),
+      child: Builder(builder: (context) {
+        result = const MasanawaPageTransitionsBuilder().buildTransitions<void>(
+          route,
+          context,
+          const AlwaysStoppedAnimation<double>(0),
+          const AlwaysStoppedAnimation<double>(0),
+          child,
+        );
+        return const SizedBox.shrink();
+      }),
+    ));
+    expect(identical(result, child), isTrue);
+  });
+
   testWidgets('reduced-motion routes render without transition artwork',
       (tester) async {
     final nav = GlobalKey<NavigatorState>();
@@ -29,7 +50,10 @@ void main() {
     nav.currentState!.push(MaterialPageRoute<void>(
       builder: (_) => const Scaffold(body: Text('Next')),
     ));
+    // Flush the route's initial offstage layout, then render its first frame.
+    // Do not settle the animation: reduced motion must show content immediately.
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
     expect(find.text('Next'), findsOneWidget);
   });
 }

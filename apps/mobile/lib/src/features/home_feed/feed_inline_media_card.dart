@@ -75,9 +75,9 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   @override void dispose(){_discard();super.dispose();}
   @override Widget build(BuildContext context){
     final current=grant;
-    if(loading)return const SizedBox(height:120,child:Center(
+    if(loading)return SizedBox(height:120,child:Center(
       child:Semantics(label:'Loading approved image preview',
-        child:CircularProgressIndicator(strokeWidth:2))));
+        child:const CircularProgressIndicator(strokeWidth:2))));
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
       return Align(alignment:Alignment.centerLeft,child:TextButton.icon(
         onPressed:load,
