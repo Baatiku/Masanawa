@@ -364,7 +364,7 @@ void main() {
       expect(find.text('fixture-recipient'), findsOneWidget);
       await capture(tester, 'withdraw-review-320-2');
       expect(wallet.executions, 0);
-      await tester.ensureVisible(find.text('Withdraw').last);
+      await tester.scrollUntilVisible(find.text('Withdraw').last, 120, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Withdraw').last);
       await tester.pumpAndSettle();
       expect(wallet.executions, 0);
@@ -447,6 +447,7 @@ void main() {
         findsOneWidget,
       );
       await capture(tester, 'convert-review-320-2-rtl');
+      await tester.scrollUntilVisible(find.text('Cancel'), 120, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(wallet.executions, 0);

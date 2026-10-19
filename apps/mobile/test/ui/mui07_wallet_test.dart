@@ -229,7 +229,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('All crypto assets'), 180, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('All crypto assets'));
     await tester.pumpAndSettle();
-    expect(find.text('Crypto assets'), findsOneWidget);
+    expect(find.text('Crypto route'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Data bundles'));

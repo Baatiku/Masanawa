@@ -104,3 +104,7 @@ APK generation remains paused by owner instruction until the whole checklist is 
 - I07: disposable encrypted database/object-store restore rehearsal remains NOT_RUN; required restore tooling/qualified storage access has not been established in this environment.
 
 - A06: active entry point now labels 15 October deployment blockers as historical, records verified Actions access, and names Baatiku/Masanawa as the active repository. The old audio-first product document now carries an explicit supersession notice and current shell/MSNW authority. Relative links reviewed; historical content preserved.
+
+### Latest non-APK verification — source `4155b1e`
+
+Dart error analysis passed. Full Flutter run: **1,156 passed, 46 errors, 2 failures**. This is not a passing app suite. The narrow-width/large-text/RTL crypto layout matrix, Buy/Receive form checks, profile-refresh/save recovery, Room invitations and Wallet history checks passed in this run; withdrawal/conversion review interactions and other existing app regressions remain open. Subsequent regression-fixture corrections still require execution. Source changes include the bank-funding screen hierarchy and readable exact balances in both crypto and Wallet asset lists. Reliability Node tests: **13 passed**, no skipped tests. PR #220 is draft and unmerged. No APK generated.

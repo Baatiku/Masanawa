@@ -188,7 +188,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Send'));
     await tester.tap(find.text('Send'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byType(MsnwCustodySendSheet), findsOneWidget);
     expect(find.byType(SendCreditsSheet), findsNothing);
     expect(wallet.sends, 0);

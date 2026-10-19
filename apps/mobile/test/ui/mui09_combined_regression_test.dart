@@ -264,10 +264,10 @@ void main() {
             await tab(2);
             await save('wallet-outage');
             expect(
-              find.text('Couldn’t refresh balance'),
+              find.text('Sign in to view your balance'),
               findsOneWidget,
             );
-            await tester.ensureVisible(find.text('All crypto assets'));
+            await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
             await tester.tap(find.text('All crypto assets'));
             await tester.pumpAndSettle();
             expect(find.byType(CryptoWalletScreen), findsOneWidget);
