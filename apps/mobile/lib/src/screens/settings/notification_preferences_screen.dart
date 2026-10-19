@@ -49,8 +49,8 @@ class NotificationPreferences {
         offset is! int || offset < -840 || offset > 840) {
       throw const FormatException('Invalid quiet hours');
     }
-    return NotificationPreferences(categories, start as int?,
-        end, offset as int);
+    return NotificationPreferences(categories, start,
+        end, offset);
   }
 
   NotificationPreferences update({
