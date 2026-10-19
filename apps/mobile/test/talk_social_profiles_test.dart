@@ -125,8 +125,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Following'), findsOneWidget);
 
-    await tester.tap(find.text('Amina Twin'));
-    expect(openedTwin, 'amina-twin');
+    expect(find.text('Amina Twin'), findsNothing);
+    expect(openedTwin, isNull);
+    expect(find.text('Public activity'), findsOneWidget);
 
     await tester.tap(find.text('Can small businesses compete globally?'));
     expect(openedTalk, 'talk-1');

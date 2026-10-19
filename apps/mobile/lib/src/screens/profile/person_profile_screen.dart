@@ -135,7 +135,7 @@ class _PersonProfileBody extends StatelessWidget {
                           Flexible(
                             child: Text(
                               profile.displayName,
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: u.textPrimary,
@@ -171,13 +171,12 @@ class _PersonProfileBody extends StatelessWidget {
                         style: TextStyle(color: u.textMuted, fontSize: 13),
                       ),
                       const SizedBox(height: 10),
-                      Row(
+                      Wrap(spacing: 18, runSpacing: 6,
                         children: [
                           _Stat(
                             value: _compact(profile.followerCount),
                             label: 'followers',
                           ),
-                          const SizedBox(width: 18),
                           _Stat(
                             value: _compact(profile.followingCount),
                             label: 'following',
@@ -189,17 +188,13 @@ class _PersonProfileBody extends StatelessWidget {
                 ),
               ],
             ),
-            if (profile.bio.trim().isNotEmpty) ...[
-              const SizedBox(height: 13),
-              Text(
-                profile.bio,
-                style: TextStyle(
-                  color: u.textPrimary,
-                  fontSize: 14,
-                  height: 1.35,
-                ),
+            if (profile.bio.trim().isNotEmpty)
+              ExpansionTile(tilePadding: EdgeInsets.zero,
+                title: const Text('About'),
+                children: [Padding(padding: const EdgeInsets.only(bottom: 12),
+                  child: Align(alignment: AlignmentDirectional.centerStart,
+                    child: SelectableText(profile.bio)))],
               ),
-            ],
             const SizedBox(height: 14),
             Row(
               children: [
@@ -232,7 +227,7 @@ class _PersonProfileBody extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Talks',
+              'Public activity',
               style: TextStyle(
                 color: u.textPrimary,
                 fontSize: 17,
@@ -244,7 +239,7 @@ class _PersonProfileBody extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 26),
                 child: Text(
-                  'No public Talks yet.',
+                  'No public activity yet.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: u.textMuted),
                 ),
@@ -275,6 +270,7 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = context.masanawa;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,

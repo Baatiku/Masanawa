@@ -3,12 +3,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
-import 'package:masanawa/src/api/models.dart';
+import 'package:masanawa/src/core/api/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
 import 'package:masanawa/src/screens/profile/masana_profile_screen.dart';
+import 'package:masanawa/src/screens/chat/masana_list_screen.dart';
 import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'package:masanawa/src/state/session_state.dart';
 
@@ -24,6 +25,9 @@ class Directory extends AgentDirectoryController {
 }
 const user = AuthUser(id: 'owner', name: 'Fan', locale: 'en', status: 'ACTIVE', role: 'USER', isNewUser: false, createdAt: '2026-10-19');
 const tokens = AuthTokens(accessToken: 'test', refreshToken: 'refresh', accessExpiresIn: 3600, user: user);
+class EmptyDirectory extends Directory {
+  @override AgentDirectoryState build() => const AgentDirectoryState(loading: false);
+}
 class SignedIn extends SessionController {
   @override SessionState build() => const SessionSignedIn(user, tokens);
   void signOut() => state = const SessionSignedOut();
@@ -75,6 +79,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sign in to view this profile.'), findsOneWidget);
     expect(find.text('Following'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('contacts Create Masana FAB opens the existing creation form directly', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: [
+      agentDirectoryProvider.overrideWith(EmptyDirectory.new),
+      sessionProvider.overrideWith(SignedIn.new),
+      apiClientProvider.overrideWithValue(client()),
+    ], child: const MaterialApp(home: MasanaListScreen())));
+    await tester.pumpAndSettle();
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    await tester.tap(find.text('Create Masana'));
+    await tester.pumpAndSettle();
+    expect(find.text('Describe your character'), findsOneWidget);
+    expect(find.text('My Masana'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
