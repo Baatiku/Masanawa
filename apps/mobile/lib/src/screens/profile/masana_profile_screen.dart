@@ -89,14 +89,18 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final agent = widget.agent;
+    final agent = ref.watch(agentDirectoryProvider.select(
+      (directory) => directory.find(widget.agent.characterId),
+    )) ?? widget.agent;
     final colors = context.masanawa;
     return Scaffold(
       backgroundColor: colors.surfaceCard,
       appBar: AppBar(title: const Text('Masana profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerScrolled) => [
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Center(child: MasanaPortraitAvatar(agent: agent, size: 112)),
           const SizedBox(height: 16),
           Text(agent.displayName, textAlign: TextAlign.center,
@@ -139,7 +143,7 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
               ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.article_outlined),
-                label: const Text('Status posts'),
+                label: const Text('All posts'),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => MasanaStatusPostsScreen(agent: agent),
                 )),
@@ -153,18 +157,6 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                 ),
             ],
           ),
-          if (agent.greeting?.trim().isNotEmpty == true) ...[
-            const SizedBox(height: 24),
-            Text('Meet ${agent.displayName}', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(agent.greeting!, style: TextStyle(color: colors.textPrimary, height: 1.45)),
-          ],
-          const SizedBox(height: 24),
-          Text('About', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          SelectableText(agent.about.isEmpty
-              ? 'More profile information will appear here.'
-              : agent.about),
           if (agent.socialChannels.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text('Official channels',
@@ -183,22 +175,15 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                   ),
               ]),
           ],
-          if (agent.conversationStarters.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text('Try asking', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            ...agent.conversationStarters.map((starter) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: OutlinedButton(
-                onPressed: () => _openChat(starter: starter),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(starter),
-                ),
-              ),
-            )),
-          ],
+          const SizedBox(height: 20),
+          Row(children: [
+            const Icon(Icons.article_outlined, size: 20),
+            const SizedBox(width: 8),
+            Text('Recent posts', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+        ]))),
         ],
+        body: MasanaStatusPostsScreen(agent: agent, embedded: true),
       ),
     );
   }

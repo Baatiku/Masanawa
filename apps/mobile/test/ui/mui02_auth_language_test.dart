@@ -115,7 +115,7 @@ class _PhoneAndEmailClient extends _TestAuthClient {
 
 class _ExpiredOtpClient extends _TestAuthClient {
   @override
-  Future<AuthTokens> otpVerify(String code, {String? phone, String? email, String? name}) async {
+  Future<AuthTokens> otpVerify(String code, {String? phone, String? email, String? name, String? deviceId}) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
   }
 }

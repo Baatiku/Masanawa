@@ -294,7 +294,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
                                   ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:4,vertical:6),
                                     leading:MasanaPortraitAvatar(displayName:r.teacher,size:48),
                                     title:Text(profession,style:TextStyle(fontWeight:FontWeight.w700,color:u.textPrimary)),
-                                    subtitle:Text('${r.teacher} · ${r.paid?'Subscription':'Free'}',maxLines:1,overflow:TextOverflow.ellipsis),
+                                    subtitle:Text('${r.teacher}\n${r.members} members · ${r.paid?'Subscription':'Free'}',maxLines:2,overflow:TextOverflow.ellipsis),
                                     trailing:Icon(r.joined?Icons.check_circle_outline:Icons.chevron_right,color:r.joined?u.brand:u.textMuted),
                                     onTap:()=>_openRoomDetail(r)),
                                   Divider(height:1,color:u.structuralBorder),
@@ -349,6 +349,7 @@ class _RoomHomeScreenState extends State<RoomHomeScreen> {
   Timer? _answerPoll;
   int _viewVersion = 0, _pollFailures = 0, _detailDepth=0;
   bool _polling = false;
+  String _timelineFilter = 'all';
 
   @override
   void initState() {
@@ -682,20 +683,41 @@ class _RoomHomeScreenState extends State<RoomHomeScreen> {
   }
 
   Widget _buildChannelChatView(MasanawaColors u,String profession) {
-    final timeline=<({Object item,DateTime? at,int order})>[
+    final allEntries=<({Object item,DateTime? at,int order})>[
       for(final lesson in lessons)(item:lesson,at:lesson.createdAt,order:0),
       for(final item in items)(item:item,at:item.createdAt,order:1),
     ].indexed.map((entry)=>(item:entry.$2.item,at:entry.$2.at,order:entry.$1)).toList();
+    final timeline = allEntries.where((entry) =>
+      _timelineFilter == 'all' ||
+      (_timelineFilter == 'lessons' && entry.item is RoomLesson) ||
+      (_timelineFilter == 'questions' && entry.item is RoomQuestion)).toList();
     timeline.sort((a,b){
       if(a.at==null&&b.at==null)return a.order.compareTo(b.order);
       if(a.at==null)return 1;if(b.at==null)return -1;
       final result=a.at!.compareTo(b.at!);return result==0?a.order.compareTo(b.order):result;
     });
     return Column(children:[
+      Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: Row(children: [
+          Icon(Icons.groups_outlined, color: u.brandStrong, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Room timeline',
+            style: Theme.of(context).textTheme.titleMedium)),
+          TextButton(onPressed: openInfo, child: const Text('Room info')),
+        ])),
+      SingleChildScrollView(scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(children: [
+          for (final filter in [('all', 'All'), ('lessons', 'Lessons'), ('questions', 'Questions')])
+            Padding(padding: const EdgeInsetsDirectional.only(end: 8),
+              child: FilterChip(label: Text(filter.$2),
+                selected: _timelineFilter == filter.$1,
+                onSelected: (_) => setState(() => _timelineFilter = filter.$1))),
+        ])),
       Expanded(child:RefreshIndicator(onRefresh:load,child:timeline.isEmpty?
         ListView(children:[Padding(padding:const EdgeInsets.symmetric(horizontal:24,vertical:64),child:Column(children:[
           Icon(Icons.forum_outlined,size:42,color:u.textMuted),const SizedBox(height:16),
-          const Text('No lessons or questions yet',textAlign:TextAlign.center),
+          Text(_timelineFilter == 'lessons' ? 'No lessons yet' : _timelineFilter == 'questions' ? 'No questions yet' : 'No lessons or questions yet',textAlign:TextAlign.center),
           const SizedBox(height:8),const Text('Ask your teacher a question below.',textAlign:TextAlign.center),
         ]))]):ListView.builder(controller:_scrollController,padding:const EdgeInsets.all(12),itemCount:timeline.length,itemBuilder:(context,index){
           final item=timeline[index].item;

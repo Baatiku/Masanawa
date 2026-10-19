@@ -39,15 +39,18 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter test --no-pub --machine > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
+          flutter test --no-pub --reporter json > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
           result=$?
           python3 - "$RUNNER_TEMP/flutter-tests.jsonl" <<'PY'
           import json,sys
           tests={};counts={};errors=[]
           for line in open(sys.argv[1]):
               try: e=json.loads(line)
-              except ValueError: continue
+              except ValueError:
+                  if line.strip(): errors.append(line.strip())
+                  continue
               if e.get('type')=='testStart':tests[e['test']['id']]=e['test']['name']
+              if e.get('type')=='print' and ('Error:' in e.get('message','') or 'Failed to load' in e.get('message','')):errors.append(e['message'])
               if e.get('type')=='error':errors.append(e.get('error','')+'\n'+e.get('stackTrace',''))
               if e.get('type')=='testDone':
                   key='skipped' if e.get('skipped') else e.get('result','unknown');counts[key]=counts.get(key,0)+1

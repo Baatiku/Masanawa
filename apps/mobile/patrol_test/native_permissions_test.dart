@@ -25,7 +25,7 @@ void main() {
           )),
         ),
       ));
-      await $(#request-microphone).tap();
+      await $(find.byKey(const Key('request-microphone'))).tap();
       if (await $.platform.mobile.isPermissionDialogVisible(
         timeout: const Duration(seconds: 5),
       )) {
@@ -35,7 +35,7 @@ void main() {
           reason: 'Microphone must be granted to record voice notes.');
       await $.platform.mobile.pressHome();
       await $.platform.mobile.openApp();
-      expect($(#request-microphone).exists, isTrue);
+      expect($(find.byKey(const Key('request-microphone'))).exists, isTrue);
     },
   );
 }

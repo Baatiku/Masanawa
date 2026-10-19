@@ -151,6 +151,7 @@ class DeferredWallet extends FixtureWallet {
     required String providerCode,
     required String amount,
     required String destinationAddress,
+    String? stepUpToken,
   }) async {
     executions++;
     return value.history.first;

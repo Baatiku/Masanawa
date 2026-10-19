@@ -52,8 +52,9 @@ class MasanaAuthorFeedApi extends AccountBoundFeedApi {
 }
 
 class MasanaStatusPostsScreen extends ConsumerWidget {
-  const MasanaStatusPostsScreen({super.key, required this.agent});
+  const MasanaStatusPostsScreen({super.key, required this.agent, this.embedded = false});
   final AgentDirectoryEntry agent;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -116,9 +117,7 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
       ));
     }
 
-    return Scaffold(
-      appBar: AppBar(title: Text('${agent.displayName} · Status')),
-      body: KeyedSubtree(
+    final posts = KeyedSubtree(
         key: ValueKey('masana-status-$account-${agent.characterId}'),
         child: MasanaFeedScreen(
           api: feed,
@@ -127,9 +126,13 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
           authorScoped: true,
           audioPlaybackAvailable: true,
           onOpenMedia: openMedia,
-          onMasanaProfile: (_) => Navigator.of(context).pop(),
+          onMasanaProfile: (_) { if (!embedded) Navigator.of(context).pop(); },
         ),
-      ),
+      );
+    if (embedded) return posts;
+    return Scaffold(
+      appBar: AppBar(title: Text('${agent.displayName} · Status')),
+      body: posts,
     );
   }
 }
