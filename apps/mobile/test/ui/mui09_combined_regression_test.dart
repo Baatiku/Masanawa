@@ -22,9 +22,7 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 import 'mui08_crypto_test.dart' as crypto;
 
 class _Session extends SessionController {
-  @override
-  SessionState build() => const SessionSignedOut();
-  void change(String id) {
+  SessionSignedIn _signedIn(String id) {
     final user = AuthUser(
       id: id,
       name: 'Fixture fan',
@@ -34,7 +32,7 @@ class _Session extends SessionController {
       isNewUser: false,
       createdAt: '2026-10-12T00:00:00Z',
     );
-    state = SessionSignedIn(
+    return SessionSignedIn(
       user,
       AuthTokens(
         accessToken: 'fixture-$id',
@@ -44,6 +42,11 @@ class _Session extends SessionController {
       ),
     );
   }
+
+  @override
+  SessionState build() => _signedIn('fixture-start');
+
+  void change(String id) => state = _signedIn(id);
 
   void signOut() => state = const SessionSignedOut();
 }
@@ -173,7 +176,6 @@ void main() {
                 ),
               );
             }
-            session.change('fixture-start');
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
