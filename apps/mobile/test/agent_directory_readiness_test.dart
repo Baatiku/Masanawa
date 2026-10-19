@@ -138,4 +138,15 @@ void main() {
     expect(entry.socialChannels.map((v) => v.platform), ['telegram']);
   });
 
+  test('public creator link survives directory cache without leaking private ownership', () {
+    final entry = AgentDirectoryEntry.fromJson({
+      ...entryWithPresence('unknown'),
+      'creatorHandle': 'amina', 'creatorName': 'Amina Bello',
+    });
+    final restored = AgentDirectoryEntry.fromJson(entry.withUnverifiedPresence().toJson());
+    expect(restored.creatorHandle, 'amina');
+    expect(restored.creatorName, 'Amina Bello');
+    expect(restored.toJson().containsKey('ownerUserId'), isFalse);
+  });
+
 }

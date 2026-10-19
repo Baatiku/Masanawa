@@ -220,7 +220,7 @@ void main() {
               Localizations.localeOf(
                 tester.element(find.byType(FiveTabShell)),
               ).languageCode,
-              locale == 'ha' ? 'en' : locale,
+              locale,
             );
             final field = find.byType(TextField);
             await tester.enterText(field, 'no authorized match');
@@ -264,11 +264,12 @@ void main() {
             await tab(2);
             await save('wallet-outage');
             expect(
-              find.text('Wallet balances are unavailable right now.'),
+              find.text('Sign in to view your balance'),
               findsOneWidget,
             );
-            await tester.ensureVisible(find.text('Crypto'));
-            await tester.tap(find.text('Crypto'));
+            await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('All crypto assets'));
             await tester.pumpAndSettle();
             expect(find.byType(CryptoWalletScreen), findsOneWidget);
             expect(find.byType(NavigationBar), findsNothing);
@@ -287,13 +288,13 @@ void main() {
             await tab(4);
             await save('rooms-unavailable');
             expect(
-              find.text('Could not load rooms. Pull to try again.'),
+              find.text('Sign in to view your Rooms.'),
               findsOneWidget,
             );
             await tab(1);
-            expect(find.text('Couldn’t load Talks right now.'), findsOneWidget);
+            expect(find.text('Sign in to view Status updates.'), findsOneWidget);
             await save('status-unavailable');
-            // Status/Rooms still mount legacy Talk resources; acceptance remains OPEN.
+            // Signed-out Status and Rooms deny private content before requesting it.
             await tab(0);
             expect(
               tester.widget<TextField>(find.byType(TextField)).controller!.text,

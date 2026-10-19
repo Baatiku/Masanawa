@@ -6,9 +6,9 @@ import {
 
 describe("Postgres Talk safety repository",()=>{
   it("uses reporter + client request identity for idempotent reports",async()=>{
-    let call:{text:string;values?:unknown[]}|undefined;
+    let call:{text:string;values?:unknown[] | undefined}|undefined;
     const pool:TalkSafetySqlPool={
-      async query<Row>(text:string,values?:unknown[]){
+      async query<Row>(text:string,values?:unknown[] | undefined){
         call={text,values};
         return {
           rowCount:1,
@@ -30,9 +30,9 @@ describe("Postgres Talk safety repository",()=>{
   });
 
   it("verifies a user-id safety subject through public profiles",async()=>{
-    let call:{text:string;values?:unknown[]}|undefined;
+    let call:{text:string;values?:unknown[] | undefined}|undefined;
     const pool:TalkSafetySqlPool={
-      async query<Row>(text:string,values?:unknown[]){
+      async query<Row>(text:string,values?:unknown[] | undefined){
         call={text,values};
         return {
           rowCount:1,
@@ -51,9 +51,9 @@ describe("Postgres Talk safety repository",()=>{
   });
 
   it("CAS-updates enforcement by current revision",async()=>{
-    let call:{text:string;values?:unknown[]}|undefined;
+    let call:{text:string;values?:unknown[] | undefined}|undefined;
     const pool:TalkSafetySqlPool={
-      async query<Row>(text:string,values?:unknown[]){
+      async query<Row>(text:string,values?:unknown[] | undefined){
         call={text,values};
         return {
           rowCount:1,

@@ -35,24 +35,25 @@ class WalletAssetOverview extends ConsumerWidget {
               leading: CircleAvatar(
                 backgroundColor: context.masanawa.surfaceMuted,
                 foregroundColor: context.masanawa.textPrimary,
-                child: Text(route.asset.substring(0, 1)),
+                child: Text(route.asset.isEmpty ? '?' : route.asset.substring(0, 1)),
               ),
               title: Text(
                 route.asset,
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: route.network == null ? null : Text(route.network!),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (route.network != null) Text(route.network!),
+                  const SizedBox(height: 4),
                   Text(
-                    hideBalances?'••••':wallet.balances[route.providerCode] ?? '—',
+                    hideBalances ? '••••' : wallet.balances[route.providerCode] ?? 'Balance unavailable',
+                    textDirection: TextDirection.ltr,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.chevron_right, size: 18),
                 ],
               ),
+              trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => CryptoWalletScreen(

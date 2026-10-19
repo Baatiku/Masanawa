@@ -532,6 +532,65 @@ class AiChatState {
   );
 }
 
+/// Only authenticated downloads are disposable. Originals and generated reply
+/// audio may have no server copy; drafts and retryable turns are never cache.
+class DownloadedChatMediaCleanup {
+  const DownloadedChatMediaCleanup(this.state, this.paths);
+  final AiChatState state;
+  final Set<String> paths;
+}
+
+DownloadedChatMediaCleanup planDownloadedChatMediaCleanup(
+  AiChatState state, Directory ownerFolder,
+) {
+  final protected = <String>{};
+  bool settled(AiChatMessage message) =>
+      const {'sent', 'delivered', 'read'}.contains(message.deliveryStatus);
+  for (final thread in state.threads.values) {
+    protected.addAll(thread.draftAttachments.map((item) => item.path));
+    if (thread.draftVoice != null) protected.add(thread.draftVoice!.path);
+    for (final message in thread.messages) {
+      if (!settled(message) || state.sendingIn.contains(thread.characterId) ||
+          state.openThreadId == thread.characterId) {
+        protected.addAll(message.allAttachments.map((item) => item.path));
+      }
+    }
+  }
+  final paths = <String>{};
+  ChatAttachment remap(ChatThread thread, AiChatMessage message,
+      ChatAttachment item) {
+    final request = message.requestId;
+    if (request == null || request.isEmpty || protected.contains(item.path) ||
+        !settled(message) || state.sendingIn.contains(thread.characterId) ||
+        state.openThreadId == thread.characterId) return item;
+    final file = File(item.path);
+    if (file.parent.absolute.path != ownerFolder.absolute.path) return item;
+    final safeId = request.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
+    final match = RegExp('^remote-${RegExp.escape(safeId)}-([0-8])\\.[a-zA-Z0-9]{1,10}\$')
+        .firstMatch(file.uri.pathSegments.last);
+    if (match == null) return item;
+    final slot = int.parse(match.group(1)!);
+    if (message.isUser != (slot < 8)) return item;
+    paths.add(item.path);
+    return ChatAttachment.fromJson({...item.toJson(), 'path':
+      chatRemoteMediaReference(thread.characterId, request, slot)});
+  }
+  final threads = <String, ChatThread>{};
+  for (final entry in state.threads.entries) {
+    final thread = entry.value;
+    threads[entry.key] = thread.copyWith(messages: [
+      for (final message in thread.messages)
+        message.copyWith(
+          attachment: message.attachment == null ? null
+              : remap(thread, message, message.attachment!),
+          attachments: [for (final item in message.attachments)
+            remap(thread, message, item)],
+        ),
+    ]);
+  }
+  return DownloadedChatMediaCleanup(state.copyWith(threads: threads), paths);
+}
+
 class AiChatController extends Notifier<AiChatState> {
   int _seq = 0;
   bool _disposed = false;
@@ -912,9 +971,8 @@ class AiChatController extends Notifier<AiChatState> {
 
   void _mergeServerHistory(
     String characterId,
-    List<AgentHistoryMessage> history, {
-    Map<String, List<ChatAttachment>> remoteMedia = const {},
-  }) {
+    List<AgentHistoryMessage> history,
+  ) {
     final thread = threadOf(characterId);
     final local = [...thread.messages];
     final byKey = <String, AiChatMessage>{};
@@ -2389,6 +2447,38 @@ class AiChatController extends Notifier<AiChatState> {
       sendingIn: {...state.sendingIn}..remove(characterId),
     );
     _save();
+  }
+
+  /// Evict downloaded bytes without dropping conversations, drafts, retry
+  /// payloads, canonical sessions or financial action journals.
+  Future<void> clearDownloadedMediaCache() async {
+    final owner = _cacheOwnerId;
+    final generation = _cacheGeneration;
+    bool current() => !_disposed && owner != null &&
+        owner == _cacheOwnerId && generation == _cacheGeneration;
+    if (!current()) throw StateError('Sign in to clear downloaded media');
+    final folder = await _mediaFolderForOwner(owner!);
+    if (!current()) throw StateError('Account changed before cache cleanup');
+    final plan = planDownloadedChatMediaCleanup(state, folder);
+    // Replace paths with authenticated placeholders before removing bytes.
+    // Saving is owner-fenced and leaves every message and receipt in place.
+    state = plan.state;
+    await _save();
+    for (final path in plan.paths) {
+      if (!current()) throw StateError('Account changed during cache cleanup');
+      // A picker may have selected an existing download while saving. Do not
+      // delete anything newly referenced by a draft or active/retryable turn.
+      final referenced = state.threads.values.any((thread) =>
+        thread.draftAttachments.any((item) => item.path == path) ||
+        thread.draftVoice?.path == path ||
+        thread.messages.any((message) =>
+          message.allAttachments.any((item) => item.path == path)));
+      if (referenced) continue;
+      // delete() unlinks only the file itself and never traverses directories.
+      try { await File(path).delete(); } on FileSystemException catch (error) {
+        if (error.osError?.errorCode != 2) rethrow;
+      }
+    }
   }
 
   Future<void> clearAll() async {

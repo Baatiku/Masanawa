@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
+import '../../account/conversation_archive.dart';
 import '../../state/session_state.dart';
 import 'verify_account_email_screen.dart';
 
@@ -28,6 +29,8 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
   DateTime? _to;
   String? _owner;
   int _epoch=0;
+  int _accountGeneration=0;
+  late final ProviderSubscription<SessionState> _sessionSubscription;
 
   bool get _sameAccount {
     final s=ref.read(sessionProvider);
@@ -38,7 +41,23 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
     super.initState();
     final s=ref.read(sessionProvider);
     if(s is SessionSignedIn)_owner=s.user.id;
+    _sessionSubscription=ref.listenManual<SessionState>(sessionProvider,(previous,next){
+      final before=previous is SessionSignedIn?previous.user.id:null;
+      final after=next is SessionSignedIn?next.user.id:null;
+      if(before!=after){
+        _accountGeneration++;
+        _epoch++;
+        if(mounted)setState((){_summary=null;_loading=false;});
+      }
+    });
     Future<void>.microtask(_refresh);
+  }
+
+  @override
+  void dispose(){
+    _accountGeneration++;
+    _sessionSubscription.close();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -88,7 +107,41 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
     }
   }
 
+  Future<void> _exportConversations() async {
+    if(_exporting||!_sameAccount)return;
+    final generation=_accountGeneration;
+    bool current()=>mounted&&_sameAccount&&generation==_accountGeneration;
+    setState((){_exporting=true;_error=null;_progress='Preparing conversations and media…';});
+    Directory? directory;
+    try{
+      final temporary=await getTemporaryDirectory();
+      if(!current())throw StateError('Account changed');
+      directory=await temporary.createTemp('masanawa-conversation-export-');
+      final result=await createConversationArchive(
+        directory:directory,
+        source:GatewayConversationArchiveSource(ref.read(apiClientProvider)),
+        isCurrent:current,
+        onProgress:(messages,media){
+          if(current())setState(()=>_progress='Exporting $messages messages · $media media files');
+        },
+      );
+      if(!current())throw StateError('Account changed');
+      await SharePlus.instance.share(ShareParams(
+        files:[XFile(result.file.path)],
+        text:'Masanawa private conversation archive. ${result.mediaCount} media files included; '
+          '${result.unavailableCount} unavailable or limited. See conversations.json for details.',
+      ));
+    }catch(_){
+      if(current())setState(()=>_error='Conversation export could not be completed. '
+        'Check your connection and available storage, then retry.');
+    }finally{
+      try{if(directory!=null&&await directory.exists())await directory.delete(recursive:true);}catch(_){}
+      if(mounted)setState((){_exporting=false;_progress=null;});
+    }
+  }
+
   Future<void> _export(bool financial) async {
+    if(!financial)return _exportConversations();
     if(_exporting || !_sameAccount)return;
     final owner=_owner;
     setState(() {_exporting=true;_error=null;_progress='Preparing your export…';});
@@ -97,7 +150,7 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
     try {
       final folder=await getTemporaryDirectory();
       final suffix=DateTime.now().microsecondsSinceEpoch;
-      file=File('${folder.path}/masanawa-${financial?'wallet-statement':'conversations'}-$suffix.${financial?'csv':'json'}');
+      file=File('${folder.path}/masanawa-wallet-statement-$suffix.csv');
       sink=file.openWrite();
       final api=ref.read(apiClientProvider);
       if(financial) {
@@ -107,27 +160,6 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
         );
         if(!_sameAccount || owner!=_owner)throw StateError('Account changed');
         sink.write(report['content'] as String? ?? '');
-      }else{
-        sink.write('{"format":"masanawa-conversations-v1","mediaFilesIncluded":false,'
-          '"exportedAt":${jsonEncode(DateTime.now().toUtc().toIso8601String())},"messages":[');
-        String? cursor;
-        var first=true;
-        var page=0;
-        do {
-          final response=await api.exportConversationPage(cursor:cursor);
-          if(!_sameAccount || owner!=_owner)throw StateError('Account changed');
-          final items=response['items'];
-          if(items is! List)throw const FormatException('Invalid export response');
-          for(final item in items){
-            if(!first)sink.write(',');
-            sink.write(jsonEncode(item));
-            first=false;
-          }
-          cursor=response['nextCursor'] as String?;
-          page++;
-          if(mounted)setState(()=>_progress='Exporting conversations · page $page');
-        }while(cursor!=null);
-        sink.write(']}');
       }
       await sink.flush();
       await sink.close();
@@ -135,9 +167,7 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
       if(!mounted || !_sameAccount)throw StateError('Account changed');
       await SharePlus.instance.share(ShareParams(
         files:[XFile(file.path)],
-        text:financial
-          ? 'Masanawa wallet statement (activity, not an audited bank statement)'
-          : 'Masanawa conversation text archive (media files not included)',
+        text:'Masanawa wallet statement (activity, not an audited bank statement)',
       ));
       if(mounted)setState(()=>_progress=null);
     }catch(_) {
@@ -204,8 +234,8 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
           const SizedBox(height:24),
           Text('Complete your profile',style:Theme.of(context).textTheme.titleLarge),
           const Text('You can complete optional details later. Financial services may need additional verified identity.'),
-          _check('Display name',checks['displayName']==true,()=>context.push('/profile')),
-          _check('Profile photo',checks['profilePhoto']==true,()=>context.push('/profile')),
+          _check('Display name',checks['displayName']==true,()=>context.push('/profile').then((_)=>_refresh())),
+          _check('Profile photo',checks['profilePhoto']==true,()=>context.push('/profile').then((_)=>_refresh())),
           _check('Linked email address',checks['linkedEmail']==true,
             ()=>Navigator.of(context).push(MaterialPageRoute<void>(
               builder:(_)=>const VerifyAccountEmailScreen(),
@@ -227,14 +257,15 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
           const Text('Conversation archive',
             style:TextStyle(fontSize:17,fontWeight:FontWeight.w600)),
           const SizedBox(height:8),
-          const Text('Conversation export contains text messages and replies; '
-            'attached media files are not included. The export stays on your device '
-            'until you choose an app to share it with.'),
+          const Text('Export messages, replies and available private attachments as a ZIP. '
+            'Expired or missing media and export limits are listed in the archive. '
+            'Maximum 128 MiB, 4,096 files and 100,000 messages. '
+            'Choose a share target to save your archive; temporary files are then removed.'),
           const SizedBox(height:12),
           FilledButton.icon(
             onPressed:_exporting?null:()=>_export(false),
             icon:const Icon(Icons.chat_bubble_outline),
-            label:const Text('Export conversations (JSON)'),
+            label:const Text('Export conversations and media (ZIP)'),
           ),
           const SizedBox(height:24),
           const Text('Wallet activity statement',style:TextStyle(fontSize:17,fontWeight:FontWeight.w600)),

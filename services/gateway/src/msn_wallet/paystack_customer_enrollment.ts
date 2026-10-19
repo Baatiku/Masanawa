@@ -76,7 +76,7 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
     throw new MsnwEnrollmentError("funding.provider_not_configured");
   const fetchImpl = input.fetchImpl ?? fetch;
 
-  async function api(path: string, method = "GET", body?: unknown) {
+  async function api(path: string, method = "GET", body?: unknown, identification = false) {
     let response: Response;
     try {
       response = await fetchImpl("https://api.paystack.co" + path, {
@@ -88,6 +88,16 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
       });
     } catch { throw new MsnwEnrollmentError("funding.provider_unavailable"); }
     if (response.status === 404 && method === "GET") return null;
+    // Only an explicit validation rejection proves this submission was not
+    // accepted. Timeouts, rate limits, malformed replies and server failures
+    // remain uncertain and must never enable replay.
+    if (identification && (response.status === 400 || response.status === 422)) {
+      let rejection: unknown;
+      try { rejection = await response.json(); } catch { /* uncertain */ }
+      if (rejection && typeof rejection === "object" &&
+          (rejection as { status?: unknown }).status === false)
+        throw new MsnwEnrollmentError("funding.bank_identity_rejected", 422);
+    }
     if (!response.ok) throw new MsnwEnrollmentError("funding.provider_unavailable");
     let payload: unknown;
     try { payload = await response.json(); }
@@ -308,11 +318,23 @@ export function createMsnwPaystackEnrollmentService(input: Readonly<{
         const code = claimed.rows[0]?.customer_code;
         if (typeof code !== "string" || !/^CUS_[A-Za-z0-9]+$/.test(code))
           throw new MsnwEnrollmentError("funding.customer_invalid");
-        await api("/customer/" + encodeURIComponent(code) + "/identification", "POST", {
-          country: "NG", type: "bank_account",
-          account_number: body.accountNumber, bvn: body.bvn, bank_code: body.bankCode,
-          first_name: info.firstName, last_name: info.lastName,
-        });
+        try {
+          await api("/customer/" + encodeURIComponent(code) + "/identification", "POST", {
+            country: "NG", type: "bank_account",
+            account_number: body.accountNumber, bvn: body.bvn, bank_code: body.bankCode,
+            first_name: info.firstName, last_name: info.lastName,
+          }, true);
+        } catch (error) {
+          if (error instanceof MsnwEnrollmentError &&
+              error.code === "funding.bank_identity_rejected") {
+            await input.pool.query(
+              "UPDATE commerce.msnw_paystack_customer_onboarding " +
+              "SET state='created',updated_at=statement_timestamp() " +
+              "WHERE tenant_id=$1 AND user_id=$2 AND customer_id=$3 AND state='validating'",
+              [identity.tenantId, identity.userId, row.customer_id]);
+          }
+          throw error;
+        }
         return { state: "identity_validation_pending" };
       }
       return read(identity);

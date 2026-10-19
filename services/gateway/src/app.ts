@@ -1,3 +1,4 @@
+import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
 import { GeminiProviderError } from "./gemini_failure.js";
@@ -173,6 +174,7 @@ export interface GatewayAppOptions {
   readonly mobilePush?: MobilePushRegistrationService;
   readonly mobileNotifications?: AccountNotificationService;
   readonly customerAuth?: CustomerAuthService;
+  readonly mobileDiagnostics?: MobileDiagnosticsPorts;
   readonly accountDataExports?: AccountDataExports;
   readonly accountDeletion?: AccountDeletionService;
   readonly talks?: TalkService;
@@ -480,6 +482,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
 
   registerAuthEmailRoutes(app);
+  if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 
   if(options.accountDataExports) {
     const exports=options.accountDataExports;

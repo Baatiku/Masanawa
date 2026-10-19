@@ -65,6 +65,17 @@ void main(){
   expect(find.text('It pumps blood around the body.'),findsOneWidget);expect(rooms.questionReads,before+1);
   await tester.pumpWidget(const SizedBox());await tester.pumpAndSettle();expect(tester.takeException(),isNull);
  });
+ testWidgets('joined Room filters real lessons and questions without changing membership',(tester)async{
+  final rooms=_Rooms()..joined=true;
+  await tester.pumpWidget(app(RoomHomeScreen(client:rooms,id:'room-one')));
+  await tester.pumpAndSettle();
+  expect(find.text('Room timeline'),findsOneWidget);
+  await tester.tap(find.widgetWithText(FilterChip,'Lessons'));await tester.pumpAndSettle();
+  expect(find.text(rooms.lesson.body),findsOneWidget);expect(find.text(rooms.q.body),findsNothing);
+  await tester.tap(find.widgetWithText(FilterChip,'Questions'));await tester.pumpAndSettle();
+  expect(find.text(rooms.q.body),findsOneWidget);expect(find.text(rooms.lesson.body),findsNothing);
+  expect(rooms.joins,0);expect(rooms.leaves,0);expect(tester.takeException(),isNull);
+ });
  testWidgets('leave opens a dedicated review and Back preserves membership',(tester)async{
   final rooms=_Rooms()..joined=true;
   await tester.pumpWidget(app(RoomHomeScreen(client:rooms,id:'room-one')));await tester.pumpAndSettle();

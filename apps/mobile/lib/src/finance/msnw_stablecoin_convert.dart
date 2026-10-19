@@ -340,11 +340,10 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
       padding:EdgeInsets.fromLTRB(20,12,20,20+MediaQuery.viewInsetsOf(context).bottom),
       child:Column(mainAxisSize:MainAxisSize.min,
         crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Text('Convert MSNW to crypto',
-            style:Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height:8),
-
-          const SizedBox(height:10),
+          const WalletFlowHeader(title:'Convert MSNW to crypto',
+            subtitle:'Choose a blockchain, enter your destination and review the live quote before authorizing a payout.',
+            icon:Icons.swap_horiz_rounded),
+          WalletFormSection(title:'Receive crypto',children:[
           WalletSelectionField<String>(
             value:providerCode,
             items:const [
@@ -359,12 +358,20 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
             },
             decoration:const InputDecoration(labelText:'Crypto and network'),
           ),
+          ]),
+          WalletFormSection(title:'You pay',children:[
           TextField(controller:amount,enabled:!busy&&receipt==null&&pending==null,
             keyboardType:const TextInputType.numberWithOptions(decimal:true),
-            decoration:const InputDecoration(labelText:'MSNW amount')),
+            decoration:const InputDecoration(labelText:'MSNW amount',suffixText:'MSNW',hintText:'0.00')),
+          ]),
+          WalletFormSection(title:'Destination',children:[
           TextField(controller:address,enabled:!busy&&receipt==null&&pending==null,
-            decoration:const InputDecoration(labelText:'Approved crypto address')),
-          if(price!=null)...[
+            autocorrect:false,enableSuggestions:false,
+            decoration:const InputDecoration(labelText:'Approved crypto address',
+              prefixIcon:Icon(Icons.account_balance_wallet_outlined),
+              helperText:'The address must support the selected blockchain. A wrong network can permanently lose funds.',helperMaxLines:4)),
+          ]),
+          if(price!=null) WalletFormSection(title:'Live quote',children:[
             const SizedBox(height:8),
             Text('Reserve MSNW: '+unit(price!['sourceMicro'] as String)),
             Text('Estimated crypto: '+unit(price!['targetMicro'] as String)),
@@ -374,7 +381,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
               const Text('Provider treasury liquidity currently unavailable.'),
             if(price!['sufficient']!=true)
               const Text('Insufficient settled MSNW available.'),
-          ],
+          ]),
           if(restoring)const LinearProgressIndicator(),
           if(blockedRecovery)const Text(
             'An earlier conversion needs support review before a new one '

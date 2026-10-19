@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:masanawa/src/ui/components/masanawa_list_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/models.dart';
@@ -58,12 +59,12 @@ void main() {
     final harness = _harness(const SessionRestoring());
     addTearDown(harness.dispose);
     await _mount(tester, harness);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(MasanawaListSkeleton), findsOneWidget);
     expect(find.text('Chats ready'), findsNothing);
     await tester.pump(const Duration(seconds: 7));
     // Never fake a logout or force a time-based navigation.
     expect(find.text('Chats ready'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(MasanawaListSkeleton), findsOneWidget);
   });
 
   testWidgets('restored account renders Chats without a splash timer',
@@ -74,7 +75,7 @@ void main() {
     harness.change(SessionSignedIn(_user, _tokens));
     await tester.pump();
     expect(find.text('Chats ready'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(MasanawaListSkeleton), findsNothing);
   });
 
   testWidgets('returning authenticated account paints Chats in first frame',
@@ -83,7 +84,7 @@ void main() {
     addTearDown(harness.dispose);
     await _mount(tester, harness);
     expect(find.text('Chats ready'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(MasanawaListSkeleton), findsNothing);
   });
 
   testWidgets('signed out never mounts protected child', (tester) async {
@@ -91,6 +92,6 @@ void main() {
     addTearDown(harness.dispose);
     await _mount(tester, harness);
     expect(find.text('Chats ready'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(MasanawaListSkeleton), findsNothing);
   });
 }

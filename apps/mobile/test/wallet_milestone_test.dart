@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/finance/msnw_wallet_home.dart';
 import 'package:masanawa/src/finance/msnw_transaction_history.dart';
@@ -17,6 +18,7 @@ class _Adapter implements HttpClientAdapter {
 }
 ResponseBody _json(String s)=>ResponseBody.fromString(s,200,headers:{Headers.contentTypeHeader:[Headers.jsonContentType]});
 void main(){
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   test('statement presets use inclusive UTC dates across year boundaries',(){
     final now=DateTime.utc(2026,1,4,23);
     expect(walletStatementRange('Last 7 days',now:now),{'from':'2025-12-29','to':'2026-01-04'});
@@ -122,7 +124,7 @@ void main(){
     final dio=Dio()..httpClientAdapter=_Adapter((o)async{
       if(o.path.endsWith('/preview'))return _json('{"asset":"MSNW","recipientUserId":"b","recipientName":"Amina","amountMicro":"2000000","feeMicro":"0"}');
       posts++;expect(o.data['idempotencyKey'],isNotEmpty);
-      return _json('{"asset":"MSNW","state":"completed","operationId":"receipt","amountMicro":"2000000"}');
+      return _json('{"asset":"MSNW","state":"completed","operationId":"receipt","recipientUserId":"b","amountMicro":"2000000"}');
     });
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:MsnwCustodySendSheet(dio:dio,baseUrl:'https://test',expectedUserId:'a',currentUserId:()=>'a',accessToken:()=>'token',onCompleted:(){}))));
     await tester.enterText(find.byType(TextField).at(0),'amina@example.test');

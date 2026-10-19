@@ -11,7 +11,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     services:
       postgres:
         image: pgvector/pgvector:0.8.6-pg18
@@ -44,7 +44,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
       - name: Test
-        run: pnpm test:ci
+        # PostgreSQL integration suites share a disposable schema; concurrent
+        # migration and teardown races cause false failures (42P07/42P01).
+        run: pnpm exec vitest run --no-file-parallelism
       - name: Provider qualification tooling tests
         run: >-
           node --test

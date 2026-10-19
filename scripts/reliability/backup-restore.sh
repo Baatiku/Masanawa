@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Private, paired PostgreSQL + S3 object snapshot and isolated restore rehearsal.
-# Requires age, awscli v2, PostgreSQL client utilities, tar and sha256sum.
+# Requires age, awscli v2, Python 3, libpq/PostgreSQL clients, tar and sha256sum.
 set -Eeuo pipefail
 umask 077
 export AWS_MAX_ATTEMPTS=3
@@ -12,7 +12,7 @@ command_required() { command -v "$1" >/dev/null || die "required command unavail
 [[ $# -eq 1 ]] || die "usage: backup-restore.sh backup|restore"
 mode="$1"
 [[ "$mode" == "backup" || "$mode" == "restore" ]] || die "unrecognized mode"
-for tool in age aws pg_dump pg_restore psql tar sha256sum; do command_required "$tool"; done
+for tool in age aws python3 pg_dump pg_restore psql tar sha256sum; do command_required "$tool"; done
 
 require MASANAWA_SECURE_TMPDIR
 [[ "$MASANAWA_SECURE_TMPDIR" == /* && -d "$MASANAWA_SECURE_TMPDIR" && -w "$MASANAWA_SECURE_TMPDIR" ]] ||
@@ -34,10 +34,12 @@ if [[ "$mode" == "backup" ]]; then
   mkdir -p -m 700 "$BACKUP_DIR"
   [[ -w "$BACKUP_DIR" ]] || die "backup destination is not writable"
 
-  # PGDATABASE is intentionally an environment value rather than a command
-  # argument so database credentials never enter the process argument list.
-  PGDATABASE="$SOURCE_DATABASE_URL" pg_dump \
-    --format=custom --no-owner --no-privileges --file="$scratch/postgres.dump"
+  # libpq does not expand a URI taken from PGDATABASE. Parse using libpq,
+  # then pass decoded options through private environment variables only.
+  python3 "$(dirname "${BASH_SOURCE[0]}")/libpq-environment.py" SOURCE_DATABASE_URL > "$scratch/source.env"
+  ( . "$scratch/source.env"
+    pg_dump --format=custom --no-owner --no-privileges --file="$scratch/postgres.dump"
+  )
   aws s3 sync "$SOURCE_OBJECT_URI" "$scratch/objects" --only-show-errors
   tar -C "$scratch" -czf "$scratch/objects.tar.gz" objects
 
@@ -86,13 +88,23 @@ age -d -i "$AGE_IDENTITY_FILE" -o "$scratch/objects.tar.gz" "$BACKUP_SET/objects
 pg_restore --list "$scratch/postgres.dump" >/dev/null ||
   die "PostgreSQL custom-format archive invalid"
 
+python3 "$(dirname "${BASH_SOURCE[0]}")/libpq-environment.py" RESTORE_DATABASE_URL > "$scratch/restore.env"
+
 # Fail closed on any existing user tables, instead of wiping/restoring into
 # production or an already-used rehearsal DB.
-table_count="$(PGDATABASE="$RESTORE_DATABASE_URL" psql -X -A -t -v ON_ERROR_STOP=1 \
+table_count="$(. "$scratch/restore.env"; psql -X -A -t -v ON_ERROR_STOP=1 \
   -c "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema');")"
 [[ "$table_count" == "0" ]] || die "restore database must be empty"
-target_listing="$(aws s3 ls "$RESTORE_OBJECT_URI" --recursive)"
-[[ -z "$target_listing" ]] || die "restore object prefix must be empty"
+target_path="${RESTORE_OBJECT_URI#s3://}"
+target_bucket="${target_path%%/*}"
+target_prefix=""
+if [[ "$target_path" == */* ]]; then target_prefix="${target_path#*/}"; fi
+# High-level `aws s3 ls` may return 1 for an empty prefix. Use a bounded API
+# response so missing/auth-denied buckets cannot be mistaken for emptiness.
+target_count="$(aws s3api list-objects-v2 --bucket "$target_bucket" \
+  --prefix "$target_prefix" --max-keys 1 --query KeyCount --output text)" ||
+  die "restore object prefix could not be checked"
+[[ "$target_count" == "0" ]] || die "restore object prefix must be empty"
 
 # Reject unsafe tar members even if a backup archive has been replaced.
 while IFS= read -r member; do
@@ -108,8 +120,9 @@ tar -C "$scratch" -xzf "$scratch/objects.tar.gz"
 # than restoring it; --dbname with a URL leaks credentials in argv.
 pg_restore --no-owner --no-privileges \
   --file="$scratch/restore.sql" "$scratch/postgres.dump"
-PGDATABASE="$RESTORE_DATABASE_URL" psql -X -v ON_ERROR_STOP=1 \
-  --single-transaction --file="$scratch/restore.sql"
+( . "$scratch/restore.env"
+  psql -X -v ON_ERROR_STOP=1 --single-transaction --file="$scratch/restore.sql"
+)
 rm -f -- "$scratch/restore.sql"
 aws s3 sync "$scratch/objects" "$RESTORE_OBJECT_URI" --only-show-errors
 
@@ -119,7 +132,7 @@ mkdir -m 700 "$scratch/readback"
 aws s3 sync "$RESTORE_OBJECT_URI" "$scratch/readback" --only-show-errors
 diff -qr "$scratch/objects" "$scratch/readback" >/dev/null ||
   die "restored object readback mismatch"
-migration_count="$(PGDATABASE="$RESTORE_DATABASE_URL" psql -X -A -t -v ON_ERROR_STOP=1 \
+migration_count="$(. "$scratch/restore.env"; psql -X -A -t -v ON_ERROR_STOP=1 \
   -c 'SELECT count(*) FROM public.masanawa_schema_migrations;')"
 [[ "$migration_count" =~ ^[1-9][0-9]*$ ]] ||
   die "restore missing canonical migration ledger"

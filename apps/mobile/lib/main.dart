@@ -124,6 +124,8 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
         controller: _localePreference,
         child: MaterialApp.router(
           title: 'Masanawa',
+          // Keep low-sensitivity UI position over Android process recreation.
+          restorationScopeId: 'masanawa-app',
           debugShowCheckedModeBanner: false,
           theme: buildMasanawaTheme(brightness: Brightness.light),
           // R01: never follow the device into an unrequested dark theme.

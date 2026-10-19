@@ -28,7 +28,9 @@ class FiveTabShell extends ConsumerStatefulWidget {
 class _FiveTabShellState extends ConsumerState<FiveTabShell> {
   late int _index;
   late final Set<int> _visitedTabs;
-  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+  PageStorageBucket _pageStorageBucket = PageStorageBucket();
+  String? _storageOwner;
+
 
   @override
   void initState() {
@@ -72,6 +74,15 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     final strings = AppLocalizations.of(context);
     final session = ref.watch(sessionProvider);
     final accountKey = session is SessionSignedIn ? session.user.id : 'signed-out';
+    if (_storageOwner != accountKey) {
+      // PageStorage is not persisted for the next person who signs in on the
+      // same handset. Keyed children alone cannot clear an old bucket.
+      _storageOwner = accountKey;
+      _pageStorageBucket = PageStorageBucket();
+      _index = widget.initialIndex.clamp(0, 4).toInt();
+      _visitedTabs..clear()..add(_index);
+    }
+
     return Scaffold(
       appBar: _index == 1 || _index == 2
           ? masanawaMainHeader(context, actions: [

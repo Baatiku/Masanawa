@@ -1,3 +1,4 @@
+import '../../tokens/feature_colors.dart';
 import 'dart:async';
 import '../../finance/wallet_flow_page.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -40,10 +41,10 @@ String? normalizeNigerianBillingPhone(String input) {
 }
 
 enum NigerianNetwork {
-  mtn('MTN', Color(0xFFFFCC00), Color(0xFF000000)),
-  airtel('Airtel', Color(0xFFED1C24), Color(0xFFFFFFFF)),
-  glo('Glo', Color(0xFF00843D), Color(0xFFFFFFFF)),
-  nineMobile('9mobile', Color(0xFF005C2B), Color(0xFFFFFFFF));
+  mtn('MTN', MasanawaFeatureColors.mtnYellow, MasanawaFeatureColors.black),
+  airtel('Airtel', MasanawaFeatureColors.airtelRed, MasanawaFeatureColors.white),
+  glo('Glo', MasanawaFeatureColors.gloGreen, MasanawaFeatureColors.white),
+  nineMobile('9mobile', MasanawaFeatureColors.nineMobileGreen, MasanawaFeatureColors.white);
 
   const NigerianNetwork(this.label, this.brandColor, this.textColor);
   final String label;

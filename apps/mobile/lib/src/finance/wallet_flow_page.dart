@@ -222,3 +222,41 @@ class _WalletChoicePickerState<T> extends State<_WalletChoicePicker<T>> {
     );
   }
 }
+
+/// Consistent hierarchy for payment entry, review and recovery screens.
+class WalletFlowHeader extends StatelessWidget {
+  const WalletFlowHeader({super.key,required this.title,required this.subtitle,required this.icon});
+  final String title,subtitle;
+  final IconData icon;
+  @override Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom:24),
+    child: Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      DecoratedBox(decoration:BoxDecoration(
+        color:Theme.of(context).colorScheme.primary.withValues(alpha:.10),
+        borderRadius:BorderRadius.circular(16)),
+        child:Padding(padding:const EdgeInsets.all(14),
+          child:Icon(icon,color:Theme.of(context).colorScheme.primary,size:28))),
+      const SizedBox(height:16),
+      Semantics(header:true,child:Text(title,style:Theme.of(context).textTheme.headlineSmall)),
+      const SizedBox(height:8),
+      Text(subtitle,style:Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color:Theme.of(context).colorScheme.onSurfaceVariant,height:1.45)),
+    ]),
+  );
+}
+class WalletFormSection extends StatelessWidget {
+  const WalletFormSection({super.key,required this.title,required this.children});
+  final String title;
+  final List<Widget> children;
+  @override Widget build(BuildContext context) => Container(
+    width:double.infinity,margin:const EdgeInsets.only(bottom:16),
+    padding:const EdgeInsets.all(16),
+    decoration:BoxDecoration(color:Theme.of(context).colorScheme.surface,
+      border:Border.all(color:Theme.of(context).colorScheme.outlineVariant),
+      borderRadius:BorderRadius.circular(16)),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      Text(title,style:Theme.of(context).textTheme.titleSmall),
+      const SizedBox(height:14),...children,
+    ]),
+  );
+}

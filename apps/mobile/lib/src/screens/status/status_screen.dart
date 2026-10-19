@@ -263,17 +263,9 @@ class StatusScreen extends ConsumerWidget {
 
     return KeyedSubtree(
       key: ValueKey('status-account-$account'),
-      child: DefaultTabController(
-        length: 2,
-        animationDuration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero : const Duration(milliseconds: 250),
-        child: Column(children: [
-          const TabBar(tabs: [
-            Tab(text: 'Updates', icon: Icon(Icons.article_outlined)),
-            Tab(text: 'Videos', icon: Icon(Icons.ondemand_video_outlined)),
-          ]),
-          Expanded(child: TabBarView(children: [
-            MasanaFeedScreen(
+      child: MasanawaStatusTabs(
+        accountKey: account,
+        updates: MasanaFeedScreen(
               api: feed,
               accountKey: account,
               mediaApi: inlineMedia,
@@ -281,7 +273,7 @@ class StatusScreen extends ConsumerWidget {
               onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
               audioPlaybackAvailable: true,
             ),
-            ExternalVideosScreen(
+        videos: ExternalVideosScreen(
               accountKey: account,
               load: ({provider}) => videos.list(provider: provider),
               loadPage: ({provider, before}) => videos.page(
@@ -291,9 +283,82 @@ class StatusScreen extends ConsumerWidget {
               onOpenVideo: openApprovedVideo,
               languageCode: Localizations.localeOf(context).languageCode,
             ),
-          ])),
-        ]),
       ),
     );
   }
+}
+
+/// Restores the selected Status category after Android kills the process.
+/// Each account owns a different restoration bucket; no private feed content
+/// or search term is saved in the Flutter restoration manager.
+class MasanawaStatusTabs extends StatefulWidget {
+  const MasanawaStatusTabs({
+    super.key,
+    required this.accountKey,
+    required this.updates,
+    required this.videos,
+  });
+  final String accountKey;
+  final Widget updates;
+  final Widget videos;
+
+  @override
+  State<MasanawaStatusTabs> createState() => _MasanawaStatusTabsState();
+}
+
+class _MasanawaStatusTabsState extends State<MasanawaStatusTabs>
+    with SingleTickerProviderStateMixin, RestorationMixin {
+  final RestorableInt _selected = RestorableInt(0);
+  late final TabController _tabController;
+  @override
+  String? get restorationId => 'status-tabs-${widget.accountKey}';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this, animationDuration: Duration.zero);
+    _tabController.addListener(_recordSelection);
+  }
+
+  void _recordSelection() {
+    if (!_tabController.indexIsChanging) {
+      _selected.value = _tabController.index;
+    }
+  }
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_selected, 'selected');
+    _tabController.index = _selected.value.clamp(0, 1);
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_recordSelection);
+    _tabController.dispose();
+    _selected.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      TabBar(
+        controller: _tabController,
+        tabs: const [
+          Tab(text: 'Updates', icon: Icon(Icons.article_outlined)),
+          Tab(text: 'Videos', icon: Icon(Icons.ondemand_video_outlined)),
+        ],
+      ),
+      Expanded(
+        child: TabBarView(
+          controller: _tabController,
+          physics: MediaQuery.disableAnimationsOf(context)
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          children: [widget.updates, widget.videos],
+        ),
+      ),
+    ],
+  );
 }

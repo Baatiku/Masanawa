@@ -32,6 +32,7 @@ For each completed checkbox: attach **exact source SHA, paths, tests executed, s
 - [ ] COMPLETE — Maintain a single milestone status ledger inside this roadmap, not a fresh parallel dated checklist per window.
 
 ## Phase 1 — Stable app shell, identity and global UI (P0)
+**Source integration and per-item evidence:** [Phase 1 implementation/acceptance ledger](PHASE1-IMPLEMENTATION-20261019.md). A passed widget test or PR merge is not physical-device/FCM qualification.
 **Outcome:** A new customer launches, signs in, navigates, searches and manages their account reliably.
 - [x] SOURCE PRESENT — Five-tab Flutter shell (Chats / Status / Wallet / Calls / Rooms) with persisted visited tab state.
 - [ ] IMPROVE — Audit **every detail screen** against green/white tokens, compact headers, 48dp controls, contrast, typography, cards and native back/gesture behavior.

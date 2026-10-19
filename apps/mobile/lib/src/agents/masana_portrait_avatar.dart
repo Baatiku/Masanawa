@@ -1,3 +1,4 @@
+import '../tokens/feature_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -209,7 +210,7 @@ class MasanaPortraitAvatar extends StatelessWidget {
   }
 
   Widget _initial(String letter) => ColoredBox(
-        color: const Color(0xFF1E63D6),
+        color: MasanawaFeatureColors.informationBlue,
         child: Center(
           child: Text(
             letter,

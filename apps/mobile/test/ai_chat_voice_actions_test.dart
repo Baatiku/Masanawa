@@ -139,7 +139,7 @@ void main() {
  testWidgets('chat avatar opens the Masana detail screen without shell callbacks', (tester) async {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();await tester.tap(find.text('Amina').first);await tester.pumpAndSettle();
-  expect(find.text('Masana profile'),findsOneWidget);expect(find.text('About'),findsOneWidget);
+  expect(find.text('Masana profile'),findsOneWidget);expect(find.text('Recent posts'),findsOneWidget);expect(find.text('About'),findsNothing);
  });
  testWidgets('emoji picker opens and an emoji-only message sends and renders without a crash',(tester)async{
   final chats=_Chats();

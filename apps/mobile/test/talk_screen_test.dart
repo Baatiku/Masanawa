@@ -265,7 +265,7 @@ class _GiftTransport implements TalkGiftTransport {
 class _LibraryTransport implements TalkLibraryTransport {
   bool saved;
 
-  _LibraryTransport({this.saved = false});
+  _LibraryTransport() : saved = false;
 
   @override
   Future<MyTalksView> loadMyTalks() async => const MyTalksView();
@@ -299,6 +299,7 @@ class _SeatTransport implements TalkAiSeatTransport {
       displayName: 'Education Expert',
       kind: TalkAiPersonaKind.expert,
       seatFeeLabel: '₦300',
+      isAvailable: true,
       subtitle: 'Learning · Schools',
     ),
   ];
@@ -988,12 +989,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('talk-direct-twin')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Direct Twin'), findsOneWidget);
+    expect(find.text('Private guidance'), findsOneWidget);
     await tester.tap(find.widgetWithText(ActionChip, 'Challenge that'));
     await tester.pumpAndSettle();
 
     expect(directTwin.updates, ['Challenge that']);
-    expect(find.text('Twin direction updated.'), findsOneWidget);
+    expect(find.text('Guidance updated.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

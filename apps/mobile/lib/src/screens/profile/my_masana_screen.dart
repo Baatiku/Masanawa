@@ -4,11 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../state/session_state.dart';
 
 /// Reuses current WhatsApp-like profile patterns and the existing MSNW Wallet.
 /// Only authenticated server operations can publish or charge a character.
 class MyMasanaScreen extends ConsumerStatefulWidget {
   const MyMasanaScreen({super.key});
+  static Future<bool?> openCreate(BuildContext context) => Navigator.push<bool>(
+    context, MaterialPageRoute(
+      builder: (_) => const _CreateMasanaScreen(),
+      settings: const RouteSettings(name: '/creator/masana/create'),
+    ),
+  );
   @override
   ConsumerState<MyMasanaScreen> createState() => _MyMasanaScreenState();
 }
@@ -16,14 +23,24 @@ class MyMasanaScreen extends ConsumerStatefulWidget {
 class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
   List<Map<String, dynamic>> _agents = const [];
   bool _loading = true;
+  String? _owner;
+  int _loadVersion = 0;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
   String? _error;
   @override
   void initState() {
     super.initState();
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
     _refresh();
   }
 
   Future<void> _refresh() async {
+    if (!_sameAccount) return;
+    final version = ++_loadVersion;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -37,7 +54,7 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
           .get<Map<String, dynamic>>('/v1/creator/masana');
       final items = response.data?['items'];
       if (items is! List) throw const FormatException('Invalid response');
-      if (!mounted) return;
+      if (!_sameAccount || version != _loadVersion) return;
       setState(() {
         _agents = items
             .map((item) => Map<String, dynamic>.from(item as Map))
@@ -45,7 +62,7 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount && version == _loadVersion) {
         setState(() {
           _error = 'Unable to load your Masana. Check your connection.';
           _loading = false;
@@ -55,18 +72,17 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
   }
 
   Future<void> _create() async {
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const _CreateMasanaScreen(),
-        settings: const RouteSettings(name: '/creator/masana/create'),
-      ),
-    );
-    if (saved == true) await _refresh();
+    final saved = await MyMasanaScreen.openCreate(context);
+    if (saved == true && _sameAccount) await _refresh();
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('My Masana')),
+        body: const Center(child: Text('Sign in to view your Masana.')));
+    }
     final u = context.masanawa;
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -163,6 +179,11 @@ class _CreateMasanaScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
+  String? _owner;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
   final _name = TextEditingController();
   final _profession = TextEditingController();
   final _languages = TextEditingController(text: 'English');
@@ -173,6 +194,8 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
   @override
   void initState() {
     super.initState();
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
     final initial = widget.initialDraft;
     if (initial != null) {
       _draft = Map<String, dynamic>.from(initial);
@@ -204,6 +227,7 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
   }
 
   Future<void> _generate() async {
+    if (!_sameAccount || _busy) return;
     final name = _name.text.trim(), profession = _profession.text.trim();
     final languages = _languages.text
         .split(',')
@@ -244,6 +268,7 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
         );
         saved = created.data;
       }
+      if (!_sameAccount) return;
       if (saved == null) throw const FormatException('Invalid draft');
       _draft = saved;
       final id = saved['characterId'], revision = saved['revision'];
@@ -254,13 +279,13 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
         '/v1/creator/masana/${Uri.encodeComponent(id)}/generate',
         data: {'expectedRevision': revision},
       );
-      if (mounted) setState(() => _draft = generated.data);
+      if (_sameAccount) setState(() => _draft = generated.data);
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount) {
         setState(() => _error = 'Could not generate your Masana. Retry later.');
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_sameAccount) setState(() => _busy = false);
     }
   }
 
@@ -276,6 +301,7 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
   }
 
   Future<void> _publish() async {
+    if (!_sameAccount) return;
     final draft = _draft;
     final id = draft?['characterId'], revision = draft?['revision'];
     if (id is! String || revision is! int || _busy) return;
@@ -314,7 +340,7 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
         if (amount is! String || operation is! String || consent is! String) {
           throw const FormatException('Missing quote');
         }
-        if (!mounted) return;
+        if (!_sameAccount) return;
         final approved = await showDialog<bool>(
           context: context,
           builder: (dialog) => AlertDialog(
@@ -334,7 +360,7 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
             ],
           ),
         );
-        if (approved != true) return;
+        if (approved != true || !_sameAccount) return;
         await dio.post<Map<String, dynamic>>(
           '$path/publish-paid',
           data: {
@@ -345,21 +371,26 @@ class _CreateMasanaScreenState extends ConsumerState<_CreateMasanaScreen> {
           },
         );
       }
-      if (mounted) Navigator.pop(context, true);
+      if (_sameAccount) Navigator.pop(context, true);
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount) {
         setState(
           () => _error =
               'Publication could not be confirmed. Check My Masana before retrying.',
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_sameAccount) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('Create Masana')),
+        body: const Center(child: Text('Sign in to create your Masana.')));
+    }
     final u = context.masanawa;
     final generated = _draft?['generated'] as Map?;
     return Scaffold(
@@ -533,10 +564,22 @@ class _ManageMasanaScreen extends ConsumerStatefulWidget {
 }
 
 class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
+  String? _owner;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
+  @override void initState() {
+    super.initState();
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
+  }
+
   late Map<String, dynamic> _agent = widget.agent;
   bool _busy = false;
   String? _error;
   Future<void> _toggle() async {
+    if (!_sameAccount || _busy) return;
     final state = _agent['state'];
     if (state != 'paused' && state != 'published') return;
     final action = state == 'paused' ? 'resume' : 'pause';
@@ -555,20 +598,25 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
             data: {'expectedRevision': revision},
           );
       if (response.data == null) throw const FormatException('Empty response');
-      if (mounted) setState(() => _agent = response.data!);
+      if (_sameAccount) setState(() => _agent = response.data!);
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount) {
         setState(
           () => _error = 'Could not update this Masana. Refresh and try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_sameAccount) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('My Masana')),
+        body: const Center(child: Text('Sign in to manage your Masana.')));
+    }
     final u = context.masanawa, seed = _agent['seed'] as Map? ?? {};
     final state = _agent['state']?.toString() ?? 'draft';
     return Scaffold(

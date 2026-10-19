@@ -10,6 +10,7 @@ import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/agents/agent_directory_cache.dart';
 import 'package:masanawa/src/agents/agent_feedback.dart';
 import 'package:masanawa/src/agents/agent_session.dart';
+import 'package:masanawa/src/agents/agent_shell.dart';
 import 'package:masanawa/src/agents/masanawa_transport.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
@@ -108,6 +109,19 @@ class RetryDirectory implements AgentDirectoryTransport {
 
   @override
   Future<void> setDefaultPlatformAgent(String characterId) async {}
+}
+
+class RecoveringShellTransport extends RecoveringTransport implements AgentShellTransport {
+  final checkedRequests = <String>[];
+  @override Future<AgentTurnStatus> turnStatus(String characterId, String requestId) async {
+    checkedRequests.add(requestId);
+    return const AgentTurnStatus(state: 'missing');
+  }
+  @override Future<AgentShellConfig> loadShellConfig(String characterId) async =>
+      const AgentShellConfig(shellVersion: 1, minimumAppVersion: '0.0.0', recommendedAppVersion: '0.0.0', features: {});
+  @override Future<List<AgentHistoryMessage>> loadHistory(String characterId, {int limit = 100, String? before}) async => [];
+  @override Stream<AgentShellEvent> events(String characterId, {String? after}) => const Stream.empty();
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class RecoveringTransport implements AgentTransport {
@@ -468,6 +482,7 @@ void main() {
     final c = ProviderContainer(
       overrides: [
         agentDirectoryTransportProvider.overrideWithValue(transport),
+        agentDirectoryCacheProvider.overrideWithValue(_NoopDirectoryCache()),
         sessionProvider.overrideWith(_SignedInSessionController.new),
       ],
     );
@@ -487,11 +502,11 @@ void main() {
   test(
     'failed turn retries the real transport without duplicating user message',
     () async {
-      final transport = RecoveringTransport();
+      final transport = RecoveringShellTransport();
       final c = ProviderContainer(
         overrides: [
           agentTransportProvider.overrideWithValue(transport),
-          sessionProvider.overrideWith(_SignedOutSessionController.new),
+          sessionProvider.overrideWith(_SignedInSessionController.new),
         ],
       );
       addTearDown(c.dispose);
@@ -512,6 +527,7 @@ void main() {
       await controller.retryMessage('character-1', userId);
       final thread = c.read(aiChatProvider).threads['character-1']!;
       expect(transport.turns, 2);
+      expect(transport.checkedRequests, [thread.messages.first.requestId]);
       expect(thread.messages.where((m) => m.isUser), hasLength(1));
       expect(thread.messages.last.text, 'Real Gateway reply');
       expect(thread.characterSessionId, 'session-1');

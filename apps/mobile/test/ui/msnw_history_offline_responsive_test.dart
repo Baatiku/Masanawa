@@ -88,6 +88,7 @@ void main() {
         await tester.pumpAndSettle();
         for(final label in ['Send','Convert','Receive','P2P']){
           expect(find.text(label),findsOneWidget);
+          await tester.ensureVisible(find.text(label));
           await tester.tap(find.text(label));
         }
         expect(chosen,['Send','Convert','Receive','P2P']);
