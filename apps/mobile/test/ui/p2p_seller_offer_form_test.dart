@@ -20,16 +20,16 @@ void main() {
         ),
       ),
     ));
-    final fields = find.byType(TextFormField);
-    expect(fields, findsNWidgets(4));
-    await tester.ensureVisible(fields.at(0));
-    await tester.enterText(fields.at(0), '1500.00');
-    await tester.ensureVisible(fields.at(1));
-    await tester.enterText(fields.at(1), '1');
-    await tester.ensureVisible(fields.at(2));
-    await tester.enterText(fields.at(2), '100');
-    await tester.ensureVisible(fields.at(3));
-    await tester.enterText(fields.at(3), '100');
+    for (final entry in const {
+      'NGN per MSNW': '1500.00',
+      'Minimum MSNW': '1',
+      'Maximum MSNW': '100',
+      'Inventory MSNW': '100',
+    }.entries) {
+      final field = find.widgetWithText(TextFormField, entry.key);
+      await tester.scrollUntilVisible(field, 120);
+      await tester.enterText(field, entry.value);
+    }
     await tester.ensureVisible(find.byKey(const ValueKey('p2p-review-offer')));
     await tester.tap(find.byKey(const ValueKey('p2p-review-offer')));
     await tester.pumpAndSettle();
@@ -38,7 +38,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(attempts, 1);
     expect(find.textContaining('could not be confirmed'), findsOneWidget);
-    expect(find.textContaining('1500.00 NGN per MSNW'), findsOneWidget);
+    expect(find.text('1500.00 NGN / MSNW'), findsOneWidget);
     expect(find.text('Return to My Offers'), findsOneWidget);
   });
 }

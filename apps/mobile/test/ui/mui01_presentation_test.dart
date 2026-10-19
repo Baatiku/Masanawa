@@ -34,7 +34,7 @@ void main() {
     final theme = buildMasanawaTheme(brightness: Brightness.light);
     final colors = theme.extension<MasanawaColors>()!;
     final nav = theme.navigationBarTheme;
-    expect(nav.iconTheme!.resolve({WidgetState.selected})!.color, colors.brand);
+    expect(nav.iconTheme!.resolve({WidgetState.selected})!.color, colors.brandStrong);
     expect(nav.iconTheme!.resolve({})!.color, colors.textPrimary);
     expect(
       nav.labelTextStyle!.resolve({WidgetState.selected})!.color,
@@ -56,7 +56,7 @@ void main() {
       ),
     );
     final text = tester.widget<Text>(find.text('Masanawa'));
-    expect(text.style!.color, const Color(0xFF075E54));
+    expect(text.style!.color, MasanawaColors.light().brand);
     expect(text.style!.fontSize, 24);
     expect(text.style!.fontWeight, FontWeight.w700);
     expect(text.style!.letterSpacing, 0);

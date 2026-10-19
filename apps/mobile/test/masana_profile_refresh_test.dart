@@ -51,13 +51,13 @@ void main() {
       sessionProvider.overrideWith(SignedIn.new),
       apiClientProvider.overrideWithValue(client()),
     ], child: const MaterialApp(home: MasanaProfileScreen(agent: old))));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('About'), findsNothing);
     expect(find.text('Long old description'), findsNothing);
     expect(find.text('Long old greeting'), findsNothing);
     expect(find.text('Recent posts'), findsOneWidget);
     directory.update();
-    await tester.pump();
+    await tester.pumpAndSettle();
     final avatar = tester.widget<MasanaPortraitAvatar>(find.byType(MasanaPortraitAvatar));
     expect(avatar.agent?.characterId, old.characterId);
     expect(avatar.agent?.portraitKey, 'amina');

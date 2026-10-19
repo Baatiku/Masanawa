@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/billing_models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
@@ -20,6 +21,7 @@ class _Adapter implements HttpClientAdapter{
  @override void close({bool force=false}){}
 }
 void main(){
+ setUp(() => FlutterSecureStorage.setMockInitialValues({}));
  testWidgets('foreign provider reference stays unconfirmed and never offers another charge',(t)async{
   final adapter=_Adapter(badReference:true),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){},initialQuote:BillingQuote.fromJson({...quoteJson,'fulfillmentReference':'msnw-bill-test-quote'})))));

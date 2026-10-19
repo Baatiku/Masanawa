@@ -12,13 +12,13 @@ void main() {
     expect(colors.bubbleOut, const Color(0xFFD9FDD3));
   });
 
-  testWidgets('wordmark on white uses the strong accessible brand green', (tester) async {
+  testWidgets('wordmark uses the owner-selected bright brand green', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: buildMasanawaTheme(brightness: Brightness.light),
       home: const Scaffold(body: MasanawaWordmark()),
     ));
     final wordmark = tester.widget<Text>(find.text('Masanawa'));
-    expect(wordmark.style?.color, MasanawaColors.light().brandStrong);
+    expect(wordmark.style?.color, MasanawaColors.light().brand);
   });
 
   testWidgets('wordmark light variant stays white over a branded surface', (tester) async {

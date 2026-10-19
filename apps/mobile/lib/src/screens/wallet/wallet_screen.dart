@@ -280,8 +280,15 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               leading: CircleAvatar(backgroundColor: u.brand.withValues(alpha: .10),
                 child: Text('M', style: TextStyle(color: u.brandStrong, fontWeight: FontWeight.w800))),
               title: const Text('MSNW', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Masanawa'),
-              trailing: Row(mainAxisSize:MainAxisSize.min,children:[Text(_hiddenOwner==accountId&&_hideBalances?'••••':_balanceOwner==accountId&&_balance!=null?formatWalletAtomic(_balance!.available):'—',style:const TextStyle(fontWeight:FontWeight.w600)),const SizedBox(width:8),const Icon(Icons.chevron_right,size:18)]), onTap: _receive),
+              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Masanawa'),
+                Text(_hiddenOwner == accountId && _hideBalances ? '••••'
+                  : _balanceOwner == accountId && _balance != null
+                    ? formatWalletAtomic(_balance!.available) : '—',
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              ]),
+              trailing: const Icon(Icons.chevron_right, size: 18), onTap: _receive),
             Divider(height: 1, color: u.structuralBorder),
             WalletAssetOverview(hideBalances:_hiddenOwner==accountId&&_hideBalances),
             ListTile(contentPadding:EdgeInsets.zero,title:const Text('All crypto assets'),trailing:const Icon(Icons.chevron_right),onTap:openCrypto),
