@@ -23,14 +23,24 @@ class MyMasanaScreen extends ConsumerStatefulWidget {
 class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
   List<Map<String, dynamic>> _agents = const [];
   bool _loading = true;
+  String? _owner;
+  int _loadVersion = 0;
+  bool get _sameAccount {
+    final session = ref.read(sessionProvider);
+    return mounted && session is SessionSignedIn && session.user.id == _owner;
+  }
   String? _error;
   @override
   void initState() {
     super.initState();
+    final session = ref.read(sessionProvider);
+    _owner = session is SessionSignedIn ? session.user.id : null;
     _refresh();
   }
 
   Future<void> _refresh() async {
+    if (!_sameAccount) return;
+    final version = ++_loadVersion;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -44,7 +54,7 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
           .get<Map<String, dynamic>>('/v1/creator/masana');
       final items = response.data?['items'];
       if (items is! List) throw const FormatException('Invalid response');
-      if (!mounted) return;
+      if (!_sameAccount || version != _loadVersion) return;
       setState(() {
         _agents = items
             .map((item) => Map<String, dynamic>.from(item as Map))
@@ -52,7 +62,7 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount && version == _loadVersion) {
         setState(() {
           _error = 'Unable to load your Masana. Check your connection.';
           _loading = false;
@@ -63,11 +73,16 @@ class _MyMasanaScreenState extends ConsumerState<MyMasanaScreen> {
 
   Future<void> _create() async {
     final saved = await MyMasanaScreen.openCreate(context);
-    if (saved == true) await _refresh();
+    if (saved == true && _sameAccount) await _refresh();
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn || session.user.id != _owner) {
+      return Scaffold(appBar: AppBar(title: const Text('My Masana')),
+        body: const Center(child: Text('Sign in to view your Masana.')));
+    }
     final u = context.masanawa;
     return Scaffold(
       backgroundColor: u.surfaceBg,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../social/talk_social_profiles.dart';
 import '../../state/talk_social_profile_state.dart';
+import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
@@ -27,6 +28,7 @@ class PersonProfileScreen extends ConsumerStatefulWidget {
 class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   HumanProfile? _local;
   bool _followBusy = false;
+  int _operation = 0;
 
   Future<void> _refresh() async {
     setState(() => _local = null);
@@ -36,6 +38,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
 
   Future<void> _toggleFollow(HumanProfile profile) async {
     if (_followBusy) return;
+    final operation = ++_operation;
     setState(() => _followBusy = true);
     try {
       final updated =
@@ -43,21 +46,26 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
                 handle: profile.handle,
                 following: !profile.isFollowing,
               );
-      if (!mounted) return;
+      if (!mounted || operation != _operation) return;
       setState(() => _local = updated);
       ref.invalidate(humanProfileProvider(widget.handle));
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || operation != _operation) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Couldn’t update Follow right now.')),
       );
     } finally {
-      if (mounted) setState(() => _followBusy = false);
+      if (mounted && operation == _operation) setState(() => _followBusy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null), (previous, next) {
+      if (previous == next) return;
+      _operation++;
+      setState(() { _local = null; _followBusy = false; });
+    });
     final asyncProfile = ref.watch(humanProfileProvider(widget.handle));
     return asyncProfile.when(
       loading: () => Scaffold(
