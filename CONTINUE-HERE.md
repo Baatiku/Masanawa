@@ -1,111 +1,18 @@
-# Continue Masanawa
+# Continue Masanawa — current source authority
+**Current revision:** 2026-10-19.
 
-Updated 2026-10-12. This is the active entry point. Older freezes, repeated launch prompts and live-Talk-first instructions have been retired from the active reading path; their exact originals are preserved in [the archive](docs/archive/20261009/README.md).
+Read in this order: [product phases and statuses](docs/PRODUCT-ROADMAP-20261019.md) → [screens and customer journeys](docs/SCREEN-JOURNEYS.md) → [contributor/financial security rules](AGENTS.md) → only the technical contracts needed for your assigned milestone.
 
-## Owner-authorized production execution — 2026-10-15
+## Canonical owner decisions
+- International **Masana** AI communication and creators with Chats / Status / Wallet / Calls / Rooms, Chats default. Preserve WhatsApp-like visual simplicity.
+- One free published creator Masana per user lifetime; additional successful publications **5,000 MSNW default**, subject to admin-edited future pricing and canonical server-authorized settlement. Creator edits, media, earnings and optional voice references need completion as the roadmap specifies.
+- **MSNW only** for customer wallet credit and designated official token, not MSN/Cr/Credits. Preserve unreconciled historical financial records and separate source availability from on-chain launch/redeemability.
+- Only authorized market/provider capabilities appear available; users approve money actions. No screenshot escrow release. No direct platform fiat cashout.
+- Approved voices where configured: **Bodi male, Fora female**. Other personas may use distinct supported voices after qualification.
+- Do not reintroduce retired Twins, personal clones, human-to-human messaging, user-created Rooms or separate Agent/Gwani root tabs.
 
-Complete the actual customer journeys, production migrations and deployment whenever connected accounts and credentials permit. The owner explicitly delegates final acceptance testing. **Remove redundant mobile APK rollout flags for read-only Wallet/MSNW functionality**: discover server capability at runtime instead. Production PostgreSQL migrations and qualified financial activation are in scope, with canonical ledger preservation, provider verification and idempotent settlement.
+## What the source already contains
+A Flutter five-tab app; Gateway/Worker/PostgreSQL; Masana directory and chat/call/Status/Room flows; MSNW Wallet and P2P source; creator wizard/first-free/paid-publication (#212); creator voice binding (#214); notifications/search (#207); and multiple regression fixes (#218). **Do not create duplicates**. Issue [#220](https://github.com/Baatiku/Masanawa/issues/220) is open; its claimed checkpoint is not treated as merged code.
 
-Recent merged main PRs: #8 restored Gemini Bodi/Fora; #9 added Paystack DVA request and Flutter sheet; #10 added on-chain MSNW contract source and verified balance/Receive; #11 added independent Paystack fiat verification; #12 added account-scoped funding activity. These are source merges, not verified live deployment. Superseded draft #2 was closed after its relevant work was integrated via #3/#5/#7.
-
-Current concrete external blockers: Railway Gateway/Worker still source weavewellindustrieslimited/masanawa; the Railway app has rejected private Baatiku/Masanawa access. GitHub Actions fails before job steps, and Paystack/NOWPayments service credential variable names are missing from the connected Railway production environment. Diagnose and remedy these as soon as permissions become available; continue all independent development rather than stopping at these blockers.
-
-## UI audit integrated into continuing windows — 2026-10-12
-
-The owner's UI audit is now a tracked implementation queue, not an optional
-recommendation list. Read [the UI continuation queue](docs/workstreams/UI-CONTINUATION-QUEUE-20261012.md)
-when selecting UI work or preparing the next window prompt. It maps shared
-headers/navigation, auth language alignment, Chats/Calls search, Status, Rooms,
-Wallet/Crypto and combined/installed-app checks to existing AF owners.
-The [copyable next-window prompt](docs/workstreams/UI-NEXT-WINDOW-PROMPT-20261012.md)
-starts the next dependency-ready unclaimed milestone; existing named work such
-as incoming-call qualification stays in its lane and carries the queue forward.
-
-Each milestone has its own handoff, with implementation, executed checks and
-release evidence kept separate. Preserve newer main/branch work, use existing
-factory/claims and one shared composition owner, and print the next queue-aware
-prompt directly at completion. Do not let missing signed devices/provider
-authority stall independent UI source or disappear from the remaining checks.
-The queue's publication does not certify any app requirement as complete.
-
-## Latest incoming calls delivery — 2026-10-12
-
-Incoming Masana signaling/push source is delivered by [PR #675](https://github.com/weavewellindustrieslimited/masanawa/pull/675),
-source `efd159787`. Ringing, explicit accept/decline, server cancel/timeout,
-missed history, durable push recovery and account-fenced Flutter use existing
-auth/history/native/billing contracts. **98 Gateway + 87 Flutter tests passed**;
-signed device/provider/production qualification remains unrun. Read the
-[executed incoming handoff](docs/workstreams/AF11-incoming-calls-20261012.md)
-and [direct continuation prompt](docs/workstreams/CALLS-NEXT-WINDOW-HANDOFF-20261012.md).
-Preserve the full Calls screen and previous native/group/financial implementation.
-
-## Previous native/group calls delivery — 2026-10-12
-
-Native call reporting, persisted recents and private 2–4 Masana group calls are
-merged to main at `757cf5657`. Canonical platform voice billing and durable
-reservation/settlement recovery are included. Read the
-[direct next-window handoff](docs/workstreams/CALLS-NEXT-WINDOW-HANDOFF-20261012.md)
-and [executed AF11 evidence](docs/workstreams/AF11-masana-call-history-20261011.md).
-Incoming Masana signaling/push has since been implemented above; signed device
-and real provider qualification remain unrun. Fetch fresh main and claims before
-starting, and preserve other windows' work.
-
-## Current development policy — 2026-10-11
-
-**Merge scoped, tested development work into main.** The owner authorizes routine
-CI/CD on main during development. A build/deployment trigger is not a reason to
-park source in an integration branch or ask again for merge approval. Run checks
-relevant to the change; record unrelated existing failures and missing runners.
-Keep auth/privacy, Wallet safeguards, secrets and destructive-data protections.
-Older integration-only and whole-product-before-handoff rules are superseded.
-Read only the instructions/contracts needed for the task; the list below is a
-reference map, not mandatory repeated reading before every change.
-
-## Delivery context — 2026-10-10
-
-Read [outcome-first dispatch](docs/NEXT-WAVE-DELIVERY-20261010.md) FIRST and use [the replacement reusable prompt](docs/REUSABLE-IMPLEMENTATION-PROMPT.md). Stop unrestricted micro-fix selection and duplicate evidence/cleanup tools. Complete substantive customer milestones, continue existing PRs and integrate tested code on one reviewed safe baseline. The AF JSON is an allocation template, not live completion status; inspect current claims/PRs/handoffs. Read only relevant feature references after this short dispatch.
-
-## Read in this order
-
-1. [Contributor rules](AGENTS.md) and [coordination](docs/MULTI-WINDOW-WORK.md).
-2. [Current owner decisions](docs/AUDIO-FIRST-PRODUCT-20261009.md).
-3. [Screen specifications](docs/AUDIO-FIRST-SCREEN-SPECS.md), [wallet/P2P contract](docs/MSN-WALLET-P2P-CONTRACT.md), [cross-slice contracts](docs/AUDIO-FIRST-INTEGRATION-CONTRACTS.md).
-4. [Recovery and supersession map](docs/AUDIO-FIRST-RECOVERY-20261009.md).
-5. [Window allocation](docs/AUDIO-FIRST-WINDOW-PLAN-20261009.md), then use exactly one [copyable lane prompt](docs/AUDIO-FIRST-WINDOW-PROMPTS-20261009.md).
-6. [Completeness audit and unresolved gates](docs/AUDIO-FIRST-COMPLETENESS-AUDIT-20261009.md).
-7. [Whole-app source findings and Settings](docs/WHOLE-APP-SOURCE-AUDIT-20261009.md), [database/storage operations](docs/BACKEND-STORAGE-OPERATIONS-20261009.md) and [screen inventory](docs/WHOLE-APP-SCREEN-INVENTORY-20261009.json).
-8. [Acceptance journeys](docs/WHOLE-PRODUCT-ACCEPTANCE-JOURNEYS.md) and relevant existing domain references.
-
-## Current direction — amended 2026-10-11
-
-Masanawa is a social messaging app for AI celebrities: WhatsApp form, modern
-and more advanced. Every contact is a Masana AI persona; humans chat and call
-Masana one-to-one and in groups. Masana publish Status updates into a feed.
-The Wallet covers billing, crypto and services. Personal Twins are retired.
-
-Confirmed bottom navigation: **Chats · Status · Wallet · Calls · Rooms**.
-**Chats is the default tab** on ordinary authenticated app launch. There is
-no Agents/Twins bottom tab. **MSNW** is the sole customer-facing wallet
-credit and designated official crypto-token name (owner decision, 2026-10-15).
-No separate MSN or Credits wallet is permitted. Historical MSN/Cr balances
-cannot be assumed to equal MSNW; independently audited migration, token
-identity and financial qualification are required. Verified fiat funding may
-acquire MSNW after custody, issuance and reconciliation pass the production
-gate. MSNW-to-crypto conversion and MSNW-only P2P against counterparty fiat
-remain planned rather than production-qualified. There is no direct platform
-fiat withdrawal. Rooms are audio-focused groups.
-
-## Historical recovery note — inspect fresh main first
-
-This note predates merged #668 and the calls delivery above. The owner's pushed
-updates and calls source have since been integrated into main; the old missing
-local-source report is not a current blocker. Preserve any newer local edits and
-inspect fresh refs before replacing affected screens.
-
-Existing drafts include #497 integration, #576 MSN, #575/#578 calls, #468/#508 contacts and #529/#530 chat polish. They are recovery inputs, not proof of completion. Inspect exact heads and unique changes, then test and integrate in dependency order. See recovery map for every old R/C/U/F lane; none is silently marked DONE.
-
-## Delivery
-
-One lane per window, isolated checkout, exact-path claim visible before edits. Start dependency-ready waves, not all lanes at once. Shared composition/migration/router/export files have one integrator. Promptly merge compatible completed code into main with relevant executable proof. Routine development CI/CD is authorized; release qualification is a separate claim. Missing external verification is recorded precisely, not used to park all tested code forever.
-
-No runtime, provider, escrow, Android-device, local-build or deployment verification is established by this documentation update.
+## Execution
+Start from current `main` with fresh branch/PR/issue inspection and exact path ownership. Complete one **customer journey** at a time, including client, backend, DB, permissions, billing/receipts, failure recovery and tests. Merge safe, compatible work promptly after applicable executable checks and diff inspection; document skipped/unrun tests, actual provider/device gaps and deployed SHA separately. Railway Gateway, Worker and PostgreSQL are the relevant backend services. Preserve live database volumes, migration history, transaction obligations, signing keys and secret boundaries. A merge is not authorization to move money without qualified custody/settlement.

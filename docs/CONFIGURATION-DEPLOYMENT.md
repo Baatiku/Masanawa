@@ -245,8 +245,6 @@ Never reuse `@nurain/worker`, copy the old volume into a new blank database
 without a verified archive, or share a public database endpoint unnecessarily.
 The new Railway account must explicitly bind secrets and private PostgreSQL
 host references through its secure variable store. Room membership,
-all MSN issuance/provider switches and automatic financial settlement remain
-OFF until their domain acceptance and genuine provider evidence.
+MSNW issuance and provider settlement capabilities must be admitted only by real server-controlled credentials, identity, custody, backing and reconciled provider evidence.
 
-See `docs/workstreams/AF00-railway-account-recovery-20261013.md` for the
-bounded operator recovery sequence and unresolved live checks.
+Use the current [product/operations roadmap](PRODUCT-ROADMAP-20261019.md) and [database restore runbook](DATABASE-REDEPLOYMENT-AND-RESTORE-RUNBOOK.md) for recovery and acceptance.

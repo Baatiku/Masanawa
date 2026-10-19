@@ -51,7 +51,7 @@ Selected composition:
 
 Canonical owners are `packages/agents`, `packages/skills`, `packages/plugins`, `packages/tools` and `packages/workflows`. Character identity, memory and world/business truth remain outside donor runtime objects.
 
-See ADR-0008 and `docs/migration/RUNTIME-SKILLS-WORKFLOW-ADOPTION-BOUNDARY.md`.
+Follow current skills package and Gateway contracts; roadmap ownership controls apply.
 
 ### Gateway, channels and devices — decision recorded
 
@@ -95,7 +95,7 @@ Canonical PostgreSQL `MemoryRecord` + explicit `MemoryScope` own truth. Vector, 
 
 At the pinned baseline, `letta-ai/letta` is a landing/historical repository; current implementation evidence comes from Letta Code.
 
-See ADR-0007 and `docs/migration/MEMORY-ADOPTION-BOUNDARY.md`.
+Follow the current memory package and privacy-scope contracts.
 
 ### Digital-life and embodiment — decision recorded
 
@@ -138,7 +138,7 @@ Secondary:
 
 Do not make LiveKit Agent = Character, room metadata = durable business truth, or Pipecat = a parallel session authority.
 
-See ADR-0006 and `docs/migration/PRESENCE-ADOPTION-BOUNDARY.md`.
+Follow the existing Presence service and live calls contracts.
 
 ### Agent runtime
 
@@ -155,7 +155,7 @@ Selected composition:
 
 Do not make AI Town `Player`/`Agent`/Convex world documents canonical Character/world truth. Do not retain ChatWithStars' process-local life-engine lock for horizontal execution. Spatial state is optional, and world events cross explicit boundaries to memory, workflows and presence.
 
-See ADR-0009 and `docs/migration/WORLD-SIMULATION-ADOPTION-BOUNDARY.md`.
+Preserve domain boundaries; speculative world simulation is not a launch dependency.
 
 ## Donor conflict procedure
 

@@ -168,7 +168,7 @@ MSNW_MINT_PRICE_KOBO_PER_MSNW=<only for verified Paystack NGN adapter>
 ```
 Do **not** put private Ed25519 keys, blockchain seed phrases or Safe-owner keys in Railway. Leave unavailable provider networks and conversion rates disabled rather than inventing provider pricing.
 
-The existing `docs/workstreams/MSNW-SIGNED-ISSUANCE-OPERATIONS-20261018.md` runbook defines:
+The required signed issuance sequence is:
 ```text
 backing_qualified -> mint_authorized -> chain_submitted
       -> [finalized-chain, code, event and reserve verification]
