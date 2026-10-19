@@ -990,6 +990,9 @@ class _BuySheetState extends State<_BuySheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'Buy crypto',
+      subtitle: 'Choose how much to pay, then continue to the secure provider checkout.',
+      icon: Icons.add_card,
+      sectionTitle: 'Purchase details',
       children: [
         WalletSelectionField<String>(
           initialValue: _currency,
@@ -1014,6 +1017,8 @@ class _BuySheetState extends State<_BuySheet> {
             final amount = _validAmount(_amount.text, maxDecimals: 2);
             if (amount != null) {
               Navigator.pop(context, _BuyInput(_currency, amount));
+            } else {
+              _invalidAmount(context);
             }
           },
           icon: const Icon(Icons.open_in_new),
@@ -1052,15 +1057,22 @@ class _ReceiveSheetState extends State<_ReceiveSheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'Receive ${widget.route.asset}',
+      subtitle: 'Create a deposit address for this asset and network. Other networks may result in lost funds.',
+      icon: Icons.south_west,
+      sectionTitle: 'Deposit details',
       children: [
         Text('${widget.route.label} deposit'),
         const SizedBox(height: 14),
-        _AmountField(controller: _amount),
+        _AmountField(controller: _amount, label: 'Amount (${widget.route.asset})'),
         const SizedBox(height: 16),
         FilledButton(
           onPressed: () {
             final value = _validAmount(_amount.text);
-            if (value != null) Navigator.pop(context, _ReceiveInput(value));
+            if (value != null) {
+              Navigator.pop(context, _ReceiveInput(value));
+            } else {
+              _invalidAmount(context);
+            }
           },
           child: const Text('Create deposit address'),
         ),
@@ -1102,8 +1114,13 @@ class _ConvertSheetState extends State<_ConvertSheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'Convert ${widget.source.asset}',
+      subtitle: 'Choose the amount and destination asset. Review the live quote before confirming.',
+      icon: Icons.swap_horiz,
+      sectionTitle: 'Conversion details',
       children: [
-        _AmountField(controller: _amount),
+        _SummaryRow(label: 'From', value: widget.source.label),
+        const SizedBox(height: 12),
+        _AmountField(controller: _amount, label: 'Amount (${widget.source.asset})'),
         const SizedBox(height: 12),
         WalletSelectionField<String>(
           initialValue: _target,
@@ -1126,6 +1143,8 @@ class _ConvertSheetState extends State<_ConvertSheet> {
             final value = _validAmount(_amount.text);
             if (value != null) {
               Navigator.pop(context, _ConvertInput(_target, value));
+            } else {
+              _invalidAmount(context);
             }
           },
           child: const Text('Review quote'),
@@ -1166,14 +1185,26 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'Withdraw ${widget.route.asset}',
+      subtitle: 'Check the destination network carefully. You will review the fee before authorizing the withdrawal.',
+      icon: Icons.north_east,
+      sectionTitle: 'Withdrawal details',
       children: [
-        _AmountField(controller: _amount),
+        _SummaryRow(label: 'Network', value: widget.route.label),
+        const SizedBox(height: 12),
+        _AmountField(controller: _amount, label: 'Amount (${widget.route.asset})'),
         const SizedBox(height: 12),
         TextField(
           controller: _address,
           minLines: 1,
           maxLines: 3,
-          decoration: const InputDecoration(labelText: 'Destination address'),
+          autocorrect: false,
+          enableSuggestions: false,
+          textDirection: TextDirection.ltr,
+          decoration: const InputDecoration(
+            labelText: 'Destination address',
+            hintText: 'Paste the receiving wallet address',
+            prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+          ),
         ),
         const SizedBox(height: 16),
         FilledButton(
@@ -1182,6 +1213,10 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
             final address = _address.text.trim();
             if (amount != null && address.isNotEmpty && address.length <= 512) {
               Navigator.pop(context, _WithdrawInput(amount, address));
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Enter a valid positive amount and destination address.'),
+              ));
             }
           },
           child: const Text('Review fee'),
@@ -1192,36 +1227,39 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
 }
 
 class _SheetScaffold extends StatelessWidget {
-  const _SheetScaffold({required this.title, required this.children});
-  final String title;
+  const _SheetScaffold({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.sectionTitle,
+    required this.children,
+  });
+  final String title, subtitle, sectionTitle;
+  final IconData icon;
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottom),
-        child: SingleChildScrollView(
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+              WalletFlowHeader(title: title, subtitle: subtitle, icon: icon),
+              WalletFormSection(
+                title: sectionTitle,
+                children: children.take(children.length - 1).toList(),
               ),
-              const SizedBox(height: 16),
-              ...children,
+              children.last,
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _AmountField extends StatelessWidget {
@@ -1263,6 +1301,12 @@ class _SummaryRow extends StatelessWidget {
       ),
     );
   }
+}
+
+void _invalidAmount(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    content: Text('Enter a valid positive amount within the supported precision.'),
+  ));
 }
 
 String? _validAmount(String raw, {int maxDecimals = 18}) {

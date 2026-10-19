@@ -81,3 +81,24 @@ Reported against the delivered APK. These are observed failures/requests; root c
 - [ ] **H06 · P1 · OWNER DESIGN REQUEST — Raise crypto assets in Wallet.** Assets are currently too far down the screen. Bring the actual asset list closer to the balance and primary actions without duplicating balances or hiding pending/error states.
 - [ ] **H07 · P1 · OWNER DESIGN REQUEST — Four Wallet actions in one horizontal row.** Match the Billing item alignment beneath the balance card. Acceptance: all four actions remain readable and tappable on narrow screens and with large text; preserve real capability checks and accessible labels.
 - [ ] **H08 · P1 · REPORTED FAILURE — Splash logo edges are clipped.** Android12 splash bitmap artwork exceeds the circular safe zone. Add padding through an inset drawable for light and dark startup. Source fix merged in PR #219: Android12 light/dark themes use a 28% inset wrapper; XML and all ten density/night alpha-bound checks pass. Closure still requires a newly compiled APK and cold-start handset check. Preserve the owner-approved mark.
+
+## Additional owner requests and implementation evidence
+
+APK generation remains paused by owner instruction until the whole checklist is implemented. Unchecked acceptance items above are deliberate: source changes and automated checks do not establish installed-device, live-provider or financial acceptance.
+
+- [ ] **H09 · P1 · Create Masana from Contacts.** Source implemented: signed-in Contacts FAB reuses the existing create/publish flow; refresh after publishing remains account-fenced. Flutter regression acceptance pending.
+- [ ] **H10 · P1 · Refactor both user profile surfaces.** Source implemented: own profile separates public identity editing from private account/settings links; public profiles prioritize identity and public activity. Historical Talk records remain readable without restoring retired Twins. Flutter and handset acceptance pending.
+- [ ] **H11 · P1 · Restore brighter green headers.** Source implemented: shared header/wordmark use the theme's bright brand token. Header token assertion added. Full Flutter and visual acceptance pending.
+- [ ] **H12 · P1 · Discover a Masana's creator.** Source implemented: Masana details link to the creator's existing public user profile. Server resolves only a published creator-owned agent with an active same-tenant owner and a real public profile. No private contact fields are returned. New directory/creator reader tests: 5 passed. Widget and handset acceptance pending.
+- [ ] **H13 · P1 · Revamp underdeveloped Wallet screens.** Source implemented for Send MSNW, MSNW-to-stablecoin Convert and crypto Buy/Receive/Convert/Withdraw: shared heading, explanatory copy, grouped fields, asset/network context and separate primary action. Invalid crypto amount/address submission explains the problem. Existing server capability, exact-unit, quote, authorization and recovery paths retained. Full Flutter, remaining Wallet screen audit and handset acceptance pending.
+
+### Current evidence boundaries
+
+- H01/H03: directory canonical identity/country backfill and live profile refresh implemented; real SQL fixtures cover all 26 stock personas, tenant isolation and portrait ownership. Installed portrait/flag readback remains pending.
+- H02: public profile save/recreated-service readback passed against PostgreSQL-compatible fixtures. Completion summary now reads the saved public name; explicit identity-provider rejection is recoverable without replaying uncertain submissions. Device restart and live verification remain pending.
+- H04/H05/H06/H07: compact Masana profile with recent posts, Room timeline/filter controls, raised crypto assets and a horizontal Wallet action row implemented. Full UI/handset acceptance remains pending.
+- A01/A02/I05/I08: sequential voice-note controller, bounded authenticated media ZIP export, draft-preserving downloaded-media cache clearing and installed-build support diagnostics implemented. Native audio/device acceptance and production crash ingestion remain separate outstanding checks.
+- A03: authentic Android signer certificate report parser regression suite: 5 passed. This does not certify a newly built APK.
+- A05: strict workspace TypeScript checks and Gateway/Worker builds passed; backend suite recorded 2,097 passed / 222 skipped. New deletion-redaction regressions passed (7 tests with existing worker tests). Latest Flutter checks are running and have not established a passing whole-app suite.
+- F15: disabled-account public-profile redaction is implemented and tested with tenant/user fencing. Real deletion/export lifecycle acceptance remains pending.
+- I07: disposable encrypted database/object-store restore rehearsal remains NOT_RUN; required restore tooling/qualified storage access has not been established in this environment.
