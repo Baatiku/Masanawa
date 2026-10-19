@@ -53,3 +53,4 @@ export {ensureMasanaCatalogProfilesAndRooms,withCatalogProvisionLock} from "./ma
 
 // Canonical immutable Masana editorial revisions and staff audit.
 export {createMasanaPostgresStore} from './masana/repository.js';
+export * from "./agents/history_cursor.js";

@@ -36,6 +36,7 @@ export interface AgentConversationService {
   memoryList?(input:{authorizationHeader:string|undefined;characterId:string}):
     Promise<{automaticLearning:boolean;items:readonly {
       memoryRecordId:string;content:string;type:string;revision:number;lifecycleRevision:number;updatedAt:string;
+      observedAt?:string;sourceKind?:string;confidence?:number;
     }[]}>;
   memoryPreferences?(input:{authorizationHeader:string|undefined;characterId:string;automaticLearning:boolean}):
     Promise<{automaticLearning:boolean}>;

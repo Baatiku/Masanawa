@@ -9,7 +9,7 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
+import { createPostgresServiceDependency, createPostgresConsumerReflectionRuntime, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
@@ -135,6 +135,7 @@ export async function startWorkerService(
   let privacyDeletion: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let conversationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let consumerMemoryCatchup: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let consumerReflection: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -157,6 +158,13 @@ export async function startWorkerService(
       onError:()=>process.stderr.write(JSON.stringify({
         event:"masana_memory.catchup_retry",reason:"database_unavailable",
       })+"\n"),
+    });
+    const reflection=createPostgresConsumerReflectionRuntime(database.pool);
+    consumerReflection=createYouTubeOutboxScheduler({
+      runOnce:reflection.runOnce,enabled:()=>!drain.isDraining(),intervalMs:120_000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"masana_memory.reflection_retry",reason:"database_unavailable",
+      })+"\\n"),
     });
     // Account deletion only after exact financial clearance and owner OTP.
     const accessRevoker = createPostgresAccountDeletionAccessRevoker(
@@ -397,6 +405,7 @@ export async function startWorkerService(
         schedulerHealth("privacy_deletion", privacyDeletion),
         schedulerHealth("masana_chat_recovery", conversationRecovery),
         schedulerHealth("masana_memory_catchup", consumerMemoryCatchup),
+        schedulerHealth("masana_memory_reflection", consumerReflection),
       ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
@@ -434,6 +443,7 @@ export async function startWorkerService(
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
         await consumerMemoryCatchup?.stop();
+        await consumerReflection?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -455,6 +465,7 @@ export async function startWorkerService(
     privacyDeletion?.start();
     conversationRecovery?.start();
     consumerMemoryCatchup?.start();
+    consumerReflection?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
@@ -469,6 +480,7 @@ export async function startWorkerService(
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
         await consumerMemoryCatchup?.stop();
+        await consumerReflection?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;

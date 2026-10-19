@@ -14,6 +14,9 @@ export interface ConsumerMasanaMemory {
   readonly revision:number;
   readonly lifecycleRevision:number;
   readonly updatedAt:string;
+  readonly observedAt:string;
+  readonly sourceKind:string;
+  readonly confidence:number;
 }
 export interface ConsumerMasanaMemoryStore {
   preferences(scope:CharacterSessionScope):Promise<{automaticLearning:boolean}>;
@@ -67,6 +70,10 @@ async function active(c:PoolClient,scope:CharacterSessionScope){
       &&(v.validTo===null||Date.parse(v.validTo)>now);
   });
 }
+async function invalidateSourceReflections(c:PoolClient,scope:CharacterSessionScope,_id:MemoryRecordId){
+  await c.query("DELETE FROM memory.consumer_summaries WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4",
+    owner(scope));
+}
 async function invalidate(c:PoolClient,scope:CharacterSessionScope,id:MemoryRecordId){
   for(const table of ["lexical","vector","entity","temporal"] as const){
     await c.query("DELETE FROM memory."+table+"_projections WHERE tenant_id=$1 AND memory_record_id=$2",[scope.tenantId,id]);
@@ -91,13 +98,32 @@ export function createPostgresConsumerMasanaMemoryStore(pool:Pool):ConsumerMasan
       return withTransaction(pool,async c=>{
         const rows=await active(c,scope);
         const entries=rows.map(r=>({content:r.currentRevision.content,updatedAt:r.record.updatedAt}));
-        return Object.freeze(rankConsumerMemories(entries,query,6).map(x=>x.content));
+        const ranked=rankConsumerMemories(entries,query,6).map(x=>x.content);
+        if(!/\b(?:continue|resume|last lesson|previous lesson|where did we stop|pick up where)\b/iu.test(query))
+          return Object.freeze(ranked);
+        const summary=await c.query<{content:string}>([
+          "SELECT summary_text AS content FROM memory.consumer_summaries m",
+          "WHERE m.tenant_id=$1 AND m.user_id=$2 AND m.character_id=$3 AND m.relationship_id=$4",
+          "AND NOT EXISTS (SELECT 1 FROM jsonb_to_recordset(m.sources)",
+          "AS src(memory_record_id text,memory_revision_id text,content_hash text)",
+          "LEFT JOIN memory.records source ON source.tenant_id=m.tenant_id",
+          "AND source.memory_record_id=src.memory_record_id",
+          "LEFT JOIN memory.revisions rv ON rv.tenant_id=source.tenant_id",
+          "AND rv.memory_record_id=source.memory_record_id AND rv.revision_number=source.revision",
+          "WHERE source.lifecycle_state IS DISTINCT FROM 'active'",
+          "OR rv.memory_revision_id IS DISTINCT FROM src.memory_revision_id)",
+        ].join(" "),owner(scope));
+        const content=summary.rows[0]?.content;
+        return Object.freeze(content?[content,...ranked.slice(0,2)]:ranked);
       },{isolation:"repeatable read",readOnly:true});
     },
     async list(scope){
       return withTransaction(pool,async c=>Object.freeze((await active(c,scope)).map(r=>({
         memoryRecordId:r.record.memoryRecordId,content:r.currentRevision.content,type:r.record.memoryType,
         revision:r.record.revision,lifecycleRevision:r.record.lifecycleRevision,updatedAt:r.record.updatedAt,
+        observedAt:r.currentRevision.observedAt,
+        sourceKind:r.currentRevision.evidence[0]?.sourceKind??"other",
+        confidence:r.currentRevision.confidence,
       }))),{readOnly:true});
     },
     async ingest(scope,source){
@@ -120,8 +146,10 @@ export function createPostgresConsumerMasanaMemoryStore(pool:Pool):ConsumerMasan
         const found=(await active(c,scope)).find(r=>r.currentRevision.payload["consumerKey"]===candidate.key);
         const at=toInstant(new Date().toISOString());
         const details={
-          content:candidate.content,payload:{consumerKey:candidate.key,consumerVersion:1},
-          confidence:candidate.explicit?1:0.9,
+          content:candidate.content,payload:{consumerKey:candidate.key,consumerVersion:2,
+            ...(candidate.eventTime?{calendarDate:candidate.eventTime.slice(0,10)}:{})},
+          ...(candidate.eventTime?{eventTime:toInstant(candidate.eventTime)}:{}),
+          confidence:candidate.explicit?1:candidate.type==="observation"?0.75:0.9,
           extractionMethod:candidate.explicit?"consumer-explicit-v1":"consumer-opt-in-pattern-v1",
           observedAt:at,
           evidence:[{sourceKind:"message" as const,sourceReference:requestId,sourceContentHash:hash(source.text),observedAt:at}],
@@ -132,6 +160,7 @@ export function createPostgresConsumerMasanaMemoryStore(pool:Pool):ConsumerMasan
             await appendMemoryRevision(c,{...details,tenantId:scope.tenantId,memoryRecordId:recordId,
               memoryRevisionId:createCanonicalId("memory-revision"),expectedRevision:found.record.revision,updatedAt:at});
             await invalidate(c,scope,recordId);
+            await invalidateSourceReflections(c,scope,recordId);
           }
         }else{
           await createMemoryRecord(c,{...details,tenantId:scope.tenantId,memoryRecordId:recordId,
@@ -157,6 +186,7 @@ export function createPostgresConsumerMasanaMemoryStore(pool:Pool):ConsumerMasan
           extractionMethod:"consumer-correction-v1",observedAt:at,
           evidence:[{sourceKind:"operator" as const,sourceReference:"user:"+scope.userId,sourceContentHash:hash(content.trim()),observedAt:at}]});
         await invalidate(c,scope,id);
+        await invalidateSourceReflections(c,scope,id);
         await c.query("INSERT INTO memory.consumer_changes(tenant_id,change_id,user_id,character_id,relationship_id,memory_record_id,action) VALUES($1,$2,$3,$4,$5,$6,'correct')",
           [scope.tenantId,createCanonicalId("event"),scope.userId,scope.characterId,scope.relationshipId,id]);
       });
@@ -172,6 +202,7 @@ export function createPostgresConsumerMasanaMemoryStore(pool:Pool):ConsumerMasan
           [scope.tenantId,id,scope.relationshipId,expectedLifecycleRevision]);
         if(updated.rowCount!==1)throw conflict();
         await cleanupTombstonedMemoryProjections(c,scope.tenantId,id);
+        await invalidateSourceReflections(c,scope,id);
         await c.query("INSERT INTO memory.consumer_changes(tenant_id,change_id,user_id,character_id,relationship_id,memory_record_id,action) VALUES($1,$2,$3,$4,$5,$6,'forget')",
           [scope.tenantId,createCanonicalId("event"),scope.userId,scope.characterId,scope.relationshipId,id]);
       });
@@ -194,6 +225,7 @@ export async function purgeConsumerMasanaMemoriesForAccount(
     "JOIN memory.consumer_relationship_preferences c ON c.tenant_id=r.tenant_id AND c.relationship_id=r.scope_ref_id "+
     "WHERE r.tenant_id=$1 AND c.user_id=$2 AND r.scope_kind='relationship' AND v.payload ? 'consumerKey'",
     [tenantId,userId]);
+  await client.query("DELETE FROM memory.consumer_summaries WHERE tenant_id=$1 AND user_id=$2",[tenantId,userId]);
   for(const row of owned.rows){
     const id=row.memory_record_id;
     for(const table of ["lexical","vector","entity","temporal"] as const) {
@@ -204,6 +236,7 @@ export async function purgeConsumerMasanaMemoriesForAccount(
     await client.query("DELETE FROM memory.revisions WHERE tenant_id=$1 AND memory_record_id=$2",[tenantId,id]);
     await client.query("DELETE FROM memory.records WHERE tenant_id=$1 AND memory_record_id=$2 AND scope_kind='relationship'",[tenantId,id]);
   }
+  await client.query("DELETE FROM memory.consumer_reflection_progress WHERE tenant_id=$1 AND user_id=$2",[tenantId,userId]);
   await client.query("DELETE FROM memory.consumer_turn_scans WHERE tenant_id=$1 AND user_id=$2",[tenantId,userId]);
   await client.query("DELETE FROM memory.consumer_changes WHERE tenant_id=$1 AND user_id=$2",[tenantId,userId]);
   await client.query("DELETE FROM memory.consumer_relationship_preferences WHERE tenant_id=$1 AND user_id=$2",[tenantId,userId]);

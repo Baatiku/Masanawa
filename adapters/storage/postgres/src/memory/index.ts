@@ -9,3 +9,4 @@ export * from "./cleanup.js";
 export * from "./reflection.js";
 export * from "./compaction.js";
 export * from "./consumer.js";
+export * from "./consumer_reflection.js";

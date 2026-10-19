@@ -10,7 +10,8 @@ const migration = (name:string) => readFileSync(
   new URL("../../../../../packages/memory/migrations/"+name,import.meta.url),"utf8");
 async function setup() {
   const db=new PGlite();
-  for(const name of ["0001_memory_foundation.sql","0002_memory_lifecycle.sql","0008_consumer_masana_memory.sql"])
+  for(const name of ["0001_memory_foundation.sql","0002_memory_lifecycle.sql","0007_memory_reflections.sql",
+    "0008_consumer_masana_memory.sql","0009_consumer_reflection_progress.sql"])
     await db.exec(migration(name));
   for(const kind of ["lexical","vector","entity","temporal"]){
     await db.exec("CREATE TABLE memory."+kind+"_projections(tenant_id text NOT NULL,memory_record_id text NOT NULL)");
@@ -55,6 +56,30 @@ describe("consumer Masana memory PostgreSQL contract",()=>{
       expect(changes.rows.map(r=>r.action)).toEqual(["correct","forget"]);
     }finally{await db.close();}
   });
+  it("stores episodic provenance and independent upserted preference topics",async()=>{
+    const {db,store}=await setup();
+    try {
+      const a=scope();
+      await store.setPreferences(a,true);
+      for(const statement of [
+        "I prefer short explanations","I prefer black tea",
+        "I prefer detailed explanations",
+        "On 2026-10-17 I completed module four",
+      ])expect(await store.ingest(a,{requestId:createCanonicalId("request"),text:statement})).toBe(true);
+      const memories=await store.list(a);
+      expect(memories).toHaveLength(3);
+      expect(memories.map(m=>m.content)).toContain("I prefer detailed explanations");
+      expect(memories.map(m=>m.content)).toContain("I prefer black tea");
+      const episode=memories.find(m=>m.type==="event");
+      expect(episode).toMatchObject({sourceKind:"message",confidence:0.9});
+      expect(episode?.observedAt).toBeTruthy();
+      const record=await db.query<{event_time:Date}>(
+        "SELECT event_time FROM memory.revisions WHERE tenant_id=$1 AND memory_record_id=$2",
+        [a.tenantId,episode!.memoryRecordId]);
+      expect(new Date(record.rows[0]!.event_time).toISOString().slice(0,10)).toBe("2026-10-17");
+    }finally{await db.close();}
+  });
+
   it("explicit memory works without auto-learning and never mixes distinct Masana",async()=>{
     const {db,store}=await setup();
     try{

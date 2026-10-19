@@ -1545,6 +1545,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     const item=Type.Object({
       memoryRecordId:Type.String(),content:Type.String(),type:Type.String(),
       revision:Type.Number(),lifecycleRevision:Type.Number(),updatedAt:Type.String(),
+      observedAt:Type.Optional(Type.String()),sourceKind:Type.Optional(Type.String()),
+      confidence:Type.Optional(Type.Number()),
     });
     app.get("/v1/agent/characters/:characterId/memories",{
       schema:{params,response:{200:Type.Object({automaticLearning:Type.Boolean(),items:Type.Array(item)})}},
@@ -1553,6 +1555,21 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
       });
       return {automaticLearning:result.automaticLearning,items:[...result.items]};
+    });
+    app.get("/v1/agent/characters/:characterId/memories/export",{
+      schema:{params},
+    },async request=>{
+      const data=await memory.memoryList!({
+        authorizationHeader:request.headers.authorization,characterId:request.params.characterId,
+      });
+      return {
+        schemaVersion:1,kind:"masana_relationship_memory",
+        exportedAt:new Date().toISOString(),
+        characterId:request.params.characterId,
+        automaticLearning:data.automaticLearning,
+        scopeNotice:"Only the active owner-scoped memories for this Masana; historical conversations are a separate export.",
+        items:[...data.items],
+      };
     });
     app.put("/v1/agent/characters/:characterId/memory-preferences",{
       schema:{params,body:Type.Object({automaticLearning:Type.Boolean()},{additionalProperties:false}),

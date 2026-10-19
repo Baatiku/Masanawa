@@ -1,4 +1,5 @@
 import { personaInstructions } from './persona_continuity.js';
+import {memoryAwareDiscoveryText} from "./memory_skill_context.js";
 import type {
   AgentInferenceProvider,
   AgentStrategy,
@@ -49,7 +50,7 @@ export function createAlphaInferenceStrategy(input: {
               guide.skillVersionId,
             );
             const skill = registry.getVersion(guide.skillVersionId);
-            const discovery = evaluateSkillDiscovery(guide, userText);
+            const discovery = evaluateSkillDiscovery(guide, memoryAwareDiscoveryText(userText,request.rememberedFacts));
             return { guide, skill, eligibility, discovery };
           })
           .filter(

@@ -26,3 +26,26 @@ describe("Masana consumer long-term learning policy",()=>{
     expect(rankConsumerMemories(entries,"Can we continue our lessons?")).toHaveLength(2);
   });
 });
+describe("calendar episodes and independent preference slots",()=>{
+  it("keeps separate food and explanation preferences and replaces only same-topic updates",()=>{
+    const short=extractConsumerMemory("I prefer short explanations",true);
+    const detailed=extractConsumerMemory("I prefer detailed explanations",true);
+    const tea=extractConsumerMemory("I prefer black tea",true);
+    expect(short?.key).toBe(detailed?.key);
+    expect(tea?.key).not.toBe(short?.key);
+    expect(extractConsumerMemory("I prefer short explanations",false)).toBeNull();
+  });
+  it("admits user-reported dated episodes and rejects impossible dates",()=>{
+    const episode=extractConsumerMemory("On 2026-10-17 I completed module four",true);
+    expect(episode).toMatchObject({type:"event",eventTime:"2026-10-17T00:00:00.000Z"});
+    expect(extractConsumerMemory("On 2026-02-30 I completed module four",true)).toBeNull();
+    expect(extractConsumerMemory("On 2026-10-17 I completed module four",false)).toBeNull();
+  });
+  it("tracks directly stated lesson observations without inventing facts",()=>{
+    expect(extractConsumerMemory("We covered algebraic equations",true))
+      .toMatchObject({type:"observation",key:"lesson:last-topic"});
+    expect(extractConsumerMemory("I'm currently working on Project Ada",true))
+      .toMatchObject({type:"state",key:"project:current"});
+    expect(extractConsumerMemory("Maybe we covered something",true)).toBeNull();
+  });
+});

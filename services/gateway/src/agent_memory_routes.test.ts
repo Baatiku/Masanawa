@@ -36,6 +36,11 @@ describe("Masana memory controls over authorized Gateway API",()=>{
     const list=await app.inject({method:"GET",url:root+"/memories",headers});
     expect(list.statusCode).toBe(200);
     expect(list.json().items[0].memoryRecordId).toBe(recordId);
+    const exported=await app.inject({method:"GET",url:root+"/memories/export",headers});
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json()).toMatchObject({schemaVersion:1,kind:"masana_relationship_memory",
+      characterId,automaticLearning:false});
+    expect(exported.json().items[0].content).toBe("I prefer short lessons");
     const consent=await app.inject({method:"PUT",url:root+"/memory-preferences",headers,
       payload:{automaticLearning:true}});
     expect(consent.statusCode).toBe(200);
@@ -49,6 +54,7 @@ describe("Masana memory controls over authorized Gateway API",()=>{
       payload:{expectedLifecycleRevision:1}});
     expect(forget.statusCode).toBe(200);
     expect(events).toEqual([
+      "list:"+characterId+":Bearer user-A",
       "list:"+characterId+":Bearer user-A",
       "preferences:"+characterId+":true",
       "correct:"+recordId+":2:I prefer long lessons",

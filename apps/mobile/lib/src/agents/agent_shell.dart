@@ -88,6 +88,26 @@ class AgentHistoryMessage {
       );
 }
 
+/// Stable seek pagination across turns sharing the same creation timestamp.
+class AgentHistoryPage {
+  const AgentHistoryPage({required this.messages,required this.hasMore,this.nextCursor});
+  final List<AgentHistoryMessage> messages;
+  final bool hasMore;
+  final String? nextCursor;
+
+  factory AgentHistoryPage.fromJson(Map<String,dynamic> json) {
+    final raw=json['messages'];
+    if(raw is! List || json['hasMore'] is! bool) throw const FormatException('Invalid history page');
+    final hasMore=json['hasMore'] as bool;
+    final cursor=json['nextCursor'];
+    if(cursor!=null && cursor is! String)throw const FormatException('Invalid history cursor');
+    return AgentHistoryPage(messages:[
+      for(final item in raw)
+        if(item is Map)AgentHistoryMessage.fromJson(item.cast<String,dynamic>()),
+    ],hasMore:hasMore,nextCursor:cursor as String?);
+  }
+}
+
 class AgentTurnStatus {
   const AgentTurnStatus({
     required this.state,

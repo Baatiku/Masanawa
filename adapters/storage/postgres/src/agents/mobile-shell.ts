@@ -11,6 +11,7 @@ import type {
   MobileAgentActivityRepository,
 } from "@masanawa/agents";
 import { withTransaction } from "../transaction.js";
+import {decodeMobileHistoryCursor} from "./history_cursor.js";
 
 function command(row: any): MobileTurnCommand {
   return Object.freeze({
@@ -171,16 +172,18 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
       if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200) {
         throw new RangeError("history limit out of range");
       }
-      const before = input.before ? new Date(input.before) : null;
-      if (before && Number.isNaN(before.getTime())) throw new TypeError("invalid history cursor");
+      const before=input.before?decodeMobileHistoryCursor(input.before):null;
       const result = await pool.query(
-        `SELECT * FROM agents.mobile_turn_commands
-          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
-            AND state='completed'
-            AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-          ORDER BY created_at DESC, request_id DESC LIMIT $6`,
+        [
+          "SELECT * FROM agents.mobile_turn_commands",
+          "WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4",
+          "AND state='completed'",
+          "AND ($5::timestamptz IS NULL OR",
+          "(created_at,request_id)<($5::timestamptz,COALESCE($6::text,'')))",
+          "ORDER BY created_at DESC, request_id DESC LIMIT $7",
+        ].join(" "),
         [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
-         before?.toISOString() ?? null,input.limit],
+         before?.at ?? null,before?.requestId ?? null,input.limit],
       );
       const messages: any[] = [];
       for (const row of result.rows.reverse()) {

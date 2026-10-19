@@ -1397,6 +1397,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   }
                 }
                 if (!context.mounted) return;
+                if (value == 'older') {
+                  final loaded=await ctl.loadEarlierHistory(widget.characterId);
+                  if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content:Text(loaded ? 'Earlier messages loaded.' : 'No earlier messages available, or you are offline.'),
+                  ));
+                }
                 if (value == 'memory') {
                   await Navigator.of(context).push(MaterialPageRoute<void>(
                     builder: (_) => MasanaMemoryScreen(
@@ -1431,6 +1437,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   PopupMenuDivider(),
                 ],
                 const PopupMenuItem(value: 'memory', child: Text('What this Masana remembers')),
+                const PopupMenuItem(value: 'older', child: Text('Load earlier messages')),
                 const PopupMenuItem(value: 'new', child: Text('New context')),
                 const PopupMenuItem(value: 'rename', child: Text('Rename chat')),
                 const PopupMenuItem(value: 'pin', child: Text('Pin / unpin')),

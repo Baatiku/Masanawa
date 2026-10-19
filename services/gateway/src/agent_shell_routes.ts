@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { parseCanonicalId } from "@masanawa/contracts";
+import {encodeMobileHistoryCursor} from "@masanawa/postgres";
 import type {
   AgentShellService,
   LiveVoiceTokenService,
@@ -81,10 +82,30 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
             characterId: text(query.characterId, "characterId", 160),
             limit: query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 200),
             ...(typeof query.before === "string" && query.before
-              ? { before: query.before.slice(0, 64) }
+              ? { before: query.before.slice(0, 256) }
               : {}),
           })),
         ],
+      };
+    });
+
+    app.get("/agent/history/page", async request=>{
+      const query=request.query as Record<string,unknown>;
+      const characterId=text(query.characterId,"characterId",160);
+      const limit=query.limit===undefined?50:integer(query.limit,"limit",1,199);
+      const before=typeof query.before==="string"&&query.before
+        ?text(query.before,"before",256):undefined;
+      const found=await shell.history({
+        authorizationHeader:request.headers.authorization,characterId,limit:limit+1,
+        ...(before?{before}:{}),
+      });
+      const hasMore=found.length>limit*2;
+      const messages=hasMore?found.slice(2):found;
+      const oldest=messages.find(m=>m.direction==="user");
+      return {
+        messages,
+        hasMore,
+        nextCursor:hasMore&&oldest?encodeMobileHistoryCursor(oldest.createdAt,oldest.requestId):null,
       };
     });
 

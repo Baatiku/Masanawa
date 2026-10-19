@@ -2,7 +2,8 @@
 export interface ConsumerMemoryCandidate {
   readonly key: string;
   readonly content: string;
-  readonly type: "fact" | "preference" | "plan";
+  readonly type: "fact" | "preference" | "plan" | "event" | "observation" | "state";
+  readonly eventTime?: string;
   readonly explicit: boolean;
 }
 const sensitive = /\b(?:password|passcode|otp|secret key|private key|seed phrase|credit card|bank account|account number|passport|medical|diagnos|pregnan|sexual|religion|political party|ethnic|race|home address)\b/iu;
@@ -14,7 +15,7 @@ export function isConsumerMemorySafeText(value:string):boolean {
     value.length<=1200 && !sensitive.test(value) && !override.test(value) && !directIdentifier.test(value);
 }
 const normalize = (value: string) => value.replace(/\s+/gu," ").trim();
-const keyPart = (value: string) => normalize(value).toLowerCase().replace(/[^a-z0-9 -]/gu,"").slice(0,60);
+const keyPart = (value: string) => normalize(value).toLowerCase().replace(/[^\p{L}\p{N} -]/gu,"").slice(0,60);
 export function extractConsumerMemory(text: string, enabled: boolean): ConsumerMemoryCandidate | null {
   if(typeof text!=="string" || text.length>4000) return null;
   const value=normalize(text);
@@ -26,8 +27,31 @@ export function extractConsumerMemory(text: string, enabled: boolean): ConsumerM
     return {key:"explicit:"+keyPart(content).slice(0,45),content,type:"fact",explicit:true};
   }
   if(!enabled || !isConsumerMemorySafeText(value) || value.length>350)return null;
+  // Date-only events retain the stated calendar date; UTC midnight is a
+  // sortable surrogate, not a claim of an exact local clock time.
+  const dated=/^on (\d{4}-\d{2}-\d{2}),? i (?:completed|finished|started|attended|submitted|passed) (.{3,180})[.!]?$/iu.exec(value);
+  if(dated) {
+    const day=dated[1]!;
+    const checked=new Date(day+"T00:00:00.000Z");
+    if(!Number.isNaN(checked.getTime()) && checked.toISOString().slice(0,10)===day)
+      return {key:"event:"+day+":"+keyPart(dated[2]!),content:value,type:"event",explicit:false,
+        eventTime:checked.toISOString()};
+  }
+  const observation=/^(?:we covered|in our last lesson we covered) (.{3,180})[.!]?$/iu.exec(value);
+  if(observation)return {key:"lesson:last-topic",content:value,type:"observation",explicit:false};
+  const activeProject=/^i(?: am|'m) currently working on (.{3,160})[.!]?$/iu.exec(value);
+  if(activeProject)return {key:"project:current",content:value,type:"state",explicit:false};
   const preference=/^i (?:usually )?prefer\s+(.{3,180})[.!]?$/iu.exec(value);
-  if(preference)return {key:"preference:general",content:value,type:"preference",explicit:false};
+  if(preference){
+    const subject=preference[1]!.toLowerCase();
+    const category=/\b(?:explanations?|responses?|answers?|lesson|details?)\b/iu.test(subject)?"explanations":
+      /\b(?:notifications?|reminders?|alerts?)\b/iu.test(subject)?"reminders":
+      /\b(?:english|hausa|arabic|languages?)\b/iu.test(subject)?"language":
+      /\b(?:food|tea|coffee|breakfast|dinner|lunch)\b/iu.test(subject)?"food":
+      /\b(?:dark mode|light mode|themes?)\b/iu.test(subject)?"appearance":
+      "custom:"+keyPart(subject).slice(0,40);
+    return {key:"preference:"+category,content:value,type:"preference",explicit:false};
+  }
   const favorite=/^my favou?rite ([\w -]{2,50}) is (.{2,130})[.!]?$/iu.exec(value);
   if(favorite)return {key:"favorite:"+keyPart(favorite[1]!),content:value,type:"preference",explicit:false};
   const goal=/^my (?:current )?goal is (.{3,180})[.!]?$/iu.exec(value);
