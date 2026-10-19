@@ -2,7 +2,8 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function fail(message, code = 1) {
   const error = new Error(message);
@@ -108,7 +109,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+// Importing input validation in unit tests must never launch production qualification.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
   const code =
     error && typeof error === "object" && Number.isInteger(error.exitCode)
       ? error.exitCode
@@ -118,3 +121,4 @@ main().catch((error) => {
   );
   process.exitCode = code;
 });
+}
