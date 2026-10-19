@@ -67,7 +67,10 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
   return Scaffold(appBar:AppBar(title:const Text('Call details'),actions:[IconButton(tooltip:'Refresh call details',onPressed:loading?null:load,icon:const Icon(Icons.refresh))]),
    body:loading?const Center(child:CircularProgressIndicator()):error!=null?Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[Text(error!,textAlign:TextAlign.center),TextButton(onPressed:load,child:const Text('Retry'))]))):item==null?const Center(child:Text('Call unavailable.')):
    ListView(padding:const EdgeInsets.all(24),children:[
-    Center(child:MasanaPortraitAvatar(displayName:item.displayName,size:76)),const SizedBox(height:16),
+    Center(child:MasanaPortraitAvatar(
+      characterId:item.characterId,
+      agent:ref.watch(agentDirectoryProvider).find(item.characterId),
+      displayName:item.displayName,size:76)),const SizedBox(height:16),
     Text(item.displayName,textAlign:TextAlign.center,style:Theme.of(context).textTheme.headlineSmall),const SizedBox(height:8),
     Text('${item.isGroupCall?'Group call · ':''}${item.incoming?'Incoming':'Outgoing'} audio call',textAlign:TextAlign.center),
     const SizedBox(height:20),Text(item.outcomeLabel,textAlign:TextAlign.center,style:Theme.of(context).textTheme.titleMedium),
@@ -81,7 +84,10 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
     ListTile(contentPadding:EdgeInsets.zero,title:const Text('Duration'),subtitle:Text(item.duration==null?'No completed connection duration recorded':callDurationLabel(item.duration!))),
     if(item.endReason!=null)ListTile(contentPadding:EdgeInsets.zero,title:const Text('End reason'),subtitle:Text(item.endReason!.label)),
     if(group!=null)...[const Divider(),Text('Group participants',style:Theme.of(context).textTheme.titleMedium),
-     for(final member in group!.participants)ListTile(contentPadding:EdgeInsets.zero,leading:MasanaPortraitAvatar(displayName:member.displayName,size:40),title:Text(member.displayName),subtitle:Text({'selected':'Selected','connecting':'Connecting','active':'Connected','left':'Left','failed':'Could not connect'}[member.state]??member.state),trailing:const Icon(Icons.chevron_right),onTap:()=>profile(member.characterId)),
+     for(final member in group!.participants)ListTile(contentPadding:EdgeInsets.zero,leading:MasanaPortraitAvatar(
+       characterId:member.characterId,
+       agent:ref.watch(agentDirectoryProvider).find(member.characterId),
+       displayName:member.displayName,size:40),title:Text(member.displayName),subtitle:Text({'selected':'Selected','connecting':'Connecting','active':'Connected','left':'Left','failed':'Could not connect'}[member.state]??member.state),trailing:const Icon(Icons.chevron_right),onTap:()=>profile(member.characterId)),
     ],
     if(groupFailed)Column(children:[const Text('Group details could not be refreshed.',textAlign:TextAlign.center),TextButton(onPressed:load,child:const Text('Retry group details'))]),
     const Divider(),ListTile(contentPadding:EdgeInsets.zero,title:const Text('Call reference'),subtitle:SelectableText(item.callId),trailing:IconButton(tooltip:'Copy call reference',icon:const Icon(Icons.copy_outlined),onPressed:()=>Clipboard.setData(ClipboardData(text:item.callId)))),

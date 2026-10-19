@@ -131,6 +131,10 @@ class CallsScreen extends ConsumerWidget {
                   : 'signed-out',
               currentAccountKey: currentAccount,
               contacts: contacts,
+              officialContacts: {
+                for (final agent in ref.read(agentDirectoryProvider).agents)
+                  agent.characterId: agent,
+              },
               transport: transport,
               onChildConnected: (grant) => binding(grant.callId).connected(),
               onChildClosed: (grant) => binding(grant.callId).closed(),
@@ -397,6 +401,8 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
           for (final call in _calls)
             ListTile(
               leading: MasanaPortraitAvatar(
+                characterId: call.characterId,
+                agent: ref.watch(agentDirectoryProvider).find(call.characterId),
                 displayName: call.displayName,
                 size: 44,
               ),

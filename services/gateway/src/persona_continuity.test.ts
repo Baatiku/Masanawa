@@ -16,6 +16,21 @@ describe('shared Masana conversation continuity',()=>{
   const hostile=livePersonaInstruction(persona,[{role:'user',text:'\u0001'.repeat(20000)},{role:'assistant',text:'a'}]);
   expect(Buffer.byteLength(hostile)).toBeLessThan(24000);expect(hostile).not.toContain('20000');
  });
+ it('retains older small pairs when a large intervening pair exceeds the call context budget',()=>{
+  const history=[
+    {role:'user' as const,text:'Earlier I asked for geometry practice'},
+    {role:'assistant' as const,text:'We will practice shapes'},
+    {role:'user' as const,text:'巨'.repeat(4500)},
+    {role:'assistant' as const,text:'巨'.repeat(4500)},
+    {role:'user' as const,text:'x'.repeat(6500)},
+    {role:'assistant' as const,text:'y'.repeat(6500)},
+  ];
+  const instruction=livePersonaInstruction(persona,history);
+  expect(instruction).toContain('Earlier I asked for geometry practice');
+  expect(instruction).toContain('We will practice shapes');
+  expect(instruction).not.toContain('巨');
+  expect(Buffer.byteLength(instruction,'utf8')).toBeLessThan(24000);
+ });
  it('loads persistent context only under the authorized user/agent/relationship scope before token issuance',async()=>{
   const scope={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user'),characterId:createCanonicalId('character'),relationshipId:createCanonicalId('relationship')};
   const seen:unknown[]=[];

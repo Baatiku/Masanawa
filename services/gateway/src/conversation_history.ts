@@ -34,7 +34,9 @@ export function compileConversationHistory(
     const bytes =
       Buffer.byteLength(turn.user, "utf8") +
       Buffer.byteLength(turn.assistant, "utf8");
-    if (bytes > remaining) break;
+    // One oversized pair must not erase all smaller, useful older pairs.
+    // Never include only half a pair or exceed the total budget.
+    if (bytes > remaining) continue;
     result.unshift(
       { role: "user", text: turn.user },
       { role: "assistant", text: turn.assistant },

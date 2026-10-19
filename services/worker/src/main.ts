@@ -28,6 +28,7 @@ import { createMsnwMerchantSettlementRuntime } from "./jobs/msnw/paystack_mercha
 import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import { createAccountDeletionFinancialClearance, createAccountDeletionPrivacyWorker } from "./jobs/privacy/account_deletion.js";
 import { createDurableJobHealth } from "./jobs/durable_health.js";
+import { createStaleConversationTurnRecovery } from "./jobs/conversations/stale_turns.js";
 import {
   createWorkerApp,
   type WorkerAppOptions,
@@ -131,10 +132,21 @@ export async function startWorkerService(
   let msnwFinality: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let msnwMerchantSettlements: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let privacyDeletion: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let conversationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
     if (!database.pool) throw new Error("rooms_teacher_postgres_pool_required");
+    // No provider re-execution. Recovery only settles abandoned turn receipts.
+    const staleTurns = createStaleConversationTurnRecovery(database.pool);
+    conversationRecovery = createYouTubeOutboxScheduler({
+      runOnce: staleTurns.runOnce,
+      enabled: () => !drain.isDraining(),
+      intervalMs: 60_000,
+      onError: () => process.stderr.write(JSON.stringify({
+        event: "masana_chat.recovery_pending", reason: "database_unavailable",
+      }) + "\n"),
+    });
     // Account deletion only after exact financial clearance and owner OTP.
     const accessRevoker = createPostgresAccountDeletionAccessRevoker(
       database.pool, createAccountDeletionFinancialClearance(),
@@ -372,6 +384,7 @@ export async function startWorkerService(
         schedulerHealth("p2p_expiry", p2pExpiry),
         schedulerHealth("p2p_custody_audit", p2pAudit),
         schedulerHealth("privacy_deletion", privacyDeletion),
+        schedulerHealth("masana_chat_recovery", conversationRecovery),
       ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
@@ -407,6 +420,7 @@ export async function startWorkerService(
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
         await privacyDeletion?.stop();
+        await conversationRecovery?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -426,6 +440,7 @@ export async function startWorkerService(
     p2pExpiry?.start();
     p2pAudit?.start();
     privacyDeletion?.start();
+    conversationRecovery?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
@@ -438,6 +453,7 @@ export async function startWorkerService(
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
         await privacyDeletion?.stop();
+        await conversationRecovery?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;
