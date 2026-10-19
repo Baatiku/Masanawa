@@ -19,10 +19,13 @@ void main() {
       ),
     ));
     expect(find.text('Report Masana'), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('report-submit')), 150);
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('report-submit'))).onPressed, isNull);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('report-reason-fraud')), -150);
     await tester.tap(find.byKey(const ValueKey('report-reason-fraud')));
     await tester.enterText(find.byKey(const ValueKey('report-details')), 'Suspicious request');
     await tester.ensureVisible(find.byKey(const ValueKey('report-submit')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('report-submit')));
     await tester.pumpAndSettle();
     expect(selected, TwinReportReason.fraud);

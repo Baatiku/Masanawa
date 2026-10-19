@@ -264,11 +264,11 @@ void main() {
             await tab(2);
             await save('wallet-outage');
             expect(
-              find.text('Wallet balances are unavailable right now.'),
+              find.text('Couldn’t refresh balance'),
               findsOneWidget,
             );
-            await tester.ensureVisible(find.text('Crypto'));
-            await tester.tap(find.text('Crypto'));
+            await tester.ensureVisible(find.text('All crypto assets'));
+            await tester.tap(find.text('All crypto assets'));
             await tester.pumpAndSettle();
             expect(find.byType(CryptoWalletScreen), findsOneWidget);
             expect(find.byType(NavigationBar), findsNothing);

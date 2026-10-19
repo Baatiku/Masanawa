@@ -42,7 +42,7 @@ void main() {
       dio:dio,baseUrl:'https://example.test',expectedUserId:'owner',
       currentUserId:()=>'owner',accessToken:()=>'token')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('P2P is unavailable:'),findsOneWidget);
+    expect(find.text('Unable to load P2P'),findsOneWidget);
     expect(find.text('Retry'),findsOneWidget);
     expect(tester.takeException(),isNull);
     dio.close();
