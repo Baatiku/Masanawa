@@ -86,6 +86,31 @@ For each completed checkbox: attach **exact source SHA, paths, tests executed, s
 - [ ] LATER — External video discovery via source-compliant embeds; no native user-uploaded long-form video hosting at launch.
 **Screen/journey contract:** Own profile → My Masana → create → generated preview → publication review → creator manager → public profile → follow/chat/Status. Rooms directory → Room details → join → discussion/lesson → leave. Every user-action result has a back route, empty/retry state and server authorization.
 
+### Phase 3 source integration checkpoint — 19 October 2026
+
+This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, containing Phase 2 PRs #223 and #224. The original Phase 3 unchecked checklist above remains open until full vertical journeys and device/provider acceptance succeed; this checkpoint is **not full Phase 3 completion**.
+
+| Requirement | Existing, improved or still missing | Required source / external acceptance |
+| --- | --- | --- |
+| Creator identity and one-free/paid publication | Existing server and client source preserved | Two distinct real accounts, Wallet exact-debit and replay acceptance still open |
+| Creator voices | Existing suggested approved TTS voices preserved | Live provider and optional voice-reference qualification still open |
+| Creation wizard and preview | Existing form, AI-generated biography and publication review reused | Photo admission, on-device audio preview and polished permission/offline states incomplete |
+| Portrait and cover | Partial improvement: publication preserves owner-approved portrait Media ID after rights check; signed media read accepts only active published creators | File upload/processing, cover upload, replacement and client end-to-end display still missing |
+| Published revision allowance/fees | DB policy and operation tables exist but editing journeys remain unimplemented | Editor, free-edit allowance, canonical quote, authorization, once-only charge/rollback and client must be added |
+| Manage Masana | Existing drafts, published/paused, current manager; new earnings route | Share, engagement, restriction and retirement actions remain incomplete |
+| Optional custom voice | Unqualified; keep approved voice fallback; no claim of cloning | Actual provider capability, consent, adult same-speaker attestations, delete/retention controls required |
+| Earnings | Read-only owner/tenant scoped allocation statement and exact six-decimal Flutter presentation implemented; no second Wallet or phantom credit | Source allocation producer, net eligibility/self-spend review, reversal handling and receipt/Wallet transfer verification missing |
+| Status feed | Existing client/feed/source reused | Creator cadence, editorial rights, anti-spam and full media/offline acceptance incomplete |
+| Rooms | Existing directory, membership/discussion/lessons reused | Paid/unpaid multi-account join, leave, expiry, replay and provider verification incomplete |
+| Creator two-account lifecycle | NOT VERIFIED | Free, paid, follow, chat, call, Status, pause, Wallet settlement and account switch in actual environment |
+| Rooms lifecycle | NOT VERIFIED | Join, leave, paid expiry, recovery, access revocation and account switch |
+| Scheduled Room audio | LATER | Explicitly deferred |
+| External video discovery | LATER | Explicitly deferred |
+
+**Source paths touched this checkpoint:** services/gateway/src/creator_agents/{store,routes,earnings.test,routes.test}.ts; services/gateway/src/modules/masana/profile_media{,.test}.ts; apps/mobile/lib/src/screens/profile/{my_masana_screen,creator_earnings_screen}.dart; apps/mobile/test/creator_earnings_format_test.dart. Risk: new earnings endpoint is read-only; no migrations, custody writes or payment/provider calls were added.
+
+**Reproducibility:** Node v24.21.0, pnpm 12.8.2, dependency installation, full TypeScript typecheck and pnpm build completed; targeted 17 Vitest tests passed across six files including gateway owner auth, statement projections and signed-media authorizations. Runtime PostgreSQL wallet settlement, Flutter/Android compilation and physical device, provider credentials/voice, market availability, privacy/rights uploads, backup/rollback remain open. Not an issuance, settlement, promotion or E2E acceptance. Preserve the original incomplete checkboxes.
+
 ## Phase 4 — MSNW Wallet, token and crypto foundation (P0)
 **Outcome:** Users see trustworthy balances and can complete only financially qualified operations.
 - [x] SOURCE PRESENT — Single MSNW customer-facing Wallet direction, custody reads, funding/history/transfer/conversion UI and Base token source. **No mainnet token deployment claimed.**

@@ -74,6 +74,14 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
  }
   async function commitCharacterPublication(db:CreatorQuery,owner:Owner,item:CreatorAgentView,expectedRevision:number):Promise<CreatorAgentView>{
     if(!item.generated)throw new CreatorAgentError("creator.profile_not_generated",409);
+    if(item.seed.portraitMediaId!==null){
+      const matched=await db.query(
+        "SELECT media_id FROM masana.character_media WHERE tenant_id=$1 AND character_id=$2 "+
+        "AND media_id=$3 AND kind='portrait' AND length(btrim(rights_note))>4 "+
+        "AND length(btrim(approved_by))>0 AND length(btrim(object_key))>0 LIMIT 1",
+        [owner.tenantId,item.characterId,item.seed.portraitMediaId]);
+      if(!matched.rows.length)throw new CreatorAgentError("creator.portrait_unverified",409);
+    }
     const charVersionId=createCanonicalId("character-version");
     const at=new Date().toISOString();
     const g=item.generated;
@@ -103,7 +111,7 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
      handle:item.handle,displayName:g.name,profession:g.profession,biography:g.biography,
      lifeStory:"This fictional Masana persona was generated for professional educational assistance.",
      languages:g.languages,talents:g.specializations,goals:g.statusTopics,
-     roomId:null,portraitMediaId:null,bannerMediaId:null,socialChannels:[],
+     roomId:null,portraitMediaId:item.seed.portraitMediaId,bannerMediaId:null,socialChannels:[],
     };
     await db.query(
      "INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at) "+
@@ -344,6 +352,63 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
     await db.query("COMMIT");begun=false;return published;
    }catch(e){if(begun)await db.query("ROLLBACK").catch(()=>{});throw e;}
    finally{db.release();}
+  },
+
+  /** Read-only, owner-scoped allocation statement. A settled allocation has
+   * already been credited by the canonical Wallet posting; never credit it here. */
+  async earnings(owner:Owner,characterId:string,cursorRaw?:unknown){
+   const character=id(characterId);
+   await own(owner,character); // A stranger must never receive even an empty statement.
+   let cursorDate:string|null=null,cursorId:string|null=null;
+   if(cursorRaw!==undefined){
+    if(typeof cursorRaw!=="string"||!(/^[A-Za-z0-9_-]{10,512}$/u).test(cursorRaw))
+     throw new CreatorAgentError("creator.earnings_cursor_invalid",400);
+    try{
+     const parsed:unknown=JSON.parse(Buffer.from(cursorRaw,"base64url").toString("utf8"));
+     if(!Array.isArray(parsed)||parsed.length!==2||typeof parsed[0]!=="string"||
+        typeof parsed[1]!=="string"||!/^[-_a-zA-Z0-9]{8,160}$/u.test(parsed[1])||
+        !Number.isFinite(Date.parse(parsed[0]))||new Date(parsed[0]).toISOString()!==parsed[0])
+       throw new TypeError("invalid cursor");
+     cursorDate=parsed[0];cursorId=parsed[1];
+    }catch{throw new CreatorAgentError("creator.earnings_cursor_invalid",400);}
+   }
+   const clause=cursorDate===null?"":" AND (created_at,allocation_id)<($4::timestamptz,$5::text)";
+   const params:unknown[]=[owner.tenantId,owner.userId,character];
+   if(cursorDate!==null)params.push(cursorDate,cursorId);
+   const rows=await pool.query(
+    "SELECT allocation_id,usage_receipt_id,policy_revision,contribution_atomic,creator_share_atomic,state,"+
+    "creator_wallet_ledger_ref,created_at FROM creator.earning_allocations "+
+    "WHERE tenant_id=$1 AND owner_user_id=$2 AND character_id=$3"+clause+
+    " ORDER BY created_at DESC,allocation_id DESC LIMIT 26",params);
+   const summary=await pool.query(
+    "SELECT coalesce(sum(CASE WHEN state='settled' THEN creator_share_atomic::numeric ELSE 0 END),0)::text AS settled_atomic,"+
+    " coalesce(sum(CASE WHEN state='pending' THEN creator_share_atomic::numeric ELSE 0 END),0)::text AS pending_atomic,"+
+    " coalesce(sum(CASE WHEN state='reversed' THEN creator_share_atomic::numeric ELSE 0 END),0)::text AS reversed_atomic"+
+    " FROM creator.earning_allocations WHERE tenant_id=$1 AND owner_user_id=$2 AND character_id=$3",
+    [owner.tenantId,owner.userId,character]);
+   const total=summary.rows[0]??{};
+   for(const key of ["settled_atomic","pending_atomic","reversed_atomic"]){
+    if(typeof total[key]!=="string"||!/^(0|[1-9][0-9]*)$/u.test(total[key]))
+     throw new CreatorAgentError("creator.earnings_unavailable",503);
+   }
+   const items=rows.rows.slice(0,25).map(row=>{
+    const state=row.state;
+    if(state!=="settled"&&state!=="pending"&&state!=="reversed"||
+      typeof row.allocation_id!=="string"||typeof row.usage_receipt_id!=="string"||
+      typeof row.creator_share_atomic!=="string"||!/^(0|[1-9][0-9]*)$/u.test(row.creator_share_atomic))
+     throw new CreatorAgentError("creator.earnings_unavailable",503);
+    if(state==="settled" && typeof row.creator_wallet_ledger_ref!=="string")
+     throw new CreatorAgentError("creator.earnings_unavailable",503);
+    const timestamp=row.created_at instanceof Date?row.created_at.toISOString():new Date(String(row.created_at)).toISOString();
+    return {allocationId:row.allocation_id,receiptId:row.usage_receipt_id,
+      amountAtomic:row.creator_share_atomic,state,createdAt:timestamp,
+      walletLedgerRef:state==="settled"?row.creator_wallet_ledger_ref:null};
+   });
+   const last=items[items.length-1];
+   return {asset:"MSNW" as const,atomicDecimals:6,settledAtomic:total.settled_atomic,
+     pendingAtomic:total.pending_atomic,reversedAtomic:total.reversed_atomic,
+     items,nextCursor:rows.rows.length>25&&last?
+       Buffer.from(JSON.stringify([last.createdAt,last.allocationId]),"utf8").toString("base64url"):null};
   },
   async setActive(owner:Owner,characterId:string,active:boolean,expectedRevision:number):Promise<CreatorAgentView>{
    if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)throw new CreatorAgentError("creator.revision_invalid",400);

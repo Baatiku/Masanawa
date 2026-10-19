@@ -24,6 +24,12 @@ describe("approved Masana media grants",()=>{
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0]?.[1])
       .toEqual(["tenant_a","masana_one","media_rights_portrait","portrait","portraitMediaId"]);
+    const sql=query.mock.calls[0]?.[0];
+    expect(sql).toContain("o.kind='creator-agent'");
+    expect(sql).toContain("ca.state='published'");
+    expect(sql).toContain("u.state='active'");
+    expect(sql).toContain("r.profile->>$5=m.media_id");
+    expect(sql).toContain("length(btrim(m.rights_note))>4");
     expect(statObject).toHaveBeenCalledWith("masana/portrait.png");
     expect(presignGet).toHaveBeenCalledWith("masana/portrait.png",120);
   });
