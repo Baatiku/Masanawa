@@ -482,6 +482,7 @@ void main() {
     final c = ProviderContainer(
       overrides: [
         agentDirectoryTransportProvider.overrideWithValue(transport),
+        agentDirectoryCacheProvider.overrideWithValue(_NoopDirectoryCache()),
         sessionProvider.overrideWith(_SignedInSessionController.new),
       ],
     );

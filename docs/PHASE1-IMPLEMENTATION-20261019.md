@@ -49,3 +49,8 @@ Additional Phase 1 improvements on top of that checkpoint:
 **Development integration gate:** pass applicable production builds and specific Flutter regressions, source review, account-isolation checks and clean staged diff, then merge compatible source. **Customer release gate:** the installed APK must pass all Phase 1 relevant golden journeys (from SCREEN-JOURNEYS) for an authenticated user and a second account, plus cold/warm startup on a low-memory phone, real push, keyboard/RTL/TalkBack, source-identifiable signature and rollback. Never label this phase `VERIFIED_E2E` until that evidence is recorded.
 
 Continue with **Phase 2** only after recording remaining Phase 1 device/provider acceptance and repairing any genuine failures discovered. Do not repeat development already merged from #220.
+
+### Integration CI repairs
+
+- Fixed an existing `agent_recovery_test.dart` fast-race test to inject its already-defined in-memory/no-op roster-cache implementation rather than initialize native Drift/path_provider in a pure Dart widget test. This is a test injection repair, not removal of production persistence.
+- Removed unused UI/test declarations which Flutter analyzer had reported as warnings. Remaining information-level lint suggestions do not by themselves demonstrate broken behavior.

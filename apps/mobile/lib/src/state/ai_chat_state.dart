@@ -971,9 +971,8 @@ class AiChatController extends Notifier<AiChatState> {
 
   void _mergeServerHistory(
     String characterId,
-    List<AgentHistoryMessage> history, {
-    Map<String, List<ChatAttachment>> remoteMedia = const {},
-  }) {
+    List<AgentHistoryMessage> history,
+  ) {
     final thread = threadOf(characterId);
     final local = [...thread.messages];
     final byKey = <String, AiChatMessage>{};
