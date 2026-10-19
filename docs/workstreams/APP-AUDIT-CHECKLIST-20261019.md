@@ -102,3 +102,5 @@ APK generation remains paused by owner instruction until the whole checklist is 
 - A05: strict workspace TypeScript checks and Gateway/Worker builds passed; backend suite recorded 2,097 passed / 222 skipped. New deletion-redaction regressions passed (7 tests with existing worker tests). Latest Flutter checks are running and have not established a passing whole-app suite.
 - F15: disabled-account public-profile redaction is implemented and tested with tenant/user fencing. Real deletion/export lifecycle acceptance remains pending.
 - I07: disposable encrypted database/object-store restore rehearsal remains NOT_RUN; required restore tooling/qualified storage access has not been established in this environment.
+
+- A06: active entry point now labels 15 October deployment blockers as historical, records verified Actions access, and names Baatiku/Masanawa as the active repository. The old audio-first product document now carries an explicit supersession notice and current shell/MSNW authority. Relative links reviewed; historical content preserved.

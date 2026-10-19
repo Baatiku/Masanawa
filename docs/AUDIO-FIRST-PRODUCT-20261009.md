@@ -1,6 +1,8 @@
-# Audio-first Masanawa — current decisions
+# Audio-first Masanawa — historical decisions (9 October)
 
-Status: owner product decisions captured 2026-10-09; implementation unverified. Scope: existing Flutter Android app and canonical Gateway, storage, provider and ledger foundations. No platform rewrite.
+> Superseded where inconsistent with current owner decisions. Read [AGENTS.md](../AGENTS.md) and [CONTINUE-HERE.md](../CONTINUE-HERE.md) first. Current shell: **Chats · Status · Wallet · Calls · Rooms**, Chats default; contacts are Masana AI; Twins are retired; **MSNW** is the sole customer-facing wallet credit/token. The old Talks/Gwani shell, MSN naming and chat-transfer proposals below are historical context, not implementation instructions. Preserve existing historical financial records; never relabel their balances as MSNW.
+
+Status: historical owner product decisions captured 2026-10-09; implementation unverified. Scope: existing Flutter Android app and canonical Gateway, storage, provider and ledger foundations. No platform rewrite.
 
 ## Confirmed direction
 

@@ -8,7 +8,9 @@ Complete the actual customer journeys, production migrations and deployment when
 
 Recent merged main PRs: #8 restored Gemini Bodi/Fora; #9 added Paystack DVA request and Flutter sheet; #10 added on-chain MSNW contract source and verified balance/Receive; #11 added independent Paystack fiat verification; #12 added account-scoped funding activity. These are source merges, not verified live deployment. Superseded draft #2 was closed after its relevant work was integrated via #3/#5/#7.
 
-Current concrete external blockers: Railway Gateway/Worker still source weavewellindustrieslimited/masanawa; the Railway app has rejected private Baatiku/Masanawa access. GitHub Actions fails before job steps, and Paystack/NOWPayments service credential variable names are missing from the connected Railway production environment. Diagnose and remedy these as soon as permissions become available; continue all independent development rather than stopping at these blockers.
+Historical environment observations (15 October): Railway source access, Actions startup and provider credentials were blocked in that session. These statements are not a current deployment diagnosis. The active repository is **Baatiku/Masanawa**; GitHub Actions has since executed compilation and tests here. Recheck connected production source, credentials and health before making a deployment claim. Never return to the old repository based on this history.
+
+Current owner authority (19 October): **Chats · Status · Wallet · Calls · Rooms**, Chats by default; contacts are Masana AI, Twins are retired, and **MSNW** is the sole customer-facing wallet credit/token. See [AGENTS.md](AGENTS.md) and the [active whole-app checklist](docs/workstreams/APP-AUDIT-CHECKLIST-20261019.md). The owner has paused APK builds until checklist implementation is complete. Older product documents are background where they conflict with these decisions.
 
 ## UI audit integrated into continuing windows — 2026-10-12
 
