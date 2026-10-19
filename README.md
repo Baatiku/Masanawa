@@ -1,30 +1,15 @@
 # Masanawa
 
-Masanawa is a social messaging app for AI celebrities: think WhatsApp, modern
-and more advanced. Every contact is a Masana, an AI persona you chat and call
-with — one-to-one and in groups. Masana post Status updates into a feed. A
-built-in Wallet covers billing, crypto and services. Bottom navigation is
-**Chats · Status · Wallet · Calls · Rooms**, opening on Chats.
+Masanawa is a **global AI-character communication and creator platform**. Users discover, chat with, call and follow professional and entertaining **Masana** characters; creators can publish their own Masana. The app combines Status, Rooms, and a unified **MSNW Wallet** for qualified digital services and payments.
 
-Start at [CONTINUE-HERE.md](CONTINUE-HERE.md) and [AGENTS.md](AGENTS.md).
+The customer app uses **Chats · Status · Wallet · Calls · Rooms**, opening on Chats. The design is clean, green-and-white and WhatsApp-like in simplicity. MSNW is the only customer-facing platform credit; a blockchain contract or global financial availability must not be inferred from source code.
 
-- [Current product decisions](docs/AUDIO-FIRST-PRODUCT-20261009.md)
-- [Screens and complete journeys](docs/AUDIO-FIRST-SCREEN-SPECS.md)
-- [MSN wallet and escrow](docs/MSN-WALLET-P2P-CONTRACT.md)
-- [Window plan](docs/AUDIO-FIRST-WINDOW-PLAN-20261009.md)
-- [Copyable window prompts](docs/AUDIO-FIRST-WINDOW-PROMPTS-20261009.md)
-- [Completeness audit](docs/AUDIO-FIRST-COMPLETENESS-AUDIT-20261009.md)
-- [Recovery and old-work reconciliation](docs/AUDIO-FIRST-RECOVERY-20261009.md)
-- [Documentation index](docs/README.md)
+## Start here
+1. [Current phased roadmap and status](docs/PRODUCT-ROADMAP-20261019.md) — **sole active product roadmap**.
+2. [Screen inventory and end-to-end acceptance journeys](docs/SCREEN-JOURNEYS.md).
+3. [Contributing and operational guardrails](AGENTS.md) and [current execution entrypoint](CONTINUE-HERE.md).
+4. [Technical/financial documents](docs/README.md).
 
-This documentation captures direction, not verified product delivery. The owner reports a local build; its source/artifact still needs reconciliation here. Existing PRs are preserved and recovered rather than rebuilt.
+Production code lives in `apps/mobile`, `apps/admin_mobile`, `services/gateway`, `services/worker`, `packages`, `adapters`, `database`, `contracts/msnw` and operational infrastructure. Reference repositories are **not bundled** into clones; the optional research list remains under `references/`.
 
-## Repository principles
-
-One canonical implementation with domain packages, services and Flutter presentation. Reference systems are specifications/donors, never runtime architecture boundaries. Runtime code must not import the reference vault.
-
-Reference repositories are **not included in Masanawa clones**. They are optional research sources listed with pinned commits and upstream links in [reference instructions](references/README.md) and [source lock](docs/migration/SOURCE-LOCK.md). Standard and recursive clones download only Masanawa itself.
-
-main remains the canonical source for ordinary pulls and qualified APK builds once local improvements and dependency-ready work have been integrated. Temporary work/integration branches are not an alternative product source of truth.
-
-Previous cumulative product and launch instructions are preserved in [the archive](docs/archive/20261009/README.md); they no longer override current owner decisions.
+A source merge does not itself prove an Android APK, AI-provider action, crypto issuance, P2P release, live billing or a signed release works. See the roadmap for exactly which journeys are qualified or still need work.

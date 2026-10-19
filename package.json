@@ -24,9 +24,7 @@
     "test:security": "vitest run tests/security",
     "test:recovery": "vitest run tests/recovery",
     "test:load": "vitest run tests/load",
-    "test:chaos": "vitest run tests/chaos",
-    "alpha:bootstrap": "node --conditions=production scripts/alpha-bootstrap.mjs",
-    "alpha:prepare": "pnpm --filter @masanawa/gateway-service... build && pnpm alpha:bootstrap"
+    "test:chaos": "vitest run tests/chaos"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
