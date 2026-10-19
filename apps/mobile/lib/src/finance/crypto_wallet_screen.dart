@@ -595,10 +595,47 @@ class _AssetList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (wallet.depositRoutes.isEmpty) return const SizedBox.shrink();
-    return Column(children:[for(final route in wallet.depositRoutes)ListTile(
-      contentPadding:EdgeInsets.zero,leading:CircleAvatar(child:Text(route.asset.substring(0,1))),title:Text(route.asset,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:route.network==null?null:Text(route.network!),
-      trailing:Row(mainAxisSize:MainAxisSize.min,children:[Text(wallet.balances[route.providerCode]??'—'),const SizedBox(width:8),const Icon(Icons.chevron_right,size:18)]),onTap:()=>onSelected(route.providerCode),
-    )]);
+    return Column(
+      children: [
+        for (final route in wallet.depositRoutes)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: context.masanawa.surfaceCard,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => onSelected(route.providerCode),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      CircleAvatar(child: Text(route.asset.isEmpty ? '?' : route.asset.substring(0, 1))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(route.asset, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            if (route.network != null) Text(route.network!),
+                            const SizedBox(height: 6),
+                            Text(
+                              wallet.balances[route.providerCode] ?? 'Balance unavailable',
+                              textDirection: TextDirection.ltr,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
