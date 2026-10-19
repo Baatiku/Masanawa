@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 import 'dart:io';
@@ -135,6 +136,7 @@ Future<void> capture(WidgetTester tester, String name) async {
 }
 
 class FixtureApprovalApi extends ApiClient {
+  FixtureApprovalApi() : super(dio: Dio());
   String? startedRequest;
   @override Future<void> beginWithdrawalStepUp({
     required String requestId, required String providerCode,
