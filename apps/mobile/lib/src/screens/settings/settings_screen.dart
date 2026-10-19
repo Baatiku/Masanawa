@@ -147,7 +147,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _sendingDiagnostics = true);
     try {
       final report = await MasanawaDiagnostics.instance.exportSanitizedReport();
-      if (!sameOwner()) return;
+      if (!mounted || !sameOwner()) return;
       final approved = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (ctx) => Scaffold(
           appBar: AppBar(title: const Text('Review app diagnostics')),
@@ -159,10 +159,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ])),
         ),
       ));
-      if (approved != true || !sameOwner()) return;
+      if (!mounted || approved != true || !sameOwner()) return;
       final reference = await ref.read(apiClientProvider).sendSupportDiagnostics(
         MasanawaDiagnostics.supportPayload(report, createRequestId()));
-      if (!sameOwner()) return;
+      if (!mounted || !sameOwner()) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Report sent. Support reference: $reference'),
         duration: const Duration(seconds: 15),
