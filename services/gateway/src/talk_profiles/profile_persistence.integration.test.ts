@@ -29,6 +29,7 @@ beforeAll(async () => {
   await db.exec('CREATE SCHEMA talks');
   await db.exec(await readFile(new URL('../../../../packages/talks/migrations/0003_talk_profiles.sql', import.meta.url), 'utf8'));
   await db.exec(`CREATE TABLE talks.safety_enforcement(tenant_id text,target_kind text,target_id text,visibility text);
+    CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);
     CREATE SCHEMA security;
     CREATE SCHEMA identity;
     CREATE TABLE security.platform_user_profiles(tenant_id text,user_id text,display_name text,email text,phone text);

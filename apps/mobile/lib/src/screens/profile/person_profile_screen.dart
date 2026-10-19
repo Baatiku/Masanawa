@@ -6,47 +6,62 @@ import '../../state/talk_social_profile_state.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
-import '../talks/talk_home_screen.dart';
+
+import 'package:go_router/go_router.dart';
+
+import '../../state/agent_directory_state.dart';
+import '../../agents/masana_portrait_avatar.dart';
+import 'my_masana_screen.dart';
 
 class PersonProfileScreen extends ConsumerStatefulWidget {
-  const PersonProfileScreen({
-    super.key,
-    required this.handle,
-    this.onOpenTalk,
-    this.onOpenTwin,
-  });
+  const PersonProfileScreen({super.key, required this.handle});
 
   final String handle;
-  final void Function(String talkId)? onOpenTalk;
-  final void Function(String publicId)? onOpenTwin;
 
   @override
-  ConsumerState<PersonProfileScreen> createState() => _PersonProfileScreenState();
+  ConsumerState<PersonProfileScreen> createState() =>
+      _PersonProfileScreenState();
 }
 
 class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
-  HumanProfile? _local;
   bool _followBusy = false;
   int _operation = 0;
 
+  @override
+  void didUpdateWidget(covariant PersonProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.handle != widget.handle) {
+      _operation++;
+
+      _followBusy = false;
+    }
+  }
+
   Future<void> _refresh() async {
-    setState(() => _local = null);
     ref.invalidate(humanProfileProvider(widget.handle));
-    await ref.read(humanProfileProvider(widget.handle).future);
+    try {
+      await Future.wait<void>([
+        ref.read(humanProfileProvider(widget.handle).future).then((_) {}),
+        if (ref.read(sessionProvider) is SessionSignedIn)
+          ref.read(agentDirectoryProvider.notifier).refresh(),
+      ]);
+    } catch (_) {
+      // The profile and directory render their own error/retry state.
+    }
   }
 
   Future<void> _toggleFollow(HumanProfile profile) async {
-    if (_followBusy) return;
+    if (_followBusy || profile.isSelf) return;
     final operation = ++_operation;
     setState(() => _followBusy = true);
     try {
-      final updated =
-          await ref.read(talkSocialProfileTransportProvider).setFollowing(
-                handle: profile.handle,
-                following: !profile.isFollowing,
-              );
+      await ref
+          .read(talkSocialProfileTransportProvider)
+          .setFollowing(
+            handle: profile.handle,
+            following: !profile.isFollowing,
+          );
       if (!mounted || operation != _operation) return;
-      setState(() => _local = updated);
       ref.invalidate(humanProfileProvider(widget.handle));
     } catch (_) {
       if (!mounted || operation != _operation) return;
@@ -54,29 +69,39 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
         const SnackBar(content: Text('Couldn’t update Follow right now.')),
       );
     } finally {
-      if (mounted && operation == _operation) setState(() => _followBusy = false);
+      if (mounted && operation == _operation)
+        setState(() => _followBusy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null), (previous, next) {
-      if (previous == next) return;
-      _operation++;
-      setState(() { _local = null; _followBusy = false; });
-    });
+    ref.listen(
+      sessionProvider.select(
+        (state) => state is SessionSignedIn ? state.user.id : null,
+      ),
+      (previous, next) {
+        if (previous == next) return;
+        _operation++;
+        setState(() {
+          _followBusy = false;
+        });
+      },
+    );
     final asyncProfile = ref.watch(humanProfileProvider(widget.handle));
     return asyncProfile.when(
       loading: () => Scaffold(
         appBar: AppBar(title: const Text('Profile')),
-        body: const MasanawaProfileSkeleton(semanticLabel: 'Loading user profile'),
+        body: const MasanawaProfileSkeleton(
+          semanticLabel: 'Loading user profile',
+        ),
       ),
       error: (_, __) => _Unavailable(
         label: 'Couldn’t load this profile.',
         onRetry: () => ref.invalidate(humanProfileProvider(widget.handle)),
       ),
       data: (remote) {
-        final profile = _local ?? remote;
+        final profile = remote;
         if (profile == null) {
           return const _Unavailable(label: 'This profile is unavailable.');
         }
@@ -85,35 +110,36 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
           followBusy: _followBusy,
           onFollow: () => _toggleFollow(profile),
           onRefresh: _refresh,
-          onOpenTalk: widget.onOpenTalk,
-          onOpenTwin: widget.onOpenTwin,
         );
       },
     );
   }
 }
 
-class _PersonProfileBody extends StatelessWidget {
+class _PersonProfileBody extends ConsumerWidget {
   const _PersonProfileBody({
     required this.profile,
     required this.followBusy,
     required this.onFollow,
     required this.onRefresh,
-    this.onOpenTalk,
-    this.onOpenTwin,
   });
 
   final HumanProfile profile;
   final bool followBusy;
   final VoidCallback onFollow;
   final Future<void> Function() onRefresh;
-  final void Function(String talkId)? onOpenTalk;
-  final void Function(String publicId)? onOpenTwin;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final u = context.masanawa;
     final avatar = profile.avatarUrl?.trim();
+    final signedIn = ref.watch(sessionProvider) is SessionSignedIn;
+    final directory = signedIn ? ref.watch(agentDirectoryProvider) : null;
+    final agents =
+        directory?.agents
+            .where((agent) => agent.creatorHandle == profile.handle)
+            .toList() ??
+        [];
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -129,10 +155,20 @@ class _PersonProfileBody extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 38,
-                  foregroundImage: avatar == null || avatar.isEmpty ? null : NetworkImage(avatar),
-                  onForegroundImageError: avatar == null || avatar.isEmpty ? null : (_, __) {},
-                  child: Text(profile.displayName.trim().isEmpty
-                    ? '?' : profile.displayName.trim().substring(0, 1).toUpperCase()),
+                  foregroundImage: avatar == null || avatar.isEmpty
+                      ? null
+                      : NetworkImage(avatar),
+                  onForegroundImageError: avatar == null || avatar.isEmpty
+                      ? null
+                      : (_, __) {},
+                  child: Text(
+                    profile.displayName.trim().isEmpty
+                        ? '?'
+                        : profile.displayName
+                              .trim()
+                              .substring(0, 1)
+                              .toUpperCase(),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -157,7 +193,9 @@ class _PersonProfileBody extends StatelessWidget {
                             const SizedBox(width: 7),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 3),
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: u.emergency.withValues(alpha: .12),
                                 borderRadius: BorderRadius.circular(999),
@@ -180,7 +218,9 @@ class _PersonProfileBody extends StatelessWidget {
                         style: TextStyle(color: u.textMuted, fontSize: 13),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(spacing: 18, runSpacing: 6,
+                      Wrap(
+                        spacing: 18,
+                        runSpacing: 6,
                         children: [
                           _Stat(
                             value: _compact(profile.followerCount),
@@ -198,71 +238,91 @@ class _PersonProfileBody extends StatelessWidget {
               ],
             ),
             if (profile.bio.trim().isNotEmpty)
-              ExpansionTile(tilePadding: EdgeInsets.zero,
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
                 title: const Text('About'),
-                children: [Padding(padding: const EdgeInsets.only(bottom: 12),
-                  child: Align(alignment: AlignmentDirectional.centerStart,
-                    child: SelectableText(profile.bio)))],
-              ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    key: const ValueKey('person-profile-follow'),
-                    onPressed: followBusy ? null : onFollow,
-                    child: Text(
-                      followBusy
-                          ? 'Updating…'
-                          : profile.isFollowing
-                              ? 'Following'
-                              : 'Follow',
-                    ),
-                  ),
-                ),
-                if (profile.isLive &&
-                    profile.liveTalkId?.isNotEmpty == true &&
-                    onOpenTalk != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => onOpenTalk!(profile.liveTalkId!),
-                      icon: const Icon(Icons.headphones_rounded),
-                      label: const Text('Listen live'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: SelectableText(profile.bio),
                     ),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Public activity',
-              style: TextStyle(
-                color: u.textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(height: 9),
-            if (profile.talks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 26),
-                child: Text(
-                  'No public activity yet.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: u.textMuted),
-                ),
+            const SizedBox(height: 14),
+            if (profile.isSelf)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    key: const ValueKey('person-profile-edit'),
+                    onPressed: () => context.push('/profile'),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit profile'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const MyMasanaScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('My Masana'),
+                  ),
+                ],
               )
             else
-              for (var i = 0; i < profile.talks.length; i++) ...[
-                TalkFeedCard(
-                  talk: profile.talks[i],
-                  onTap: onOpenTalk == null
-                      ? null
-                      : () => onOpenTalk!(profile.talks[i].id),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: OutlinedButton(
+                  key: const ValueKey('person-profile-follow'),
+                  onPressed: followBusy ? null : onFollow,
+                  child: Text(
+                    followBusy
+                        ? 'Updating…'
+                        : profile.isFollowing
+                        ? 'Following'
+                        : 'Follow',
+                  ),
                 ),
-                if (i != profile.talks.length - 1) const SizedBox(height: 10),
-              ],
+              ),
+            // Message and Call actions are composed here only when their real
+            // human transports land; no agent route or disabled fake action.
+            if (agents.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('Masana', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final agent in agents)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: MasanaPortraitAvatar(agent: agent),
+                  title: Text(agent.displayName),
+                  subtitle: Text(
+                    agent.roleLabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(
+                    '/masana/${Uri.encodeComponent(agent.characterId)}',
+                  ),
+                ),
+            ],
+            if (directory?.error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Could not refresh public Masana.',
+                style: TextStyle(color: u.textMuted),
+              ),
+              TextButton(
+                onPressed: () =>
+                    ref.read(agentDirectoryProvider.notifier).refresh(),
+                child: const Text('Try again'),
+              ),
+            ],
           ],
         ),
       ),
@@ -283,10 +343,7 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: TextStyle(
-            color: u.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: u.textPrimary, fontWeight: FontWeight.w700),
         ),
         const SizedBox(width: 4),
         Text(label, style: TextStyle(color: u.textMuted, fontSize: 12)),
@@ -315,7 +372,10 @@ class _Unavailable extends StatelessWidget {
               Text(label, textAlign: TextAlign.center),
               if (onRetry != null) ...[
                 const SizedBox(height: 12),
-                FilledButton(onPressed: onRetry, child: const Text('Try again')),
+                FilledButton(
+                  onPressed: onRetry,
+                  child: const Text('Try again'),
+                ),
               ],
             ],
           ),

@@ -194,7 +194,8 @@ describe("Talk AI Seat API", () => {
   });
 
   it("returns the canonical confirmation status and friendly message", async () => {
-    const quoteId = createCanonicalId("quote");
+    // The fixture maps a trailing 0 to admitted; pin the pending branch.
+    const quoteId = createCanonicalId("quote").slice(0, -1) + "1";
     const response = await app().inject({
       method: "POST",
       url: `/talks/talk_1/ai-seat-quotes/${quoteId}/confirm`,

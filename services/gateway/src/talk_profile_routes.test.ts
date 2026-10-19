@@ -12,6 +12,7 @@ function repo(initiallyMissing = false): TalkProfileRepository {
   let biography = "Host";
   let avatarUrl: string | null = "https://assets.example.test/avatar.jpg";
   return {
+    async listHumanContacts() { return {items:[],nextCursor:null}; },
     async readHuman({ handle }) {
       if (handle !== "amina") return null;
       return {

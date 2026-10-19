@@ -21,16 +21,16 @@ class _Profiles implements TalkSocialProfileTransport {
 
   @override
   Future<HumanProfile?> loadHuman(String handle) async => HumanProfile(
-        handle: handle,
-        displayName: 'Amina Yusuf',
-        bio: 'Technology, startups and useful conversations.',
-        followerCount: following ? 1201 : 1200,
-        followingCount: 80,
-        isFollowing: following,
-        twinPublicId: 'amina-twin',
-        twinDisplayName: 'Amina Twin',
-        talks: const [talk],
-      );
+    handle: handle,
+    displayName: 'Amina Yusuf',
+    bio: 'Technology, startups and useful conversations.',
+    followerCount: following ? 1201 : 1200,
+    followingCount: 80,
+    isFollowing: following,
+    twinPublicId: 'amina-twin',
+    twinDisplayName: 'Amina Twin',
+    talks: const [talk],
+  );
 
   @override
   Future<HumanProfile?> loadHumanByUserId(String userId) async =>
@@ -87,87 +87,149 @@ class _Profiles implements TalkSocialProfileTransport {
 Widget _app({
   required TalkSocialProfileTransport transport,
   required Widget home,
-}) =>
-    ProviderScope(
-      overrides: [
-        talkSocialProfileTransportProvider.overrideWithValue(transport),
-      ],
-      child: MaterialApp(
-        theme: buildMasanawaTheme(brightness: Brightness.light),
-        home: home,
-      ),
-    );
+}) => ProviderScope(
+  overrides: [talkSocialProfileTransportProvider.overrideWithValue(transport)],
+  child: MaterialApp(
+    theme: buildMasanawaTheme(brightness: Brightness.light),
+    home: home,
+  ),
+);
+
+class _RevokedProfiles extends _Profiles {
+  bool available = true;
+  @override
+  Future<HumanProfile?> loadHuman(String handle) async =>
+      available ? super.loadHuman(handle) : null;
+}
+
+class _OwnProfiles extends _Profiles {
+  @override
+  Future<HumanProfile?> loadHuman(String handle) async => HumanProfile(
+    handle: handle,
+    displayName: 'My public identity',
+    followerCount: 0,
+    followingCount: 0,
+    isFollowing: false,
+    isSelf: true,
+  );
+}
 
 void main() {
-  testWidgets('human profile follows and keeps Talks vertical', (tester) async {
-    final transport = _Profiles();
-    String? openedTalk;
-    String? openedTwin;
-
+  testWidgets('authoritative removal wins after successful follow', (
+    tester,
+  ) async {
+    final transport = _RevokedProfiles();
     await tester.pumpWidget(
       _app(
         transport: transport,
-        home: PersonProfileScreen(
-          handle: 'amina',
-          onOpenTalk: (id) => openedTalk = id,
-          onOpenTwin: (id) => openedTwin = id,
-        ),
+        home: const PersonProfileScreen(handle: 'amina'),
       ),
     );
     await tester.pumpAndSettle();
-
-    expect(find.text('Amina Yusuf'), findsOneWidget);
-    expect(find.text('Follow'), findsOneWidget);
-    expect(find.text('Can small businesses compete globally?'), findsOneWidget);
-    expect(find.byType(GridView), findsNothing);
-
     await tester.tap(find.byKey(const ValueKey('person-profile-follow')));
     await tester.pumpAndSettle();
     expect(find.text('Following'), findsOneWidget);
-
-    expect(find.text('Amina Twin'), findsNothing);
-    expect(openedTwin, isNull);
-    expect(find.text('Public activity'), findsOneWidget);
-
-    await tester.tap(find.text('Can small businesses compete globally?'));
-    expect(openedTalk, 'talk-1');
-  });
-
-  testWidgets('Expert profile discloses Masana role and existing verification', (tester) async {
-    final transport = _Profiles();
-    await tester.pumpWidget(
-      _app(
-        transport: transport,
-        home: const PersonaProfileScreen(publicId: 'economist'),
-      ),
+    transport.available = false;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PersonProfileScreen)),
     );
+    container.invalidate(humanProfileProvider('amina'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Economist'), findsWidgets);
-    expect(find.text('Masana · Economics'), findsOneWidget);
-    expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
-    expect(find.text('₦300'), findsOneWidget);
-    expect(find.text('Economics'), findsWidgets);
+    expect(find.text('Amina Yusuf'), findsNothing);
+    expect(find.text('This profile is unavailable.'), findsOneWidget);
   });
-
-  testWidgets('retired personal profile offers discovery without exposing old actions', (tester) async {
-    final transport = _Profiles();
-    String? owner;
-
-    await tester.pumpWidget(
-      _app(
-        transport: transport,
-        home: PersonaProfileScreen(
-          publicId: 'amina-twin',
-          onOpenOwner: (handle) => owner = handle,
+  testWidgets(
+    'own public identity uses owner controls instead of self follow',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          transport: _OwnProfiles(),
+          home: const PersonProfileScreen(handle: 'amina'),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Edit profile'), findsOneWidget);
+      expect(find.text('My Masana'), findsOneWidget);
+      expect(find.byKey(const ValueKey('person-profile-follow')), findsNothing);
+    },
+  );
+  testWidgets(
+    'human and creator profile share identity without retired Talk publishing',
+    (tester) async {
+      final transport = _Profiles();
 
-    expect(find.text('This personal profile has been retired. Browse Masana contacts instead.'), findsOneWidget);
-    expect(find.text('₦450'), findsNothing);
-    expect(find.text('Owned by Amina Yusuf'), findsNothing);
-    expect(owner, isNull);
-  });
+      await tester.pumpWidget(
+        _app(
+          transport: transport,
+          home: PersonProfileScreen(handle: 'amina'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Amina Yusuf'), findsOneWidget);
+      expect(find.text('Follow'), findsOneWidget);
+      expect(find.text('Can small businesses compete globally?'), findsNothing);
+      expect(find.byType(GridView), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('person-profile-follow')));
+      await tester.pumpAndSettle();
+      expect(find.text('Following'), findsOneWidget);
+
+      expect(find.text('Amina Twin'), findsNothing);
+      expect(find.text('Public activity'), findsNothing);
+      expect(
+        find.text('Message'),
+        findsNothing,
+      ); // Human admission not wired yet.
+    },
+  );
+
+  testWidgets(
+    'Expert profile discloses Masana role and existing verification',
+    (tester) async {
+      final transport = _Profiles();
+      await tester.pumpWidget(
+        _app(
+          transport: transport,
+          home: const PersonaProfileScreen(publicId: 'economist'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Economist'), findsWidgets);
+      expect(find.text('Masana · Economics'), findsOneWidget);
+      expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
+      expect(find.text('₦300'), findsOneWidget);
+      expect(find.text('Economics'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'retired personal profile offers discovery without exposing old actions',
+    (tester) async {
+      final transport = _Profiles();
+      String? owner;
+
+      await tester.pumpWidget(
+        _app(
+          transport: transport,
+          home: PersonaProfileScreen(
+            publicId: 'amina-twin',
+            onOpenOwner: (handle) => owner = handle,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This personal profile has been retired. Browse Masana contacts instead.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('₦450'), findsNothing);
+      expect(find.text('Owned by Amina Yusuf'), findsNothing);
+      expect(owner, isNull);
+    },
+  );
 }

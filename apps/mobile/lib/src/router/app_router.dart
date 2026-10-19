@@ -1,3 +1,4 @@
+import '../screens/profile/person_profile_screen.dart';
 import '../calls/incoming_call_coordinator.dart';
 import '../calls/incoming_call_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -178,7 +179,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      // Legacy publishing, user-to-user Talks, human profiles and personal
+      // Legacy publishing, user-to-user Talks, personal
       // Twins are retired. Preserve inbound URLs without mounting forbidden
       // workflows or implying that users may create content.
       GoRoute(path: '/activity',
@@ -192,7 +193,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/talk/:id',
         redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/u/:handle',
-        redirect: (_, __) => '/masana'),
+        builder: (_, state) => PersonProfileScreen(handle: state.pathParameters['handle']!)),
       GoRoute(path: '/persona/:publicId',
         redirect: (_, __) => '/masana'),
       GoRoute(

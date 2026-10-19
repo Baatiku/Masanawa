@@ -60,8 +60,9 @@ function strings(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function human(row: HumanRow): HumanProfileView {
+function human(row: HumanRow, viewerUserId: string): HumanProfileView {
   return Object.freeze({
+    isSelf: row.user_id === viewerUserId,
     handle: row.handle,
     displayName: row.display_name,
     bio: row.bio,
@@ -95,6 +96,20 @@ function persona(row: PersonaRow): PersonaProfileView {
   });
 }
 
+// Public profile visibility is identical for listing and direct URL reads.
+// $1 = authenticated tenant; $2 = authenticated viewer, never client scope.
+const publicHumanAccess = `
+  EXISTS (SELECT 1 FROM identity.users u
+    WHERE u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active')
+  AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences b
+    WHERE b.tenant_id=p.tenant_id AND b.blocked=true
+      AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id)
+        OR (b.subject_user_id=$2 AND b.viewer_user_id=p.user_id)))
+  AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement se
+    WHERE se.tenant_id=p.tenant_id AND se.target_kind='profile'
+      AND se.target_id=p.handle AND se.visibility IN ('restricted','blocked'))
+`;
+
 const humanSelect = `
   SELECT p.tenant_id, p.user_id, p.handle, p.display_name, p.bio, p.avatar_url,
          p.live_talk_id, p.twin_public_id, p.twin_display_name, p.talks_json,
@@ -110,6 +125,7 @@ const humanSelect = `
          ) AS is_following
     FROM talks.public_profiles p
    WHERE p.tenant_id = $1 AND p.handle = $3
+     AND (p.user_id=$2 OR (${publicHumanAccess}))
      AND NOT EXISTS (
        SELECT 1 FROM talks.safety_enforcement se
         WHERE se.tenant_id = p.tenant_id
@@ -136,6 +152,7 @@ const humanSelectByUserId = `
          ) AS is_following
     FROM talks.public_profiles p
    WHERE p.tenant_id = $1 AND p.user_id = $3
+     AND (p.user_id=$2 OR (${publicHumanAccess}))
      AND ($2 = $3 OR NOT EXISTS (
        SELECT 1 FROM talks.safety_enforcement se
         WHERE se.tenant_id = p.tenant_id
@@ -159,7 +176,7 @@ export function createPostgresTalkProfileRepository(
       input.viewerUserId,
       input.handle,
     ]);
-    return result.rows[0] ? human(result.rows[0]) : null;
+    return result.rows[0] ? human(result.rows[0], input.viewerUserId) : null;
   }
 
   async function readHumanByUserId(input: {
@@ -172,10 +189,30 @@ export function createPostgresTalkProfileRepository(
       input.viewerUserId,
       input.userId,
     ]);
-    return result.rows[0] ? human(result.rows[0]) : null;
+    return result.rows[0] ? human(result.rows[0], input.viewerUserId) : null;
   }
 
   return Object.freeze<TalkProfileRepository>({
+    async listHumanContacts(input) {
+      const result = await pool.query<{
+        handle: string; display_name: string; bio: string; avatar_url: string | null;
+      }>(`SELECT p.handle,p.display_name,p.bio,p.avatar_url
+        FROM talks.public_profiles p
+        WHERE p.tenant_id=$1 AND p.user_id<>$2 AND (${publicHumanAccess})
+          AND ($4::text IS NULL OR p.handle > $4)
+          AND (CASE WHEN $3 = '' THEN EXISTS (
+            SELECT 1 FROM talks.follows f WHERE f.tenant_id=p.tenant_id
+              AND f.follower_user_id=$2 AND f.followed_user_id=p.user_id)
+            ELSE strpos(lower(p.handle),$3)>0 OR strpos(lower(p.display_name),$3)>0 END)
+        ORDER BY p.handle ASC LIMIT 31`,
+        [input.tenantId,input.viewerUserId,input.query,input.after]);
+      const rows = result.rows.slice(0,30);
+      return Object.freeze({
+        items: Object.freeze(rows.map(row => Object.freeze({handle:row.handle,
+          displayName:row.display_name,bio:row.bio,avatarUrl:row.avatar_url}))),
+        nextCursor: result.rows.length > 30 ? rows.at(-1)!.handle : null,
+      });
+    },
     readHuman,
     readHumanByUserId,
 
@@ -231,6 +268,7 @@ export function createPostgresTalkProfileRepository(
       const target = await pool.query<{ user_id: string }>(
         `SELECT p.user_id FROM talks.public_profiles p
           WHERE p.tenant_id = $1 AND p.handle = $2
+            AND (${publicHumanAccess.replaceAll('$2', '$3')})
             AND NOT EXISTS (
               SELECT 1 FROM talks.safety_enforcement se
                WHERE se.tenant_id = p.tenant_id
@@ -239,7 +277,7 @@ export function createPostgresTalkProfileRepository(
                  AND se.visibility IN ('restricted','blocked')
             )
           LIMIT 1`,
-        [input.tenantId, input.handle],
+        [input.tenantId, input.handle, input.viewerUserId],
       );
       const targetUserId = target.rows[0]?.user_id;
       if (!targetUserId) return null;
@@ -277,6 +315,7 @@ export function createPostgresTalkProfileRepository(
       const target = await pool.query<{ user_id: string; handle: string }>(
         `SELECT p.user_id, p.handle FROM talks.public_profiles p
           WHERE p.tenant_id = $1 AND p.user_id = $2
+            AND (${publicHumanAccess.replaceAll('$2', '$3')})
             AND NOT EXISTS (
               SELECT 1 FROM talks.safety_enforcement se
                WHERE se.tenant_id = p.tenant_id
@@ -285,7 +324,7 @@ export function createPostgresTalkProfileRepository(
                  AND se.visibility IN ('restricted','blocked')
             )
           LIMIT 1`,
-        [input.tenantId, input.userId],
+        [input.tenantId, input.userId, input.viewerUserId],
       );
       const targetUserId = target.rows[0]?.user_id;
       if (!targetUserId) return null;

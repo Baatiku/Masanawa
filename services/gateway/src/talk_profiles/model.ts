@@ -50,6 +50,7 @@ export interface PersonaProfileRecord {
 }
 
 export interface HumanProfileView extends Omit<HumanProfileRecord, "tenantId" | "userId"> {
+  readonly isSelf?: boolean;
   readonly followerCount: number;
   readonly followingCount: number;
   readonly isFollowing: boolean;
@@ -58,7 +59,20 @@ export interface HumanProfileView extends Omit<HumanProfileRecord, "tenantId" | 
 
 export interface PersonaProfileView extends Omit<PersonaProfileRecord, "tenantId"> {}
 
+export interface HumanContact {
+  readonly handle: string;
+  readonly displayName: string;
+  readonly bio: string;
+  readonly avatarUrl: string | null;
+}
+export interface HumanContactPage {
+  readonly items: readonly HumanContact[];
+  readonly nextCursor: string | null;
+}
 export interface TalkProfileRepository {
+  listHumanContacts(input: Readonly<{
+    tenantId: string; viewerUserId: string; query: string; after: string | null;
+  }>): Promise<HumanContactPage>;
   readHuman(input: Readonly<{
     tenantId: string;
     viewerUserId: string;
