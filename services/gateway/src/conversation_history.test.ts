@@ -32,4 +32,22 @@ describe("bounded canonical conversation context", () => {
     expect(history.at(-1)).toEqual({ role: "assistant", text: "Reply 19" });
     expect(history[0]?.role).toBe("user");
   });
+  it("skips an oversized middle pair and preserves bounded older context", () => {
+    const rows = [
+      row("one", "user", "Earlier useful question"),
+      row("one", "assistant", "Earlier useful answer"),
+      row("two", "user", "界".repeat(5000)),
+      row("two", "assistant", "界".repeat(5000)),
+      row("three", "user", "Latest question" + "z".repeat(5500)),
+      row("three", "assistant", "Latest answer" + "w".repeat(5500)),
+    ];
+    const history = compileConversationHistory(rows, "current");
+    expect(history).toEqual([
+      { role: "user", text: "Earlier useful question" },
+      { role: "assistant", text: "Earlier useful answer" },
+      { role: "user", text: "Latest question" + "z".repeat(5500) },
+      { role: "assistant", text: "Latest answer" + "w".repeat(5500) },
+    ]);
+  });
+
 });

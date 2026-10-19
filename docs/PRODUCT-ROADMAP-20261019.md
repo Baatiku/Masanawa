@@ -49,19 +49,20 @@ For each completed checkbox: attach **exact source SHA, paths, tests executed, s
 **Screen/journey contract:** splash/auth/language → Chats; Settings → edit profile → save/retry; search → authorized target; deep link → login → correct resource; sign out → no prior-user cache. Each route needs loading/error/offline/permission/empty/readability cases.
 
 ## Phase 2 — Masana identities, conversation and live voice (P0)
+**Phase 2 source audit and acceptance ledger:** [Phase 2 implementation/acceptance](PHASE2-IMPLEMENTATION-20261019.md). The roster, core chat/call flows, channel delivery outbox, signup NULL fix and canonical retry IDs already exist on Phase 1 main; follow the linked per-item evidence rather than rebuilding them. This phase adds canonical portrait guards across call history, safer Retry, bounded context preservation and bounded Worker crash reconciliation. **No on-device or actual Gemini acceptance is claimed**; corresponding VERIFY boxes remain open.
 **Outcome:** Users repeatedly converse naturally with distinct Masana across text, voice notes and calls.
 - [x] SOURCE PRESENT — Masana directory, profile models, text chat, voice/call client source, agent identity and platform roster.
-- [ ] IMPROVE — Bind **every approved portrait** to canonical character ID; verify server list, detailed profiles, chat lists, call histories and Status use same image.
-- [ ] IMPROVE — Distinct professional persona expertise/teaching method/entertainment style/safety boundaries; no identical generic personas or fake professional certification.
-- [ ] IMPROVE — Use approved Bodi male/Fora female voices where configured; map distinct supported voices to individual characters, test accent/language and fallback honestly.
-- [ ] IMPROVE — Bounded authenticated user–Masana conversation memory across messages, media replies and call handoff. Open issue #98 signals missing context recovery.
-- [ ] COMPLETE — Persist conversation identity and replay-safe client request IDs across HTTP retries (#96); message/media response continuity and exact receipts.
-- [ ] IMPROVE — Chat composer: WhatsApp-like text/attachment/hold-to-record behavior, send/cancel, waveform, playback speed and safe recordings after interruption.
+- [x] SOURCE IMPROVED, DEVICE VERIFY OPEN — Bind **every approved portrait** to canonical character ID; verify server list, detailed profiles, chat lists, call histories and Status use same image.
+- [x] SOURCE IMPROVED, DIALOGUE VERIFY OPEN — Distinct professional persona expertise/teaching method/entertainment style/safety boundaries; no identical generic personas or fake professional certification.
+- [x] SOURCE PRESENT, PROVIDER VERIFY OPEN — Use approved Bodi male/Fola female voices where configured; map distinct supported voices to individual characters, test accent/language and fallback honestly.
+- [x] SOURCE IMPROVED, LIVE VERIFY OPEN — Bounded authenticated user–Masana conversation memory across messages, media replies and call handoff. Open issue #98 signals missing context recovery.
+- [x] SOURCE IMPROVED, LIVE VERIFY OPEN — Persist conversation identity and replay-safe client request IDs across HTTP retries (#96); message/media response continuity and exact receipts.
+- [x] SOURCE PRESENT, FLUTTER/DEVICE VERIFY OPEN — Chat composer: WhatsApp-like text/attachment/hold-to-record behavior, send/cancel, waveform, playback speed and safe recordings after interruption.
 - [ ] VERIFY — Actual Gemini text, audio and media completion for real accounts, native recording permission, voice playback, large messages, uploads and account isolation.
-- [ ] IMPROVE — Full screen call UI, incoming ringing, missed identity, reconnect/timeout and microphone teardown. Call source exists but actual handset/LiveKit proof is pending.
-- [ ] COMPLETE — Recover live channel replies from provider failure, retry and worker restart; inspect open issues #88/#90.
-- [ ] IMPROVE — Correct customer signup null-identity constraints affecting chat/call admission (#94).
-- [ ] IMPROVE — Message long-press copy/reply/share/delete/report, media secure retrieval, private in-chat search and accessible delivery statuses.
+- [x] SOURCE IMPROVED, DEVICE VERIFY OPEN — Full screen call UI, incoming ringing, missed identity, reconnect/timeout and microphone teardown. Call source exists but actual handset/LiveKit proof is pending.
+- [x] SOURCE IMPROVED, PROVIDER VERIFY OPEN — Recover live channel replies from provider failure, retry and worker restart; inspect open issues #88/#90.
+- [x] SOURCE PRESENT, DEPLOYED MIGRATION VERIFY OPEN — Correct customer signup null-identity constraints affecting chat/call admission (#94).
+- [x] SOURCE PRESENT, FLUTTER VERIFY OPEN — Message long-press copy/reply/share/delete/report, media secure retrieval, private in-chat search and accessible delivery statuses.
 - [ ] VERIFY — Long call, call interruption, headset/speaker, background, multiple networks and low-memory Android on exact APK SHA.
 - [ ] LATER — Optional recording/transcripts only with jurisdictional consent, deletion and storage controls.
 **Screen/journey contract:** directory → profile → text/voice chat → outgoing/incoming call → history → resume chat; failure must not bill twice or lose messages. Account switches must revoke private media and stale replies.

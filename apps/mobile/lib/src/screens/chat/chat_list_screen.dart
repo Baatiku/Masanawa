@@ -852,6 +852,8 @@ class _ChatsSearchPaneState extends State<_ChatsSearchPane> {
                   dense: true,
                   key: ValueKey('remote-${result.characterId}'),
                   leading: MasanaPortraitAvatar(
+                    characterId: result.characterId,
+                    agent: directory.find(result.characterId),
                     displayName: result.displayName,
                     size: 40,
                   ),

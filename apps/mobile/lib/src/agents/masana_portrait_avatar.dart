@@ -138,12 +138,17 @@ class MasanaPortraitAvatar extends StatelessWidget {
   const MasanaPortraitAvatar({
     super.key,
     this.agent,
+    this.characterId,
     this.displayName,
     this.avatarUrl,
     this.size = 52,
   });
 
   final AgentDirectoryEntry? agent;
+  /// When provided, never select a bundled portrait by a potentially stale
+  /// call-history or remote-inbox display name. Only the matching canonical
+  /// directory entry can supply an approved portrait key.
+  final String? characterId;
   final String? displayName;
   final String? avatarUrl;
   final double size;
@@ -153,13 +158,21 @@ class MasanaPortraitAvatar extends StatelessWidget {
     final name = (displayName ?? agent?.displayName ?? '').trim();
     // Agent objects have server-owned canonical IDs and must never use fuzzy
     // display-name matching, even when the stock portrait is unavailable.
-    final photoAsset = agent == null
-        ? portraitPhotoAssetFor(name)
-        : portraitPhotoAssetForKey(agent!.portraitKey);
-    final svgAsset = agent == null
-        ? portraitAssetFor(name)
-        : portraitAssetForKey(agent!.portraitKey);
-    final url = avatarUrl ?? agent?.avatarUrl;
+    final canonical = characterId != null || agent != null;
+    final approvedKey = agent != null &&
+            (characterId == null || agent!.characterId == characterId)
+        ? agent!.portraitKey
+        : null;
+    final photoAsset = canonical
+        ? portraitPhotoAssetForKey(approvedKey)
+        : portraitPhotoAssetFor(name);
+    final svgAsset = canonical
+        ? portraitAssetForKey(approvedKey)
+        : portraitAssetFor(name);
+    final url = agent != null && characterId != null &&
+            agent!.characterId != characterId
+        ? null
+        : avatarUrl ?? agent?.avatarUrl;
     final initial = agent?.initial ?? (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 
     Widget fallbackSvgOrUrl() {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../agents/agent_directory.dart';
 import '../agents/agent_shell.dart';
 import '../agents/masana_portrait_avatar.dart';
 import 'group_call_controller.dart';
@@ -11,6 +12,7 @@ class GroupCallScreen extends StatefulWidget {
     required this.accountKey,
     required this.currentAccountKey,
     required this.contacts,
+    this.officialContacts = const {},
     required this.transport,
     this.authorize,
     this.onChildConnected,
@@ -20,6 +22,7 @@ class GroupCallScreen extends StatefulWidget {
   final String accountKey;
   final String? Function() currentAccountKey;
   final List<GroupContact> contacts;
+  final Map<String, AgentDirectoryEntry> officialContacts;
   final GroupCallTransport transport;
   final Future<GroupAdmission?> Function(GroupContact)? authorize;
   final FutureOr<void> Function(AgentLiveVoiceGrant)? onChildConnected,
@@ -120,7 +123,10 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                     for (final contact in widget.contacts)
                       if (!inCall)
                         CheckboxListTile(
-                          secondary:MasanaPortraitAvatar(displayName:contact.displayName,size:42),
+                          secondary:MasanaPortraitAvatar(
+                            characterId:contact.characterId,
+                            agent:widget.officialContacts[contact.characterId],
+                            displayName:contact.displayName,size:42),
                           title: Text(contact.displayName),
                           subtitle: Text(
                             contact.supportAgent
@@ -145,7 +151,10 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                       ))
                         ListTile(
                           leading:Stack(alignment:Alignment.bottomRight,children:[
-                            MasanaPortraitAvatar(displayName:contact.displayName,size:48),
+                            MasanaPortraitAvatar(
+                              characterId:contact.characterId,
+                              agent:widget.officialContacts[contact.characterId],
+                              displayName:contact.displayName,size:48),
                             if(controller.speakingCharacterId==contact.characterId)
                               Container(padding:const EdgeInsets.all(3),decoration:BoxDecoration(color:Theme.of(context).colorScheme.primary,shape:BoxShape.circle),child:Icon(Icons.graphic_eq,size:14,color:Theme.of(context).colorScheme.onPrimary)),
                           ]),

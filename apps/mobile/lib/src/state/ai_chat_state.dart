@@ -1783,37 +1783,88 @@ class AiChatController extends Notifier<AiChatState> {
   }
 
   Future<void> retryMessage(String characterId, String messageId) async {
-    if (state.sendingIn.contains(characterId)) return;
+    if (_disposed || state.sendingIn.contains(characterId)) return;
     final thread = threadOf(characterId);
     final users = thread.messages.where((m) => m.id == messageId && m.isUser);
     if (users.isEmpty) return;
     final user = users.first;
-    // Manual retry must obey the same server-first, original-ID policy as
-    // crash/offline recovery. A request without an ID cannot be safely
-    // replayed, even if a user taps Retry.
-    if (user.requestId == null || user.requestId!.isEmpty) return;
-    final failures = thread.messages.where(
+    if (user.deliveryStatus != 'failed' ||
+        user.requestId == null || user.requestId!.isEmpty) return;
+
+    // Never guess whether the server executed the request. In particular, a
+    // failed model execution is TERMINAL for its original idempotency key.
+    // User-authorized retry after an actual server failure is a NEW turn;
+    // unknown/pending cannot be retried as a new operation.
+    final transport = _shellTransport;
+    if (transport == null) return;
+    final generation = _connectionGeneration;
+    final owner = _cacheOwnerId;
+    final threadGeneration = _threadGenerations[characterId] ?? 0;
+    AgentTurnStatus status;
+    try {
+      status = await transport.turnStatus(characterId, user.requestId!);
+    } catch (_) {
+      return; // Server unavailable: no risk of double execution.
+    }
+    if (_disposed || generation != _connectionGeneration ||
+        owner != _cacheOwnerId ||
+        threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
+
+    if (status.state == 'completed') {
+      await _reconcilePendingTurns(characterId, transport);
+      return;
+    }
+    if (status.state == 'pending') {
+      _setDelivery(characterId, messageId, 'processing');
+      return;
+    }
+    if (status.state != 'failed' && status.state != 'missing') return;
+
+    final failures = threadOf(characterId).messages.where(
       (m) => m.parts.any(
-        (p) =>
-            p.kind == AgentMessagePartKind.status &&
-            p.status == 'failed' &&
-            p.referenceId == messageId,
+        (p) => p.kind == AgentMessagePartKind.status &&
+            p.status == 'failed' && p.referenceId == messageId,
       ),
-    );
-    if (failures.isEmpty) return;
-    state = state.copyWith(
-      threads: {
+    ).toSet();
+
+    if (status.state == 'failed') {
+      // Retain the old failed message and server receipt for auditability.
+      // The visible second message makes a voluntary second attempt explicit.
+      final retry = AiChatMessage(
+        id: _newId(),
+        isUser: true,
+        text: user.text,
+        createdAt: DateTime.now(),
+        attachment: user.attachment,
+        attachments: user.attachments,
+        replyToId: user.replyToId,
+        replyPreview: user.replyPreview,
+        deliveryStatus: 'queued',
+        requestId: createRequestId(),
+      );
+      final updated = threadOf(characterId);
+      state = state.copyWith(threads: {
         ...state.threads,
-        characterId: thread.copyWith(
-          messages: thread.messages
-              .where((m) => !failures.contains(m))
-              .toList(),
+        characterId: updated.copyWith(
+          messages: [
+            ...updated.messages.where((m) => !failures.contains(m)),
+            retry,
+          ],
+          updatedAt: DateTime.now(),
         ),
-      },
-    );
-    _setDelivery(characterId, user.id, 'queued');
-    // If offline or if the status endpoint is unavailable, the original
-    // durable queue remains visible and retries on the next connection.
+      });
+    } else {
+      // Only a positively missing server request may keep its original ID.
+      final updated = threadOf(characterId);
+      state = state.copyWith(threads: {
+        ...state.threads,
+        characterId: updated.copyWith(
+          messages: updated.messages.where((m) => !failures.contains(m)).toList(),
+          updatedAt: DateTime.now(),
+        ),
+      });
+      _setDelivery(characterId, messageId, 'queued');
+    }
     await _save();
     await _flushQueuedMessages();
   }

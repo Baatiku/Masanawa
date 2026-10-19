@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
 
@@ -86,4 +87,39 @@ void main() {
     expect(portraitAssetFor("Malamah Gwana Sulafat"), isNotNull);
     expect(portraitAssetFor('Admin-managed custom AI'), isNull);
   });
+
+  testWidgets('call history cannot guess a portrait from a renamed or reused display label', (tester) async {
+    const authoritative = AgentDirectoryEntry(
+      characterId: 'character_one',
+      characterVersionId: 'version_1',
+      displayName: 'Custom alias',
+      roleLabel: 'Medicine',
+      about: '',
+      presence: AgentPresence.unknown,
+      portraitKey: 'amina',
+    );
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Column(children: [
+      MasanaPortraitAvatar(
+        characterId: 'character_one',
+        agent: authoritative,
+        displayName: 'Another name',
+      ),
+      MasanaPortraitAvatar(
+        characterId: 'character_two',
+        agent: authoritative,
+        displayName: 'Dr. Amina Yusuf',
+      ),
+      MasanaPortraitAvatar(
+        characterId: 'character_unknown',
+        displayName: 'Mallam Gwani',
+      ),
+    ]))));
+    final portraits = tester.widgetList<Image>(find.byType(Image)).toList();
+    expect(portraits.length, 1, reason: 'Only a matching canonical identity may select bundled media');
+    expect((portraits.single.image as AssetImage).assetName,
+        'assets/masana/portraits/amina.webp');
+    expect(find.text('M'), findsOneWidget,
+      reason:'An unknown caller must show a neutral initial, not a similarly named Masana');
+  });
+
 }
