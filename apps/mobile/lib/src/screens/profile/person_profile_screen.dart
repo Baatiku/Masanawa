@@ -6,7 +6,6 @@ import '../../state/talk_social_profile_state.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
-import '../../agents/masana_portrait_avatar.dart';
 import '../talks/talk_home_screen.dart';
 
 class PersonProfileScreen extends ConsumerStatefulWidget {
@@ -128,10 +127,12 @@ class _PersonProfileBody extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                MasanaPortraitAvatar(
-                  displayName: profile.displayName,
-                  avatarUrl: avatar,
-                  size: 76,
+                CircleAvatar(
+                  radius: 38,
+                  foregroundImage: avatar == null || avatar.isEmpty ? null : NetworkImage(avatar),
+                  onForegroundImageError: avatar == null || avatar.isEmpty ? null : (_, __) {},
+                  child: Text(profile.displayName.trim().isEmpty
+                    ? '?' : profile.displayName.trim().substring(0, 1).toUpperCase()),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

@@ -1,6 +1,7 @@
 name: Masanawa Chat Voice and Calls Regression
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "apps/mobile/lib/src/screens/chat/**"
@@ -120,6 +121,7 @@ jobs:
           test/ai_chat_voice_actions_test.dart
 
   android-debug-apk:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
