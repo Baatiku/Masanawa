@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,7 +26,28 @@ final humanCommunicationTransportProvider =
     });
 
 class HumanCommunicationTransport {
-  HumanCommunicationTransport(this.api);
+  HumanCommunicationTransport(this.api) {
+    unawaited(recoverTemporaryHumanMedia());
+  }
+  static Future<void>? _recovery;
+
+  /// A killed process cannot dispose its player. Remove its private temporary
+  /// videos once before this process creates any new playback files.
+  static Future<void> recoverTemporaryHumanMedia() => _recovery ??= () async {
+    try {
+      await for (final entry in Directory.systemTemp.list()) {
+        if (entry is Directory &&
+            entry.uri.pathSegments
+                .where((s) => s.isNotEmpty)
+                .last
+                .startsWith('human-video-')) {
+          try {
+            await entry.delete(recursive: true);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }();
   final ApiClient api;
   final CancelToken _cancel = CancelToken();
   final _revocations = StreamController<void>.broadcast(sync: true);

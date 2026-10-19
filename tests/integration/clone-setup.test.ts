@@ -23,6 +23,7 @@ describe.skipIf(!connectionString)("clone setup PostgreSQL 18 acceptance", () =>
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "clone-setup-test", max: 4 });
   });
   beforeEach(async () => {
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP TABLE IF EXISTS public.masanawa_schema_migrations");
     await runMigrations(pool, [{ owner: "identity", directory: fileURLToPath(new URL("../../packages/identity/migrations", import.meta.url)) }]);

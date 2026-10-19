@@ -1,3 +1,4 @@
+import { createIsolatedPostgresTestDatabase } from "../home_feed/isolated_test_database.js";
 import { fileURLToPath } from "node:url";
 import { createCanonicalId, toInstant } from "@masanawa/contracts";
 import { createMemoryScopePredicate } from "@masanawa/memory";
@@ -8,7 +9,6 @@ import {
   appendMemoryRevision,
   createMemoryProjectionGeneration,
   createMemoryRecord,
-  createPostgresPool,
   getCurrentMemoryProjectionGeneration,
   getMemoryRecordInScope,
   indexMemoryLexicalSnapshot,
@@ -46,18 +46,17 @@ const migrationRoots = [
 
 describePostgres("PostgreSQL memory retrieval projection conformance", () => {
   let pool: Pool;
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
 
   beforeAll(async () => {
-    pool = createPostgresPool({
-      connectionString: connectionString!,
-      applicationName: "masanawa-memory-projection-integration",
-      max: 4,
-    });
+    isolated = await createIsolatedPostgresTestDatabase(connectionString!);
+    pool = isolated.pool;
   });
 
   beforeEach(async () => {
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");
@@ -72,7 +71,7 @@ describePostgres("PostgreSQL memory retrieval projection conformance", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await isolated?.close();
   });
 
   it("keeps lexical retrieval authorization-first across rebuilds and canonical revision drift", async () => {

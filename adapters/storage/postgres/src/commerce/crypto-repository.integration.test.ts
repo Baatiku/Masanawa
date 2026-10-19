@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -15,6 +16,7 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
 
   beforeAll(async () => {
     pool = new Pool({ connectionString });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [{
       owner: "commerce",
       directory: fileURLToPath(

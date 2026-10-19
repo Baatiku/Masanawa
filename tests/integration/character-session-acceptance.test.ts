@@ -32,7 +32,7 @@ describePostgres("CharacterSession PostgreSQL 18 acceptance", () => {
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "sessions-acceptance", max: 5 });
   });
   beforeEach(async () => {
-    for (const schema of ["agents", "identity", "skills", "security", "events"]) await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    for (const schema of ["agents", "creator", "identity", "skills", "security", "events"]) await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await pool.query("DROP TABLE IF EXISTS public.masanawa_schema_migrations");
     await runMigrations(pool, characterSessionMigrationRoots());
   });

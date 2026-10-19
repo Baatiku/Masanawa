@@ -39,6 +39,8 @@ describePostgres("Skills PostgreSQL 18 acceptance", () => {
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "skills-acceptance", max: 4 });
   });
   beforeEach(async () => {
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS skills CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");

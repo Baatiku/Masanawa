@@ -20,6 +20,11 @@ on:
       - "services/gateway/src/live_voice_token*"
       - "services/gateway/src/call_history/**"
       - "services/gateway/src/incoming_calls/**"
+      - "apps/mobile/lib/src/human_chat/**"
+      - "apps/mobile/lib/src/human_calls/**"
+      - "apps/mobile/test/human_*"
+      - "services/gateway/src/human_communication/**"
+      - "packages/talks/migrations/**"
       - ".github/workflows/communication-regression.yml"
   push:
     branches: [main]
@@ -33,6 +38,11 @@ on:
       - "services/gateway/src/live_voice_token.ts"
       - "services/gateway/src/incoming_calls/**"
       - "services/gateway/src/call_history/**"
+      - "apps/mobile/lib/src/human_chat/**"
+      - "apps/mobile/lib/src/human_calls/**"
+      - "apps/mobile/test/human_*"
+      - "services/gateway/src/human_communication/**"
+      - "packages/talks/migrations/**"
       - ".github/workflows/communication-regression.yml"
 
 permissions: {contents: read}
@@ -73,6 +83,7 @@ jobs:
         run: |
           pnpm exec vitest run --no-file-parallelism services/gateway/src/call_history
           pnpm exec vitest run --no-file-parallelism services/gateway/src/incoming_calls
+          pnpm exec vitest run --no-file-parallelism services/gateway/src/human_communication services/gateway/src/talk_profiles/human_contacts.integration.test.ts services/gateway/src/human_call_media.test.ts adapters/storage/postgres/src/masana_chat/inbox.integration.test.ts
 
   flutter-message-recording-and-live-call:
     runs-on: ubuntu-latest
@@ -103,6 +114,11 @@ jobs:
           test/incoming_call_transport_test.dart
           test/incoming_call_coordinator_test.dart
           test/incoming_call_screen_test.dart
+          test/human_calls_test.dart
+          test/human_chat_controller_test.dart
+          test/human_chat_transport_test.dart
+          test/human_chat_privacy_test.dart
+          test/human_contacts_test.dart
       - name: Strict analysis of affected Flutter customer journeys
         run: >-
           flutter analyze --no-pub --no-fatal-infos

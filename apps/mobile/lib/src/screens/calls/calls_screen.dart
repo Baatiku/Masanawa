@@ -261,6 +261,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
 
   String? _nextCursor, _humanNextCursor;
   bool _loading = true;
+  bool _humanLoading = false;
   bool _failed = false;
   bool _retryRefresh = true;
   int _generation = 0;
@@ -343,39 +344,52 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
       _failed = false;
     });
     try {
-      if (refresh || _humanNextCursor != null) {
+      // Load each participant kind independently: an unavailable human service
+      // must not delay existing Masana history (or vice versa).
+      _humanLoading = true;
+      unawaited(() async {
         try {
-          final human = await ref
-              .read(humanCallsTransportProvider)
-              .request(
-                'GET',
-                refresh || _humanNextCursor == null
-                    ? '/calls'
-                    : '/calls?after=${Uri.encodeComponent(_humanNextCursor!)}',
-              );
-          if (!mounted || generation != _generation || !_sameAccount) return;
-          final previousHuman = refresh ? <HumanCallRecord>[] : _humanCalls;
-          final newHuman = (human['items'] as List)
-              .map(
-                (r) => HumanCallRecord.fromJson(
-                  Map<String, dynamic>.from(r as Map),
-                ),
-              )
-              .toList();
-          _humanCalls = {
-            for (final c in [...previousHuman, ...newHuman]) c.id: c,
-          }.values.toList();
-          _humanNextCursor = human['nextCursor'] as String?;
-          _humanFailed = false;
-        } catch (_) {
-          if (!mounted || generation != _generation || !_sameAccount) return;
-          if (refresh) {
-            _humanCalls = [];
-            _humanNextCursor = null;
+          if (refresh || _humanNextCursor != null) {
+            try {
+              final human = await ref
+                  .read(humanCallsTransportProvider)
+                  .request(
+                    'GET',
+                    refresh || _humanNextCursor == null
+                        ? '/calls'
+                        : '/calls?after=${Uri.encodeComponent(_humanNextCursor!)}',
+                  );
+              if (!mounted || generation != _generation || !_sameAccount)
+                return;
+              final previousHuman = refresh ? <HumanCallRecord>[] : _humanCalls;
+              final newHuman = (human['items'] as List)
+                  .map(
+                    (r) => HumanCallRecord.fromJson(
+                      Map<String, dynamic>.from(r as Map),
+                    ),
+                  )
+                  .toList();
+              _humanCalls = {
+                for (final c in [...previousHuman, ...newHuman]) c.id: c,
+              }.values.toList();
+              _humanNextCursor = human['nextCursor'] as String?;
+              _humanFailed = false;
+            } catch (_) {
+              if (!mounted || generation != _generation || !_sameAccount)
+                return;
+              if (refresh) {
+                _humanCalls = [];
+                _humanNextCursor = null;
+              }
+              _humanFailed = true;
+            }
           }
-          _humanFailed = true;
+        } finally {
+          if (mounted && generation == _generation && _sameAccount) {
+            setState(() => _humanLoading = false);
+          }
         }
-      }
+      }());
       if (!refresh && _nextCursor == null) {
         if (mounted && generation == _generation && _sameAccount)
           setState(() => _loading = false);
@@ -564,6 +578,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
           if (!_loading &&
               !_failed &&
               !_invalidQuery &&
+              !_humanLoading &&
               (_nextCursor != null || _humanNextCursor != null))
             TextButton(onPressed: _load, child: const Text('Load more')),
         ],

@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,7 @@ db("AF01 staged MSN PostgreSQL18 reconciliation through worker", () => {
   let pool: Pool;
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [{
       owner: "commerce",
       directory: fileURLToPath(new URL("../../../../../packages/commerce/migrations", import.meta.url)),

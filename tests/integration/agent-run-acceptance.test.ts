@@ -60,6 +60,7 @@ describePostgres("AgentRun PostgreSQL 18 acceptance", () => {
   beforeEach(async () => {
     for (const schema of [
       "agents",
+      "creator",
       "identity",
       "skills",
       "security",

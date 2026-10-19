@@ -1,3 +1,4 @@
+import { createIsolatedPostgresTestDatabase } from "../home_feed/isolated_test_database.js";
 import { fileURLToPath } from "node:url";
 import { createCanonicalId, toInstant } from "@masanawa/contracts";
 import { memoryReflectionSourceFromSnapshot } from "@masanawa/memory";
@@ -8,7 +9,6 @@ import {
   appendMemoryRevision,
   commitMemoryReflection,
   createMemoryRecord,
-  createPostgresPool,
   createTenant,
   getMemoryRecordInScope,
   linkMemoryRecords,
@@ -45,18 +45,17 @@ const migrationRoots = [
 
 describePostgres("PostgreSQL memory reflection and compaction custody", () => {
   let pool: Pool;
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
 
   beforeAll(async () => {
-    pool = createPostgresPool({
-      connectionString: connectionString!,
-      applicationName: "masanawa-memory-reflection-integration",
-      max: 4,
-    });
+    isolated = await createIsolatedPostgresTestDatabase(connectionString!);
+    pool = isolated.pool;
   });
 
   beforeEach(async () => {
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");
@@ -69,7 +68,7 @@ describePostgres("PostgreSQL memory reflection and compaction custody", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await isolated?.close();
   });
 
   it("commits a scoped reflection once, replays after source absorption, and preserves derivation evidence", async () => {

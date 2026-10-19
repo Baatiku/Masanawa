@@ -209,10 +209,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
     } catch (_) {
-      if (sameOwner())
+      if (sameOwner()) {
         _showFeedback(
           'Could not send diagnostics. Your local report is retained; try again when connected.',
         );
+      }
     } finally {
       if (mounted) setState(() => _sendingDiagnostics = false);
     }

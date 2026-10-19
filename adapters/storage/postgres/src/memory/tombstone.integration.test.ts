@@ -1,3 +1,4 @@
+import { createIsolatedPostgresTestDatabase } from "../home_feed/isolated_test_database.js";
 import { fileURLToPath } from "node:url";
 import { createCanonicalId, toInstant } from "@masanawa/contracts";
 import {
@@ -16,7 +17,6 @@ import {
   compileMemoryHybridContext,
   createMemoryProjectionGeneration,
   createMemoryRecord,
-  createPostgresPool,
   createTenant,
   executeMemoryRecordTombstone,
   getMemoryRecordInScope,
@@ -66,13 +66,11 @@ const migrationRoots = [
 
 describePostgres("PostgreSQL memory tombstone propagation", () => {
   let pool: Pool;
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
 
   beforeAll(async () => {
-    pool = createPostgresPool({
-      connectionString: connectionString!,
-      applicationName: "masanawa-memory-tombstone-integration",
-      max: 4,
-    });
+    isolated = await createIsolatedPostgresTestDatabase(connectionString!);
+    pool = isolated.pool;
   });
 
   beforeEach(async () => {
@@ -82,6 +80,7 @@ describePostgres("PostgreSQL memory tombstone propagation", () => {
     vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");
@@ -94,7 +93,7 @@ describePostgres("PostgreSQL memory tombstone propagation", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await isolated?.close();
   });
 
   afterEach(() => {

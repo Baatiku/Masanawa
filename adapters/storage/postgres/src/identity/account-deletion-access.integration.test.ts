@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -33,6 +34,7 @@ describeDatabase("R12 identity-privacy access revocation", () => {
     pool = new Pool({ connectionString });
     const root = (path: string) =>
       fileURLToPath(new URL(`../../../../../packages/${path}/migrations`, import.meta.url));
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [
       { owner: "events", directory: root("events") },
       { owner: "security", directory: root("security") },

@@ -1,3 +1,4 @@
+import { createIsolatedPostgresTestDatabase } from "./home_feed/isolated_test_database.js";
 import { generateKeyPairSync } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
@@ -35,7 +36,6 @@ import {
   checkPostgresReadiness,
   claimInboxBatch,
   claimOutboxBatch,
-  createPostgresPool,
   createTenant,
   createUser,
   linkExternalUserIdentity,
@@ -153,13 +153,11 @@ function testCharacterConstitution() {
 
 describePostgres("PostgreSQL 18 foundation integration", () => {
   let pool: Pool;
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
 
   beforeAll(async () => {
-    pool = createPostgresPool({
-      connectionString: connectionString!,
-      applicationName: "masanawa-foundation-integration",
-      max: 4,
-    });
+    isolated = await createIsolatedPostgresTestDatabase(connectionString!);
+    pool = isolated.pool;
 
     const version = await pool.query<{ server_version_num: string }>(
       "SHOW server_version_num",
@@ -172,6 +170,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
   beforeEach(async () => {
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");
@@ -233,7 +232,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await isolated?.close();
   });
 
   it("resolves explicitly linked external identity only inside its tenant", async () => {

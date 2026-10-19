@@ -446,6 +446,8 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                 imageQuality: 85,
               );
         if (f == null || !mounted || controller != c || !c.current) return;
+        if (await f.length() > 20000000)
+          throw StateError('Choose media smaller than 20 MB.');
         await _upload(
           await f.readAsBytes(),
           f.name,
@@ -1208,6 +1210,8 @@ class _HumanVideoState extends State<_HumanVideo> with WidgetsBindingObserver {
 
   Future<void> _load() async {
     try {
+      await HumanCommunicationTransport.recoverTemporaryHumanMedia();
+      if (!mounted || !widget.transport.active || !widget.lease.value) return;
       folder = await Directory.systemTemp.createTemp('human-video-');
       final file = File(
         '${folder!.path}/video.${widget.mime == 'video/webm' ? 'webm' : 'mp4'}',
