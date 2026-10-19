@@ -125,14 +125,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Following'), findsOneWidget);
 
-    await tester.tap(find.text('Amina Twin'));
-    expect(openedTwin, 'amina-twin');
+    expect(find.text('Amina Twin'), findsNothing);
+    expect(openedTwin, isNull);
+    expect(find.text('Public activity'), findsOneWidget);
 
     await tester.tap(find.text('Can small businesses compete globally?'));
     expect(openedTalk, 'talk-1');
   });
 
-  testWidgets('Expert profile is clearly Masanawa verified', (tester) async {
+  testWidgets('Expert profile discloses Masana role and existing verification', (tester) async {
     final transport = _Profiles();
     await tester.pumpWidget(
       _app(
@@ -143,12 +144,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Economist'), findsWidgets);
-    expect(find.textContaining('Masanawa Expert'), findsOneWidget);
+    expect(find.text('Masana · Economics'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
     expect(find.text('₦300'), findsOneWidget);
     expect(find.text('Economics'), findsWidgets);
   });
 
-  testWidgets('Twin profile shows owner and Seat fee', (tester) async {
+  testWidgets('retired personal profile offers discovery without exposing old actions', (tester) async {
     final transport = _Profiles();
     String? owner;
 
@@ -163,11 +165,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('User Twin'), findsOneWidget);
-    expect(find.text('₦450'), findsOneWidget);
-    expect(find.text('Owned by Amina Yusuf'), findsOneWidget);
-
-    await tester.tap(find.text('Owned by Amina Yusuf'));
-    expect(owner, 'amina');
+    expect(find.text('This personal profile has been retired. Browse Masana contacts instead.'), findsOneWidget);
+    expect(find.text('₦450'), findsNothing);
+    expect(find.text('Owned by Amina Yusuf'), findsNothing);
+    expect(owner, isNull);
   });
 }

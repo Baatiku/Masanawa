@@ -8,7 +8,7 @@ import 'package:masanawa/src/commerce/wallet_models.dart';
 import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
 import 'package:masanawa/src/state/wallet_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
-import 'package:masanawa/src/ui/components/masanawa_wordmark.dart';
+import 'package:masanawa/src/state/session_state.dart';
 
 WalletView _view({
   int amount = 9007199254740991,
@@ -40,6 +40,10 @@ WalletView _view({
           ),
         ],
 );
+
+class _SignedOut extends SessionController {
+  @override SessionState build() => const SessionSignedOut();
+}
 
 class _Wallet extends WalletController {
   _Wallet(this.value);
@@ -85,6 +89,7 @@ void main() {
       ProviderScope(
         key: UniqueKey(),
         overrides: [
+          sessionProvider.overrideWith(_SignedOut.new),
           walletProvider.overrideWith(controller ?? () => _Wallet(value)),
         ],
         child: MaterialApp(
@@ -125,16 +130,16 @@ void main() {
             onCrypto: () {},
             onBilling: (_) {},
           );
-          expect(find.byType(MasanawaWordmark), findsOneWidget);
-          expect(find.text('MSNW'), findsOneWidget);
-          expect(find.text('MSNW balance'), findsOneWidget);
+          expect(find.text('Wallet'), findsOneWidget);
+          expect(find.textContaining('MSNW'), findsWidgets);
+          expect(find.text('Available balance'), findsOneWidget);
           expect(find.text('9007199254740991'), findsNothing);
           expect(find.text('Credits'), findsNothing);
           expect(find.textContaining('₦'), findsNothing);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
-          await tester.scrollUntilVisible(find.text('Data bundles'), 180);
-          expect(find.text('MSNW history unavailable'), findsOneWidget);
+          expect(find.text('Sign in to view your balance'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
         });
@@ -150,7 +155,7 @@ void main() {
     expect(find.text('— MSNW'), findsOneWidget);
     await mount(tester);
     expect(find.text('0'), findsNothing);
-    expect(find.text('MSNW history unavailable'), findsOneWidget);
+    expect(find.text('Sign in to view your balance'), findsOneWidget);
   });
 
   testWidgets(
@@ -172,7 +177,7 @@ void main() {
     final controller = _RetryWallet();
     await mount(tester, controller: () => controller, onCrypto: () {});
     expect(find.text('— MSNW'), findsOneWidget);
-    expect(find.text('MSNW history unavailable'), findsOneWidget);
+    expect(find.text('Sign in to view your balance'), findsOneWidget);
     expect(find.text('42'), findsNothing);
     expect(controller.attempts, 0);
     expect(tester.takeException(), isNull);
@@ -209,6 +214,7 @@ void main() {
       ProviderScope(
         key: UniqueKey(),
         overrides: [
+          sessionProvider.overrideWith(_SignedOut.new),
           walletProvider.overrideWith(
             () => _Wallet(_view(amount: 12, empty: true)),
           ),
@@ -220,11 +226,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Crypto'));
+    await tester.scrollUntilVisible(find.text('All crypto assets'), 180, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('All crypto assets'));
     await tester.pumpAndSettle();
-    expect(find.text('Crypto assets'), findsOneWidget);
+    expect(find.text('Crypto route'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Data bundles'));
     await tester.tap(find.text('Data bundles'));
     await tester.pumpAndSettle();
     expect(find.text('Billing data'), findsOneWidget);
@@ -245,24 +253,23 @@ void main() {
       await tester.ensureVisible(find.text('Send'));
       await tester.tap(find.text('Send'));
       expect(sent, 0);
-      final send = tester.widget<FilledButton>(
-        find.widgetWithIcon(FilledButton, Icons.north_east));
-      expect(send.onPressed, isNull);
+      final send = tester.widget<InkWell>(find.ancestor(
+        of: find.text('Send'), matching: find.byType(InkWell)).first);
+      expect(send.onTap, isNull);
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('MSNW Send stays disabled without qualified host action', (
+  testWidgets('MSNW Send stays disabled without an authenticated account', (
     tester,
   ) async {
     await mount(
       tester,
       value: _view(amount: 1000, empty: true),
     );
-    final sendButton = tester.widget<FilledButton>(
-      find.widgetWithIcon(FilledButton, Icons.north_east),
-    );
-    expect(sendButton.onPressed, isNull);
+    final sendButton = tester.widget<InkWell>(find.ancestor(
+      of: find.text('Send'), matching: find.byType(InkWell)).first);
+    expect(sendButton.onTap, isNull);
     expect(find.byTooltip('Send Credits'), findsNothing);
     expect(find.text('Credits'), findsNothing);
   });

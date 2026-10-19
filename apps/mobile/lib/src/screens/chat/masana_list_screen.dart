@@ -8,6 +8,7 @@ import '../../agents/masana_portrait_avatar.dart';
 import '../../agents/agent_feedback.dart';
 import '../../agents/agent_presence_labels.dart';
 import '../../state/session_state.dart';
+import '../profile/my_masana_screen.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../theme/masanawa_theme.dart';
@@ -94,6 +95,18 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         ],
       ),
       body: _body(context, directory, accountId),
+      floatingActionButton: session is! SessionSignedIn ? null
+          : FloatingActionButton.extended(
+              tooltip: 'Create a new Masana',
+              icon: const Icon(Icons.add),
+              label: const Text('Create Masana'),
+              onPressed: () async {
+                final saved = await MyMasanaScreen.openCreate(context);
+                final active = ref.read(sessionProvider);
+                if (!mounted || active is! SessionSignedIn || active.user.id != accountId) return;
+                if (saved == true) await ref.read(agentDirectoryProvider.notifier).refresh();
+              },
+            ),
     );
   }
 
@@ -249,6 +262,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                   onRefresh: () =>
                       ref.read(agentDirectoryProvider.notifier).refresh(),
                   child: ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 96),
                     key: PageStorageKey<String>('masana-contacts-$accountId-$_filter-$_query'),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: filtered.length,

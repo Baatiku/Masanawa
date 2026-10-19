@@ -36,10 +36,10 @@ void main(){
   expect(tester.getCenter(find.text('Send')).dy,tester.getCenter(find.text('P2P')).dy);
   await tester.ensureVisible(find.text('Data bundles'));await tester.tap(find.text('Data bundles'));expect(services,['data']);
   await tester.ensureVisible(find.text('Transactions'));await tester.tap(find.text('Transactions'));await tester.pumpAndSettle();
-  expect(find.text('No transactions yet'),findsOneWidget);
+  expect(find.text('No transactions yet. Fund your MSNW wallet to get started.'),findsOneWidget);
   await tester.tap(find.text('View all transactions'));await tester.pumpAndSettle();expect(find.text('Transaction history'),findsOneWidget);
   (container.read(sessionProvider.notifier) as _Session).change(const SessionSignedOut());await tester.pumpAndSettle();
-  expect(find.text('No transactions yet'),findsNothing);expect(find.text('Sign in again to continue'),findsOneWidget);
+  expect(find.text('No transactions yet. Fund your MSNW wallet to get started.'),findsNothing);expect(find.text('Sign in again to continue'),findsOneWidget);
   expect(tester.takeException(),isNull);
  });
 }

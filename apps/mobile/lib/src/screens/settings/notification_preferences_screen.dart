@@ -50,7 +50,7 @@ class NotificationPreferences {
       throw const FormatException('Invalid quiet hours');
     }
     return NotificationPreferences(categories, start as int?,
-        end as int?, offset as int);
+        end, offset as int);
   }
 
   NotificationPreferences update({

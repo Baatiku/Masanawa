@@ -224,7 +224,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
       expect(transport.updates, 1);
       expect(find.text('Profile saved.'), findsNothing);
@@ -250,7 +251,8 @@ void main() {
             .onPressed,
         isNull,
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
       expect(transport.updates, 1);
       transport.savedName = 'Server-confirmed name';
@@ -292,7 +294,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
       expect(transport.exists, isFalse);
       expect(
@@ -335,7 +338,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
       expect(find.text('@new_amina'), findsOneWidget);
       expect(transport.creates, 2);
@@ -372,6 +376,7 @@ void main() {
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
@@ -431,6 +436,7 @@ void main() {
       150,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
     expect(transport.updates, 0);
@@ -461,6 +467,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
 
@@ -484,6 +491,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
 
@@ -509,6 +517,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
     expect(transport.updates, 0);
@@ -526,6 +535,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
     expect(transport.savedName, 'Amina Bello');
@@ -556,6 +566,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
     expect(transport.savedName, 'Amina');
@@ -591,6 +602,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
     expect(transport.updates, 2);
@@ -609,6 +621,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pumpAndSettle();
 
@@ -649,7 +662,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
 
       expect(transport.creates, 1);
@@ -684,7 +698,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
 
       transport.failNextLoad = true;
@@ -718,7 +733,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pumpAndSettle();
       expect(transport.updates, 2);
     },
@@ -767,6 +783,7 @@ void main() {
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const ValueKey('profile-edit-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
     await tester.pump();
     expect(transport.updates, 1);
@@ -813,7 +830,8 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('profile-edit-save')),
       );
-      await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
+      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-edit-save')));
       await tester.pump();
       expect(transport.updates, 1);
 

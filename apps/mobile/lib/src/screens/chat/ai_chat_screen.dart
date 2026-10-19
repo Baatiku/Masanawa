@@ -1,3 +1,4 @@
+import '../../tokens/feature_colors.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -52,6 +53,7 @@ import '../../state/wallet_state.dart';
 import '../../voice/paid_voice.dart';
 import '../../voice/paid_voice_state.dart';
 import '../../voice/voice_reply_playback_preference.dart';
+import '../../voice/voice_note_sequence.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';
@@ -87,7 +89,7 @@ class AiChatScreen extends ConsumerStatefulWidget {
   ConsumerState<AiChatScreen> createState() => _AiChatScreenState();
 }
 
-class _AiChatScreenState extends ConsumerState<AiChatScreen> {
+class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBindingObserver {
   final _input = TextEditingController();
   final _composerFocus = FocusNode();
   final _scroll = ScrollController();
@@ -122,10 +124,99 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   AudioPlayer? _inlinePreviewPlayer;
   bool _inlinePreviewPlaying = false;
   bool _voiceHoldActive = false, _recordingLocked = false;
+  final _voiceSequence = VoiceNoteSequence();
+  final Map<String, ChatAttachment> _sequenceNotes = {};
+  String? _continuationNoteId;
+  int? _continuationGeneration;
+
+  bool get _canContinueVoiceNotes => mounted &&
+      ref.read(sessionProvider) is SessionSignedIn &&
+      ref.read(voiceReplyAutoplayProvider).asData?.value == true &&
+      _inlineVoiceSession == null && _modalVoiceSession == null &&
+      !LiveCallForeground.active && ModalRoute.of(context)?.isCurrent != false &&
+      TickerMode.of(context);
+
+  int? _beginVoiceSequence(String id) {
+    _sequenceNotes.clear();
+    final messages = [...(ref.read(aiChatProvider).threads[widget.characterId]?.messages ?? <AiChatMessage>[])]
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final message in messages) {
+      if (message.deleted || !{'sent', 'delivered'}.contains(message.deliveryStatus)) continue;
+      for (var i = 0; i < message.allAttachments.length; i++) {
+        final attachment = message.allAttachments[i];
+        if (!{'voice', 'audio'}.contains(attachment.kind) || attachment.path.isEmpty ||
+            attachment.path.startsWith('masanawa-remote|')) continue;
+        _sequenceNotes['${message.id}:$i'] = attachment;
+      }
+    }
+    if (_continuationNoteId != id && mounted) setState(() => _continuationNoteId = null);
+    return _voiceSequence.start(id, _sequenceNotes.keys, enabled: _canContinueVoiceNotes);
+  }
+
+  void _stopVoiceSequence() => _voiceSequence.stop();
+
+  bool _sequenceNoteStillAvailable(String id) {
+    final snapshot = _sequenceNotes[id];
+    if (snapshot == null) return false;
+    for (final message in ref.read(aiChatProvider).threads[widget.characterId]?.messages ?? <AiChatMessage>[]) {
+      if (message.deleted || !{'sent', 'delivered'}.contains(message.deliveryStatus)) continue;
+      for (var i = 0; i < message.allAttachments.length; i++) {
+        if ('${message.id}:$i' == id && message.allAttachments[i].path == snapshot.path &&
+            {'voice', 'audio'}.contains(message.allAttachments[i].kind)) return true;
+      }
+    }
+    return false;
+  }
+
+  void _voiceNoteCompleted(String id, int? generation) {
+    if (!_voiceSequence.isCurrent(id, generation)) return;
+    var next = _voiceSequence.complete(id, generation, allowed: _canContinueVoiceNotes);
+    while (next != null && !_sequenceNoteStillAvailable(next)) {
+      next = _voiceSequence.complete(next, generation, allowed: _canContinueVoiceNotes);
+    }
+    if (!mounted) return;
+    setState(() {
+      _continuationNoteId = next;
+      _continuationGeneration = generation;
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!TickerMode.of(context) || ModalRoute.of(context)?.isCurrent == false) {
+      _stopVoiceSequence();
+      _pendingVoiceAutoplay = null;
+      unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AiChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.characterId != widget.characterId) {
+      _stopVoiceSequence();
+      _continuationNoteId = null;
+      _sequenceNotes.clear();
+      _pendingVoiceAutoplay = null;
+      unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _stopVoiceSequence();
+      _pendingVoiceAutoplay = null;
+      unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
+    }
+  }
+
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _voiceAccountSubscription = ref.listenManual(sessionProvider, (
       previous,
       next,
@@ -133,6 +224,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final previousId = previous is SessionSignedIn ? previous.user.id : null;
       final nextId = next is SessionSignedIn ? next.user.id : null;
       if (previousId != nextId) {
+        _stopVoiceSequence();
+        unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
         _inlineVoiceSession?.endReason=CallEndReason.accountChanged;
         _modalVoiceSession?.endReason=CallEndReason.accountChanged;
         _pendingVoiceAutoplay = null;
@@ -198,6 +291,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopVoiceSequence();
     _voiceAccountSubscription?.close();
     _pendingVoiceAutoplay = null;
     unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
@@ -545,6 +640,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   void _openMasanaProfile(AgentDirectoryEntry agent) {
+    _stopVoiceSequence();
+    unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
     if (widget.onOpenProfile != null) { widget.onOpenProfile!(); return; }
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => MasanaProfileScreen(agent: agent),
@@ -553,6 +650,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   Future<void> _prepareCallAudio() async {
     _pendingVoiceAutoplay = null;
+    _stopVoiceSequence();
     await _cancelInlineRecording();
     await _activeVoiceBubble?._pauseFromAnotherBubble();
     await LivePcmAudio.stop();
@@ -582,7 +680,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.insert_drive_file_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF5B51D8), Color(0xFF833AB4)],
+                    colors: [MasanawaFeatureColors.instagramPurple, MasanawaFeatureColors.instagramViolet],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -595,7 +693,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.camera_alt_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFE1306C), Color(0xFFFD1D1D)],
+                    colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -608,7 +706,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.photo_library_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF833AB4), Color(0xFF405DE6)],
+                    colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -621,7 +719,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.headphones_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFF7E5F), Color(0xFFFEB47B)],
+                    colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -634,7 +732,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.videocam_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
+                    colors: [MasanawaFeatureColors.cyan, MasanawaFeatureColors.deepCyan],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -647,7 +745,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.location_on_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF0F9D58), Color(0xFF00E676)],
+                    colors: [MasanawaFeatureColors.emerald, MasanawaFeatureColors.brightEmerald],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -660,7 +758,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.person_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF00897B), Color(0xFF00BFA5)],
+                    colors: [MasanawaFeatureColors.teal, MasanawaFeatureColors.brightTeal],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -673,7 +771,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 _AttachOption(
                   icon: Icons.poll_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFFB300), Color(0xFFF57C00)],
+                    colors: [MasanawaFeatureColors.amber, MasanawaFeatureColors.deepAmber],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -1135,7 +1233,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       for (final message in next.threads[widget.characterId]?.messages ?? const <AiChatMessage>[]) {
         final wasGenerating = prior.any((m) => m.id == message.id && m.deliveryStatus == 'streaming');
         final audio = message.attachment;
-        if (wasGenerating && message.deliveryStatus == 'delivered' && audio?.kind == 'voice' &&
+        if (_voiceSequence.current == null && wasGenerating && message.deliveryStatus == 'delivered' && audio?.kind == 'voice' &&
             ref.read(voiceReplyAutoplayProvider).asData?.value == true &&
             _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
           _pendingVoiceAutoplay = audio!.path;
@@ -1157,7 +1255,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) setState(() => _showEmoji = false);
+        if (didPop) {
+          _stopVoiceSequence();
+          unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
+          setState(() => _showEmoji = false);
+        }
       },
       child: Scaffold(
         backgroundColor: u.chatBg,
@@ -1194,7 +1296,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
-                    fillColor: Color(0xFFF1F4F3),
+                    fillColor: MasanawaFeatureColors.searchFill,
                     border: InputBorder.none,
                   ),
                   onChanged: (_) {
@@ -1417,7 +1519,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         final previous = index > 0 ? messages[index - 1] : null;
                         final showDate = previous == null ||
                             !_sameDay(previous.createdAt, message.createdAt);
-                        return Column(
+                        return _VoicePlaybackScope(
+                          message: message,
+                          onStart: _beginVoiceSequence,
+                          onComplete: _voiceNoteCompleted,
+                          onStop: _stopVoiceSequence,
+                          child: Column(
                           children: [
                             if (showDate) _DateSeparator(date: message.createdAt),
                             KeyedSubtree(
@@ -1518,6 +1625,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                               ),
                             ),
                           ],
+                        ),
                         );
                       },
                     ),
@@ -1602,6 +1710,31 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 senderName: _replyingTo!.isUser ? 'You' : agent.displayName,
                 onClose: () => setState(() => _replyingTo = null),
               ),
+            if (_continuationNoteId != null && _sequenceNotes[_continuationNoteId] != null)
+              Builder(builder: (context) {
+                final noteId = _continuationNoteId!;
+                final generation = _continuationGeneration;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: _VoicePlaybackScope(
+                    noteId: noteId,
+                    onStart: _beginVoiceSequence,
+                    onComplete: _voiceNoteCompleted,
+                    onStop: _stopVoiceSequence,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('Next voice note', style: TextStyle(color: u.textMuted, fontSize: 12)),
+                      _VoiceBubble(
+                        key: ValueKey('continuation-$noteId'),
+                        attachment: _sequenceNotes[noteId]!,
+                        continuationGeneration: generation,
+                        canContinue: () => _canContinueVoiceNotes &&
+                            _voiceSequence.isCurrent(noteId, generation) &&
+                            _sequenceNoteStillAvailable(noteId),
+                      ),
+                    ]),
+                  ),
+                );
+              }),
             _Composer(
                 controller: _input,
                 focusNode: _composerFocus,
@@ -4468,13 +4601,47 @@ class _VoiceWaveform extends StatelessWidget {
   }
 }
 
+class _VoicePlaybackScope extends InheritedWidget {
+  const _VoicePlaybackScope({this.message, this.noteId, required this.onStart,
+    required this.onComplete, required this.onStop, required super.child});
+  final AiChatMessage? message;
+  final String? noteId;
+  final int? Function(String) onStart;
+  final void Function(String, int?) onComplete;
+  final VoidCallback onStop;
+  String? idFor(ChatAttachment attachment) {
+    if (noteId != null) return noteId;
+    final index = message?.allAttachments.indexOf(attachment) ?? -1;
+    return index < 0 ? null : '${message!.id}:$index';
+  }
+  @override
+  bool updateShouldNotify(_VoicePlaybackScope oldWidget) => message != oldWidget.message || noteId != oldWidget.noteId;
+}
+
 String? _pendingVoiceAutoplay;
 _VoiceBubbleState? _activeVoiceBubble;
 double _sharedVoiceSpeed = 1.0;
+// Serialize native route changes: disposal of an old bubble must finish before
+// a new bubble activates its route, and must never deactivate its successor.
+Future<void> _voiceRouteWork = Future<void>.value();
+Future<T> _withVoiceRoute<T>(Future<T> Function() work) {
+  final result = Completer<T>();
+  _voiceRouteWork = _voiceRouteWork.then((_) async {
+    try {
+      result.complete(await work());
+    } catch (error, stack) {
+      result.completeError(error, stack);
+    }
+  });
+  return result.future;
+}
 
 class _VoiceBubble extends StatefulWidget {
-  const _VoiceBubble({required this.attachment});
+  const _VoiceBubble({super.key, required this.attachment,
+    this.continuationGeneration, this.canContinue});
   final ChatAttachment attachment;
+  final int? continuationGeneration;
+  final bool Function()? canContinue;
 
   @override
   State<_VoiceBubble> createState() => _VoiceBubbleState();
@@ -4482,6 +4649,12 @@ class _VoiceBubble extends StatefulWidget {
 
 class _VoiceBubbleState extends State<_VoiceBubble> {
   AudioPlayer? _player;
+  _VoicePlaybackScope? _sequenceScope;
+  String? _noteId;
+  int? _sequenceGeneration;
+  int _playRequest = 0;
+  bool _finishing = false;
+  StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
   StreamSubscription<PlayerState>? _stateSub;
   StreamSubscription<Duration>? _positionSub;
   bool _playing = false;
@@ -4494,19 +4667,33 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _pendingVoiceAutoplay == widget.attachment.path) {
+      if (mounted && widget.continuationGeneration != null) {
+        if (widget.canContinue?.call() == true && !LiveCallForeground.active) {
+          unawaited(_toggle(continuing: true));
+        }
+      } else if (mounted && _pendingVoiceAutoplay == widget.attachment.path) {
         _pendingVoiceAutoplay = null;
-        if (!LiveCallForeground.active) unawaited(_toggle());
+        if (!LiveCallForeground.active) unawaited(_toggle(userInitiated: false));
       }
     });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sequenceScope = context.dependOnInheritedWidgetOfExactType<_VoicePlaybackScope>();
+    _noteId = _sequenceScope?.idFor(widget.attachment);
+  }
+
+  @override
   void dispose() {
+    _playRequest++;
     if (identical(_activeVoiceBubble, this)) {
+      _sequenceScope?.onStop();
       _activeVoiceBubble = null;
       unawaited(_releaseAudioRoute());
     }
+    _interruptionSub?.cancel();
     _stateSub?.cancel();
     _positionSub?.cancel();
     _player?.dispose();
@@ -4514,26 +4701,49 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   }
 
   Future<void> _finishPlayback(AudioPlayer player) async {
-    await player.pause();
-    await player.seek(Duration.zero);
-    if (identical(_activeVoiceBubble, this)) _activeVoiceBubble = null;
-    await _releaseAudioRoute();
+    _finishing = true;
+    final request = _playRequest;
+    try {
+      await player.pause();
+      await player.seek(Duration.zero);
+      if (!identical(_activeVoiceBubble, this)) return;
+      await _releaseAudioRoute();
+      if (!identical(_activeVoiceBubble, this)) return;
+      _activeVoiceBubble = null;
+      if (mounted && request == _playRequest && _noteId != null) {
+        _sequenceScope?.onComplete(_noteId!, _sequenceGeneration);
+      }
+    } catch (_) {
+      if (identical(_activeVoiceBubble, this)) {
+        _sequenceScope?.onStop();
+        await _releaseAudioRoute();
+        if (identical(_activeVoiceBubble, this)) _activeVoiceBubble = null;
+      }
+    } finally {
+      _finishing = false;
+    }
   }
 
-  Future<void> _releaseAudioRoute() async {
-    if (LiveCallForeground.active) return;
+  Future<void> _releaseAudioRoute() => _withVoiceRoute(() async {
+    bool ownsRoute() => !LiveCallForeground.active &&
+        (_activeVoiceBubble == null || identical(_activeVoiceBubble, this));
+    if (!ownsRoute()) return;
     try {
       await LivePcmAudio.release();
+      if (!ownsRoute()) return;
       final session = await AudioSession.instance;
-      await session.setActive(false);
+      if (ownsRoute()) await session.setActive(false);
     } catch (_) {}
-  }
+  });
 
   Future<void> _pauseFromAnotherBubble() async {
+    _playRequest++;
+    _sequenceScope?.onStop();
     if (!_playing) return;
-    await _player?.pause();
     if (mounted) setState(() => _playing = false);
+    try { await _player?.pause(); } catch (_) {}
     await _releaseAudioRoute();
+    if (identical(_activeVoiceBubble, this)) _activeVoiceBubble = null;
   }
 
   Future<void> _ensurePlayer() async {
@@ -4549,6 +4759,10 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
           _position = Duration.zero;
         });
         unawaited(_finishPlayback(player));
+      } else if (!state.playing && _playing && state.processingState != ProcessingState.completed) {
+        _sequenceScope?.onStop();
+        setState(() => _playing = false);
+        unawaited(_releaseAudioRoute());
       }
     });
     _positionSub = player.positionStream.listen((value) {
@@ -4578,7 +4792,11 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
     await player.setSpeed(_sharedVoiceSpeed);
   }
 
-  Future<void> _toggle() async {
+  Future<void> _toggle({bool continuing = false, bool userInitiated = true}) async {
+    if (_finishing) return;
+    final request = ++_playRequest;
+    bool validRequest() => mounted && request == _playRequest &&
+        !LiveCallForeground.active && ModalRoute.of(context)?.isCurrent != false;
     try {
       if (_broken && mounted) setState(() => _broken = false);
 
@@ -4587,46 +4805,71 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
         await other._pauseFromAnotherBubble();
       }
 
+      if (!validRequest()) return;
+      _activeVoiceBubble = this;
       await _ensurePlayer();
+      if (!validRequest()) return;
 
       if (_playing) {
-        await _player!.pause();
+        _sequenceScope?.onStop();
         if (mounted) setState(() => _playing = false);
+        await _player!.pause();
         await _releaseAudioRoute();
         return;
       }
 
-      if (LiveCallForeground.active) return;
+      if (!validRequest() ||
+          (continuing && widget.canContinue?.call() != true)) return;
       final session = await AudioSession.instance;
-      await session.configure(
-        const AudioSessionConfiguration(
-          avAudioSessionCategory: AVAudioSessionCategory.playback,
-          avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-          androidAudioAttributes: AndroidAudioAttributes(
-            contentType: AndroidAudioContentType.speech,
-            usage: AndroidAudioUsage.media,
+      _interruptionSub ??= session.interruptionEventStream.listen((event) {
+        if (event.begin) unawaited(_pauseFromAnotherBubble());
+      });
+      await _withVoiceRoute(() async {
+        if (!validRequest()) return;
+        await session.configure(
+          const AudioSessionConfiguration(
+            avAudioSessionCategory: AVAudioSessionCategory.playback,
+            avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+            androidAudioAttributes: AndroidAudioAttributes(
+              contentType: AndroidAudioContentType.speech,
+              usage: AndroidAudioUsage.media,
+            ),
+            androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+            androidWillPauseWhenDucked: true,
           ),
-          androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
-          androidWillPauseWhenDucked: true,
-        ),
-      );
-      if (!await session.setActive(true)) {
-        throw StateError('Audio session could not be activated');
-      }
+        );
+        if (!validRequest()) return;
+        if (!await session.setActive(true)) {
+          throw StateError('Audio session could not be activated');
+        }
 
-      if (!_speakerOn) {
-        await LivePcmAudio.setSpeaker(false);
-      }
+        if (!_speakerOn && validRequest()) {
+          await LivePcmAudio.setSpeaker(false);
+        }
+      });
 
+      if (!validRequest() ||
+          (continuing && widget.canContinue?.call() != true)) {
+        await _releaseAudioRoute();
+        return;
+      }
+      _sequenceGeneration = continuing ? widget.continuationGeneration :
+          (!userInitiated || _noteId == null ? null : _sequenceScope?.onStart(_noteId!));
       _activeVoiceBubble = this;
       if (_position >= _duration && _duration > Duration.zero) {
         await _player!.seek(Duration.zero);
       }
-      if (mounted) setState(() => _playing = true);
+      if (!validRequest()) return;
+      setState(() => _playing = true);
       unawaited(_player!.play().catchError((Object error) {
-        if (mounted) setState(() { _playing = false; _broken = true; });
+        if (mounted && request == _playRequest) {
+          _sequenceScope?.onStop();
+          setState(() { _playing = false; _broken = true; });
+        }
       }));
     } catch (_) {
+      if (!mounted || request != _playRequest) return;
+      _sequenceScope?.onStop();
       await _player?.dispose();
       _player = null;
       await _stateSub?.cancel();
@@ -4644,6 +4887,8 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   }
 
   Future<void> _seek(double fraction) async {
+    _playRequest++;
+    _sequenceScope?.onStop();
     try {
       await _ensurePlayer();
       final totalMs = _duration.inMilliseconds;
@@ -4655,15 +4900,22 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   }
 
   Future<void> _toggleAudioRoute() async {
+    final request = _playRequest;
     final next = !_speakerOn;
-    if (_playing) {
-      if (next) {
-        await LivePcmAudio.release();
-      } else {
-        await LivePcmAudio.setSpeaker(false);
+    bool current() => mounted && request == _playRequest &&
+        !LiveCallForeground.active &&
+        (!_playing || identical(_activeVoiceBubble, this));
+    await _withVoiceRoute(() async {
+      if (!current()) return;
+      if (_playing) {
+        if (next) {
+          await LivePcmAudio.release();
+        } else {
+          await LivePcmAudio.setSpeaker(false);
+        }
       }
-    }
-    if (mounted) setState(() => _speakerOn = next);
+      if (current()) setState(() => _speakerOn = next);
+    });
   }
 
   Future<void> _cycleSpeed() async {

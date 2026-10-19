@@ -120,6 +120,21 @@ describe("26 professional Masana production bootstrap",()=>{
    await run(f,tenant);expect(f.presentations[0]?.countryCode).toBe('GB');
  });
 
+ it("backfills missing country on renamed approved canonical stock identities",async()=>{
+   const f=fixture(),tenant=createCanonicalId("tenant");
+   const first=await run(f,tenant);
+   const approvedId=first.characterIds[24]!;
+   const index=f.presentations.findIndex(p=>p.characterId===approvedId);
+   f.presentations[index]={...f.presentations[index]!,displayName:"Curated Hindi tutor",countryCode:null,countryName:null};
+   await run(f,tenant,new Map([["masana.asha",approvedId]]));
+   expect(f.presentations[index]).toMatchObject({characterId:approvedId,
+     displayName:"Curated Hindi tutor",countryCode:"IN",countryName:"India"});
+   expect(f.identity.provision).toHaveBeenCalledTimes(26);
+   f.presentations[index]={...f.presentations[index]!,countryCode:"GB",countryName:"United Kingdom"};
+   await run(f,tenant,new Map([["masana.asha",approvedId]]));
+   expect(f.presentations[index]?.countryCode).toBe("GB");
+ });
+
  it("does not overwrite administrator-selected voices or editorial welcomes",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
    await run(f,tenant);

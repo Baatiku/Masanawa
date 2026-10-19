@@ -19,7 +19,7 @@ const details = {
   accountNumber: "0123456789", bankCode: "007",
 };
 
-function scenario() {
+function scenario(identificationFailure?: number | "timeout" | "malformed") {
   let row: Record<string, unknown> | null = null;
   let dva: Record<string, unknown> | null = null;
   let identified = false;
@@ -88,7 +88,13 @@ function scenario() {
       return new Response("", { status: 404 });
     if (path === "/customer" && init?.method === "POST") return ok(found);
     if (path === "/customer/CUS_test321/identification" && init?.method === "POST")
-      return ok({});
+      {
+        if (identificationFailure === "timeout") throw new Error("timeout");
+        if (identificationFailure === "malformed") return new Response("invalid", { status: 422 });
+        if (typeof identificationFailure === "number")
+          return new Response(JSON.stringify({ status: false }), { status: identificationFailure });
+        return ok({});
+      }
     if (path === "/customer/CUS_test321") return ok(found);
     throw new Error("Unexpected provider request " + path);
   };
@@ -152,6 +158,35 @@ describe("MSNW Paystack customer identity enrollment", () => {
       .toBe(true);
     expect(test.queries.join("\n")).not.toContain(details.bvn);
     expect(test.queries.join("\n")).not.toContain(details.accountNumber);
+  });
+
+  it.each([400, 422])("allows corrected bank identity after definite provider rejection %s while retaining owner details", async status => {
+    const test = scenario(status);
+    const phoneOnly = { ...owner, profile: { ...owner.profile, email: null, name: "Guest" } } as PlatformSessionIdentity;
+    const supplied = { ...details, email: "owner@example.com", legalName: "Amina Yusuf" };
+    await expect(test.service.submit(phoneOnly, supplied)).rejects.toMatchObject({
+      code: "funding.bank_identity_rejected", statusCode: 422,
+    });
+    expect(await test.service.read(owner)).toEqual({ state: "awaiting_bank_identity" });
+    expect(await test.service.profile(phoneOnly)).toMatchObject({
+      legalName: "Amina Yusuf", email: "owner@example.com", phone: "+2348012345678",
+    });
+    await expect(test.service.submit(phoneOnly, { ...details, accountNumber: "1234567890" })).rejects.toMatchObject({
+      code: "funding.bank_identity_rejected",
+    });
+    expect(test.calls.filter(x => x === "POST /customer")).toHaveLength(1);
+    expect(test.calls.filter(x => x.includes("/identification"))).toHaveLength(2);
+    expect(test.queries.some(x => x.includes("INSERT INTO commerce.msnw_paystack_dva"))).toBe(false);
+  });
+
+  it.each([500, 429, 401, 403, "timeout", "malformed"] as const)("does not replay ambiguous identification failure %s", async failure => {
+    const test = scenario(failure);
+    await expect(test.service.submit(owner, details)).rejects.toMatchObject({
+      code: "funding.provider_unavailable",
+    });
+    expect(await test.service.read(owner)).toEqual({ state: "identity_validation_pending" });
+    await test.service.submit(owner, details);
+    expect(test.calls.filter(x => x.includes("/identification"))).toHaveLength(1);
   });
 
   it("rejects invalid or non-consented identity without a provider request", async () => {

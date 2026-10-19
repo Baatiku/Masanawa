@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../social/talk_social_profiles.dart';
 import '../../state/talk_social_profile_state.dart';
+import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
-import '../../agents/masana_portrait_avatar.dart';
 import '../talks/talk_home_screen.dart';
 
 class PersonProfileScreen extends ConsumerStatefulWidget {
@@ -27,6 +27,7 @@ class PersonProfileScreen extends ConsumerStatefulWidget {
 class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   HumanProfile? _local;
   bool _followBusy = false;
+  int _operation = 0;
 
   Future<void> _refresh() async {
     setState(() => _local = null);
@@ -36,6 +37,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
 
   Future<void> _toggleFollow(HumanProfile profile) async {
     if (_followBusy) return;
+    final operation = ++_operation;
     setState(() => _followBusy = true);
     try {
       final updated =
@@ -43,21 +45,26 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
                 handle: profile.handle,
                 following: !profile.isFollowing,
               );
-      if (!mounted) return;
+      if (!mounted || operation != _operation) return;
       setState(() => _local = updated);
       ref.invalidate(humanProfileProvider(widget.handle));
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || operation != _operation) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Couldn’t update Follow right now.')),
       );
     } finally {
-      if (mounted) setState(() => _followBusy = false);
+      if (mounted && operation == _operation) setState(() => _followBusy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null), (previous, next) {
+      if (previous == next) return;
+      _operation++;
+      setState(() { _local = null; _followBusy = false; });
+    });
     final asyncProfile = ref.watch(humanProfileProvider(widget.handle));
     return asyncProfile.when(
       loading: () => Scaffold(
@@ -120,10 +127,12 @@ class _PersonProfileBody extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                MasanaPortraitAvatar(
-                  displayName: profile.displayName,
-                  avatarUrl: avatar,
-                  size: 76,
+                CircleAvatar(
+                  radius: 38,
+                  foregroundImage: avatar == null || avatar.isEmpty ? null : NetworkImage(avatar),
+                  onForegroundImageError: avatar == null || avatar.isEmpty ? null : (_, __) {},
+                  child: Text(profile.displayName.trim().isEmpty
+                    ? '?' : profile.displayName.trim().substring(0, 1).toUpperCase()),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -135,7 +144,7 @@ class _PersonProfileBody extends StatelessWidget {
                           Flexible(
                             child: Text(
                               profile.displayName,
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: u.textPrimary,
@@ -171,13 +180,12 @@ class _PersonProfileBody extends StatelessWidget {
                         style: TextStyle(color: u.textMuted, fontSize: 13),
                       ),
                       const SizedBox(height: 10),
-                      Row(
+                      Wrap(spacing: 18, runSpacing: 6,
                         children: [
                           _Stat(
                             value: _compact(profile.followerCount),
                             label: 'followers',
                           ),
-                          const SizedBox(width: 18),
                           _Stat(
                             value: _compact(profile.followingCount),
                             label: 'following',
@@ -189,17 +197,13 @@ class _PersonProfileBody extends StatelessWidget {
                 ),
               ],
             ),
-            if (profile.bio.trim().isNotEmpty) ...[
-              const SizedBox(height: 13),
-              Text(
-                profile.bio,
-                style: TextStyle(
-                  color: u.textPrimary,
-                  fontSize: 14,
-                  height: 1.35,
-                ),
+            if (profile.bio.trim().isNotEmpty)
+              ExpansionTile(tilePadding: EdgeInsets.zero,
+                title: const Text('About'),
+                children: [Padding(padding: const EdgeInsets.only(bottom: 12),
+                  child: Align(alignment: AlignmentDirectional.centerStart,
+                    child: SelectableText(profile.bio)))],
               ),
-            ],
             const SizedBox(height: 14),
             Row(
               children: [
@@ -232,7 +236,7 @@ class _PersonProfileBody extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Talks',
+              'Public activity',
               style: TextStyle(
                 color: u.textPrimary,
                 fontSize: 17,
@@ -244,7 +248,7 @@ class _PersonProfileBody extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 26),
                 child: Text(
-                  'No public Talks yet.',
+                  'No public activity yet.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: u.textMuted),
                 ),
@@ -275,6 +279,7 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = context.masanawa;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,

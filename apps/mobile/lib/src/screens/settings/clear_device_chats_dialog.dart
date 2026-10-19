@@ -29,24 +29,25 @@ class _ClearDeviceChatsDialogState extends State<ClearDeviceChatsDialog> {
       if (!mounted) return;
       setState(() {
         _clearing = false;
-        _error = 'Could not clear local chats. Nothing was confirmed. '
-            'Check your connection and try again.';
+        _error = 'Could not finish clearing downloaded media. '
+            'Try again. Your messages and drafts are kept.';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Clear chats on this device?'),
+    title: const Text('Clear downloaded chat media?'),
     content: SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'This removes cached Masana conversations and temporary voice '
-            'media from this device. It does not delete server-held history, '
-            'your account, or financial receipts. Synced chats may reappear.',
+            'This removes downloaded media from closed chats. Messages, drafts, '
+            'retryable uploads, original recordings and financial receipts '
+            'are kept. Available media can be downloaded again; expired '
+            'server media may no longer be available.',
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -66,12 +67,12 @@ class _ClearDeviceChatsDialogState extends State<ClearDeviceChatsDialog> {
     actions: [
       TextButton(
         onPressed: _clearing ? null : () => Navigator.of(context).pop(false),
-        child: const Text('Keep chats'),
+        child: const Text('Keep media'),
       ),
       FilledButton(
         key: const Key('confirm-clear-device-chats'),
         onPressed: _clearing ? null : _confirm,
-        child: const Text('Clear local chats'),
+        child: const Text('Clear downloaded media'),
       ),
     ],
   );

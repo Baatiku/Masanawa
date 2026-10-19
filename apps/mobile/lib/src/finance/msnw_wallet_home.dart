@@ -318,28 +318,25 @@ class WalletActionRow extends StatelessWidget {
         ),
       ),
     );
-    return LayoutBuilder(builder:(context,constraints) {
-      final narrow=constraints.maxWidth<360 ||
-        MediaQuery.textScalerOf(context).scale(1)>1.35;
-      if(narrow) {
-        return Column(children:[
-          Row(children:[
-            action('Send',Icons.north_east,onSend),
-            action('Convert',Icons.swap_horiz,onConvert),
-          ]),
-          const SizedBox(height:14),
-          Row(children:[
-            action('Receive',Icons.south_west,onReceive),
-            action('P2P',Icons.people_alt_outlined,onP2p),
-          ]),
-        ]);
-      }
-      return Row(children:[
-        action('Send',Icons.north_east,onSend),
-        action('Convert',Icons.swap_horiz,onConvert),
-        action('Receive',Icons.south_west,onReceive),
-        action('P2P',Icons.people_alt_outlined,onP2p),
-      ]);
+    return LayoutBuilder(builder: (context, constraints) {
+      // Keep the four actions together. Large accessibility text may scroll
+      // horizontally instead of changing the order into a second row.
+      final scale = MediaQuery.textScalerOf(context).scale(1);
+      final minimum = scale > 1.35 ? 112.0 : 64.0;
+      final width = constraints.maxWidth < minimum * 4
+          ? minimum * 4 : constraints.maxWidth;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(width: width, child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            action('Send', Icons.north_east, onSend),
+            action('Convert', Icons.swap_horiz, onConvert),
+            action('Receive', Icons.south_west, onReceive),
+            action('P2P', Icons.people_alt_outlined, onP2p),
+          ],
+        )),
+      );
     });
   }
 }

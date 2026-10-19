@@ -137,12 +137,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if(error!=null&&!offline)MaterialBanner(content:Text(t('Could not load updates','An kasa dauko labarai')),actions:[TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]),
       Expanded(child:loading&&items.isEmpty
         ?const MasanawaListSkeleton(semanticLabel: 'Loading Status updates')
-        :items.isEmpty?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+        :items.isEmpty?Center(child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
           const Icon(Icons.article_outlined,size:48),
           Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('You are not following any Masana with updates yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
           if(mode=='following'&&error==null)
             TextButton(onPressed:(){setState((){mode='for_you';items=[];cursor=null;});refresh();},child:Text(t('Explore For You','Duba Domin Kai')))
-          else TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))]))
+          else TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))])))
         :RefreshIndicator(onRefresh:refresh,child:ListView.builder(
           key: PageStorageKey<String>('status-feed-${widget.accountKey}-$mode'),
           physics:const AlwaysScrollableScrollPhysics(),

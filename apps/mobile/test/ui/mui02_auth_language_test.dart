@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -115,12 +116,13 @@ class _PhoneAndEmailClient extends _TestAuthClient {
 
 class _ExpiredOtpClient extends _TestAuthClient {
   @override
-  Future<AuthTokens> otpVerify(String code, {String? phone, String? email, String? name}) async {
+  Future<AuthTokens> otpVerify(String code, {String? phone, String? email, String? name, String? deviceId}) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
   }
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   const routes = ['/phone-login', '/password', '/otp', '/name'];
 
   for (final route in routes) {

@@ -34,8 +34,8 @@ void main() {
     final theme = buildMasanawaTheme(brightness: Brightness.light);
     final colors = theme.extension<MasanawaColors>()!;
     final nav = theme.navigationBarTheme;
-    expect(nav.iconTheme!.resolve({WidgetState.selected})!.color, colors.brand);
-    expect(nav.iconTheme!.resolve({})!.color, colors.textPrimary);
+    expect(nav.iconTheme!.resolve({WidgetState.selected})!.color, colors.brandStrong);
+    expect(nav.iconTheme!.resolve({})!.color, colors.textMuted);
     expect(
       nav.labelTextStyle!.resolve({WidgetState.selected})!.color,
       colors.textPrimary,
@@ -56,7 +56,7 @@ void main() {
       ),
     );
     final text = tester.widget<Text>(find.text('Masanawa'));
-    expect(text.style!.color, const Color(0xFF075E54));
+    expect(text.style!.color, MasanawaColors.light().brand);
     expect(text.style!.fontSize, 24);
     expect(text.style!.fontWeight, FontWeight.w700);
     expect(text.style!.letterSpacing, 0);
@@ -156,8 +156,8 @@ void main() {
       final rect = tester.getRect(find.byType(TextField));
       expect(rect.height, inInclusiveRange(44, 48));
       final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.decoration!.fillColor, const Color(0xFFF0F2F5));
-      expect(field.decoration!.enabledBorder!.borderSide, BorderSide.none);
+      expect(field.decoration!.fillColor, buildMasanawaTheme(brightness: Brightness.light).inputDecorationTheme.fillColor);
+      expect(field.decoration!.enabledBorder!.borderSide.color, MasanawaColors.light().structuralBorder);
     },
   );
 

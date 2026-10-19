@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers.dart';
+import 'session_state.dart';
 import '../social/talk_social_profiles.dart';
 import '../social/talk_social_profiles_http_transport.dart';
 
@@ -9,17 +10,23 @@ final talkSocialProfileTransportProvider = Provider<TalkSocialProfileTransport>(
 );
 
 final humanProfileProvider = FutureProvider.family<HumanProfile?, String>(
-  (ref, handle) =>
-      ref.watch(talkSocialProfileTransportProvider).loadHuman(handle),
+  (ref, handle) {
+    ref.watch(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null));
+    return ref.watch(talkSocialProfileTransportProvider).loadHuman(handle);
+  },
 );
 
 final humanProfileByUserIdProvider =
     FutureProvider.family<HumanProfile?, String>(
-  (ref, userId) =>
-      ref.watch(talkSocialProfileTransportProvider).loadHumanByUserId(userId),
+  (ref, userId) {
+    ref.watch(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null));
+    return ref.watch(talkSocialProfileTransportProvider).loadHumanByUserId(userId);
+  },
 );
 
 final personaProfileProvider = FutureProvider.family<PersonaProfile?, String>(
-  (ref, publicId) =>
-      ref.watch(talkSocialProfileTransportProvider).loadPersona(publicId),
+  (ref, publicId) {
+    ref.watch(sessionProvider.select((state) => state is SessionSignedIn ? state.user.id : null));
+    return ref.watch(talkSocialProfileTransportProvider).loadPersona(publicId);
+  },
 );

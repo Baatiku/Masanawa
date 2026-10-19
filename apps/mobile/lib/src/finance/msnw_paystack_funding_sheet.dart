@@ -292,24 +292,22 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Row(
-          children: [
-            const Icon(Icons.account_balance_outlined),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Bank transfer',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Refresh funding account',
-              onPressed: _busy ? null : () => _reload(),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+        const WalletFlowHeader(
+          title: 'Bank transfer',
+          subtitle: 'Use your assigned bank account to fund MSNW. Your balance updates after payment and funding checks are confirmed.',
+          icon: Icons.account_balance_outlined,
         ),
-        const SizedBox(height: 24),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: Tooltip(
+            message: 'Refresh funding account',
+            child: TextButton.icon(
+            onPressed: _busy ? null : () => _reload(),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh funding account'),
+          )),
+        ),
+        const SizedBox(height: 12),
         if (_busy) const LinearProgressIndicator(),
         if (_error != null) ...[
           Text(_error!, textAlign: TextAlign.center),
@@ -351,6 +349,7 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
           ),
         ],
         if (account != null) ...[
+          WalletFormSection(title: 'Your bank account', children: [
           Text(
             account['bankName'] as String,
             style: Theme.of(context).textTheme.titleMedium,
@@ -379,7 +378,8 @@ class _MsnwPaystackFundingSheetState extends State<MsnwPaystackFundingSheet> {
           Text(account['accountName'] as String),
           const SizedBox(height: 8),
           const Text('NGN'),
-          const SizedBox(height: 28),
+          ]),
+          const SizedBox(height: 12),
           const Divider(),
           if (kMsnwPaystackVerifyEnabled)
             ListTile(

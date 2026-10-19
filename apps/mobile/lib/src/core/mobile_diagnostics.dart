@@ -5,8 +5,9 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
-/// Diagnostics are local-only and never transmit automatically.
+/// Capture is local; sharing or sending requires an explicit user action.
 class MasanawaDiagnostics {
   MasanawaDiagnostics._();
   static final instance = MasanawaDiagnostics._();
@@ -15,6 +16,15 @@ class MasanawaDiagnostics {
   static const _native = MethodChannel('masanawa/diagnostics');
   Future<void> _pending = Future<void>.value();
   bool _installed = false;
+
+  /// Release metadata is bounded and never accepts free-form text or URLs.
+  static String safeReleaseValue(String value) =>
+      RegExp(r'^[0-9][0-9A-Za-z.+_-]{0,47}$').hasMatch(value)
+          ? value : 'unknown';
+
+  static String safeSourceCommit(String value) =>
+      RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(value)
+          ? value.toLowerCase() : 'unknown';
 
   static String safeErrorType(Object error) {
     final type = error.runtimeType.toString();
@@ -86,8 +96,19 @@ class MasanawaDiagnostics {
     final lines = <String>[
       'Masanawa support diagnostics: local, anonymous, user-initiated export',
       'No account, device identifiers, conversations, tokens, URLs or raw stacks.',
-      'Flutter exceptions:',
+      'Source commit: ${safeSourceCommit(const String.fromEnvironment('MASANAWA_SOURCE_SHA'))}',
     ];
+    try {
+      // Read the installed binary identity; pubspec alone misses build overrides.
+      final info = await PackageInfo.fromPlatform().timeout(const Duration(seconds: 2));
+      lines.add('App version: ${safeReleaseValue(info.version)}');
+      lines.add('App build: ${safeReleaseValue(info.buildNumber)}');
+    } catch (_) {
+      lines.add('App version: unknown');
+      lines.add('App build: unknown');
+    }
+    lines.add('Flutter exceptions:');
+
     for (final entry in stored.take(20)) {
       if (entry is! Map) continue;
       final type = entry['type'], frame = entry['frame'], day = entry['day'];
@@ -113,6 +134,35 @@ class MasanawaDiagnostics {
     }
     if (stored.isEmpty) lines.add('No local Flutter errors.');
     return lines.join('\n');
+  }
+
+  /// Strict projection used for the opt-in Gateway support collector.
+  static Map<String, dynamic> supportPayload(String report, String reportId) {
+    const types = {'StateError','ApiException','FormatException','AssertionError',
+      'TypeError','FlutterError','RangeError','ArgumentError','SocketException',
+      'TimeoutException','PlatformException','OtherError'};
+    const exitTypes = {'anr','java_crash','native_crash','low_memory'};
+    final lines = report.split('\n');
+    String metadata(String prefix) {
+      for (final line in lines) {
+        if (line.startsWith(prefix)) return safeReleaseValue(line.substring(prefix.length));
+      }
+      return 'unknown';
+    }
+    final events = <Map<String, String>>[];
+    final exits = <String>[];
+    var source = 'unknown';
+    for (final line in lines) {
+      if (line.startsWith('Source commit: ')) source = safeSourceCommit(line.substring(15));
+      if (exitTypes.contains(line) && exits.length < 10) exits.add(line);
+      final match = RegExp(r'^(\d{4}-\d{2}-\d{2}) ([A-Za-z_][A-Za-z0-9_]{0,47}) (unknown|src/[a-zA-Z0-9_/-]+\.dart:[0-9]{1,6})$').firstMatch(line);
+      if (match == null || events.length >= 20) continue;
+      final day = DateTime.tryParse(match[1]!);
+      if (day == null || day.toIso8601String().substring(0, 10) != match[1]) continue;
+      events.add({'day':match[1]!, 'type':types.contains(match[2]) ? match[2]! : 'OtherError', 'frame':match[3]!});
+    }
+    return {'reportId':reportId,'consent':true,'version':metadata('App version: '),
+      'build':metadata('App build: '),'source':source,'events':events,'exits':exits};
   }
 
   Future<void> clear() async {

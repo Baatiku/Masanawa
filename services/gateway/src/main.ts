@@ -1,3 +1,4 @@
+import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import { RoomError } from "@masanawa/rooms";
@@ -1780,6 +1781,7 @@ export async function startGatewayService(
           ...(database.featurePool ? {
             rooms: createPgAgentRoomDirectory(database.featurePool),
             identities: createPgAgentMasanaIdentityReader(database.featurePool),
+            creators: createPgMasanaCreatorDirectory(database.featurePool),
           } : {}),
         })
       : undefined);
@@ -2761,6 +2763,10 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
+      ...(sessions ? { mobileDiagnostics: {
+        sessions,
+        observe: (report) => { process.stdout.write(JSON.stringify(report) + "\n"); },
+      } } : {}),
       ...(database.featurePool && sessions
         ? { accountDataExports: createAccountDataExports(database.featurePool,sessions) }
         : {}),

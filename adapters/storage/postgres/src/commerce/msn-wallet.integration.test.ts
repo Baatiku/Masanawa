@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations.js";
+import { platformProductMigrationRoots } from "../readiness.js";
 import { createMsnLedgerStore } from "../../../../../services/gateway/src/msn_wallet/store.js";
 
 const url = process.env.MASANAWA_TEST_DATABASE_URL;
@@ -13,10 +14,7 @@ db("MSN canonical PostgreSQL ledger acceptance", () => {
   let pool: Pool;
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
-    await runMigrations(pool, [{
-      owner: "commerce",
-      directory: fileURLToPath(new URL("../../../../../packages/commerce/migrations", import.meta.url)),
-    }]);
+    await runMigrations(pool, platformProductMigrationRoots());
     // Simulate an approved deployment without migrating real mainline
     // production databases before qualified custody and issuer review.
     const proposedSql = await readFile(fileURLToPath(

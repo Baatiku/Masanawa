@@ -15,10 +15,28 @@ export function pubspecVersion(text) {
 }
 
 export function signerFingerprint(output) {
-  const matches = [...output.matchAll(/Signer #\d+ certificate SHA-256 digest:\s*([0-9a-f:]{64,95})/ig)];
-  if (matches.length !== 1) throw new Error('APK must have exactly one discoverable signer');
-  const fingerprint = matches[0][1].replaceAll(':', '').toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(fingerprint)) throw new Error('Invalid APK certificate digest');
+  // apksigner versions emit either numbered signers or one record per scheme.
+  // Scheme records may repeat a certificate, but must describe one identity.
+  const counts = [...output.matchAll(/^Number of signers:\s*(\d+)\s*$/gim)];
+  if (counts.some((match) => Number(match[1]) !== 1)) {
+    throw new Error('APK must have exactly one discoverable signer');
+  }
+  const records = [...output.matchAll(/^(Signer #(\d+)|V\d+(?:\.\d+)? Signer):? certificate SHA-256 digest:\s*([^\r\n]*)$/gim)];
+  const numberedSigners = new Set(records.filter((match) => match[2]).map((match) => match[2]));
+  if (records.length === 0 || numberedSigners.size > 1) {
+    throw new Error('APK must have exactly one discoverable signer');
+  }
+  const fingerprints = records.map((match) => {
+    const value = match[3].trim();
+    if (!/^(?:[0-9a-f]{64}|[0-9a-f]{2}(?::[0-9a-f]{2}){31})$/i.test(value)) {
+      throw new Error('Invalid APK certificate digest');
+    }
+    return value.replaceAll(':', '').toLowerCase();
+  });
+  if (new Set(fingerprints).size !== 1) {
+    throw new Error('APK must have exactly one discoverable signer');
+  }
+  const fingerprint = fingerprints[0];
   return fingerprint;
 }
 

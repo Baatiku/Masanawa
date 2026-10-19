@@ -27,7 +27,9 @@ describe.skipIf(!url)("incoming PostgreSQL authority and races", () => {
       "0002_agent_configurations.sql",
       "0004_platform_agent_preferences.sql",
       "0007_masana_call_history.sql",
+      "0008_masana_group_calls.sql",
       "0009_masana_incoming_calls.sql",
+      "0013_masana_call_outcomes.sql",
     ])
       await pool.query(
         await readFile(

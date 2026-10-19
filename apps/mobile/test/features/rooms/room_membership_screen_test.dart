@@ -58,7 +58,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: RoomHomeScreen(
       client: rooms, id: 'room_math', membershipClient: memberships)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('room-invitations')));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invitations'));
     await tester.pumpAndSettle();
     expect(find.text('Join with code'), findsOneWidget);
     expect(find.text('Manage invitations and members'), findsOneWidget);

@@ -6,7 +6,12 @@ import 'package:masanawa/src/finance/crypto_models.dart';
 import 'package:masanawa/src/finance/crypto_state.dart';
 import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
 import 'package:masanawa/src/state/wallet_state.dart';
+import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
+
+class _SignedOut extends SessionController {
+  @override SessionState build() => const SessionSignedOut();
+}
 
 class _FakeWalletController extends WalletController {
   _FakeWalletController(this.view);
@@ -62,6 +67,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          sessionProvider.overrideWith(_SignedOut.new),
           walletProvider.overrideWith(() => _FakeWalletController(testView)),
           cryptoWalletProvider.overrideWith(_FakeCryptoController.new),
         ],
@@ -76,8 +82,8 @@ void main() {
 
     // MSNW is the only wallet credit/token; legacy Credits and historical
     // bank metadata must not be silently presented as MSNW funding.
-    expect(find.text('MSNW balance'), findsOneWidget);
-    expect(find.text('MSNW'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
+    expect(find.text('MSNW'), findsWidgets);
     expect(find.text('My assets'), findsOneWidget);
     expect(find.text('2500'), findsNothing);
     expect(find.text('Credits'), findsNothing);
@@ -85,10 +91,11 @@ void main() {
     expect(find.text('9930481726'), findsNothing);
     expect(find.text('Wema Bank (Paystack)'), findsNothing);
     expect(find.text('Masanawa / Test User'), findsNothing);
-    expect(find.text('MSNW history unavailable'), findsOneWidget);
+    expect(find.text('Sign in to view your balance'), findsOneWidget);
 
     // Verify navigating to the same crypto wallet within the Wallet screen.
-    await tester.tap(find.text('Crypto assets'));
+    await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('All crypto assets'));
     await tester.pumpAndSettle();
 
     // Verify Crypto tab loaded
