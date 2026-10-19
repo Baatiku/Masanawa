@@ -220,7 +220,7 @@ void main() {
               Localizations.localeOf(
                 tester.element(find.byType(FiveTabShell)),
               ).languageCode,
-              locale == 'ha' ? 'en' : locale,
+              locale,
             );
             final field = find.byType(TextField);
             await tester.enterText(field, 'no authorized match');

@@ -150,7 +150,7 @@ void main() {
     expect(find.text('Economics'), findsWidgets);
   });
 
-  testWidgets('retired profile retains historical owner and Seat fee', (tester) async {
+  testWidgets('retired personal profile offers discovery without exposing old actions', (tester) async {
     final transport = _Profiles();
     String? owner;
 
@@ -165,11 +165,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Retired profile'), findsOneWidget);
-    expect(find.text('₦450'), findsOneWidget);
-    expect(find.text('Owned by Amina Yusuf'), findsOneWidget);
-
-    await tester.tap(find.text('Owned by Amina Yusuf'));
-    expect(owner, 'amina');
+    expect(find.text('This personal profile has been retired. Browse Masana contacts instead.'), findsOneWidget);
+    expect(find.text('₦450'), findsNothing);
+    expect(find.text('Owned by Amina Yusuf'), findsNothing);
+    expect(owner, isNull);
   });
 }

@@ -368,7 +368,9 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
       await tester.pumpAndSettle();
       expect(wallet.executions, 0);
+      await tester.scrollUntilVisible(find.byKey(const Key('withdrawal-step-up-code')), 120, scrollable: find.byType(Scrollable).first);
       await tester.enterText(find.byKey(const Key('withdrawal-step-up-code')), '123456');
+      await tester.scrollUntilVisible(find.text('Verify and proceed'), 120, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Verify and proceed'));
       await tester.pumpAndSettle();
       expect(wallet.executions, 1);

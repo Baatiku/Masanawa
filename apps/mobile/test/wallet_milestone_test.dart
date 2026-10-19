@@ -124,7 +124,7 @@ void main(){
     final dio=Dio()..httpClientAdapter=_Adapter((o)async{
       if(o.path.endsWith('/preview'))return _json('{"asset":"MSNW","recipientUserId":"b","recipientName":"Amina","amountMicro":"2000000","feeMicro":"0"}');
       posts++;expect(o.data['idempotencyKey'],isNotEmpty);
-      return _json('{"asset":"MSNW","state":"completed","operationId":"receipt","amountMicro":"2000000"}');
+      return _json('{"asset":"MSNW","state":"completed","operationId":"receipt","recipientUserId":"b","amountMicro":"2000000"}');
     });
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:MsnwCustodySendSheet(dio:dio,baseUrl:'https://test',expectedUserId:'a',currentUserId:()=>'a',accessToken:()=>'token',onCompleted:(){}))));
     await tester.enterText(find.byType(TextField).at(0),'amina@example.test');
