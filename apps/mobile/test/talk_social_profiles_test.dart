@@ -133,7 +133,7 @@ void main() {
     expect(openedTalk, 'talk-1');
   });
 
-  testWidgets('Expert profile is clearly Masanawa verified', (tester) async {
+  testWidgets('Expert profile discloses Masana role and existing verification', (tester) async {
     final transport = _Profiles();
     await tester.pumpWidget(
       _app(
@@ -144,12 +144,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Economist'), findsWidgets);
-    expect(find.textContaining('Masanawa Expert'), findsOneWidget);
+    expect(find.text('Masana · Economics'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
     expect(find.text('₦300'), findsOneWidget);
     expect(find.text('Economics'), findsWidgets);
   });
 
-  testWidgets('Twin profile shows owner and Seat fee', (tester) async {
+  testWidgets('retired profile retains historical owner and Seat fee', (tester) async {
     final transport = _Profiles();
     String? owner;
 
@@ -164,7 +165,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('User Twin'), findsOneWidget);
+    expect(find.text('Retired profile'), findsOneWidget);
     expect(find.text('₦450'), findsOneWidget);
     expect(find.text('Owned by Amina Yusuf'), findsOneWidget);
 

@@ -24,7 +24,7 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const ValueKey('report-reason-fraud')), -150, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const ValueKey('report-reason-fraud')));
     await tester.enterText(find.byKey(const ValueKey('report-details')), 'Suspicious request');
-    await tester.ensureVisible(find.byKey(const ValueKey('report-submit')));
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('report-submit')), 120, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('report-submit')));
     await tester.pumpAndSettle();

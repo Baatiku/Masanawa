@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/finance/msnw_wallet_home.dart';
 import 'package:masanawa/src/finance/msnw_transaction_history.dart';
@@ -17,6 +18,7 @@ class _Adapter implements HttpClientAdapter {
 }
 ResponseBody _json(String s)=>ResponseBody.fromString(s,200,headers:{Headers.contentTypeHeader:[Headers.jsonContentType]});
 void main(){
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   test('statement presets use inclusive UTC dates across year boundaries',(){
     final now=DateTime.utc(2026,1,4,23);
     expect(walletStatementRange('Last 7 days',now:now),{'from':'2025-12-29','to':'2026-01-04'});

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:masanawa/main.dart';
 import 'package:masanawa/src/screens/onboarding/phone_login_screen.dart';
-import 'package:masanawa/src/ui/components/logo.dart';
+import 'package:masanawa/src/screens/chat/chat_list_screen.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 import 'package:masanawa/src/core/providers.dart';
@@ -32,7 +32,7 @@ void main() {
         .setMockMethodCallHandler(storageChannel, null);
   });
 
-  testWidgets('fresh install shows the brand then opens phone login', (
+  testWidgets('fresh install opens phone login without a forced splash delay', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -43,12 +43,7 @@ void main() {
         child: const MasanawaApp(),
       ),
     );
-    await tester.pump();
-    expect(find.byType(MasanawaLogo), findsOneWidget);
-    expect(find.byType(PhoneLoginScreen), findsNothing);
-    expect(tester.takeException(), isNull);
-
-    await tester.pump(const Duration(milliseconds: 1300));
+    expect(find.byType(ChatListScreen), findsNothing);
     await tester.pumpAndSettle();
     expect(find.byType(PhoneLoginScreen), findsOneWidget);
     expect(find.text('Welcome to Masanawa'), findsOneWidget);
@@ -58,7 +53,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('disposing splash before the brand delay cancels its timers', (
+  testWidgets('disposing startup leaves no delayed navigation', (
     tester,
   ) async {
     await tester.pumpWidget(

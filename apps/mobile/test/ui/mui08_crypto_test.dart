@@ -364,8 +364,8 @@ void main() {
       expect(find.text('fixture-recipient'), findsOneWidget);
       await capture(tester, 'withdraw-review-320-2');
       expect(wallet.executions, 0);
-      await tester.scrollUntilVisible(find.text('Withdraw').last, 120, scrollable: find.byType(Scrollable).first);
-      await tester.tap(find.text('Withdraw').last);
+      await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Withdraw'), 120, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
       await tester.pumpAndSettle();
       expect(wallet.executions, 0);
       await tester.enterText(find.byKey(const Key('withdrawal-step-up-code')), '123456');

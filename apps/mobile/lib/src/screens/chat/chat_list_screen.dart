@@ -452,6 +452,28 @@ class ChatListScreen extends ConsumerWidget {
             onPressed: () => context.push('/settings'),
           ),
         ],
+        bottom: !chat.online || attention > 0
+            ? PreferredSize(
+                preferredSize: Size.fromHeight(activityHeight),
+                child: Semantics(
+                  liveRegion: true,
+                  child: InkWell(
+                    onTap: activity.isEmpty ? null
+                        : () => _showActivity(context, directory, activity),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(children: [
+                        Icon(chat.online ? Icons.pending_actions : Icons.cloud_off_outlined,
+                          size: 17, color: u.textMuted),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(activityLabel, style: activityStyle)),
+                        if (activity.isNotEmpty)
+                          Icon(Icons.chevron_right, size: 18, color: u.textMuted),
+                      ]),
+                    ),
+                  ),
+                ),
+              ) : null,
       ),
       body: _ChatsSearchPane(
         key: ValueKey(session is SessionSignedIn ? session.user.id : 'signed-out'),

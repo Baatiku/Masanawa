@@ -138,8 +138,8 @@ void main() {
           expect(find.textContaining('₦'), findsNothing);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
-          await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('Sign in to view your balance'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
         });
