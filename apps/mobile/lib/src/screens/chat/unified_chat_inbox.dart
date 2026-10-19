@@ -428,9 +428,25 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                         }
                       },
                     ),
-                    onTap: () => context.push(
-                      '/chat/${Uri.encodeComponent(result.characterId)}',
-                    ),
+                    onTap: () {
+                      final owner = ref.read(sessionProvider);
+                      if (owner is! SessionSignedIn) return;
+                      context.push('/chat/${Uri.encodeComponent(result.characterId)}');
+                      // Acknowledgment is server-authorized and deliberately
+                      // independent of navigation: a transient failure must
+                      // never prevent opening the conversation.
+                      unawaited(() async {
+                        if (!mounted || !identical(owner, ref.read(sessionProvider))) return;
+                        try {
+                          await ref.read(masanaInboxSearchProvider).markRead(
+                            bearer: owner.tokens.accessToken,
+                            characterId: result.characterId,
+                          );
+                        } catch (_) {
+                          // Failed read receipts can be retried when chat opens.
+                        }
+                      }());
+                    },
                   ),
                 const SizedBox(height: 88),
               ],
