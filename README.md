@@ -1,15 +1,17 @@
 # Masanawa
 
-Masanawa is a **global AI-character communication and creator platform**. Users discover, chat with, call and follow professional and entertaining **Masana** characters; creators can publish their own Masana. The app combines Status, Rooms, and a unified **MSNW Wallet** for qualified digital services and payments.
+Masanawa is a human and **Masana** AI communication, creator, social Updates and individual P2P platform with a single MSNW Wallet. Customers chat and call humans/Masana, scroll a shared human/Masana Updates feed, join creator-configurable Rooms and access eligible financial services.
 
-The customer app uses **Chats · Status · Wallet · Calls · Rooms**, opening on Chats. The design is clean, green-and-white and WhatsApp-like in simplicity. MSNW is the only customer-facing platform credit; a blockchain contract or global financial availability must not be inferred from source code.
+**Approved visible app tabs:** **Chats · Updates · Wallet · Calls · Rooms** (Chats default). Updates is a continuous, Facebook-style mixed-human/Masana post feed, **not** WhatsApp's temporary Status/stories; human publication is paid only after an actual server-quoted MSNW fee and explicit authorization. **Video support stays.** Rooms unite group/community/channel features into one customizable Room, not three separate products. Individual P2P Buy/Sell, escrow and trader trust share the ordinary human profile, not a merchant account. **No merchant commerce, card products or additional root tabs.**
 
 ## Start here
-1. [Current phased roadmap and status](docs/PRODUCT-ROADMAP-20261019.md) — **sole active product roadmap**.
-2. [Screen inventory and end-to-end acceptance journeys](docs/SCREEN-JOURNEYS.md).
-3. [Contributing and operational guardrails](AGENTS.md) and [current execution entrypoint](CONTINUE-HERE.md).
-4. [Technical/financial documents](docs/README.md).
 
-Production code lives in `apps/mobile`, `apps/admin_mobile`, `services/gateway`, `services/worker`, `packages`, `adapters`, `database`, `contracts/msnw` and operational infrastructure. Reference repositories are **not bundled** into clones; the optional research list remains under `references/`.
+1. [Canonical product roadmap and implementation status](docs/PRODUCT-ROADMAP-20261019.md) — the single phase/task authority.
+2. [Canonical screen and journey contract](docs/SCREEN-JOURNEYS.md) and [complete existing-source application screen blueprint](docs/COMPLETE-SCREEN-AND-JOURNEY-BLUEPRINT.md).
+3. Feature specifications: [Updates and paid human posting](docs/UPDATES-FEED-FINAL-SPEC.md), [individual P2P and social/trader profile](docs/P2P-AND-PROFILE-FINAL-SPEC.md), [one customizable Rooms product](docs/UNIFIED-ROOMS-PRODUCT-SPEC.md).
+4. [Contributor and security rules](AGENTS.md), [current handoff](CONTINUE-HERE.md) and [technical documentation index](docs/README.md).
+5. [OPay source reference](docs/AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md), [WhatsApp/OPay feature audit](docs/reference-audit/FEATURE-REGISTER.csv) and [Rooms capabilities inventory](docs/ROOMS-REFERENCE-FEATURE-INVENTORY.md) are discovery registers, **not** independently approved product plans.
 
-A source merge does not itself prove an Android APK, AI-provider action, crypto issuance, P2P release, live billing or a signed release works. See the roadmap for exactly which journeys are qualified or still need work.
+Production architecture remains in `apps/mobile`, `apps/admin_mobile`, `services/gateway`, `services/worker`, `packages`, `adapters`, `database` and `contracts`. Decompiled references and optional donor repositories are research-only and must not be imported as proprietary production assets.
+
+**Delivery truth:** a documented feature, source merge, simulated test or provider SDK is not proof of an installed Android APK, settled financial transaction, deployed MSNW token, qualified live call or production release. Use exact source/PR SHA, tests, device/provider evidence and a clear `NOT_RUN` status for gaps.
