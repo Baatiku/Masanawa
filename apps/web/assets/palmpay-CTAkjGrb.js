@@ -1,0 +1,1 @@
+const s="/assets/gtbank-DLU4qpem.png",a="/assets/first_bank-DkRzmi1W.png",t="/assets/zenith-BHAOVJMX.jpeg",n="/assets/kuda-CA6Oablp.png",p="/assets/palmpay-CWSGpwD9.png";export{a as f,s as g,n as k,p,t as z};

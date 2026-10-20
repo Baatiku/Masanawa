@@ -1,0 +1,1 @@
+const n=1685,t={monthly:{id:"monthly",name:"Monthly",price:1.69,duration:"1 month",discount:0},quarterly:{id:"quarterly",name:"3 Months",price:4.69,duration:"3 months",discount:7},yearly:{id:"yearly",name:"Yearly",price:16.99,duration:"1 year",discount:16}},o="0.5% fee, max ₦500";export{o as D,n as N,t as s};

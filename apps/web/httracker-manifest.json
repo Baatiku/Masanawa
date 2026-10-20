@@ -1,0 +1,12 @@
+{
+  "entry": "https://nasfampay.com",
+  "pages": 61,
+  "assets": 365,
+  "apis": 161,
+  "apiHosts": [
+    "api.coinlore.net",
+    "api.coingecko.com",
+    "nasfampay-backend.onrender.com"
+  ],
+  "clonedAt": "2026-10-11T13:00:03.726Z"
+}

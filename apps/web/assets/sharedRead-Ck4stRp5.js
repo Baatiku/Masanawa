@@ -1,0 +1,1 @@
+function s({reuseMs:u,now:a=Date.now}){let e=null,t=null;return{run(n,i){if(e&&e.key===n&&a()-e.at<u)return e.promise;const r=Promise.resolve().then(i),l={key:n,at:a(),promise:r};return e=l,r.then(o=>{(!t||t.at<=l.at)&&(t={key:n,at:l.at,value:o})},()=>{e===l&&(e=null)}),r},peek:n=>t&&t.key===n?t.value:void 0,clear:()=>{e=null,t=null}}}export{s as c};
