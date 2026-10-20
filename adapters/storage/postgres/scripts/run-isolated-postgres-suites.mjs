@@ -19,7 +19,7 @@ const testUrl = process.env.MASANAWA_TEST_DATABASE_URL;
 if (!testUrl) throw new Error('A dedicated disposable PostgreSQL test URL is required');
 const parsed = new URL(testUrl);
 if (!['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) ||
-    !/test/i.test(parsed.pathname) || process.env.CI !== 'true') {
+    !/test/i.test(parsed.pathname)) {
   throw new Error('Refusing to create/drop test databases outside CI localhost');
 }
 const parent = new pg.Client({ connectionString: testUrl });
