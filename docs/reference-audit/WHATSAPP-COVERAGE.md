@@ -27,7 +27,7 @@
 
 ## Reference anchors
 
-- [Static component index](../../whatsapp-decompiled/WHATSAPP-COMPONENTS-INDEX.md); [WhatsApp UI benchmark](../WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md). Beware benchmark's old local file:/// paths and copied palette tokens; Masanawa must use original brand assets.
+- [Static WhatsApp component index](../../whatsapp-decompiled/WHATSAPP-COMPONENTS-INDEX.md) and [unified Rooms source inventory](../ROOMS-REFERENCE-FEATURE-INVENTORY.md). Only extracted reference evidence is preserved; adopt original Masanawa palettes/assets, never copy WhatsApp artwork or ephemeral Status UI.
 - [WhatsApp Communities](https://faq.whatsapp.com/495856382464992), [Community announcement permissions](https://faq.whatsapp.com/742237357891080), [Channel capabilities](https://faq.whatsapp.com/265055289421317), [Channel privacy](https://faq.whatsapp.com/1318001139066835).
 - [Telegram topic model](https://telegram.org/blog/topics-in-groups-collectible-usernames), [Telegram July 2026 Communities](https://telegram.org/blog/communities-editor-invisible-messages) and [August 2026 welcome/messages](https://telegram.org/blog/welcome-messages-buttons-TG-13); these are Room inspiration, not WhatsApp decompiled evidence.
 - The same five tabs remain Chats / Status / Wallet / Calls / Rooms. One-to-one remains in Chats; group/community/channel functionality is inside one creator-configurable Room.
