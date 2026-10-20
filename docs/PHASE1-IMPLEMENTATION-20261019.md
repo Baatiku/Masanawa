@@ -1,5 +1,7 @@
 # Phase 1 — Integrated implementation and acceptance
 
+**Implementation evidence snapshot, not current product screen authority.** This file retains the exact earlier source-test observations, including the *then-existing* Status/Video tab; the current target is [Updates](UPDATES-FEED-FINAL-SPEC.md), which **removes the primary Videos tab but retains video content/player**. The single current [roadmap](PRODUCT-ROADMAP-20261019.md) and [screen contract](SCREEN-JOURNEYS.md) override old UX goals. The original Phase 1 PASS/NOT_RUN entries remain evidence of what was tested, not proof of today's final UI.
+
 **Date:** 19 October 2026. **Product source of truth:** [canonical roadmap](PRODUCT-ROADMAP-20261019.md), [screen and journey inventory](SCREEN-JOURNEYS.md). This record maps each of the 12 Phase 1 items to the source actually worked on. A merge or simulator test is **not** evidence that an installed handset, Firebase provider or account in production has passed.
 
 ## Integration and tested boundaries

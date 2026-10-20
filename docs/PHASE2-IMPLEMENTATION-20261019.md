@@ -1,5 +1,7 @@
 # Phase 2 — Masana identities, conversations and live voice
 
+**Implementation evidence snapshot, not product design authority.** Retained source/test/PR evidence below describes the app at this October 2026 integration checkpoint. The user-visible Status name and its old layout are now replaced by the approved [Facebook-style Updates feed](UPDATES-FEED-FINAL-SPEC.md), with video assets and players retained. The current [roadmap](PRODUCT-ROADMAP-20261019.md) and [screen contract](SCREEN-JOURNEYS.md) control subsequent implementation; never restore old WhatsApp Status/rings or a separate primary Videos tab from this historical test record.
+
 **Product baseline:** `docs/PRODUCT-ROADMAP-20261019.md` + `docs/SCREEN-JOURNEYS.md`.
 **Starting SHA:** `73016de631289bb9ca1b5042704f05ddb5439f58` (merged Phase 1 PR #222).
 **Integration contract:** merge-source evidence is not live Gemini, signed APK or physical-phone acceptance. No paid, external-provider, recording or wallet operations were exercised by this work.

@@ -1,11 +1,27 @@
-# Masanawa technical documentation
+# Masanawa documentation — one current product authority
 
-**Product requirements and current scope:** [Canonical roadmap](PRODUCT-ROADMAP-20261019.md) and [screen/acceptance journeys](SCREEN-JOURNEYS.md). These are the only active end-user product plans.
+**Start with the [canonical phase roadmap](PRODUCT-ROADMAP-20261019.md) and [screen/journey contract](SCREEN-JOURNEYS.md).** Their referenced milestones, task statuses and test evidence govern product implementation. The [complete source-to-screen audit](COMPLETE-SCREEN-AND-JOURNEY-BLUEPRINT.md) defines the intended screen layout and missing journeys for every major app section.
 
-**Engineering contracts:** [Architecture](ARCHITECTURE.md), [Domain](DOMAIN-MODEL.md), [Packages](PACKAGE-BOUNDARIES.md), [Agent API](AGENT-GATEWAY-CONTRACT.md), [API lifecycle](API-LIFECYCLE.md), [Event contracts](EVENT-CONTRACTS.md), [Services](SERVICE-CONTRACTS.md), [Adapter topology](ADAPTER-TOPOLOGY.md).
+## Approved screen specifications
 
-**Security and finance:** [Security authority](SECURITY-AUTHORITY.md), [Security model](SECURITY-MODEL.md), [Privacy scopes](PRIVACY-SCOPES.md), [MSNW global token creation guide](token/MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md). Neither operational source nor the token guide establishes live token issuance or merchant eligibility.
+- [Updates: Facebook-style mixed human/Masana feed, paid human posting and preserved video](UPDATES-FEED-FINAL-SPEC.md)
+- [P2P Buy/Sell, escrow, disputes and one public social/trader profile](P2P-AND-PROFILE-FINAL-SPEC.md)
+- [Creator-configurable unified Rooms](UNIFIED-ROOMS-PRODUCT-SPEC.md)
 
-**Operations:** [Deployment config](CONFIGURATION-DEPLOYMENT.md), [Database recovery](DATABASE-REDEPLOYMENT-AND-RESTORE-RUNBOOK.md), [Storage ops](BACKEND-STORAGE-OPERATIONS-20261009.md), [Flutter release](FLUTTER-RELEASE-AND-SHOREBIRD-POLICY.md), [Testing topology](TEST-TOPOLOGY.md), [Collaboration](MULTI-WINDOW-WORK.md). [Approved voices](voices/APPROVED-MASANA-VOICES-20261017.md). [Reference studies](../references/README.md) remain optional and are not runtime dependencies.
+Visible navigation: **Chats · Updates · Wallet · Calls · Rooms**. Status is a legacy internal route name, not WhatsApp story UX. **No merchant products or card features.** Human paid publishing price is not yet approved; use server quote and one Wallet authority. Only implement essential visible controls.
 
-No archived or superseded product narratives belong in the active tree. Prior changes remain available through Git commit/PR metadata; do not re-add old product plans.
+## Research and feature evidence (not alternate roadmaps)
+
+[OPay source discovery](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md), [WhatsApp/OPay reference register](reference-audit/FEATURE-REGISTER.csv), [WhatsApp coverage](reference-audit/WHATSAPP-COVERAGE.md), [OPay coverage](reference-audit/OPAY-COVERAGE.md), [unified Rooms candidates](ROOMS-REFERENCE-FEATURE-INVENTORY.md) and [acceptance matrix](reference-audit/ACCEPTANCE-MATRIX.md). These are traceable candidate lists, not finished features or permissions to copy third-party assets. [External donors](../references/README.md) are optional reference-only.
+
+## Technical, privacy and delivery authority
+
+[Architecture](ARCHITECTURE.md), [Domain model](DOMAIN-MODEL.md), [Package boundaries](PACKAGE-BOUNDARIES.md), [Agent/Gateway](AGENT-GATEWAY-CONTRACT.md), [API compatibility](API-LIFECYCLE.md), [Events](EVENT-CONTRACTS.md), [Services](SERVICE-CONTRACTS.md), [Adapters](ADAPTER-TOPOLOGY.md), [Source ownership](SOURCE-OWNERSHIP.md), [Technology](TECHNOLOGY.md).
+
+[Security authority](SECURITY-AUTHORITY.md), [Security model](SECURITY-MODEL.md), [Privacy](PRIVACY-SCOPES.md), [Token guide](token/MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md).
+
+[Deployment](CONFIGURATION-DEPLOYMENT.md), [Database restore](DATABASE-REDEPLOYMENT-AND-RESTORE-RUNBOOK.md), [Storage ops](BACKEND-STORAGE-OPERATIONS-20261009.md), [Flutter release](FLUTTER-RELEASE-AND-SHOREBIRD-POLICY.md), [Testing](TEST-TOPOLOGY.md), [Multi-window source coordination](MULTI-WINDOW-WORK.md), [Approved Masana voices](voices/APPROVED-MASANA-VOICES-20261017.md).
+
+**Implementation evidence rather than new requirements:** [Phase 1 source/acceptance ledger](PHASE1-IMPLEMENTATION-20261019.md) and [Phase 2 source/acceptance ledger](PHASE2-IMPLEMENTATION-20261019.md) retain checkpoint commands, passes/skips/known device/provider gaps. Do not use historical screen labels or completed source checkpoints from those records to override today's roadmap.
+
+Deprecated duplicate product specifications have been **deleted from the tracked tree**, not moved into an archive. Git history remains immutable, but no old document should be linked as an implementation authority.
