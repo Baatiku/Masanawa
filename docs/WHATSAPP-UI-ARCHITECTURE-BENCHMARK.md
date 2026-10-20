@@ -1,16 +1,16 @@
 # WhatsApp UI Architecture and Design System Benchmark
 
 **Target Version:** WhatsApp v2.26.40.72 (`com.whatsapp`)  
-**Decompiled Artifacts Location:** [`whatsapp-ref/`](file:///c:/Users/Besta/Masanawa/whatsapp-ref)  
+**Decompiled Artifacts Location:** [`whatsapp-decompiled/`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled)  
 **Masanawa System Contract:** Single Strong Green/White WhatsApp-like Design System across 5 Core Tabs (`Chats` · `Status` · `Wallet` · `Calls` · `Rooms`).
 
 ---
 
 ## 1. Executive Summary & Extraction Overview
 
-Through REA static package inspection and binary XML/manifest decoding of `C:\Users\Besta\Downloads\WhatsApp.apk`, we successfully extracted **15,111 assets and resources** into [`whatsapp-ref/`](file:///c:/Users/Besta/Masanawa/whatsapp-ref):
+Through REA static package inspection and binary XML/manifest decoding of `C:\Users\Besta\Downloads\WhatsApp.apk`, we successfully extracted **15,111 assets and resources** into [`whatsapp-decompiled/`](file:///c:/Users/Besta/Masanawa/whatsapp-ref):
 
-1. **Decoded Manifest (`whatsapp-ref/AndroidManifest.xml`)**:
+1. **Decoded Manifest (`whatsapp-decompiled/AndroidManifest.xml`)**:
    - 855 activities, services, content providers, and broadcast receivers.
    - 143 deep-link URI patterns (`whatsapp://chat`, `whatsapp://call`, `whatsapp://channel`, `whatsapp://pay`, `whatsapp://event`).
 2. **WhatsApp Design System (WDS) Lottie Animations**:
@@ -92,7 +92,7 @@ WhatsApp’s architecture is anchored on 4 root bottom-navigation tabs. Masanawa
 * **Metadata Alignment:** Timestamp and status checkmarks (`blueTickRead`) sit inside the bubble at bottom-right, with text automatically wrapping to avoid overlapping the time string.
 
 ### 4.2 Push-to-Talk (PTT) Voice Notes
-* **WhatsApp Source Asset:** [`res/kjt.json`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/res/kjt.json) (`Android PTT mic - Light`), [`res/kjq.json`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/res/kjq.json) (`Wave 2`)
+* **WhatsApp Source Asset:** [`res/kjt.json`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/res/kjt.json) (`Android PTT mic - Light`), [`res/kjq.json`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/res/kjq.json) (`Wave 2`)
 * **Behavior:**
   1. Hold mic icon: recording starts immediately with haptic click (`kh4.m4a`).
   2. Slide up to lock: hands-free recording with elapsed timer and live amplitude bars.
@@ -100,7 +100,7 @@ WhatsApp’s architecture is anchored on 4 root bottom-navigation tabs. Masanawa
   4. Playback controls: Variable speed pill (`1x`, `1.5x`, `2x`), waveform scrubbing, and proximity sensor ear-piece audio routing.
 
 ### 4.3 Contextual Emoji Reaction Bar
-* **WhatsApp Source Asset:** [`res/kiw.json`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/res/kiw.json), [`res/kiu.json`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/res/kiu.json)
+* **WhatsApp Source Asset:** [`res/kiw.json`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/res/kiw.json), [`res/kiu.json`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/res/kiu.json)
 * **Behavior:** Long-press any message bubble pops up a floating rounded white/charcoal pill displaying the top 6 emojis: 👍, ❤️, 😂, 😮, 😢, 🙏, plus a `+` icon to open the full emoji grid.
 * **Reaction Pill:** Selected reaction pins to the bottom-corner of the bubble with a subtle drop shadow.
 

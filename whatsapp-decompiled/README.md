@@ -1,4 +1,4 @@
-# WhatsApp Reverse-Engineered Reference (v2.26.40.72)
+# WhatsApp Decompiled Reference (v2.26.40.72)
 
 This directory contains extracted and decoded assets, manifests, vector graphics, Lottie animations, sound effects, and design system tokens reverse-engineered from `WhatsApp.apk` (v2.26.40.72, SDK 37) to serve as a design, interaction, and component reference for Masanawa's WhatsApp-like 5-tab architecture.
 

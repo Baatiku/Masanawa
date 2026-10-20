@@ -108,13 +108,13 @@ When implementing the Wallet and Transfer subsystem, adhere strictly to these pr
 
 ---
 
-## 6. Pairing OPay Speed with WhatsApp UX (`whatsapp-ref/`)
+## 6. Pairing OPay Speed with WhatsApp UX (`whatsapp-decompiled/`)
 
-To complement OPay's fintech architecture, we also reverse-engineered **WhatsApp v2.26.40.72** into [`whatsapp-ref/`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/README.md) and documented the design system in [`docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md`](file:///c:/Users/Besta/Masanawa/docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md).
+To complement OPay's fintech architecture, we also reverse-engineered **WhatsApp v2.26.40.72** into [`whatsapp-decompiled/`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/README.md) and documented the design system in [`docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md`](file:///c:/Users/Besta/Masanawa/docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md).
 
 ### The Synergy Model:
 - **OPay (`opay-decloned/`) supplies the Engine:** 10-digit instant account inquiry, 5-minute duplicate transfer interception, custom 3x4 numeric security keyboard, offline JSON caching, and telco auto-detection.
-- **WhatsApp (`whatsapp-ref/`) supplies the Shell:** Iconic green/white design system (`#25D366`, `#111B21`, `#202C33`), chat bubble tails and nip geometries, push-to-talk voice note animations (`kjt.json`), live voice equalizers (`kja.json`), and the 5-tab root architecture (**Chats · Status · Wallet · Calls · Rooms**).
+- **WhatsApp (`whatsapp-decompiled/`) supplies the Shell:** Iconic green/white design system (`#25D366`, `#111B21`, `#202C33`), chat bubble tails and nip geometries, push-to-talk voice note animations (`kjt.json`), live voice equalizers (`kja.json`), and the 5-tab root architecture (**Chats · Status · Wallet · Calls · Rooms**).
 
 Use both reference trees freely to craft the most fluid, resilient, and beautiful communication and fintech app in the world.
 
