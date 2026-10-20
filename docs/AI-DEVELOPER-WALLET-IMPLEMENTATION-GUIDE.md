@@ -1,120 +1,47 @@
-# Masanawa Platform Enhancement & OPay Reverse-Engineering Guide
-## For AI Developers & Core Contributors
+# OPay reference audit — source patterns for Masanawa Wallet and P2P
 
-**Document ID:** `GUIDE-AI-DEV-OPAY-INTEGRATION-20261020`  
-**Purpose:** Comprehensive, open-ended architectural guide pointing directly to the decompiled OPay reference source code (`opay-decloned/`) to benchmark, compare, contrast, and adapt industry-leading mobile UX and infrastructure patterns across Masanawa.  
-**Design System Standard:** Clean Green/White WhatsApp Aesthetic (`#075E54`, `#00A884`, `#FFFFFF`, `#E9EDEF`, dark text `#111B21`, 48dp targets).  
-**Root Navigation:** Exactly 5 tabs: **Chats · Status · Wallet · Calls · Rooms** (Chats default).
+**Purpose:** A source-discovery guide to the checked-in `opay-decloned/` reference. **NOT a competing product roadmap, Wallet architecture, security policy, screen specification or verified OPay runtime behavior.** For all current product decisions follow [the canonical roadmap](PRODUCT-ROADMAP-20261019.md), [application screen blueprint](COMPLETE-SCREEN-AND-JOURNEY-BLUEPRINT.md), [individual P2P/trader profile design](P2P-AND-PROFILE-FINAL-SPEC.md) and [screen journeys](SCREEN-JOURNEYS.md). Reference candidate IDs and source-evidence statuses belong in [FEATURE-REGISTER.csv](reference-audit/FEATURE-REGISTER.csv).
 
----
+**Owner decisions, 20 October 2026:** Chats · **Updates** · Wallet · Calls · Rooms (Chats default). Updates is a persistent Facebook-style human/Masana scrolling feed with paid human publication, **not** WhatsApp 24-hour Status. Individual P2P remains important. **No merchant enrollment/storefront/POS/checkout, card products or Phase 7C–D merchant-financial expansions.** Use original accessible Masanawa identity and assets, not WhatsApp/OPay copyrighted designs. Never use a second Ledger, database identity store or fake fiat/MSNW rate.
 
-## 1. Context & Mandate for the AI Developer
+## Reference file map and source-confidence rules
 
-You have deep context on the Masanawa codebase, its architecture, and its roadmap. Your mandate is **NOT** to blindly copy code or follow a narrow checklist, but to:
-1. **Explore and Analyze:** Inspect the pruned reference codebase in [`opay-decloned/`](file:///c:/Users/Besta/Masanawa/opay-decloned/README.md).
-2. **Compare & Contrast:** Benchmark OPay's real-world solutions for emerging markets (low data, poor networks, fraud prevention, instant settlement) against Masanawa's existing implementations.
-3. **Identify Missed Gems:** Look beyond the wallet. Identify *any* mechanism, UX pattern, caching trick, or resilience layer in OPay that can improve Masanawa across **Chats, Calls, Rooms, Status, Settings, Security, and Wallet**.
-4. **Adapt to Masanawa’s Identity:** Translate OPay’s high-conversion simplicity into Masanawa’s WhatsApp-style green/white interface, internal P2P token economy (**MSNW** & crypto), and international privacy standards.
+`opay-decloned/` is a historical decoded APK sample, not a trusted implementation. Source paths/classes/resources suggest features but **do not prove** that the feature behaves, is enabled, is correct or is licensed to copy. Confirm every class, XML attribute, user action and backend/Smali call chain before marking a reference `SOURCE_CONFIRMED`. Keep exact path, sample version, inspected commit SHA and technical evidence in the canonical register. No sensitive bundled APK keys or external user data should enter reports.
 
----
+| Discovery topic | Reference class/resource leads | Accepted Masanawa pattern | Roadmap owner |
+|---|---|---|---|
+| Wallet balance/privacy | `res/layout/omain_fragment_new_pay.xml`, `layout_total_assets.xml`, wallet Smali classes | Display authoritative available/reserved balance, last refresh and balance-eye toggle; do not invent a fiat conversion | P6-W, WALLET-01 |
+| Recipient name inquiry | `OpayBankTransferActivityV3.smali`, `BankAccountInputText.smali`, `activity_choose_bank.xml` | Resolve a complete 10-digit Masanawa account/@handle via actual Gateway authority, invalidate after edits, preserve recipient privacy | P6-W01, W05 |
+| Duplicate transfer safeguard | `res/layout/dialog_transfer_repeat_tips.xml` | Real server journal/idempotency, prior operation info and explicit intentional-repeat approval. OPay's local visual warning alone does NOT prove a 5-minute backend policy | P6-W04 |
+| Clipboard UX | `ClipboardAutoReader.smali`, `TransferClipboardParser.smali`, `activity_access_to_clipboard.xml` | **Explicit Paste by default**, opt-in/freshness and no global/background harvest | P6-W03, W09, P8-X |
+| Payment review/keypad | `res/layout/pay_activity_cashier.xml`, `cashier_layout_pin_keyboard_view.xml`, `PinAppLockActivity.smali`, biometric references | Exact user-approved amount, fee, recipient and transaction-specific device/server step-up; a keypad is NOT payment security by itself | P6-W02, P8-X03 |
+| Request money | `res/layout/activity_request_money.xml`, `activity_recent_request.xml` | Authenticated, expiring, one-purpose request card from Chat/Rooms -> user Wallet review -> authoritative receipt, never automatic debit | P6-W12 |
+| Bill services | `res/layout/fragment_airtime_data_topup.xml`, `ConfirmInfomationListDialog.smali`, `activity_kyc_level.xml` | Provider-qualified service/recipient verification, exact quote, ported-number caveat, no global KYC tier claims | P7-S01–S04, P8-X04 |
+| QR and routes | `CommonQRScanActivity.smali`, `MyQRCodeActivity.smali`, `SchemeDispatchActivity.smali` | Allowlisted personal receive QR and canonical deep-link dispatcher; no arbitrary merchant acceptance or execute-from-QR | P6-W05, P8-X01 |
+| Poor connectivity | `res/layout/activity_no_net.xml`, network diagnostics strings | Offline banners, bounded retry, cached read-only history, unknown outcome recovery, provider outage explanation | P6-W08, P8-X02 |
+| Support and case routing | `res/layout/activity_ocustomer_service_home.xml`, transaction help UI | Receipt-linked help, actual support case with cross-account checks and real reconciliation status | P6-W10, P8-X09 |
+| Security and risk | `BiometricSaveActivity.smali`, `res/layout/activity_kyc_level.xml`, device/risk classes | Device/session revocation, biometric enrollment-change safeguards, actual provider jurisdiction checks; no fictional merchant tier or universal transfer limits | P8-X03–X06 |
+| Refund/late outcome | Transaction state Smali, `res/layout/dialog_transfer_repeat_tips.xml` | Never label an order refunded/settled solely from a UI, screenshot or "I have paid" flag; custody journal readback controls claims | P7-P08, P8-X09 |
 
-## 2. Where the Reference Code Lives: `opay-decloned/` Map
+### Wallet scope
 
-The pruned OPay Android app (Target SDK 35 / Android 15) is committed directly in `opay-decloned/`. Below is your cross-reference map:
+Preserve the real Masanawa MSNW account-number/name inquiry and merged source from PR #230; current source routes and the canonical ledger in `services/gateway/src/msn_wallet/`, account/session authority in `services/gateway/src/customer_auth.ts`, and existing mobile screens under `apps/mobile/lib/src/finance/`. For **internal user-to-user transfer**, quote amount/fee, review recipient, authorize exactly and read back a single ledger receipt. Crypto rails operate only where qualified, not because a token symbol exists in reference UI. For **individual buy/sell P2P escrow**, preserve the separate real order lifecycle in `services/gateway/src/p2p/` and `apps/mobile/lib/src/finance/msnw_p2p_screen.dart`; bank payment is external and a buyer's paid flag is not settlement proof.
 
-| Masanawa Domain / Target Area | OPay Reference Path (`opay-decloned/`) | Key Files & Layouts to Study |
-| :--- | :--- | :--- |
-| **Wallet Home & Balance Sync** | `smali_classes6/team/opay/pay/wallet/`<br/>`res/layout/omain_fragment_new_pay.xml` | `HomeSavingDetailsActivity.smali`<br/>`layout_total_assets.xml`<br/>Eye balance visibility toggle, real-time push invalidation |
-| **Transfer Flow & Name Inquiry** | `smali_classes6/team/opay/pay/home/tabs/ac/`<br/>`res/layout/activity_choose_bank.xml` | `OpayBankTransferActivityV3.smali`<br/>`BankAccountInputText.smali`<br/>Instant recipient lookup on typing, name inquiry card |
-| **Smart Clipboard Auto-Reader** | `smali_classes6/team/opay/pay/home/clipboard/`<br/>`res/layout/dialog_home_clipboard_*.xml` | `ClipboardAutoReader.smali`<br/>`TransferClipboardParser.smali`<br/>`ACHomeClipboardDialog.smali`<br/>Regex extraction of IDs/numbers, contextual prompt dialog |
-| **Duplicate Transfer Protection** | `res/layout/dialog_transfer_repeat_tips.xml` | Strings: `osdk_repeate_transfer`, `osdk_recharge_again_reminder`<br/>5-minute repeat transfer intercept modal |
-| **Cashier & Checkout Sheet** | `smali/cashier/`<br/>`res/layout/pay_activity_cashier.xml` | `CashierActivity.smali`<br/>`QuickPayActivity.smali`<br/>`CashierDelegate.smali`<br/>Modal checkout bottom sheet, fee summary |
-| **In-App Keypad & Security** | `res/layout/cashier_layout_pin_keyboard_view.xml`<br/>`smali_classes6/team/opay/pay/pin/` | `PinAppLockActivity.smali`<br/>`BiometricSaveActivity.smali`<br/>In-app 3x4 numeric grid, biometric shortcut, weak PIN rules |
-| **Airtime & Utility Bills** | `smali_classes6/team/opay/pay/payment/`<br/>`res/layout/fragment_airtime_data_topup.xml` | `AirtimeTopUpActivity.smali`<br/>`ConfirmInfomationListDialog.smali`<br/>Telco prefix auto-detection, denomination chips, 2-step verification |
-| **QR Code Scanner & Generator** | `smali_classes2/team/opay/qrcode/`<br/>`smali_classes5/team/opay/opb/qrcode/` | `CommonQRScanActivity.smali`<br/>`MyQRCodeActivity.smali`<br/>`QRCodeEMVQRProtocolParserActivity.smali`<br/>High-contrast QR generation, camera scanner integration |
-| **Deep Link Scheme Dispatcher** | `smali_classes6/team/opay/pay/home/scheme/`<br/>`AndroidManifest.xml` (metadata: `scheme_prefix`) | `SchemeDispatchActivity.smali`<br/>`otravel://schemedispatcher?action=...`<br/>URI router mapping push/web links to nested screens/modals |
-| **Real-time Push & Connection** | `AndroidManifest.xml` (meta-data: `mqttHost`) | `tcp://message-platform.opayweb.com`<br/>Real-time socket events for balance invalidation & transaction alerts |
-| **Device Security & Risk Control** | `smali_classes2/team/opay/risk/`<br/>`smali_classes6/team/opay/pay/sensesecurity/` | `RiskControlHost.smali`<br/>Device binding, root/jailbreak detection, screen overlay guards |
-| **UI Copy, Colors & Typography** | `res/values/strings.xml`<br/>`res/values/colors.xml`<br/>`res/values/styles.xml` | Master list of all user prompts, errors, micro-copy, and styling |
+### Useful cross-app techniques
 
----
+- A single allowlisted route/push/QR entrypoint shared by Chats, Updates posts, Rooms, Wallet and P2P; reauthorize under current user and never auto-authorize spending.
+- Recover a prior transaction by the **same idempotency key** after a timeout or app restart; no optimistic transfer completion.
+- Exact support/receipt context tied to canonical IDs with redacted sharing, not guessed success messages.
+- Explicit, interruptible provider-offline and connection states. No hidden background clipboard polling or duplicate socket protocol unless actual architecture requires it.
+- Authenticated server-derived customer/trader identity and service eligibility with an honest Unknown/Pending presentation.
 
-## 3. Platform-Wide Opportunities (Beyond the Wallet)
+## Reference research, test and documentation process
 
-While researching `opay-decloned/`, look for cross-platform mechanisms that can elevate Masanawa:
+1. Read the current `AGENTS.md` and [roadmap](PRODUCT-ROADMAP-20261019.md), including owner exclusions; do not copy this study's old candidate behavior blindly.
+2. Inspect actual OPay XML/Smali only as evidence of *possible* flows; pair with current public official documentation if availability/law/provider changes matter.
+3. Compare against existing actual Flutter/Gateway/PostgreSQL code and tests on a pinned commit, then enter a row status in [the reference register](reference-audit/FEATURE-REGISTER.csv).
+4. Design complete screen/error/accessibility journeys within the [screen contract](SCREEN-JOURNEYS.md), not inside another parallel implementation roadmap.
+5. Require real account, exact quote/review, purpose-bound authorization, server idempotency, provider callback, immutable receipt/reversal and actual device/provider evidence before calling any financial behavior shipped.
+6. Reject merchant/card, unsupported KYC/limits, auto-harvesting clipboard, pre-approved generic MSNW/fiat pegs and OPay-exclusive graphical assets.
 
-### 1. Unified Deep Link Dispatcher (`SchemeDispatchActivity`)
-- **OPay Pattern:** OPay uses a centralized deep-link URI dispatcher (`otravel://schemedispatcher?action=<target>&params=...`). Every push notification, marketing banner, SMS, or external link resolves through a single intent filter that decodes the payload, validates authentication, and pushes the exact target view.
-- **Masanawa Opportunity:** Use this pattern in Flutter (`go_router` or custom URI handler) to ensure that in-chat links, push notifications, and payment requests deep-link straight to the exact chat, Room, Status post, or Send Money sheet seamlessly.
-
-### 2. Smart Clipboard Integration Across the Entire App
-- **OPay Pattern:** `ClipboardAutoReader` does not just read bank numbers; it is integrated across onboarding (`OnboardingViewModel$readClipboardPhone`), payment links, and recharge numbers.
-- **Masanawa Opportunity:**
-  - In Chats: Detect copied text containing a 10-digit Masanawa ID and suggest sending a tip or transfer.
-  - In Registration/Login: Detect copied phone number or invitation code and auto-fill.
-
-### 3. QR Code Subsystem (`team.opay.qrcode`)
-- **OPay Pattern:** Supports both scanning merchant/user QRs and generating static/dynamic personal QR codes (`MyQRCodeActivity`).
-- **Masanawa Opportunity:** Every Masanawa user has a 10-digit ID and public handle. Unify Profile QR (for adding friends) and Wallet QR (for receiving MSNW/crypto) into a single versatile Masanawa QR card that can be scanned from the chat screen or wallet screen.
-
-### 4. Background Resilience & Connection State Handling
-- **OPay Pattern:** Notice strings like `[osdk_result_net_tip]`, `[pay_net_error_label]`: OPay treats poor network as a normal state rather than an unexpected exception. It displays informative inline recovery banners, cached balances, and explicit retry buttons without locking the user out.
-- **Masanawa Opportunity:** Ensure Masanawa's Chat and Wallet tabs handle spotty cellular connections gracefully—optimistic UI updates, clear pending ticks, and deduplicated retries.
-
----
-
-## 4. Specific Wallet & Transfer Rules for Masanawa
-
-When implementing the Wallet and Transfer subsystem, adhere strictly to these product decisions:
-
-### A. Core Distinctions from OPay
-1. **No Domestic Bank Lists:** Masanawa is an international app. Transfers do not route through domestic Nigerian NIBSS inter-bank clearing. They are:
-   - **Internal P2P:** Instant, off-chain, **zero gas fee** between Masanawa users.
-   - **External Crypto:** On-chain withdrawals to verified crypto addresses (USDT, SOL, BTC, ETH).
-2. **No NIP Session IDs & No "Money Saved" Metrics:** Keep receipts clean, fast, and minimal.
-3. **No USSD:** Do not connect or prompt USSD gateways.
-4. **10-Digit Masanawa Account Number:**
-   - Generated upon account creation (format: `8012 345 678`, random 10-digit number starting with `8`, not based on phone number).
-   - Displayed on Wallet Home with 1-tap copy.
-   - Used for zero-gas P2P transfers.
-5. **Universal Global KYC:**
-   - Do not implement domestic Tier 1/2/3 local banking restrictions.
-   - Implement universal identity verification (Unverified -> Verified ID -> Pro Merchant) with high international volume allowances.
-
-### B. What to Adapt from OPay's Transfer Flow
-1. **Instant Recipient Name Resolution:** Typing 10 digits immediately calls `GET /v1/wallet/lookup?query=...` and slides in a verified recipient card (Avatar, Display Name, Handle, Verified badge).
-2. **Duplicate Transfer Guard:** Intercept duplicate submissions of identical amount to the same user within 5 minutes.
-3. **In-App 3x4 Numeric Keypad:** Custom in-app keypad (`cashier_layout_pin_keyboard_view.xml`) bypassing OS keyboards, with biometric shortcut (Fingerprint / Face ID) and weak PIN rejection.
-4. **Telco Auto-Detection for Airtime/Data:** Auto-detect MTN, Airtel, Glo, 9mobile by phone number prefix.
-5. **Two-Step Utility Lookup:** Customer name verification dialog for electricity and cable TV before debiting.
-
----
-
-## 5. Existing Code & Next Execution Steps
-
-### What Was Just Built & Committed:
-- **`packages/security/migrations/0113_masanawa_account_number.sql`**: Added `masanawa_account_number` to user profiles with the generator function `security.generate_masanawa_account_number()`.
-- **`packages/commerce/migrations/0134_multi_asset_wallet_and_transfers.sql`**: Multi-asset custody accounts (`MSNW`, `USDT`, `USDC`, `SOL`, `BTC`, `ETH`), P2P transfers journal, and crypto deposit addresses table.
-- **`services/gateway/src/msn_wallet/custody_send.ts`**: Updated `resolve()` and `recipient()` to resolve 10-digit Masanawa IDs and `@handles`, plus added `lookupRecipient()`.
-- **`services/gateway/src/msn_wallet/custody_routes.ts`**: Added `GET /v1/wallet/lookup?query=...` name inquiry route.
-
-### Your Direct Execution Goals:
-1. **Review & Compare:** Open `opay-decloned/res/layout/` and inspect how OPay lays out `omain_fragment_new_pay.xml`, `pay_activity_cashier.xml`, and `dialog_transfer_repeat_tips.xml`.
-2. **Upgrade Mobile Wallet Home:** Refactor `apps/mobile/lib/src/finance/msnw_wallet_home.dart` and `wallet_screen.dart` into a consolidated portfolio view showing total balance (USD/MSNW), 10-digit ID badge with 1-tap copy, action buttons (`Send`, `Deposit`, `Swap`, `Bills`), and the "My Assets" token list.
-3. **Build Dual-Rail Send Sheet:** In `apps/mobile/lib/src/finance/wallet_flow_page.dart`, implement the P2P tab (10-digit ID lookup card, duplicate guard, clipboard auto-reader) and the External Crypto tab.
-4. **Build the Custom In-App Keypad:** In `apps/mobile/lib/src/ui/components/pin_keyboard.dart`, implement the 3x4 numeric keypad with biometric button.
-5. **Explore & Integrate Chat Synergy:** Enable in-chat transfers (`+ -> Pay`) and tap-to-pay on 10-digit IDs in conversation threads.
-6. **Feel Empowered to Surface More:** If you spot other smart implementations in `opay-decloned/` (such as transaction caching, haptic feedback hooks, or notification deduplication), adapt them into Masanawa and keep our codebase world-class!
-
----
-
-## 6. Pairing OPay Speed with WhatsApp UX (`whatsapp-decompiled/`)
-
-To complement OPay's fintech architecture, we also reverse-engineered **WhatsApp v2.26.40.72** into [`whatsapp-decompiled/`](file:///c:/Users/Besta/Masanawa/whatsapp-decompiled/README.md) and documented the design system in [`docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md`](file:///c:/Users/Besta/Masanawa/docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md).
-
-### The Synergy Model:
-- **OPay (`opay-decloned/`) supplies the Engine:** 10-digit instant account inquiry, 5-minute duplicate transfer interception, custom 3x4 numeric security keyboard, offline JSON caching, and telco auto-detection.
-- **WhatsApp (`whatsapp-decompiled/`) supplies the Shell:** Iconic green/white design system (`#25D366`, `#111B21`, `#202C33`), chat bubble tails and nip geometries, push-to-talk voice note animations (`kjt.json`), live voice equalizers (`kja.json`), and the 5-tab root architecture (**Chats · Status · Wallet · Calls · Rooms**).
-
-Use both reference trees freely to craft the most fluid, resilient, and beautiful communication and fintech app in the world.
-
+**Related documentation:** [OPay feature coverage](reference-audit/OPAY-COVERAGE.md), [global acceptance matrix](reference-audit/ACCEPTANCE-MATRIX.md), [individual trader profile](P2P-AND-PROFILE-FINAL-SPEC.md), [WhatsApp feature coverage](reference-audit/WHATSAPP-COVERAGE.md). Technical finance authority remains the real service/ledger and [security contract](SECURITY-AUTHORITY.md). No additional Phase 7C–D or separate Wallet roadmap.
