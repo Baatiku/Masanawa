@@ -1,7 +1,7 @@
 # Masanawa — canonical global product roadmap
 **Approved planning baseline:** 2026-10-19 · **Repository:** `Baatiku/Masanawa` · **Source inspected for this update:** `27e15f1be5f434256c6ab9f907e4cc478ab912d3`
 **Authority:** This document plus `AGENTS.md` governs consumer product scope and sequencing. Operational/security/API and token runbooks remain authoritative within their specific technical domains. No dated product plan or retired workstream supersedes this roadmap.
-
+ 
 ## 1. Product and design rules
 **Mission:** Masanawa is a global human and Masana communication and creator platform with integrated communities, useful digital services and a unified MSNW Wallet. Characters are **Masana**. Users discover, chat with, call and follow them; creators build and operate their own characters. Gwani is a prominent Masana/service assistant, not a duplicate root product.
 **Canonical navigation:** **Chats · Status · Wallet · Calls · Rooms**, Chats default. Profiles, My Masana, creator earnings, search, transaction history, billing and P2P use secondary routes, **not extra tabs**. Adopt a consistent white/green, compact, approachable WhatsApp-like visual rhythm; do not copy protected assets.
@@ -9,7 +9,7 @@
 **Trust:** Platform-owned Masana and creator-owned Masana share discoverable character behavior but have distinct ownership/permission rules. Clearly disclose generated identity, distinguish actual professional credentials from fictional personas, and require explicit authorization for money movement. AI must never autonomously release escrow or spend user funds.
 **Geography:** International by design, not tied to any country, currency or provider. Fund/bill/crypto/P2P rails are enabled only where merchant terms, operating licenses and provider capability allow.
 **Excluded:** Retired Twins, arbitrary WhatsApp personal-account automation, extra root tabs, second wallets, speculation/leverage/staking, raw-like/view rewards, exchange-terminal charts, unlimited AI video and forced voice cloning. **Owner scope decision (20 Oct 2026): no physical/virtual cards, card issuance/management, merchant onboarding, merchant storefronts, merchant checkout/POS or separate merchant-commerce modules.** In particular, no proposed Phase 7C–D. Keep individual P2P escrow, Wallet/billing and existing Room entitlements/history intact.
-
+ 
 ## 2. Evidence and checklist semantics
 - `[x] SOURCE PRESENT`: merged implementation or direct repository inspection shows the feature exists. **Not** an assertion of live product readiness.
 - `[ ] IMPROVE`: a real implementation already exists; do **not rebuild**; improve its specified defect or finish the connection.
@@ -18,13 +18,13 @@
 - `[ ] DECIDE`: economic/regulatory product decision, not a coding task; record before its financial activation.
 - `[ ] LATER`: intentionally not required for initial global launch.
 For each completed checkbox: attach **exact source SHA, paths, tests executed, screenshots/device/provider evidence where relevant and end-to-end customer journey**. Only a real, qualified run earns VERIFIED_E2E or DEPLOYED_VERIFIED. Merges and generated examples alone do not.
-
+ 
 **Verified source snapshot:** Flutter 5-tab root is in `apps/mobile/lib/src/shell/five_tab_shell.dart`; Wallet custody card and MSNW P2P screens exist. PR #207 merged notification/search/deep-link source; #212 creator creation/publication/fees; #214 creator voice use; #218 fixed P2P large-text overflow and ran 2,075 backend tests (222 skipped), 16 P2P Flutter tests. Railway Gateway, Worker and Postgres were all online at the 2026-10-19 audit, but previous deployment attempts failed and on-device/payment/chain workflows were not comprehensively accepted. **Issue #220 describes an unmerged checklist checkpoint; do not attribute it to main.** Evidence: [PRs](https://github.com/Baatiku/Masanawa/pulls?q=is%3Apr+is%3Amerged), [open issue #220](https://github.com/Baatiku/Masanawa/issues/220). `main` evolves: re-check fresh SHA before touching each item.
-
+ 
 ### Current stopping point and continuation — reconciled 20 October 2026
-
+ 
 **Planning ends at Phase 8; implementation does not.** Phases 1–3 are owner-closed delivery rounds with unfinished creator source carried into P5-C and external acceptance carried into Phase 8. The latest merged implementation checkpoint recorded here is **Phase 4 Milestone A**: contacts/public-profile foundations and the chat Wallet shortcut. The next dependent source milestone remains **P4-05–P4-07**, followed by P4-08–P4-11. Do not restart that work: inspect and reconcile [Phase 4 PR #227](https://github.com/Baatiku/Masanawa/pull/227), head `0d72ae9d2444646ceb0ef276eb8f366fd3ce40a7`, which contains further messaging/privacy/calling source but is **open/unmerged** at this review.
-
+ 
 | Workstream | Verified repository/planning position at this review | Next action |
 |---|---|---|
 | Phase 4 | Milestone A on main; further implementation in open #227 | Repair relevant checks, review/integrate existing work, then run participant/device acceptance; do not mark the phase complete from an APK build |
@@ -32,9 +32,9 @@ For each completed checkbox: attach **exact source SHA, paths, tests executed, s
 | Memory/continuity | Separate open [PR #228](https://github.com/Baatiku/Masanawa/pull/228), head `97bfa5e59a09d0b424bcd034236e6e94de38fcda` | Reconcile shared source and verification separately; memory never authorizes spending |
 | Phase 6 wallet guide | Initial account-number/name-inquiry work in open [PR #230](https://github.com/Baatiku/Masanawa/pull/230), head `5a70dcd7c2d51a699550b0d05b78d1d516ce3167` | Integrate/qualify existing source under P6-W01; remaining guide requirements are P6-W02–W11 below |
 | Phases 7–8 | Services/P2P and global acceptance remain open | Deliver the service and trust milestones below without claiming global provider eligibility |
-
+ 
 PR state is a dated observation, not a permanent freeze: fetch current main/heads/checks before execution. Independent Wallet preparation may continue with exact path ownership while P4/P5 integration proceeds; it does not close or replace those phases. The owner’s [wallet guide](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md) is incorporated into the existing phases below, not a Phase 9 or a second roadmap.
-
+ 
 ## Phase 0 — Canonical product authority and repository cleanup
 **Outcome:** Only current product guidance remains in the working tree; operational programs and financial history remain intact.
 - [x] SOURCE PRESENT — Inspect current root navigation, finance, agent, creator and notification source on `40071bc8e88d`.
@@ -44,7 +44,7 @@ PR state is a dated observation, not a permanent freeze: fetch current main/head
 - [ ] VERIFY — Scan all surviving source/tests/workflows for references to deleted paths or user-facing outdated terms; repair **actual** broken import, CI and link consumers.
 - [ ] VERIFY — Re-run exact-commit TypeScript/Flutter/build/architecture checks in a reachable runner; do not present structural Git inspection as executed suite.
 - [ ] COMPLETE — Maintain a single milestone status ledger inside this roadmap, not a fresh parallel dated checklist per window.
-
+ 
 ## Phase 1 — Stable app shell, identity and global UI (P0)
 **Source integration and per-item evidence:** [Phase 1 implementation/acceptance ledger](PHASE1-IMPLEMENTATION-20261019.md). A passed widget test or PR merge is not physical-device/FCM qualification.
 **Outcome:** A new customer launches, signs in, navigates, searches and manages their account reliably.
@@ -61,7 +61,7 @@ PR state is a dated observation, not a permanent freeze: fetch current main/head
 - [ ] IMPROVE — Unified search across authorized contacts/characters/chats/Rooms/Status plus account-fenced search history and empty/offline states (#207 exists).
 - [ ] VERIFY — FCM registration, privacy-safe previews, background/terminated app navigation, quiet hours, account isolation and missed-call/financial alerts (#207 source exists).
 **Screen/journey contract:** splash/auth/language → Chats; Settings → edit profile → save/retry; search → authorized target; deep link → login → correct resource; sign out → no prior-user cache. Each route needs loading/error/offline/permission/empty/readability cases.
-
+ 
 ## Phase 2 — Masana identities, conversation and live voice (P0)
 **Phase 2 source audit and acceptance ledger:** [Phase 2 implementation/acceptance](PHASE2-IMPLEMENTATION-20261019.md). The roster, core chat/call flows, channel delivery outbox, signup NULL fix and canonical retry IDs already exist on Phase 1 main; follow the linked per-item evidence rather than rebuilding them. This phase adds canonical portrait guards across call history, safer Retry, bounded context preservation and bounded Worker crash reconciliation. **No on-device or actual Gemini acceptance is claimed**; corresponding VERIFY boxes remain open.
 **Outcome:** Users repeatedly converse naturally with distinct Masana across text, voice notes and calls.
@@ -80,7 +80,7 @@ PR state is a dated observation, not a permanent freeze: fetch current main/head
 - [ ] VERIFY — Long call, call interruption, headset/speaker, background, multiple networks and low-memory Android on exact APK SHA.
 - [ ] LATER — Optional recording/transcripts only with jurisdictional consent, deletion and storage controls.
 **Screen/journey contract:** directory → profile → text/voice chat → outgoing/incoming call → history → resume chat; failure must not bill twice or lose messages. Account switches must revoke private media and stale replies.
-
+ 
 ## Phase 3 — Creators, Status, discovery and Rooms (P0/P1)
 **Outcome:** Creators publish real Masana, build an audience and participate in valuable content/communities.
 - [x] SOURCE PRESENT — Creator-owned type, basic wizard, server publication, one-free-lifetime rule, quoted additional MSNW charge and mobile/admin entry (#212).
@@ -99,11 +99,11 @@ PR state is a dated observation, not a permanent freeze: fetch current main/head
 - [ ] LATER — Scheduled live Room audio only after basic Room reliability and moderation qualification.
 - [ ] LATER — External video discovery via source-compliant embeds; no native user-uploaded long-form video hosting at launch.
 **Screen/journey contract:** Own profile → My Masana → create → generated preview → publication review → creator manager → public profile → follow/chat/Status. Rooms directory → Room details → join → discussion/lesson → leave. Every user-action result has a back route, empty/retry state and server authorization.
-
+ 
 ### Phase 3 source integration checkpoint — 19 October 2026
-
+ 
 This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, containing Phase 2 PRs #223 and #224. The original Phase 3 unchecked checklist above remains open until full vertical journeys and device/provider acceptance succeed; this checkpoint is **not full Phase 3 completion**.
-
+ 
 | Requirement | Existing, improved or still missing | Required source / external acceptance |
 | --- | --- | --- |
 | Creator identity and one-free/paid publication | Existing server and client source preserved | Two distinct real accounts, Wallet exact-debit and replay acceptance still open |
@@ -120,17 +120,17 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 | Rooms lifecycle | NOT VERIFIED | Join, leave, paid expiry, recovery, access revocation and account switch |
 | Scheduled Room audio | LATER | Explicitly deferred |
 | External video discovery | LATER | Explicitly deferred |
-
+ 
 **Source paths touched this checkpoint:** services/gateway/src/creator_agents/{store,routes,earnings.test,routes.test}.ts; services/gateway/src/modules/masana/profile_media{,.test}.ts; apps/mobile/lib/src/screens/profile/{my_masana_screen,creator_earnings_screen}.dart; apps/mobile/test/creator_earnings_format_test.dart. Risk: new earnings endpoint is read-only; no migrations, custody writes or payment/provider calls were added.
-
+ 
 **Reproducibility:** Node v24.21.0, pnpm 12.8.2, dependency installation, full TypeScript typecheck and pnpm build completed; targeted 17 Vitest tests passed across six files including gateway owner auth, statement projections and signed-media authorizations. Runtime PostgreSQL wallet settlement, Flutter/Android compilation and physical device, provider credentials/voice, market availability, privacy/rights uploads, backup/rollback remain open. Not an issuance, settlement, promotion or E2E acceptance. Preserve the original incomplete checkboxes.
-
+ 
 ## Owner-approved revision — human communication and user-created Rooms (19 October 2026)
-
+ 
 **Approval:** Owner approved the design in chat and explicitly authorized detailed planning and immediate Phase 4 implementation. Keep **Rooms**, never rename the product tab to Channels. Contacts has exactly **Masana / Humans** tabs. Every human uses the existing creator/public profile identity, including people with no published Masana. Existing root tabs stay unchanged. These decisions supersede old human-chat and personal-Room exclusions in all documents.
-
+ 
 **Progress reconciliation:** Owner reports Phases 1–3 done. Phase 1 merged #222; Phase 2 #223/#224; latest main `fe04f96d46a8a82d94fc8a49072e2f6a909c4827` includes Phase 3 #225. The #225 ledger explicitly documents unfinished source. Treat Phases 1–3 as previous delivery rounds, preserve their evidence and do not relabel unchecked requirements as tested/complete. Carry unfinished source into P5-C below; carry physical device/provider/operational acceptance into Phase 8. No requirement disappears through renumbering.
-
+ 
 | Phase | Outcome and dependencies | Current delivery state |
 |---|---|---|
 | 0 | Product authority/cleanup | Existing source; remaining reference/build checks preserved |
@@ -142,11 +142,11 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 | 6 | Wallet/token/crypto | Existing foundation; open #230 plus P6-W01–W11 wallet-guide completion |
 | 7 | P2P/digital services | Existing foundation; P7-S01–S04 refine verification, repeat purchase and recovery |
 | 8 | Global trust/admin/release | Carried acceptance plus P8-X01–X06 shared navigation, security, resilience and release checks |
-
+ 
 ## Phase 4 — Human contacts, unified profiles, messages and calls (P0)
 **Outcome:** A person finds another member under Humans, opens the same profile used by creators, exchanges messages/voice notes, calls them and resumes the same conversation. No separate human account/profile product; no extra root tab.
 **Design authority:** detailed screen and state contracts in `SCREEN-JOURNEYS.md`, section “Human communication and Rooms revision”.
-
+ 
 - [x] P4-01 SOURCE IMPLEMENTED, FLUTTER EXECUTION OPEN — Replace **Data Bundles** in every Masana chat header with a 48dp Wallet icon, accessible label, existing `/wallet` route; back restores the conversation. Keep billing in Wallet/assistant service journeys.
 - [ ] P4-02 COMPLETE — Contacts title and two tabs **Masana / Humans**, shared search, independent filter/scroll state, refresh and account reset. Preserve server-driven Masana list and creation entry. Humans uses compact avatar/name/@handle rows. Following people are the initial saved contact source; accepted conversations/connections join it when P4-05 lands. Global username discovery must not enumerate private phone/email or infer messaging permission from follows.
 - [x] P4-03 SOURCE IMPLEMENTED, PGLITE API TESTED — Authenticated tenant-scoped human contact listing and public name/@handle search, stable pagination, self exclusion, active-account filter, profile moderation and bidirectional block enforcement. User identifiers/phone/email never leak through public contact projections. No contact upload or permission wall to use username lookup.
@@ -158,31 +158,38 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] P4-09 COMPLETE — Calls history unifies human/Masana entries with participant kind, identity, incoming/outgoing/missed, details and callback/chat. Incoming handset notification, locked/background app answer, permission explanation, audio route/headset, reconnect, minimized return and microphone shutdown. Begin with voice, no group/video scope added silently.
 - [ ] P4-10 COMPLETE — Privacy: who can message/call/add to Rooms, blocked list, presence/read receipt controls, message requests, report and delete-account handling. Private phone/email are not shared via profile/Room membership. Essential consent appears in context, not onboarding walls.
 - [ ] P4-11 VERIFY — Two accounts + third unauthorized account: find/follow/profile → request/accept → text/media/voice → incoming call → history → reopen; negative tenant/participant/block/privacy/tampering/replay tests; offline/reconnect/process death/account switch, small Android and 200% text. Persist real results separately from mocks.
-
+**Full WhatsApp communication adaptation milestones (outside Rooms; [267 candidate rows](reference-audit/WHATSAPP-COVERAGE.md)):**
+ 
+- [ ] **P4-12 COMPLETE — WhatsApp-quality human/Masana chat operations (WA-MSG, WA-PROFILE):** message requests, edit/star/pin/mute/archive/lists, full search, replies/reactions/forward, deletion/tombstones, privacy-safe profiles/contact/share, verified read/delivery and composer drafts. Integrate open #227 first; group-like chats live in unified Rooms (P5-R), not a third conversation stack. Gate: real 2-account/blocked/user-removed/restarted-device and non-model human message route.
+- [ ] **P4-13 COMPLETE — Full voice notes and media (WA-MEDIA):** hold/slide/lock/pause/preview/waveform/variable-speed/transcription plus HD media/docs/camera/share, background upload and authenticated playback. Reuse current Flutter voice composer/media auth; no copied WhatsApp assets. Gate: permission denial, interrupted upload, media expiry, duplicate retry, source/API/account switch.
+- [ ] **P4-14 COMPLETE/VERIFY — Advanced human calling (WA-CALL):** integrate open #227 real one-to-one voice first, followed by participant-authorized video, group voice/video launched from Rooms and displayed in Calls, waiting rooms/call links, screen share, reconnect/transfer, spam controls and call history. Gate: verified LiveKit/FCM/device audio/video and teardown; unqualified guest calling/cross-device handoff remains explicitly provider-gated, never fake-connected.
+- [ ] **P4-15 COMPLETE/VERIFY — Chat privacy and security (WA-PRIV):** contacts/blocked/request controls, disappearing and view-once media, chat lock/device auth, encrypted backup/recovery and safety notices. Do not assert E2EE without auditable key/device lifecycle, server-readability/Masana moderation compatibility and real E2E tests. Gate: public profile/blocked/media safety, key renewal, account recovery, snapshot nonleak.
+ 
+ 
 ### Phase 4 execution plan and current ownership
 **Branch/base:** `feat/phase4-human-contacts-rooms-roadmap` from `fe04f96d46a8a82d94fc8a49072e2f6a909c4827`; no open PRs observed at start. One integrator owns this milestone; do not delegate or edit unrelated finance/migration/deployment paths.
 **Milestone A (start now):** P4-01 + P4-02/P4-03 public contact directory + P4-04 profile convergence foundation. First write SQL-backed API tests for following/search pagination, inactive/moderated/blocked accounts, tenant fencing and invalid queries. Implement in `services/gateway/src/talk_profiles/{model,service,postgres_repository}.ts` and `talk_profile_routes.ts`. Add separate mobile `social/human_contacts.dart`, `state/human_contacts_state.dart`, `screens/chat/human_contacts_list.dart`; integrate in `masana_list_screen.dart`, restore authenticated `/u/:handle` in `router/app_router.dart`. Reuse PersonProfileScreen; owner actions reuse EditProfile/MyMasana and public agents use the existing directory creatorHandle. No disabled Message/Call controls pretending to work: they arrive with Milestones B/C. Directory row temporarily opens the shared public profile until direct chat exists.
 **Milestone B:** P4-05–07 + remaining messaging/profile actions and inbox; first pin conversation pair/idempotency/access tests, then persistent repository/API/outbox/media authorization, then Flutter transport/state/thread/inbox composition; test real two-account catch-up and account switch.
 **Milestone C:** P4-08–10 + remaining profile Call action; first pin call state/race tests, then signaling/media adapter/push, then incoming/active/history mobile composition and privacy screens. Reuse call transport only after its human participant authorization is proven.
 **Milestone D:** P4-11 and integration; run `pnpm typecheck`, targeted then full `pnpm test:ci`, architecture, PostgreSQL/PGlite, Flutter targeted/analyze/Android build where available. Capture exact SHA/results, review, create/merge compatible PR; external provider/device acceptance remains explicit.
-
+ 
 ### Phase 4 Milestone A — source and verification checkpoint
 **Implementation source:** [`1c900437d6ff56fda347ae4504342cff4ec038a8`](https://github.com/Baatiku/Masanawa/commit/1c900437d6ff56fda347ae4504342cff4ec038a8), tree `5df52c1b9934a2f6a660c7e683ad396e877bad09`, identical to locally tested commit `14a999c75fa3f7135f0c37df8f49dc25ae1bf158`. Architecture/API compatibility checks: **90 PASS**. Production implementation unchanged by subsequent verification/fixture checkpoint edits.
 **Status:** PARTIAL_IMPLEMENTATION of Phase 4; Milestone A source implemented. P4-01 and initial P4-03 source delivered; P4-02 tabs/shared search/followed contacts/pagination delivered but saved accepted-chat sources await P4-05. P4-04 unified profile route/identity/owner controls/public Masana section delivered; Message/Call actions and Rooms sections await their actual backends. **Human messaging and calls are not implemented or claimed working by this milestone.** No schema migration, financial write, provider provisioning or deployment configuration change.
-
+ 
 **Source:** `apps/mobile/lib/src/screens/chat/{ai_chat_screen,masana_list_screen,human_contacts_list}.dart`, `social/{human_contacts,talk_social_profiles}.dart`, `state/human_contacts_state.dart`, `screens/profile/person_profile_screen.dart`, `router/app_router.dart`; `services/gateway/src/talk_profile_routes.ts`, `talk_profiles/{model,service,postgres_repository}.ts`. Human Contacts uses versioned `/v1/profiles/contacts`; blank search lists followed public people, queries search public names/handles, rows open the same creator profile until messaging lands. Owner identity is server-derived `isSelf`, not a separate account or client claim. Retired Talk publishing/activity removed from the now-reachable person profile.
-
+ 
 **Executed checks (19 October 2026, container):** Node 24.19.0/pnpm 12.8.2; frozen dependency install; `pnpm typecheck` PASS; `pnpm build` PASS; full `pnpm test:ci` **2,121 PASS / 222 SKIP, 424 files PASS / 39 SKIP**. Final scoped API/profile/AI-seat run **32 PASS** including PGlite SQL-backed tenant/self/inactive/moderation/bidirectional-block filtering, literal wildcard/injection input, pagination, profile route bypass and blocked-follow mutation rejection. First full run exposed a new route-version inventory failure, fixed by versioning the endpoint; another run exposed an inherited randomized AI-seat test fixture, fixed by pinning its intended pending branch. No unrelated production seat logic changed. Local Dart formatter parsed all 11 touched Dart files successfully; this is syntax evidence, not analyzer/widget/build proof.
-
+ 
 **Mobile checks:** new contact/tab/debounce/late-response/signout tests, Wallet navigation/back test, owner profile and authoritative-removal-after-follow regressions authored. Local Flutter widget/analyze/Android checks **NOT_RUN**: SDK bootstrap/direct tool execution was blocked by automatic approval review after it attempted a cloud metadata endpoint. No bypass attempted; no credentials or instance metadata obtained. Device/provider/FCM/live calling and real deployed PostgreSQL acceptance remain Phase 8. Reproduce mobile checks in a permitted environment: `cd apps/mobile && flutter pub get && flutter test test/human_contacts_test.dart test/ai_chat_voice_actions_test.dart test/talk_social_profiles_test.dart && flutter analyze && flutter build apk --debug`.
-
+ 
 **Hosted CI follow-up:** On head `5378616191d184bb5bb6200e6c5a0435d009a565`, [Mobile Build](https://github.com/Baatiku/Masanawa/actions/runs/39217559278) passed Flutter analysis; focused Flutter chat/voice/calls, roster, startup and voice-note jobs passed. Full mobile suite/build still pending at this checkpoint. PostgreSQL chat/call assertions passed but incoming-call teardown raised PG18 `57P01` because `DROP DATABASE WITH(FORCE)` raced closing clients. Reuse the existing canonical `createIsolatedPostgresTestDatabase` idle-drain cleanup in that fixture, with no production call change. Hosted retry result is linked in PR #226; do not count an unexecuted local PostgreSQL fixture as passed.
-
+ 
 **Independent review:** no critical finding; important inherited stale `_local` profile override removed, with a new regression test (execution open). Profile refresh also refreshes the creator directory; inactive SQL fixture now uses canonical `disabled`. Source self-review and `git diff --check` passed. Shared-path owner is this branch for the listed files and canonical documents; next work resumes **P4-05**, with exact conversation/participant/idempotency contracts before adding Message actions. Do not restart the contacts implementation or call this full Phase 4 completion.
-
+ 
 ## Phase 5 — Unified Rooms: Groups + Communities + Channels + Telegram capabilities (P0/P1)
 **Owner-approved product change, 20 Oct 2026.** Room is the ONE product: one five-tab Rooms entry, one canonical room ID, one creator identity, one membership/entitlement system, one Manage Room console. No Group/Community/Channel type selector or separate services. Room owners control Updates (broadcast), Conversation (group), optional Topics (community), polls/events, roles, Masana and advanced safety independently, with a short creation form and advanced settings after creation. Conversion never rewrites IDs or unlocks historic private messages. **Specification:** [UNIFIED-ROOMS-PRODUCT-SPEC.md](UNIFIED-ROOMS-PRODUCT-SPEC.md). **Feature census:** [ROOMS-REFERENCE-FEATURE-INVENTORY.md](ROOMS-REFERENCE-FEATURE-INVENTORY.md) — 204 individually tracked *candidates*, not claims of working WhatsApp/Telegram parity. Add more as the source census continues; never silently omit.
-
+ 
 **Development waves, with full client/API/data/permission/test acceptance before marking a wave finished:**
 | Wave | Task IDs | Functional acceptance |
 |---|---|---|
@@ -192,7 +199,7 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 | 5D Governance and Masana | P5-R05–06, R16, R18 | One advanced creator console, moderation, auditable AI context |
 | 5E Conditional growth | P5-R19–21 | Live room stage LATER/provider-gated, creator insights, preserve verified Room subscriptions |
 | 5F Integration | P5-R08–09 and Phase 8 | Search, push, revocation, offline, historical migration, device/provider/restore evidence |
-
+ 
 **Outcome:** Any eligible user creates and manages a Room, invites people and adds Masana; professional lessons and existing memberships survive the upgrade.
 - [ ] P5-R01 COMPLETE — Creator self-service Create Room: name/photo/about; Public/Private; who can talk Everyone/Admins/Approved members; optional invitations later. No group/channel/community choice, no invented fee. Same owner ID, idempotency key and draft on retry.
 - [ ] P5-R02 IMPROVE — One joined/owned/discover list and one Room destination regardless of its settings; pinned/muted/unread, search, public preview/creator, authorized private invite and actual qualified paid terms.
@@ -203,9 +210,9 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] P5-R07 IMPROVE — Migrate existing professional Rooms IN PLACE; preserve teacher, room IDs, lessons, Q&A, discussion, members, verified subscriptions/expiry/receipts. Make teacher binding optional for human-created Rooms without fake characters, with additive schema and compatible old reads. No parallel Channels/Communities schema.
 - [ ] P5-R08 COMPLETE — Search, push/deep links, offline drafts/cache, request replay and membership revoke catch-up. Removed users/agents lose private media and notifications promptly.
 - [ ] P5-R09 VERIFY — Owner/admin/mod/member/follower/outsider/Masana positive/negative journeys: same Room converts broadcast->community->broadcast; join/invite/post/comment/topic/reaction/poll/mention/remove; test permission revocation, private history, signed-media leaks, paid expiry, duplicate requests, stale offline sends, account swap, migration/restore and physical devices.
-
+ 
 **Unified Rooms granular milestones (mapped to 204 register IDs; none is complete merely because a design exists):**
-
+ 
 - [ ] **P5-R10 COMPLETE — UR-IDENTITY:** Stable Room identity, cover/@slug/share link, joined/owned/discover, canonical search, unread/pin/mute and creator association; no duplicate room on conversion.
 - [ ] **P5-R11 COMPLETE — UR-ACCESS:** Join approval, private invites, expiring/revocable links/QR, follower/member/admin/mod permissions, welcome pack, bans, tags and safe transfer; adversarial role/replay tests.
 - [ ] **P5-R12 COMPLETE — UR-UPDATES:** Author announcements, media/voice/docs/rich text, polls/reactions/comments, schedule/edit/pins, Room-vs-author attribution, suggested posts; subscriber privacy and scheduled revocation.
@@ -219,7 +226,7 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] **P5-R20 COMPLETE — UR-GROWTH:** Privacy-safe aggregate reach, engagement and join insights, suggested post moderation, creator links and optional direct message requests; no public follower list.
 - [ ] **P5-R21 IMPROVE/VERIFY — UR-ENTITLEMENT:** Existing qualified paid Room access, actual price/expiry/receipts/creator earnings survive settings changes; no new card processor, merchant storefront, merchant checkout or standalone merchant commerce.
 - [ ] **P5-R22 COMPLETE — UR-STORAGE:** Scalable push/outbox, safe Room/topic deep links, offline drafts, read state, cursor retries, ban/access revocation fanout, account fencing, old client compatibility, backups and 320px/200% RTL accessibility.
-
+ 
 **P5-C: carried unfinished Phase 3 source — do not lose these requirements**
 - [ ] P5-C01 COMPLETE — Portrait/cover upload, rights admission, processing, preview, replace and list/profile/Status propagation; deletion and media authorization.
 - [ ] P5-C02 COMPLETE — Published revision editor, admin-configurable free allowance/fee, canonical quote, explicit approval, concurrent edit fencing, once-only settlement and rollback.
@@ -228,7 +235,11 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] P5-C05 COMPLETE — Creator Status cadence/pause/content rights/review/anti-spam and complete media/offline recovery.
 - [ ] P5-C06 COMPLETE — Optional voice reference only with actual qualified provider, adult same-speaker consent, retention/deletion and supported-voice fallback. Do not falsely claim voice cloning.
 - [ ] P5-C07 VERIFY — Two-account creator lifecycle and existing Room/Status journeys, including paid publication, pause/restrict, access expiry and accurate earnings/reversal. Preserve scheduled live Room audio and external video as LATER, not hidden new launch requirements.
-
+**Full Status and creator communication (parallel P5 lane, not new root tabs):**
+- [ ] **P5-S01 COMPLETE — Human, creator and Masana Status (WA-STATUS):** text/image/video/voice Status creation, audience scopes/mute/viewed rings/reactions/replies/mentions/expiry, content rights/disclosure, media retries and Status notification/privacy settings. Reuse A07 Status/Follow/Discover; do not force humans to publish Masana content or rebuild creator Status infrastructure. Gate: 2 accounts plus outsider, privacy before/after audience change, offline/expired URL and account switch.
+- [ ] **P5-C08 IMPROVE — Creator communications without merchant commerce (WA-SERVICE):** creator contact requests, support/reply snippets, welcome/away automation under anti-spam limits, limited subscriber insights, help escalation and opt-out. Announcements and group engagement use one Room; no business catalogue/cart, merchant accounts, POS or checkout.
+ 
+ 
 ## Phase 6 — MSNW Wallet, token and crypto foundation (P0)
 **Outcome:** Users see trustworthy balances and can complete only financially qualified operations.
 - [x] SOURCE PRESENT — Single MSNW customer-facing Wallet direction, custody reads, funding/history/transfer/conversion UI and Base token source. **No mainnet token deployment claimed.**
@@ -241,21 +252,21 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] COMPLETE — Canonical on-chain contract address and chain binding only after public source verification; test mint/transfer/receive/burn and chain reorganization handling.
 - [ ] COMPLETE — Financial custody ledger, reserve/settlement approvals, exact six-decimal accounting, on-chain reconciliation, permission-bound signer controls and recovery.
 - [ ] COMPLETE — Audit and economically reconcile old customer Credits/MSN/Cr liability records without silent 1:1 renaming, erasure or unauthorized issuance.
-- [ ] IMPROVE — Paystack/Flutterwave/other adapter-specific international funding routes: settlement evidence, original minor currency, fee/rate quote and global coverage; provider acceptance is **not** global merchant eligibility.
+- [ ] IMPROVE — Paystack/Flutterwave/other adapter-specific international funding routes: settlement evidence, original minor currency, fee/rate quote and global coverage; provider acceptance is **not** proof of universal user/payment-rail eligibility.
 - [ ] VERIFY — Actual provider callbacks, retries, reconciliation and double-submit prevention; live NOWPayments crypto currency/readback/withdrawal capability where eligible.
 - [ ] COMPLETE — Supported crypto holdings/send/receive/convert/withdraw with explicit chain/network/custody/fees; do not imply MSNW exchange liquidity when none exists.
 - [ ] VERIFY — Signing/provenance, upgrade/rollback, incorrect network, pending/failed/reorg and restored ledger/chain reconciliation under failure.
 **Screen/journey contract:** Wallet → Fund/Send/Receive/Convert/History/Asset → review → authorized settlement → receipt → fresh verified balance. Every operation requires exact, single-use, user-confirmed authorization and recoverable idempotency.
-
+ 
 ### Wallet guide implementation checkpoint — 20 October 2026
 **PARTIAL_IMPLEMENTATION** of [the owner wallet guide](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md): corrected account-number/@handle parsing on the canonical MSNW Send authority; active-account, block and moderation filtering; authenticated no-store account-number read; forward-only assignment/backfill migration 0114 that preserves assigned IDs and financial records; mobile account-number copy badge and debounced recipient inquiry with explicit Paste, retry and stale-response fencing. Existing preview, exact-amount confirmation, encrypted pending request and replay-safe receipt recovery remain canonical. No competing multi-asset ledger is activated.
-
+ 
 Backend SQL tests cover assignment/reapplication, identity/privacy boundaries and account-number → preview → send → replay with balanced postings. Mobile widget coverage is authored; Flutter/Android execution and production migration/device acceptance remain open. Remaining guide scope includes the five-minute repeated-transfer warning, server-bound PIN/biometric authorization, qualified external-crypto send composition, portfolio valuation from an authoritative rate source, and chat Pay/QR integration. No fiat peg, KYC badge or provider capability is inferred from recipient lookup. Existing Phase 6 completion/verification boxes remain open.
-
+ 
 ### Phase 6 wallet-guide completion — P6-W01–P6-W11
-
+ 
 **Scope:** [wallet guide](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md), especially its six direct execution goals. Extend `apps/mobile/lib/src/finance/{msnw_wallet_home,msnw_custody_send,wallet_flow_page,crypto_wallet_screen,wallet_asset_overview}.dart`, `screens/wallet/wallet_screen.dart`, the existing financial authorization and Gateway custody/crypto adapters. These are reference paths, not a blanket claim over another contributor’s files. Keep one canonical MSNW ledger; inspect the proposed multi-asset tables before activation, reconcile authority/backing and never show the same MSNW in two stores as spendable funds.
-
+ 
 - [ ] **P6-W01 IMPROVE/VERIFY — Account identity and instant name inquiry (P0).** Reconcile #230 before writing new source: random stable 10-digit account number starting with `8`, independent of phone; collision/concurrent-signup protection, legacy-user backfill preserving existing IDs, own-account read/copy and `GET /v1/wallet/lookup?query=...`. Complete-number/@handle input shows a server-resolved recipient card before amount entry; include an avatar only from permitted profile data and a verified badge only from actual verification authority. Preserve blocked/disabled/moderated/tenant/self checks, stale-response/account-switch fencing, rate limits and request privacy. Gate: migration/restart/concurrency, two-account lookup → preview → confirm → receipt → balance readback, inaccessible target and edited handle/account tests. **Status (20 Oct 2026):** #230 merged on main with scoped source/tests, but device/provider/production proof remains pending.
 - [ ] **P6-W02 IMPROVE — Consolidated portfolio and actions (P0).** Show exact available/reserved MSNW, hide/show, refresh time, account badge, My Assets and one compact **Send / Deposit / Swap / Bills** row. Reuse Fund/Receive/Convert routes as compatible entry points; P2P and history stay reachable as secondary entries. Show supported USDT/USDC/SOL/BTC/ETH only from the server capability and custody/network inventory. USD portfolio valuation requires an authoritative rate, valuation timestamp and defined coverage; mark unpriced/stale assets and omit an unsupported total rather than assume an MSNW peg or add fiat funding awaiting settlement. Gate: exact zero vs unavailable, partial asset failure, no double-counted custody/on-chain holdings, 320px/200% text/RTL and account reset.
 - [ ] **P6-W03 COMPLETE — Dual-rail Send (P0).** Internal Masanawa account/@handle and External Crypto are explicit choices on the existing Send journey. Internal MSNW transfers use the current canonical zero-gas authority and show the server quote; additional internal assets require a qualified ledger adapter, not just a currency enum. External sends require an eligible asset/network, address validation plus memo/tag where applicable, exact network/provider fees, limits, quote expiry, step-up, durable pending recovery and independently verified final receipt. Preserve Base-first qualification; listing an asset in the guide does not activate every chain. Gate: wrong chain/address/memo, recipient changed after preview, insufficient balance, expired quote, concurrent submit, timeout/restart and reconciliation. No domestic-bank list, NIBSS/NIP identifier or USSD path in global Send; existing region-qualified funding adapters remain separate.
@@ -267,10 +278,12 @@ Backend SQL tests cover assignment/reapplication, identity/privacy boundaries an
 - [ ] **P6-W09 COMPLETE — Saved recipients and safe repeat entry (P1; additional OPay finding O3).** Offer recent/saved recipients after an authorized operation, with explicit save/delete and account-fenced storage. Re-resolve identity, current address/network and block/verification status each time; reuse no old quote, authorization or idempotency key for a genuinely new transfer. Gate: renamed/reassigned handle, removed recipient, address/network change, stale saved data and cross-account leakage. Favourites are shortcuts, not trusted payment instructions.
 - [ ] **P6-W10 IMPROVE — Receipt-to-help journey (P1; O4/O5).** Extend the existing paginated activity and CSV/PDF export: transaction → exact server status/amount/asset/network/fees/reference → refresh pending → privacy-aware share/download → support case linked to the same operation → reversal/adjustment readback. Mask sensitive identifiers by default, scope receipt reads/exports and omit domestic NIP IDs and invented “money saved” metrics. Gate: shared screenshot cannot settle/release/refund, forged/deleted/foreign-account reference, export permissions, duplicate support cases and a real reversal with immutable original postings preserved.
 - [ ] **P6-W11 VERIFY — Wallet integrated acceptance (P0).** Two users plus an unauthorized account traverse W01–W10 on the exact source/APK and eligible provider rails. Include multi-device concurrency, process kill, connectivity loss, stale rate/quote, biometric enrollment change, malicious clipboard/QR/link, accessibility and account switch. Separate unit/PGlite, actual PostgreSQL, Flutter, APK build, handset/provider and production evidence. Do not check the parent Phase 6 boxes merely because #230 merges.
-
+ 
+**P6-W12 COMPLETE — Request money and financial intent in Chats/Rooms (OP-TRANSFER; P0/P1).** Single canonical server-generated request object and user-reviewed Wallet route, shareable as a structured in-chat/Room card; verified recipient identity, amount/network/expiry and explicit payment authorization with server receipt. An AI message, forwarded card or Room post is never spending permission. Gate: forged/expired/replayed request, block/membership change, account switch mid-review, duplicate settlement and receipt reauthorization. Reuse W06/W07/W10 and existing ledger; no merchant checkout/card product.
+ 
 ## Phase 7 — Individual P2P exchange and digital services ONLY (P0/P1)
 **Owner scope exclusion (20 Oct 2026):** No Phase 7C–D merchant commerce, cards, merchant storefront/POS/checkout, merchant onboarding or standalone card services. Maintain already built **person-to-person** P2P Buy/Sell escrow and qualified airtime/data/utility services; individual offer authors are not merchant accounts.
-
+ 
 **Outcome:** An attractive, simple marketplace and real purchases with strong fraud and settlement handling.
 - [x] SOURCE PRESENT — MSNW individual P2P escrow marketplace, seller offer cards (NOT merchant commerce), orders and financial recovery tests; #218 fixed 320px/200% P2P header overflow.
 - [ ] IMPROVE — Visually polish compact offer cards: seller identity, verified payment-method state, price/currency, min/max, available MSNW, trading history and one primary Buy/Sell action.
@@ -286,16 +299,16 @@ Backend SQL tests cover assignment/reapplication, identity/privacy boundaries an
 - [ ] VERIFY — Real supported provider packages/payment/billing status on eligible countries, plus Gwani conversational parity using same canonical service operation.
 - [ ] LATER — Add new bill/digital service categories only after positive margin, demand, provider eligibility and support costs are measured.
 **Screen/journey contract:** Wallet → P2P Buy/Sell → offer → review → order timeline → release/dispute → receipt; Wallet/Gwani → Data/Airtime/TV/Electricity → recipient/package/review → authorized purchase → durable receipt.
-
+ 
 ### Phase 7 service refinements — P7-S01–P7-S04
-
+ 
 Reuse `services/gateway/src/msn_wallet/billing_service.ts`, existing billing catalogs, provider adapters and mobile service forms. These refine the existing Phase 7 requirements rather than create another billing subsystem.
-
+ 
 - [ ] **P7-S01 IMPROVE — Operator and amount selection (P1).** Country-aware phone normalization, eligible operator suggestions, provider-priced denomination/package chips and an editable operator choice. Nigerian MTN/Airtel/Glo/9mobile prefixes may be hints only in their eligible region; mobile number portability means a prefix is not proof. Refresh catalog/price/expiry before approval. Gate: ported number, roaming/international input, unsupported country, changed denomination and provider outage.
 - [ ] **P7-S02 COMPLETE — Two-step utility/customer verification (P0).** Electricity/TV account → provider-resolved customer name/account/service/min-max details → exact fee/amount review → authorization → fulfillment/readback. Changing account/operator/package invalidates lookup and quote. Do not debit when lookup is unavailable or expose a foreign customer’s private details. Gate: wrong account, stale lookup, minimum/maximum, provider timeout and changed recipient between verify and pay.
 - [ ] **P7-S03 IMPROVE — Saved bill recipients and repeat-purchase warning (P1).** Explicitly save/delete a beneficiary and offer repeat with refreshed provider details/price. Detect a recent same product/customer/amount purchase and distinguish pending fulfillment from an intentional second purchase; show the prior receipt and keep original request identity on recovery. Gate: stale package, ported number, duplicate taps/devices, opt-out, account switch and partial fulfillment.
 - [ ] **P7-S04 COMPLETE/VERIFY — Provider disruption and fulfillment recovery (P0; O1/O2).** Show timestamped eligible-rail/service availability before consent, retain useful authorized history during a partial outage and explain pending/unknown/failed/refunded outcomes. Use bounded status polling/backoff and canonical reconciliation/compensation; offer only independently qualified alternatives with a new review, never silent financial rerouting. Gate: stale health data, no invented ETA, offline-after-debit, late success, partial delivery, reversal and one final reconciled receipt. Gwani must use this same operation and approval authority.
-
+ 
 ## Phase 8 — Global trust, admin, operations, release and growth (P0/P1)
 **Outcome:** Launch only qualified capabilities for each market, keep operations observable, and manage total costs.
 - [ ] COMPLETE — Country-by-country feature-capability policy for identity, fiat rails, virtual-asset activities, subscriptions and P2P. No hardcoded home-market default.
@@ -312,20 +325,27 @@ Reuse `services/gateway/src/msn_wallet/billing_service.ts`, existing billing cat
 - [ ] COMPLETE — Pilot/normal/growth provider cost model (Gemini text/audio, voice calls, FCM, hosting, PostgreSQL, storage, crypto gas, fees, support); per-action margin and abuse caps.
 - [ ] COMPLETE — Global customer support, FAQs, transaction help, individual P2P dispute escalation and incident transparency.
 - [ ] LATER — Optional creator premium subscriptions/Rooms monetization and advanced discovery only after retention and positive unit economics.
-
+ 
 ### Phase 8 shared improvements — P8-X01–P8-X06
-
+ 
 - [ ] **P8-X01 IMPROVE — One secure link/QR/push dispatcher (P0; O6).** Extend existing `core/shell_deep_link.dart`, `pending_deep_link.dart` and notification policy/deduplication. Allowlisted versioned intents cover human/Masana chats, Rooms, Status, profiles, Wallet receipts and unapproved payment requests; authenticate and reauthorize at the target. Preserve intended destination/back state without restoring a prior account’s private intent. Gate: external redirect/nested target URL, duplicate push, logged-out/terminated start, revoked Room membership and forged payment intent. No arbitrary WebView/URL execution.
 - [ ] **P8-X02 IMPROVE — Shared connectivity/recovery states (P0; O2/O7).** One lifecycle-owned, bounded connection/recovery controller distinguishes device offline, service unavailable and provider pending across Chats/Calls/Rooms/Status/Wallet. Reuse domain request IDs, permitted caches, outboxes and drafts; retain usable content with per-section retry, low-data backoff and cancellation on logout/background where appropriate. Diagnostics must be opt-in/redacted and avoid message/PIN/clipboard/PII capture. Gate: Wi-Fi/cellular changes, captive portal, flapping connection, account switch, duplicate watchers, battery/retry bounds and audio teardown. No generic optimistic “paid/delivered” state without authority.
 - [ ] **P8-X03 IMPROVE — Security centre, biometric lifecycle and device recovery (P0; O8).** Extend existing `screens/settings/account_security_screen.dart`, session/login history and financial step-up. Show signed-in sessions, revoke a lost device, distinguish app lock from payment authorization, invalidate relevant biometric credentials after enrollment/device changes and provide a safe recovery route. Evaluate obscured-touch/screen-capture protections specifically for secret/payment screens with platform/accessibility tests; do not equate root/device signals with identity proof or introduce broad third-party tracking. Gate: stolen/stale session, token refresh, enrollment change, cancellation, lockout/recovery and private recent-app previews.
 - [ ] **P8-X04 COMPLETE — Global verification and capability presentation (P0).** Show Unverified / Verified identity / Qualified operation available only where actually supported, without Pro Merchant tiers, merchant admission or card issuance. Financial privileges/limits remain provider/jurisdiction/server-checked. No generic domestic Tier 1/2/3 globally or fabricated limits. Gate: provider/country limits, expired verification, revoked individual P2P eligibility and client-forged status.
 - [ ] **P8-X05 IMPROVE — Contextual permissions, notification controls and private sharing (P1; O4/O8/O9).** Ask for camera/mic/files/notifications only at the relevant action and provide meaningful manual/text alternatives. Unify essential transaction/call notices, user-controlled promotional/social categories and quiet hours; private previews and unread state must remain account-scoped. Receipt/QR sharing needs explicit user action and redaction choices. Gate: permanently denied permission, repeated prompt dismissal, notification disabled, account switch and OS share cancellation; no full address-book upload or background clipboard harvesting.
 - [ ] **P8-X06 VERIFY — Cross-feature release and migration evidence (P0).** Extend Phase 8’s existing exact-SHA qualification: migrate/backfill/restore without ID or ledger loss; replay/revoke/correct across Wallet, chat Pay, Rooms and notifications; execute real PostgreSQL isolation, Flutter state/viewport tests, signed handset tests and eligible provider readback. Dispose test databases cleanly and reset all schema owners (including creator-owned tables) so unrelated fixture failures cannot masquerade as feature evidence. Record unresolved CI/provider/device gaps and operational ownership in this roadmap; no empty green checklist or duplicate verification platform.
-
+ 
+### Expanded global reference coverage & release gates — P8-X07–X10
+ 
+- [ ] **P8-X07 COMPLETE/VERIFY — Linked device and chat continuity (WA-DEVICE):** session list/revoke, account switch, encrypted history transfer/backup, web/desktop/tablet continuity, offline storage and cross-device call handoff where actual qualified. Gate: device loss, key reauth, restore, revoked media, second-account leak and multi-device tests.
+- [ ] **P8-X08 COMPLETE — Creator and customer communication (WA-SERVICE/WA-AI):** support requests, quick/greeting/away replies, subscriber message routing and qualified human takeover; permitted AI summaries/memory follow open #228 only after verified consent and scope. Strictly NO merchant accounts, cards, catalogues or checkout. Gate: private data/AI visibility, opt-out/blocked, account suspension and anti-spam.
+- [ ] **P8-X09 COMPLETE — OPay-grade transaction help and failure recovery (OP-SUPPORT):** Wallet/receipt-linked support cases, bill/transfer complaint tracking, provider disruption notices, safe diagnostics, escalations, refund status from real ledger and privacy-safe export/readback. Reuse W10/P7-S04/current support screens. Gate: duplicate case/receipt, wrong user, fake refund and pending-provider/outage recovery.
+- [ ] **P8-X10 VERIFY — Exhaustive reference adaptation coverage gate:** use [global 417-row WhatsApp/OPay register](reference-audit/FEATURE-REGISTER.csv), [WhatsApp audit](reference-audit/WHATSAPP-COVERAGE.md), [OPay audit](reference-audit/OPAY-COVERAGE.md) and [204-candidate unified Rooms audit](ROOMS-REFERENCE-FEATURE-INVENTORY.md); every row needs reference evidence tier, implemented source SHA, actor/screen/backend/test or explicit excluded/provider-gated disposition. No claim of full parity from candidate count, static APK component labels or source-only UI. Reconcile each register after merged phase and inspect any reference-update deltas before final release.
+ 
 ### OPay reference analysis and additional findings — personally inspected 20 October 2026
-
+ 
 **Method and limits:** inspected the committed pruned Smali, layouts and strings at main `27e15f1b`, and compared them with Masanawa’s existing source paths. This is static reference analysis, not a running OPay test, a complete audit of every file, proof of server settlement/idempotency or proof of legal/market eligibility. Reimplement useful interaction patterns with original Masanawa code/assets; do not copy proprietary code/artwork, endpoints, credentials or domestic business rules. “Observed” below means a concrete symbol, resource or method was read; the proposed Masanawa behavior is a planned adaptation.
-
+ 
 | Finding | Concrete reference evidence | Existing Masanawa coverage and planned adaptation |
 |---|---|---|
 | **O1 — Surface provider disruption before payment** | [`BankAVGTimeConfig.smali`](../opay-decloned/smali_classes6/team/opay/pay/home/tabs/ac/BankAVGTimeConfig.smali): `avgTime`, `timePeriod`, availability title/description and alternate action; [`BankUnStableDialog.smali`](../opay-decloned/smali_classes6/team/opay/pay/home/tabs/ac/BankUnStableDialog.smali) | Capability/provider checks already exist; add timestamped customer-facing disruption state to W03/S04. No bank rails or unverified ETA imported. |
@@ -339,11 +359,11 @@ Reuse `services/gateway/src/msn_wallet/billing_service.ts`, existing billing cat
 | **O9 — Clipboard suggestions have freshness and dismissal concerns** | Actual reader is [`home/ClipboardAutoReader.smali`](../opay-decloned/smali_classes6/team/opay/pay/home/ClipboardAutoReader.smali), method `f`: clip timestamp and `0xea60` (60 seconds) freshness check; [`TransferClipboardParser.smali`](../opay-decloned/smali_classes6/team/opay/pay/home/clipboard/TransferClipboardParser.smali), method `k`: domestic phone/10-digit parsing | #230 uses explicit Paste. For W01/W07/X05, keep explicit Paste default; any future foreground contextual suggestion must be optional, bounded, dismissible and account-fenced, with no raw clipboard logging/upload or automatic payment. Do not copy the Nigerian phone regex. |
 | **O10 — Utility confirmation can show provider constraints** | [`ElectricityCustomerInfo.smali`](../opay-decloned/smali_classes6/team/opay/pay/payment/ElectricityCustomerInfo.smali): recipient name, account info, min/max vend amount and vend type; [`ConfirmInfomationListDialog.smali`](../opay-decloned/smali_classes6/team/opay/pay/payment/ConfirmInfomationListDialog.smali): confirm/cancel/data | Existing catalogs/forms remain; S01/S02 expose authoritative account/package/amount constraints and invalidate lookup after edits instead of adding a second billing provider. |
 | **O11 — Repeat protection complements durable request identity** | [`dialog_transfer_repeat_tips.xml`](../opay-decloned/res/layout/dialog_transfer_repeat_tips.xml), strings `osdk_repeate_transfer`/`osdk_recharge_again_reminder`; [`UniqueRequestBody.smali`](../opay-decloned/smali_classes4/team/opay/core/biz/risk/UniqueRequestBody.smali) contains a `tid` field | W04/S03 combine a customer warning with Masanawa’s existing replay-safe operation IDs. A risk DTO’s `tid` field does **not** prove OPay financial idempotency or the five-minute server window. |
-
+ 
 **Corrections to the guide’s reference map:** several named paths are approximate: `ClipboardAutoReader` is directly under `pay/home`, `BiometricSaveActivity` is under `smali_classes5/team/opay/pay/biometric`, and `RiskControlHost.smali` was not found; actual [`RiskHeaderInterceptor.smali`](../opay-decloned/smali_classes2/team/opay/risk/RiskHeaderInterceptor.smali) exposes a device-ID header path, not proof of root/overlay defenses. Do not turn unverified guide descriptions into implemented security claims. OPay MQTT metadata does not justify an extra Masanawa transport; reuse current notification/outbox/catch-up first.
-
-**Execution sequence:** reconcile P4/#227 and the Phase 5 dependencies; independently integrate/qualify #230 as W01 → complete W02/W03/W05/W08 and S02/S04 → W04’s cross-entry duplicate guard → W06/W07 and W09/W10 plus S01/S03 → W11 and X01–X06 release acceptance. Within that sequence, shared dispatcher/authorization work must precede any dependent QR/chat payment entry. Do not defer foundational server authorization in order to ship a cosmetic keypad or a clickable payment button. Keep all original Phase 6–8 financial, privacy, operational and cost requirements above.
-
+ 
+**Execution sequence (owner update 20 Oct 2026):** reconcile P4/#227 then implement P4-12–15; in parallel build unified Rooms P5 waves with source-first owner/schema contract and P5-S01/C08; #228 memory needs merge and privacy proof. #230 is already merged, so qualify W01 rather than reimplement; finish P6-W02–W12 and P7-S01–S04 without merchant/cards, then P8-X01–X10. Maintain one integrated Flutter/Gateway/DB contract. Existing historical financial, security and device/provider obligations stay in force.
+ 
 ## 3. Delivery rules: no duplicate implementations
 1. Fresh `main`, open issues/PRs, exact file owners and existing app screens before each milestone. **Issue #220 must be reconciled against main before assuming its features landed.**
 2. One approved screen/feature/journey inventory. Each P0 requirement maps to real route, loading/empty/error/offline/permission/account-switch state, data contract and negative/security tests. Avoid duplicate wallet and creator data authority.
@@ -352,7 +372,7 @@ Reuse `services/gateway/src/msn_wallet/billing_service.ts`, existing billing cat
 5. Run actual reachable Node/Vitest/PostgreSQL/Flutter checks when available; use container fallback if CI is down; record NOT_RUN honestly. Merge safe scoped code promptly, but **do not confuse merged source with approved custody or live payments**.
 6. Release only exact qualifying APK/deployed SHA with device/provider/account-isolation/backup/rollback proof. Cost, permissions, legal and financial correctness outrank superficial release labels.
 7. Review this same roadmap's checkboxes after each merged phase; do not reintroduce dated parallel product plans, deprecated consumer routes, new wallet names or retired scripts.
-
+ 
 ## 4. Source-of-truth links
 - [GitHub main](https://github.com/Baatiku/Masanawa/tree/main)
 - [Original planning audit baseline](https://github.com/Baatiku/Masanawa/commit/40071bc8e88d80d2ce7affb25dfefe6cd37a0989)
@@ -364,3 +384,4 @@ Reuse `services/gateway/src/msn_wallet/billing_service.ts`, existing billing cat
 - [P2P accessibility/regression #218](https://github.com/Baatiku/Masanawa/pull/218)
 - [In-progress owner checklist #220](https://github.com/Baatiku/Masanawa/issues/220)
 - [Current MSNW deployment guide](token/MSNW-GLOBAL-TOKEN-CREATION-GUIDE.md)
+ 
