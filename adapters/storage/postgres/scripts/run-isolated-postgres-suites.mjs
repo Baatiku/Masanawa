@@ -57,12 +57,12 @@ async function suite(file,index){
   try{
     const source=await readFile(file,'utf8');
     const customSchema=source.includes('DROP SCHEMA') ||
+      source.includes('CREATE DATABASE') ||
       file.endsWith('/home_feed/af00_migrations.integration.test.ts');
     if(!customSchema){
       const db=new pg.Pool({connectionString:url.toString(),max:2});
       try {
         await runMigrations(db,[...platformProductMigrationRoots(),
-          {owner:'memory',directory:fileURLToPath(new URL('../../../../packages/memory/migrations/',import.meta.url))},
           {owner:'world',directory:fileURLToPath(new URL('../../../../packages/world/migrations/',import.meta.url))}]);
       } finally {await db.end();}
     }
