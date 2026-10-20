@@ -89,12 +89,17 @@ describe("test topology", () => {
       "utf8",
     );
     expect(workflow).toContain("- name: Typecheck\n        run: pnpm typecheck");
-    // CI deliberately serializes database suites to avoid races between
-    // PostgreSQL migration/teardown tests. Keep that distinction explicit.
-    expect(workflow).toMatch(
-      /- name: Test\n(?:[^\n]*\n)*?\s+run: pnpm exec vitest run --no-file-parallelism/u,
-    );
-    expect(workflow).toContain("- name: Build\n        run: pnpm build");
+    // The full check remains explicit; PostgreSQL files now run with
+    // independent disposable databases instead of destructive shared schemas.
+    const build = workflow.indexOf("- name: Build workspace for production-conditioned PostgreSQL suites");
+    const unit = workflow.indexOf("- name: Unit and PGlite tests");
+    const pg = workflow.indexOf("- name: Actual PostgreSQL 18 integration (isolated databases)");
+    expect(build).toBeGreaterThan(0);
+    expect(unit).toBeGreaterThan(build);
+    expect(pg).toBeGreaterThan(unit);
+    expect(workflow).toContain("run: pnpm build");
+    expect(workflow).toContain("run: env -u MASANAWA_TEST_DATABASE_URL pnpm exec vitest run --no-file-parallelism");
+    expect(workflow).toContain("run: node --conditions=production adapters/storage/postgres/scripts/run-isolated-postgres-suites.mjs");
     expect(workflow).not.toContain("run: pnpm check");
   });
 
