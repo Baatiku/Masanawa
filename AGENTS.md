@@ -1,4 +1,4 @@
-# Masanawa contributor and coding-agent rules (2026-10-19)
+# Masanawa contributor and coding-agent rules (updated 2026-10-20)
 
 **Read the [one active product roadmap](docs/PRODUCT-ROADMAP-20261019.md), [screen/journey contract](docs/SCREEN-JOURNEYS.md) and [current handoff](CONTINUE-HERE.md) before working.** Older dated product plans, historic handoffs and Alpha/Twin tools have been removed from the current tree. Do not recreate an archive or restore their superseded UX rules.
 
@@ -16,4 +16,4 @@
 11. Keep approved implementation practical: no duplicate backend providers/ledgers, unnecessary microservices, expensive dormant services, forced custom voice onboarding, synthetic fund claims or undisclosed hidden fees.
 12. Handoff must identify base/head SHA, actual PR, touched paths, phase/task IDs, relevant commands/results, current deployment status, remaining source/verification, next action and safe merge target. Update checkboxes **in the same roadmap**, not new dated checklists.
 
-13. Owner revision (2026-10-19): human messaging/calls and user-created channel-style **Rooms** are approved. Contacts tabs **Masana / Humans**; one human/creator public profile. No sixth tab or Channels rename. Follow revised Phases 4–8; preserve open source/device/provider work carried from Phase 3.
+13. Owner revision (2026-10-20): human messaging/calls and ONE user-created, creator-configurable **Room** product are approved (group/community/channel/topic abilities are settings within a Room, not separate products). Contacts tabs **Masana / Humans**, one canonical human social/P2P profile; visible **Updates** is the persistent mixed feed with paid human posting, not stories. No extra tab or merchant/card flows. Follow revised Phases 4–8; preserve actual source/device/provider work carried from earlier phases.
