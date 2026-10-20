@@ -11,7 +11,7 @@
 | AC05 | WA-CALL / P4-14 | Voice call A -> B on two actual devices via qualified RTC and push | Ring/busy/decline/reconnect/teardown; no fake connected or unjustified Masana charge |
 | AC06 | WA-CALL / P4-14 | Video or participant group call -> call history and in-Room launch | Actual device/media tokens and screen sharing only if qualified; privacy and participant removal |
 | AC07 | WA-PRIV / P4-15 | App lock, private media, deleted messages, block lists | Lost device/key reauth, login recovery, media/metadata nonleak; no unsupported E2EE claim |
-| AC08 | WA-STATUS / P5-S01 | Human/creator/Masana posts -> Status viewer -> expiry | Scoped audience/seen/muted/reaction/reply, stale content and account switch |
+| AC08 | WA-STATUS reclassified / P5-U01–U08 | Human drafts/quotes/pays exactly once and posts alongside disclosed Masana on one continuous Updates feed | Video retained; no Stories/rings/24h expiry; fees configured, one capture+receipt; like/comment free; stale and account switch |
 | AC09 | UR-IDENTITY / P5-R01/R10 | Creator -> R03 -> create Room -> R01/R04 + public profile | One immutable ID; no Group/Channel option; duplicate create returns same result |
 | AC10 | UR-ACCESS / P5-R03/R11 | Creator invites Member; outsider attempts R04 and media | Hashed limited invite, role/approval, last-owner transfer, ban revokes push/media |
 | AC11 | UR-UPDATES / P5-R04/R12 | Creator-only broadcast -> follower R04/R10 reactions/comments | Follower cannot create Update; scheduling after revoke canceled; private follower list |
@@ -45,3 +45,14 @@ When implementing, split gates into **CONTRACT** (typed DTO/route validation), *
 - [Wallet name inquiry #230](https://github.com/Baatiku/Masanawa/pull/230) and [OPay roadmap work #231](https://github.com/Baatiku/Masanawa/pull/231) are merged at the inspected baseline. Do not recreate another Wallet service.
 - No signed APK, live provider settlement, actual schema migration or client/provider test is claimed from this docs-only plan.
 - Owner exclusions are release-invariant: no merchant-commerce or card UI/API, no invented Room-type selector, no additional root tabs or second membership/financial ledger.
+
+## Paid Updates and unified human/P2P identity acceptance additions
+
+| Gate | Requirement | Positive and adversarial proof |
+|---|---|---|
+| AC31 | P5-U01–U04 | New Updates visible root name, old status links work, mixed human/Masana cursor with accurate author profiles, no first-class Videos tab, video player/catalogue retained |
+| AC32 | P5-U05 | Human post fee initially unavailable until price policy approved; exact server quote/digest, one idempotent MSNW reserve/capture, moderation approval before publish, refund/compensate on reject or timeout; liker/commenter charged nothing |
+| AC33 | P5-U06–U08 | Offline/cache/author block/media privacy, real likes/comments and canonical post ID in Feed and profile, native video provider gating and actual device proof |
+| AC34 | P4-A01–A02 | Phone six-digit password vs email OTP server choice, code paste/expiry, recovery no session creation, account switch/deep link preserved, Updates label |
+| AC35 | P4-16–17/P7-P03 | /u human identity shared by Updates, Chats, Rooms, seller row and P2P; real verified 30-day stats or insufficient history; no merchant profile or leaked bank |
+| AC36 | P7-P01–P10 | Buy/Sell main filter, Orders/My Offers secondary, seller quote/order escrow, buyer claimed paid != settlement, seller checked bank, disputes, activity and immutable Wallet receipt, multi-device/replay/provider verified |
