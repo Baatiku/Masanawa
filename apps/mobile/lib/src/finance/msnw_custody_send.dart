@@ -1,6 +1,8 @@
 import 'wallet_flow_page.dart';
 import 'msnw_wallet_home.dart' show formatWalletAtomic;
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -50,17 +52,65 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
   String? key;
   String? error;
   bool busy = false;
+  Timer? lookupTimer;
+  int lookupGeneration = 0;
+  bool lookingUp = false;
+  Map<String, dynamic>? recipientCard;
+  String? lookupError;
+
+  void recipientChanged() {
+    invalidate();
+    lookupTimer?.cancel();
+    final run = ++lookupGeneration;
+    setState(() { recipientCard = null; lookupError = null; lookingUp = false; });
+    final value = recipient.text.trim();
+    if (!RegExp(r'^8[0-9]{9}$|^8[0-9]{3} [0-9]{3} [0-9]{3}$|^@[a-zA-Z0-9_][a-zA-Z0-9._-]{1,39}$|^[^\s@]+@[^\s@]+\.[^\s@]+$|^\+[1-9][0-9]{6,14}$').hasMatch(value)) return;
+    lookupTimer = Timer(const Duration(milliseconds: 300), () => lookupRecipient(value, run));
+  }
+
+  Future<void> lookupRecipient(String value, int run) async {
+    final token = widget.accessToken()?.trim();
+    if (token == null || token.isEmpty || !sameSession(token)) return;
+    setState(() { lookingUp = true; lookupError = null; });
+    try {
+      final response = await widget.dio.get<dynamic>(
+        '${widget.baseUrl.replaceFirst(RegExp(r'/$'), '')}/v1/wallet/lookup',
+        queryParameters: {'query': value}, options: headers(token));
+      if (!sameSession(token) || run != lookupGeneration) return;
+      final raw = response.data;
+      if (raw is! Map || raw['found'] != true || raw['userId'] is! String || raw['displayName'] is! String) {
+        throw const FormatException('Invalid recipient');
+      }
+      setState(() => recipientCard = raw.cast<String, dynamic>());
+    } catch (_) {
+      if (sameSession(token) && run == lookupGeneration) setState(() =>
+        lookupError = 'Recipient unavailable. Check the account number or handle and retry.');
+    } finally {
+      if (mounted && run == lookupGeneration) setState(() => lookingUp = false);
+    }
+  }
+
+  Future<void> pasteRecipient() async {
+    final token = widget.accessToken()?.trim();
+    if (token == null || !sameSession(token) || busy) return;
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!sameSession(token) || busy) return;
+    final value = data?.text?.trim();
+    if (value != null && value.length <= 320) recipient.text = value;
+  }
+
 
   @override
   void initState() {
     super.initState();
-    recipient.addListener(invalidate);
+    recipient.addListener(recipientChanged);
     quantity.addListener(invalidate);
     WidgetsBinding.instance.addPostFrameCallback((_) => restorePending());
   }
   @override
   void dispose() {
-    recipient.removeListener(invalidate);
+    lookupTimer?.cancel();
+    recipient.removeListener(recipientChanged);
     quantity.removeListener(invalidate);
     recipient.dispose();
     quantity.dispose();
@@ -86,7 +136,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     if (busy || widget.currentUserId() != widget.expectedUserId) return;
     final atomic = parseMsnwMicro(quantity.text);
     if (atomic == null || recipient.text.trim().isEmpty) {
-      setState(() => error = 'Enter a recipient email or +234 phone and a positive '
+      setState(() => error = 'Enter a Masanawa account number or @handle and a positive '
         'MSNW amount with up to six decimal places.');
       return;
     }
@@ -304,14 +354,29 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           icon:Icons.north_east_rounded),
         if (receipt == null && pending == null) ...[
           WalletFormSection(title:'1. Recipient',children:[
-            TextField(controller: recipient, enabled: !busy,
+            TextField(controller: recipient, enabled: !busy, maxLength: 320,
               textInputAction: TextInputAction.next,
-              keyboardType: TextInputType.emailAddress,
+              keyboardType: TextInputType.text,
               decoration: const InputDecoration(
                 prefixIcon:Icon(Icons.person_outline),
-                labelText:'Recipient email or +234 phone',
-                helperText:'Use the registered email or full international phone number.',
+                labelText:'Masanawa account number or @handle',
+                helperText:'10-digit account number starting with 8. Email and international phone also supported.',
                 helperMaxLines:3)),
+            Align(alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(onPressed: busy ? null : pasteRecipient,
+                icon: const Icon(Icons.content_paste), label: const Text('Paste recipient'))),
+            if (lookingUp) const LinearProgressIndicator(),
+            if (lookupError != null) ...[
+              Text(lookupError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              TextButton(onPressed: lookingUp || busy ? null : () =>
+                lookupRecipient(recipient.text.trim(), ++lookupGeneration), child: const Text('Retry lookup')),
+            ],
+            if (recipientCard != null) ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(recipientCard!['displayName'] as String),
+              subtitle: Text(recipientCard!['handle'] is String
+                ? '@${recipientCard!['handle']}' : 'Masanawa recipient'),
+            ),
           ]),
           WalletFormSection(title:'2. Amount',children:[
             TextField(controller: quantity, enabled: !busy,
@@ -341,7 +406,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           ]),
         ] else if (preview != null && receipt == null) ...[
           ListTile(title: Text(preview!['recipientName'] as String),
-            subtitle: const Text('Verified recipient for this transfer')),
+            subtitle: const Text('Recipient confirmed for this transfer')),
 
           FilledButton(onPressed: busy ? null : send,
             child: const Text('Review and confirm')),

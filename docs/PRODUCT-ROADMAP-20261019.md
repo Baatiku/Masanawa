@@ -205,6 +205,11 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 - [ ] VERIFY — Signing/provenance, upgrade/rollback, incorrect network, pending/failed/reorg and restored ledger/chain reconciliation under failure.
 **Screen/journey contract:** Wallet → Fund/Send/Receive/Convert/History/Asset → review → authorized settlement → receipt → fresh verified balance. Every operation requires exact, single-use, user-confirmed authorization and recoverable idempotency.
 
+### Wallet guide implementation checkpoint — 20 October 2026
+**PARTIAL_IMPLEMENTATION** of [the owner wallet guide](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md): corrected account-number/@handle parsing on the canonical MSNW Send authority; active-account, block and moderation filtering; authenticated no-store account-number read; forward-only assignment/backfill migration 0114 that preserves assigned IDs and financial records; mobile account-number copy badge and debounced recipient inquiry with explicit Paste, retry and stale-response fencing. Existing preview, exact-amount confirmation, encrypted pending request and replay-safe receipt recovery remain canonical. No competing multi-asset ledger is activated.
+
+Backend SQL tests cover assignment/reapplication, identity/privacy boundaries and account-number → preview → send → replay with balanced postings. Mobile widget coverage is authored; Flutter/Android execution and production migration/device acceptance remain open. Remaining guide scope includes the five-minute repeated-transfer warning, server-bound PIN/biometric authorization, qualified external-crypto send composition, portfolio valuation from an authoritative rate source, and chat Pay/QR integration. No fiat peg, KYC badge or provider capability is inferred from recipient lookup. Existing Phase 6 completion/verification boxes remain open.
+
 ## Phase 7 — P2P and digital services (P0/P1)
 **Outcome:** An attractive, simple marketplace and real purchases with strong fraud and settlement handling.
 - [x] SOURCE PRESENT — MSNW escrow/P2P marketplace components, merchant cards, order flows and financial recovery tests; #218 fixed 320px/200% P2P header overflow.
