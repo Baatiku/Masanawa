@@ -25,18 +25,20 @@ function at(raw: unknown): string {
     throw new MsnwCustodyError("msnw.receipt_corrupt");
   return value;
 }
-function recipient(raw: unknown) {
-  if (typeof raw !== "string") throw new MsnwCustodyError("msnw.recipient_invalid",400);
-  const value = raw.trim();
-  if (value.includes("@")) {
-    const email = value.toLowerCase();
-    if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      throw new MsnwCustodyError("msnw.recipient_invalid",400);
-    return { email, phone: null };
-  }
-  if (!/^\+[1-9][0-9]{6,14}$/.test(value))
+function recipient(raw: unknown): { accountNumber: string | null; handle: string | null; email: string | null; phone: string | null } {
+  if (typeof raw !== "string" || raw.length > 320)
     throw new MsnwCustodyError("msnw.recipient_invalid",400);
-  return { email: null, phone: value };
+  const value = raw.trim();
+  const result = { accountNumber: null, handle: null, email: null, phone: null };
+  if (/^8[0-9]{9}$/.test(value)) return { ...result, accountNumber: value };
+  if (/^8[0-9]{3} [0-9]{3} [0-9]{3}$/.test(value))
+    return { ...result, accountNumber: value.replaceAll(" ", "") };
+  if (/^@[a-zA-Z0-9_][a-zA-Z0-9._-]{1,39}$/.test(value))
+    return { ...result, handle: value.slice(1).toLowerCase() };
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+    return { ...result, email: value.toLowerCase() };
+  if (/^\+[1-9][0-9]{6,14}$/.test(value)) return { ...result, phone: value };
+  throw new MsnwCustodyError("msnw.recipient_invalid",400);
 }
 
 export function createMsnwCustodyService(pool: Pool) {
