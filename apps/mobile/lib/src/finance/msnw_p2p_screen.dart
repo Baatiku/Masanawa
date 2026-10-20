@@ -36,7 +36,7 @@ String _micro(String text) {
   final pieces = value.split('.');
   final atomic = BigInt.parse(pieces.first) * BigInt.from(1000000) +
     BigInt.parse((pieces.length == 2 ? pieces[1] : '').padRight(6, '0'));
-  if (atomic <= BigInt.zero || atomic > BigInt.from(9223372036854775807)) {
+  if (atomic <= BigInt.zero || atomic > BigInt.parse('9223372036854775807')) {
     throw const FormatException('Amount is out of range.');
   }
   return atomic.toString();
