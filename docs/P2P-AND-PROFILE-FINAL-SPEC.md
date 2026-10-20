@@ -106,4 +106,4 @@ P2P trading allowed only where real jurisdiction/provider/identity authorization
 
 **Never build** a new payment ledger, second profile identity, merchant product, card issuing, unverified P2P ratings or a visual "success" screen unrelated to custody readback.
 
-References: [Binance P2P 2026 overview](https://www.binance.com/en/academy/articles/what-is-binance-p2p-and-how-to-use-it), [Binance P2P terminology/user statistics](https://www.binance.com/en/blog/p2p/7428324997079645557), [Binance escrow and appeals](https://www.binance.com/en/blog/all/421499824684900825), [OPay benchmark](OPAY-WALLET-PAYMENT-BENCHMARK.md), [existing Masanawa P2P source](../apps/mobile/lib/src/finance/msnw_p2p_screen.dart).
+References: [Binance P2P 2026 overview](https://www.binance.com/en/academy/articles/what-is-binance-p2p-and-how-to-use-it), [Binance P2P terminology/user statistics](https://www.binance.com/en/blog/p2p/7428324997079645557), [Binance escrow and appeals](https://www.binance.com/en/blog/all/421499824684900825), [OPay source audit](AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md), [existing Masanawa P2P source](../apps/mobile/lib/src/finance/msnw_p2p_screen.dart).
