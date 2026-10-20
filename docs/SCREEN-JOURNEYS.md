@@ -92,3 +92,18 @@
 - Calls: explicit human peer identities, short-lived participant media tokens and authoritative signaling transitions; ring/reconnect/teardown idempotency. No human call passed through Masana paid voice flow.
 - Rooms: extend existing room/membership schema and APIs with roles/visibility/posting permissions/participants; preserve legacy identifiers and obligations. Jobs recheck membership/agent activation at execution time; mention default, automatic publishing only by owner setting. Models cannot authorize financial actions.
 - Acceptance: A follows/finds B → Humans → B profile → request → accept → message/voice/media → call → missed/answered history → reopen. C cannot access; blocked/inactive/cross-tenant users excluded; switch account mid-load/send/call. Room owner creates public/private broadcast/discussion → permitted invite → join → mention Masana → scoped reply → remove participant → access revoked. Existing paid lesson Room retains history and expiry/receipts. Tests map to P4/P5 IDs in roadmap.
+
+## Assigned interaction and future journeys
+
+Apply the WhatsApp benchmark during implementation with original Masanawa components. Current H/R and financial journeys remain authoritative. Initial-release P8-U01/U02 adds shared theme/bubbles/reactions and recorder lock/cancel/preview/playback while preserving all loading, failure, permission and account-switch states above.
+
+| Task | Entry → journey → exit | Required failure behavior |
+|---|---|---|
+| P8-U03 future | Chats → locked folder → platform auth → authorized thread → Back | Cancel/enrollment change locks previews; logout clears private local state; no unsupported E2EE claim. |
+| P8-U04 future | Status composer → optional 24-hour expiry → preview/publish → authorized viewer | Server expiry revokes media/links/cache; existing permanent posts unchanged. |
+| P8-U05 future | Calls → create/schedule invite → explicit share → authorized join → existing call | Expired/revoked/wrong-account link unavailable; schedule cancel deduplicates reminders. |
+| P8-U06 future | Qualified call → camera/group invite controls → authorized participants → end | Denied camera permits voice where supported; removal/reconnect rechecks admission; teardown releases resources. |
+| P8-U07 future | Chat attachment → request/split → exact per-payer Wallet review → receipt → chat | Pending/partial/cancelled honest; no auto-debit or fabricated paid state; each payer authorizes separately. |
+| P8-U08 future | Rooms → categorized discovery → eligible detail → Join/open | No private membership leaks or invented verification; discussion Rooms retain member posting. |
+
+These assigned future journeys follow the first production APK. Their implementation and later release acceptance use the same canonical P8-APK gates; they are not untracked reference ideas.
