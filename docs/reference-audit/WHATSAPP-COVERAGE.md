@@ -9,7 +9,7 @@
 | Human/Masana messaging, profiles, chat operations | 51 chat + 14 profile | P4-12 | P0 communication: real two-account user, privacy, durable backend receipt |
 | Media and complete WhatsApp-quality voice notes | 36 | P4-13 | P0: records, media auth, restart/permission/cancellation |
 | Human/Masana voice/video, group calls and handoff | 42 | P4-14 | P0 voice, P1 video and guest/handoff: real multi-device LiveKit/FCM |
-| Status from humans, creators and Masana | 32 | P5-S01 | P0 social; preview/view/read/privacy/expiry with real multi-account media |
+| **Updates** social feed from humans and Masana, replacing WhatsApp Status behavior | 32 WhatsApp candidates individually reclassified to adapted or owner-excluded | P5-U01–U08 | P0: one Facebook-style persistent feed, qualified paid human publishing, retained video; NO story rings/24-hour expiry |
 | Privacy, E2EE requirements, blocks and account safety | 30 | P4-15 / P8-X03 | P0; do not assert E2EE without audited protocol/device/key proof |
 | Linked devices, cross-device history, backups, web/tablets | 26 | P8-X07 | P1 with P0 account fence/revocation/restore |
 | AI in communication and scoped continuity | 18 | P5-R18 / Phase 2 carried | P0 consent, source separation, per-Room Masana access |
@@ -31,3 +31,7 @@
 - [WhatsApp Communities](https://faq.whatsapp.com/495856382464992), [Community announcement permissions](https://faq.whatsapp.com/742237357891080), [Channel capabilities](https://faq.whatsapp.com/265055289421317), [Channel privacy](https://faq.whatsapp.com/1318001139066835).
 - [Telegram topic model](https://telegram.org/blog/topics-in-groups-collectible-usernames), [Telegram July 2026 Communities](https://telegram.org/blog/communities-editor-invisible-messages) and [August 2026 welcome/messages](https://telegram.org/blog/welcome-messages-buttons-TG-13); these are Room inspiration, not WhatsApp decompiled evidence.
 - The same five tabs remain Chats / Status / Wallet / Calls / Rooms. One-to-one remains in Chats; group/community/channel functionality is inside one creator-configurable Room.
+
+## LATEST owner override: Status patterns rejected (20 October 2026)
+
+The old `WA-STATUS-001–032` IDs stay stable for traceability but have been **reclassified** in [FEATURE-REGISTER.csv](FEATURE-REGISTER.csv). Relevant media/reactions/author/publishing functions are **ADAPT_TO_FEED**, not copied as WhatsApp Status. Story rings, viewed/read status receipts, 24-hour expiration and archive-only stories are explicitly **EXCLUDED_OWNER**. Videos and the current approved external video player remain; only the separate top-level Videos tab within the old Status screen is removed from the target design. A normal human's Update publication must be quoted in MSNW and paid once after explicit authorization and moderation; **no fixed price is approved yet**. See [UPDATES-FEED-FINAL-SPEC.md](../UPDATES-FEED-FINAL-SPEC.md) and Phase 5 P5-U01–08. The count 267 is still a reference-row count, not a WhatsApp parity or implementation count.
