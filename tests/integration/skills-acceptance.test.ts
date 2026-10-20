@@ -39,6 +39,14 @@ describePostgres("Skills PostgreSQL 18 acceptance", () => {
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "skills-acceptance", max: 4 });
   });
   beforeEach(async () => {
+    // Each SQL acceptance assertion starts from the same deterministic
+    // empty per-file database, including optional product schemas seeded
+    // for unrelated suites by the isolated test runner.
+    for (const schema of ["agents","commerce","masana","external_videos","feed",
+      "rooms","talks","skills","identity","security","events","memory","world"]) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+
     await pool.query("DROP SCHEMA IF EXISTS skills CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");

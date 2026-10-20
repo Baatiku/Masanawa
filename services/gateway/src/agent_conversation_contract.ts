@@ -33,6 +33,17 @@ export interface AgentConversationAuthorizer {
 }
 
 export interface AgentConversationService {
+  memoryList?(input:{authorizationHeader:string|undefined;characterId:string}):
+    Promise<{automaticLearning:boolean;items:readonly {
+      memoryRecordId:string;content:string;type:string;revision:number;lifecycleRevision:number;updatedAt:string;
+      observedAt?:string;sourceKind?:string;confidence?:number;
+    }[]}>;
+  memoryPreferences?(input:{authorizationHeader:string|undefined;characterId:string;automaticLearning:boolean}):
+    Promise<{automaticLearning:boolean}>;
+  memoryCorrect?(input:{authorizationHeader:string|undefined;characterId:string;recordId:string;content:string;expectedRevision:number}):
+    Promise<void>;
+  memoryForget?(input:{authorizationHeader:string|undefined;characterId:string;recordId:string;expectedLifecycleRevision:number}):
+    Promise<void>;
   open(input: {
     readonly authorizationHeader: string | undefined;
     readonly characterId: string;

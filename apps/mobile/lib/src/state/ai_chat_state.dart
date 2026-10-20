@@ -601,6 +601,8 @@ class AiChatController extends Notifier<AiChatState> {
   bool _flushingQueue = false;
   final Map<String, StreamSubscription<AgentShellEvent>> _eventSubscriptions = {};
   final Map<String, String> _eventCursors = {};
+  final Map<String, String?> _olderHistoryCursors = {};
+  final Set<String> _loadingOlderHistory = {};
   final Map<String, ShellActionCoordinator> _actionCoordinators = {};
   final Map<String, EncryptedShellActionJournal> _actionJournals = {};
   String? _cacheOwnerId;
@@ -655,6 +657,8 @@ class AiChatController extends Notifier<AiChatState> {
       _eventSubscriptions.clear();
       _actionCoordinators.clear();
       _eventCursors.clear();
+      _olderHistoryCursors.clear();
+      _loadingOlderHistory.clear();
       state = state.copyWith(shellConfigs: {});
     });
     return const AiChatState();
@@ -710,12 +714,19 @@ class AiChatController extends Notifier<AiChatState> {
     try {
       final results = await Future.wait<dynamic>([
         transport.loadShellConfig(characterId),
-        transport.loadHistory(characterId, limit: 100),
+        transport is MasanawaAgentTransport
+          ? transport.loadHistoryPage(characterId,limit:100)
+          : transport.loadHistory(characterId, limit: 100),
       ]);
       if (_disposed || generation != _connectionGeneration ||
           threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
       final config = results[0] as AgentShellConfig;
-      final history = results[1] as List<AgentHistoryMessage>;
+      final loaded=results[1];
+      final history=loaded is AgentHistoryPage
+        ? loaded.messages : loaded as List<AgentHistoryMessage>;
+      if(loaded is AgentHistoryPage) {
+        _olderHistoryCursors[characterId]=loaded.nextCursor;
+      }
       state = state.copyWith(
         shellConfigs: {...state.shellConfigs, characterId: config},
       );
@@ -773,6 +784,52 @@ class AiChatController extends Notifier<AiChatState> {
     } catch (_) {
       // A cached conversation remains usable while the canonical service is unavailable.
     }
+  }
+
+  /// Fetch older server messages without losing the visible local timeline.
+  /// Owner/connection/generation checks prevent delayed cross-account data.
+  Future<bool> loadEarlierHistory(String characterId) async {
+    final transport=_shellTransport;
+    if(transport is! MasanawaAgentTransport || await _offlineNow())return false;
+    final cursor=_olderHistoryCursors[characterId];
+    if(cursor==null || _loadingOlderHistory.contains(characterId))return false;
+    final owner=_cacheOwnerId;
+    final ownerGeneration=_cacheGeneration;
+    final connection=_connectionGeneration;
+    final threadGeneration=_threadGenerations[characterId]??0;
+    _loadingOlderHistory.add(characterId);
+    try {
+      final page=await transport.loadHistoryPage(characterId,limit:100,before:cursor);
+      if(_disposed || owner!=_cacheOwnerId || ownerGeneration!=_cacheGeneration ||
+         connection!=_connectionGeneration || threadGeneration!=(_threadGenerations[characterId]??0))
+        return false;
+      _olderHistoryCursors[characterId]=page.nextCursor;
+      _mergeServerHistory(characterId,page.messages);
+      if(page.messages.isNotEmpty){
+        unawaited(_restorePrivateHistoryMedia(characterId,page.messages,transport).then((remoteMedia){
+          if(_disposed || owner!=_cacheOwnerId || ownerGeneration!=_cacheGeneration ||
+            connection!=_connectionGeneration ||
+            threadGeneration!=(_threadGenerations[characterId]??0) ||
+            remoteMedia.isEmpty)return;
+          final thread=threadOf(characterId);
+          state=state.copyWith(threads:{
+            ...state.threads,
+            characterId:thread.copyWith(messages:[
+              for(final message in thread.messages)
+                if(message.requestId!=null &&
+                   remoteMedia.containsKey((message.isUser?'user':'assistant')+':'+message.requestId!))
+                  message.copyWith(attachments:remoteMedia[
+                    (message.isUser?'user':'assistant')+':'+message.requestId!]!)
+                else message,
+            ]),
+          });
+          unawaited(_save());
+        }).catchError((Object _){}));
+      }
+      unawaited(_save());
+      return page.messages.isNotEmpty;
+    } catch (_) { return false; }
+    finally { _loadingOlderHistory.remove(characterId); }
   }
 
   Future<ChatAttachment> _cacheOneRemoteMedia(
@@ -2543,6 +2600,7 @@ class AiChatController extends Notifier<AiChatState> {
     final subscriptions = [..._eventSubscriptions.values];
     _eventSubscriptions.clear();
     _eventCursors.clear();
+    _olderHistoryCursors.clear();
     state = state.copyWith(threads: {}, sendingIn: {}, shellConfigs: {});
     await _save();
     await Future.wait([
@@ -2712,6 +2770,7 @@ class AiChatController extends Notifier<AiChatState> {
     final subscriptions = [..._eventSubscriptions.values];
     _eventSubscriptions.clear();
     _eventCursors.clear();
+    _olderHistoryCursors.clear();
     state = state.copyWith(
       threads: {},
       sendingIn: {},

@@ -9,7 +9,7 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
+import { createPostgresServiceDependency, createPostgresConsumerReflectionRuntime, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, createPgTeacherQueue, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import { createRoomTeacherRuntime } from "./jobs/rooms/runtime.js";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import {createRoomReplyNoticeRuntime} from "./jobs/rooms/notifications_runtime.js";
@@ -29,6 +29,7 @@ import { createGeminiRoomAnswerModel } from "./jobs/rooms/gemini_room_model.js";
 import { createAccountDeletionFinancialClearance, createAccountDeletionPrivacyWorker } from "./jobs/privacy/account_deletion.js";
 import { createDurableJobHealth } from "./jobs/durable_health.js";
 import { createStaleConversationTurnRecovery } from "./jobs/conversations/stale_turns.js";
+import { createConsumerMemoryCatchup } from "./jobs/conversations/memory_catchup.js";
 import {
   createWorkerApp,
   type WorkerAppOptions,
@@ -133,6 +134,8 @@ export async function startWorkerService(
   let msnwMerchantSettlements: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let privacyDeletion: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let conversationRecovery: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let consumerMemoryCatchup: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let consumerReflection: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
 
   let app: ManagedNodeServer;
   try {
@@ -146,6 +149,22 @@ export async function startWorkerService(
       onError: () => process.stderr.write(JSON.stringify({
         event: "masana_chat.recovery_pending", reason: "database_unavailable",
       }) + "\n"),
+    });
+    const memoryCatchup = createConsumerMemoryCatchup(database.pool);
+    consumerMemoryCatchup = createYouTubeOutboxScheduler({
+      runOnce:memoryCatchup.runOnce,
+      enabled:()=>!drain.isDraining(),
+      intervalMs:60_000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"masana_memory.catchup_retry",reason:"database_unavailable",
+      })+"\n"),
+    });
+    const reflection=createPostgresConsumerReflectionRuntime(database.pool);
+    consumerReflection=createYouTubeOutboxScheduler({
+      runOnce:reflection.runOnce,enabled:()=>!drain.isDraining(),intervalMs:120_000,
+      onError:()=>process.stderr.write(JSON.stringify({
+        event:"masana_memory.reflection_retry",reason:"database_unavailable",
+      })+"\\n"),
     });
     // Account deletion only after exact financial clearance and owner OTP.
     const accessRevoker = createPostgresAccountDeletionAccessRevoker(
@@ -385,6 +404,8 @@ export async function startWorkerService(
         schedulerHealth("p2p_custody_audit", p2pAudit),
         schedulerHealth("privacy_deletion", privacyDeletion),
         schedulerHealth("masana_chat_recovery", conversationRecovery),
+        schedulerHealth("masana_memory_catchup", consumerMemoryCatchup),
+        schedulerHealth("masana_memory_reflection", consumerReflection),
       ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
@@ -421,6 +442,8 @@ export async function startWorkerService(
         await p2pAudit?.stop();
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
+        await consumerMemoryCatchup?.stop();
+        await consumerReflection?.stop();
         await roomReview?.stop();
         await database.close();
       },
@@ -441,6 +464,8 @@ export async function startWorkerService(
     p2pAudit?.start();
     privacyDeletion?.start();
     conversationRecovery?.start();
+    consumerMemoryCatchup?.start();
+    consumerReflection?.start();
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
@@ -454,6 +479,8 @@ export async function startWorkerService(
     await p2pAudit?.stop();
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
+        await consumerMemoryCatchup?.stop();
+        await consumerReflection?.stop();
     await roomReview?.stop();
     await database.close().catch(() => undefined);
     throw error;

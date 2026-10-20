@@ -64,6 +64,12 @@ export function characterSessionMigrationRoots(): readonly MigrationRoot[] {
 export function platformProductMigrationRoots(): readonly MigrationRoot[] {
   return Object.freeze([
     ...characterSessionMigrationRoots(),
+    // Production Masana agents require canonical Memory, consumer consent,
+    // durable receipts and erasable source-linked summaries at startup.
+    Object.freeze({
+      owner: "memory",
+      directory: packageMigrationDirectory("@masanawa/memory"),
+    }),
     Object.freeze({
       owner: "commerce",
       directory: packageMigrationDirectory("@masanawa/commerce"),

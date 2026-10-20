@@ -154,6 +154,8 @@ describe("Alpha conversation service", () => {
     const strategy: AgentStrategy = {
       async execute(input) {
         expect(input.presentation.displayName).toBe("Amina");
+        expect(input.rememberedFacts).toEqual(input.input.kind==="media"
+          ? [] : ["I prefer calm explanations"]);
         expect(input.conversationHistory).toEqual([{role:"user",text:"Remember the fruit mango"},{role:"assistant",text:"Mango is our fruit"}]);
         expect(input.presentation.roleLabel).toBe("Research Assistant");
         if (input.input.kind === "text") {
@@ -170,7 +172,10 @@ describe("Alpha conversation service", () => {
     };
 
     const render=vi.fn(async()=>({dataBase64:"AAAAAA==",mimeType:"audio/pcm;rate=24000",durationMs:1}));
+    const remembered=vi.fn(async(_scope:CharacterSessionScope,_query:string)=>["I prefer calm explanations"]);
+    const stored=vi.fn(async(_scope:CharacterSessionScope,_source:{requestId:string;text:string})=>true);
     const service = createAgentConversationService({
+      memory:{recall:remembered,ingest:stored} as never,
       sessions,
       runs,
       authorizer,
@@ -222,6 +227,10 @@ describe("Alpha conversation service", () => {
       correlationId: createCanonicalId("correlation"),
     });
     expect(mediaSet.reply).toBe("I reviewed both attachments.");
+    expect(remembered).toHaveBeenCalledTimes(2);
+    for(const call of remembered.mock.calls)expect(call[0]).toEqual(f.scope);
+    expect(stored).toHaveBeenCalledTimes(2);
+    expect(stored.mock.calls[0]?.[0]).toEqual(f.scope);
     expect(listHistory).toHaveBeenCalledTimes(3);
     for(const call of listHistory.mock.calls) expect(call[0]).toEqual({scope:f.scope,limit:16});
     expect(render).toHaveBeenNthCalledWith(1,"Text: hello",undefined,undefined,{voiceName:"Fora"});

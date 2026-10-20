@@ -32,6 +32,14 @@ describePostgres("CharacterSession PostgreSQL 18 acceptance", () => {
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "sessions-acceptance", max: 5 });
   });
   beforeEach(async () => {
+    // Each SQL acceptance assertion starts from the same deterministic
+    // empty per-file database, including optional product schemas seeded
+    // for unrelated suites by the isolated test runner.
+    for (const schema of ["agents","commerce","masana","external_videos","feed",
+      "rooms","talks","skills","identity","security","events","memory","world"]) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+
     for (const schema of ["agents", "identity", "skills", "security", "events"]) await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await pool.query("DROP TABLE IF EXISTS public.masanawa_schema_migrations");
     await runMigrations(pool, characterSessionMigrationRoots());

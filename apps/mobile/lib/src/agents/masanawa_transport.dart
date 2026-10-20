@@ -857,6 +857,19 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     ];
   }
 
+  /// Efficient, authenticated keyset paging for the user's older Masana turns.
+  Future<AgentHistoryPage> loadHistoryPage(
+    String characterId, {int limit=100,String? before}
+  ) async {
+    if(limit<1 || limit>199)throw const ApiException('History page size invalid');
+    final query=<String,String>{
+      'characterId':characterId,'limit':'$limit',
+      if(before!=null && before.isNotEmpty)'before':before,
+    };
+    final result=await _client.get('/agent/history/page?'+Uri(queryParameters:query).query);
+    return AgentHistoryPage.fromJson(result);
+  }
+
   @override
   Future<AgentTurnStatus> turnStatus(
     String characterId,

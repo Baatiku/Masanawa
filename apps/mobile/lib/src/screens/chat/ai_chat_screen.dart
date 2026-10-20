@@ -22,6 +22,7 @@ import 'package:audio_session/audio_session.dart';
 
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
+import '../../agents/masana_memory.dart';
 import '../../chat/chat_format.dart';
 import '../../chat/chat_emoji_panel.dart';
 import '../../chat/chat_text_editing.dart';
@@ -1396,6 +1397,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   }
                 }
                 if (!context.mounted) return;
+                if (value == 'older') {
+                  final loaded=await ctl.loadEarlierHistory(widget.characterId);
+                  if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content:Text(loaded ? 'Earlier messages loaded.' : 'No earlier messages available, or you are offline.'),
+                  ));
+                }
+                if (value == 'memory') {
+                  await Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => MasanaMemoryScreen(
+                      characterId: widget.characterId,
+                      characterName: agent.displayName,
+                    ),
+                  ));
+                }
                 if (value == 'activity') widget.onOpenActivity?.call();
                 if (value == 'profile') _openMasanaProfile(agent);
                 if (value == 'room' && agent.roomId != null) {
@@ -1421,6 +1436,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   PopupMenuItem(value: 'profile', child: Text('Profile')),
                   PopupMenuDivider(),
                 ],
+                const PopupMenuItem(value: 'memory', child: Text('What this Masana remembers')),
+                const PopupMenuItem(value: 'older', child: Text('Load earlier messages')),
                 const PopupMenuItem(value: 'new', child: Text('New context')),
                 const PopupMenuItem(value: 'rename', child: Text('Rename chat')),
                 const PopupMenuItem(value: 'pin', child: Text('Pin / unpin')),

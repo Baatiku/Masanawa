@@ -170,6 +170,14 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
   });
 
   beforeEach(async () => {
+    // Each SQL acceptance assertion starts from the same deterministic
+    // empty per-file database, including optional product schemas seeded
+    // for unrelated suites by the isolated test runner.
+    for (const schema of ["agents","commerce","masana","external_videos","feed",
+      "rooms","talks","skills","identity","security","events","memory","world"]) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
@@ -206,6 +214,8 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "memory/0005_memory_multisignal_projections.sql",
       "memory/0006_memory_tombstones.sql",
       "memory/0007_memory_reflections.sql",
+      "memory/0008_consumer_masana_memory.sql",
+      "memory/0009_consumer_reflection_progress.sql",
       "security/0001_security_foundation.sql",
       "security/0002_approval_operation_integrity.sql",
       "security/0003_service_credentials.sql",

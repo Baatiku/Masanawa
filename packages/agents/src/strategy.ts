@@ -45,6 +45,8 @@ export type AgentConversationRepresentation = "platform-agent" | "public-twin";
 
 export interface AgentStrategyRequest {
   readonly conversationHistory?: readonly AgentConversationHistoryMessage[];
+  /** Authorized active relationship memories, untrusted evidence, never capabilities. */
+  readonly rememberedFacts?: readonly string[];
   readonly onTextDelta?: (delta: string) => void | Promise<void>;
   readonly surface?: AgentConversationSurface;
   readonly representation?: AgentConversationRepresentation;

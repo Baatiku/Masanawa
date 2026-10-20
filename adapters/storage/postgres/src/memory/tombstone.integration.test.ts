@@ -76,6 +76,14 @@ describePostgres("PostgreSQL memory tombstone propagation", () => {
   });
 
   beforeEach(async () => {
+    // Each SQL acceptance assertion starts from the same deterministic
+    // empty per-file database, including optional product schemas seeded
+    // for unrelated suites by the isolated test runner.
+    for (const schema of ["agents","commerce","masana","external_videos","feed",
+      "rooms","talks","skills","identity","security","events","memory","world"]) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+
     // Authority is checked against application time; fixture expiry must not age
     // with the CI calendar. Keep real timers for PostgreSQL I/O.
     vi.useFakeTimers({ toFake: ["Date"] });

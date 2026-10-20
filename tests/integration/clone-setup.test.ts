@@ -23,6 +23,14 @@ describe.skipIf(!connectionString)("clone setup PostgreSQL 18 acceptance", () =>
     pool = createPostgresPool({ connectionString: databaseUrl, applicationName: "clone-setup-test", max: 4 });
   });
   beforeEach(async () => {
+    // Each SQL acceptance assertion starts from the same deterministic
+    // empty per-file database, including optional product schemas seeded
+    // for unrelated suites by the isolated test runner.
+    for (const schema of ["agents","commerce","masana","external_videos","feed",
+      "rooms","talks","skills","identity","security","events","memory","world"]) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP TABLE IF EXISTS public.masanawa_schema_migrations");
     await runMigrations(pool, [{ owner: "identity", directory: fileURLToPath(new URL("../../packages/identity/migrations", import.meta.url)) }]);
