@@ -11,7 +11,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 70
     services:
       postgres:
         image: pgvector/pgvector:0.8.6-pg18
@@ -43,15 +43,16 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
-      - name: Test
-        # PostgreSQL integration suites share a disposable schema; concurrent
-        # migration and teardown races cause false failures (42P07/42P01).
-        run: pnpm exec vitest run --no-file-parallelism
+      - name: Build workspace for production-conditioned PostgreSQL suites
+        run: pnpm build
+      - name: Unit and PGlite tests
+        # Real PostgreSQL suites execute below against isolated databases.
+        run: env -u MASANAWA_TEST_DATABASE_URL pnpm exec vitest run --no-file-parallelism
+      - name: Actual PostgreSQL 18 integration (isolated databases)
+        run: node --conditions=production adapters/storage/postgres/scripts/run-isolated-postgres-suites.mjs
       - name: Provider qualification tooling tests
         run: >-
           node --test
           scripts/flutterwave-billing-qualification-gate.test.mjs
           scripts/flutterwave-billing-production-qualification.test.mjs
           scripts/nowpayments-production-qualification.test.mjs
-      - name: Build
-        run: pnpm build
