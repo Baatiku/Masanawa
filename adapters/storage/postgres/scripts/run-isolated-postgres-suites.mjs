@@ -57,6 +57,8 @@ async function suite(file,index){
   try{
     const source=await readFile(file,'utf8');
     const customSchema=source.includes('DROP SCHEMA') ||
+      file.endsWith('/external_videos/repository.integration.test.ts') ||
+      file.endsWith('/home_feed/feed.integration.test.ts') ||
       source.includes('CREATE DATABASE') ||
       file.endsWith('/home_feed/af00_migrations.integration.test.ts');
     if(!customSchema){
