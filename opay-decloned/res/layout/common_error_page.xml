@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/osdk_color_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/error_icon" android:padding="@dimen/content_padding_smaller" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toTopOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="parent" app:srcCompat="@drawable/ic_history_error" />
+    <TextView android:gravity="center" android:id="@id/error_details" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/coupons_error" android:layout_below="@id/error_icon" android:layout_centerHorizontal="true" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/error_icon" style="@style/WalletFilterDateBarTextView" />
+</androidx.constraintlayout.widget.ConstraintLayout>

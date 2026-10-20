@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <team.opay.core.widget.ValidationTextView android:textSize="18.0sp" android:textColor="@color/black_85" android:gravity="center" android:id="@id/code_view" android:background="@drawable/common_bg_fix_code_field_item" android:focusable="false" android:clickable="false" android:longClickable="false" android:layout_width="match_parent" android:layout_height="match_parent" android:minWidth="40.0dp" android:minHeight="40.0dp" android:includeFontPadding="false" android:maxLength="1" android:fontFamily="@font/roboto_bold" />
+    <ImageView android:layout_gravity="center" android:id="@id/cursor" android:background="#1dcf9f" android:focusable="false" android:visibility="gone" android:layout_width="@dimen/common_code_field_cursor_width" android:layout_height="@dimen/common_code_field_cursor_height" />
+</FrameLayout>

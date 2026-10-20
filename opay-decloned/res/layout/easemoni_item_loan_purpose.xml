@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="@dimen/okash_dimen_12" android:paddingTop="@dimen/okash_dimen_6" android:paddingRight="@dimen/okash_dimen_9" android:paddingBottom="@dimen/okash_dimen_6" android:layout_width="match_parent" android:layout_height="@dimen/okash_dimen_40"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textAppearance="?android:textAppearanceListItemSmall" android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_42526e" android:gravity="center_vertical" android:id="@id/tv_item" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" />
+    <TextView android:textAppearance="?android:textAppearanceListItemSmall" android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_42526e" android:gravity="center_vertical" android:id="@id/tv_item_checked" android:visibility="gone" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" android:fontFamily="sans-serif-medium" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/iv_checked" android:layout_width="wrap_content" android:layout_height="wrap_content" android:tint="@color/easemoni_color_theme" app:srcCompat="@drawable/easemoni_ic_ok_check" />
+</LinearLayout>

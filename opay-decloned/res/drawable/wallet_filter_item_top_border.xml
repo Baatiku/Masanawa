@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:top="8.0dp">
+        <shape>
+            <stroke android:width="1.0dp" android:color="@color/transaction_title_background" />
+        </shape>
+    </item>
+    <item android:top="9.0dp">
+        <shape>
+            <solid android:color="@color/osdk_color_white" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.pay.kyc.view.ZoomImageView android:id="@id/zoom_image" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="120.0dp" android:adjustViewBounds="true" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@mipmap/osdk_ic_net_error" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/preview_close" android:visibility="gone" android:layout_width="32.0dp" android:layout_height="32.0dp" android:layout_marginTop="24.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/zoom_image" app:layout_constraintVertical_bias="0.0" app:srcCompat="@mipmap/ic_close_round" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <ripple android:color="?android:colorControlHighlight">
+            <item android:id="@android:id/mask">
+                <shape>
+                    <corners android:radius="12.0dp" />
+                    <solid android:color="@color/black" />
+                </shape>
+            </item>
+            <item>
+                <shape>
+                    <corners android:radius="12.0dp" />
+                    <solid android:color="@color/flow_e2f5eb" />
+                </shape>
+            </item>
+        </ripple>
+    </item>
+    <item>
+        <ripple android:color="?android:colorControlHighlight">
+            <item android:id="@android:id/mask">
+                <shape>
+                    <corners android:radius="12.0dp" />
+                    <solid android:color="@color/black" />
+                </shape>
+            </item>
+            <item>
+                <shape>
+                    <corners android:radius="12.0dp" />
+                    <solid android:color="@color/flow_select_tn_item" />
+                </shape>
+            </item>
+        </ripple>
+    </item>
+</selector>

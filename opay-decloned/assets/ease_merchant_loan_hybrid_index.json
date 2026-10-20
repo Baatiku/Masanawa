@@ -1,0 +1,37 @@
+[
+  {
+    "remoteUrl":"/npm/vant@4.8.0/lib/index.min.css",
+    "path":"easemerchant/css/index.min.css",
+    "mineType":"text/css"
+  },
+  {
+    "remoteUrl":"/npm/vue-demi@0.14.6/lib/index.iife.min.js",
+    "path":"easemerchant/js/index.iife.min.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/npm/jsencrypt@2.3.0/bin/jsencrypt.min.js",
+    "path":"easemerchant/js/jsencrypt.min.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/npm/pinia@2.1.7/dist/pinia.iife.min.js",
+    "path":"easemerchant/js/pinia.iife.min.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/npm/vant@4.8.0/lib/vant.global.min.js",
+    "path":"easemerchant/js/vant.global.min.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/npm/vue@3.3.10/dist/vue.global.min.js",
+    "path":"easemerchant/js/vue.global.min.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/npm/vue-router@4.2.5/dist/vue-router.global.min.js",
+    "path":"easemerchant/js/vue-router.global.min.js",
+    "mineType":"application/javascript"
+  }
+]

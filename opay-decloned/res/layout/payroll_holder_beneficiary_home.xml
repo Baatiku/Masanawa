@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.business.widget.shimmer.CorpShimmerConstraintLayout android:background="@color/opb_white" android:layout_width="match_parent" android:layout_height="wrap_content" app:corp_corners="12.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.business.widget.shimmer.CorpShimmerView android:id="@id/holderRecent" android:layout_width="80.0dp" android:layout_height="24.0dp" android:layout_margin="16.0dp" app:corp_corners="12.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" style="@style/commonShimmer" />
+    <team.opay.business.widget.shimmer.CorpShimmerView android:id="@id/holderFavorite" android:layout_width="80.0dp" android:layout_height="24.0dp" android:layout_marginStart="27.0dp" app:corp_corners="12.0dp" app:layout_constraintStart_toEndOf="@id/holderRecent" app:layout_constraintTop_toTopOf="@id/holderRecent" style="@style/commonShimmer" />
+    <include android:id="@id/holderItem1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dp" app:layout_constraintTop_toBottomOf="@id/holderRecent" layout="@layout/payroll_holder_beneficiary_item" />
+    <include android:id="@id/holderItem2" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toBottomOf="@id/holderItem1" layout="@layout/payroll_holder_beneficiary_item" />
+    <include android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toBottomOf="@id/holderItem2" layout="@layout/payroll_holder_beneficiary_item" />
+</team.opay.business.widget.shimmer.CorpShimmerConstraintLayout>

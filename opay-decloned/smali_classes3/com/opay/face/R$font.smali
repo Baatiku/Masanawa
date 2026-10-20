@@ -1,0 +1,28 @@
+.class public final Lcom/opay/face/R$font;
+.super Ljava/lang/Object;
+
+
+# static fields
+.field public static final live_face_roboto_400:I = 0x7f090000
+
+.field public static final live_face_roboto_500:I = 0x7f090001
+
+.field public static final live_face_roboto_600:I = 0x7f090002
+
+.field public static final swarm_roboto_400:I = 0x7f090024
+
+.field public static final swarm_roboto_500:I = 0x7f090025
+
+
+# direct methods
+.method private constructor <init>()V
+    .locals 0
+
+    .line 1
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    .line 2
+    .line 3
+    .line 4
+    return-void
+.end method

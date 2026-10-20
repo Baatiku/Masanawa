@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.core.widget.fillet.CorpConstraintLayout android:background="#fff5e8" android:paddingTop="8.0dp" android:paddingBottom="8.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="8.0dp" android:paddingEnd="16.0dp" app:corp_corners="4.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/iconTip" android:layout_width="16.0dp" android:layout_height="16.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/common_svg_notice" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="#ff9100" android:id="@id/tv_content" android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="4.0dp" android:fontFamily="@font/roboto_regular" android:layout_marginStart="4.0dp" app:layout_constrainedWidth="true" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toEndOf="@id/iconTip" app:layout_constraintTop_toTopOf="parent" />
+</team.opay.core.widget.fillet.CorpConstraintLayout>

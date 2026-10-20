@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="@dimen/easemoni_tv_size_18" android:textColor="@color/easemoni_color_d9000000" android:gravity="center" android:id="@id/tv_diclist_title" android:background="@drawable/easemoni_bg_top_corner_12_ffffff" android:paddingTop="@dimen/easemoni_dimen_13" android:paddingBottom="@dimen/easemoni_dimen_13" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" android:paddingStart="@dimen/easemoni_dimen_16" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        <androidx.appcompat.widget.AppCompatImageView android:id="@id/acivCloseList" android:padding="@dimen/okash_dimen_8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="@dimen/okash_dimen_24" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/easemoni_ic_close" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/rv_dialog_recycle" android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="wrap_content" />
+</LinearLayout>

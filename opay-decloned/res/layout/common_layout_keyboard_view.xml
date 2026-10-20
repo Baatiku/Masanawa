@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.gridlayout.widget.GridLayout android:background="@color/divider_d8" android:padding="0.5dp" android:layout_width="match_parent" android:layout_height="match_parent" app:columnCount="3" app:orientation="horizontal" app:rowCount="4"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_1" android:text="1" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_2" android:text="2" android:layout_marginStart="0.5dp" android:layout_marginEnd="0.5dp" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_3" android:text="3" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_4" android:layout_marginTop="0.5dp" android:text="4" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_5" android:layout_marginTop="0.5dp" android:text="5" android:layout_marginStart="0.5dp" android:layout_marginEnd="0.5dp" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_6" android:layout_marginTop="0.5dp" android:text="6" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_7" android:layout_marginTop="0.5dp" android:text="7" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_8" android:layout_marginTop="0.5dp" android:text="8" android:layout_marginStart="0.5dp" android:layout_marginEnd="0.5dp" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_9" android:layout_marginTop="0.5dp" android:text="9" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_clear" android:layout_marginTop="0.5dp" android:text="C" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <androidx.appcompat.widget.AppCompatTextView android:id="@id/key_0" android:layout_marginTop="0.5dp" android:text="0" android:layout_marginStart="0.5dp" android:layout_marginEnd="0.5dp" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0" style="@style/corp_keyboard_text" />
+    <FrameLayout android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_marginTop="0.5dp" app:layout_columnWeight="1.0" app:layout_rowWeight="1.0">
+        <androidx.appcompat.widget.AppCompatImageView android:id="@id/key_image" android:background="@drawable/common_ripple_white" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="center" />
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="24.0sp" android:id="@id/key_text" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" android:includeFontPadding="false" style="@style/corp_keyboard_text" />
+    </FrameLayout>
+</androidx.gridlayout.widget.GridLayout>

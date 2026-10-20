@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:background="@drawable/ripple_white_3" android:padding="@dimen/content_padding" android:layout_width="match_parent" android:layout_height="wrap_content" android:elevation="2.0dp" android:stateListAnimator="@animator/lift_on_touch"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/notification_icon" android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/ic_notifications" app:tint="@color/purple" />
+    <TextView android:id="@id/notification_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/content_padding" android:layout_toEndOf="@id/notification_icon" style="@style/Body.Bold" />
+    <TextView android:id="@id/notification_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/notification_title" android:layout_alignStart="@id/notification_title" style="@style/Caption" />
+    <TextView android:id="@id/notification_message" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/content_padding_small" android:layout_below="@id/notification_time" android:layout_alignStart="@id/notification_title" style="@style/Caption.Italic" />
+    <ImageView android:id="@id/notification_delete" android:background="?selectableItemBackgroundBorderless" android:padding="@dimen/content_padding_small" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="-8.0dp" android:contentDescription="@string/delete_notification_content_description" android:layout_alignParentEnd="true" app:srcCompat="@drawable/ic_close" app:tint="@color/blue_grey_64" />
+</RelativeLayout>

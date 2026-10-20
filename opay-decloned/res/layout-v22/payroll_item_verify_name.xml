@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/payroll_ripple_f8f8fb_12" android:paddingLeft="12.0dp" android:paddingTop="16.0dp" android:paddingRight="12.0dp" android:paddingBottom="16.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dp" android:paddingHorizontal="12.0dp" android:paddingVertical="16.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/itemRadioButton" android:layout_width="24.0dp" android:layout_height="24.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/http_selector_radio_button" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="@color/black_45" android:id="@id/itemName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16.0dp" app:fontFamily="@font/roboto_400" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toEndOf="@id/itemRadioButton" app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

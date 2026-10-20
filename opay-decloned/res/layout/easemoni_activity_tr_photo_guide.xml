@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ScrollView android:layout_width="match_parent" android:layout_height="wrap_content">
+        <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <team.opay.easemoni.widget.StatusBar android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent">
+                <FrameLayout android:id="@id/flBack" android:paddingLeft="@dimen/okash_dimen_16" android:paddingTop="@dimen/easemoni_dimen_13" android:paddingRight="@dimen/okash_dimen_16" android:paddingBottom="@dimen/easemoni_dimen_13" android:layout_width="wrap_content" android:layout_height="wrap_content">
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@id/ivBack" android:padding="@dimen/okash_dimen_10" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_ic_back" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:tint="@color/easemoni_color_222f3e" />
+                </FrameLayout>
+            </team.opay.easemoni.widget.StatusBar>
+            <ImageView android:id="@id/ivPhoto" android:layout_width="@dimen/okash_dimen_120" android:layout_height="@dimen/okash_dimen_120" android:layout_marginTop="@dimen/okash_dimen_104" android:src="@drawable/easemoni_ic_photo_guide" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+            <TextView android:textSize="@dimen/okash_tv_size_24" android:textStyle="bold" android:textColor="@color/easemoni_color_d9000000" android:id="@id/tvTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_40" android:text="@string/easemoni_photo_capture" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/ivPhoto" />
+            <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_a6000000" android:gravity="center" android:id="@id/tvDesc" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_16" android:layout_marginTop="16.0dp" android:layout_marginRight="@dimen/okash_dimen_16" android:text="@string/easemoni_photo_capture_desc" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/tvTitle" />
+            <LinearLayout android:orientation="vertical" android:id="@id/llGuide" android:background="@drawable/easemoni_bg_liveness_tips" android:padding="@dimen/okash_dimen_16" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_16" android:layout_marginTop="@dimen/okash_dimen_32" android:layout_marginRight="@dimen/okash_dimen_16" app:layout_constraintTop_toBottomOf="@id/tvDesc">
+                <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_black" android:id="@id/tvRecommend" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_photo_recommend" app:layout_constraintStart_toStartOf="parent" />
+                <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_12" app:layout_constraintTop_toBottomOf="@id/tvRecommend">
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/easemoni_ic_bright" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_stay_bright" android:layout_marginStart="@dimen/easemoni_dimen_12" />
+                    </LinearLayout>
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_12">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/easemoni_ic_face_frame" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_face_frame" android:layout_marginStart="@dimen/easemoni_dimen_12" />
+                    </LinearLayout>
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_12">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/easemoni_ic_face_cover" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_remove_face_cover" android:layout_marginStart="@dimen/easemoni_dimen_12" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <Space android:layout_width="@dimen/easemoni_dimen_20" android:layout_height="@dimen/okash_dimen_80" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/llGuide" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
+    <FrameLayout android:layout_gravity="bottom" android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Button android:textColor="@color/easemoni_color_white" android:id="@id/btnStart" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_10" android:layout_marginBottom="@dimen/okash_dimen_20" android:text="@string/easemoni_lets_start" android:textAllCaps="false" style="@style/EaseMoniLargeBtnStyle" />
+    </FrameLayout>
+</FrameLayout>

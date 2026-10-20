@@ -43,17 +43,50 @@ export function createMsnwCustodyService(pool: Pool) {
   async function resolve(owner: Owner, value: unknown,
     db?: PoolClient) {
     const identifier = recipient(value);
-    const r = await (db ?? pool).query(
-      "SELECT user_id,display_name FROM security.platform_user_profiles " +
-      "WHERE tenant_id=$1 AND (($2::text IS NOT NULL AND email=$2) OR " +
-      "($3::text IS NOT NULL AND phone=$3)) LIMIT 2",
-      [owner.tenantId,identifier.email,identifier.phone]);
-    if (r.rowCount !== 1) throw new MsnwCustodyError("msnw.recipient_not_found",404);
-    const userId = r.rows[0]?.user_id, displayName = r.rows[0]?.display_name;
+    let r;
+    if (identifier.handle) {
+      r = await (db ?? pool).query(
+        "SELECT p.user_id, p.display_name, p.masanawa_account_number, t.handle " +
+        "FROM security.platform_user_profiles p " +
+        "LEFT JOIN talks.public_profiles t ON t.tenant_id = p.tenant_id AND t.user_id = p.user_id " +
+        "WHERE p.tenant_id = $1 AND lower(t.handle) = lower($2) LIMIT 2",
+        [owner.tenantId, identifier.handle]
+      );
+    } else {
+      r = await (db ?? pool).query(
+        "SELECT p.user_id, p.display_name, p.masanawa_account_number, t.handle " +
+        "FROM security.platform_user_profiles p " +
+        "LEFT JOIN talks.public_profiles t ON t.tenant_id = p.tenant_id AND t.user_id = p.user_id " +
+        "WHERE p.tenant_id = $1 AND (" +
+        "($2::text IS NOT NULL AND p.masanawa_account_number = $2) OR " +
+        "($3::text IS NOT NULL AND p.email = $3) OR " +
+        "($4::text IS NOT NULL AND p.phone = $4)" +
+        ") LIMIT 2",
+        [owner.tenantId, identifier.accountNumber, identifier.email, identifier.phone]
+      );
+    }
+    if (r.rowCount !== 1) throw new MsnwCustodyError("msnw.recipient_not_found", 404);
+    const row = r.rows[0];
+    const userId = row?.user_id, displayName = row?.display_name;
     if (typeof userId !== "string" || typeof displayName !== "string")
-      throw new MsnwCustodyError("msnw.recipient_invalid",409);
-    if (userId === owner.userId) throw new MsnwCustodyError("msnw.send_to_self",400);
-    return { userId, displayName };
+      throw new MsnwCustodyError("msnw.recipient_invalid", 409);
+    if (userId === owner.userId) throw new MsnwCustodyError("msnw.send_to_self", 400);
+    return {
+      userId,
+      displayName,
+      accountNumber: typeof row.masanawa_account_number === "string" ? row.masanawa_account_number : null,
+      handle: typeof row.handle === "string" ? row.handle : null
+    };
+  }
+  async function lookupRecipient(owner: Owner, query: string) {
+    const target = await resolve(owner, query);
+    return Object.freeze({
+      found: true as const,
+      userId: target.userId,
+      displayName: target.displayName,
+      handle: target.handle,
+      accountNumber: target.accountNumber,
+    });
   }
   async function balance(owner: Owner) {
     const r = await pool.query(
@@ -192,6 +225,6 @@ export function createMsnwCustodyService(pool: Pool) {
       asset: "MSNW" as const, state: "completed" as const,
     })));
   }
-  return Object.freeze({ balance, preview, send, lookup, history, activity: createWalletActivity(pool) });
+  return Object.freeze({ balance, preview, send, lookup, history, lookupRecipient, activity: createWalletActivity(pool) });
 }
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:background="@drawable/easemoni_decline_item_bg" android:paddingTop="@dimen/easemoni_dimen_5" android:paddingBottom="@dimen/easemoni_dimen_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/easemoni_dimen_12" android:paddingEnd="@dimen/easemoni_dimen_12"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/decline_reason_icon" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_515f68" android:layout_gravity="center_vertical" android:id="@id/tv_declined_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/easemoni_dimen_13" />
+    <Space android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_weight="1.0" />
+    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/easemoni_right_arrow" />
+</LinearLayout>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_input_error" />
+            <solid android:color="@color/easemoni_color_white" />
+        </shape>
+    </item>
+</layer-list>

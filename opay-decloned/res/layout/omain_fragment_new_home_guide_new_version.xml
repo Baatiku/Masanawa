@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/root" android:background="@color/black_75" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ViewFlipper android:id="@id/guide_flipper" android:layout_width="match_parent" android:layout_height="match_parent">
+        <include android:id="@id/guideStep1" layout="@layout/omain_layout_home_guide_step_3" />
+        <include android:id="@id/guideStep2" layout="@layout/omain_layout_home_guide_play4a_child" />
+        <include android:id="@id/guideStep3" layout="@layout/omain_layout_home_guide_more" />
+    </ViewFlipper>
+</androidx.constraintlayout.widget.ConstraintLayout>

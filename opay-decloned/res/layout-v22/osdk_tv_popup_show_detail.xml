@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/ivArrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@mipmap/ic_beneficiary_pop_arrow" android:tint="@color/osdk_tv_pop" android:forceDarkAllowed="false" app:layout_constraintEnd_toEndOf="@id/tvNotice" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:textSize="12.0sp" android:textColor="#ffffff" android:gravity="center" android:id="@id/tvNotice" android:background="@drawable/omain_tv_pop_bg" android:padding="8.0dp" android:layout_width="200.0dp" android:layout_height="wrap_content" android:lineSpacingExtra="4.0dp" android:drawableTint="@color/black_85" android:forceDarkAllowed="false" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/ivArrow" />
+</androidx.constraintlayout.widget.ConstraintLayout>

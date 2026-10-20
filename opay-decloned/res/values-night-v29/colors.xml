@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pay_4d7d4fff">#4d936dff</color>
+    <color name="pay_7d4fff">#936dff</color>
+    <color name="pay_EFEFF5">#444444</color>
+    <color name="pay_FFF5E8">#1aff9100</color>
+    <color name="pay_black">#ffffff</color>
+    <color name="pay_black_10">#1affffff</color>
+    <color name="pay_black_25">#59ffffff</color>
+    <color name="pay_black_45">#8cffffff</color>
+    <color name="pay_black_65">#a6ffffff</color>
+    <color name="pay_black_85">#d9ffffff</color>
+    <color name="pay_btn_disable_bg">#105e47</color>
+    <color name="pay_color_00B876">#1dce9f</color>
+    <color name="pay_color_E2F5EB">#163d31</color>
+    <color name="pay_color_F8F8FB">#1b1b1b</color>
+    <color name="pay_color_f8f8f8">#1b1b1b</color>
+    <color name="pay_data_time_color">#182c26</color>
+    <color name="pay_e0f7ee">#b3191919</color>
+    <color name="pay_fce2e8">#1aff2e62</color>
+    <color name="pay_red_pink">#ff2e62</color>
+    <color name="pay_switch_track_color">#444444</color>
+    <color name="pay_white">#2c2c2c</color>
+    <color name="pay_white_65">#a6000000</color>
+</resources>

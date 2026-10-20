@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/payment_method_empty_background" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ImageView android:id="@id/item_image" android:layout_width="35.0dp" android:layout_height="35.0dp" android:layout_marginStart="@dimen/_20dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@mipmap/ic_bank_account_empty" />
+        <TextView android:textSize="14.0sp" android:textColor="@color/omain_222f3e" android:id="@id/item_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/_12dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toEndOf="@id/item_image" app:layout_constraintTop_toTopOf="parent" style="@style/AddNewPaymentOption" />
+        <ImageView android:layout_width="@dimen/_16dp" android:layout_height="@dimen/_16dp" android:layout_marginEnd="@dimen/_20dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/ic_arrow_back_right" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

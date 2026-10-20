@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.easemoni.widget.OKashActionBar android:id="@id/bank_list_action_bar" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent" app:okash_ab_bg_color="@color/easemoni_color_white" app:okash_ab_start_tint_color="@color/easemoni_color_8497a4" app:okash_ab_title="@string/easemoni_select_bank" app:okash_ab_title_color="@color/easemoni_color_222f3e" app:okash_ab_title_gravity="start" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/rv_bank" android:background="@color/easemoni_color_f8f8fb" android:layout_width="match_parent" android:layout_height="match_parent" />
+</LinearLayout>

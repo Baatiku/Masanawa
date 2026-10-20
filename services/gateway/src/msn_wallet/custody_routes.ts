@@ -27,6 +27,17 @@ export function registerMsnwCustodyRoutes(
     reply.code(mapped.statusCode);
     return { error: mapped.code };
   }
+    app.get("/v1/wallet/lookup", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    try {
+      const identity = await owner(request.headers.authorization);
+      const { query } = request.query as { query?: unknown };
+      if (typeof query !== "string" || !query.trim()) {
+        throw new MsnwCustodyError("msnw.query_required", 400);
+      }
+      return await input.ledger.lookupRecipient(identity, query.trim());
+    } catch (error) { return failed(reply, error); }
+  });
   app.get("/v1/wallet/msnw/custody", async (request, reply) => {
     try { return await input.ledger.balance(await owner(request.headers.authorization)); }
     catch (error) { return failed(reply,error); }

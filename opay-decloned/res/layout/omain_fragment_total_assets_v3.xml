@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/osdk_color_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.core.android.views.OpayActionBar android:id="@id/action_bar" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:oab_title="@string/omain_total_assets_label" app:oab_title_color="@color/text_51" style="@style/ActionBar" />
+    <View android:background="@color/color_f8f8fb" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_constrainedHeight="true" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toBottomOf="@id/action_bar" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/total_assets_list" android:paddingBottom="@dimen/_40dp" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="0.0dp" android:overScrollMode="never" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/action_bar" />
+    <team.opay.core.android.views.PulseLoaderView android:id="@id/fragment_loading" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <include android:id="@id/reward_error" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="80.0dp" layout="@layout/omain_error_layout" />
+</androidx.constraintlayout.widget.ConstraintLayout>

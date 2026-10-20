@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ProgressBar android:layout_gravity="center" android:id="@id/webFoundationProgressBar" android:layout_width="30.0dp" android:layout_height="30.0dp" android:indeterminate="true" android:indeterminateDrawable="@drawable/web_progressbar" android:indeterminateDuration="500" android:indeterminateTint="#1dcf9f" android:indeterminateTintMode="src_atop" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatTextView android:gravity="center_horizontal" android:id="@id/free_data_tip" android:visibility="gone" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginTop="16.0dp" android:layout_marginStart="16.0dp" android:layout_marginEnd="16.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/webFoundationProgressBar" />
+</androidx.constraintlayout.widget.ConstraintLayout>

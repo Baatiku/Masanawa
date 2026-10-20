@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/message_dp_40" app:srcCompat="@drawable/message_ic_no_data" />
+    <TextView android:textSize="@dimen/message_sp_14" android:textColor="@color/message_A6000000" android:layout_gravity="center" android:id="@id/tvNoData" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/message_dp_8" android:text="@string/message_no_notice" android:fontFamily="@font/message_roboto_400" />
+</LinearLayout>

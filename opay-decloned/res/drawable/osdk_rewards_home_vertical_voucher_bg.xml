@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="12.0dp" />
+    <gradient android:startColor="@color/osdk_color_rewards_voucher_end" android:endColor="@color/osdk_rewards_voucher_start" android:angle="180.0" />
+</shape>

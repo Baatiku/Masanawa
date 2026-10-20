@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="72.0dp" android:width="72.0dp" android:viewportWidth="72.0" android:viewportHeight="72.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="#000" android:pathData="M6,3H66V62.9998H6z" android:strokeAlpha="0.01" android:fillAlpha="0.01" />
+    <path android:fillColor="@drawable/$easemoni_svg_success__0" android:pathData="M6,32.9999C6,49.5599 19.44,62.9998 36,62.9998C52.56,62.9998 66,49.5599 66,32.9999C66,16.44 52.56,3 36,3C19.44,3 6,16.44 6,32.9999Z" android:fillType="evenOdd" />
+    <path android:fillColor="#fff" android:pathData="M50.7137,27.1919C51.3947,26.4616 51.3547,25.3175 50.6245,24.6365L49.3903,23.4857C48.6601,22.8047 47.516,22.8447 46.835,23.5749L34.1624,37.1646L28.2796,31.2818C27.5736,30.5757 26.4288,30.5758 25.7227,31.2818L24.5295,32.475C23.8235,33.1811 23.8235,34.3258 24.5295,35.0319L31.73,42.2323C31.7595,42.264 31.7903,42.2949 31.8224,42.3249L31.8243,42.3267L32.1906,42.693C32.2696,42.772 32.3541,42.8421 32.4428,42.9034L33.0566,43.4758C33.7868,44.1567 34.9309,44.1168 35.6119,43.3865L50.7137,27.1919Z" android:fillType="evenOdd" />
+</vector>

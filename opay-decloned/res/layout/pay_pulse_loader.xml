@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:focusable="true" android:focusableInTouchMode="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/logo" android:background="@drawable/pay_round_shadow" android:padding="@dimen/pay_load_logo_padding" android:layout_width="@dimen/pay_load_logo_size" android:layout_height="@dimen/pay_load_logo_size" android:elevation="8.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@mipmap/pay_load_logo" />
+    <ProgressBar android:id="@id/progress_bar" android:layout_width="@dimen/pay_load_bg_size" android:layout_height="@dimen/pay_load_bg_size" android:indeterminateDrawable="@drawable/pay_pulse_loader_background" app:layout_constraintBottom_toBottomOf="@id/logo" app:layout_constraintEnd_toEndOf="@id/logo" app:layout_constraintStart_toStartOf="@id/logo" app:layout_constraintTop_toTopOf="@id/logo" />
+</androidx.constraintlayout.widget.ConstraintLayout>

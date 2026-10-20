@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.google.android.material.button.MaterialButton android:textSize="16.0sp" android:textColor="@color/osdk_color_white" android:layout_gravity="center" android:id="@id/action_button" android:visibility="visible" android:layout_width="match_parent" android:layout_height="48.0dp" android:text="@string/label_tv_payment_next" android:fontFamily="@font/roboto_500" android:backgroundTint="@color/color_material_button_selector" app:cornerRadius="24.0dp" style="@style/Material.Button.TextButton" />
+    <ProgressBar android:layout_gravity="center" android:id="@id/action_progress_bar" android:background="@drawable/osdk_ripple_00b876_r26" android:visibility="gone" android:layout_width="match_parent" android:layout_height="48.0dp" android:indeterminateTint="@color/osdk_color_white" />
+</merge>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="@color/black_85" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/bvn" />
+    <androidx.appcompat.widget.AppCompatEditText android:textSize="14.0sp" android:textColor="@color/black_85" android:gravity="center_vertical" android:id="@id/input_bvn" android:background="@drawable/osdk_register_input_bg" android:padding="12.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" android:hint="@string/osdk_kyc2_bvn_hint" android:maxLines="1" android:maxLength="11" android:digits="1234567890" android:inputType="number" android:imeOptions="actionNext" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="13.0sp" android:textColor="@color/red_pink" android:id="@id/bvn_error" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6.0dp" />
+</LinearLayout>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:left="-20.0dp" android:top="-20.0dp" android:right="-20.0dp">
+        <shape>
+            <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_gray_color_c8c8c8" />
+        </shape>
+    </item>
+</layer-list>

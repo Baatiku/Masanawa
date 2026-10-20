@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/ivArrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@mipmap/ic_beneficiary_pop_arrow" android:tint="@color/omain_color_eef4f8" android:layout_marginEnd="20.0dp" app:layout_constraintEnd_toEndOf="@id/tvDelete" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:textSize="12.0sp" android:textColor="@color/black_65" android:gravity="center" android:id="@id/tvDelete" android:background="@drawable/omain_shape_eef4f8_12" android:paddingLeft="14.0dp" android:paddingTop="12.0dp" android:paddingRight="14.0dp" android:paddingBottom="12.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/delete_instrument_text" android:drawablePadding="4.0dp" android:drawableStart="@mipmap/ic_beneficiary_pop_delete" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/ivArrow" />
+</androidx.constraintlayout.widget.ConstraintLayout>

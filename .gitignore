@@ -44,3 +44,7 @@ Thumbs.db
 
 # Optional historical donor checkouts (no longer tracked as submodules)
 references/sources/
+
+# Reverse engineering and decompiled packages
+*.apk
+activities.txt
