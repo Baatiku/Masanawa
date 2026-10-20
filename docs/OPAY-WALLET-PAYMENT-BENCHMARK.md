@@ -1,243 +1,293 @@
-# OPay Reverse-Engineering Benchmark & Best Practices for Masanawa Wallet
+# Masanawa Wallet, Payments & Billing Architecture
+## Adapted from OPay Simplicity & WhatsApp Design Language
 
-**Document ID:** `MASANAWA-DOC-OPAY-BENCHMARK-20261020`  
-**Target Focus:** Wallet (A11), Transfers & Send (A13), Billing & Utilities (A18), Cashier/Security, KYC, and Receipts (A15).  
-**Source Target:** OPay Nigeria (`team.opay.pay`, Android Target SDK 35 / Android 15, Release APK SHA-256: `a3430f6e91c856b3143f5fc5cce4acaf363899c51a0851842a77136d945b1bc2`).  
-**Audience:** Masanawa Mobile (Flutter), Backend (NestJS/PostgreSQL), and Product Engineering.
-
----
-
-## 1. Executive Summary & Context
-
-To support the development of **Masanawa’s Wallet tab** (one of the 5 canonical root tabs: *Chats · Status · Wallet · Calls · Rooms*), we performed deep reverse engineering on the market-leading Nigerian fintech application (OPay) using REA analysis tools and decoded smali/resource trees.
-
-OPay's market dominance in Nigeria is driven not by loans or savings, but by its **near-instant settlement reliability, low friction on transfer flows, proactive handling of banking infrastructure failures, and frictionless utility recharges**. 
-
-This document details the architectural mechanisms, UX design patterns, and security guardrails extracted from OPay's implementation, translated into actionable specifications for the Masanawa Flutter app and NestJS backend.
+**Document ID:** `MASANAWA-WALLET-SPEC-20261020`  
+**Status:** Canonical Design & Implementation Specification  
+**Design System:** Strong Green/White WhatsApp-like Aesthetic  
+**Target Scope:** Wallet Home (`A11`), Send/Receive (`A13`), History & Receipts (`A15`), Billing Services (`A18`), Cashier Checkout, and Global KYC.  
+**Currency Identity:** **MSNW** custody token (primary customer-facing unit) with local fiat counter-value (e.g., NGN / USD).
 
 ---
 
-## 2. Wallet Core & Balance State Machine (Screen A11)
+## 1. Core Product Philosophy & Design Tenets
 
-### 2.1 Balance Privacy & Visibility
-* **OPay Smali Pattern:** `team.opay.pay.home.balance.HomeSavingDetailsActivity`, `omain_fragment_new_pay.xml`
-* **Mechanism:**
-  - An eye toggle icon (`iv_eye_status`) sits next to the balance.
-  - Toggling updates an encrypted local key (`KEY_BALANCE_VISIBILITY`) in `SharedPreferences`/`EncryptedSharedPreferences`.
-  - When hidden, all balance numbers format to `••••••` or `****`.
-  - Crucially, balance amounts in child fragments and transaction list items respect this global state.
-* **Masanawa Implementation:**
-  - Implement `BalanceVisibilityNotifier` in Flutter using `flutter_secure_storage` or persistent Riverpod state.
-  - Display both local fiat (NGN) and **MSNW** custody token balance. When toggled off, both values mask synchronously.
+Masanawa combines the **operational simplicity and zero-friction execution flow of OPay** with the **clean, lightweight, high-contrast green/white interface of WhatsApp**.
 
-### 2.2 Real-time Balance Invalidation (Push vs Poll)
-* **OPay Smali Pattern:** Manifest metadata: `mqttHost: tcp://message-platform.opayweb.com`, `mqttOfflineHost: https://api-im.opayweb.com`.
-* **Mechanism:**
-  - Balance is never solely reliant on manual pull-to-refresh or aggressive HTTP polling.
-  - Upon transaction completion or incoming credit alert, the backend pushes an event across a persistent socket (`balance_delta` or `transaction_settled`).
-  - The client animates the balance counter upward or downward, followed by a silent reconciliation fetch if the nonce/hash deviates.
-* **Masanawa Implementation:**
-  - Reuse Masanawa’s existing real-time WebSocket connection to send a `WALLET_BALANCE_UPDATED` event whenever the backend ledger commits a ledger entry.
-
-### 2.3 Unified "Add Money" Hub
-* **OPay Smali Pattern:** `team.opay.sme.va.TransferActivity`
-* **Mechanism:**
-  - Tapping "Add Money" opens a modal bottom sheet displaying 4 distinct channels:
-    1. **Bank Transfer:** Dedicated virtual NUBAN account (NinePSB / Wema) assigned to the user. Features a one-tap copy button with haptic feedback and clear guidance: *"Transfer from any bank app to this account to fund your wallet instantly."*
-    2. **Debit Card Top-up:** Tokenized Visa/Mastercard/Verve debit via 3D-Secure.
-    3. **USSD Transfer:** Pre-formatted USSD code based on user's bank (e.g., `*737*50*AMOUNT*ACCOUNT#` for GTBank).
-    4. **QR Code / Payment Tag:** Displays the user's personal QR code for P2P scan-to-pay.
+### Key Distinctions from Traditional Banking Apps
+1. **Transfers are P2P & Crypto, NOT Inter-Bank NIP:**
+   - Masanawa does not route transfers through Nigerian inter-bank NIP clearing switches.
+   - Transfers occur **directly between Masanawa users** (P2P on the Masanawa internal ledger) or as **Crypto withdrawals** (on supported chains).
+   - *No bank lists, no NIBSS downtime alerts, no NIP Session IDs, and no USSD codes.*
+2. **10-Digit Unique Masanawa Account Number (User ID Number):**
+   - Every Masanawa user is assigned a uniquely generated, persistent **10-digit Masanawa Account Number** (e.g., `8012 345 678`).
+   - This number is NOT the user's phone number, preserving privacy while providing a familiar 10-digit banking paradigm.
+   - Displayed prominently on the Wallet home screen with 1-tap copy.
+   - Serves as the primary transfer handle across the ecosystem (alongside `@handle` and QR codes).
+3. **Global Audience & Flexible KYC (No Rigid Local Banking Tiers):**
+   - Replaces localized Tier 1/2/3 bank account rules with universal KYC identity verification (Government ID / Passport / BVN / NIN where applicable).
+   - High default transaction limits tailored to an international user base, unlockable to enterprise scale upon identity verification.
+4. **WhatsApp Green/White Design System:**
+   - Deep WhatsApp green `#075E54` / primary accent `#00A884` (or OPay vibrant `#00B876`), crisp white backgrounds, subtle dividers `#E9EDEF`, dark high-contrast typography, and zero visual clutter.
 
 ---
 
-## 3. Payments & Transfer Engine (Screen A13)
+## 2. Screen A11 — Wallet Home Screen
 
-### 3.1 Smart Clipboard Detection & Auto-Fill
-* **OPay Smali Pattern:** 
-  - `team.opay.pay.home.clipboard.ClipboardAutoReader`
-  - `team.opay.pay.home.clipboard.TransferClipboardParser`
-  - `team.opay.pay.home.clipboard.dialog.ACHomeClipboardDialog`
-  - `team.opay.pay.home.security.AccessToClipboardSettingActivity`
-* **Mechanism:**
-  - When the app is opened or foregrounded, `ClipboardAutoReader` inspects the OS clipboard for text matching:
-    1. Nigerian 10-digit NUBAN account numbers.
-    2. Nigerian phone numbers: `^\\+?(?:234)?0?[789][0-9]{9}`.
-    3. Deep payment links or amounts (`ClipboardRecipientInfo: amount, phone, account, gateway`).
-  - If a valid recipient is detected, a bottom banner appears:
-    > *"Account number detected in clipboard: 0123456789. Transfer to this account now?"*
-  - Tapping "Transfer" opens the transfer view with the account number pre-filled, destination bank auto-selected (if known), and triggers name enquiry immediately.
-  - **Privacy Guard:** Includes an explicit toggle in Privacy & Security (`Access to Clipboard`) allowing users to opt out.
-* **Masanawa Value:** In Masanawa, where users frequently copy bank details out of chat threads, clipboard auto-detection cuts transfer initiation from 6 taps down to 1.
+```
+┌────────────────────────────────────────────────────────┐
+│  Masanawa Wallet                               [ 🔍 ]  │
+│                                                        │
+│  TOTAL BALANCE                                         │
+│  4,520.00 MSNW                 [ 👁 Hide ]             │
+│  ≈ ₦ 45,200.00                                         │
+│                                                        │
+│  Account No: 8012 345 678 [ 📋 Copy ]  •  Verified ✓   │
+├────────────────────────────────────────────────────────┤
+│    [ ↗ Send ]   [ ↙ Receive ]   [ ⚡ Bills ]   [ ⛶ QR ] │
+├────────────────────────────────────────────────────────┤
+│  RECENT TRANSFERS                                      │
+│  (👤 Ahmad)   (👤 Fatima)   (👤 Zainab)   (👤 Bello)   │
+├────────────────────────────────────────────────────────┤
+│  TRANSACTION HISTORY                                   │
+│  ↗ Sent to @fatima (8019 123 456)   -150 MSNW  🟢 Today │
+│  ↙ Received from @ahmad             +500 MSNW  🟢 Y'day │
+│  ⚡ MTN Airtime ₦1,000               -100 MSNW  🟢 Oct 18│
+└────────────────────────────────────────────────────────┘
+```
 
-### 3.2 Real-time Bank Network Health & Delay Indicator
-* **OPay Smali Pattern:**
-  - `team.opay.pay.home.tabs.ac.BankStatusActivity`
-  - `team.opay.pay.home.tabs.ac.BankAVGTimeConfig`
-  - `team.opay.pay.home.tabs.ac.BankUnStableDialog`
-  - Resource layout: `dialog_bank_unstable.xml`
-* **Mechanism:**
-  - Nigerian inter-bank NIP transfer delays are frequent. OPay exposes real-time network statuses alongside the bank list:
-    - 🟢 **Normal:** Average settlement < 10 seconds.
-    - 🟡 **Degraded / High Traffic:** Settlement delays of 5–30 minutes possible.
-    - 🔴 **Bank Unstable / Down:** Significant downtime on destination bank switch.
-  - When a user chooses a bank currently marked unstable, `BankUnStableDialog` intercepts:
-    > *"Recipient Bank Unstable: [Bank Name] is experiencing network issues. Transactions may be delayed. Continue anyway or try another method?"*
-* **Masanawa Value:** Eliminates the #1 driver of fintech support tickets—users assuming the app failed when the destination bank is down.
+### 2.1 Balance Privacy & Multi-Currency Presentation
+* **Persistent Balance Toggle (`Eye` icon):**
+  - Tapping the eye toggle masks total balance, fiat counter-value, and transaction amounts with dots (`••••••`).
+  - Stored in encrypted local state (`flutter_secure_storage`) so the preference persists on relaunch.
+* **Token & Fiat Dual Display:**
+  - Primary: **MSNW** custody balance in bold typography.
+  - Secondary: Real-time converted fiat counter-value based on the latest internal exchange quote.
 
-### 3.3 Internal P2P Intercept Guide
-* **OPay Smali Pattern:** `GuideToOpayAccountTransferDialog.smali`
-* **Mechanism:**
-  - When a user enters a 10-digit number in the "To Bank" form, the client checks if that number or linked phone belongs to a registered OPay user.
-  - If registered, an inline banner or dialog suggests:
-    > *"This recipient has an OPay account! Switch to Transfer to OPay for FREE, instant delivery and rewards."*
-* **Masanawa Value:** Routes external NIP transfers into zero-fee internal transfers, saving Masanawa NIP switch processing fees and accelerating ecosystem retention.
+### 2.2 Account Number Badge
+* Displays the user's unique 10-digit Masanawa Account Number formatted with spaces: `8012 345 678`.
+* Tapping triggers an instant copy to clipboard, accompanied by a light haptic tap and toast: *"Masanawa Account Number copied"*.
 
-### 3.4 Duplicate Transfer Guard
-* **OPay Smali Pattern:** `dialog_transfer_repeat_tips.xml`, string `osdk_repeate_transfer` ("Duplicate Transfer Detected")
-* **Mechanism:**
-  - If a user submits a transfer with the exact same amount to the same beneficiary within a 10-minute window, the app intercepts the submission:
-    - Displays a warning modal with the timestamp, amount, and status of the prior transaction.
-    - Requires an explicit confirmation click to prevent accidental double debits caused by slow network retries.
-* **Masanawa Value:** Crucial safeguard for users with poor or fluctuating cellular network connectivity.
-
-### 3.5 Unified Cashier Checkout Bottom Sheet
-* **OPay Smali Pattern:** `cashier.normalpay.CashierActivity`, `cashier.quickpay.QuickPayActivity`, `cashier_layout_pin_keyboard_view.xml`
-* **Mechanism:**
-  - Rather than pushing a full new activity/screen for checkout, all payment confirmation is executed inside a bottom sheet (`Cashier`):
-    1. **Summary:** Recipient Name, Destination Bank/Service, Exact Debit Amount.
-    2. **Payment Source Selector:** Wallet Balance (default) vs. Linked Bank Cards.
-    3. **Fee Transparency:** Shows `Fee: ₦0.00` or promotional quota remaining (e.g., *"3 free transfers remaining today"*).
-    4. **Authorization:** In-app secure numeric keypad or biometric prompt.
+### 2.3 Quick Actions Bar
+* **Send:** Opens the unified P2P / Crypto Send flow (`A13`).
+* **Receive:** Opens the funding screen showing the user's 10-digit Masanawa ID, personal payment QR code, and crypto deposit addresses (`A12`).
+* **Bills:** Opens Airtime, Data, and Utility bill payment hub (`A18`).
+* **QR Scan:** Opens scanner for instant payment to any user or merchant QR code.
 
 ---
 
-## 4. Billing & Utility Services (Screen A18)
+## 3. Screen A13 — Send & Transfer Execution Engine
 
-### 4.1 Telco Auto-Detection by Phone Prefix
-* **OPay Smali Pattern:** `team.opay.pay.payment.airtime.AirtimeTopUpActivity`
-* **Prefix Map:**
+### 3.1 3-Step Frictionless Flow
+Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view transfer configuration:
+
+```
+┌────────────────────────────────────────────────────────┐
+│  ← Send Money                                          │
+│                                                        │
+│  Recipient Masanawa ID or @handle:                     │
+│  [ 8012345678                                    ]     │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 👤 Ahmad Ibrahim  (@ahmad)  ✓ Verified Masanawa  │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  Amount (MSNW):                                        │
+│  [ 250.00                                   MSNW ]     │
+│  ≈ ₦ 2,500.00      Available: 4,520 MSNW [ Max ]       │
+│                                                        │
+│  Narration (Optional):                                 │
+│  [ For design work                               ]     │
+│                                                        │
+│  [                 Continue                 ]          │
+└────────────────────────────────────────────────────────┘
+```
+
+1. **Instant Real-Time Recipient Name Resolution:**
+   - As soon as the user enters 10 digits (or an `@handle`), the client triggers an instant server lookup.
+   - A verified profile card slides in showing:
+     - Recipient's Avatar
+     - Full Legal Display Name
+     - Public Handle (`@handle`)
+     - Verification Badge (✓)
+   - Prevents sending funds to the wrong user.
+
+2. **Smart Clipboard Account Number Detection:**
+   - When the user launches Masanawa or opens the Transfer screen, the app inspects the system clipboard.
+   - If a 10-digit number or a Masanawa pay link (`masanawa.me/pay/...`) is detected:
+     - A bottom sheet appears:  
+       > *"Masanawa Account detected in clipboard: **8012 345 678** (Ahmad Ibrahim). Transfer now?"*
+     - Tapping "Transfer" pre-fills the form and resolves the recipient immediately.
+   - An opt-out setting is available in Privacy Settings.
+
+3. **Duplicate Transfer Guard:**
+   - If a user submits a transfer with the exact same amount to the same recipient within 5 minutes, an intercept modal displays:
+     > *"Duplicate Transfer Detected: You sent 250 MSNW to Ahmad Ibrahim 2 minutes ago. Are you sure you want to proceed?"*
+   - Requires explicit re-confirmation, eliminating accidental double payments during spotty connectivity.
+
+4. **Frequent Beneficiaries Horizontal Carousel:**
+   - Directly above or below the input field, recent transfer recipients appear as circular avatar chips with names.
+   - 1-tap on a chip automatically populates the recipient and focuses the amount input.
+
+---
+
+## 4. Cashier Checkout Bottom Sheet & Security Keypad
+
+```
+┌────────────────────────────────────────────────────────┐
+│  Confirm Payment                                [ ✕ ]  │
+│                                                        │
+│  Amount to Pay:                                        │
+│  250.00 MSNW (≈ ₦ 2,500.00)                            │
+│                                                        │
+│  To:        Ahmad Ibrahim (8012 345 678)               │
+│  From:      MSNW Custody Wallet                        │
+│  Fee:       0.00 MSNW (Free Internal Transfer)         │
+│                                                        │
+│  Enter 6-digit Payment PIN:                            │
+│  [ • ]  [ • ]  [ • ]  [   ]  [   ]  [   ]              │
+│                                                        │
+│  ┌───────┬───────┬───────┐                             │
+│  │   1   │   2   │   3   │                             │
+│  ├───────┼───────┼───────┤                             │
+│  │   4   │   5   │   6   │                             │
+│  ├───────┼───────┼───────┤                             │
+│  │   7   │   8   │   9   │                             │
+│  ├───────┼───────┼───────┤                             │
+│  │  [⛶]  │   0   │  [⌫]  │   (⛶ = Biometric Finger/Face)
+│  └───────┴───────┴───────┘                             │
+└────────────────────────────────────────────────────────┘
+```
+
+### 4.1 Custom In-App 3x4 Secure Keypad
+* **Implementation:** Built as an internal Flutter widget (`MasanawaPinKeyboard`), completely bypassing the Android/iOS system soft keyboard.
+* **Security Advantages:**
+  - Prevents 3rd-party malicious keyboard apps from intercepting PIN digits.
+  - Immune to accessibility service keystroke snooping and OS screen recording previews.
+  - Crisp haptic feedback on each valid press.
+* **Biometric Shortcut:**
+  - The bottom-left key features a Biometric icon (Fingerprint / Face ID). Tapping it instantly prompts device biometrics to authorize payment without entering the PIN manually.
+
+### 4.2 PIN Complexity Enforcement
+* Rejects consecutive digits (`123456`, `654321`) and repeated digits (`000000`, `111111`).
+* Enforced at the time of PIN creation and reset.
+
+---
+
+## 5. Screen A18 — Billing & Utility Services
+
+```
+┌────────────────────────────────────────────────────────┐
+│  ← Mobile Airtime & Data                               │
+│                                                        │
+│  Phone Number:                                         │
+│  [ 0803 123 4567 ]                 [ 📶 MTN (Auto) ▼ ] │
+│                                                        │
+│  Recent Recharges:                                     │
+│  (Mom - 0803...)   (Bro - 0812...)   (Data - 0805...)  │
+│                                                        │
+│  Select Amount:                                        │
+│  ┌───────────┐ ┌───────────┐ ┌───────────┐             │
+│  │   ₦100    │ │   ₦200    │ │   ₦500    │             │
+│  ├───────────┤ ├───────────┤ ├───────────┤             │
+│  │  ₦1,000   │ │  ₦2,000   │ │  ₦5,000   │             │
+│  └───────────┘ └───────────┘ └───────────┘             │
+│  Custom Amount: [ ₦                     ]              │
+│                                                        │
+│  Cost: 100.00 MSNW                                     │
+│  [                 Pay 100 MSNW                 ]      │
+└────────────────────────────────────────────────────────┘
+```
+
+### 5.1 Telco Auto-Detection by Prefix
+* The app automatically identifies Nigerian telco providers upon typing the first 4 digits:
   - `0803`, `0806`, `0703`, `0706`, `0813`, `0816`, `0810`, `0814`, `0903`, `0906`, `0913`, `0916` ➔ **MTN**
   - `0802`, `0808`, `0708`, `0812`, `0701`, `0902`, `0901`, `0904`, `0907`, `0912` ➔ **Airtel**
   - `0805`, `0807`, `0705`, `0815`, `0811`, `0905`, `0915` ➔ **Glo**
   - `0809`, `0817`, `0818`, `0909`, `0908` ➔ **9mobile**
-* **UX Rule:** Auto-selects the telco logo immediately after 4 digits are typed. Displays a dropdown pill allowing the user to override if the number was ported.
+* The user can tap the logo pill to manually switch providers if their number was ported.
 
-### 4.2 Quick Denomination Chips & Recent Recharges
-* **OPay Layouts:** `layout_topup_airtime_custom_amount.xml`, `fragment_airtime_data_topup.xml`
-* **UI Elements:**
-  - Horizontal chip carousel of recently recharged numbers with avatars/initials.
-  - 2x3 or 3x3 grid of standard Nigerian denominations: `₦100`, `₦200`, `₦500`, `₦1,000`, `₦2,000`, `₦5,000`.
-  - Custom amount text field with immediate cashback calculation display (e.g., *"Earn ₦30 cashback on this recharge"*).
+### 5.2 Preset Denomination Chips
+* Rapid 1-tap selection grid: `₦100`, `₦200`, `₦500`, `₦1,000`, `₦2,000`, `₦5,000`.
+* Real-time calculation shows the exact debit in **MSNW** tokens.
 
-### 4.3 Two-Step Utility Validation (`ConfirmInfomationListDialog`)
-* **OPay Smali Pattern:** `team.opay.pay.payment.ConfirmInfomationListDialog`, `ElectricityCustomerInfo`
-* **Mechanism:**
-  - For Electricity (Prepaid/Postpaid) and Cable TV (DStv, GOtv, StarTimes):
-    - Entering the Meter or Smartcard number fires an asynchronous name-lookup query.
-    - Before PIN entry, a structured confirmation dialog pops up displaying:
-      - *Customer Name* (from Disco database)
-      - *Meter/Card Number*
-      - *Address*
-      - *Account Type (Prepaid / Postpaid)*
-      - *Fee & Total Payable*
-    - Prevents recharging the wrong meter or smartcard.
+### 5.3 Two-Step Name Inquiry for Utilities (Electricity & Cable TV)
+* When paying for electricity (Prepaid/Postpaid) or Cable TV (DStv/GOtv/StarTimes):
+  - Typing the Meter/Smartcard Number triggers an instant lookup.
+  - A confirmation modal pops up displaying:
+    - *Customer Name* (from the utility provider)
+    - *Address*
+    - *Account Type (Prepaid / Postpaid)*
+    - *Token Delivery Method*
+  - Requires customer review before opening the Cashier sheet.
 
 ---
 
-## 5. Authentication, Login & Security Best Practices
+## 6. Screen A15 — Receipts & Post-Transaction UX
 
-### 5.1 Custom In-App Secure Numeric Keypad
-* **OPay Layout:** `cashier_layout_pin_keyboard_view.xml`
-* **Mechanism:**
-  - OPay does not trigger the default Android soft keyboard for entering 6-digit transaction PINs.
-  - It renders an internal 3x4 `GridLayout` (`key_1` through `key_9`, `key_0`, and `key_del`).
-* **Security Guardrails:**
-  - Prevents third-party malicious keyboard apps from keylogging transaction PINs.
-  - Bypasses Android screen-recording and accessibility service extraction.
-  - Provides uniform haptic feedback on keypresses.
+```
+┌────────────────────────────────────────────────────────┐
+│               MASANAWA TRANSFER RECEIPT                │
+│                                                        │
+│                 🟢 TRANSFER SUCCESSFUL                 │
+│                      250.00 MSNW                       │
+│                     (≈ ₦ 2,500.00)                     │
+│                                                        │
+│  Recipient:       Ahmad Ibrahim                        │
+│  Masanawa ID:     8012 345 678                         │
+│  Sender:          Bello Abubakar (8019 876 543)        │
+│  Reference:       MSN-TX-20261020-8912401              │
+│  Date & Time:     20 Oct 2026, 03:45 PM                │
+│  Fee:             0.00 MSNW (Free)                     │
+│  Narration:       For design work                      │
+├────────────────────────────────────────────────────────┤
+│  [ 💬 Share to Chat ]   [ 📥 Download ]   [ 📤 Share ] │
+└────────────────────────────────────────────────────────┘
+```
 
-### 5.2 Strict PIN Complexity Rules
-* **OPay String:** `The Payment PIN must contain number which cannot be repeated or consecutive.`
-* **Validation Requirements:**
-  - Rejects repetitive sequences: `000000`, `111111`, `999999`.
-  - Rejects ascending/descending sequences: `123456`, `654321`.
-  - Rejects numbers matching the user’s birth date or phone number prefix/suffix.
+### 6.1 Clean, Focused Identifiers
+* **Internal Reference (`MSN-TX-...`):** Unique, cryptographically signed transaction reference.
+* **Sender & Beneficiary 10-Digit Masanawa IDs:** Cleanly displayed alongside display names.
+* **Instant Status Badge:** 🟢 *Completed*, 🟡 *Pending / Processing*, 🔴 *Failed*.
+* **Omissions:** *No NIP Session IDs and no "Money Saved" badges.*
 
-### 5.3 Multi-Modal Authentication & App Lock
-* **OPay Smali Pattern:** `PinAppLockActivity.smali`, `BiometricSaveActivity.smali`, `GestureSettingActivity.smali`
-* **Mechanism:**
-  - Phone number primary identifier + 6-digit PIN.
-  - Biometric authentication (Fingerprint / Face Unlock via Android BiometricPrompt API).
-  - Background timeout guard: automatically locks after 1 or 5 minutes in background.
+### 6.2 Multi-Format Share Actions
+1. **Share to Chat (Native WhatsApp / Masanawa Integration):**
+   - Automatically renders an interactive, rich receipt bubble inside any selected Masanawa chat thread.
+2. **Download / Share Image (PNG):**
+   - Generates a clean 1080x1920 high-contrast branded card with green top bar, white receipt surface, and sharp typography.
 
 ---
 
-## 6. Tiered KYC & Identity Progression
+## 7. Global KYC & Verification Progression
 
-* **OPay Smali Pattern:** `activity_kyc_level.xml`, `dialog_kyc2_bvn_check.xml`, `OFaceLiveNew1Activity.smali`
+Rather than rigid domestic banking tiers (Tier 1/2/3 with low local caps), Masanawa employs a **flexible global compliance ladder**:
 
-| KYC Tier | Required Information | Daily Transaction Limit | Max Wallet Balance | Validation Engine |
+| Verification Status | Requirements | Daily Send Limit | Monthly Volume | Target Profile |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1** | Phone Number, Full Legal Name, Date of Birth | ₦50,000 | ₦300,000 | SMS OTP verification |
-| **Tier 2** | BVN / NIN Verification + Live Face Match | ₦200,000 | ₦500,000 | NIBSS BVN API + Name Matching |
-| **Tier 3** | Proof of Address (Utility bill, bank statement) | ₦5,000,000 | Unlimited | Automated OCR / Agent verification |
+| **Unverified (Base)** | Phone/Email verification | 500 MSNW (≈ $500) | 2,500 MSNW | Casual chatting, tips, micro-transfers |
+| **Verified (ID)** | Government ID / Passport + Live Selfie | 10,000 MSNW (≈ $10,000) | 50,000 MSNW | Standard users, creators, global remittances |
+| **Pro / Merchant** | Business verification / Address proof | 100,000+ MSNW | Custom / Unlimited | Merchants, high-volume creators, P2P vendors |
 
-* **Strict Name Matching Guard:** BVN verification checks that the registered first name and surname match the user's account name. In case of discrepancies, account limits are frozen until manual verification to prevent identity theft.
-
----
-
-## 7. Post-Transaction UX, Receipts & Dispute Resolution (Screen A15)
-
-### 7.1 Mandatory Nigerian Banking Identifiers
-* **OPay Smali Pattern:** `share_view_pdf.xml`, `ReceiptLayout.smali`, `flow_item_transaction_detail_progress.xml`
-* **Required Metadata Fields on Every Receipt:**
-  1. **NIP Session ID (30 digits):** Standard NIBSS inter-bank transaction tracking number (e.g., `100004240520120530918237461928`). *Essential for receiving banks to locate missing funds.*
-  2. **Transaction Reference:** Masanawa internal unique reference (`MSN-TRX-...`).
-  3. **Sender Details:** Name & Masked Account.
-  4. **Beneficiary Details:** Beneficiary Name, Account Number, Destination Bank Name.
-  5. **Amount & Fee Breakdown:** Clear indication of ₦0.00 fee.
-  6. **Timestamp:** Date and time with seconds.
-  7. **Status Badge:** High-contrast 🟢 *Successful*, 🟡 *Processing / Pending*, 🔴 *Failed*.
-
-### 7.2 In-Receipt Self-Service Help (`item_transaction_details_faq.xml`)
-* Below the receipt action buttons, OPay embeds an expandable self-service card:
-  - *"Recipient says they haven't received the money?"*
-  - Tapping this reveals a 3-step timeline:
-    1. *Masanawa Debit (Completed)*
-    2. *NIP Central Switch (Delivered)*
-    3. *Beneficiary Bank Credit (Pending destination bank processing)*
-  - Offers a one-tap button to copy the **Session ID** to share with the beneficiary bank.
-
-### 7.3 Multi-Format Sharing Options
-* **Share Image (PNG):** Clean, branded card optimized for sharing on WhatsApp or Masanawa chat.
-* **Download PDF:** Official bank-standard statement format for business and formal records.
-* **Send to Chat:** Instant one-tap delivery of the receipt into an active Masanawa conversation.
+* **Streamlined Verification Flow:**
+  - Simple camera scan of passport, national ID card, or driver's license.
+  - Automated facial liveness selfie check.
+  - Verification typically resolves within 60 seconds via automated KYC provider.
 
 ---
 
-## 8. Concrete Implementation Plan for Masanawa
+## 8. Summary of Feature Matrix (OPay Adaptation to Masanawa)
 
-### Phase 1: High-Priority Wallet & Security Upgrades
-1. **Receipt Overhaul (Screen A15):**
-   - Ensure the 30-digit NIP Session ID is stored in the database for every external transfer.
-   - Render receipts with branded Masanawa green/white styling, PDF generation, and in-chat sharing.
-2. **Custom PIN Keypad (Screen A13/Cashier):**
-   - Replace standard mobile keyboard with an in-app 3x4 numeric keypad for all PIN entry flows.
-   - Add biometric authentication fallback via `local_auth` Flutter package.
-3. **Duplicate Transfer Intercept:**
-   - Implement client and server-side checks for identical transactions submitted within 10 minutes.
-
-### Phase 2: Frictionless Transfer & Billing Experience
-1. **Clipboard Account Listener:**
-   - Add a privacy-respecting clipboard parser in Flutter (`ClipboardAutoReader`) that detects 10-digit NUBANs on app resume.
-2. **Telco Prefix Auto-Detector (Screen A18):**
-   - Implement regex matching for Nigerian telco prefixes on the Airtime and Mobile Data screens.
-3. **Utility Name Lookup Confirmation Dialog:**
-   - Ensure Electricity and Cable TV purchases show resolved customer names before PIN confirmation.
-
-### Phase 3: Banking Network Reliability
-1. **Bank Health Monitor Service:**
-   - Backend tracks success/failure rates per destination bank code.
-   - Mobile client queries bank status and displays visual indicators (Normal/Degraded/Unstable) on bank selection.
-2. **Internal Transfer Routing:**
-   - Automatically detect if an entered phone number or account is already a Masanawa user and prompt instant 0-fee P2P transfer.
+| Feature | OPay Android Origin | Masanawa Implementation | Status |
+| :--- | :--- | :--- | :--- |
+| **Primary Account Handle** | Virtual Bank NUBAN (Phone-based) | **Unique 10-Digit Masanawa ID** (Not phone-based) | **Included** |
+| **Transfer Rails** | NIBSS Inter-Bank NIP | **Internal Ledger P2P + Crypto Withdrawals** | **Included** |
+| **Smart Clipboard Detection** | `ClipboardAutoReader` (NUBAN regex) | **Auto-detect 10-digit Masanawa IDs & Links** | **Included** |
+| **Duplicate Transfer Guard** | `dialog_transfer_repeat_tips.xml` | **5-minute repeat transaction intercept modal** | **Included** |
+| **Keypad Security** | `cashier_layout_pin_keyboard_view.xml` | **Custom in-app 3x4 numeric keypad + biometrics** | **Included** |
+| **Airtime Telco Auto-Detect** | Prefix detection in `AirtimeTopUpActivity` | **Nigerian prefix auto-detection (MTN/Airtel/Glo/9mobile)** | **Included** |
+| **Utility Name Lookup** | `ConfirmInfomationListDialog` | **Two-step meter/smartcard name verification dialog** | **Included** |
+| **Balance Privacy** | `iv_eye_status` on home balance | **Global eye toggle for MSNW & fiat counter-value** | **Included** |
+| **Receipt Design** | PDF/PNG with NIP Session ID | **PNG/Chat bubble with Masanawa Reference** | **Included** |
+| **NIP Session ID** | Mandatory in OPay | *Excluded (Not inter-bank)* | **Removed** |
+| **"Money Saved" Metric** | `item_transaction_details_cost_reduction.xml` | *Excluded (Unnecessary clutter)* | **Removed** |
+| **USSD Gateway** | Pre-formatted USSD strings | *Excluded (No USSD gateway connection)* | **Removed** |
+| **Local Banking Tiers** | Strict Central Bank Tier 1/2/3 | **Global KYC with high international limits** | **Adapted** |
