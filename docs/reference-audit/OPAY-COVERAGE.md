@@ -1,6 +1,6 @@
 # OPay finance/service adaptation coverage — 20 October 2026
 
-**Status:** initial candidate register; reference set opay-decloned/, [wallet implementation guide](../AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md) and [OPay benchmark](../OPAY-WALLET-PAYMENT-BENCHMARK.md). Static Smali/layout strings are discovery and design evidence, NOT settlement correctness, regulatory authority or evidence the decompiled feature actually works. Use the existing 11 source-linked OPay findings O1–O11 and tasks P6-W01–W11, P7-S01–S04, P8-X01–X06 in the canonical roadmap, rather than duplicating underlying Wallet/ledger systems.
+**Status:** initial candidate register; reference set opay-decloned/, [consolidated OPay source guide](../AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md). Static Smali/layout strings are discovery and design evidence, NOT settlement correctness, regulatory authority or evidence the decompiled feature actually works. Use the existing 11 source-linked OPay findings O1–O11 and tasks P6-W01–W11, P7-S01–S04, P8-X01–X06 in the canonical roadmap, rather than duplicating underlying Wallet/ledger systems.
 
 ## Owner exclusions — absolute, not merely deferred Phase 7C–D
 
