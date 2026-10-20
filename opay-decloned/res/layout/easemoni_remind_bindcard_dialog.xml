@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/easemoni_remind_bindcard_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_24" app:srcCompat="@drawable/easemoni_ic_remind_bindcard" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_515f68" android:gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_22" android:text="@string/easemoni_remind_bindcard" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textStyle="bold" android:textColor="@color/easemoni_color_white" android:gravity="center" android:id="@id/tv_remind_confirm" android:background="@drawable/easemoni_bg_corner_1dcf9f_24" android:paddingTop="@dimen/easemoni_dimen_10" android:paddingBottom="@dimen/easemoni_dimen_10" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="@dimen/easemoni_dimen_24" android:text="@string/easemoni_ok" android:textAllCaps="true" />
+</LinearLayout>

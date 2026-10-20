@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/torch" android:layout_width="44.0dp" android:layout_height="44.0dp" android:layout_marginBottom="60.0dp" android:scaleType="fitXY" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/qr_hms_ic_torch_off" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="@color/qr_hms_color_torch" android:id="@id/description" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" android:includeFontPadding="false" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/torch" />
+</androidx.constraintlayout.widget.ConstraintLayout>

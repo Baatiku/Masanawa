@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="@color/message_73000000" android:ellipsize="end" android:id="@id/tv_key" android:layout_width="82.0dp" android:layout_height="wrap_content" android:layout_marginTop="12.0dp" android:maxWidth="100.0dp" android:lines="1" android:fontFamily="@font/message_roboto_400" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="@color/message_A6000000" android:id="@id/tv_value" android:layout_width="0.0dp" android:layout_height="wrap_content" android:lineSpacingExtra="4.0dp" android:fontFamily="@font/message_roboto_400" android:layout_marginStart="12.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toEndOf="@id/tv_key" app:layout_constraintTop_toTopOf="@id/tv_key" />
+</androidx.constraintlayout.widget.ConstraintLayout>

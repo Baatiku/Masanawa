@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="@drawable/easemoni_dialog_bg" android:paddingLeft="@dimen/easemoni_dimen_16" android:paddingTop="@dimen/easemoni_dimen_16" android:paddingRight="@dimen/easemoni_dimen_16" android:layout_width="match_parent" android:layout_height="450.0dp" android:backgroundTint="@color/easemoni_color_f8f8fb" android:paddingHorizontal="@dimen/easemoni_dimen_16"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="@dimen/easemoni_dimen_16" android:textColor="@color/easemoni_color_222f3e" android:id="@id/easemoni_available_card_voucher" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_available_card_voucher" android:fontFamily="sans-serif-medium" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        <androidx.appcompat.widget.AppCompatImageView android:id="@id/easemoni_dialog_close" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/easemoni_ic_close" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/select_coupon_list" android:paddingBottom="@dimen/easemoni_dimen_16" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="@dimen/easemoni_dimen_16" app:layout_constraintBottom_toBottomOf="parent" />
+</LinearLayout>

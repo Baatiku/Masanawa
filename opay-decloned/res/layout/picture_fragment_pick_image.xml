@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="@drawable/common_shape_white_4" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="16.0sp" android:textColor="@color/text_51" android:gravity="center" android:id="@id/take_photo" android:background="@drawable/common_ripple_white" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="8.0dp" android:text="@string/picture_take_picture" android:includeFontPadding="false" app:fontFamily="@font/roboto_400" />
+    <View android:background="@color/divider_d8" android:layout_width="match_parent" android:layout_height="1.0dp" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="16.0sp" android:textColor="@color/text_51" android:gravity="center" android:id="@id/select_photo" android:background="@drawable/common_ripple_white" android:layout_width="match_parent" android:layout_height="48.0dp" android:text="@string/picture_select_photos" android:includeFontPadding="false" app:fontFamily="@font/roboto_400" />
+    <View android:background="@color/divider_d8" android:layout_width="match_parent" android:layout_height="5.0dp" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="16.0sp" android:textColor="@color/text_51" android:gravity="center" android:id="@id/cancel" android:background="@drawable/common_ripple_white" android:layout_width="match_parent" android:layout_height="48.0dp" android:text="@string/common_cancel" android:includeFontPadding="false" app:fontFamily="@font/roboto_400" />
+</LinearLayout>

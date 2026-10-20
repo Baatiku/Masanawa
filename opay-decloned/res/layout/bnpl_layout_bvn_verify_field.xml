@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.loan.cash.credit.bnpl.bvn.widget.BNPLBvnValidationTextView android:textSize="@dimen/okash_tv_size_20" android:textStyle="bold" android:textColor="@color/bnpl_color_d9000000" android:gravity="center" android:padding="0.0dp" android:focusable="true" android:focusableInTouchMode="false" android:layout_width="@dimen/okash_dimen_44" android:layout_height="@dimen/okash_dimen_44" android:layout_margin="0.0dp" android:hint=""
+  xmlns:android="http://schemas.android.com/apk/res/android" />

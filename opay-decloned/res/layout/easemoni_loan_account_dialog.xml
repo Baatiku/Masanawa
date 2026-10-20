@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="@drawable/easemoni_bg_account_list" android:paddingBottom="@dimen/okash_dimen_20" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <androidx.appcompat.widget.AppCompatImageView android:id="@id/ll_account_back" android:padding="@dimen/okash_dimen_15" android:layout_width="wrap_content" android:layout_height="wrap_content" android:scaleType="centerInside" android:adjustViewBounds="true" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/easemoni_ic_arrow_left_back" />
+        <TextView android:textSize="@dimen/okash_tv_size_18" android:textColor="@color/easemoni_color_222f3e" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_select_account" android:fontFamily="sans-serif-medium" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/recycler_view" android:layout_width="match_parent" android:layout_height="wrap_content" />
+</LinearLayout>

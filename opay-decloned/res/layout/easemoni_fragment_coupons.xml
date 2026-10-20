@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@id/coupons_refresh_layout" android:background="@color/easemoni_color_f8f8fb" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="@dimen/okash_tv_size_12" android:textColor="@color/easemoni_color_ff9100" android:id="@id/coupons_turn_on_notify" android:background="@drawable/easemoni_bg_turn_on_notify" android:paddingLeft="@dimen/okash_dimen_12" android:paddingTop="@dimen/okash_dimen_6" android:paddingRight="@dimen/okash_dimen_12" android:paddingBottom="@dimen/okash_dimen_6" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_16" android:layout_marginTop="@dimen/okash_dimen_8" android:layout_marginRight="@dimen/okash_dimen_16" android:layout_marginBottom="@dimen/okash_dimen_8" android:text="@string/easemoni_turn_on_notify" android:drawablePadding="@dimen/okash_dimen_8" android:drawableStart="@drawable/easemoni_ic_turn_on_notify_loudspeaker" android:drawableEnd="@drawable/easemoni_ic_turn_on_notify_arrow" />
+        <androidx.recyclerview.widget.RecyclerView android:id="@id/coupons_list" android:paddingLeft="@dimen/easemoni_dimen_16" android:paddingRight="@dimen/easemoni_dimen_16" android:visibility="visible" android:layout_width="match_parent" android:layout_height="match_parent" />
+    </LinearLayout>
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

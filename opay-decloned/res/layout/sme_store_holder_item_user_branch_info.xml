@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.business.widget.shimmer.CorpShimmerConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.business.widget.shimmer.CorpShimmerView android:id="@id/holderBranchName" android:layout_width="100.0dp" android:layout_height="12.0dp" app:corp_corners="6.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" style="@style/commonShimmer" />
+    <team.opay.business.widget.shimmer.CorpShimmerView android:layout_width="100.0dp" android:layout_height="12.0dp" app:corp_corners="6.0dp" app:layout_constraintBottom_toBottomOf="@id/holderBranchName" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" style="@style/commonShimmer" />
+    <View android:background="@drawable/sme_store_shape_f8f8fb_8" android:layout_width="match_parent" android:layout_height="0.0dp" app:layout_constraintBottom_toBottomOf="@id/holderLayoutAction3" app:layout_constraintTop_toTopOf="@id/holderLayoutAction1" />
+    <include android:id="@id/holderLayoutAction1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" app:layout_constraintTop_toBottomOf="@id/holderBranchName" layout="@layout/sme_store_holder_item_action" />
+    <include android:id="@id/holderLayoutAction2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" app:layout_constraintTop_toBottomOf="@id/holderLayoutAction1" layout="@layout/sme_store_holder_item_action" />
+    <include android:id="@id/holderLayoutAction3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" app:layout_constraintTop_toBottomOf="@id/holderLayoutAction2" layout="@layout/sme_store_holder_item_action" />
+</team.opay.business.widget.shimmer.CorpShimmerConstraintLayout>

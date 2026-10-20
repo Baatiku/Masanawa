@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Spinner android:id="@id/service_spinner_internal" android:layout_width="match_parent" android:layout_height="80.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

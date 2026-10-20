@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="@dimen/easemoni_dimen_8" />
+                    <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_theme" />
+                    <solid android:color="@color/easemoni_color_e5f8f1" />
+                </shape>
+            </item>
+            <item>
+                <bitmap android:gravity="end|bottom" android:src="@drawable/easemoni_ic_term_selected_bottom_end" />
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_selected="false">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/easemoni_dimen_8" />
+            <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_theme" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/easemoni_dimen_8" />
+            <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_theme" />
+        </shape>
+    </item>
+</selector>

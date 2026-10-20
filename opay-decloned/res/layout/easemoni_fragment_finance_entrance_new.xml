@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView android:id="@id/root_view" android:background="@color/easemoni_color_white" android:padding="@dimen/okash_dimen_16" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <FrameLayout android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:orientation="vertical" android:clipChildren="false" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent">
+            <androidx.appcompat.widget.AppCompatImageView android:id="@id/aciv_id_content" android:layout_width="match_parent" android:layout_height="wrap_content" android:adjustViewBounds="true" app:srcCompat="@drawable/easemoni_bg_finance_card_default_content" />
+            <androidx.appcompat.widget.AppCompatImageView android:id="@id/aciv_bnpl_id_content" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:adjustViewBounds="true" />
+            <TextView android:textSize="@dimen/easemoni_tv_size_10" android:textColor="@color/easemoni_color_73000000" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_16" android:text="@string/easemoni_finance_entrance_bottom_content" />
+        </LinearLayout>
+        <team.opay.easemoni.widget.CardEntranceLoaderView android:id="@id/loader" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" />
+    </FrameLayout>
+</androidx.core.widget.NestedScrollView>

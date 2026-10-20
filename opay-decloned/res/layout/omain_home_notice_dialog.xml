@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:gravity="center_horizontal" android:layout_gravity="center" android:orientation="vertical" android:id="@id/home_notice_container" android:background="@drawable/omain_bg_white_radius_8" android:focusable="false" android:clickable="false" android:layout_width="match_parent" android:layout_height="350.0dp" android:layout_marginStart="32.0dp" android:layout_marginEnd="32.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="350.0dp" android:minWidth="300.0dp">
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+            <TextView android:textSize="18.0dp" android:textColor="@color/omain_29303a" android:ellipsize="end" android:gravity="center_horizontal" android:layout_gravity="center_horizontal" android:id="@id/notice_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/margin_24_dp" android:maxLines="2" android:layout_marginStart="@dimen/_16dp" android:layout_marginEnd="@dimen/_16dp" />
+            <ScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5.0dp" android:layout_marginBottom="70.0dp" android:layout_marginStart="@dimen/_16dp" android:layout_marginEnd="@dimen/_16dp">
+                <TextView android:textSize="14.0dp" android:textColor="@color/omain_515f68" android:layout_gravity="center_horizontal" android:id="@id/notice_content" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </ScrollView>
+        </LinearLayout>
+        <TextView android:textSize="16.0dp" android:textColor="@color/osdk_color_white" android:gravity="center" android:layout_gravity="bottom" android:id="@id/get_it" android:background="@drawable/omain_button_background_green_radius_5" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_margin="@dimen/_16dp" android:layout_marginTop="16.0dp" android:text="@string/omain_got_it" />
+    </FrameLayout>
+</FrameLayout>

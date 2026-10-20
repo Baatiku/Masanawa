@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.pay.ad.MajorAdLoopViewPager android:id="@id/ad_loop_view_pager" android:layout_width="match_parent" android:layout_height="wrap_content" app:loop_full_screen="true" app:loop_full_screen_height_minus="0.0dp" app:loop_indicator_color_normal="@color/osdk_color_C1CBD1" app:loop_indicator_color_select="@color/osdk_color_00B876" app:loop_indicator_margin_bottom="2.0dp" app:loop_indicator_position="pager_middle"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" />

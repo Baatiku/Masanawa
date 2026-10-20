@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:paddingTop="0.0dp" android:layout_width="match_parent" android:layout_height="80.0dp" android:paddingStart="0.0dp" android:paddingEnd="0.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/omain_bg_white_radius_12" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ImageView android:id="@id/pay_bill_more_hot_img" android:layout_width="44.0dp" android:layout_height="20.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        <ImageView android:id="@id/bill_more_img" android:layout_width="32.0dp" android:layout_height="32.0dp" android:layout_marginTop="16.0dp" android:src="@mipmap/logo" android:layout_marginStart="12.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        <TextView android:textSize="13.0dp" android:textColor="@color/omain_515f68" android:ellipsize="end" android:id="@id/bill_more_name" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginTop="6.0dp" android:text="Deposit" android:lines="1" android:layout_marginStart="14.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintHorizontal_weight="1.0" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/bill_more_img" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

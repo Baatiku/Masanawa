@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:layout_gravity="center" android:id="@id/img" android:layout_width="60.0dp" android:layout_height="60.0dp" />
+    <LinearLayout android:layout_gravity="center_vertical" android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12.0dp">
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <ImageView android:id="@id/icon" android:layout_width="14.0dp" android:layout_height="14.0dp" />
+            <TextView android:textSize="12.0sp" android:textColor="#281471" android:id="@id/appName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:includeFontPadding="false" android:layout_marginStart="4.0dp" style="@style/TextAppearance.Compat.Notification.Title" />
+        </LinearLayout>
+        <TextView android:textSize="15.0sp" android:textColor="@color/black_85" android:id="@id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/TextAppearance.Compat.Notification.Title" />
+        <TextView android:textSize="13.0sp" android:textColor="@color/black_65" android:ellipsize="end" android:id="@id/content" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="2" style="@style/TextAppearance.Compat.Notification" />
+    </LinearLayout>
+</LinearLayout>

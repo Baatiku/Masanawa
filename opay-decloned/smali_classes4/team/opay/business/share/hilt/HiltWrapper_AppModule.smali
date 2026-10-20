@@ -1,0 +1,17 @@
+.class public final Lteam/opay/business/share/hilt/HiltWrapper_AppModule;
+.super Ljava/lang/Object;
+.source "HiltWrapper_AppModule.java"
+
+
+# direct methods
+.method public constructor <init>()V
+    .locals 0
+
+    .line 1
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    .line 2
+    .line 3
+    .line 4
+    return-void
+.end method

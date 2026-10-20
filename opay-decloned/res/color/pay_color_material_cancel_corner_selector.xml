@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="@color/pay_black_25" />
+    <item android:state_enabled="true" android:color="@color/pay_color_00B876" />
+    <item android:color="@color/pay_color_00B876" />
+</selector>

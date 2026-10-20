@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="true" android:drawable="@drawable/easemoni_bg_22_1dcf97" />
+    <item android:state_enabled="false" android:drawable="@drawable/easemoni_bg_b5c1c8_22" />
+    <item android:drawable="@drawable/easemoni_bg_22_1dcf97" />
+</selector>

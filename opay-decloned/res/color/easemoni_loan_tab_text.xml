@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="false" android:color="@color/easemoni_color_8497a4" />
+    <item android:state_checked="true" android:color="@color/easemoni_color_515f68" />
+    <item android:color="@color/easemoni_color_8497a4" />
+</selector>

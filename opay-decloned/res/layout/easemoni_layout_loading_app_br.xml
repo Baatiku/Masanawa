@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center" android:layout_gravity="center" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="@dimen/okash_dimen_248" android:layout_height="wrap_content">
+            <ImageView android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/easemoni_loading_br_top" android:scaleType="fitXY" android:adjustViewBounds="true" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+            <ImageView android:id="@id/iv_loading_br_point" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+        <LinearLayout android:background="@drawable/easemoni_bg_corner_8_f8f8fb" android:paddingTop="@dimen/okash_dimen_8" android:paddingBottom="@dimen/okash_dimen_8" android:layout_width="@dimen/okash_dimen_248" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_11">
+            <ImageView android:layout_gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_loading_br_vector" android:layout_marginStart="@dimen/okash_dimen_11" />
+            <TextView android:textSize="@dimen/easemoni_tv_size_10" android:textColor="@color/easemoni_color_a6000000" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_br_loading_text" android:layout_marginStart="@dimen/okash_dimen_8" android:layout_marginEnd="@dimen/easemoni_dimen_9" />
+        </LinearLayout>
+        <View android:gravity="center_horizontal" android:id="@id/v_line_of_dashes" android:background="@drawable/easemoni_bg_coupon_line_of_dashes" android:layout_width="@dimen/okash_dimen_248" android:layout_height="@dimen/easemoni_dimen_2" android:layout_marginTop="@dimen/easemoni_dimen_12" />
+        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_00b876" android:gravity="center_horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_20" android:text="@string/easemoni_br_loading_bottom_text" android:lineSpacingExtra="@dimen/okash_dimen_12" />
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="false">
+        <layer-list>
+            <item android:gravity="bottom" android:height="0.5dp" android:start="@dimen/_12dp" android:end="@dimen/_12dp">
+                <shape>
+                    <solid android:color="@color/black_08" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:gravity="bottom" android:height="0.5dp" android:start="@dimen/_12dp" android:end="@dimen/_12dp">
+                <shape>
+                    <solid android:color="@color/omain_00b876" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

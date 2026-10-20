@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/arrow_up" android:layout_width="10.0dp" android:layout_height="8.0dp" android:layout_marginStart="80.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/sme_store_icon_up_white" app:tint="@color/black_60" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="10.0sp" android:textColor="@color/white" android:id="@id/tv_pop_content" android:background="@drawable/sme_store_shape_black60_8" android:paddingTop="4.0dp" android:paddingBottom="4.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="7.0dp" android:text="@string/sme_store_balance_withdraw_tip" android:paddingStart="21.0dp" android:paddingEnd="24.0dp" app:fontFamily="@font/roboto_400" app:layout_constrainedWidth="true" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

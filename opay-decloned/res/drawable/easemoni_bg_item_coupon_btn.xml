@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/easemoni_color_theme" />
+    <corners android:radius="@dimen/easemoni_dimen_14" />
+    <padding android:left="@dimen/easemoni_dimen_16" android:top="@dimen/easemoni_dimen_6" android:right="@dimen/easemoni_dimen_16" android:bottom="@dimen/easemoni_dimen_6" />
+</shape>

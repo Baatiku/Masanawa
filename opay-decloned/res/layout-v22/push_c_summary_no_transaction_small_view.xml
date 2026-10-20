@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:minHeight="64.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:gravity="center" android:orientation="vertical" android:background="@drawable/push_c_shape_summary_left" android:paddingTop="2.0dp" android:paddingBottom="2.0dp" android:layout_width="0.0dp" android:layout_height="match_parent" android:layout_weight="0.36" android:paddingVertical="2.0dp">
+        <TextView android:textSize="11.0sp" android:textColor="@color/black_85_no_dark" android:gravity="center" android:id="@id/leftTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="4.0dp" android:layout_marginRight="4.0dp" android:includeFontPadding="false" android:layout_marginHorizontal="4.0dp" />
+        <TextView android:textSize="18.0sp" android:textStyle="bold" android:textColor="@color/black_85_no_dark" android:gravity="center" android:id="@id/leftAmount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="4.0dp" android:layout_marginTop="4.0dp" android:layout_marginRight="4.0dp" android:includeFontPadding="false" android:layout_marginHorizontal="4.0dp" />
+    </LinearLayout>
+    <LinearLayout android:gravity="center_vertical" android:orientation="vertical" android:background="@drawable/push_c_shape_summary_right" android:layout_width="0.0dp" android:layout_height="match_parent" android:layout_weight="0.64">
+        <TextView android:textSize="12.0sp" android:textStyle="bold" android:textColor="@color/push_c_summary_main_title" android:ellipsize="end" android:gravity="center_vertical" android:id="@id/mainTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="2" android:includeFontPadding="false" android:drawablePadding="4.0dp" android:drawableEnd="@drawable/push_c_icon_summary_no_transaction" android:layout_marginStart="8.0dp" android:layout_marginEnd="8.0dp" />
+    </LinearLayout>
+</LinearLayout>

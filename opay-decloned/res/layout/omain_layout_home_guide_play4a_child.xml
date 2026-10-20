@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/guide_play_4_child" android:focusable="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/guide_play_4_child_top" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginTop="360.0dp" android:layout_marginEnd="96.0dp" app:layout_constraintDimensionRatio="88:86" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@mipmap/omain_ic_home_guide_play_4_top" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/btn_guide_play_4_child" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginBottom="12.0dp" android:layout_marginEnd="9.0dp" app:layout_constraintBottom_toTopOf="@id/guide_play_4_child_top" app:layout_constraintDimensionRatio="262:163" app:layout_constraintEnd_toEndOf="parent" app:srcCompat="@mipmap/omain_ic_home_guide_play_4_btn" />
+</androidx.constraintlayout.widget.ConstraintLayout>

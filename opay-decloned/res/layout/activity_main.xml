@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:orientation="vertical" android:id="@id/main_layout" android:background="@color/osdk_color_F8F8FB" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@id/bottom_navigation_bar" android:background="@color/osdk_home_tab" android:layout_width="match_parent" android:layout_height="wrap_content" app:itemIconTint="@color/bar_icon_button" app:itemTextColor="@color/bar_button" app:labelVisibilityMode="labeled" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:menu="@menu/bottom_menu" />
+    <androidx.viewpager2.widget.ViewPager2 android:id="@id/contentPager" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_constrainedHeight="true" app:layout_constraintBottom_toTopOf="@id/bottom_navigation_bar" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <include android:fitsSystemWindows="true" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_constraintBottom_toTopOf="@id/bottom_navigation_bar" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" layout="@layout/merge_home_holder_layout" />
+</androidx.constraintlayout.widget.ConstraintLayout>

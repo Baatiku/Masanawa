@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <solid android:color="@color/easemoni_color_white" />
+            <corners android:radius="@dimen/okash_dimen_16" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient android:startColor="@color/easemoni_color_1a28ba64" android:endColor="@color/easemoni_color_white" android:angle="270.0" android:centerColor="@color/easemoni_color_white" />
+            <corners android:radius="@dimen/okash_dimen_16" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.pay.ad.OpayAdBannerView android:id="@id/pager" android:layout_width="0.0dp" android:layout_height="64.0dp" app:banner_background_res="@drawable/shape_corner_white_12" app:intercept_touch="false" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:show_right_arrow="true" />
+    <TextView android:textSize="12.0sp" android:textColor="@color/osdk_color_FFA101" android:id="@id/act_tag" android:background="@mipmap/bg_free_tag" android:paddingLeft="8.0dp" android:paddingTop="3.0dp" android:paddingRight="8.0dp" android:paddingBottom="3.0dp" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="-8.0dp" android:paddingHorizontal="8.0dp" android:paddingVertical="3.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="@id/pager" />
+</androidx.constraintlayout.widget.ConstraintLayout>

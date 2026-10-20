@@ -47,5 +47,4 @@ references/sources/
 
 # Reverse engineering and decompiled packages
 *.apk
-*-decloned/
 activities.txt

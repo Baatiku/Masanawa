@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:layout_gravity="center" android:orientation="vertical" android:background="@drawable/ripple_white_6" android:paddingTop="@dimen/margin_24_dp" android:paddingBottom="@dimen/margin_24_dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="32.0dp" android:layout_marginRight="32.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:layout_gravity="center_horizontal" android:id="@id/upgrade_kyc_title" android:background="@mipmap/to_be_paid_icon" android:layout_width="125.0dp" android:layout_height="125.0dp" />
+    <TextView android:textSize="16.0sp" android:textStyle="bold" android:textColor="@color/color_515f68" android:gravity="center_horizontal" android:layout_gravity="center_horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4.0dp" android:text="Continue to pay" android:lineSpacingExtra="8.0sp" />
+    <TextView android:textSize="14.0sp" android:textColor="@color/omain_8497a4" android:layout_gravity="center_horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dp" android:text="Do you want to return to the page you are \n paying for?" android:lineSpacingExtra="6.0sp" />
+    <Button android:gravity="center" android:id="@id/bt_ok" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginLeft="40.0dp" android:layout_marginTop="@dimen/margin_24_dp" android:layout_marginRight="40.0dp" android:text="Confirm" style="@style/Button_R24" />
+    <Button android:gravity="center" android:id="@id/bt_resend" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginLeft="40.0dp" android:layout_marginTop="12.0dp" android:layout_marginRight="40.0dp" android:text="Cancel" style="@style/Button_Hollow_R24" />
+</LinearLayout>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Pay.AppTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="colorAccent">@color/pay_color_00B876</item>
+        <item name="colorPrimary">@color/pay_color_00B876</item>
+    </style>
+    <style name="Pay.Core.Dialog" parent="@style/Theme.AppCompat.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowFrame">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:forceDarkAllowed">true</item>
+    </style>
+</resources>

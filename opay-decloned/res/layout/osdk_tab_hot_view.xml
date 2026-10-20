@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.AppCompatTextView android:textColor="@color/black_65" android:id="@id/hotTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/osdk_hot" android:drawablePadding="2.0dp" android:drawableStart="@mipmap/osdk_ic_hot" style="@style/rewardsTabLayoutTextStyle"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

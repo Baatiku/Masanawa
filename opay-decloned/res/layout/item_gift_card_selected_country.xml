@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="64.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.google.android.material.imageview.ShapeableImageView android:id="@id/icon" android:background="@drawable/osdk_circle_f8f8fb" android:layout_width="40.0dp" android:layout_height="40.0dp" android:scaleType="fitCenter" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:shapeAppearance="@style/CircleImageView" />
+    <ImageView android:id="@id/selector" android:layout_width="24.0dp" android:layout_height="24.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:textSize="14.0sp" android:textColor="@color/black_85" android:id="@id/name" android:layout_width="0.0dp" android:layout_height="wrap_content" android:fontFamily="@font/roboto_500" android:layout_marginStart="12.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toStartOf="@id/selector" app:layout_constraintStart_toEndOf="@id/icon" app:layout_constraintTop_toTopOf="parent" />
+    <View android:background="@color/osdk_color_F8F8FB" android:layout_width="match_parent" android:layout_height="1.0dp" app:layout_constraintBottom_toBottomOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

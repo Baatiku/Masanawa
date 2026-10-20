@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:id="@id/root" android:background="@drawable/selector_tag_08" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.appcompat.widget.LinearLayoutCompat android:orientation="vertical" android:paddingTop="@dimen/_16dp" android:paddingBottom="@dimen/_16dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="16.0sp" android:textColor="@color/black_85" android:gravity="center" android:id="@id/total_amount" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="1.0dp" android:text="@string/osdk_0" android:fontFamily="@font/roboto_400" />
+        <TextView android:textSize="12.0sp" android:textColor="@drawable/cash_bundle_item_text_selector" android:gravity="center" android:id="@id/amount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2.0dp" android:text="@string/osdk_0" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</FrameLayout>

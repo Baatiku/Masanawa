@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/printer_white" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/iv_print" android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/print_separate" android:scaleType="centerInside" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:textSize="12.0sp" android:textStyle="bold" android:textColor="@color/printer_black" android:gravity="center" android:layout_gravity="center" android:id="@id/tv_sign_line_top_text" android:background="@color/printer_white" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="@string/printer_notice_ad" android:lines="1" android:paddingStart="5.0dp" android:paddingEnd="5.0dp" />
+</FrameLayout>

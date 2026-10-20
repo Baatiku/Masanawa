@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.easemoni.widget.OKashActionBar android:id="@id/action_bar" app:layout_constraintLeft_toLeftOf="parent" app:layout_constraintTop_toTopOf="parent" app:okash_ab_start_tint_color="@color/easemoni_color_white" app:okash_ab_title="@string/easemoni_version_update" app:okash_ab_title_color="@color/easemoni_color_white" style="@style/EaseMoniActionBar" />
+    <ImageView android:paddingTop="@dimen/easemoni_dimen_40" android:paddingBottom="@dimen/easemoni_dimen_40" android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/easemoni_bg_version_check" />
+    <FrameLayout android:id="@id/version_check_result_container" android:padding="@dimen/easemoni_dimen_16" android:layout_width="match_parent" android:layout_height="match_parent" />
+</LinearLayout>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/bnpl_color_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ScrollView android:id="@id/scroll_view" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <com.loan.cash.credit.bnpl.widget.BNPLActionBar android:id="@id/action_bar" android:layout_width="match_parent" android:layout_height="wrap_content" app:bnpl_ab_bg_color="@color/bnpl_color_white" app:bnpl_ab_start_icon="@drawable/bnpl_ic_back" app:bnpl_ab_start_tint_color="@color/bnpl_color_222f3e" app:layout_constraintTop_toTopOf="parent" />
+            <ImageView android:id="@id/iv_photo" android:layout_width="@dimen/okash_dimen_120" android:layout_height="@dimen/okash_dimen_120" android:layout_marginTop="@dimen/okash_dimen_104" android:src="@drawable/bnpl_ic_face_guide" android:contentDescription="@null" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+            <TextView android:textSize="@dimen/okash_tv_size_24" android:textStyle="bold" android:textColor="@color/bnpl_color_d9000000" android:id="@id/tv_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_40" android:text="@string/bnpl_bvn_face_guide_title" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/iv_photo" />
+            <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_a6000000" android:gravity="center" android:id="@id/tv_desc" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_16" android:layout_marginTop="@dimen/okash_dimen_16" android:layout_marginRight="@dimen/okash_dimen_16" android:text="@string/bnpl_bvn_face_guide_desc" android:layout_marginHorizontal="@dimen/okash_dimen_16" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/tv_title" />
+            <LinearLayout android:orientation="vertical" android:id="@id/ll_guide" android:background="@drawable/bnpl_bg_liveness_tips" android:padding="@dimen/okash_dimen_16" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_16" android:layout_marginTop="@dimen/okash_dimen_32" android:layout_marginRight="@dimen/okash_dimen_16" android:layout_marginHorizontal="@dimen/okash_dimen_16" app:layout_constraintTop_toBottomOf="@id/tv_desc">
+                <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_black" android:id="@id/tv_recommend" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/bnpl_bvn_photo_recommend" />
+                <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_12">
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/bnpl_ic_bright" android:contentDescription="@null" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/bnpl_bvn_stay_bright" android:layout_marginStart="@dimen/okash_dimen_12" />
+                    </LinearLayout>
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_12">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/bnpl_ic_face_frame" android:contentDescription="@null" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/bnpl_bvn_face_frame" android:layout_marginStart="@dimen/okash_dimen_12" />
+                    </LinearLayout>
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_12">
+                        <ImageView android:layout_width="@dimen/okash_dimen_32" android:layout_height="@dimen/okash_dimen_32" android:src="@drawable/bnpl_ic_face_cover" android:contentDescription="@null" />
+                        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_black" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/bnpl_bvn_remove_face_cover" android:layout_marginStart="@dimen/okash_dimen_12" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <Space android:layout_width="@dimen/okash_dimen_20" android:layout_height="@dimen/okash_dimen_80" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/ll_guide" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
+    <FrameLayout android:layout_gravity="bottom" android:background="@color/bnpl_color_white" android:paddingLeft="@dimen/okash_dimen_25" android:paddingRight="@dimen/okash_dimen_25" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="@dimen/okash_dimen_25">
+        <Button android:textColor="@color/bnpl_color_white" android:id="@id/btn_start" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_10" android:layout_marginBottom="@dimen/okash_dimen_20" android:text="@string/bnpl_bvn_lets_start" android:textAllCaps="false" style="@style/BNPLLargeBtnStyle" />
+    </FrameLayout>
+</FrameLayout>

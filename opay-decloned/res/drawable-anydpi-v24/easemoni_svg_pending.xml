@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="83.0dp" android:width="80.0dp" android:viewportWidth="80.0" android:viewportHeight="83.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="@drawable/$easemoni_svg_pending__0" android:pathData="M40,7A30,30 0,1 0,40 67A30,30 0,1 0,40 7Z" />
+    <path android:fillColor="#fff" android:pathData="M40.9077,22.9092L40.9077,22.9092A2.6728,2.6728 0,0 1,43.5806 25.582L43.5806,34.1123A2.6728,2.6728 0,0 1,40.9077 36.7851L40.9077,36.7851A2.6728,2.6728 0,0 1,38.2349 34.1123L38.2349,25.582A2.6728,2.6728 0,0 1,40.9077 22.9092z" />
+    <path android:fillColor="#fff" android:pathData="M38.6171,35.3338C39.5248,34.1463 41.2209,33.938 42.3889,34.8708V34.8708C43.5369,35.7876 43.7426,37.4637 42.8505,38.631L33.8853,50.3609C32.9776,51.5485 31.2814,51.7567 30.1135,50.8239V50.8239C28.9655,49.9071 28.7598,48.231 29.6519,47.0638L38.6171,35.3338Z" android:fillType="evenOdd" />
+    <path android:fillColor="#fff" android:pathData="M40.9893,32.0733A4.6565,4.6565 0,1 0,40.9893 41.3863A4.6565,4.6565 0,1 0,40.9893 32.0733Z" />
+</vector>

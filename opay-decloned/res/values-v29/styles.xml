@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="OFace.AppTheme.NoActionBar" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/live_white</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="colorPrimaryDark">@color/live_white</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+    <style name="Pay.AppTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="android:forceDarkAllowed">true</item>
+        <item name="colorAccent">@color/pay_color_00B876</item>
+        <item name="colorPrimary">@color/pay_color_00B876</item>
+    </style>
+</resources>

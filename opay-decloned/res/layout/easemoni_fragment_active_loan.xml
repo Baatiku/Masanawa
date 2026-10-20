@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.easemoni.widget.OKashActionBar android:id="@id/active_action_bar" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent" app:okash_ab_bg_color="@color/easemoni_color_white" app:okash_ab_start_tint_color="@color/easemoni_color_theme" app:okash_ab_title="@string/easemoni_module_name" app:okash_ab_title_color="@color/easemoni_color_theme" app:okash_ab_title_gravity="start" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/recycler_view" android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="match_parent" />
+</FrameLayout>

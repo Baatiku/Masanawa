@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16.0dp" android:layout_marginEnd="16.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <FrameLayout android:layout_gravity="center_vertical" android:id="@id/announcement" android:layout_width="match_parent" android:layout_height="32.0dp">
+        <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="center_vertical" android:id="@id/announcement_image" android:background="@mipmap/pay_ic_announcement_normal" android:layout_width="16.0dp" android:layout_height="16.0dp" android:layout_marginStart="12.0dp" />
+        <cashier.view.MarqueeView android:layout_gravity="center_vertical" android:id="@id/marquee_view" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="36.0dp" android:layout_marginEnd="36.0dp" />
+        <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="end|center" android:id="@id/announcement_arrow" android:background="@mipmap/pay_ic_announcement_arrow_normal" android:layout_width="16.0dp" android:layout_height="16.0dp" android:layout_marginEnd="12.0dp" />
+    </FrameLayout>
+</LinearLayout>

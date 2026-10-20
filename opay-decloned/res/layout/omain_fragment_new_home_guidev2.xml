@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/root" android:background="@color/osdk_guide_mask" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ViewFlipper android:id="@id/guide_flipper" android:layout_width="match_parent" android:layout_height="match_parent">
+        <include android:id="@id/homeGuideStep1" layout="@layout/omain_layout_home_guide_step_1" />
+        <include android:id="@id/homeGuideStep2" layout="@layout/omain_layout_home_guide_step_2" />
+        <include android:id="@id/homeGuideStep3" layout="@layout/omain_layout_home_guide_step_3" />
+        <include android:id="@id/homeGuideStep5" layout="@layout/omain_layout_home_guide_step_5" />
+    </ViewFlipper>
+</androidx.constraintlayout.widget.ConstraintLayout>

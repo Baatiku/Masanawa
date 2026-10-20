@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView android:textSize="@dimen/easemoni_tv_size_12" android:textColor="@color/easemoni_color_relationship" android:id="@id/tv_content" android:background="@drawable/easemoni_relationship_selector" android:paddingLeft="@dimen/okash_dimen_12" android:paddingTop="@dimen/okash_dimen_4" android:paddingRight="@dimen/okash_dimen_12" android:paddingBottom="@dimen/okash_dimen_4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

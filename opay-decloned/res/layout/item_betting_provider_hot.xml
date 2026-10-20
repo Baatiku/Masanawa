@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/shape_corner_f8f8fb_12" android:paddingTop="6.0dp" android:paddingBottom="6.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="4.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/hot_img" android:layout_width="32.0dp" android:layout_height="32.0dp" android:layout_marginTop="6.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/black_65" android:id="@id/hot_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/hot_img" />
+</androidx.constraintlayout.widget.ConstraintLayout>

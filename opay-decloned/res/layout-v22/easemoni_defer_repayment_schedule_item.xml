@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.easemoni.widget.OKashBatterLinearLayout android:orientation="horizontal" android:paddingTop="@dimen/okash_dimen_10" android:paddingBottom="@dimen/okash_dimen_10" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="@dimen/okash_dimen_10"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <team.opay.easemoni.widget.OKashBatterLinearLayout android:orientation="vertical" android:layout_width="@dimen/okash_dimen_0" android:layout_height="wrap_content" android:layout_weight="1.0">
+        <TextView android:textSize="@dimen/okash_tv_size_12" android:textColor="@color/easemoni_color_d9000000" android:gravity="center" android:id="@id/item_repayment_schedule_due_date" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" />
+        <TextView android:textSize="@dimen/okash_tv_size_10" android:textColor="@color/easemoni_color_73000000" android:gravity="center" android:id="@id/tv_instalment_number" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_4" />
+    </team.opay.easemoni.widget.OKashBatterLinearLayout>
+    <team.opay.easemoni.widget.OKashBatterLinearLayout android:orientation="vertical" android:layout_width="@dimen/okash_dimen_0" android:layout_height="wrap_content" android:layout_weight="1.0">
+        <TextView android:textSize="@dimen/okash_tv_size_12" android:textColor="@color/easemoni_color_d9000000" android:gravity="center" android:id="@id/item_repayment_schedule_repay_amount" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" />
+        <TextView android:textSize="@dimen/okash_tv_size_10" android:textColor="@color/easemoni_color_73000000" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_4" android:text="@string/easemoni_loan_text_principle" />
+    </team.opay.easemoni.widget.OKashBatterLinearLayout>
+    <team.opay.easemoni.widget.OKashBatterLinearLayout android:orientation="vertical" android:id="@id/repay_schedule_header_save_area" android:layout_width="@dimen/okash_dimen_0" android:layout_height="wrap_content" android:layout_weight="1.0">
+        <TextView android:textSize="@dimen/okash_tv_size_12" android:textColor="@color/easemoni_color_theme" android:gravity="center" android:id="@id/item_repayment_schedule_saved" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" />
+        <TextView android:textSize="@dimen/okash_tv_size_10" android:textColor="@color/easemoni_color_73000000" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_4" android:text="@string/easemoni_interest" />
+    </team.opay.easemoni.widget.OKashBatterLinearLayout>
+</team.opay.easemoni.widget.OKashBatterLinearLayout>

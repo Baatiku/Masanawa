@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:padding="5.0dp" android:layout_width="match_parent" android:layout_height="110.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <RelativeLayout android:gravity="center" android:id="@id/add_view" android:background="@drawable/common_selector_edit_text" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ImageView android:id="@id/imageview" android:layout_width="20.0dp" android:layout_height="20.0dp" android:src="@drawable/picture_ic_add" />
+    </RelativeLayout>
+</RelativeLayout>
