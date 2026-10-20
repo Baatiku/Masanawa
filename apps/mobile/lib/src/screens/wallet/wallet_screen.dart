@@ -268,6 +268,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               onFund: _fund,
               onVisibilityChanged:(hidden)=>setState((){_hiddenOwner=accountId;_hideBalances=hidden;}),
               onBalance:(value){if(mounted&&accountId==switch(ref.read(sessionProvider)){SessionSignedIn(:final user)=>user.id,_=>null})setState((){_balance=value;_balanceOwner=accountId;});}),
+            MsnwAccountBadge(
+              dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl, accountId: accountId,
+              currentUserId: () => switch (ref.read(sessionProvider)) {
+                SessionSignedIn(:final user) => user.id, _ => null,
+              }, accessToken: () => ref.read(apiClientProvider).accessToken),
             const SizedBox(height: 24),
             WalletActionRow(onSend: accountId == null ? null : _sendMsnw,
               onConvert: accountId == null ? null : _convertMsnw,
