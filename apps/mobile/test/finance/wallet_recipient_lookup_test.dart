@@ -41,8 +41,16 @@ void main() {
     Widget page() => MaterialApp(home: Scaffold(body: MsnwAccountBadge(
       dio: dio, baseUrl: 'https://example.invalid', accountId: account,
       currentUserId: () => account, accessToken: () => 'session-$account')));
-    await tester.pumpWidget(page()); await tester.pump();
-    account = 'two'; await tester.pumpWidget(page()); await tester.pump();
+    await tester.pumpWidget(page());
+    for (var i = 0; i < 10 && reads.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(reads, hasLength(1));
+    account = 'two'; await tester.pumpWidget(page());
+    for (var i = 0; i < 10 && reads.length < 2; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(reads, hasLength(2));
     reads[1].complete({'accountNumber': '8000000002'});
     await tester.pumpAndSettle();
     reads[0].complete({'accountNumber': '8000000001'});

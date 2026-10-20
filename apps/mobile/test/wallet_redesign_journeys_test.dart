@@ -61,6 +61,7 @@ void main(){
   final context=t.element(find.byKey(const ValueKey('wallet-balance-card')));
   expect((card.decoration as BoxDecoration).color,context.masanawa.brand);
   expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('2 MSNW reserved'),findsOneWidget);expect(find.text('USDT'),findsOneWidget);expect(find.text('12.5'),findsOneWidget);expect(find.text('USDC'),findsOneWidget);expect(find.text('0'),findsNWidgets(2));expect(find.text('Tron'),findsOneWidget);expect(find.text('Polygon'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('Data bundles'),200,scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pumpAndSettle();
   expect(find.text('Data bundles'),findsOneWidget);expect(find.text('Transactions'),findsOneWidget);expect(t.takeException(),isNull);
   await t.tap(find.byTooltip('Hide balance'));await t.pump();expect(find.text('12.5'),findsNothing);expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••'),findsNWidgets(3));
  });
