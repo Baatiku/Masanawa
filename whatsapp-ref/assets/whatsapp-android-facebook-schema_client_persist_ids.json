@@ -1,0 +1,122 @@
+{
+  "AcDcCreateDigitalCommerceNonse": {
+    "operation_name": "AcDcCreateDigitalCommerceNonse",
+    "operation_name_hash": "347426904",
+    "operation_text_hash": "12618905878102061020",
+    "client_doc_id": "34742690412618905878102061020",
+    "doc_id": 24264828513176160,
+    "schema": "facebook"
+  },
+  "BizAlertsNotificationList": {
+    "operation_name": "BizAlertsNotificationList",
+    "operation_name_hash": "2822139444",
+    "operation_text_hash": "14289507393855084139",
+    "client_doc_id": "282213944414289507393855084139",
+    "doc_id": 25131061249916279,
+    "schema": "facebook"
+  },
+  "BizAlertsUpdateMutation": {
+    "operation_name": "BizAlertsUpdateMutation",
+    "operation_name_hash": "2212382936",
+    "operation_text_hash": "12640780775375332648",
+    "client_doc_id": "221238293612640780775375332648",
+    "doc_id": 31887288120915506,
+    "schema": "facebook"
+  },
+  "CtwaAdsContextBizQuery": {
+    "operation_name": "CtwaAdsContextBizQuery",
+    "operation_name_hash": "2954588679",
+    "operation_text_hash": "892176129681888053",
+    "client_doc_id": "2954588679892176129681888053",
+    "doc_id": 28454201244247378,
+    "schema": "facebook"
+  },
+  "DigitalContentIAPPurchaseQuoteMutation": {
+    "operation_name": "DigitalContentIAPPurchaseQuoteMutation",
+    "operation_name_hash": "1696031672",
+    "operation_text_hash": "11219688241314679965",
+    "client_doc_id": "169603167211219688241314679965",
+    "doc_id": 24407486212227381,
+    "schema": "facebook"
+  },
+  "GetCompliance": {
+    "operation_name": "GetCompliance",
+    "operation_name_hash": "3294599448",
+    "operation_text_hash": "14113391831729071605",
+    "client_doc_id": "329459944814113391831729071605",
+    "doc_id": 25758882000383882,
+    "schema": "facebook"
+  },
+  "GetCustomUrlsQuery": {
+    "operation_name": "GetCustomUrlsQuery",
+    "operation_name_hash": "810695842",
+    "operation_text_hash": "14293867754538840238",
+    "client_doc_id": "81069584214293867754538840238",
+    "doc_id": 24381430531538259,
+    "schema": "facebook"
+  },
+  "GetDcpProductsQuery": {
+    "operation_name": "GetDcpProductsQuery",
+    "operation_name_hash": "250862609",
+    "operation_text_hash": "10922749944554622917",
+    "client_doc_id": "25086260910922749944554622917",
+    "doc_id": 24562080436794785,
+    "schema": "facebook"
+  },
+  "SetCompliance": {
+    "operation_name": "SetCompliance",
+    "operation_name_hash": "40393248",
+    "operation_text_hash": "966173993490771611",
+    "client_doc_id": "40393248966173993490771611",
+    "doc_id": 25904531552477562,
+    "schema": "facebook"
+  },
+  "WaAutofillAddPayCreditCard": {
+    "operation_name": "WaAutofillAddPayCreditCard",
+    "operation_name_hash": "214790815",
+    "operation_text_hash": "13735340368924609469",
+    "client_doc_id": "21479081513735340368924609469",
+    "doc_id": 29134839332774684,
+    "schema": "facebook"
+  },
+  "WaAutofillBindCard": {
+    "operation_name": "WaAutofillBindCard",
+    "operation_name_hash": "134198203",
+    "operation_text_hash": "135233086531537954",
+    "client_doc_id": "134198203135233086531537954",
+    "doc_id": 28179983854996363,
+    "schema": "facebook"
+  },
+  "WaAutofillFetchPaymentData": {
+    "operation_name": "WaAutofillFetchPaymentData",
+    "operation_name_hash": "765790044",
+    "operation_text_hash": "8005682683401240692",
+    "client_doc_id": "7657900448005682683401240692",
+    "doc_id": 28691228703848497,
+    "schema": "facebook"
+  },
+  "WaAutofillGetEncryptedPan": {
+    "operation_name": "WaAutofillGetEncryptedPan",
+    "operation_name_hash": "3037899336",
+    "operation_text_hash": "3224006943456208955",
+    "client_doc_id": "30378993363224006943456208955",
+    "doc_id": 27992001657136028,
+    "schema": "facebook"
+  },
+  "WaGetServerEncryptionKey": {
+    "operation_name": "WaGetServerEncryptionKey",
+    "operation_name_hash": "1449508975",
+    "operation_text_hash": "16758610613322851832",
+    "client_doc_id": "144950897516758610613322851832",
+    "doc_id": 27456385417377565,
+    "schema": "facebook"
+  },
+  "WhatsappTrustedDeviceRegistration": {
+    "operation_name": "WhatsappTrustedDeviceRegistration",
+    "operation_name_hash": "3710309539",
+    "operation_text_hash": "11979708600288520838",
+    "client_doc_id": "371030953911979708600288520838",
+    "doc_id": 27335489319457030,
+    "schema": "facebook"
+  }
+}

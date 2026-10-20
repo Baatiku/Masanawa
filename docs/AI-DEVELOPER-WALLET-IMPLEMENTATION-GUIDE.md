@@ -105,3 +105,16 @@ When implementing the Wallet and Transfer subsystem, adhere strictly to these pr
 4. **Build the Custom In-App Keypad:** In `apps/mobile/lib/src/ui/components/pin_keyboard.dart`, implement the 3x4 numeric keypad with biometric button.
 5. **Explore & Integrate Chat Synergy:** Enable in-chat transfers (`+ -> Pay`) and tap-to-pay on 10-digit IDs in conversation threads.
 6. **Feel Empowered to Surface More:** If you spot other smart implementations in `opay-decloned/` (such as transaction caching, haptic feedback hooks, or notification deduplication), adapt them into Masanawa and keep our codebase world-class!
+
+---
+
+## 6. Pairing OPay Speed with WhatsApp UX (`whatsapp-ref/`)
+
+To complement OPay's fintech architecture, we also reverse-engineered **WhatsApp v2.26.40.72** into [`whatsapp-ref/`](file:///c:/Users/Besta/Masanawa/whatsapp-ref/README.md) and documented the design system in [`docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md`](file:///c:/Users/Besta/Masanawa/docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md).
+
+### The Synergy Model:
+- **OPay (`opay-decloned/`) supplies the Engine:** 10-digit instant account inquiry, 5-minute duplicate transfer interception, custom 3x4 numeric security keyboard, offline JSON caching, and telco auto-detection.
+- **WhatsApp (`whatsapp-ref/`) supplies the Shell:** Iconic green/white design system (`#25D366`, `#111B21`, `#202C33`), chat bubble tails and nip geometries, push-to-talk voice note animations (`kjt.json`), live voice equalizers (`kja.json`), and the 5-tab root architecture (**Chats · Status · Wallet · Calls · Rooms**).
+
+Use both reference trees freely to craft the most fluid, resilient, and beautiful communication and fintech app in the world.
+
