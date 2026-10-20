@@ -110,7 +110,7 @@ See [UPDATES-FEED-FINAL-SPEC.md](UPDATES-FEED-FINAL-SPEC.md). Brief source-drive
 
 - **UPDATE-01:** Rename root label Status -> **Updates**, preserve route aliases; replace current "Updates | Videos" top TabBar with one feed and lightweight **For You / Following** filters immediately below the composer (or accessible filter menu). Never use WhatsApp ring/story UI.
 - **UPDATE-02:** Header: title Updates, search, optional notification; own avatar + "Share an update…" composer entry; feed scroll of unified human/Masana posts.
-- **UPDATE-03:** One post card: avatar/name, HUM AN / Masana AI disclosure, post time and audience, overflow; text then photo/gallery/video/audio inline; row of like/comment/share plus save via overflow, real counts, comment thread.
+- **UPDATE-03:** One post card: avatar/name, Human / Masana AI disclosure, post time and audience, overflow; text then photo/gallery/video/audio inline; row of like/comment/share plus save via overflow, real counts, comment thread.
 - **UPDATE-04:** Preserve current videos and external video player as an authorized **media type inside feed** or secondary media/search browse; do not delete `features/videos` or old source; no dedicated primary Videos tab, no video-only feed requirement or automatic full-screen takeover.
 - **UPDATE-05:** Human author create text/photo/video/audio -> review audience/rights -> see **server-quoted MSNW publication fee** -> explicit confirm and purpose-bound auth -> single charge and post publication with receipt. If insufficient MSNW, return Fund Wallet; draft survives; no phantom publish. Where moderation is required, **charge/capture policy must be explicit**: reserve before review and capture only on approval, otherwise release, or quote a non-charge review process. Never take irreversible money for a rejected post without disclosed policy.
 - **UPDATE-06:** Masana post authorship bound to approved Masana / creator and agent worker permission with anti-spam and pacing, separate from human fee; no forged role author.
@@ -197,6 +197,24 @@ See [P2P-AND-PROFILE-FINAL-SPEC.md](P2P-AND-PROFILE-FINAL-SPEC.md). Existing `ms
 **NAV-01** Five tab visible labels changed to Chats/Updates/Wallet/Calls/Rooms; aliases `status` and `/status/:postId` preserved, no fifth+ tab.
 **NAV-02** Back/deep link restoration: authorized target only after current account sign-in; legacy /status link opens Updates post details.
 **NAV-03** Unified single green/white high contrast Masanawa design (brand original, no exact copied Facebook/WhatsApp visual assets), modest spacing and consistent header/empty states.
+
+## 2A. Minimalism filter — complete products without congested screens
+
+A **comprehensive reference catalogue is NOT an obligation to display every switch or ship every candidate immediately**. Screen outcomes, user need and verification determine the active surface. For every register row assign a **decision** (CORE NOW / CONTEXTUAL ADVANCED / QUALIFIED LATER / EXCLUDED WITH REASON) independently from code status (PRESENT / PARTIAL / MISSING / VERIFIED). Those dispositions must be recorded during source-by-source audit; the 417+204 row counts are discovery scope, NOT evidence of 621 useful features or a forced feature checklist.
+
+| Domain | Core visible immediately | Contextual only | Explicitly avoid |
+|---|---|---|---|
+| Auth | Sign-in method, verify, recover | Device list and step-up when invoked | Overloaded onboarding/AI/Wallet ads |
+| Chats | Human/Masana inbox, new chat, requests, text/voice, call | Advanced message tools via long-press/menu | Separate channel/community inbox, additional tabs |
+| Human profile | Identity, Message, Follow, Posts | Masana/Rooms when real; P2P stats/Trade only when eligible | Fake follower/trade metrics, business identity |
+| Masana profile | AI identity, Chat, qualified Call, published posts | Creator and professional details when authenticated | Fictitious expert verification or hidden AI label |
+| Updates | Mixed feed, composer, For You/Following, Like, Comment, Share | Video/media viewer, post rights/fee at publish review | WhatsApp 24-hour status, rings, Videos main tab |
+| P2P | Buy/Sell, offer, quote, order, escrow status | Orders/My Offers, trader trust, dispute on state | Merchant profiles, trading terminals, fake ratings |
+| Wallet | Available MSNW, Send, Receive, Fund, Convert, Bills/P2P | Advanced assets/receipts/support | Cards, speculative balance, second ledger |
+| Rooms | One Room list, short create, conversation/updates | Topics, admin, roles, live stage only if creator enables | Group/Channel/Community type selector |
+| Calls | Recent calls, new call, real voice | Video/group/stage only if provider qualified | Cosmetic "connected" fake sessions |
+
+**Rework discipline:** freeze a screen design for each implementation wave after source audit, then implement that whole client/server/database/permission/test slice. Don't redesign a working screen simply because a competitor has another menu. **"Functional and important" outranks feature quantity**. Excluded or not-yet-qualified features remain visibly accounted for, not silently abandoned.
 
 ## 3. Priority, dependency and anti-rework policy
 
