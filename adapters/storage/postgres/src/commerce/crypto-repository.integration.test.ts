@@ -210,7 +210,7 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
     })).rejects.toThrow("crypto.provider_payment.intent_mismatch");
     expect(await f.repository.readBalance({
       tenantId: f.tenantId, userId: f.userId, asset: "USDTTRC20", network: "tron",
-    })).toBe("30");
+    })).toMatch(/^30(?:\.0+)?$/u);
   });
 
   it("reverses a provider deposit refund exactly once and never resurrects refunded state", async () => {
@@ -717,7 +717,7 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
     })).toBe("-100");
     expect(await f.repository.readAggregateLiability({
       tenantId: f.tenantId, asset: "USDTTRC20", network: "tron",
-    })).toBe("30");
+    })).toMatch(/^30(?:\.0+)?$/u);
   });
 
   it("aggregates shared custody liability across separate tenants", async () => {

@@ -423,7 +423,7 @@ export function createPostgresAgentRunRepository(
           await admit(client, request, "read", run.trace);
           return run;
         },
-        { isolation: "repeatable read", readOnly: true },
+        { isolation: "repeatable read" },
       );
     },
 
