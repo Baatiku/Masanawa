@@ -159,7 +159,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   BillingCheckoutView? current;
   BillingWalletActionView? walletAction;
   int _generation = 0;
-  bool _manualNetwork = false;
   String? historyError;
   String? get _owner => switch(ref.read(sessionProvider)) {SessionSignedIn(:final user) => user.id, _ => null};
   bool valid(int generation, String? owner) => mounted && generation == _generation && owner == _owner;
@@ -167,7 +166,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   bool loading = true;
   String? error;
 
-  NigerianNetwork selectedNetwork = NigerianNetwork.mtn;
+  NigerianNetwork? selectedNetwork;
   String selectedFilter = 'All';
 
   ApiClient get api => ref.read(apiClientProvider);
@@ -177,25 +176,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   void initState() {
     super.initState();
-    customer.addListener(_onPhoneChanged);
     load();
-  }
-
-  void _onPhoneChanged() {
-    final text = customer.text;
-    if (!mobileCategory || _manualNetwork || busy) return;
-    final detected = detectNetworkFromPhone(text);
-    if (detected != null && detected != selectedNetwork) {
-      setState(() {
-        selectedNetwork = detected;
-      });
-      _matchBillerForNetwork(detected);
-    }
   }
 
   @override
   void dispose() {
-    customer.removeListener(_onPhoneChanged);
     customer.dispose();
     super.dispose();
   }
@@ -252,7 +237,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final generation = _generation, owner = _owner;
     setState(() {
       selectedFilter = 'All';
-      _manualNetwork = false;
+      selectedNetwork = null;
       category = value;
       biller = null;
       item = null;
@@ -266,9 +251,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       if (valid(generation, owner)) {
         // Release the category fetch guard before loading the selected biller.
         setState(() { billers = next; busy = false; });
-        if (mobileCategory) {
-          await _matchBillerForNetwork(selectedNetwork);
-        } else if (next.isNotEmpty) {
+        if (!mobileCategory && next.isNotEmpty) {
           await selectBiller(next.first);
         }
       }
@@ -497,10 +480,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         items=freshItems;item=selected;
         categories=freshCategories;
         selectedFilter='All';
-        _manualNetwork=true;
         customer.text=recipient;
         if(phone){
-          selectedNetwork=detectNetworkFromPhone(recipient)??selectedNetwork;
+          selectedNetwork=NigerianNetwork.values.where((network) =>
+            selectedBillers.single.name.toLowerCase().contains(network.label.toLowerCase()))
+            .firstOrNull;
         }
         busy=false;
       });
@@ -543,6 +527,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    final phoneHint = mobileCategory ? detectNetworkFromPhone(customer.text) : null;
     ref.listen<SessionState>(sessionProvider, (previous, next) {
       final before = previous is SessionSignedIn ? previous.user.id : null;
       final after = next is SessionSignedIn ? next.user.id : null;
@@ -638,6 +623,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             const SizedBox(height: 6),
             TextField(
               controller: customer,
+              onChanged: (_) {if (mobileCategory) setState(() {});},
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 hintText: mobileCategory ? '0803 000 0000' : 'Customer account number',
@@ -660,6 +646,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             if (mobileCategory) const Text(
               'Phone prefixes are hints, not proof of your network. If your number was ported, choose its current operator.',
             ),
+            if (mobileCategory && phoneHint != null)
+              Text('Prefix suggests ${phoneHint.label}. Confirm your current operator below.'),
+            if (mobileCategory && biller == null)
+              const Text('Choose your current operator to see eligible packages.'),
             const SizedBox(height: 8),
             if (mobileCategory) Row(
               children: NigerianNetwork.values.map((net) {
@@ -669,7 +659,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: InkWell(
                       onTap: busy || !billers.any((b) => b.name.toLowerCase().contains(net.label.toLowerCase())) ? null : () {
-                        setState(() {selectedNetwork = net; _manualNetwork = true;});
+                        setState(() {selectedNetwork = net;});
                         _matchBillerForNetwork(net);
                       },
                       borderRadius: BorderRadius.circular(10),
@@ -713,6 +703,22 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   ),
                 );
               }).toList(),
+            ),
+            if (mobileCategory && billers.isNotEmpty) WalletSelectionField<String>(
+              value: biller?.billerCode,
+              items: billers.map((entry) => DropdownMenuItem(
+                value: entry.billerCode, child: Text(entry.name))).toList(),
+              onChanged: busy ? null : (code) {
+                for (final entry in billers) {
+                  if (entry.billerCode != code) continue;
+                  setState(() => selectedNetwork = NigerianNetwork.values.where(
+                    (network) => entry.name.toLowerCase().contains(network.label.toLowerCase()),
+                  ).firstOrNull);
+                  selectBiller(entry);
+                  break;
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Current operator from provider catalog'),
             ),
             const SizedBox(height: 16),
 

@@ -141,6 +141,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '08031234567');
+    await tester.tap(find.text('MTN'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('MTN Airtime 100').first);
     await tester.pumpAndSettle();
     expect(find.text('Previous purchase is still pending'), findsOneWidget);
