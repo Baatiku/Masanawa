@@ -24,6 +24,7 @@ function validateSource(input:ApprovedCatalogIdentity){
 export async function ensureMasanaCatalogProfilesAndRooms(input:{
  readonly pool:Pool;readonly tenantId:TenantId;
  readonly catalog:readonly ApprovedCatalogIdentity[];
+ readonly seedRooms?:boolean;
 }):Promise<{approved:number;rooms:number}>{
  if(input.catalog.length===0)return {approved:0,rooms:0};
  const c=await input.pool.connect();
@@ -77,7 +78,7 @@ export async function ensureMasanaCatalogProfilesAndRooms(input:{
          "Professional styling is a role, not a claim of a real person's degree or registration.",
        languages:[...seed.languages],talents:[...seed.expertise],
        goals:["Help students learn "+seed.roleLabel,"Provide clear explanations and practice"],
-       roomId:seed.roomId,portraitMediaId:portraitId,bannerMediaId:bannerId,
+       ...(input.seedRooms === false ? {} : {roomId:seed.roomId}),portraitMediaId:portraitId,bannerMediaId:bannerId,
      };
      // Never alter an existing approved or curated staff-owned Character bible.
      const prev=await c.query(`SELECT state FROM masana.character_revisions
@@ -95,6 +96,7 @@ export async function ensureMasanaCatalogProfilesAndRooms(input:{
          [input.tenantId,characterId,revision,JSON.stringify(profile)]);
        if(created.rowCount===1)approved++;
      }
+     if(input.seedRooms===false)continue;
      const owner=await c.query(`SELECT teacher_character_id,state FROM rooms.rooms
        WHERE tenant_id=$1 AND room_id=$2`,[input.tenantId,seed.roomId]);
      if(owner.rows.length){

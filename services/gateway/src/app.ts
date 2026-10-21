@@ -1797,7 +1797,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
   if (options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
-  if (options.rooms) {
+  if (options.rooms && !options.roomCommunity) {
     registerRoomsRoutes(app, options.rooms.routes);
     registerRoomDiscussionRoutes(app, options.rooms.discussion);
     registerRoomBookmarkRoutes(app, options.rooms.bookmarks);

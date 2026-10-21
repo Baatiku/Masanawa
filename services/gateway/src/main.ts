@@ -970,6 +970,7 @@ export async function startGatewayService(
             pool:database.featurePool!,
             tenantId:activePlatformTenantId,
             catalog:roster.catalog,
+            seedRooms:false,
           });
         });
       } catch (error) {

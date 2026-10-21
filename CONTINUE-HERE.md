@@ -18,3 +18,6 @@ Use the roadmap forward-progress policy: inspect failures, bounded repair and pr
 
 ## Release target
 Produce the signed APK, checksum, expected certificate, version, source SHA and provenance using existing CI. Owner/device operator validates the installed candidate; backend operator validates matching deployment/migrations/backup/recovery and enabled providers. Record evidence in the canonical roadmap; no production-ready claim from compilation alone. Preserve database volumes, keys, receipts and rollback obligations.
+
+## Rooms owner correction — 21 October 2026
+Delete retired Rooms/history; do not migrate or preserve it. Replace lesson UI with clean user-created broadcast/discussion Rooms. Phase 5 migration 0008 clears the Rooms schema records and pending Room jobs; Gateway disables old automatic Room/lesson seeding. New Room UI replaces old root/detail widgets. Do not resurrect old lesson screens, saved lessons or professional-Room branches. No production database execution is claimed from source changes.
