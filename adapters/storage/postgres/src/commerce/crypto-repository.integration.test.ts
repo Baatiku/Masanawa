@@ -29,6 +29,14 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
     await pool?.end();
   });
 
+  it('lists owned ledger holdings without deposit-route capability and fences both account and tenant',async()=>{
+    const f=await fundedFixture('17');
+    const own=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
+    expect(own).toHaveLength(1);expect(own[0]?.asset).toBe('USDTTRC20');expect(Number(own[0]?.amount)).toBe(17);
+    expect(await f.repository.listHoldings!({tenantId:f.tenantId,userId:createCanonicalId('user')})).toEqual([]);
+    expect(await f.repository.listHoldings!({tenantId:createCanonicalId('tenant'),userId:f.userId})).toEqual([]);
+  });
+
   function instant(offset = 0) {
     return toInstant(new Date(Date.parse("2026-10-05T00:00:00.000Z") + offset));
   }

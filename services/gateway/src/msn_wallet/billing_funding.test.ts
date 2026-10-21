@@ -38,7 +38,7 @@ describe("MSNW exact-value Flutterwave bill settlement", () => {
     };
     const pool={async connect(){return db;}} as unknown as Pool;
     const service=createMsnwBillingFunding({
-      pool,quotes:{} as never,rateKoboPerMsnw:"10000",
+      pool,quotes:{} as never,rateKoboPerMsnw:"100",
     });
     const base={
       ...original,quoteRevision:1,fulfillmentReference:"msnw-bill-quote-1",
@@ -74,7 +74,7 @@ describe("MSNW exact-value Flutterwave bill settlement", () => {
     };
     const pool={async connect(){return db;}} as unknown as Pool;
     const service=createMsnwBillingFunding({
-      pool,quotes:{} as never,rateKoboPerMsnw:"10000",
+      pool,quotes:{} as never,rateKoboPerMsnw:"100",
     });
     await expect(service.funding.reserveConfirmedBill({
       tenantId:"t1",userId:"u1",quoteId:"quote-1",

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
+import '../../finance/wallet_asset_detail.dart';
+import '../../finance/wallet_portfolio_summary.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_wallet_home.dart';
 import '../../finance/wallet_asset_overview.dart';
@@ -104,6 +106,30 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   bool _hideBalances=false;
   String? _hiddenOwner;
 
+  Future<void> _depositChoices() => openWalletPage<void>(context:context,title:'Deposit',builder:(_)=>ListView(padding:const EdgeInsets.all(16),children:[
+    ListTile(title:const Text('From another Masanawa user'),subtitle:const Text('Share your account number'),onTap:()=>_receiveInternal()),
+    ListTile(title:const Text('Blockchain deposit'),subtitle:const Text('Choose a supported asset and network'),onTap:()=>_openCryptoOperation('deposit')),
+    ListTile(title:const Text('Buy MSNW with local payment'),onTap:_fund),
+    ListTile(title:const Text('Buy through P2P'),onTap:_openP2p),
+  ]));
+
+  Future<void> _receiveInternal() async {
+    final session=ref.read(sessionProvider);
+    if(session is! SessionSignedIn)return;
+    await openWalletPage<void>(context:context,title:'Receive in Masanawa',builder:(_)=>_AccountWalletPage(accountId:session.user.id,
+      child:MsnwAccountBadge(dio:ref.read(dioProvider),baseUrl:kApiBaseUrl,accountId:session.user.id,
+        currentUserId:()=>switch(ref.read(sessionProvider)){SessionSignedIn(:final user)=>user.id,_=>null},
+        accessToken:()=>ref.read(apiClientProvider).accessToken)));
+  }
+
+  Future<void> _assetDetail() async {
+    final session=ref.read(sessionProvider);
+    if(session is! SessionSignedIn)return;
+    await openWalletPage<void>(context:context,title:'MSNW',builder:(_)=>_AccountWalletPage(accountId:session.user.id,
+      child:MsnwAssetDetail(balance:_balanceOwner==session.user.id?_balance:null,onDeposit:_depositChoices,onSend:_sendMsnw,
+        onActivity:()=>openWalletPage<void>(context:context,title:'Activity',builder:(_)=>_history(session.user.id)))));
+  }
+
   Future<void> _sendMsnw() async {
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn) return;
@@ -162,6 +188,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         accessToken: () => ref.read(apiClientProvider).accessToken,
       ),
     );
+  }
+
+  void _openCryptoOperation(String operation) {
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(builder:(_)=>CryptoWalletScreen(initialOperation:operation)));
   }
 
   void _openCrypto() {
@@ -259,6 +289,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           key: PageStorageKey<String>('wallet-assets-${accountId ?? 'signed-out'}'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
+            WalletPortfolioSummary(balance:_balanceOwner==accountId?_balance:null,hidden:_hiddenOwner==accountId&&_hideBalances),
             MsnwWalletBalanceCard(
               dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,
               accountId: accountId, refreshKey: _custodyRefresh,
@@ -275,10 +306,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               }, accessToken: () => ref.read(apiClientProvider).accessToken),
             const SizedBox(height: 24),
             WalletActionRow(onSend: accountId == null ? null : _sendMsnw,
-              onConvert: accountId == null ? null : _convertMsnw,
+              onConvert: accountId == null ? null : ()=>_openCryptoOperation('swap'),
+              onDeposit: accountId == null ? null : _depositChoices,
+              onWithdraw: accountId == null ? null : ()=>_openCryptoOperation('withdraw'),
               onReceive: accountId == null ? null : _receive,
               onP2p: accountId == null ? null : _openP2p),
             const SizedBox(height: 24),
+            Wrap(spacing:12,children:[TextButton(onPressed:accountId==null?null:_openP2p,child:const Text('P2P')),TextButton(onPressed:accountId==null?null:_convertMsnw,child:const Text('Convert MSNW & withdraw'))]),
             _tabs(),
             const SizedBox(height: 12),
             ListTile(contentPadding: EdgeInsets.zero,
@@ -293,7 +327,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   textDirection: TextDirection.ltr,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               ]),
-              trailing: const Icon(Icons.chevron_right, size: 18), onTap: _receive),
+              trailing: const Icon(Icons.chevron_right, size: 18), onTap: _assetDetail),
             Divider(height: 1, color: u.structuralBorder),
             WalletAssetOverview(hideBalances:_hiddenOwner==accountId&&_hideBalances),
             ListTile(contentPadding:EdgeInsets.zero,title:const Text('All crypto assets'),trailing:const Icon(Icons.chevron_right),onTap:openCrypto),

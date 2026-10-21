@@ -1,3 +1,4 @@
+import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { readFile } from "node:fs/promises";
 import { createPostgresServiceDependency, platformProductMigrationRoots } from "@masanawa/postgres";
 import {
@@ -28,7 +29,7 @@ export async function runMsnwAdmissionCli(
     return;
   }
   if (!env.DATABASE_URL || !env.MSNW_CHAIN_ID ||
-      !env.MSNW_TOKEN_CONTRACT || !env.MSNW_MINT_PRICE_KOBO_PER_MSNW ||
+      !env.MSNW_TOKEN_CONTRACT ||
       !env.MSNW_RESERVE_APPROVER_PUBLIC_KEY ||
       !env.MSNW_MINT_APPROVER_PUBLIC_KEY)
     throw new Error("msnw.admission.runtime_configuration_required");
@@ -41,7 +42,7 @@ export async function runMsnwAdmissionCli(
     const runtime=createMsnwIssuanceAdmission({
       pool:database.pool,chainId:env.MSNW_CHAIN_ID,
       contract:env.MSNW_TOKEN_CONTRACT,
-      rateKoboPerMsnw:env.MSNW_MINT_PRICE_KOBO_PER_MSNW,
+      rateKoboPerMsnw:assertMsnwNgnPolicyRate(env.MSNW_MINT_PRICE_KOBO_PER_MSNW),
       reserveApproverPublicKey:env.MSNW_RESERVE_APPROVER_PUBLIC_KEY,
       mintApproverPublicKey:env.MSNW_MINT_APPROVER_PUBLIC_KEY,
     });

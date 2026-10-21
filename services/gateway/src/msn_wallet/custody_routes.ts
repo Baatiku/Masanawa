@@ -1,3 +1,4 @@
+import { MSNW_PRICING_POLICY } from "@masanawa/commerce";
 import { WalletActivityError } from './wallet_activity.js';
 import type { FastifyInstance } from "fastify";
 import type { MsnBalanceAuthority } from "./routes.js";
@@ -27,6 +28,11 @@ export function registerMsnwCustodyRoutes(
     reply.code(mapped.statusCode);
     return { error: mapped.code, ...(mapped instanceof MsnwCustodyError && mapped.details ? mapped.details : {}) };
   }
+  app.get('/v1/wallet/pricing-policy', async (request, reply) => {
+    reply.header('Cache-Control','private, no-store');
+    try { await owner(request.headers.authorization); return MSNW_PRICING_POLICY; }
+    catch(error) { return failed(reply,error); }
+  });
   app.get("/v1/wallet/account", async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
     try { return await input.ledger.account(await owner(request.headers.authorization)); }
@@ -44,7 +50,7 @@ export function registerMsnwCustodyRoutes(
     } catch (error) { return failed(reply, error); }
   });
   app.get("/v1/wallet/msnw/custody", async (request, reply) => {
-    try { return await input.ledger.balance(await owner(request.headers.authorization)); }
+    try { return {...await input.ledger.balance(await owner(request.headers.authorization)),pricingPolicy:MSNW_PRICING_POLICY}; }
     catch (error) { return failed(reply,error); }
   });
   app.get("/v1/wallet/msnw/transactions", async (request, reply) => {

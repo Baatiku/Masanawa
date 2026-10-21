@@ -28,7 +28,7 @@ class WalletAssetOverview extends ConsumerWidget {
       ),
       data: (wallet) => Column(
         children: [
-          for (final route in wallet.depositRoutes) ...[
+          for (final route in wallet.assetRoutes) ...[
             Divider(height: 1, color: context.masanawa.structuralBorder),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -47,7 +47,7 @@ class WalletAssetOverview extends ConsumerWidget {
                   if (route.network != null) Text(route.network!),
                   const SizedBox(height: 4),
                   Text(
-                    hideBalances ? '••••' : wallet.balances[route.providerCode] ?? 'Balance unavailable',
+                    hideBalances ? '••••' : wallet.balances[route.providerCode] == null ? 'Available balance unavailable' : 'Available: ${wallet.balances[route.providerCode]}',
                     textDirection: TextDirection.ltr,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),

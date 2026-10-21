@@ -741,6 +741,17 @@ export function createPostgresCryptoRepository(pool: Pool): CryptoRepository {
       });
     },
 
+    async listHoldings(input) {
+      const tenantId=parseCanonicalId('tenant',input.tenantId), userId=parseCanonicalId('user',input.userId);
+      return withTransaction(pool,async(client)=>{
+        const result=await client.query<{asset:string;network:string|null;amount:string}>(
+          `SELECT asset,network,SUM(CASE direction WHEN 'credit' THEN amount ELSE -amount END)::text AS amount
+           FROM commerce.crypto_ledger_entries WHERE tenant_id=$1 AND user_id=$2
+           GROUP BY asset,network ORDER BY asset,network`,[tenantId,userId]);
+        return Object.freeze(result.rows.map(row=>Object.freeze({...row,amount:canonicalNumeric(row.amount)})));
+      },{isolation:'repeatable read',readOnly:true});
+    },
+
     async readBalance(input) {
       const normalized = {
         tenantId: parseCanonicalId("tenant", input.tenantId),

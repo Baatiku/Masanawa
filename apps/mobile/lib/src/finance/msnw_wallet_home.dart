@@ -18,7 +18,8 @@ String formatWalletAtomic(String raw, {int decimals = 6}) {
 }
 
 class MsnwCustodyBalance {
-  const MsnwCustodyBalance(this.available, this.reserved);
+  const MsnwCustodyBalance(this.available, this.reserved, {this.pricingPolicyId});
+  final String? pricingPolicyId;
   final String available, reserved;
   factory MsnwCustodyBalance.fromJson(dynamic value) {
     if (value is! Map ||
@@ -32,7 +33,7 @@ class MsnwCustodyBalance {
     final reserved = value['reservedMicro'] as String;
     formatWalletAtomic(available);
     formatWalletAtomic(reserved);
-    return MsnwCustodyBalance(available, reserved);
+    return MsnwCustodyBalance(available, reserved,pricingPolicyId:value['pricingPolicy'] is Map?value['pricingPolicy']['id'] as String?:null);
   }
 }
 
@@ -280,8 +281,9 @@ class WalletActionRow extends StatelessWidget {
     required this.onConvert,
     required this.onReceive,
     required this.onP2p,
+    this.onDeposit, this.onWithdraw,
   });
-  final VoidCallback? onSend, onConvert, onReceive, onP2p;
+  final VoidCallback? onSend, onConvert, onReceive, onP2p, onDeposit, onWithdraw;
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
@@ -331,10 +333,10 @@ class WalletActionRow extends StatelessWidget {
         child: SizedBox(width: width, child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            action('Deposit', Icons.south_west, onDeposit ?? onReceive),
             action('Send', Icons.north_east, onSend),
-            action('Convert', Icons.swap_horiz, onConvert),
-            action('Receive', Icons.south_west, onReceive),
-            action('P2P', Icons.people_alt_outlined, onP2p),
+            action('Withdraw', Icons.north_east, onWithdraw),
+            action('Swap', Icons.swap_horiz, onConvert),
           ],
         )),
       );

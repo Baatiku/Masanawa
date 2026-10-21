@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "@masanawa/postgres";
-import { parseNgnKobo, type BillingFundingAuthority,
+import { MSNW_PRICING_POLICY, assertMsnwNgnPolicyRate, parseNgnKobo, type BillingFundingAuthority,
   type BillingQuote, type BillingQuoteRepository } from "@masanawa/commerce";
 import type { QuoteId } from "@masanawa/contracts";
 
@@ -20,11 +20,12 @@ export function msnwForKobo(totalKobo: number, rate: bigint): string {
 export function createMsnwBillingFunding(input: Readonly<{
   pool: Pool;
   quotes: BillingQuoteRepository;
-  rateKoboPerMsnw: string;
+  rateKoboPerMsnw?: string;
 }>) {
-  if (!/^[1-9][0-9]{0,15}$/.test(input.rateKoboPerMsnw))
-    throw new MsnwBillingError("msnw.billing.rate_not_configured",503);
-  const rate = BigInt(input.rateKoboPerMsnw);
+  let configuredRate: string;
+  try { configuredRate = assertMsnwNgnPolicyRate(input.rateKoboPerMsnw); }
+  catch { throw new MsnwBillingError("msnw.billing.rate_not_configured",503); }
+  const rate = BigInt(configuredRate);
   async function ownedQuote(owner: Owner, quoteId: string): Promise<BillingQuote> {
     const value = await input.quotes.readQuote({
       tenantId:owner.tenantId as BillingQuote["tenantId"],
@@ -58,7 +59,7 @@ export function createMsnwBillingFunding(input: Readonly<{
       quoteId,quoteRevision:revision,asset:"MSNW" as const,
       serviceAmountKobo:String(quote.serviceAmountKobo),
       totalAmountKobo:String(quote.totalAmountKobo),
-      amountMicro,rateKoboPerMsnw:rate.toString(),
+      amountMicro,rateKoboPerMsnw:rate.toString(),pricingPolicy:MSNW_PRICING_POLICY,
       availableMicro:available,
       sufficient:BigInt(available)>=BigInt(amountMicro),
       customerId:quote.customerId,itemName:quote.itemName,
