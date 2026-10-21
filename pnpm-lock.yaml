@@ -625,6 +625,9 @@ importers:
       '@fastify/type-provider-typebox':
         specifier: 6.1.0
         version: 6.1.0(typebox@1.3.34)
+      '@masanawa/commerce':
+        specifier: workspace:*
+        version: link:../../packages/commerce
       '@masanawa/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
