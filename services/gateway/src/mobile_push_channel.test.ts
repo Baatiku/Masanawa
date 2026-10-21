@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mobilePushAndroidChannel } from "./mobile_push.js";
-import { mobilePushSafePreview } from "@masanawa/mobile-push";
+import { mobilePushSafeData, mobilePushSafePreview } from "@masanawa/mobile-push";
 
 describe("mobile FCM call channels", () => {
   const uuid = "6b943dad-7684-4ed3-9841-852588ae44ce";
@@ -21,6 +21,28 @@ describe("mobile FCM call channels", () => {
     expect(JSON.stringify(preview)).not.toMatch(/100000|Private person/);
     expect(mobilePushSafePreview({ type: "incoming_call", callId: uuid }))
       .toEqual({ title: "Incoming call", body: "Open Calls to respond" });
+  });
+
+  it("sends only bounded navigation hints as FCM data", () => {
+    const safe = mobilePushSafeData({
+      type: "wallet_transfer", eventId: "wallet-event-1",
+      deepLink: "masanawa://wallet/transaction/reference_1",
+      amount: "100000", sender: "Private person", body: "Secret conversation",
+      paymentToken: "secret", masanawa: "forged",
+    });
+    expect(safe).toEqual({
+      type: "wallet_transfer", eventId: "wallet-event-1",
+      deepLink: "masanawa://wallet/transaction/reference_1",
+    });
+    expect(mobilePushSafeData({
+      type: "human_call", callId: uuid,
+      deepLink: "masanawa://human/call/" + uuid + "?token=private",
+    })).toEqual({ type: "human_call", callId: uuid });
+    expect(mobilePushSafeData({
+      type: "room_post", roomId: uuid, postId: uuid,
+      orderId: "p2p_order_1", body: "Hidden Room text",
+      deepLink: "masanawa://wallet/transaction/order_1/private",
+    })).toEqual({ type: "room_post", roomId: uuid, postId: uuid, orderId: "p2p_order_1" });
   });
 
   it("classifies human invitations as calls with private previews", () => {

@@ -41,7 +41,7 @@ it("uses account registrations and one bounded deadline for OAuth and delivery",
       scope,
       title: "Incoming Masana call",
       body: "Open Calls to respond",
-      data: { type: "incoming_call", callId: "invitation" },
+      data: { type: "incoming_call", callId: "invitation", body: "Private message", amount: "100000" },
     }),
   ).toEqual({ attempted: 1, delivered: 1 });
   expect(list).toHaveBeenCalledWith(scope);
@@ -53,6 +53,7 @@ it("uses account registrations and one bounded deadline for OAuth and delivery",
     data: { type: "incoming_call", callId: "invitation", masanawa: "1" },
   });
   expect(JSON.stringify(payload)).not.toContain("server-oauth");
+  expect(JSON.stringify(payload)).not.toMatch(/Private message|100000/);
   expect(payload.message.notification).toEqual({
     title: "Masanawa",
     body: "Open the app to view your update",
