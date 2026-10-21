@@ -532,6 +532,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
                           .read(cryptoWalletProvider.notifier)
                           .refreshBalance(),
               ),
+              const Text('Available funds are shown. Reserved crypto and total valuation remain unverified.'),
               const SizedBox(height: 14),
               _CryptoActions(
                 busy: _busy,
