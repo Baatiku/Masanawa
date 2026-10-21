@@ -21,7 +21,7 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   const quotes=createPostgresBillingQuoteRepository(pool),service=createMsnwBillingFunding({pool,quotes});
   async function quote(customerId='fixture-customer',verifiedCustomerName?:string){
    const at=new Date().toISOString();
-   const q=createBillingQuote({...owner,categoryCode:'AIRTIME',billerCode:'fixture-biller',itemCode:'fixture-item',itemName:'Fixture airtime',customerId,verifiedCustomerName,serviceAmountKobo:100,feeAmountKobo:0,createdAt:at,expiresAt:new Date(Date.now()+600000).toISOString()});
+   const q=createBillingQuote({...owner,categoryCode:'AIRTIME',billerCode:'fixture-biller',itemCode:'fixture-item',itemName:'Fixture airtime',customerId,...(verifiedCustomerName?{verifiedCustomerName}:{}),serviceAmountKobo:100,feeAmountKobo:0,createdAt:at,expiresAt:new Date(Date.now()+600000).toISOString()});
    await quotes.createQuote(q);await quotes.confirmQuote({...owner,quoteId:q.quoteId,quoteRevision:q.revision,confirmedAt:at});
    return {...owner,quoteId:q.quoteId,quoteRevision:q.revision,fulfillmentReference:'msnw-bill-'+q.quoteId,categoryCode:'AIRTIME',billerCode:q.billerCode,itemCode:q.itemCode,customerId,amount:'1',currency:'NGN' as const};
   }
