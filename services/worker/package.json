@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fastify/type-provider-typebox": "6.1.0",
+    "@masanawa/commerce": "workspace:*",
     "@masanawa/contracts": "workspace:*",
     "@masanawa/mobile-push": "workspace:*",
     "fastify": "5.12.5",
