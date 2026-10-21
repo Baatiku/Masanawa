@@ -42,6 +42,7 @@ class CallSignalingTone {
     return _serial = _serial.then((_) async {
       try {
         await _channel.invokeMethod<bool>('stop', {'owner': _owner}).timeout(const Duration(seconds: 1));
+      } on TimeoutException {
       } on MissingPluginException {
       } on PlatformException {
       }

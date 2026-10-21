@@ -82,15 +82,17 @@ class CallSignalingAudio(private val context: Context) {
     fun stop(lease: String? = null) {
         if (lease != null && lease != owner) return
         handler.removeCallbacks(timeout)
-        ringtone?.stop(); ringtone = null
-        ringback?.stopTone(); ringback?.release(); ringback = null
-        vibrator?.cancel(); vibrator = null
+        runCatching { ringtone?.stop() }; ringtone = null
+        runCatching { ringback?.stopTone() }; runCatching { ringback?.release() }; ringback = null
+        runCatching { vibrator?.cancel() }; vibrator = null
         val request = focus
         focus = null
         if (owner != null) {
             owner = null
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && request != null) manager.abandonAudioFocusRequest(request)
-            else manager.abandonAudioFocus(legacyFocus)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && request != null) manager.abandonAudioFocusRequest(request)
+                else manager.abandonAudioFocus(legacyFocus)
+            }
         }
     }
 }
