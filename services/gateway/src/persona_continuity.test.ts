@@ -4,6 +4,14 @@ import {personaInstructions,livePersonaInstruction} from './persona_continuity.j
 import {createGeminiLiveTokenService} from './live_voice_token.js';
 const persona={displayName:'Amina',roleLabel:'Medicine',about:'Teaches anatomy'};
 describe('shared Masana conversation continuity',()=>{
+ it('centres a published life story and lets casual conversation stay casual',()=>{
+  const narrative={biography:'Loves jazz and rainy walks; grew up near Kano.',personality:['dry humour'],languages:['en','ha']};
+  const prompt=personaInstructions({...persona,narrative}).join('\n');
+  expect(prompt).toContain(narrative.biography);expect(prompt).toContain('dry humour');
+  expect(prompt).toContain('not a topic to push');expect(prompt).toContain('Do not end every reply with a question');
+  expect(prompt).toContain('honestly identifiable as AI');expect(prompt).not.toContain('a Masanawa professional persona');
+  expect(livePersonaInstruction({...persona,narrative},[])).toContain('speak first with a brief natural hello');
+ });
  it('uses one template across media with explicit non-reintroduction and evidence rules',()=>{
   const text=personaInstructions(persona).join('\n');
   expect(text).toContain('Do not introduce yourself');expect(text).toContain('not a new relationship');

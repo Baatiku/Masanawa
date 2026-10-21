@@ -1218,6 +1218,9 @@ export function createHttpSmsOtpDelivery(input: Readonly<{
 export function createPlatformCustomerAuthorizers(input: Readonly<{
   sessions: PlatformCustomerSessionAuthorizer;
   presentations: AgentPresentationRepository;
+  personaReader?: {
+    readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: import('@masanawa/contracts').CharacterVersionId}): Promise<import('@masanawa/agents').AgentPersonaNarrative | null>;
+  };
   skillAssignments: CharacterSkillAssignmentRepository;
   relationships: UserRelationshipReader;
   relationshipProvisioner: UserRelationshipProvisioner;
@@ -1370,6 +1373,10 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
         tenantId: identity.tenantId,
         characterId,
       });
+      const narrative = await input.personaReader?.readPublished({
+        tenantId: identity.tenantId, characterId, characterVersionId: presentation.characterVersionId,
+      });
+      if (input.personaReader && !narrative) throw new CustomerAuthError("PERSONA_UNAVAILABLE", 409);
       const requestId = createCanonicalId("request");
       const correlationId = createCanonicalId("correlation");
       return Object.freeze({
@@ -1391,6 +1398,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
           displayName: presentation.displayName,
           roleLabel: presentation.roleLabel,
           about: presentation.about,
+          ...(narrative ? {narrative} : {}),
         }),
         authority: createAuthorityContext({
           tenantId: identity.tenantId,

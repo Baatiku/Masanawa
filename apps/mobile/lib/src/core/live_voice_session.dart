@@ -429,7 +429,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
                     'parts': [
                       {
                         'text':
-                            'Continue naturally using the saved conversation context. A brief hello is enough. '
+                            'You have answered this call. Speak first with a brief, natural hello in your own character, using the saved conversation context. '
                             'Do not repeat your introduction or ask for facts already supplied.',
                       },
                     ],

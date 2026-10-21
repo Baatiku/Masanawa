@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../agents/agent_shell.dart';
 import '../core/live_voice_session.dart';
 import '../core/call_recording.dart';
+import '../core/call_signaling_tone.dart';
 import 'call_outcome.dart';
 import 'group_call_controller.dart';
 import 'incoming_call_transport.dart';
@@ -45,10 +46,12 @@ class IncomingCallController extends ChangeNotifier
   ) => LiveVoiceSession(
     grant: grant,
     characterName: call.displayName,
+    sendGreeting: true, // The invited persona may briefly open an accepted incoming call.
     maxDuration: admission.remaining,
     endAt: admission.expiresAt,
     onClosed: closed,
   );
+  final _tone = CallSignalingTone();
   final String callId, accountKey;
   final String? Function() currentAccountKey;
   final IncomingCallTransport transport;
@@ -88,6 +91,7 @@ class IncomingCallController extends ChangeNotifier
       call?.ringing == true &&
       call!.expiresAt.isAfter(DateTime.now());
   void _notify() {
+    unawaited(_tone.update(canAccept ? CallTone.incoming : null));
     if (!_disposed) notifyListeners();
   }
 
@@ -122,6 +126,7 @@ class IncomingCallController extends ChangeNotifier
     error = null;
     _notify();
     try {
+      await _tone.update(null);
       // Acceptance is a server race decision; it never authorizes spending.
       final accepted = await transport.accept(callId);
       _check();
@@ -280,6 +285,7 @@ class IncomingCallController extends ChangeNotifier
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_tone.close());
     WidgetsBinding.instance.removeObserver(this);
     unawaited(end());
     super.dispose();

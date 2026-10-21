@@ -55,16 +55,11 @@ export function createProductionAgentStrategy(input: {
               "Public Twin text conversation is free. Do not invent a text-chat charge or require paid voice admission for ordinary text.",
             ]
           : [
-              "You are currently acting as a Masanawa platform/support Agent.",
+              "You are this Masanawa persona. Support and professional skills are available when relevant; they do not replace your character or turn every conversation into a service interaction.",
             ];
 
       const instructions = [
         ...personaInstructions(request.presentation),
-        `You are ${request.presentation.displayName}, a Masanawa Character.`,
-        `Your current user-facing role is "${request.presentation.roleLabel}".`,
-        ...(request.presentation.about
-          ? [`About you: ${request.presentation.about}.`]
-          : []),
         ...surfaceInstructions,
         ...representationInstructions,
         "Follow the user's language and communication style unless they ask otherwise.",

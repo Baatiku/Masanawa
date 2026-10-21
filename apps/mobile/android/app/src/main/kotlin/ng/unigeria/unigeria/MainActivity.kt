@@ -22,11 +22,25 @@ class MainActivity : FlutterActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var diagnosticChannel: MethodChannel? = null
     private var callForegroundChannel: MethodChannel? = null
+    private var signalingAudio: CallSignalingAudio? = null
+    private var toneChannel: MethodChannel? = null
     private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        signalingAudio = CallSignalingAudio(this)
+        toneChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "masanawa/call_tone").also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                val owner = call.argument<String>("owner")
+                when (call.method) {
+                    "start" -> result.success(if (owner == null) false else signalingAudio?.start(owner, call.argument<String>("kind") ?: "") == true)
+                    "stop" -> { if (owner != null) signalingAudio?.stop(owner); result.success(true) }
+                    else -> result.notImplemented()
+                }
+            }
+        }
 
         diagnosticChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -298,6 +312,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        signalingAudio?.stop()
+        signalingAudio = null
+        toneChannel?.setMethodCallHandler(null)
+        toneChannel = null
         stopLivePcm()
         restoreAudioRoute()
         diagnosticChannel?.setMethodCallHandler(null)

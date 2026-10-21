@@ -43,6 +43,10 @@ void main() {
   });
   tearDown(() async => session.close());
 
+  test('a called Masana retains the existing speak-first greeting by default', () {
+    expect(session.sendGreeting, isTrue);
+  });
+
   test('notification ducking never closes or stops a call microphone', () async {
     final capture=_Capture();session.audioObserver=capture;
     await session.handleAudioInterruption(AudioInterruptionEvent(true,AudioInterruptionType.duck));

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../chat/message_parts.dart';
 import '../core/network/api_client.dart';
+import '../core/optional_reply_audio.dart';
 import 'agent_directory.dart';
 import 'creator_skills.dart';
 import 'creator_economy.dart';
@@ -617,9 +618,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
       text: reply,
       parts: List.unmodifiable(parts),
       agentRunId: runId is String && runId.isNotEmpty ? runId : null,
-      audioBytes: audioBase64 is String && audioBase64.isNotEmpty
-          ? base64Decode(audioBase64)
-          : null,
+      audioBytes: decodeOptionalReplyAudio(audioBase64),
       audioMimeType: audioMimeType is String ? audioMimeType : null,
       audioDurationMs: audioDurationMs is num ? audioDurationMs.round() : null,
       audioTranscript: data['audioTranscript'] is String ? data['audioTranscript'] as String : null,
@@ -642,6 +641,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     var outputStarted=false;
     var transcript='';
     final audio=BytesBuilder(copy:false);
+    var invalidAudio = false;
     Map<String,dynamic>? done;
     try {
       try {
@@ -657,9 +657,14 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
             transcript+=text;onAudioTranscriptDelta?.call(text);
           }
           if(type=='audio' && event['dataBase64'] is String){
-            final chunk=base64Decode(event['dataBase64'] as String);
-            if(chunk.length.isOdd || audio.length+chunk.length>8*1024*1024)throw const ApiException('Invalid voice response');
-            audio.add(chunk);await onAudioPcmChunk?.call(chunk);
+            final chunk=decodeOptionalReplyAudio(event['dataBase64']);
+            if (invalidAudio || chunk == null || chunk.length.isOdd || audio.length+chunk.length>8*1024*1024) {
+              invalidAudio = true;
+              audio.takeBytes();
+            } else {
+              audio.add(chunk);
+              await onAudioPcmChunk?.call(chunk);
+            }
           }
           if(type=='done'){done=event;break;}
         }
@@ -765,9 +770,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
       text: reply,
       parts: List.unmodifiable(parts),
       agentRunId: runId is String && runId.isNotEmpty ? runId : null,
-      audioBytes: audioBase64 is String && audioBase64.isNotEmpty
-          ? base64Decode(audioBase64)
-          : null,
+      audioBytes: decodeOptionalReplyAudio(audioBase64),
       audioMimeType: audioMimeType is String ? audioMimeType : null,
       audioDurationMs: audioDurationMs is num ? audioDurationMs.round() : null,
       audioTranscript: data['audioTranscript'] is String ? data['audioTranscript'] as String : null,

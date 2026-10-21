@@ -1,4 +1,5 @@
 import '../../tokens/feature_colors.dart';
+import '../../core/call_signaling_tone.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -2641,6 +2642,7 @@ class MasanaLiveCallScreen extends StatefulWidget {
 }
 
 class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
+  final _tone = CallSignalingTone();
   bool _ringing = true;
   bool _muted = false;
   bool _speaker = true;
@@ -2662,6 +2664,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
       widget.session.audioObserver = _recording;
     }
     _errors = widget.session.errors.listen((message) {
+      unawaited(_tone.update(null));
       if (mounted) setState(() => _error = message);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2670,9 +2673,8 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   }
 
   Future<void> _beginCallExperience() async {
-    await Future<void>.delayed(const Duration(milliseconds: 850));
+    await _tone.update(CallTone.outgoing);
     if (!mounted) return;
-    setState(() => _ringing = false);
     await _startVerifiedSession();
   }
 
@@ -2682,6 +2684,9 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
         widget.session.start(),
         widget.session.ready,
       ]);
+      await _tone.update(null);
+      if (!mounted) return;
+      setState(() => _ringing = false);
       await widget.onMediaStarted?.call();
       if (!mounted) return;
       _elapsed.start();
@@ -2697,6 +2702,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
         });
       }
     } catch (_) {
+      await _tone.update(null);
       await widget.session.close();
       if (!mounted) return;
       setState(() {
@@ -2711,6 +2717,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
     _durationTimer?.cancel();
     _elapsedTimer?.cancel();
     _elapsed.stop();
+    unawaited(_tone.close());
     _errors?.cancel();
     _recording?.ended();
     widget.session.endReason??=CallEndReason.userEnded;

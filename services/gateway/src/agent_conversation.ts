@@ -1,3 +1,4 @@
+import { optionalAudioReply } from "./optional_audio_reply.js";
 import {recordMasanaQuality} from "./masana_quality_signals.js";
 import { observeSessionOpen } from "./agent_session_diagnostics.js";
 import { compileConversationHistory } from "./conversation_history.js";
@@ -118,19 +119,21 @@ export function createAgentConversationService(input: {
     onAudioTranscriptDelta?: (delta: string) => void | Promise<void>,
   ) {
     if (!input.nativeAudio || signal?.aborted) return undefined;
-    try {
+    return optionalAudioReply(async (audioSignal) => {
       const voiceName = await input.voiceForCharacter?.(scope);
-      return await input.nativeAudio
-      .render(
-        reply,
-        signal,
-        onAudioPcmChunk
-          ? async (chunk) => onAudioPcmChunk(chunk.toString("base64"))
-          : undefined,
-        { ...(voiceName ? {voiceName} : {}), ...(onAudioTranscriptDelta ? {onTranscriptDelta:onAudioTranscriptDelta} : {}) },
-      )
-      .catch(() => undefined);
-    } catch { return undefined; }
+      if (audioSignal.aborted) return undefined;
+      return input.nativeAudio!.render(
+        reply, audioSignal,
+        onAudioPcmChunk ? async (chunk) => {
+          if (!audioSignal.aborted) await onAudioPcmChunk(chunk.toString("base64"));
+        } : undefined,
+        { ...(voiceName ? {voiceName} : {}),
+          ...(onAudioTranscriptDelta ? {onTranscriptDelta: async (text: string) => {
+            if (!audioSignal.aborted) await onAudioTranscriptDelta(text);
+          }} : {}),
+        },
+      );
+    }, signal);
   }
 
   async function conversationHistory(scope: import("@masanawa/agents").CharacterSessionScope, requestId:string) {
