@@ -4,6 +4,7 @@ type Job={tenant_id:string;job_id:string;character_id:string;owner_user_id:strin
 const permitted=`a.state='published' AND a.status_enabled AND a.status_posts_weekly>0
  AND length(trim(COALESCE(a.status_rights_note,'')))>=8
  AND EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=a.tenant_id AND u.user_id=a.owner_user_id AND u.state='active')
+ AND EXISTS(SELECT 1 FROM identity.character_ownership o WHERE o.tenant_id=a.tenant_id AND o.character_id=a.character_id AND o.owner_user_id=a.owner_user_id AND o.kind='creator-agent')
  AND EXISTS(SELECT 1 FROM identity.characters c WHERE c.tenant_id=a.tenant_id AND c.character_id=a.character_id AND c.state='active')`;
 const cap=`COALESCE((SELECT p.max_posts_weekly FROM creator.fee_policies p WHERE p.tenant_id=a.tenant_id AND p.effective_at<=now() ORDER BY p.effective_at DESC,p.revision DESC LIMIT 1),2)`;
 export function createCreatorStatusRuntime(input:{pool:Pool;generate:(profile:Record<string,unknown>,rights:string)=>Promise<string>}){

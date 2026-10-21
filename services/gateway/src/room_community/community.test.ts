@@ -116,3 +116,19 @@ it('queues each Masana mention once and suppresses provider jobs and publication
  expect((await db.query('SELECT * FROM rooms.answers')).rows).toHaveLength(0);
  expect(await queue.claim('worker')).toBeNull();
 });
+
+it('keeps each mentioned comment distinct and hides answers when its source post is removed',async()=>{
+ const pool={query:(s:string,v?:unknown[])=>db.query(s,v),connect:async()=>({query:(s:string,v?:unknown[])=>db.query(s,v),release(){}})} as any;
+ service=createRoomCommunityService({pool,authorize:async()=>a,isApprovedMasana:async()=>true});
+ await db.exec("INSERT INTO identity.characters(tenant_id,character_id) VALUES('t','character_masana')");
+ const r=await service.dispatch(a,'POST','',{name:'Reply Room',requestId:'reply-room'}),path=r.id+'/community';
+ await service.dispatch(a,'POST',path+'/masana',{characterId:'character_masana',active:true});
+ const post=await service.dispatch(a,'POST',path+'/timeline',{body:'Question',requestId:'post',mentions:['character_masana']});
+ for(const key of ['comment1','comment2'])await service.dispatch(a,'POST',path+'/timeline',{body:'Another question',parentId:post.id,requestId:key,mentions:['character_masana']});
+ expect((await db.query('SELECT * FROM rooms.questions')).rows).toHaveLength(3);
+ await db.exec("UPDATE rooms.questions SET state='answered'");
+ await db.query("INSERT INTO rooms.answers(tenant_id,answer_id,question_id,teacher_character_id,body,state,reviewed_by,reviewed_at) SELECT tenant_id,'room-answer_'||question_id,question_id,target_character_id,'A reply','approved','masanawa-ai',now() FROM rooms.questions");
+ expect((await service.dispatch(a,'GET',path+'/timeline')).items.filter((v:any)=>v.authorKind==='masana')).toHaveLength(3);
+ await service.dispatch(a,'DELETE',path+'/posts/'+post.id);
+ expect((await service.dispatch(a,'GET',path+'/timeline')).items).toEqual([]);
+});

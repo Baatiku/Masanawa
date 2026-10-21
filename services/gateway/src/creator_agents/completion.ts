@@ -40,7 +40,7 @@ export function createCreatorCompletionService({pool,images,approvedDownloadOrig
    if(!images)return {completed:0};
    const pending=await pool.query('SELECT tenant_id,media_id,object_key FROM creator.media_deletions WHERE completed_at IS NULL ORDER BY created_at LIMIT 25');
    let completed=0;
-   for(const item of pending.rows){try{await images.deleteObject(String(item.object_key));await pool.query('UPDATE creator.media_deletions SET completed_at=clock_timestamp() WHERE tenant_id=$1 AND media_id=$2 AND completed_at IS NULL',[item.tenant_id,item.media_id]);completed++;}catch{/* Retry on the next worker sweep. */}}
+   for(const item of pending.rows){try{await images.deleteObject(String(item.object_key));if(await images.statObject(String(item.object_key))!==null)continue;await pool.query('UPDATE creator.media_deletions SET completed_at=clock_timestamp() WHERE tenant_id=$1 AND media_id=$2 AND completed_at IS NULL',[item.tenant_id,item.media_id]);completed++;}catch{/* Retry on the next worker sweep. */}}
    return {completed};
   },
   async deleteImage(owner:Owner,character:string,raw:unknown){

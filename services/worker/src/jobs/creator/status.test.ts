@@ -5,6 +5,8 @@ import {createCreatorStatusRuntime} from './status.js';
 async function fixture(){
  const db=new PGlite();
  await db.exec(`CREATE SCHEMA creator;CREATE SCHEMA identity;CREATE SCHEMA masana;CREATE SCHEMA feed;
+ CREATE TABLE identity.character_ownership(tenant_id text,character_id text,owner_user_id text,kind text);
+ INSERT INTO identity.character_ownership VALUES('t','character','owner','creator-agent');
  CREATE TABLE identity.users(tenant_id text,user_id text,state text);
  CREATE TABLE identity.characters(tenant_id text,character_id text,state text);
  CREATE TABLE creator.agents(tenant_id text,character_id text,owner_user_id text,state text,revision bigint,status_enabled boolean,status_posts_weekly int,status_rights_note text,PRIMARY KEY(tenant_id,character_id,owner_user_id));

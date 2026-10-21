@@ -11,3 +11,5 @@ export * from "./flutterwave-bills/commerce-orchestrator.js";
 export * from "./flutterwave-bills/receipt-projection.js";
 export * from "./flutterwave-bills/webhook.js";
 export * from "./flutterwave-bills/funding-client.js";
+export {createReplayObjectStore,type ReplayObjectStore} from './storage/s3_object_store.js';
+export {createConfiguredStatusObjectStore} from './storage/status_object_store.js';
