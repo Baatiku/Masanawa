@@ -655,6 +655,9 @@ export function createBillingCheckoutService(input: Readonly<{
         throw new Error("financial.billing.catalog_amount_mismatch");
       }
 
+      let verifiedCustomerName: string | null = null;
+      let verifiedMinimumKobo: number | null = null;
+      let verifiedMaximumKobo: number | null = null;
       if (category.code === "AIRTIME" || category.code === "MOBILEDATA") {
         if (!/^(?:0[789]\d{9}|\+?234[789]\d{9})$/u.test(request.customerId.trim())) {
           throw new Error("financial.billing.phone_invalid");
@@ -662,9 +665,17 @@ export function createBillingCheckoutService(input: Readonly<{
       } else {
         const validation = await input.catalog.validateCustomer(item.itemCode,request.customerId,request.signal);
         if (!validation.valid || validation.customer !== request.customerId ||
-            validation.billerCode !== request.billerCode) {
+            validation.billerCode !== request.billerCode ||
+            (validation.productCode != null && validation.productCode !== item.itemCode)) {
           throw new Error("financial.billing.recipient_invalid");
         }
+        verifiedCustomerName = validation.name?.trim() || null;
+        if (/(?:ELECTRIC|POWER|UTILITY|CABLE|TV)/u.test(category.code.toUpperCase()) &&
+            verifiedCustomerName === null)
+          throw new Error("financial.billing.recipient_name_unavailable");
+        verifiedMinimumKobo = validation.minimum === null ? null : parseNgnKobo(validation.minimum);
+        const maximum = validation.maximum === null ? null : parseNgnKobo(validation.maximum);
+        verifiedMaximumKobo = maximum === 0 ? null : maximum;
         if (validation.minimum !== null && decimalCompare(request.amount,validation.minimum) < 0) {
           throw new Error("financial.billing.amount_below_minimum");
         }
@@ -686,6 +697,7 @@ export function createBillingCheckoutService(input: Readonly<{
         itemCode: item.itemCode,
         itemName: item.name,
         customerId: request.customerId,
+        verifiedCustomerName, verifiedMinimumKobo, verifiedMaximumKobo,
         serviceAmountKobo: requestedAmountKobo,
         feeAmountKobo: calculateBillingFeeKobo(requestedAmountKobo,{
           basisPoints: feeBasisPoints,

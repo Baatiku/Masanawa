@@ -7,11 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/billing_models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 import 'package:masanawa/src/finance/msnw_billing_checkout.dart';
-final quoteJson=<String,dynamic>{'quoteId':'test-quote','revision':1,'categoryCode':'ELECTRICITY','billerCode':'power','itemCode':'prepaid','itemName':'Prepaid electricity','customerId':'12345678901','serviceAmountKobo':100000,'feeAmountKobo':1000,'totalAmountKobo':101000,'currency':'NGN','state':'quoted','expiresAt':'2099-01-01T00:00:00Z','createdAt':'2026-10-18T12:00:00Z','updatedAt':'2026-10-18T12:00:00Z'};
+final quoteJson=<String,dynamic>{'quoteId':'test-quote','revision':1,'categoryCode':'ELECTRICITY','billerCode':'power','itemCode':'prepaid','itemName':'Prepaid electricity','customerId':'12345678901','verifiedCustomerName':'Ada Customer','verifiedMinimumKobo':50000,'verifiedMaximumKobo':200000,'serviceAmountKobo':100000,'feeAmountKobo':1000,'totalAmountKobo':101000,'currency':'NGN','state':'quoted','expiresAt':'2099-01-01T00:00:00Z','createdAt':'2026-10-18T12:00:00Z','updatedAt':'2026-10-18T12:00:00Z'};
 final quote=BillingQuote.fromJson(quoteJson);
 class _Api extends ApiClient{
- _Api(Dio dio):super(dio:dio);
- @override Future<BillingCheckoutView> createBillingQuote({required String categoryCode,required String billerCode,required String itemCode,required String customerId,required String amount})async=>BillingCheckoutView(quote:quote,phase:'quoted',checkoutUrl:null,purchase:null);
+ _Api(Dio dio,{BillingQuote? responseQuote}):responseQuote=responseQuote??quote,super(dio:dio);
+ final BillingQuote responseQuote;
+ @override Future<BillingCheckoutView> createBillingQuote({required String categoryCode,required String billerCode,required String itemCode,required String customerId,required String amount})async=>BillingCheckoutView(quote:responseQuote,phase:'quoted',checkoutUrl:null,purchase:null);
 }
 class _Adapter implements HttpClientAdapter{
  _Adapter({this.badReference=false});
@@ -22,6 +23,13 @@ class _Adapter implements HttpClientAdapter{
 }
 void main(){
  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+ testWidgets('electricity quote without provider account identity cannot reach payment review',(t)async{
+  final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
+  await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio,responseQuote:BillingQuote.fromJson({...quoteJson,'verifiedCustomerName':null})),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
+  await t.tap(find.text('Get verified price'));await t.pumpAndSettle();
+  expect(find.text('Review & pay MSNW'),findsNothing);
+  expect(adapter.calls,isEmpty);
+ });
  testWidgets('foreign provider reference stays unconfirmed and never offers another charge',(t)async{
   final adapter=_Adapter(badReference:true),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){},initialQuote:BillingQuote.fromJson({...quoteJson,'fulfillmentReference':'msnw-bill-test-quote'})))));
@@ -38,7 +46,8 @@ void main(){
   final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
   await t.tap(find.text('Get verified price'));await t.pumpAndSettle();await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();
-  await t.scrollUntilVisible(find.text('Confirm payment'), 120, scrollable:find.byType(Scrollable).last);await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
+  await t.drag(find.byType(ListView).last,const Offset(0,-700));await t.pumpAndSettle();
+  await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
   expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('provider-verified'),findsOneWidget);expect(find.text('msnw-bill-test-quote'),findsOneWidget);
   await t.ensureVisible(find.text('Check payment status'));await t.tap(find.text('Check payment status'));await t.pumpAndSettle();expect(adapter.calls.where((o)=>o.path.endsWith('/execute')).length,1);expect(adapter.calls.last.path.endsWith('/msnw-bill-test-quote'),isTrue);expect(find.text('Review & pay MSNW'),findsNothing);
  });

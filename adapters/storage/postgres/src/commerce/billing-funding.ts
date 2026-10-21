@@ -20,6 +20,9 @@ interface BillingQuoteRow {
   item_code: string;
   item_name: string;
   customer_id: string;
+  verified_customer_name: string | null;
+  verified_minimum_kobo: string | number | null;
+  verified_maximum_kobo: string | number | null;
   service_amount_kobo: string | number;
   fee_amount_kobo: string | number;
   total_amount_kobo: string | number;
@@ -63,6 +66,9 @@ function quote(row: BillingQuoteRow): BillingQuote {
     itemCode: row.item_code,
     itemName: row.item_name,
     customerId: row.customer_id,
+    verifiedCustomerName: row.verified_customer_name ?? null,
+    verifiedMinimumKobo: row.verified_minimum_kobo == null ? null : integer(row.verified_minimum_kobo, "verified_minimum"),
+    verifiedMaximumKobo: row.verified_maximum_kobo == null ? null : integer(row.verified_maximum_kobo, "verified_maximum"),
     serviceAmountKobo: integer(row.service_amount_kobo, "service_amount"),
     feeAmountKobo: integer(row.fee_amount_kobo, "fee_amount"),
     totalAmountKobo: integer(row.total_amount_kobo, "total_amount"),
@@ -119,9 +125,10 @@ export function createPostgresBillingQuoteRepository(pool: Pool): BillingQuoteRe
              biller_code,item_code,item_name,customer_id,service_amount_kobo,fee_amount_kobo,
              total_amount_kobo,currency,confirmed_at,expires_at,checkout_tx_ref,checkout_url,
              provider_transaction_id,provider_reference,bill_provider_reference,payment_verified_at,
-             fulfillment_reference,settlement_state,refund_reference,created_at,updated_at
+             fulfillment_reference,settlement_state,refund_reference,created_at,updated_at,
+             verified_customer_name,verified_minimum_kobo,verified_maximum_kobo
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                     $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+                     $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
            ON CONFLICT (tenant_id,user_id,quote_id) DO NOTHING
            RETURNING *`,
           [
@@ -131,6 +138,7 @@ export function createPostgresBillingQuoteRepository(pool: Pool): BillingQuoteRe
             input.expiresAt,input.checkoutTxRef,input.checkoutUrl,input.providerTransactionId,input.providerReference,
             input.billProviderReference,input.paymentVerifiedAt,input.fulfillmentReference,input.settlementState,
             input.refundReference,input.createdAt,input.updatedAt,
+            input.verifiedCustomerName ?? null,input.verifiedMinimumKobo ?? null,input.verifiedMaximumKobo ?? null,
           ],
         );
         if (inserted.rows[0]) return quote(inserted.rows[0]);
@@ -143,6 +151,9 @@ export function createPostgresBillingQuoteRepository(pool: Pool): BillingQuoteRe
           existing.itemCode === input.itemCode &&
           existing.itemName === input.itemName &&
           existing.customerId === input.customerId &&
+          existing.verifiedCustomerName === (input.verifiedCustomerName ?? null) &&
+          existing.verifiedMinimumKobo === (input.verifiedMinimumKobo ?? null) &&
+          existing.verifiedMaximumKobo === (input.verifiedMaximumKobo ?? null) &&
           existing.serviceAmountKobo === input.serviceAmountKobo &&
           existing.feeAmountKobo === input.feeAmountKobo &&
           existing.totalAmountKobo === input.totalAmountKobo &&
