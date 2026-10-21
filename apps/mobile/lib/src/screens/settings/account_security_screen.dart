@@ -24,6 +24,12 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   String? _confirmSession;
   String? _error;
   int _epoch = 0;
+  late int _authorizationEpoch;
+
+  int get _currentAuthorizationEpoch =>
+      ref.read(sessionProvider.notifier).authorizationEpoch;
+  bool _sameSession(String owner, int epoch) =>
+      mounted && _account == owner && _currentAuthorizationEpoch == epoch;
 
   String? get _account {
     final state = ref.read(sessionProvider);
@@ -33,14 +39,17 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   @override
   void initState() {
     super.initState();
+    _authorizationEpoch = _currentAuthorizationEpoch;
     Future<void>.microtask(_load);
   }
 
   Future<void> _load() async {
     final ticket = ++_epoch;
     final owner = _account;
+    final authEpoch = _currentAuthorizationEpoch;
     if (owner == null) {
-      if (mounted) setState(() { _loading = false; _error = 'Sign in to manage account security.'; });
+      if (mounted && _epoch == ticket && _currentAuthorizationEpoch == authEpoch)
+        setState(() { _loading = false; _error = 'Sign in to manage account security.'; });
       return;
     }
     if (mounted) setState(() { _loading = true; _error = null; });
@@ -48,14 +57,14 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
       final api = ref.read(apiClientProvider);
       final sessions = await api.securitySessions();
       final history = await api.securityLoginHistory();
-      if (!mounted || _epoch != ticket || _account != owner) return;
+      if (!_sameSession(owner, authEpoch) || _epoch != ticket) return;
       setState(() {
         _sessions = sessions;
         _history = history;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || _epoch != ticket || _account != owner) return;
+      if (!_sameSession(owner, authEpoch) || _epoch != ticket) return;
       setState(() {
         _loading = false;
         _error = 'Could not load security details. Check your connection and retry.';
@@ -65,43 +74,54 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
 
   Future<void> _revoke(String sessionId, {required bool current}) async {
     if (_saving || _account == null) return;
-    final owner = _account;
+    final owner = _account!;
+    final authEpoch = _currentAuthorizationEpoch;
     setState(() => _saving = true);
     try {
-      await ref.read(apiClientProvider).revokeSecuritySession(sessionId);
-      if (!mounted || _account != owner) return;
+      final api = ref.read(apiClientProvider);
+      await api.revokeSecuritySession(sessionId);
+      if (!_sameSession(owner, authEpoch)) return;
       if (current) {
         await ref.read(sessionProvider.notifier).logout();
-        if (mounted) Navigator.of(context).pop();
+        if (mounted && ref.read(sessionProvider) is SessionSignedOut)
+          Navigator.of(context).pop();
       } else {
+        final sessions = await api.securitySessions();
+        if (!_sameSession(owner, authEpoch)) return;
+        if (sessions.any((item) => item['sessionId'] == sessionId))
+          throw StateError('revoked_session_still_active');
         setState(() => _confirmSession = null);
         await _load();
       }
     } catch (_) {
-      if (mounted && _account == owner) {
-        setState(() => _error = 'Could not revoke that session. Retry when online.');
+      if (_sameSession(owner, authEpoch)) {
+        setState(() => _error = 'Could not confirm whether that device signed out. '
+            'Refresh the session list before trying again.');
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sameSession(owner, authEpoch)) setState(() => _saving = false);
     }
   }
 
   Future<void> _logoutAll() async {
     if (_saving || _account == null) return;
-    final owner = _account;
+    final owner = _account!;
+    final authEpoch = _currentAuthorizationEpoch;
     setState(() => _saving = true);
     try {
       // If the server is unavailable, do not claim remote sessions were revoked.
       await ref.read(apiClientProvider).securityLogoutAll();
-      if (!mounted || _account != owner) return;
+      if (!_sameSession(owner, authEpoch)) return;
       await ref.read(sessionProvider.notifier).logout();
-      if (mounted) Navigator.of(context).pop();
+      if (mounted && ref.read(sessionProvider) is SessionSignedOut)
+        Navigator.of(context).pop();
     } catch (_) {
-      if (mounted && _account == owner) {
-        setState(() => _error = 'Other devices have not been signed out. Retry online.');
+      if (_sameSession(owner, authEpoch)) {
+        setState(() => _error = 'Could not confirm sign-out on other devices. '
+            'Refresh sessions when online before trying again.');
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (_sameSession(owner, authEpoch)) setState(() => _saving = false);
     }
   }
 
@@ -120,10 +140,14 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
     ref.listen<SessionState>(sessionProvider, (previous, next) {
       final previousId = previous is SessionSignedIn ? previous.user.id : null;
       final nextId = next is SessionSignedIn ? next.user.id : null;
-      if (previousId == nextId) return;
+      final nextEpoch = _currentAuthorizationEpoch;
+      if (previousId == nextId && _authorizationEpoch == nextEpoch) return;
+      _authorizationEpoch = nextEpoch;
       ++_epoch;
       _sessions = const [];
       _history = const [];
+      _saving = false;
+      _loading = nextId != null;
       _confirmSession = null;
       _confirmAll = false;
       if (nextId != null) Future<void>.microtask(_load);
