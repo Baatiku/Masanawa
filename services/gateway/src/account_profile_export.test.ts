@@ -23,6 +23,8 @@ describe("private profile export",()=>{
             created_at:new Date("2026-10-17T11:00:00Z"),
             updated_at:new Date("2026-10-17T12:00:00Z")},
         ]};
+        if(sql.includes("talks.human_privacy"))return {rows:[{value:{messages:"contacts",presence:false}}]};
+        if(sql.includes("talks.human_calls"))return {rows:[{id:"call-owned",outgoing:true,state:"ended",created_at:new Date("2026-10-19T12:00:00Z"),answered_at:null,ended_at:null}]};
         throw Error("Unexpected query: "+sql);
       },
     } as unknown as Pool;
@@ -36,7 +38,9 @@ describe("private profile export",()=>{
     await expect(service.personalData({authorizationHeader:undefined}))
       .rejects.toThrow("UNAUTHORIZED");
     const record=await service.personalData({authorizationHeader:"Bearer owner"});
-    expect(seen).toHaveLength(3);
+    expect(seen).toHaveLength(5);
+    expect(record.humanCommunication.privacy).toMatchObject({messages:"contacts",presence:false});
+    expect(record.humanCommunication.recentCalls[0]).toMatchObject({id:"call-owned",direction:"outgoing"});
     for(const pair of seen)expect(pair).toEqual(["tenant_owner","user_owner"]);
     expect(record.profile.linkedEmail).toBe("owned@example.com");
     expect(record.profile.state).toBe("restricted");

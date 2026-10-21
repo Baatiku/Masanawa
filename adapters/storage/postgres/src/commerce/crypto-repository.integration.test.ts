@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -15,6 +16,7 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
 
   beforeAll(async () => {
     pool = new Pool({ connectionString });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [{
       owner: "commerce",
       directory: fileURLToPath(
@@ -89,9 +91,11 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
         observedAt: instant(2),
       },
     });
-    expect(await repository.readBalance({
+    // Compare PostgreSQL NUMERIC precisely; its trailing zero scale is benign.
+    const actual = await repository.readBalance({
       tenantId, userId, asset: "USDTTRC20", network: "tron",
-    })).toBe(balance);
+    });
+    expect(actual?.replace(/\.0+$/, "")).toBe(balance);
     return { repository, tenantId, userId, fundingRequestId, fundingPaymentId };
   }
 

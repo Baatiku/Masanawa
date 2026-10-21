@@ -9,27 +9,70 @@ String? shellDeepLinkRoute(Uri uri) {
     return null;
   }
 
+  // Human push payloads use canonical internal paths. Only these exact paths
+  // are accepted; relative links cannot inject a different app destination.
+  final human = uri.pathSegments;
+  if (uri.queryParameters.isEmpty) {
+    if (!uri.hasScheme &&
+        !uri.hasAuthority &&
+        human.length == 3 &&
+        human[0] == 'human' &&
+        const ['chat', 'call'].contains(human[1]) &&
+        _validResourceId(human[2])) {
+      return '/human/${human[1]}/${Uri.encodeComponent(human[2])}';
+    }
+    if (uri.scheme == 'masanawa' &&
+        uri.host == 'human' &&
+        human.length == 2 &&
+        const ['chat', 'call'].contains(human[0]) &&
+        _validResourceId(human[1])) {
+      return '/human/${human[0]}/${Uri.encodeComponent(human[1])}';
+    }
+    if (uri.scheme == 'https' &&
+        uri.host.toLowerCase() == 'masanawa.com' &&
+        human.length == 3 &&
+        human[0] == 'human' &&
+        const ['chat', 'call'].contains(human[1]) &&
+        _validResourceId(human[2])) {
+      return '/human/${human[1]}/${Uri.encodeComponent(human[2])}';
+    }
+    if ((uri.scheme == 'https' &&
+            uri.host.toLowerCase() == 'masanawa.com' &&
+            human.length == 2 &&
+            human[0] == 'u') ||
+        (uri.scheme == 'masanawa' && uri.host == 'u' && human.length == 1)) {
+      final handle = human.last;
+      if (RegExp(r'^[a-z0-9_][a-z0-9_.-]{1,39}$').hasMatch(handle))
+        return '/u/${Uri.encodeComponent(handle)}';
+    }
+  }
+
   // Navigation hints never grant access. The target screen loads its own
   // authorized resource after sign-in; no caller-supplied tokens or queries.
   if (uri.scheme == 'masanawa' && uri.queryParameters.isEmpty) {
     final segments = uri.pathSegments;
-    if (uri.host == 'rooms' && segments.length == 1 &&
+    if (uri.host == 'rooms' &&
+        segments.length == 1 &&
         _validResourceId(segments.single)) {
       return '/rooms/${Uri.encodeComponent(segments.single)}';
     }
-    if (uri.host == 'masana' && segments.length == 1 &&
+    if (uri.host == 'masana' &&
+        segments.length == 1 &&
         _validCharacterId(segments.single)) {
       return '/masana/${Uri.encodeComponent(segments.single)}';
     }
-    if (uri.host == 'status' && segments.length == 1 &&
+    if (uri.host == 'status' &&
+        segments.length == 1 &&
         _validResourceId(segments.single)) {
       return '/status/${Uri.encodeComponent(segments.single)}';
     }
-    if (uri.host == 'calls' && segments.length == 1 &&
+    if (uri.host == 'calls' &&
+        segments.length == 1 &&
         segments.single == 'history') {
       return '/home?tab=calls';
     }
-    if (uri.host == 'wallet' && segments.length == 2 &&
+    if (uri.host == 'wallet' &&
+        segments.length == 2 &&
         segments.first == 'transaction' &&
         _validTransactionId(segments.last)) {
       return '/wallet/transactions/${Uri.encodeComponent(segments.last)}';
@@ -179,8 +222,12 @@ bool canOpenIncomingCallRoute({
   required String targetPath,
   bool hasActiveCall = false,
 }) {
-  if (!targetPath.startsWith('/calls/incoming/')) return true;
+  if (!targetPath.startsWith('/calls/incoming/') &&
+      !targetPath.startsWith('/human/call/'))
+    return true;
   return !hasActiveCall &&
       !currentPath.startsWith('/calls/incoming/') &&
+      !currentPath.startsWith('/human/call/') &&
+      !currentPath.startsWith('/human/chat/') &&
       !currentPath.startsWith('/chat/');
 }

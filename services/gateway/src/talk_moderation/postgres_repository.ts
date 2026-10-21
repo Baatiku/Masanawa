@@ -580,6 +580,8 @@ export function createPostgresTalkModerationRepository(
               OR
               (viewer_user_id=$3 AND subject_user_id=$2 AND (blocked=true OR muted=true))
             )
+         UNION ALL SELECT true AS blocked
+          WHERE NOT talks.human_contact_allowed($1,$2,$3,'roomInvites')
           LIMIT 1`,
         [input.tenantId,talk.host_user_id,profile.user_id],
       );
@@ -670,6 +672,8 @@ export function createPostgresTalkModerationRepository(
               OR
               (viewer_user_id=$3 AND subject_user_id=$2 AND (blocked=true OR muted=true))
             )
+         UNION ALL SELECT true AS blocked
+          WHERE NOT talks.human_contact_allowed($1,$2,$3,'roomInvites')
           LIMIT 1`,
         [input.tenantId,talk.host_user_id,input.inviteeUserId],
       );

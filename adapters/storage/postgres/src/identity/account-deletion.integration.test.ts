@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -21,10 +22,12 @@ describeDatabase("R12 durable PostgreSQL deletion request", () => {
 
   beforeAll(async () => {
     pool = new Pool({ connectionString });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [
       { owner: "events", directory: fileURLToPath(new URL("../../../../../packages/events/migrations", import.meta.url)) },
       { owner: "security", directory: fileURLToPath(new URL("../../../../../packages/security/migrations", import.meta.url)) },
       { owner: "identity", directory: fileURLToPath(new URL("../../../../../packages/identity/migrations", import.meta.url)) },
+      { owner: "talks", directory: fileURLToPath(new URL("../../../../../packages/talks/migrations", import.meta.url)) },
     ]);
     const profiles = createPostgresPlatformSessionRepository(pool);
     const profile = await profiles.createProfile({

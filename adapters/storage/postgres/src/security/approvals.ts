@@ -426,10 +426,11 @@ export async function consumeOnceApproval(
 
 export function createPostgresCurrentAuthoritySource(
   client: PoolClient,
+  options: { readonly lockPolicyRevision?: boolean } = {},
 ): CurrentAuthoritySource {
   return {
     getPolicyRevision: (tenantId) =>
-      loadPolicyRevision(client, tenantId, "share"),
+      loadPolicyRevision(client, tenantId, options.lockPolicyRevision === false ? null : "share"),
     isRevoked: (context: AuthorityContext) =>
       isAuthorityContextRevoked(
         client,

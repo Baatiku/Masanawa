@@ -1,3 +1,4 @@
+import { createIsolatedPostgresTestDatabase } from "../home_feed/isolated_test_database.js";
 import { fileURLToPath } from "node:url";
 import { createCanonicalId, toInstant } from "@masanawa/contracts";
 import {
@@ -11,7 +12,6 @@ import {
   activateMemoryProjectionGeneration,
   createMemoryProjectionGeneration,
   createMemoryRecord,
-  createPostgresPool,
   createTenant,
   getMemoryRecordInScope,
   indexMemoryEntitySnapshot,
@@ -54,18 +54,17 @@ const migrationRoots = [
 
 describePostgres("Phase 4 memory acceptance retrieval", () => {
   let pool: Pool;
+  let isolated: Awaited<ReturnType<typeof createIsolatedPostgresTestDatabase>>;
 
   beforeAll(async () => {
-    pool = createPostgresPool({
-      connectionString: connectionString!,
-      applicationName: "masanawa-memory-acceptance",
-      max: 4,
-    });
+    isolated = await createIsolatedPostgresTestDatabase(connectionString!);
+    pool = isolated.pool;
   });
 
   beforeEach(async () => {
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS identity CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS security CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS events CASCADE");
@@ -76,7 +75,7 @@ describePostgres("Phase 4 memory acceptance retrieval", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await isolated?.close();
   });
 
   it("held-out entity, temporal and hybrid retrieval select corrected current truth and forbid the contradicted predecessor", async () => {

@@ -135,8 +135,21 @@ export function createAccountDataExports(
            ORDER BY updated_at DESC LIMIT 100`,
         [owner.tenantId,owner.userId],
       );
+      const humanPrivacy=await pool.query<{value:Record<string,unknown>}>(
+        "SELECT value FROM talks.human_privacy WHERE tenant_id=$1 AND user_id=$2",
+        [owner.tenantId,owner.userId],
+      );
+      const humanCalls=await pool.query<{id:string;outgoing:boolean;state:string;created_at:Date|string;answered_at:Date|string|null;ended_at:Date|string|null}>(
+        `SELECT id,caller=$2 AS outgoing,state,created_at,answered_at,ended_at
+           FROM talks.human_calls WHERE tenant_id=$1 AND (caller=$2 OR recipient=$2)
+           ORDER BY created_at DESC,id DESC LIMIT 100`,[owner.tenantId,owner.userId],
+      );
       return {
         kind:"personal_account_details" as const,formatVersion:1,
+        humanCommunication:{
+          privacy:{messages:"everyone",calls:"everyone",roomInvites:"everyone",readReceipts:true,presence:true,...humanPrivacy.rows[0]?.value},
+          recentCalls:humanCalls.rows.map(c=>({id:c.id,direction:c.outgoing?"outgoing":"incoming",state:c.state,createdAt:new Date(c.created_at).toISOString(),answeredAt:c.answered_at?new Date(c.answered_at).toISOString():null,endedAt:c.ended_at?new Date(c.ended_at).toISOString():null})),
+        },
         exportedAt:new Date().toISOString(),
         profile:{
           userId:owner.userId,displayName:row.display_name,
@@ -157,7 +170,7 @@ export function createAccountDataExports(
           clientLabel:e.client_label,
         })),
         notices:[
-          "Only your account profile and latest 100 security events/devices are included.",
+          "Your account profile, human privacy settings and latest 100 human calls/security events/devices are included.",
           "Your passwords, OTPs, access tokens, provider credentials and financial keys are never exported.",
           "Conversation text and wallet transactions have separate exports.",
         ],
@@ -168,13 +181,18 @@ export function createAccountDataExports(
       const start=cursor(input.cursor);
       const result=await pool.query<{
         request_id:string;character_id:string;kind:string;state:string;
-        user_text:string;reply:string|null;created_at:Date|string;
+        user_text:string;reply:string|null;created_at:Date|string;conversation_id:string|null;export_id:string;
       }>(
-        `SELECT request_id,character_id,kind,state,user_text,reply,created_at
-          FROM agents.mobile_turn_commands
-         WHERE tenant_id=$1 AND user_id=$2
-           AND ($3::timestamptz IS NULL OR (created_at,request_id)>($3::timestamptz,$4::text))
-         ORDER BY created_at ASC, request_id ASC LIMIT 201`,
+        `SELECT * FROM (
+           SELECT request_id,character_id,kind,state,user_text,reply,created_at,NULL::text AS conversation_id,'masana:'||request_id AS export_id
+             FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2
+           UNION ALL
+           SELECT request_id,NULL AS character_id,'human' AS kind,CASE WHEN deleted THEN 'deleted' ELSE 'sent' END AS state,
+                  CASE WHEN deleted THEN '' ELSE text END AS user_text,NULL AS reply,created_at,conversation_id,'human:'||id AS export_id
+             FROM talks.human_messages WHERE tenant_id=$1 AND user_id=$2
+         ) transcript
+         WHERE ($3::timestamptz IS NULL OR (created_at,export_id)>($3::timestamptz,$4::text))
+         ORDER BY created_at ASC,export_id ASC LIMIT 201`,
         [owner.tenantId,owner.userId,start?.[0]??null,start?.[1]??null],
       );
       const rows=result.rows.slice(0,200);
@@ -185,10 +203,11 @@ export function createAccountDataExports(
         mediaFilesIncluded:false,
         items:rows.map(row=>({
           requestId:row.request_id,characterId:row.character_id,
+          ...(row.conversation_id?{conversationId:row.conversation_id}:{}),
           kind:row.kind,state:row.state,userText:row.user_text,
           reply:row.reply,createdAt:new Date(row.created_at).toISOString(),
         })),
-        nextCursor:result.rows.length>200&&last ? encode(last.created_at,last.request_id):null,
+        nextCursor:result.rows.length>200&&last ? encode(last.created_at,last.export_id??last.request_id):null,
       };
     },
     async financialStatement(input: Context & {from?:string;to?:string}) {

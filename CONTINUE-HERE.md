@@ -1,24 +1,20 @@
-# Continue Masanawa — current source authority
-**Current revision:** 2026-10-19.
+# Continue Masanawa — current implementation handoff
+**Reconciled:** 20 October 2026 · **Baseline:** `c944045e` · **Repository:** Baatiku/Masanawa.
 
-Read in this order: [product phases and statuses](docs/PRODUCT-ROADMAP-20261019.md) → [screens and customer journeys](docs/SCREEN-JOURNEYS.md) → [contributor/financial security rules](AGENTS.md) → only the technical contracts needed for your assigned milestone.
+Read [canonical tasks/status/release path](docs/PRODUCT-ROADMAP-20261019.md) → [screens/journeys](docs/SCREEN-JOURNEYS.md) → [contributor rules](AGENTS.md). Use the [wallet guide](docs/AI-DEVELOPER-WALLET-IMPLEMENTATION-GUIDE.md) and [communication benchmark](docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md) when implementing their mapped tasks. These are practical instructions; task status and release sequencing live only in the roadmap.
 
-## Canonical owner decisions
-- International human and **Masana** communication and creators with Chats / Status / Wallet / Calls / Rooms, Chats default. Preserve WhatsApp-like visual simplicity.
-- One free published creator Masana per user lifetime; additional successful publications **5,000 MSNW default**, subject to admin-edited future pricing and canonical server-authorized settlement. Creator edits, media, earnings and optional voice references need completion as the roadmap specifies.
-- **MSNW only** for customer wallet credit and designated official token, not MSN/Cr/Credits. Preserve unreconciled historical financial records and separate source availability from on-chain launch/redeemability.
-- Only authorized market/provider capabilities appear available; users approve money actions. No screenshot escrow release. No direct platform fiat cashout.
-- Approved voices where configured: **Bodi male, Fora female**. Other personas may use distinct supported voices after qualification.
-- Do not reintroduce retired Twins, personal clones, separate Agent/Gwani root tabs.
+## Current source and next work
+- Phase 4 foundation is merged; messaging/privacy/calls source is in open [#227](https://github.com/Baatiku/Masanawa/pull/227), head `24b0801d3da0245e55e9df973029ad4931b68e8f`. Integrator reconciles fresh main, repairs scoped failures and merges completed source. Real handset/provider acceptance is separate. Do not restart contacts or claim full Phase 4 delivery.
+- Phase 5 is being implemented in local `feat/phase5-rooms-creators-20261020`, no published PR yet: canonical Room community/membership/media/mentions, worker checks, account-fenced mobile and creator media/revisions. Preserve unfinished P5-C earnings producer, actual Status cadence and qualified optional voice work until implemented/explicitly dispositioned. No source completion inferred from partial tests.
+- Wallet [#230](https://github.com/Baatiku/Masanawa/pull/230) is merged via `ab15bf7b88ec4c45b27c60c8b14e99d67d78b7e2`. Reuse assigned account numbers, lookup, badge and Send authority; continue P6-W01 verification and W02–W11.
+- Roadmap [#231](https://github.com/Baatiku/Masanawa/pull/231) is merged via `b957161fa7bbcb1e5f2a01c516883570a000456c`. Preserve W/S/X task additions when reconciling older branches.
+- Memory [#228](https://github.com/Baatiku/Masanawa/pull/228) remains open at `97bfa5e59a09d0b424bcd034236e6e94de38fcda`; one integrator reconciles shared router/composition/migrations, without granting financial authority to memory.
 
-## Current next phase
-Owner approved human chat/calls, Contacts **Masana / Humans**, one unified human/creator profile, and user-created channel-style **Rooms** on 19 October. Start Phase 4 in the canonical roadmap; Phase 5 covers Rooms/creator carry-forward, Phases 6–8 preserve Wallet/P2P/operations. Previous Phases 1–3 are owner-closed delivery rounds; #225 explicitly leaves source gaps carried into P5-C. Do not silently mark them verified.
+## Execution and ownership
+Finish Phase 4 → Phase 5 → remaining Wallet/services → initial-release shared polish and P8-APK01–05. Independent scoped work can proceed concurrently; one integrator owns shared router, app/main, migration composition and financial authority. Keep five tabs Chats / Status / Wallet / Calls / Rooms, Chats default; one canonical MSNW ledger; preserve historical liabilities. First lifetime creator publication free, additional publication default 5,000 MSNW quoted/authorized/captured once. Bodi male/Fora female supported voices; cloning only when qualified.
 
-## Phase 4 continuation
-Milestone A now adds the Wallet header shortcut, Contacts Masana/Humans tabs, versioned public contact API, shared human/creator profile and authenticated `/u/:handle`. Full Phase 4 is not complete: contact rows open profiles until **P4-05 direct-message persistence/admission** and P4-06/07 compose the real conversation/inbox. Calls follow in P4-08/09, privacy P4-10. Follow is not message acceptance. Read the roadmap checkpoint for actual PASS/SKIP/NOT_RUN evidence; Flutter execution was blocked by automatic review of metadata access. Keep the remaining Rooms/creator/Wallet/P2P/release requirements.
+## Keep moving with honest evidence
+Use the roadmap forward-progress policy: inspect failures, bounded repair and practical fallback, record unresolved checks with task/SHA/reason/owner/next action, then continue independent implementation. No unavailable SDK/device/provider can stall unrelated source. Never convert skipped checks to passes or activate a known unsafe capability. Run available Node/PostgreSQL/Flutter/Android checks; source integration, APK build and production acceptance are separate states.
 
-## What the source already contains
-A Flutter five-tab app; Gateway/Worker/PostgreSQL; Masana directory and chat/call/Status/Room flows; MSNW Wallet and P2P source; creator wizard/first-free/paid-publication (#212); creator voice binding (#214); notifications/search (#207); and multiple regression fixes (#218). **Do not create duplicates**. Issue [#220](https://github.com/Baatiku/Masanawa/issues/220) is open; its claimed checkpoint is not treated as merged code.
-
-## Execution
-Start from current `main` with fresh branch/PR/issue inspection and exact path ownership. Complete one **customer journey** at a time, including client, backend, DB, permissions, billing/receipts, failure recovery and tests. Merge safe, compatible work promptly after applicable executable checks and diff inspection; document skipped/unrun tests, actual provider/device gaps and deployed SHA separately. Railway Gateway, Worker and PostgreSQL are the relevant backend services. Preserve live database volumes, migration history, transaction obligations, signing keys and secret boundaries. A merge is not authorization to move money without qualified custody/settlement.
+## Release target
+Produce the signed APK, checksum, expected certificate, version, source SHA and provenance using existing CI. Owner/device operator validates the installed candidate; backend operator validates matching deployment/migrations/backup/recovery and enabled providers. Record evidence in the canonical roadmap; no production-ready claim from compilation alone. Preserve database volumes, keys, receipts and rollback obligations.

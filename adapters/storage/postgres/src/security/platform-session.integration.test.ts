@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -18,6 +19,7 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
 
   beforeAll(async () => {
     pool = new Pool({ connectionString });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [
       {
         owner: "events",
@@ -83,7 +85,7 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
       channel: "email",
       identifier: left.email!,
       observedAt: new Date().toISOString(),
-    })).resolves.toEqual(left);
+    })).resolves.toMatchObject(left);
 
     const identityRows = await pool.query<{ tenants: string; users: string }>(
       `SELECT

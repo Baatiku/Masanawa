@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -16,6 +17,7 @@ db("AF01 real PostgreSQL18 NGN intake/provider reconciliation", () => {
     pool = new Pool({ connectionString: url });
     // Only the CANONICAL commerce funding schema. Never install staged MSN
     // migration or create a substitute funding wallet for these checks.
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [{
       owner: "commerce",
       directory: fileURLToPath(new URL("../../../../../packages/commerce/migrations", import.meta.url)),

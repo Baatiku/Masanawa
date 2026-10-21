@@ -58,4 +58,10 @@ it("uses account registrations and one bounded deadline for OAuth and delivery",
     body: "Open the app to view your update",
   });
   expect(payload.message.android.notification.visibility).toBe("PRIVATE");
+  await sender.send({scope,title:"Incoming call",body:"Open Calls to respond",data:{type:"human_call",callId:"11111111-1111-4111-8111-111111111111",deepLink:"masanawa://human/call/11111111-1111-4111-8111-111111111111"}});
+  const human=JSON.parse(requests[2]!.body as string).message;
+  expect(human.notification).toBeUndefined();
+  expect(human.android.notification).toBeUndefined();
+  expect(human.android).toMatchObject({priority:"high",ttl:"60s"});
+  expect(human.data.type).toBe("human_call");
 });

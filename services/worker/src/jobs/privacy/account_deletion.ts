@@ -136,6 +136,7 @@ export function createAccountDeletionPrivacyWorker(input:{
       const scope=[row.tenant_id,row.user_id];
       for(const sql of [
         "DELETE FROM agents.private_chat_media WHERE tenant_id=$1 AND user_id=$2",
+        "SELECT talks.redact_human_account($1,$2)",
         "DELETE FROM masana.fan_hidden_turns WHERE tenant_id=$1 AND fan_user_id=$2",
         "DELETE FROM masana.fan_chat_preferences WHERE tenant_id=$1 AND fan_user_id=$2",
         // Deleting a follow also cascades to its per-fan mute preferences.

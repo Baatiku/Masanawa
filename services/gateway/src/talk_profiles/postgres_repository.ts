@@ -200,9 +200,12 @@ export function createPostgresTalkProfileRepository(
         FROM talks.public_profiles p
         WHERE p.tenant_id=$1 AND p.user_id<>$2 AND (${publicHumanAccess})
           AND ($4::text IS NULL OR p.handle > $4)
-          AND (CASE WHEN $3 = '' THEN EXISTS (
+          AND (CASE WHEN $3 = '' THEN (EXISTS (
             SELECT 1 FROM talks.follows f WHERE f.tenant_id=p.tenant_id
               AND f.follower_user_id=$2 AND f.followed_user_id=p.user_id)
+            OR EXISTS (SELECT 1 FROM talks.human_conversations c
+              WHERE c.tenant_id=p.tenant_id AND c.state='accepted'
+                AND c.low_user=LEAST($2,p.user_id) AND c.high_user=GREATEST($2,p.user_id)))
             ELSE strpos(lower(p.handle),$3)>0 OR strpos(lower(p.display_name),$3)>0 END)
         ORDER BY p.handle ASC LIMIT 31`,
         [input.tenantId,input.viewerUserId,input.query,input.after]);

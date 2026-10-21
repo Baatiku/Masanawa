@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -13,6 +14,7 @@ describeDatabase("commerce paid fulfillment PostgreSQL acceptance", () => {
   let pool: Pool;
   beforeAll(async () => {
     pool = new Pool({ connectionString });
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [{ owner: "commerce", directory: fileURLToPath(
       new URL("../../../../../packages/commerce/migrations", import.meta.url),
     ) }]);

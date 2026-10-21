@@ -1,3 +1,5 @@
+import '../../human_chat/human_chat.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -183,14 +185,20 @@ class _HumanContactsListState extends ConsumerState<HumanContactsList> {
           for (final person in _items)
             ListTile(
               key: ValueKey('human-contact-${person.handle}'),
-              leading: CircleAvatar(
-                foregroundImage: person.avatarUrl?.isNotEmpty == true
-                    ? NetworkImage(person.avatarUrl!)
-                    : null,
-                onForegroundImageError: person.avatarUrl?.isNotEmpty == true
-                    ? (_, __) {}
-                    : null,
-                child: Text(person.displayName.characters.first.toUpperCase()),
+              leading: GestureDetector(
+                onTap: () =>
+                    context.push('/u/${Uri.encodeComponent(person.handle)}'),
+                child: CircleAvatar(
+                  foregroundImage: person.avatarUrl?.isNotEmpty == true
+                      ? NetworkImage(person.avatarUrl!)
+                      : null,
+                  onForegroundImageError: person.avatarUrl?.isNotEmpty == true
+                      ? (_, __) {}
+                      : null,
+                  child: Text(
+                    person.displayName.characters.first.toUpperCase(),
+                  ),
+                ),
               ),
               title: Text(
                 person.displayName,
@@ -205,7 +213,7 @@ class _HumanContactsListState extends ConsumerState<HumanContactsList> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 final owner = _owner;
-                await context.push('/u/${Uri.encodeComponent(person.handle)}');
+                await humanConversationStart(context, ref, person.handle);
                 if (mounted && owner == _owner) await _load();
               },
             ),

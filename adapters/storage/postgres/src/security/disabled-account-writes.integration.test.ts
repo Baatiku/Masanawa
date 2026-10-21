@@ -1,3 +1,4 @@
+import { foundationMigrationRoots } from "../readiness.js";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -25,6 +26,7 @@ describeDatabase("R12 account disabled write barriers", () => {
     pool = new Pool({ connectionString });
     const root = (name: string) =>
       fileURLToPath(new URL(`../../../../../packages/${name}/migrations`, import.meta.url));
+    await runMigrations(pool, foundationMigrationRoots());
     await runMigrations(pool, [
       { owner: "events", directory: root("events") },
       { owner: "agents", directory: root("agents") },
