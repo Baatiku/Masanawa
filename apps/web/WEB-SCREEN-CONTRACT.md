@@ -53,5 +53,17 @@ For **every** migrated route: first-load skeleton, authorized empty state, parti
 - All reference flows preserve layout geometry wherever appropriate, and each accepted web flow runs against the **same Masanawa Gateway** as mobile; verified cross-device user data, permission checks and server session/memory continuity, with signed-in account switch tests.
 - Before release: executable web build/typecheck/unit/Playwright smoke (desktop/mobile); privacy and CSP/CORS/cookie checks; backend staging proof; deployed SHA/URL and rollback. Track NOT_RUN separately from PASS_REAL.
 
-## Current first branch scope
-Brand asset alias from the approved mobile-mark candidate, Masanawa PWA manifest, token scaffold and baseline audit tool. They **do not complete** the 104-page rebuild or change actual customer HTML/compiled JS. Keep this work unmerged/draft until all visible surfaces and integrations are coordinated; then merge only with proof and no legacy live endpoint leakage.
+## Current implementation checkpoint — 21 October 2026
+
+Web application sources now exist under `apps/web/src` using **Next.js 16 / React 19**, the legacy `apps/web` snapshot is preserved separately in place but is **not imported** into the Next.js build.
+
+**Shipped by source, browser-tested but not deployed:**
+- Responsive branded marketing homepage (`/`), registration (`/register`), sign-in (`/login`), six-digit phone password recovery (`/recovery`).
+- Shared `/chats`, `/status`, `/wallet`, `/calls`, `/rooms`, `/masana`, `/settings` shell with Masanawa green/white visual design; unavailable features show truthful pending text rather than fabricated data.
+- Authenticated **read-only** Masana directory and Masana inbox projection against canonical Gateway, with session-gated loading/empty/error/permission states.
+- Same-origin Next.js BFF at `/api/auth/*` and narrowly allowlisted `/api/bridge/*`, HTTP-only SameSite cookies, origin validation on state-changing requests, server-only access to Gateway, no client-side provider tokens or wallet ledger.
+- Brand audit of `apps/web/src` passes. **The full imported legacy snapshot still contains NasfamPay references and must not be publicly served as the Masanawa application.**
+
+**Remaining:** original authenticated conversation screens, human messaging, status feed, voice calls, rooms, wallet operations, creator work, authoritative public policy/about/help copy, regional/financial provider qualification, and deployment. Visual parity to every old layout and real provider/account E2E are **NOT_RUN**; review those before deleting the old static snapshots. Next milestone should complete a full chat/profile user journey, not another disconnected landing page.
+
+**Execution evidence:** Higgsfield Linux checkout of commit `ba7dd0ebdd07bb69bf7f2143e1214707dd100089`, with local subsequent fixes committed as follow-on to the same PR: `node --test` 3/3; `tsc --noEmit` PASS; production `next build` PASS after adding auth Suspense; browser route smoke 1440px and 390px across 7 routes returned 200 with no JS errors, overflow or visible old-brand text. Backend/provider/authentication success were not verified against live accounts. `brand-audit.mjs --root src --strict` PASS (zero); entire legacy `apps/web` root audit still expected FAIL (snapshot is not converted).
