@@ -57,9 +57,9 @@ jobs:
           import sys
           from pathlib import Path
           lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
-          indices = [i for i, line in enumerate(lines) if '[E]' in line][:50]
+          indices = [i for i, line in enumerate(lines) if '[E]' in line][:30]
           for index in indices:
-              detail = '\n'.join(lines[index:index + 18])
+              detail = '\n'.join(lines[max(0, index - 35):index + 32])
               detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print(f'::error title=Flutter test failure::{detail}')
           PY
