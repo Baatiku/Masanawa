@@ -16,6 +16,9 @@ Read [canonical tasks/status/release path](docs/PRODUCT-ROADMAP-20261019.md) →
 ## Execution and ownership
 Continue unfinished Phase 5 dependencies and remaining Wallet/services → initial-release shared polish and owner-requested P8-APK01–05. Phase 4 source is integrated; carry its device/provider acceptance forward rather than restarting it. Independent scoped work can proceed concurrently; one integrator owns shared router, app/main, migration composition and financial authority. Keep five tabs Chats / Status / Wallet / Calls / Rooms, Chats default; one canonical MSNW ledger; preserve historical liabilities. First lifetime creator publication free, additional publication default 5,000 MSNW quoted/authorized/captured once. Bodi male/Fora female supported voices; cloning only when qualified.
 
+## Persistent owner working preference
+Implement several connected features across backend/mobile before one focused check/review/merge pass. Avoid one-small-feature delivery cycles and repeated documentation/test overhead. Follow AGENTS rule 17; APKs only when explicitly requested. This is the default for future sessions.
+
 ## Keep moving with honest evidence
 Use the roadmap forward-progress policy: inspect failures, bounded repair and practical fallback, record unresolved checks with task/SHA/reason/owner/next action, then continue independent implementation. No unavailable SDK/device/provider can stall unrelated source. Never convert skipped checks to passes or activate a known unsafe capability. Run available Node/PostgreSQL/Flutter/Android checks; source integration, APK build and production acceptance are separate states.
 
