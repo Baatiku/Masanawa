@@ -3,6 +3,18 @@
 **Status:** APPROVED DIRECTION / PLANNED, not functional acceptance. **Source baseline:** `9f517836471f6cc92c4b71fd1a84e38f85cb6152` (21 October 2026).
 **Authority:** [canonical product roadmap](../../docs/PRODUCT-ROADMAP-20261019.md), [screen and journey contract](../../docs/SCREEN-JOURNEYS.md), [Masanawa AGENTS](../../AGENTS.md), mobile [design tokens](../mobile/lib/src/tokens/masanawa_tokens.dart) and [security](../../docs/SECURITY-AUTHORITY.md). This is a **web implementation specification**, not a second product roadmap. Any later roadmap status belongs in the canonical roadmap.
 
+## Implemented web conversation milestone — 21 October 2026
+**Source and code checkpoint:** `apps/web/src/components/masana-experience.tsx`, `apps/web/src/lib/masana.ts`, `apps/web/src/app/api/masana/[characterId]/[action]/route.ts`. Implemented in PR #236, not deployed or live-provider accepted.
+
+- **Discovery:** secure Masana directory cards link to one authorized character profile; Masana inbox items link directly into conversation history. A malformed/foreign character ID fails closed.
+- **Profile:** role, creator, region, greeting, biography and conversation suggestions from the canonical directory; unknown presence displays **Status unverified**, not fabricated availability. AI identity and safety disclosure remain visible.
+- **Conversation:** read-only history from the canonical account-scoped `/agent/history` endpoint; text submission uses `/agent/sessions/open` then `/agent/sessions/:id/turn`, with `x-request-id` and existing canonical correlation. No separate agent runtime, memory, wallet, room or identity service.
+- **Failed/ambiguous turns:** one stable canonical request ID is generated client-side and retained in session storage without bearer credentials. A transport timeout, disconnect or malformed reply locks the composer until `/agent/turns/:requestId/status` confirms completed/failed. A missing/pending state stays blocked and invites another explicit status check; it **never automatically replays an uncertain turn**.
+- **Auth:** server-side same-origin BFF and HTTP-only cookies, strict route/action allowlist and POST Origin validation. The signed-in scope and history permissions are enforced by the Gateway, not by claimed client identities.
+- **States:** signed-out, auth-unavailable, loading, not-found, denied, empty history, history read error, offline, sending, unconfirmed, pending, completed, failed. The mobile bottom nav and five-root-tab rule remain intact.
+
+**Still open:** human conversation E2E, message media, richer shell parts/actions, websocket/SSE streaming, call/media device permission, multi-device conversation reconciliation, billing rules, real provider tests, deployed auth/CSRF/security review, automated authenticated-browser scenarios, full legacy snapshot retirement. Do not label the web application production complete or replace old snapshots without parity review.
+
 ## Observed imported baseline
 - `apps/web` is now an HTTrack-style static snapshot of NasfamPay: **683 tracked tree entries and 104 HTML route snapshots**, 361 JS files and four CSS files; many `assets/*.js` files are compiled/minified and the original editable React components are not present. The prior minimal Next.js `apps/web/src/app` and `package.json` are no longer in this tree.
 - Paths include `dashboard/` (44 mirrored HTML pages), `learn/` (25), `careers/` (11), standalone public pages, plus legacy cached `__api__` response paths. These are **preservation and layout references, not verified functioning Masanawa journeys**. Build, browser, provider and device validation were NOT_RUN when this specification was written.

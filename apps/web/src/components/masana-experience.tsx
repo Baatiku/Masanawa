@@ -15,6 +15,9 @@ function humanTime(date:string){
 }
 function path(id:string,action:string){return "/api/masana/"+encodeURIComponent(id)+"/"+action;}
 function savedKey(id:string){return "masanawa.web.unconfirmed."+id;}
+function restorePending(key:string):string|null{try{return sessionStorage.getItem(key);}catch{return null;}}
+function persistPending(key:string,value:string){try{sessionStorage.setItem(key,value);}catch{/* Session storage can be disabled. The in-memory guard remains. */}}
+function forgetPending(key:string){try{sessionStorage.removeItem(key);}catch{/* Keep the in-memory guard intact. */}}
 async function requestJSON(url:string, options?:RequestInit):Promise<ResponseData>{
   const res=await fetch(url,{credentials:"same-origin",cache:"no-store",...options});
   const data:unknown=await res.json().catch(()=>null);
@@ -83,13 +86,14 @@ export function MasanaExperience({characterId,mode}:{characterId:string;mode:Vie
         if(controller.signal.aborted)return;
         const parsed=readProfile(data.profile);
         if(!parsed){setState("not-found");return;}
-        setProfile(parsed);setState("ready");
+        setProfile(parsed);
         if(mode==="chat") {
           try{await loadHistory();}catch(e){if(!controller.signal.aborted)setHistoryIssue(e instanceof Error?e.message:"Unable to load history.");}
         }
         if(controller.signal.aborted)return;
-        const stored=sessionStorage.getItem(recoveryKey);
+        const stored=restorePending(recoveryKey);
         if(stored&&validRequestId(stored)){setPendingId(stored);setTurnState("unconfirmed");setTurnError("A previous message has not been confirmed. Check its status before sending another.");}
+        setState("ready");
       }catch(e){
         if(controller.signal.aborted)return;
         const status=typeof e==="object"&&e!==null&&"status" in e?(e as {status:unknown}).status:0;
@@ -105,10 +109,10 @@ export function MasanaExperience({characterId,mode}:{characterId:string;mode:Vie
     try{
       const data=await requestJSON(path(characterId,"status")+"?requestId="+encodeURIComponent(pendingId));
       if(data.state==="completed"){
-        setPendingId("");sessionStorage.removeItem(recoveryKey);setTurnState("idle");setDraft("");
+        setPendingId("");forgetPending(recoveryKey);setTurnState("idle");setDraft("");
         await loadHistory();
       }else if(data.state==="failed"){
-        setPendingId("");sessionStorage.removeItem(recoveryKey);setTurnState("idle");setTurnError("The Gateway reported that the turn failed. You can edit and send a new message.");
+        setPendingId("");forgetPending(recoveryKey);setTurnState("idle");setTurnError("The Gateway reported that the turn failed. You can edit and send a new message.");
         await loadHistory().catch(()=>setHistoryIssue("Unable to refresh conversation history."));
       }else{
         setTurnState(data.state==="pending"?"pending":"unconfirmed");
@@ -134,11 +138,11 @@ export function MasanaExperience({characterId,mode}:{characterId:string;mode:Vie
         binding=opened.characterSessionId;setSessionId(binding);
       }
       key="request_"+crypto.randomUUID();
-      setPendingId(key);sessionStorage.setItem(recoveryKey,key);
+      setPendingId(key);persistPending(recoveryKey,key);
       setTurnState("sending");
       const reply=await requestJSON(path(characterId,"turn"),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId:binding,requestId:key,text:original})});
       if(typeof reply.reply!=="string")throw Error("The reply could not be confirmed.");
-      sessionStorage.removeItem(recoveryKey);setPendingId("");setTurnState("idle");setDraft("");
+      forgetPending(recoveryKey);setPendingId("");setTurnState("idle");setDraft("");
       try{await loadHistory();}catch{setHistoryIssue("Your message was sent, but the history could not be refreshed. Use Refresh to check.");}
     }catch(e){
       if(key){
