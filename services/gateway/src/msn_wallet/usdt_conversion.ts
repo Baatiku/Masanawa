@@ -1,3 +1,4 @@
+import type { NgnAssetQuote } from './ngn_asset_quote.js';
 import { randomUUID } from "node:crypto";
 import type { Pool } from "@masanawa/postgres";
 import type { NowPaymentsCustodyClient, NowPaymentsPayoutClient } from "@masanawa/nowpayments";
@@ -56,6 +57,8 @@ export function createMsnwUsdtConversion(input: Readonly<{
   payout: Payout;
   custody: Custody;
   rateUsdMicroPerMsnw: string;
+  ngnQuote?: (providerCode:string)=>Promise<NgnAssetQuote>;
+  requireNgnQuote?: boolean;
   verificationCode: string;
   approvedDestination: (owner:Owner,route:Route,address:string) => boolean;
   enabledRoutes: readonly string[];
@@ -85,9 +88,15 @@ export function createMsnwUsdtConversion(input: Readonly<{
     );
     if(prior.rowCount)
       throw new MsnwConversionError("msnw.convert.previous_unresolved",409);
-    // A 6-decimal MSNW quote amount converts to exact 6-decimal USD
-    // stablecoin tokens using an explicitly operator-governed rate.
-    const target = source*priceMicro/1000000n;
+    let evidence:NgnAssetQuote|undefined;
+    try{evidence=await input.ngnQuote?.(providerCode);}catch{throw new MsnwConversionError('msnw.convert.ngn_quote_unavailable',503);}
+    if(input.requireNgnQuote&&!evidence)throw new MsnwConversionError('msnw.convert.ngn_quote_unavailable',503);
+    // Numerator/denominator is target atomic units per MSNW (= NGN 1),
+    // not assumed USD parity. Floor only once at the target precision.
+    const n=evidence?BigInt(evidence.numerator):priceMicro,d=evidence?BigInt(evidence.denominator):1n;
+    const target=source*n/(1000000n*d);
+    const compatibilityRate=(n+d-1n)/d;
+    if(compatibilityRate>9223372036854775807n)throw new MsnwConversionError('msnw.convert.rate_invalid',503);
     if(target<1n || !microPattern.test(target.toString()))
       throw new MsnwConversionError("msnw.convert.quote_dust",409);
     await input.payout.validateAddress({
@@ -130,11 +139,12 @@ export function createMsnwUsdtConversion(input: Readonly<{
       asset:"MSNW" as const,providerCode,destinationAddress,
       sourceMicro:source.toString(),targetMicro:target.toString(),
       payoutAmount:expected,feeEstimateMicro:feeMicro.toString(),
-      rateUsdMicroPerMsnw:priceMicro.toString(),
+      rateUsdMicroPerMsnw:compatibilityRate.toString(),
+      ...(evidence?{pricingEvidence:evidence}:{}),
       availableMicro:ownMicro,
       sufficient:BigInt(ownMicro)>=source,
       providerLiquidityQualified:remaining>=target+feeMicro,
-      expiresAt:new Date(Date.now()+2*60*1000).toISOString(),
+      expiresAt:new Date(Math.min(Date.now()+2*60*1000,evidence?Date.parse(evidence.expiresAt):Infinity)).toISOString(),
     });
   }
 
@@ -170,7 +180,7 @@ export function createMsnwUsdtConversion(input: Readonly<{
   async function reserve(owner:Owner,parameters: Readonly<{
     amountMicro:unknown;providerCode:unknown;destinationAddress:unknown;
     expectedTargetMicro:unknown;expectedFeeMicro:unknown;
-    expectedRateUsdMicroPerMsnw:unknown;idempotencyKey:unknown;
+    expectedRateUsdMicroPerMsnw:unknown;expectedNgnQuoteId?:unknown;idempotencyKey:unknown;
   }>) {
     const idem=parameters.idempotencyKey;
     if(typeof idem!=="string" || !keyPattern.test(idem))
@@ -181,12 +191,13 @@ export function createMsnwUsdtConversion(input: Readonly<{
     const previous=await input.pool.query(
       "SELECT conversion_id::text,provider_code,destination_address," +
       "source_micro::text,target_micro::text,fee_estimate_micro::text," +
-      "rate_usd_micro_per_msnw::text FROM commerce.msnw_usdt_payouts " +
+      "rate_usd_micro_per_msnw::text,pricing_evidence FROM commerce.msnw_usdt_payouts " +
       "WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3",
       [owner.tenantId,owner.userId,idem],
     );
     if(previous.rowCount===1){
       const item=previous.rows[0]!;
+      if(item.pricing_evidence && (item.pricing_evidence as Record<string,unknown>).quoteId!==parameters.expectedNgnQuoteId)throw new MsnwConversionError('msnw.convert.idempotency_conflict',409);
       if(item.provider_code!==parameters.providerCode ||
          item.destination_address!==parameters.destinationAddress ||
          item.source_micro!==parameters.amountMicro ||
@@ -197,6 +208,8 @@ export function createMsnwUsdtConversion(input: Readonly<{
       return {conversionId:text(item.conversion_id),claimed:false};
     }
     const quoted=await quote(owner,parameters);
+    if(quoted.pricingEvidence&&parameters.expectedNgnQuoteId!==quoted.pricingEvidence.quoteId)
+      throw new MsnwConversionError('msnw.convert.quote_changed',409);
     if(quoted.targetMicro!==parameters.expectedTargetMicro ||
        quoted.feeEstimateMicro!==parameters.expectedFeeMicro ||
        quoted.rateUsdMicroPerMsnw!==parameters.expectedRateUsdMicroPerMsnw)
@@ -218,7 +231,8 @@ export function createMsnwUsdtConversion(input: Readonly<{
       );
       if(replay.rowCount){
         const row=replay.rows[0]!;
-        if(text(row.provider_code)!==quoted.providerCode ||
+        if((row.pricing_evidence && (row.pricing_evidence as Record<string,unknown>).quoteId!==parameters.expectedNgnQuoteId) ||
+           text(row.provider_code)!==quoted.providerCode ||
            text(row.destination_address)!==quoted.destinationAddress ||
            text(row.source_micro)!==quoted.sourceMicro ||
            text(row.target_micro)!==quoted.targetMicro ||
@@ -261,6 +275,7 @@ export function createMsnwUsdtConversion(input: Readonly<{
       if(funds.rowCount!==1 ||
          BigInt(text(funds.rows[0]?.available_micro))<BigInt(quoted.sourceMicro))
         throw new MsnwConversionError("msnw.convert.insufficient_funds",409);
+      if(Date.parse(quoted.expiresAt)<=Date.now())throw new MsnwConversionError('msnw.convert.quote_expired',409);
       const id=randomUUID();
       const moved=await client.query(
         "UPDATE commerce.msnw_custody_accounts " +
@@ -274,11 +289,11 @@ export function createMsnwUsdtConversion(input: Readonly<{
       await client.query(
         "INSERT INTO commerce.msnw_usdt_payouts " +
         "(conversion_id,tenant_id,user_id,idempotency_key,provider_code,destination_address," +
-        "source_micro,target_micro,rate_usd_micro_per_msnw,fee_estimate_micro,quote_expires_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9::bigint,$10::numeric,$11)",
+        "source_micro,target_micro,rate_usd_micro_per_msnw,fee_estimate_micro,quote_expires_at,pricing_evidence) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9::bigint,$10::numeric,$11,$12::jsonb)",
         [id,owner.tenantId,owner.userId,idem,quoted.providerCode,
           quoted.destinationAddress,quoted.sourceMicro,quoted.targetMicro,
-          quoted.rateUsdMicroPerMsnw,quoted.feeEstimateMicro,quoted.expiresAt],
+          quoted.rateUsdMicroPerMsnw,quoted.feeEstimateMicro,quoted.expiresAt,quoted.pricingEvidence?JSON.stringify(quoted.pricingEvidence):null],
       );
       await client.query(
         "INSERT INTO commerce.msnw_usdt_payout_audit " +

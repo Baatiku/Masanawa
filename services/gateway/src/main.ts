@@ -1,3 +1,4 @@
+import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import {createRoomCommunityService} from "./room_community/index.js";
@@ -1368,7 +1369,7 @@ export async function startGatewayService(
         systemInstructions: Object.freeze([
           ...TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
           ...(cryptoConversationConfigured &&
-               env.MSNW_CONVERT_USD_MICRO_PER_MSNW?.trim() &&
+               env.MSNW_NGN_QUOTE_URL?.trim() && env.MSNW_NGN_QUOTE_PUBLIC_KEY?.trim() &&
                env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true" &&
                env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true"
             ? MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
@@ -1692,7 +1693,11 @@ export async function startGatewayService(
 
     // Only qualified provider 2FA, fixed egress and a verified prefunded
     // stablecoin treasury can buy crypto with existing custodied MSNW.
-    const msnwRate = env.MSNW_CONVERT_USD_MICRO_PER_MSNW?.trim();
+    const ngnQuote=env.MSNW_NGN_QUOTE_URL?.trim()&&env.MSNW_NGN_QUOTE_PUBLIC_KEY?.trim()
+      ?createSignedNgnQuoteReader({url:env.MSNW_NGN_QUOTE_URL.trim(),publicKey:env.MSNW_NGN_QUOTE_PUBLIC_KEY.trim()}):undefined;
+    // Compatibility column retained for old receipt recovery. New quotes
+    // require fresh signed NGN evidence, never the static USD environment rate.
+    const msnwRate = "1";
     if (!composedMsnwConversion && database.featurePool && msnBalanceAuthorizer &&
         payout && custody && msnwRate &&
         env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true" &&
@@ -1703,7 +1708,7 @@ export async function startGatewayService(
         authorizer: msnBalanceAuthorizer,
         service: createMsnwUsdtConversion({
           pool: database.featurePool, payout, custody,
-          rateUsdMicroPerMsnw: msnwRate,
+          rateUsdMicroPerMsnw: msnwRate,requireNgnQuote:true,...(ngnQuote?{ngnQuote}:{}),
           verificationCode: env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE.trim(),
           enabledRoutes: withdrawalProviderCodes,
           approvedDestination: (owner, route, address) =>

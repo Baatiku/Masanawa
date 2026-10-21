@@ -221,6 +221,14 @@ export function createWalletActivity(pool:Pool,clock:()=>Date=()=>new Date()) {
     } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
   }
   return {
+    async read(owner:Owner,id:string){
+      if(!id||id.length>180)throw new WalletActivityError('wallet.operation_invalid');
+      const records=await pool.query(`${walletActivitySourceSql} SELECT id,reference,category,title,amount_atomic,decimals,asset,incoming,status,
+       to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,details
+       FROM activity WHERE id=$3 LIMIT 1`,[owner.tenantId,owner.userId,id]);
+      if(!records.rows[0])throw new WalletActivityError('wallet.operation_not_found',404);
+      return normalize(records.rows[0]);
+    },
     async list(owner:Owner,query:Readonly<Record<string,unknown>>) {
       if(Object.keys(query).some(k=>!['category','status','search','from','to','asset','direction','minAmount','maxAmount','cursor','limit'].includes(k)))throw new WalletActivityError('wallet.filter_invalid');
       const filter=filters(query),now=clock(),cursor=readCursor(query.cursor,owner,filter,now);

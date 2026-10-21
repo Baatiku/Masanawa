@@ -45,7 +45,7 @@ export function registerMsnwUsdtConversionRoutes(
   app.post("/v1/wallet/msnw/convert",{bodyLimit:2048},async(request,reply)=>{
     try{
       const who=await owner(request.headers.authorization);
-      const value=assert(request.body,["amountMicro","providerCode","destinationAddress",
+      const value=assert(request.body,[...(request.body&&typeof request.body==="object"&&"expectedNgnQuoteId" in request.body?["expectedNgnQuoteId"]:[]),"amountMicro","providerCode","destinationAddress",
         "expectedTargetMicro","expectedFeeMicro","expectedRateUsdMicroPerMsnw","idempotencyKey"]);
       return await input.service.confirm(who, {
         amountMicro:value.amountMicro,providerCode:value.providerCode,
@@ -54,6 +54,7 @@ export function registerMsnwUsdtConversionRoutes(
         expectedFeeMicro:value.expectedFeeMicro,
         expectedRateUsdMicroPerMsnw:value.expectedRateUsdMicroPerMsnw,
         idempotencyKey:value.idempotencyKey,
+        ...(value.expectedNgnQuoteId!==undefined?{expectedNgnQuoteId:value.expectedNgnQuoteId}:{}),
       });
     }catch(e){return failed(reply,e);}
   });

@@ -1,3 +1,4 @@
+import 'wallet_transaction_help.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -255,7 +256,7 @@ class _HistoryState extends State<MsnwTransactionHistory> with WidgetsBindingObs
                 textAlign:TextAlign.end,style:const TextStyle(fontWeight:FontWeight.w700))),
               onTap:()=>openWalletPage<void>(context:context,title:'Transaction details',builder:(_)=>WalletTransactionDetails(
                 entry:e,authorized:()=>same(widget.accessToken()?.trim()),
-                onSupport:e.category=='P2P'?()=>openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>MsnwP2pScreen(dio:widget.dio,baseUrl:widget.baseUrl,expectedUserId:widget.expectedUserId,currentUserId:widget.currentUserId,accessToken:widget.accessToken,initialOrderId:e.details['Reference'])):null))),
+                onSupport:e.category=='P2P'?()=>openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>MsnwP2pScreen(dio:widget.dio,baseUrl:widget.baseUrl,expectedUserId:widget.expectedUserId,currentUserId:widget.currentUserId,accessToken:widget.accessToken,initialOrderId:e.details['Reference'])):()=>openWalletPage<void>(context:context,title:'Transaction help',builder:(_)=>WalletTransactionHelp(dio:widget.dio,baseUrl:widget.baseUrl,operationId:e.id,authorized:()=>same(widget.accessToken()?.trim()),accessToken:widget.accessToken))))),
           ]);
         })),
     ]);
@@ -282,7 +283,8 @@ class WalletTransactionDetails extends StatelessWidget {
           Text(field.key,style:Theme.of(context).textTheme.labelMedium),const SizedBox(height:4),SelectableText(field.value)])),
       OutlinedButton.icon(onPressed:()async{if(authorized())await Clipboard.setData(ClipboardData(text:e.details['Reference']??e.id));},
         icon:const Icon(Icons.copy),label:const Text('Copy reference')),
-      if(onSupport!=null)OutlinedButton.icon(onPressed:authorized()?onSupport:null,icon:const Icon(Icons.support_agent_outlined),label:const Text('Order help')),
+      OutlinedButton.icon(onPressed:()async{if(authorized())await Share.share('Masanawa receipt\n${e.title}\n${e.displayAmount}\nStatus: ${walletTransactionStatus(e.status)}\nReference: ${e.details['Reference']??e.id}');},icon:const Icon(Icons.share_outlined),label:const Text('Share redacted receipt')),
+      if(onSupport!=null)OutlinedButton.icon(onPressed:authorized()?onSupport:null,icon:const Icon(Icons.support_agent_outlined),label:const Text('Transaction help')),
     ]);
   }
 }
