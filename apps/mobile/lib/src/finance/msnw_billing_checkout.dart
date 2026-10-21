@@ -1,6 +1,7 @@
 import 'bill_beneficiary_book.dart';
 import 'wallet_flow_page.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +44,8 @@ class MsnwBillingCheckoutSheet extends StatefulWidget {
   @override
   State<MsnwBillingCheckoutSheet> createState()=>_MsnwBillingCheckoutSheetState();
 }
-class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
+class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet>
+    with WidgetsBindingObserver {
   late final TextEditingController amount;
   BillingQuote? quote;
   Map<String,dynamic>? price,receipt;
@@ -52,10 +54,15 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
   final storage = const FlutterSecureStorage();
   Map<String,dynamic>? pendingBill;
   Map<String,dynamic>? settledBill;
+  Timer? statusPoll;
+  int statusPollAttempts=0;
+  DateTime? lastStatusCheck;
+  bool foreground=true;
   String get pendingStorageKey =>
       'msnw.bill.pending.v1.${widget.expectedUserId}';
   @override void initState(){
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     amount=TextEditingController(text:widget.item.variableAmount?'':widget.item.amount);
     if(widget.initialQuote != null){quote=widget.initialQuote;uncertain=true;
       WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted)recover();});}
@@ -63,7 +70,28 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(mounted && widget.initialQuote==null) restorePending();
     });
   }
-  @override void dispose(){amount.dispose();super.dispose();}
+  @override void dispose(){
+    statusPoll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    amount.dispose();super.dispose();
+  }
+  @override void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground=state==AppLifecycleState.resumed;
+    if(!foreground)statusPoll?.cancel();
+    else if(pendingBill!=null) scheduleStatusPoll(pendingBill!,
+      widget.accessToken()?.trim());
+  }
+  void scheduleStatusPoll(Map<String,dynamic> saved,String? token) {
+    statusPoll?.cancel();
+    if(busy||!foreground||token==null||token.isEmpty||!same(token)||
+       pendingBill!=saved||!uncertain||statusPollAttempts>=3)return;
+    const delays=[Duration(seconds:5),Duration(seconds:15),Duration(seconds:30)];
+    statusPoll=Timer(delays[statusPollAttempts],(){
+      if(!same(token)||pendingBill!=saved||!foreground)return;
+      statusPollAttempts++;
+      recoverPending(); // Read/reconcile only. Never repeat the debit request.
+    });
+  }
   bool same(String token)=>mounted&&widget.currentUserId()==widget.expectedUserId&&
     widget.accessToken()?.trim()==token;
   String uri(String path)=>widget.baseUrl.replaceFirst(RegExp(r'/$'),'')+path;
@@ -105,6 +133,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     final saved=pendingBill,token=widget.accessToken()?.trim();
     if(busy||saved==null||!isValidMsnwBillRecoveryRecord(saved)||
        token==null||token.isEmpty||!same(token))return;
+    statusPoll?.cancel();
     setState((){busy=true;error=null;});
     try {
       final reference=saved['fulfillmentReference'] as String;
@@ -121,27 +150,35 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       }
       if(!same(token))return;
       setState((){
+        lastStatusCheck=DateTime.now();
         receipt=v.cast<String,dynamic>();
         settledBill=saved;
         uncertain=!terminalReceipt(v['state']);
-        if(!uncertain)pendingBill=null;
+        if(!uncertain){pendingBill=null;statusPoll?.cancel();}
       });
     }on DioException catch(e){
       if(same(token))setState((){
+        lastStatusCheck=DateTime.now();
         uncertain=true;
         error=e.response?.statusCode==404
-          ? 'No completed purchase found yet. Retry only the original '
-            'quote below, or check status again.'
-          : 'Purchase outcome unavailable. Check status or retry the '
-            'original quote without starting another purchase.';
+          ? 'Original purchase outcome is not confirmed. Check this '
+            'reference again before any new purchase.'
+          : 'Purchase outcome unavailable. Check this original reference '
+            'before any new purchase.';
       });
     }catch(_){
       if(same(token))setState((){
+        lastStatusCheck=DateTime.now();
         uncertain=true;
         error='Purchase status could not be confirmed. Contact support '
           'with the original bill reference before paying again.';
       });
-    }finally{if(same(token))setState(()=>busy=false);}
+    }finally{
+      if(same(token)){
+        setState(()=>busy=false);
+        scheduleStatusPoll(saved,token);
+      }
+    }
   }
 
   Future<void> submitPending(Map<String,dynamic> saved,String token) async {
@@ -167,10 +204,11 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       }
       if(!same(token))return;
       setState((){
+        lastStatusCheck=DateTime.now();
         receipt=value.cast<String,dynamic>();
         settledBill=saved;
         uncertain=!terminalReceipt(value['state']);
-        if(!uncertain)pendingBill=null;
+        if(!uncertain){pendingBill=null;statusPoll?.cancel();}
       });
     }catch(_){
       if(same(token))setState((){
@@ -178,7 +216,12 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
         error='Payment outcome is uncertain. Check status or retry only '
           'this exact quote; the same provider purchase reference is reused.';
       });
-    }finally{if(same(token))setState(()=>busy=false);}
+    }finally{
+      if(same(token)){
+        setState(()=>busy=false);
+        scheduleStatusPoll(saved,token);
+      }
+    }
   }
 
   Future<void> retryPending() async {
@@ -272,8 +315,10 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             detail('Provider minimum','NGN ${q.verifiedMinimum}'),
           if(q.verifiedMaximum!=null)
             detail('Provider maximum','NGN ${q.verifiedMaximum}'),
-          if(q.verifiedCustomerName!=null)
-            detail('Verified for this quote',q.createdAt),
+          detail('Catalog and account checked',q.createdAt),
+          const Text('The provider may still delay delivery. If the payment '
+            'outcome is uncertain, check the original reference before '
+            'starting another purchase.'),
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
           detail('Total','NGN '+q.totalAmount),
           detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
@@ -351,7 +396,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       setState((){receipt=data.cast<String,dynamic>();uncertain=false;});
     }catch(_){
       if(same(token))setState((){
-        uncertain=true;error='Order status unavailable. Retry this order.';
+        uncertain=true;error='Order status unavailable. Check the original '
+          'reference before starting another purchase.';
       });
     }finally{if(same(token))setState(()=>busy=false);}
   }
@@ -372,6 +418,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(result['closed']!=true){setState(()=>error='This purchase has reserved funds (${result['state']}). Keep checking its original status.');return;}
       if(result['state']!='expired')throw const FormatException('Closure not confirmed');
       await storage.delete(key:pendingStorageKey);if(!same(token)||pendingBill!=saved)return;
+      statusPoll?.cancel();
       setState((){pendingBill=null;settledBill=null;quote=null;price=null;receipt=null;uncertain=false;error='Unsubmitted quote closed. Get a fresh verified price before paying.';});
     }catch(_){if(same(token))setState(()=>error='The original could not be safely closed. Keep its reference and check status.');}
     finally{if(same(token))setState(()=>busy=false);}
@@ -434,7 +481,9 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             if(quote!.verifiedMaximum!=null)
               detail('Provider maximum','NGN ${quote!.verifiedMaximum}'),
             if(quote!.verifiedCustomerName!=null)
-              Text('Verified for this quote at ${quote!.createdAt}. Changing the recipient or service requires a new quote.'),
+              Text('Catalog and account checked at ${quote!.createdAt}. This '
+                'does not guarantee delivery. Changing the recipient or '
+                'service requires a new quote.'),
             detail('Service','NGN '+quote!.serviceAmount),
             detail('Fee','NGN '+quote!.feeAmount),
             detail('Total','NGN '+quote!.totalAmount),
@@ -461,6 +510,11 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             detail('Recipient',pendingBill!['customerId'] as String),
             detail('Original reference',
               pendingBill!['fulfillmentReference'] as String),
+            if(lastStatusCheck!=null)
+              detail('Last status check',lastStatusCheck!.toLocal().toString()),
+            if(statusPollAttempts>=3 && uncertain)
+              const Text('Automatic checks have paused. Check the original '
+                'status again when connected.'),
             Wrap(spacing:8,runSpacing:8,children:[
               OutlinedButton(onPressed:busy?null:recoverPending,
                 child:const Text('Check original status')),
@@ -488,6 +542,14 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
               detail('Total','NGN '+(settledBill!['totalAmount'] as String)),
             ],
             detail('Status',status(receipt!['state'] as String)),
+            if(lastStatusCheck!=null)
+              detail('Last status check',lastStatusCheck!.toLocal().toString()),
+            if(receipt!['providerStatus'] case final String providerStatus
+                when providerStatus.isNotEmpty)
+              detail('Provider status',providerStatus),
+            if(receipt!['lastEvidenceAt'] case final String evidenceAt
+                when evidenceAt.isNotEmpty)
+              detail('Provider evidence recorded',evidenceAt),
             detail('Reference',receipt!['fulfillmentReference'] as String),
             TextButton.icon(
               onPressed:()async {
