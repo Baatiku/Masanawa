@@ -1614,7 +1614,6 @@ class AiChatController extends Notifier<AiChatState> {
       final attachment = userMsg.attachment;
       final attachmentSet = userMsg.attachments;
       final hasMedia = attachment != null || attachmentSet.isNotEmpty;
-      final voiceReply = userMsg.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio');
       final streamMessageId = _beginAiStream(characterId, requestId: userMsg.requestId);
       final visiblePrompt = userMsg.replyPreview?.trim().isNotEmpty == true
           ? 'Replying to this earlier message:\n"${userMsg.replyPreview}"\n\n${userMsg.text}'
@@ -1628,10 +1627,10 @@ class AiChatController extends Notifier<AiChatState> {
       // Gemini Live to generate audio, but chat never plays generation PCM.
       var spokenTranscript = '';
       void textDelta(String delta) {
-        if (!voiceReply && currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
+        if (currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
-        if (voiceReply || !currentAudioOwner()) return;
+        if (!currentAudioOwner()) return;
         spokenTranscript += delta;
         _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
       }
@@ -1743,10 +1742,13 @@ class AiChatController extends Notifier<AiChatState> {
           // unsupported format, is malformed, or cannot be cached locally.
         }
       }
+        if (result.text.trim().isEmpty && (result.audioTranscript ?? spokenTranscript).trim().isEmpty && replyAudio == null) {
+          throw const ApiException('No reply was received. Check message status before retrying.');
+        }
         await _finalizeAiStream(
           characterId,
           streamMessageId,
-          result.text,
+          result.text.trim().isNotEmpty ? result.text : (result.audioTranscript ?? spokenTranscript),
           parts: result.parts,
           attachment: replyAudio,
           agentRunId: result.agentRunId,

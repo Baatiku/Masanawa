@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_permissions.dart';
+import '../core/call_signaling_tone.dart';
 import '../core/live_call_foreground.dart';
 import '../core/request_id.dart';
 import '../state/session_state.dart';
@@ -47,6 +48,7 @@ class HumanCallController extends ChangeNotifier {
     required this.stopForeground,
     this.autoPoll = true,
   });
+  final _tone = CallSignalingTone();
   final HumanCallsTransport api;
   final HumanCallAudio Function() audioFactory;
   final String ownerId;
@@ -78,6 +80,9 @@ class HumanCallController extends ChangeNotifier {
       _media?.audio != null &&
       ['connected', 'waiting', 'reconnecting'].contains(mediaState);
   void _changed() {
+    final record = call;
+    unawaited(_tone.update(active && record?.state == 'ringing' && !busy
+      ? (record!.incoming ? CallTone.incoming : CallTone.outgoing) : null));
     if (!_closed) notifyListeners();
   }
 
@@ -301,6 +306,7 @@ class HumanCallController extends ChangeNotifier {
     final version = ++_signalVersion;
     _changed();
     try {
+      await _tone.update(null);
       if (!await requestMicrophone()) {
         if (sameAccount)
           error = 'Allow microphone access to answer. You can still decline.';
@@ -516,6 +522,11 @@ class HumanCallController extends ChangeNotifier {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    try {
+      await _tone.close();
+    } catch (_) {
+      // Optional signaling can never prevent microphone/service cleanup.
+    }
     _generation++;
     _signalVersion++;
     _poll?.cancel();

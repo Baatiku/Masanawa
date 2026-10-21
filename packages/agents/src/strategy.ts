@@ -33,7 +33,14 @@ export type AgentStrategyInput =
       }[];
     };
 
+export interface AgentPersonaNarrative {
+  readonly biography: string;
+  readonly personality: readonly string[];
+  readonly languages: readonly string[];
+}
+
 export interface AgentStrategyPresentation {
+  readonly narrative?: AgentPersonaNarrative;
   readonly displayName: string;
   readonly roleLabel: string;
   readonly about: string;

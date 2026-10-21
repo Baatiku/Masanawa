@@ -57,6 +57,18 @@ const binding = AgentSessionBinding(
   characterSessionId: 'session',
 );
 void main() {
+  test('malformed optional audio cannot discard a completed voice-note text reply', () async {
+    final adapter = Adapter([
+      {'type':'delta','text':'I heard you.'},
+      {'type':'audio','dataBase64':'%%%not-audio'},
+      {'type':'done','reply':'I heard you. Let us talk about your day.','parts':[], 'audioBase64':'%%%not-audio'},
+    ]);
+    final result = await transport(adapter).sendMediaTurnStream(binding:binding,
+      bytes:Uint8List.fromList([1,2]),mimeType:'audio/mp4',caption:'',requestId:'request_voice');
+    expect(result.text, 'I heard you. Let us talk about your day.');
+    expect(result.audioBytes,isNull);
+    expect(adapter.requests,hasLength(1));
+  });
   test(
     'voice-note upload receives streamed PCM and output transcript with the original request identity',
     () async {

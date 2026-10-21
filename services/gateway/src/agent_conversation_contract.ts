@@ -19,6 +19,7 @@ export interface AgentConversationAdmission {
   readonly bindings: CharacterSessionBindings;
   readonly authority: AuthorityContext;
   readonly presentation: {
+    readonly narrative?: import("@masanawa/agents").AgentPersonaNarrative;
     readonly displayName: string;
     readonly roleLabel: string;
     readonly about: string;

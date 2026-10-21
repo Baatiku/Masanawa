@@ -1,3 +1,4 @@
+import { createPublishedPersonaReader } from "./persona_narrative.js";
 import {createRoomCommunityService} from "./room_community/index.js";
 import {createCreatorCompletionService} from "./creator_agents/completion.js";
 import { createHumanCommunicationService } from "./human_communication/index.js";
@@ -1040,6 +1041,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool)} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
