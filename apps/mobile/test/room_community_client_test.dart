@@ -42,6 +42,12 @@ void main() {
     await expectLater(api.action('private_room', 'timeline', {'body': 'stale'}), throwsStateError);
     expect(calls, 1);
   });
+  test('existing Room without creator owner uses redesigned Room projection', () {
+    final room = CommunityRoom.fromJson({'roomId':'room_existing','name':'Existing room',
+      'visibility':'public','postingPolicy':'members','ownerUserId':null,'isMember':true,'role':'member'});
+    expect(room.id, 'room_existing');
+    expect(room.canPost, true);
+  });
   test('broadcast posting capability follows authoritative role', () {
     CommunityRoom room(String? role, String policy) => CommunityRoom(id: 'r', name: 'Room', visibility: 'private', postingPolicy: policy, ownerId: 'owner', role: role);
     expect(room(null, 'members').canPost, false);

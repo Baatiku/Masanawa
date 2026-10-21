@@ -177,7 +177,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
     final version = ++_loadVersion;
     setState(() { loading = true; error = null; });
     try {
-      final list = await widget.client.list(joined: joined, query: query, language: language);
+      final list = widget.communityApi != null ? <RoomInfo>[] : await widget.client.list(joined: joined, query: query, language: language);
       await loadCommunities(joined, version);
       if (mounted && version == _loadVersion) setState(() { rows = list; loading = false; });
     } catch (e) {
@@ -224,6 +224,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
   void _openRoomDetail(RoomInfo room) => _navigateToChat(room.id);
 
   Future<void> _navigateToChat(String roomId) async {
+    if (widget.communityApi != null) { await openCommunity(roomId); return; }
     await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
       final detail = RoomHomeScreen(
         client: widget.client,

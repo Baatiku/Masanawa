@@ -16,7 +16,7 @@ class CommunityRoom {
     id: j['roomId'] as String, name: j['name'] as String,
     description: j['description'] as String? ?? '', photoUrl: j['photoUrl'] as String? ?? '',
     visibility: j['visibility'] as String, postingPolicy: j['postingPolicy'] as String,
-    ownerId: j['ownerUserId'] as String, role: j['isMember'] == false ? null : j['role'] as String?,
+    ownerId: j['ownerUserId'] as String? ?? '', role: j['isMember'] == false ? null : j['role'] as String?,
     unreadCount: (j['unreadCount'] as num?)?.toInt() ?? 0,
     muted: j['muted'] == true, pinned: j['pinned'] == true, commentsEnabled: j['commentsEnabled'] != false,
     memberCount: (j['memberCount'] as num?)?.toInt() ?? 0);
@@ -48,7 +48,7 @@ class HttpRoomCommunityApi implements RoomCommunityApi {
   }
   @override Future<List<Map<String, dynamic>>> invitations() => _items('/v1/rooms/invitations');
   @override Future<List<CommunityRoom>> list(bool joined) async =>
-    (await _items('/v1/rooms/${joined ? 'mine' : 'discover'}')).where((j) => j['ownerUserId'] is String).map(CommunityRoom.fromJson).toList();
+    (await _items('/v1/rooms/${joined ? 'mine' : 'discover'}')).map(CommunityRoom.fromJson).toList();
   @override Future<CommunityRoom> room(String id) async => CommunityRoom.fromJson((await http.get<Map<String, dynamic>>(path(id))).data!);
   @override Future<CommunityRoom> create(Map<String, dynamic> values) async => CommunityRoom.fromJson((await http.post<Map<String, dynamic>>('/v1/rooms', data: values)).data!);
   @override Future<CommunityRoom> update(String id, Map<String, dynamic> values) async => CommunityRoom.fromJson((await http.patch<Map<String, dynamic>>(path(id), data: values)).data!);

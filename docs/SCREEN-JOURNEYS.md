@@ -107,3 +107,5 @@ Apply the WhatsApp benchmark during implementation with original Masanawa compon
 | P8-U08 future | Rooms → categorized discovery → eligible detail → Join/open | No private membership leaks or invented verification; discussion Rooms retain member posting. |
 
 These assigned future journeys follow the first production APK. Their implementation and later release acceptance use the same canonical P8-APK gates; they are not untracked reference ideas.
+
+**Rooms redesign clarification (21 October):** R01–R07 apply to every Room, including existing IDs. No separate lesson/professional home or old discovery section in consumer navigation. Preserve historical records and financial access under the redesigned timeline, not the retired UX.
