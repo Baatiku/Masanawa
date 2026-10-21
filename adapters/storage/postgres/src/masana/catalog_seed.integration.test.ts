@@ -4,12 +4,10 @@ import {Pool} from "pg";
 import {createCanonicalId} from "@masanawa/contracts";
 import {runMigrations} from "../migrations.js";
 import {platformProductMigrationRoots} from "../readiness.js";
-import {createPgRoomsRepository} from "../rooms/repository.js";
-import {ensureMasanaCatalogProfilesAndRooms} from "./catalog_seed.js";
-import {initialRoomLessons,MASANA_INTRO_LESSONS} from "./catalog_lessons.js";
+import {ensureMasanaCatalogProfiles} from "./catalog_seed.js";
 
 const url=process.env.MASANAWA_TEST_DATABASE_URL;
-describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL18",()=>{
+describe.skipIf(!url)("Masana catalog without retired Room seeding on real PostgreSQL18",()=>{
  const dbName="masana_catalog_"+randomUUID().replaceAll("-","").slice(0,12);
  const tenant=createCanonicalId("tenant"),other=createCanonicalId("tenant");
  let admin:Pool,pool:Pool;
@@ -53,37 +51,13 @@ describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL1
    if(pool)await pool.end();
    if(admin){await admin.query('DROP DATABASE IF EXISTS "'+dbName+'"');await admin.end();}
  },30_000);
- it("publishes approved AI personas with own static media and joinable free Room",async()=>{
-   const first=await ensureMasanaCatalogProfilesAndRooms({pool,tenantId:tenant,catalog:roster});
-   expect(first).toEqual({approved:roster.length,rooms:roster.length});
+ it("publishes approved persona media without creating Rooms or lesson history",async()=>{
+   expect(await ensureMasanaCatalogProfiles({pool,tenantId:tenant,catalog:roster})).toEqual({approved:roster.length,rooms:0});
    const items=await pool.query("SELECT character_id,profile FROM masana.character_revisions WHERE tenant_id=$1 AND state='approved'",[tenant]);
    expect(items.rows).toHaveLength(roster.length);
-   const rooms=await pool.query("SELECT room_id,teacher_character_id,state,plan_mode FROM rooms.rooms WHERE tenant_id=$1",[tenant]);
-   expect(rooms.rows).toHaveLength(roster.length);
-   for(const {seed,characterId}of roster){
-     const profile=items.rows.find((x)=>x.character_id===characterId)?.profile;
-     expect(profile).toMatchObject({displayName:seed.displayName,roomId:seed.roomId});
-     const room=rooms.rows.find(x=>x.room_id===seed.roomId);
-     expect(room).toMatchObject({teacher_character_id:characterId,state:"published",plan_mode:"free"});
-     const media=await pool.query("SELECT kind,object_key FROM masana.character_media WHERE tenant_id=$1 AND character_id=$2",[tenant,characterId]);
-     expect(media.rows.map(x=>x.kind).sort()).toEqual(["banner","portrait"]);
-     expect(media.rows.every(x=>x.object_key.includes("/apps/mobile/assets/masana/"))).toBe(true);
-     expect(media.rows.find(x=>x.kind==="portrait")?.object_key)
-       .toContain("/portraits/"+seed.key+".webp");
-   }
-   const repo=createPgRoomsRepository(pool);
-   const fan={tenantId:tenant,userId:"fan_one",roles:[] as string[]};
-   const list=await repo.list(fan,{});
-   expect(list).toHaveLength(roster.length);
-   await repo.join(fan,roster[4]!.seed.roomId);
-   const lessons=await repo.lessons(fan,roster[4]!.seed.roomId);
-   expect(lessons).toHaveLength(2);
-   expect(lessons.every(l=>l.kind==="lesson"&&l.body.length>100)).toBe(true);
-   const question=await repo.ask(fan,roster[4]!.seed.roomId,"كيف حالك؟","student_ask_idempotency_123456");
-   expect(question.state).toBe("queued");
-   expect(question.roomId).toBe(roster[4]!.seed.roomId);
-   expect((await pool.query("SELECT count(*)::int AS n FROM events.outbox WHERE tenant_id=$1 AND aggregate_id=$2 AND destination='rooms.teacher'",[tenant,question.questionId])).rows[0].n).toBe(1);
-   await expect(repo.questions({...fan,tenantId:other},roster[4]!.seed.roomId)).rejects.toMatchObject({status:404});
+   expect(items.rows.every(r=>r.profile.roomId===undefined)).toBe(true);
+   expect((await pool.query('SELECT * FROM rooms.rooms')).rows).toEqual([]);
+   expect((await pool.query('SELECT * FROM rooms.lessons')).rows).toEqual([]);
  });
  it("repairs only the legacy stock portrait and preserves curator media",async()=>{
    const first=roster[0]!, second=roster[1]!;
@@ -95,7 +69,7 @@ describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL1
    await pool.query(`UPDATE masana.character_media
      SET object_key='approved/private/custom_portrait.webp',approved_by='approved-curator'
      WHERE tenant_id=$1 AND media_id=$2`,[tenant,"masana_portrait_"+second.seed.key]);
-   expect(await ensureMasanaCatalogProfilesAndRooms({pool,tenantId:tenant,catalog:roster}))
+   expect(await ensureMasanaCatalogProfiles({pool,tenantId:tenant,catalog:roster}))
      .toEqual({approved:0,rooms:0});
    const firstKey=(await pool.query(`SELECT object_key FROM masana.character_media
      WHERE tenant_id=$1 AND media_id=$2`,[tenant,"masana_portrait_"+first.seed.key])).rows[0]?.object_key;
@@ -104,20 +78,9 @@ describe.skipIf(!url)("professional Masana catalog and Rooms on real PostgreSQL1
    expect(firstKey).toContain("/portraits/gwani.webp");
    expect(secondKey).toBe("approved/private/custom_portrait.webp");
  });
- it("all 26 professional teachers ship distinct, substantive first lessons",()=>{
-   expect(Object.keys(MASANA_INTRO_LESSONS)).toHaveLength(26);
-   for(const [key] of Object.entries(MASANA_INTRO_LESSONS)){
-     const lessons=initialRoomLessons(key);
-     expect(lessons).toHaveLength(2);
-     expect(lessons[0]?.body.length).toBeGreaterThan(160);
-     expect(lessons[1]?.body.length).toBeGreaterThan(160);
-     expect(new Set(lessons.map(l=>l.id)).size).toBe(2);
-   }
- });
- it("rerun is non-destructive; staff pause and existing approved revision survive",async()=>{
-   await pool.query("UPDATE rooms.rooms SET state='paused' WHERE tenant_id=$1 AND room_id=$2",[tenant,roster[0]!.seed.roomId]);
-   expect(await ensureMasanaCatalogProfilesAndRooms({pool,tenantId:tenant,catalog:roster})).toEqual({approved:0,rooms:0});
-   expect((await pool.query("SELECT state FROM rooms.rooms WHERE tenant_id=$1 AND room_id=$2",[tenant,roster[0]!.seed.roomId])).rows[0].state).toBe("paused");
-   expect((await pool.query("SELECT count(*)::int AS n FROM masana.character_revisions WHERE tenant_id=$1 AND state='approved'",[tenant])).rows[0].n).toBe(roster.length);
+ it("restart never recreates retired Rooms or lessons",async()=>{
+   expect(await ensureMasanaCatalogProfiles({pool,tenantId:tenant,catalog:roster})).toEqual({approved:0,rooms:0});
+   expect((await pool.query('SELECT * FROM rooms.rooms')).rows).toEqual([]);
+   expect((await pool.query('SELECT * FROM rooms.lessons')).rows).toEqual([]);
  });
 });

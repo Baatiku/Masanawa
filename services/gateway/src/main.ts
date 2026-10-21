@@ -13,7 +13,7 @@ import {
   createPgRoomsRepository, createPgRoomDiscussionRepository,
   createPgRoomBookmarkStore, createPgRoomMembershipRepository,
   createMasanaInboxRepository,
-  ensureMasanaCatalogProfilesAndRooms,withCatalogProvisionLock,
+  ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
@@ -966,11 +966,10 @@ export async function startGatewayService(
             skillAssignments: database.characterSkillAssignments!,
             skillDistribution: database.skillDistribution!,
           });
-          await ensureMasanaCatalogProfilesAndRooms({
+          await ensureMasanaCatalogProfiles({
             pool:database.featurePool!,
             tenantId:activePlatformTenantId,
             catalog:roster.catalog,
-            seedRooms:false,
           });
         });
       } catch (error) {

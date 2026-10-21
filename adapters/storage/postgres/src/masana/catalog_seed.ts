@@ -1,5 +1,4 @@
 import type {Pool} from "pg";
-import {initialRoomLessons} from "./catalog_lessons.js";
 import type {TenantId,CharacterId} from "@masanawa/contracts";
 
 /** A server-owned immutable catalog projection. Neither customers nor
@@ -21,10 +20,9 @@ function validateSource(input:ApprovedCatalogIdentity){
    ||!input.characterId.startsWith("character_"))
    throw Error("catalog_seed_invalid");
 }
-export async function ensureMasanaCatalogProfilesAndRooms(input:{
+export async function ensureMasanaCatalogProfiles(input:{
  readonly pool:Pool;readonly tenantId:TenantId;
  readonly catalog:readonly ApprovedCatalogIdentity[];
- readonly seedRooms?:boolean;
 }):Promise<{approved:number;rooms:number}>{
  if(input.catalog.length===0)return {approved:0,rooms:0};
  const c=await input.pool.connect();
@@ -78,7 +76,7 @@ export async function ensureMasanaCatalogProfilesAndRooms(input:{
          "Professional styling is a role, not a claim of a real person's degree or registration.",
        languages:[...seed.languages],talents:[...seed.expertise],
        goals:["Help students learn "+seed.roleLabel,"Provide clear explanations and practice"],
-       ...(input.seedRooms === false ? {} : {roomId:seed.roomId}),portraitMediaId:portraitId,bannerMediaId:bannerId,
+       portraitMediaId:portraitId,bannerMediaId:bannerId,
      };
      // Never alter an existing approved or curated staff-owned Character bible.
      const prev=await c.query(`SELECT state FROM masana.character_revisions
@@ -96,42 +94,7 @@ export async function ensureMasanaCatalogProfilesAndRooms(input:{
          [input.tenantId,characterId,revision,JSON.stringify(profile)]);
        if(created.rowCount===1)approved++;
      }
-     if(input.seedRooms===false)continue;
-     const owner=await c.query(`SELECT teacher_character_id,state FROM rooms.rooms
-       WHERE tenant_id=$1 AND room_id=$2`,[input.tenantId,seed.roomId]);
-     if(owner.rows.length){
-       if(owner.rows[0]?.teacher_character_id!==characterId)
-         throw Error("catalog_seed_room_conflict");
-       // Do not override deliberately paused/retired Rooms.
-       if(owner.rows[0].state==="draft"){
-         await c.query(`UPDATE rooms.rooms SET state='published',updated_at=now()
-           WHERE tenant_id=$1 AND room_id=$2 AND state='draft'`,
-           [input.tenantId,seed.roomId]);
-       }
-     }else{
-       const slug="masana-"+number+"-"+seed.key;
-       const created=await c.query(`INSERT INTO rooms.rooms
-         (tenant_id,room_id,slug,profession_title,teacher_character_id,
-          language,state,plan_mode)
-         VALUES($1,$2,$3,$4,$5,$6,'published','free') RETURNING room_id`,
-         [input.tenantId,seed.roomId,slug,seed.roleLabel+" — "+seed.displayName,
-          characterId,seed.languages[0]??"en"]);
-       if(created.rowCount===1)rooms++;
-     }
-     // Starter content is fully published alongside the Room in the same
-     // tenant-scoped transaction. Reruns never rewrite staff/learner content.
-     for(const lesson of initialRoomLessons(seed.key)){
-       await c.query(`INSERT INTO rooms.lessons
-         (tenant_id,lesson_id,room_id,kind,body,state,publish_at)
-         VALUES($1,$2,$3,'lesson',$4,'published',now())
-         ON CONFLICT(tenant_id,lesson_id) DO NOTHING`,
-         [input.tenantId,lesson.id,seed.roomId,lesson.body]);
-       const verified=await c.query(`SELECT room_id FROM rooms.lessons
-         WHERE tenant_id=$1 AND lesson_id=$2`,
-         [input.tenantId,lesson.id]);
-       if(verified.rows[0]?.room_id!==seed.roomId)
-         throw new Error("masana_room_lesson_conflict");
-     }
+
    }
    await c.query("COMMIT");
    return {approved,rooms};
