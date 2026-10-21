@@ -1,35 +1,20 @@
 name: Masana Android APK Compilation
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "apps/mobile/assets/masana/**"
-      - "apps/mobile/lib/src/agents/masana_portrait_avatar.dart"
-      - "apps/mobile/lib/src/agents/agent_directory.dart"
-      - "apps/mobile/lib/src/router/app_router.dart"
-      - "apps/mobile/lib/src/screens/chat/ai_chat_screen.dart"
-      - "apps/mobile/lib/src/screens/chat/masana_list_screen.dart"
-      - "apps/mobile/lib/src/screens/rooms/rooms_screen.dart"
-      - "apps/mobile/test/masana_room_link_test.dart"
-      - "apps/mobile/pubspec.yaml"
-      - "adapters/storage/postgres/src/masana/catalog_lessons.ts"
-      - ".github/workflows/masana-android-apk.yml"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/masana-android-apk.yml"
-      - "apps/mobile/assets/masana/**"
-      - "apps/mobile/pubspec.yaml"
-      - "apps/mobile/lib/src/agents/agent_directory.dart"
-      - "apps/mobile/lib/src/router/app_router.dart"
-      - "apps/mobile/lib/src/screens/chat/ai_chat_screen.dart"
-      - "apps/mobile/lib/src/screens/chat/masana_list_screen.dart"
-      - "apps/mobile/lib/src/screens/rooms/rooms_screen.dart"
-      - "apps/mobile/test/masana_room_link_test.dart"
+    inputs:
+      build_apk:
+        description: Build an APK explicitly requested by the owner
+        type: boolean
+        default: false
+      publish_release:
+        description: Also publish a GitHub prerelease (separate explicit request)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   compile-android:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
@@ -129,7 +114,7 @@ jobs:
           retention-days: 7
 
   publish-handset:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true && inputs.publish_release == true
     needs: compile-android
     runs-on: ubuntu-latest
     permissions:
