@@ -135,7 +135,9 @@ void main() {
           expect(find.text('Available balance'), findsOneWidget);
           expect(find.text('9007199254740991'), findsNothing);
           expect(find.text('Credits'), findsNothing);
-          expect(find.textContaining('₦'), findsNothing);
+          // Pricing policy copy may mention ₦1, but a signed-out portfolio
+          // must not invent an NGN valuation.
+          expect(find.text('Unavailable'), findsOneWidget);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsNothing);
           expect(find.text('Sign in to view your balance'), findsOneWidget);
