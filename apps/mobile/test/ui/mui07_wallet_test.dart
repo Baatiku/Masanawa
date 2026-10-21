@@ -139,7 +139,7 @@ void main() {
           // must not invent an NGN valuation.
           expect(find.text('Unavailable'), findsOneWidget);
           expect(find.text('Send'), findsOneWidget);
-          expect(find.text('Withdraw'), findsNothing);
+          expect(find.text('Withdraw'), findsOneWidget);
           expect(find.text('Sign in to view your balance'), findsOneWidget);
           await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
