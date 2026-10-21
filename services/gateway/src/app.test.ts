@@ -16,6 +16,19 @@ afterEach(async () => {
 });
 
 describe("gateway service bootstrap", () => {
+  it("does not expose retired lesson, question or staff Room routes", async () => {
+    const app = createGatewayApp();
+    apps.push(app);
+    for (const [method, url] of [
+      ["GET", "/v1/rooms/room_12345678/lessons"],
+      ["GET", "/v1/rooms/room_12345678/questions"],
+      ["GET", "/v1/admin/rooms"],
+      ["GET", "/v1/rooms/room_12345678/discussion"],
+    ] as const) {
+      const response = await app.inject({ method, url });
+      expect(response.statusCode, `${method} ${url}`).toBe(404);
+    }
+  });
   it("reports health without implying dependency readiness", async () => {
     const app = createGatewayApp({
       now: () => toInstant("2026-10-01T16:00:00Z"),

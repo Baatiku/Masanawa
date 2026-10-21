@@ -8,13 +8,10 @@ import { createHumanCallRoomTerminator } from "./human_call_media.js";
 import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
-import { RoomError } from "@masanawa/rooms";
 import {
   createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgFeedMediaAuthorization, createPostgresVideoStore,
   createPostgresYouTubeSourceAdminStore,
-  createPgRoomsRepository, createPgRoomDiscussionRepository,
-  createPgRoomBookmarkStore, createPgRoomMembershipRepository,
   createMasanaInboxRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
@@ -358,7 +355,7 @@ export interface ServiceDatabaseDependency {
   };
   readonly videos?: ReturnType<typeof createPostgresVideoStore>;
   /** Reuses the same canonical platform Pool for Rooms and C10. */
-  readonly featurePool?: Parameters<typeof createPgRoomsRepository>[0];
+  readonly featurePool?: Parameters<typeof createRoomCommunityService>[0]["pool"];
   readonly callHistory?: CallHistoryRepository & CallHistoryRecorder;
   readonly groupCalls?: GroupCallRepository;
   readonly incomingCalls?: IncomingRepository;
@@ -665,22 +662,6 @@ function readCsvEnv(value: string | undefined): readonly string[] {
       value.split(",").map((entry) => entry.trim().toUpperCase()).filter(Boolean),
     ),
   ]);
-}
-
-/**
- * Bound Room editorial privilege: only an authenticated, tenant-checked
- * session can be considered, and only for the staff capability when the
- * independent staff feature is explicitly qualified. Caller headers and
- * request payloads never supply roles.
- */
-export function roomRolesForSession(
-  capability: "rooms.read" | "rooms.join" | "rooms.ask" | "rooms.staff",
-  userId: string,
-  editorUserIds: ReadonlySet<string>,
-  staffEnabled: boolean,
-): readonly string[] {
-  return capability === "rooms.staff" && staffEnabled && editorUserIds.has(userId)
-    ? ["rooms_editor"] : [];
 }
 
 function readPrincipalSet(value: string | undefined): ReadonlySet<string> {
@@ -2650,63 +2631,6 @@ export async function startGatewayService(
       throw new CustomerAuthError("FORBIDDEN", 403);
     return { tenantId: session.tenantId, userId: session.userId };
   };
-  const roomsEnabled = () => true;
-  // Separate rollout from free Rooms discovery and AI answers: the six-step
-  // Rooms schema must be applied and customer/moderator journeys qualified
-  // before inviting users. OFF by default even when Rooms itself is live.
-  const roomsMembershipEnabled = () =>
-    process.env.MASANAWA_ROOMS_MEMBERSHIP_ENABLED === "true";
-  const roomsStaffEnabled = () => true; // Server-listed editors only; not client-supplied roles.
-  const rooms: GatewayAppOptions["rooms"] = options.appOptions?.rooms ??
-    (featurePool && sessions && featureTenant ? (() => {
-      const authorizeRoom = async (
-        header: string | undefined,
-        capability: "rooms.read" | "rooms.join" | "rooms.ask" | "rooms.staff",
-      ) => {
-        try {
-          const session = await resolveFeatureFan(header);
-          // The canonical session already passed the exact platform-tenant
-          // fence. Room staff may use the existing server-approved editorial
-          // identity list only when the separate Room staff gate is enabled.
-          return {
-            tenantId: session.tenantId,
-            userId: session.userId,
-            roles: roomRolesForSession(
-              capability, session.userId, editors, roomsStaffEnabled(),
-            ),
-          };
-        } catch (error) {
-          if (error instanceof CustomerAuthError)
-            throw new RoomError(error.statusCode, error.code);
-          throw new RoomError(503, "rooms_auth_unavailable");
-        }
-      };
-      const eligibility = database.status?.eligibility ??
-        new PgStatusEligibility(featurePool);
-      return {
-        routes: {
-          repository: createPgRoomsRepository(featurePool),
-          authorize: authorizeRoom,
-          isApprovedMasana: (tenant: string, character: string) =>
-            eligibility.author(tenant, character),
-          enabled: roomsEnabled,
-        },
-        discussion: {
-          store: createPgRoomDiscussionRepository(featurePool),
-          authorize: authorizeRoom, enabled: roomsEnabled,
-        },
-        bookmarks: {
-          store: createPgRoomBookmarkStore(featurePool),
-          authorize: authorizeRoom, enabled: roomsEnabled,
-        },
-        membership: {
-          repository: createPgRoomMembershipRepository(featurePool),
-          authorize: authorizeRoom,
-          // Explicit deployment gate; authorization is still checked per call.
-          enabled: roomsMembershipEnabled,
-        },
-      };
-    })() : undefined);
   // Creator agent routes use the same tenant-scoped session and PostgreSQL pool.
   // Publishing is limited to a lifetime first-free character until an atomic,
   // authorized MSNW fee-capture adapter is composed for additional characters.
@@ -2733,7 +2657,8 @@ export async function startGatewayService(
     (featurePool && sessions && featureTenant ? createRoomCommunityService({
       pool: featurePool,
       authorize: ({authorizationHeader}) => resolveFeatureFan(authorizationHeader),
-      ...(rooms ? {isApprovedMasana: rooms.routes.isApprovedMasana} : {}),
+      isApprovedMasana: (tenant: string, character: string) =>
+        (database.status?.eligibility ?? new PgStatusEligibility(featurePool)).author(tenant, character),
     }) : undefined);
   const creatorCompletion: GatewayAppOptions["creatorCompletion"] = options.appOptions?.creatorCompletion ??
     (featurePool && sessions && featureTenant ? {
@@ -2818,7 +2743,6 @@ export async function startGatewayService(
       ...(status ? {status} : {}),
       ...(videos ? {videos} : {}),
       ...(videoSources ? {videoSources} : {}),
-      ...(rooms ? {rooms} : {}),
       ...(masana ? {masana} : {}),
       ...(creatorAgents ? {creatorAgents} : {}),
       ...(roomCommunity ? {roomCommunity} : {}),
