@@ -103,6 +103,7 @@ Future<void> mount(
       key: UniqueKey(),
       overrides: [
         if (signedIn) sessionProvider.overrideWith(_SignedInSession.new),
+        walletPendingCryptoProvider.overrideWith((ref) async => null),
         apiClientProvider.overrideWithValue(FixtureApprovalApi()),
         cryptoWalletProvider.overrideWith(
           controller ?? () => FixtureWallet(value ?? snapshot()),
@@ -128,6 +129,11 @@ Future<void> mount(
   // pending-operation read waits on a fixture-less API. The screen itself is
   // ready after this bounded build pump.
   await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump();
+}
+
+Future<void> pumpWallet(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 350));
   await tester.pump();
 }
 
@@ -299,8 +305,10 @@ void main() {
     (tester) async {
       await mount(tester, width: 320, scale: 2, signedIn: true);
       await tester.scrollUntilVisible(find.text('Withdrawal'), 150);
+      await tester.ensureVisible(find.text('Withdrawal'));
+      await pumpWallet(tester);
       await tester.tap(find.text('Withdrawal'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await capture(tester, 'receipt-320-2');
       expect(find.text('Transaction details'), findsOneWidget);
       expect(find.text('fixture-receipt'), findsOneWidget);
@@ -316,13 +324,13 @@ void main() {
   testWidgets('receive sheet fits keyboard and large text', (tester) async {
     await mount(tester, width: 320, scale: 2, signedIn: true);
     await tester.scrollUntilVisible(find.text('Receive'), 100);
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     await tester.tap(find.text('Receive'));
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     expect(find.text('Receive USDT'), findsOneWidget);
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
     addTearDown(tester.view.resetViewInsets);
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     await tester.enterText(find.byType(TextField), '10.000001');
     await tester.scrollUntilVisible(
       find.text('Create deposit address'),
@@ -338,9 +346,9 @@ void main() {
       final wallet = DeferredWallet();
       await mount(tester, width: 320, scale: 2, signedIn: true, controller: () => wallet);
       await tester.scrollUntilVisible(find.text('Withdraw'), 100);
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await tester.tap(find.text('Withdraw'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await tester.enterText(find.byType(TextField).first, '10.000001');
       await tester.enterText(find.byType(TextField).last, 'fixture-recipient');
       await tester.scrollUntilVisible(
@@ -348,8 +356,10 @@ void main() {
         100,
         scrollable: find.byType(Scrollable).last,
       );
+      await tester.ensureVisible(find.text('Review fee'));
+      await pumpWallet(tester);
       await tester.tap(find.text('Review fee'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(wallet.quoteCalls, 1);
       expect(wallet.executions, 0);
       expect(
@@ -380,7 +390,7 @@ void main() {
           'quotedAt': '2026-10-12T12:00:00Z',
         }),
       );
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(find.text('Confirm withdrawal'), findsOneWidget);
       expect(find.text('USDT · tron'), findsWidgets);
       expect(find.text('0.1 USDTTRC20'), findsOneWidget);
@@ -388,16 +398,19 @@ void main() {
       await capture(tester, 'withdraw-review-320-2');
       expect(wallet.executions, 0);
       await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Withdraw'), 120, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Withdraw'));
+      await pumpWallet(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(wallet.executions, 0);
       await tester.scrollUntilVisible(find.byKey(const Key('withdrawal-step-up-code')), 120, scrollable: find.byType(Scrollable).first);
       await tester.enterText(find.byKey(const Key('withdrawal-step-up-code')), '123456');
       await tester.pump();
       await tester.scrollUntilVisible(find.text('Verify and proceed'), 120, scrollable: find.byType(Scrollable).first);
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Verify and proceed'));
+      await pumpWallet(tester);
       await tester.tap(find.text('Verify and proceed'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(wallet.executions, 1);
       expect(
         find.textContaining(
@@ -413,19 +426,19 @@ void main() {
   ) async {
     await mount(tester, width: 320, scale: 2, signedIn: true);
     await tester.scrollUntilVisible(find.text('Buy'), 100);
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     await tester.tap(find.text('Buy'));
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
     addTearDown(tester.view.resetViewInsets);
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     await tester.enterText(find.byType(TextField), '100.50');
     await tester.scrollUntilVisible(
       find.text('Continue to secure checkout'),
       80,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     await capture(tester, 'buy-keyboard-320-2');
     expect(tester.takeException(), isNull);
     // Input alone never starts a purchase.
@@ -443,23 +456,23 @@ void main() {
         controller: () => wallet,
       );
       await tester.scrollUntilVisible(find.text('Convert'), 100);
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await tester.tap(find.text('Convert'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
       addTearDown(tester.view.resetViewInsets);
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await tester.enterText(find.byType(TextField), '10.000001');
       await tester.scrollUntilVisible(
         find.text('Review quote'),
         80,
         scrollable: find.byType(Scrollable).last,
       );
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       await capture(tester, 'convert-keyboard-320-2-rtl');
       await tester.tap(find.text('Review quote'));
       tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(find.text('Confirm conversion'), findsOneWidget);
       expect(find.text('0.000000123456789123 BTC'), findsOneWidget);
       expect(
@@ -477,7 +490,7 @@ void main() {
       await capture(tester, 'convert-review-320-2-rtl');
       await tester.scrollUntilVisible(find.text('Cancel'), 120, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
+      await pumpWallet(tester);
       expect(wallet.executions, 0);
       expect(tester.takeException(), isNull);
     },
@@ -490,7 +503,7 @@ void main() {
     expect(find.text('Wallet unavailable'), findsOneWidget);
     expect(find.text('No crypto activity yet'), findsNothing);
     await tester.tap(find.text('Try again'));
-    await tester.pumpAndSettle();
+    await pumpWallet(tester);
     expect(wallet.refreshes, 1);
     expect(find.text('Available balance'), findsOneWidget);
     expect(tester.takeException(), isNull);
