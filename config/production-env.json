@@ -811,6 +811,20 @@
       "description": "Optional feature configuration consumed by services/worker/src/msnw_admission_cli.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MSNW_NGN_QUOTE_PUBLIC_KEY",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional Ed25519 public verification key for signed NGN quote evidence; missing or invalid key disables new MSNW payout admission, not original payout recovery."
+    },
+    {
+      "name": "MSNW_NGN_QUOTE_URL",
+      "owner": "services/gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional HTTPS source for fresh MSNW NGN quote evidence; absent source disables new payouts without substituting static USD pricing."
+    },
+    {
       "name": "MSNW_RESERVE_APPROVER_PUBLIC_KEY",
       "owner": "services/worker",
       "classification": "secret",
