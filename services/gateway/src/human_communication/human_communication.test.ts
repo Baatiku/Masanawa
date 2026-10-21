@@ -639,3 +639,10 @@ it('enforces Room invitation privacy through the canonical SQL admission functio
  await db.exec("INSERT INTO talks.safety_preferences VALUES('t','room-sender','room-recipient',true,false,clock_timestamp());");
  expect(await check()).toBe(false);
 });
+
+it('profile-moderated sender cannot admit outgoing messages or notifications',async()=>{
+ await db.exec("INSERT INTO identity.users VALUES('t','moderated-sender','active'),('t','moderated-recipient','active');INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('t','moderated-sender','moderatedsender','Sender'),('t','moderated-recipient','moderatedrecipient','Recipient');INSERT INTO talks.safety_enforcement VALUES('t','profile','moderatedsender',1,'restricted','moderated',now());");
+ const count=(await db.query('SELECT * FROM talks.human_outbox')).rows.length;
+ await expect(send({tenantId:'t',userId:'moderated-sender'},'POST','conversations',{handle:'moderatedrecipient',requestId:'moderated-attempt'})).rejects.toMatchObject({statusCode:404});
+ expect((await db.query('SELECT * FROM talks.human_outbox')).rows).toHaveLength(count);
+});

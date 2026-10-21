@@ -108,7 +108,7 @@ export function createHumanCommunicationService(o:HumanOptions){
     }
   }
   async function peer(db:HumanSql,a:Actor,user:string){
-    const r=await db.query(`SELECT p.* FROM talks.public_profiles p JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id WHERE p.tenant_id=$1 AND p.user_id=$2 AND u.state='active' AND EXISTS(SELECT 1 FROM identity.users me WHERE me.tenant_id=$1 AND me.user_id=$3 AND me.state='active') AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=$1 AND b.blocked AND ((b.viewer_user_id=$3 AND b.subject_user_id=$2) OR(b.viewer_user_id=$2 AND b.subject_user_id=$3))) AND NOT EXISTS(SELECT 1 FROM talks.safety_enforcement s WHERE s.tenant_id=$1 AND s.target_kind='profile' AND s.target_id=p.handle AND s.visibility<>'public')`,[a.tenantId,user,a.userId]);
+    const r=await db.query(`SELECT p.* FROM talks.public_profiles p JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id WHERE p.tenant_id=$1 AND p.user_id=$2 AND u.state='active' AND EXISTS(SELECT 1 FROM identity.users me WHERE me.tenant_id=$1 AND me.user_id=$3 AND me.state='active') AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=$1 AND b.blocked AND ((b.viewer_user_id=$3 AND b.subject_user_id=$2) OR(b.viewer_user_id=$2 AND b.subject_user_id=$3))) AND NOT EXISTS(SELECT 1 FROM talks.safety_enforcement s WHERE s.tenant_id=$1 AND s.target_kind='profile' AND (s.target_id=p.handle OR s.target_id IN(SELECT me.handle FROM talks.public_profiles me WHERE me.tenant_id=$1 AND me.user_id=$3)) AND s.visibility<>'public')`,[a.tenantId,user,a.userId]);
     if(!r.rows[0])fail(404,'Person unavailable');
     return r.rows[0] as Row
   }
