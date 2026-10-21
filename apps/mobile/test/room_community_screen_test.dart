@@ -67,4 +67,20 @@ void main() {
     expect(find.text('Welcome gardeners'), findsNothing);
     expect(find.byTooltip('Send post'), findsNothing);
   });
+  testWidgets('membership revocation discards an unsent Room draft before rejoin', (tester) async {
+    final api = FakeCommunityApi()..policy = 'members';
+    await tester.pumpWidget(MaterialApp(home: RoomCommunityScreen(api: api, roomId: 'room_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Private unsent draft');
+    api.role = null;
+    await tester.tap(find.byTooltip('Refresh Room'));
+    await tester.pumpAndSettle();
+    expect(find.text('Private unsent draft'), findsNothing);
+    expect(find.byTooltip('Send post'), findsNothing);
+    api.role = 'member';
+    await tester.tap(find.byTooltip('Refresh Room'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller?.text, isEmpty);
+    expect(api.sent, isEmpty);
+  });
 }
