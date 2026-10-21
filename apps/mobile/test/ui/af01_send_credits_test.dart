@@ -185,10 +185,12 @@ void main() {
         home: const WalletScreen(walletCreditSendEnabled: true),
       ),
     ));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Send'));
-    await tester.tap(find.text('Send'));
-    await tester.pumpAndSettle();
+    // The live Wallet keeps a balance loader active without a fixture API.
+    // A bounded pump tests the entry action without waiting for that loader.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.ensureVisible(find.byTooltip('Send'));
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(MsnwCustodySendSheet), findsOneWidget);
     expect(find.byType(SendCreditsSheet), findsNothing);
     expect(wallet.sends, 0);
@@ -206,8 +208,8 @@ void main() {
         home: const WalletScreen(walletCreditSendEnabled: false),
       ),
     ));
-    await tester.pumpAndSettle();
-    expect(find.text('Send'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byTooltip('Send'), findsOneWidget);
 
     // Different provider container: signed-out account, enabled build flag.
     await tester.pumpWidget(ProviderScope(
@@ -221,7 +223,7 @@ void main() {
         home: const WalletScreen(walletCreditSendEnabled: true),
       ),
     ));
-    await tester.pumpAndSettle();
-    expect(find.text('Send'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byTooltip('Send'), findsOneWidget);
   });
 }

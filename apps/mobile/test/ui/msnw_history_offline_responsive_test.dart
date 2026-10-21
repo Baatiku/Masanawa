@@ -79,19 +79,21 @@ void main() {
               textScaler:TextScaler.linear(scale)),
             child:WalletActionRow(
               onSend:()=>chosen.add('Send'),
-              onConvert:()=>chosen.add('Convert'),
-              onReceive:()=>chosen.add('Receive'),
-              onP2p:()=>chosen.add('P2P'),
+              onConvert:()=>chosen.add('Swap'),
+              onReceive:null,
+              onP2p:null,
+              onDeposit:()=>chosen.add('Deposit'),
+              onWithdraw:()=>chosen.add('Withdraw'),
             ),
           )),
         ));
         await tester.pumpAndSettle();
-        for(final label in ['Send','Convert','Receive','P2P']){
+        for(final label in ['Deposit','Send','Withdraw','Swap']){
           expect(find.text(label),findsOneWidget);
           await tester.ensureVisible(find.text(label));
           await tester.tap(find.text(label));
         }
-        expect(chosen,['Send','Convert','Receive','P2P']);
+        expect(chosen,['Deposit','Send','Withdraw','Swap']);
         expect(tester.takeException(),isNull);
       });
     }

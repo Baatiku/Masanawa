@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
+import 'package:masanawa/src/core/api/models.dart';
+import 'package:masanawa/src/state/session_state.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -67,6 +69,21 @@ class FixtureWallet extends CryptoWalletController {
   }
 }
 
+class _SignedInSession extends SessionController {
+  @override
+  SessionState build() {
+    const user = AuthUser(
+      id: 'wallet-test-owner', name: 'Wallet tester', locale: 'en',
+      status: 'ACTIVE', role: 'fan', isNewUser: false,
+      createdAt: '2026-10-21T00:00:00Z',
+    );
+    return const SessionSignedIn(user, AuthTokens(
+      accessToken: 'wallet-test-token', refreshToken: 'wallet-test-refresh',
+      accessExpiresIn: 900, user: user,
+    ));
+  }
+}
+
 Future<void> mount(
   WidgetTester tester, {
   double width = 390,
@@ -84,6 +101,7 @@ Future<void> mount(
     ProviderScope(
       key: UniqueKey(),
       overrides: [
+        sessionProvider.overrideWith(_SignedInSession.new),
         apiClientProvider.overrideWithValue(FixtureApprovalApi()),
         cryptoWalletProvider.overrideWith(
           controller ?? () => FixtureWallet(value ?? snapshot()),
