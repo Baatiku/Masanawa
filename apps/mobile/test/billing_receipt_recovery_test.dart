@@ -17,7 +17,7 @@ class _Adapter implements HttpClientAdapter{
  _Adapter({this.badReference=false});
  final bool badReference;
  final calls=<RequestOptions>[];
- @override Future<ResponseBody> fetch(RequestOptions o,Stream<Uint8List>? s,Future<void>? c)async{calls.add(o);return ResponseBody.fromString(jsonEncode(o.path.endsWith('/preview')?{'asset':'MSNW','quoteId':'test-quote','quoteRevision':1,'totalAmountKobo':'101000','amountMicro':'1010000','rateKoboPerMsnw':'100000','availableMicro':'2000000','sufficient':true}:{'state':'succeeded','fulfillmentReference':badReference?'another-order':'msnw-bill-test-quote','providerReference':'provider-verified','deliveryCode':'1234-5678-9012-3456'}),200,headers:{Headers.contentTypeHeader:['application/json']});}
+ @override Future<ResponseBody> fetch(RequestOptions o,Stream<Uint8List>? s,Future<void>? c)async{calls.add(o);return ResponseBody.fromString(jsonEncode(o.path.endsWith('/preview')?{'asset':'MSNW','quoteId':'test-quote','quoteRevision':1,'totalAmountKobo':'101000','amountMicro':'1010000000','rateKoboPerMsnw':'100','availableMicro':'2000000000','sufficient':true}:{'state':'succeeded','fulfillmentReference':badReference?'another-order':'msnw-bill-test-quote','providerReference':'provider-verified','deliveryCode':'1234-5678-9012-3456'}),200,headers:{Headers.contentTypeHeader:['application/json']});}
  @override void close({bool force=false}){}
 }
 void main(){
@@ -37,7 +37,8 @@ void main(){
  testWidgets('completed electricity receipt exposes actual token and exact original reference',(t)async{
   final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
-  await t.tap(find.text('Get verified price'));await t.pumpAndSettle();await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
+  await t.tap(find.text('Get verified price'));await t.pumpAndSettle();await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();
+  await t.scrollUntilVisible(find.text('Confirm payment'), 120, scrollable:find.byType(Scrollable).last);await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
   expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('provider-verified'),findsOneWidget);expect(find.text('msnw-bill-test-quote'),findsOneWidget);
   await t.ensureVisible(find.text('Check payment status'));await t.tap(find.text('Check payment status'));await t.pumpAndSettle();expect(adapter.calls.where((o)=>o.path.endsWith('/execute')).length,1);expect(adapter.calls.last.path.endsWith('/msnw-bill-test-quote'),isTrue);expect(find.text('Review & pay MSNW'),findsNothing);
  });

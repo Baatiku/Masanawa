@@ -32,8 +32,8 @@ void main(){
   addTearDown(container.dispose);
   final services=<String>[];
   await tester.pumpWidget(UncontrolledProviderScope(container:container,child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:WalletScreen(embeddedInShell:true,onOpenBillingService:services.add))));
-  await tester.pumpAndSettle();expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('Services'),findsNothing);
-  expect(tester.getCenter(find.text('Send')).dy,tester.getCenter(find.text('P2P')).dy);
+  await tester.pump(const Duration(seconds: 1));expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('Services'),findsNothing);
+  expect(tester.getCenter(find.text('Send')).dy,tester.getCenter(find.text('Swap')).dy);
   await tester.scrollUntilVisible(find.text('Data bundles'),200,scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await tester.pumpAndSettle();await tester.tap(find.text('Data bundles'));expect(services,['data']);
   await tester.ensureVisible(find.text('Transactions'));await tester.pumpAndSettle();await tester.tap(find.text('Transactions'));await tester.pumpAndSettle();
   expect(find.text('No transactions yet. Fund your MSNW wallet to get started.'),findsOneWidget);

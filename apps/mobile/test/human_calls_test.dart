@@ -75,6 +75,7 @@ class _Audio implements HumanCallAudio {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test(
     'permission denial does not create a ringing call or start media',
     () async {

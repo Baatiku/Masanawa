@@ -68,7 +68,8 @@ void main(){
     tester.view.physicalSize=const Size(320,640);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:Scaffold(body:WalletActionRow(onSend:(){},onConvert:(){},onReceive:(){},onP2p:(){}))));
-    expect(tester.getCenter(find.text('Send')).dy,tester.getCenter(find.text('P2P')).dy);expect(tester.takeException(),isNull);
+    expect(tester.getCenter(find.byIcon(Icons.south_west)).dy, tester.getCenter(find.byIcon(Icons.swap_horiz)).dy);
+    expect(find.text('Withdraw'),findsOneWidget);expect(tester.takeException(),isNull);
   });
   testWidgets('services use navigable rows with exact category intents',(tester)async{
     final selected=<String>[];
