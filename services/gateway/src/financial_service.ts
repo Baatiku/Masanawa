@@ -129,7 +129,7 @@ export interface FinancialFiatPurchaseView {
 }
 
 export interface FinancialService {
-  listHoldings?(input:{readonly authorizationHeader:string|undefined}):Promise<readonly {providerCode:string;asset:string;network:string|null;amount:string;reservedAmount:string}[]>;
+  listHoldings?(input:{readonly authorizationHeader:string|undefined}):Promise<readonly {providerCode:string;asset:string;network:string|null;amount:string;reservedAmount:string;totalAmount:string}[]>;
   capabilities(input: {
     readonly authorizationHeader: string | undefined;
   }): Promise<FinancialCapabilities>;
@@ -813,9 +813,14 @@ export function createFinancialService(input: {
       const auth=await authority(request.authorizationHeader);
       if(!input.crypto.listHoldings) throw new Error('crypto.holdings_unavailable');
       const rows=await input.crypto.listHoldings({tenantId:auth.tenantId,userId:auth.userId});
+      const seen=new Set<string>();
       return Object.freeze(rows.filter(row=>row.asset.toUpperCase()!=='MSNW').map(row=>{
         const route=splitProviderCurrency(row.asset);
-        return Object.freeze({providerCode:row.asset,asset:route.asset,network:row.network,amount:row.amount,reservedAmount:row.reservedAmount});
+        // A provider currency identifies one custody lot. A second network under
+        // that code must never overwrite the first balance in the client.
+        if(route.network!==row.network||seen.has(row.asset)) throw new Error('financial.crypto.holdings_identity_conflict');
+        seen.add(row.asset);
+        return Object.freeze({providerCode:row.asset,asset:route.asset,network:row.network,amount:row.amount,reservedAmount:row.reservedAmount,totalAmount:row.totalAmount});
       }));
     },
 
