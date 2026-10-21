@@ -20,6 +20,7 @@ class FakeIncoming implements IncomingCallTransport {
   );
   int accepts = 0, tokens = 0;
   Completer<IncomingCallRecord>? pending;
+  final acceptedSignal = Completer<void>();
   @override
   Future<IncomingCallRecord> load(String id) async =>
       pending == null ? value : pending!.future;
@@ -28,6 +29,7 @@ class FakeIncoming implements IncomingCallTransport {
   @override
   Future<IncomingCallRecord> accept(String id) async {
     accepts++;
+    if (!acceptedSignal.isCompleted) acceptedSignal.complete();
     return IncomingCallRecord(
       callId: value.callId,
       characterId: value.characterId,
@@ -155,17 +157,21 @@ void main() {
     () async {
       final transport = FakeIncoming();
       final pending = Completer<GroupAdmission?>();
+      final waitingForApproval = Completer<void>();
       var completions = 0;
       final controller = IncomingCallController(
         callId: 'call',
         accountKey: 'a',
         currentAccountKey: () => 'a',
         transport: transport,
-        authorize: (_) => pending.future,
+        authorize: (_) {
+          waitingForApproval.complete();
+          return pending.future;
+        },
       );
       await controller.refresh();
       final accepting = controller.accept();
-      await Future<void>.delayed(Duration.zero);
+      await waitingForApproval.future;
       await controller.end();
       pending.complete(
         GroupAdmission(
@@ -188,7 +194,7 @@ void main() {
       final transport = MediaIncoming();
       FakeSession? session;
       var starts = 0, completions = 0, reports = 0;
-      final reasons=<CallEndReason?>[];
+      final reasons = <CallEndReason?>[];
       final controller = IncomingCallController(
         callId: 'call',
         accountKey: 'a',
@@ -203,7 +209,7 @@ void main() {
             completions++;
           },
         ),
-        onOutcome:(_,reason)async=>reasons.add(reason),
+        onOutcome: (_, reason) async => reasons.add(reason),
         onConnected: (_) async {
           reports++;
         },
@@ -217,14 +223,14 @@ void main() {
       expect(transport.tokens, 1);
       expect(starts, 1);
       expect(reports, 1);
-      expect(controller.statusLabel,'Connected');
+      expect(controller.statusLabel, 'Connected');
       expect(controller.recording, isNotNull);
-      expect(controller.recording!.recording,isFalse);
-      session!.endReason=CallEndReason.connectionFailed;
+      expect(controller.recording!.recording, isFalse);
+      session!.endReason = CallEndReason.connectionFailed;
       await controller.end();
       await controller.end();
       expect(session!.closes, 1);
-      expect(reasons,[CallEndReason.connectionFailed]);
+      expect(reasons, [CallEndReason.connectionFailed]);
       expect(completions, 1);
       controller.dispose();
     },
@@ -255,7 +261,9 @@ void main() {
       );
       await controller.refresh();
       final accepting = controller.accept();
-      await Future<void>.delayed(Duration.zero);
+      while (session == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
       controller.didChangeAppLifecycleState(AppLifecycleState.paused);
       ready.complete();
       await accepting;
