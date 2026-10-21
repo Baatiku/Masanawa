@@ -24,6 +24,6 @@ void main(){
   await tester.tap(find.text('Cancel'));await tester.pumpAndSettle();expect(sends,isEmpty);
   await tester.ensureVisible(find.text('Review and confirm'));await tester.tap(find.text('Review and confirm'));await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('Send again intentionally'));await tester.tap(find.text('Send again intentionally'));await tester.pumpAndSettle();
-  expect(sends,singleElement);expect(sends.single['repeatOf'],prior);expect(find.text('Transfer completed'),findsOneWidget);
+  expect(sends,hasLength(1));expect(sends.single['repeatOf'],prior);expect(find.text('Transfer completed'),findsOneWidget);
  });
 }

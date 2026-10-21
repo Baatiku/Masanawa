@@ -56,13 +56,18 @@ void main(){
   t.view.physicalSize=const Size(360,800);t.view.devicePixelRatio=1;addTearDown(t.view.resetPhysicalSize);addTearDown(t.view.resetDevicePixelRatio);
   final dio=Dio()..httpClientAdapter=_Adapter((o)=>{'asset':'MSNW','scope':'platform_custody','availableMicro':'0','reservedMicro':'2000000'});
   final api=ApiClient(dio:dio)..accessToken='owner-token';
-  await t.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),dioProvider.overrideWithValue(dio),apiClientProvider.overrideWithValue(api),cryptoWalletProvider.overrideWith(_Crypto.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const WalletScreen(embeddedInShell:true))));await t.pumpAndSettle();
+  await t.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),dioProvider.overrideWithValue(dio),apiClientProvider.overrideWithValue(api),cryptoWalletProvider.overrideWith(_Crypto.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const WalletScreen(embeddedInShell:true))));await t.pump(const Duration(seconds: 1));
   final card=t.widget<Container>(find.byKey(const ValueKey('wallet-balance-card')));
   final context=t.element(find.byKey(const ValueKey('wallet-balance-card')));
   expect((card.decoration as BoxDecoration).color,context.masanawa.brand);
-  expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('2 MSNW reserved'),findsOneWidget);expect(find.text('USDT'),findsOneWidget);expect(find.text('12.5'),findsOneWidget);expect(find.text('USDC'),findsOneWidget);expect(find.text('0'),findsNWidgets(2));expect(find.text('Tron'),findsOneWidget);expect(find.text('Polygon'),findsOneWidget);
+  expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('2 MSNW reserved'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('USDT'), 140, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pump(const Duration(milliseconds: 200));
+  expect(find.text('USDT'),findsOneWidget);expect(find.text('Available: 12.5'),findsOneWidget);expect(find.text('Tron'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('USDC'), 110, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
+  expect(find.text('USDC'),findsOneWidget);expect(find.text('Available: 0'),findsOneWidget);expect(find.text('Polygon'),findsOneWidget);
   await t.scrollUntilVisible(find.text('Data bundles'),200,scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pumpAndSettle();
   expect(find.text('Data bundles'),findsOneWidget);expect(find.text('Transactions'),findsOneWidget);expect(t.takeException(),isNull);
-  await t.ensureVisible(find.byTooltip('Hide balance'));await t.pumpAndSettle();await t.tap(find.byTooltip('Hide balance'));await t.pump();expect(find.text('12.5'),findsNothing);expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••'),findsNWidgets(3));
+  await t.scrollUntilVisible(find.byTooltip('Hide balance'), -160, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
+  await t.pump(const Duration(milliseconds: 100));await t.tap(find.byTooltip('Hide balance'));await t.pump();expect(find.text('12.5'),findsNothing);expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••'),findsNWidgets(3));
  });
 }
