@@ -15,11 +15,11 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(readFileSync(new URL("../../../../../packages/events/migrations/0001_event_foundation.sql",import.meta.url),"utf8"));
   // Minimal canonical identity tables for real author eligibility. Production
   // ownership remains in identity; these exist only in this disposable database.
-  await pool.query(`CREATE SCHEMA identity;
+  await pool.query(`CREATE SCHEMA identity; CREATE SCHEMA creator; CREATE TABLE creator.agents(tenant_id text,character_id text,owner_user_id text,state text); CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE identity.characters(tenant_id text,character_id text,state text,PRIMARY KEY(tenant_id,character_id));
-   CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text,PRIMARY KEY(tenant_id,character_id));
+   CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text,owner_user_id text,PRIMARY KEY(tenant_id,character_id));
    INSERT INTO identity.characters VALUES('tenant_test','masana_one','active'),('tenant_thread','masana_one','active');
-   INSERT INTO identity.character_ownership VALUES('tenant_test','masana_one','platform'),('tenant_thread','masana_one','platform');`);
+   INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES('tenant_test','masana_one','platform'),('tenant_thread','masana_one','platform');`);
   await pool.query("CREATE SCHEMA masana; CREATE TABLE masana.character_media(tenant_id text, character_id text, media_id text, rights_note text, approved_by text, object_key text, kind text); CREATE TABLE masana.follows(tenant_id text NOT NULL,fan_user_id text NOT NULL,character_id text NOT NULL,PRIMARY KEY(tenant_id,fan_user_id,character_id)); CREATE TABLE masana.character_revisions(tenant_id text NOT NULL,character_id text NOT NULL,state text NOT NULL,profile jsonb NOT NULL); INSERT INTO masana.character_revisions VALUES ('tenant_test','masana_one','approved','{\"displayName\":\"Teacher\"}'::jsonb)");
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0001_feed.sql",import.meta.url),"utf8"));
   // Simulate the forward-only upgrade with existing historic comments, before C22.

@@ -7,7 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/masana_chat/inbox_search.dart';
-import '../../features/rooms/rooms_client.dart';
+import '../../features/rooms/room_community_api.dart';
 import '../../features/home_feed/feed_api.dart';
 import '../../screens/rooms/rooms_screen.dart';
 import '../../screens/status/status_screen.dart';
@@ -34,7 +34,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
   List<String> _recent = [];
   Future<void> _historyWrites = Future<void>.value();
   List<MasanaInboxSearchItem> _chats = [];
-  List<RoomInfo> _rooms = [];
+  List<CommunityRoom> _rooms = [];
   List<FeedPost> _posts = [];
   String? _chatError, _roomError, _statusError;
 
@@ -144,7 +144,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     final owner = session.user.id;
     final token = session.tokens.accessToken;
     final chatsApi = ref.read(masanaInboxSearchProvider);
-    final roomApi = ref.read(roomsClientProvider);
+    final roomApi = ref.read(roomCommunityApiProvider);
     final feedApi = ref.read(statusFeedApiProvider);
     Future<Object?> safely(Future<Object?> Function() read) async {
       try {
@@ -155,7 +155,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     }
     final results = await Future.wait<Object?>([
       safely(() => chatsApi.search(bearer: token, query: term)),
-      safely(() => roomApi.list(joined: false, query: term)),
+      safely(() => roomApi.list(false).then((rooms) => rooms.where((room) => '${room.name} ${room.description}'.toLowerCase().contains(term.toLowerCase())).toList())),
       safely(() => feedApi.list(mode: 'for_you')),
     ]);
     if (!mounted || ticket != _generation || _owner != owner ||
@@ -169,7 +169,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     setState(() {
       _chats = chatData is List<MasanaInboxSearchItem>
           ? chatData.take(20).toList() : [];
-      _rooms = roomData is List<RoomInfo> ? roomData.take(20).toList() : [];
+      _rooms = roomData is List<CommunityRoom> ? roomData.take(20).toList() : [];
       // The Status endpoint supplies the latest page. Explicitly avoid
       // claiming a corpus-wide search or showing unapproved content.
       _posts = feedData is FeedPage
@@ -292,8 +292,8 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
                 const ListTile(title: Text('No matching Rooms'))
               else for (final room in _rooms) ListTile(
                 leading: const Icon(Icons.groups_outlined),
-                title: Text(room.title),
-                subtitle: Text(room.teacher),
+                title: Text(room.name),
+                subtitle: Text(room.description),
                 onTap: () => context.push('/rooms/${Uri.encodeComponent(room.id)}'),
               ),
               _heading('Recent Status matches',

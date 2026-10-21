@@ -1,242 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../core/providers.dart';
-import '../../features/rooms/room_discussion_api.dart';
-import '../../features/rooms/room_membership_client.dart';
-import '../../features/rooms/rooms_client.dart';
-import '../../features/rooms/rooms_screen.dart' as canonical;
-import '../../features/rooms/saved_lessons_client.dart';
+import '../../features/rooms/room_community_api.dart';
+import '../../features/rooms/room_community_screen.dart';
+import '../../features/rooms/rooms_screen.dart' as redesigned;
 import '../../state/session_state.dart';
-import '../../state/agent_directory_state.dart';
-import '../../theme/masanawa_theme.dart';
 
-/// Reuses the existing authenticated Gateway Dio and the canonical J07 Rooms
-/// contract. Never use the retired Talk/live-feed endpoint as Room discovery.
-final roomsClientProvider = Provider<RoomsClient>((ref) {
-  ref.watch(agentDirectoryProvider.select((value)=>value.agents.map((a)=>'${a.characterId}:${a.displayName}').join('|')));
-  return HttpRoomsClient(ref.watch(apiClientProvider).dio,teacherName:(id){
-    for(final agent in ref.read(agentDirectoryProvider).agents){if(agent.characterId==id)return agent.displayName;}
-    return null;
-  });
+final roomCommunityApiProvider=Provider<RoomCommunityApi>((ref){
+  final session=ref.watch(sessionProvider);
+  if(session is! SessionSignedIn)throw StateError('account_changed');
+  final account=session.user.id;
+  final epoch=ref.read(sessionProvider.notifier).authorizationEpoch;
+  return AccountBoundRoomCommunityApi(
+    delegate:HttpRoomCommunityApi(ref.watch(apiClientProvider).dio,loadMasana:() async =>
+      (await ref.read(agentDirectoryTransportProvider).loadDirectory()).map((a) =>
+        <String,dynamic>{'characterId':a.characterId,'displayName':a.displayName}).toList()),
+    ownerAccount:account,currentAccount:(){final s=ref.read(sessionProvider);return s is SessionSignedIn&&ref.read(sessionProvider.notifier).authorizationEpoch==epoch?s.user.id:null;});
 });
-
-class AccountBoundRoomsClient implements RoomsClient {
-  AccountBoundRoomsClient({
-    required this.delegate,
-    required this.ownerAccount,
-    required this.currentAccount,
-  });
-
-  final RoomsClient delegate;
-  final String ownerAccount;
-  final String? Function() currentAccount;
-
-  void _checkAccount() {
-    if (ownerAccount.isEmpty || currentAccount() != ownerAccount) {
-      throw StateError('account_changed');
-    }
-  }
-
-  Future<T> _guard<T>(Future<T> Function() work) async {
-    _checkAccount();
-    final value = await work();
-    _checkAccount();
-    return value;
-  }
-
-  @override
-  Future<List<RoomInfo>> list({
-    required bool joined,
-    String query = '',
-    String language = '',
-  }) => _guard(() => delegate.list(
-      joined: joined, query: query, language: language));
-
-  @override
-  Future<RoomInfo> room(String id) => _guard(() => delegate.room(id));
-
-  @override
-  Future<void> join(String id) => _guard(() => delegate.join(id));
-
-  @override
-  Future<void> leave(String id) => _guard(() => delegate.leave(id));
-
-  @override
-  Future<RoomQuestion> ask(String id, String text, String key) =>
-      _guard(() => delegate.ask(id, text, key));
-
-  @override
-  Future<List<RoomQuestion>> questions(String id) =>
-      _guard(() => delegate.questions(id));
-
-  @override
-  Future<List<RoomLesson>> lessons(String id) =>
-      _guard(() => delegate.lessons(id));
-}
-
-class AccountBoundRoomDiscussionApi implements RoomDiscussionApi {
-  const AccountBoundRoomDiscussionApi({
-    required this.delegate,
-    required this.ownerAccount,
-    required this.currentAccount,
-  });
-  final RoomDiscussionApi delegate;
-  final String ownerAccount;
-  final String? Function() currentAccount;
-
-  Future<T> _guard<T>(Future<T> Function() work) async {
-    if (ownerAccount.isEmpty || currentAccount() != ownerAccount) {
-      throw StateError('account_changed');
-    }
-    final result = await work();
-    if (currentAccount() != ownerAccount) {
-      throw StateError('account_changed');
-    }
-    return result;
-  }
-
-  @override
-  Future<List<RoomDiscussionTarget>> targets(String roomId) =>
-      _guard(() => delegate.targets(roomId));
-
-  @override
-  Future<RoomDiscussionPage> list(
-    String roomId,
-    RoomDiscussionTarget target, {
-    String? cursor,
-  }) => _guard(() => delegate.list(roomId, target, cursor: cursor));
-
-  @override
-  Future<RoomDiscussionReply> send(
-    String roomId,
-    RoomDiscussionTarget target,
-    String body,
-    String key, {
-    String? parentReplyId,
-  }) => _guard(() => delegate.send(
-      roomId, target, body, key, parentReplyId: parentReplyId));
-}
-
-/// Already mounted in the five-tab shell; deliberately owns no new router,
-/// server identity, payment rail or migration. Missing server routes render
-/// an unavailable/retry state rather than invented Room records.
+RoomCommunityApi _api(WidgetRef ref,String account)=>ref.watch(roomCommunityApiProvider);
+Widget _protect(String account,int epoch,Widget detail)=>Consumer(builder:(context,ref,_){
+  final s=ref.watch(sessionProvider);
+  return s is SessionSignedIn&&s.user.id==account&&ref.read(sessionProvider.notifier).authorizationEpoch==epoch?detail:const Scaffold(body:Center(child:Text('Session changed. Sign in to view Rooms.')));
+});
 class RoomsScreen extends ConsumerWidget {
   const RoomsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    if (session is! SessionSignedIn) {
-      return Scaffold(
-        backgroundColor: context.masanawa.surfaceBg,
-        body: const Center(
-          child: Text('Sign in to view your Rooms.'),
-        ),
-      );
-    }
-
-    final ownerAccount = session.user.id;
-    final api = ref.watch(apiClientProvider);
-    String? currentAccount() {
-      // A disposed tab must fail closed rather than retaining another fan's
-      // data in an in-flight read, even after logout or account replacement.
-      try {
-        final current = ref.read(sessionProvider);
-        return current is SessionSignedIn ? current.user.id : null;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    return KeyedSubtree(
-      key: ValueKey('rooms-account-' + ownerAccount),
-      child: canonical.RoomsScreen(
-        // Navigator detail routes outlive the account-keyed tab. A route
-        // must immediately hide and unmount private Room data on sign-out
-        // or account replacement, not merely reject its next network read.
-        protectDetail: (routeContext, detail) => Consumer(
-          builder: (context, detailRef, _) {
-            final active = detailRef.watch(sessionProvider);
-            if (active is! SessionSignedIn || active.user.id != ownerAccount) {
-              return const Scaffold(
-                body: Center(
-                  child: Text('Session changed. Sign in to view this Room.'),
-                ),
-              );
-            }
-            return detail;
-          },
-        ),
-        client: AccountBoundRoomsClient(
-          delegate: ref.watch(roomsClientProvider),
-          ownerAccount: ownerAccount,
-          currentAccount: currentAccount,
-        ),
-        discussionApi: AccountBoundRoomDiscussionApi(
-          delegate: HttpRoomDiscussionApi(api.dio),
-          ownerAccount: ownerAccount,
-          currentAccount: currentAccount,
-        ),
-        discussionAccountScope: ownerAccount,
-        membershipClient: AccountBoundRoomMembershipClient(
-          delegate: HttpRoomMembershipClient(api.dio),
-          ownerAccount: ownerAccount,
-          currentAccount: currentAccount,
-        ),
-        savedLessonsClient: DioSavedLessonsClient(
-          dio: api.dio,
-          accountKey: ownerAccount,
-          currentAccountKey: currentAccount,
-        ),
-        savedLessonsAccountKey: ownerAccount,
-      ),
-    );
+  @override Widget build(BuildContext context,WidgetRef ref){
+    final s=ref.watch(sessionProvider);
+    if(s is! SessionSignedIn)return const Scaffold(body:Center(child:Text('Sign in to view Rooms.')));
+    final epoch=ref.read(sessionProvider.notifier).authorizationEpoch;
+    return KeyedSubtree(key:ValueKey('rooms-${s.user.id}-$epoch'),child:redesigned.RoomsScreen(api:_api(ref,s.user.id),protectDetail:(_,detail)=>_protect(s.user.id,epoch,detail)));
   }
 }
-
-/** Direct link from the Masana directory to the canonical, account-fenced Room. */
+/// Compatibility route name only; the retired lesson screen has been removed.
 class MasanaRoomDetailScreen extends ConsumerWidget {
-  const MasanaRoomDetailScreen({super.key, required this.roomId});
+  const MasanaRoomDetailScreen({super.key,required this.roomId});
   final String roomId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session=ref.watch(sessionProvider);
-    if(session is! SessionSignedIn) {
-      return const Scaffold(body:Center(child:Text('Sign in to view this Room.')));
-    }
-    final accountId=session.user.id;
-    final api=ref.watch(apiClientProvider);
-    String? currentAccount(){
-      try{
-        final current=ref.read(sessionProvider);
-        return current is SessionSignedIn?current.user.id:null;
-      }catch(_){return null;}
-    }
-    return KeyedSubtree(
-      key:ValueKey('masana-room-$accountId-$roomId'),
-      child:canonical.RoomHomeScreen(
-        protectDetail:(routeContext,detail)=>Consumer(builder:(context,detailRef,_){
-          final active=detailRef.watch(sessionProvider);
-          return active is SessionSignedIn && active.user.id==accountId?detail:
-            const Scaffold(body:Center(child:Text('Session changed. Sign in to view this Room.')));
-        }),
-        id:roomId,
-        client:AccountBoundRoomsClient(delegate:ref.watch(roomsClientProvider),
-          ownerAccount:accountId,currentAccount:currentAccount),
-        discussionApi:AccountBoundRoomDiscussionApi(
-          delegate:HttpRoomDiscussionApi(api.dio),
-          ownerAccount:accountId,currentAccount:currentAccount),
-        discussionAccountScope:accountId,
-        membershipClient:AccountBoundRoomMembershipClient(
-          delegate:HttpRoomMembershipClient(api.dio),
-          ownerAccount:accountId,currentAccount:currentAccount),
-        savedLessonsClient:DioSavedLessonsClient(
-          dio:api.dio,accountKey:accountId,currentAccountKey:currentAccount),
-        savedLessonsAccountKey:accountId,
-      ),
-    );
+  @override Widget build(BuildContext context,WidgetRef ref){
+    final s=ref.watch(sessionProvider);
+    if(s is! SessionSignedIn)return const Scaffold(body:Center(child:Text('Sign in to view this Room.')));
+    final epoch=ref.read(sessionProvider.notifier).authorizationEpoch;
+    return KeyedSubtree(key:ValueKey('room-${s.user.id}-$epoch-$roomId'),child:RoomCommunityScreen(api:_api(ref,s.user.id),roomId:roomId,protectDetail:(_,detail)=>_protect(s.user.id,epoch,detail)));
   }
 }
-

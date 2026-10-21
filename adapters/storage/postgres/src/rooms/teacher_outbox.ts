@@ -32,6 +32,13 @@ export function createPgTeacherQueue(pool:Pool):TeacherQueue {
                    AND a.question_id=question.question_id AND a.state='approved'))
         )
         AND question.state IN ('queued','answering','needs_staff')
+        AND room.state='published'
+        AND NOT EXISTS(SELECT 1 FROM creator.agents ca WHERE ca.tenant_id=question.tenant_id AND ca.character_id=question.target_character_id AND (ca.state<>'published' OR NOT EXISTS(SELECT 1 FROM identity.users cu WHERE cu.tenant_id=ca.tenant_id AND cu.user_id=ca.owner_user_id AND cu.state='active')))
+        AND EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=question.tenant_id AND u.user_id=question.user_id AND u.state='active')
+        AND EXISTS(SELECT 1 FROM rooms.memberships m WHERE m.tenant_id=question.tenant_id AND m.room_id=question.room_id AND m.user_id=question.user_id AND m.state='active')
+        AND (room.plan_mode='free' OR EXISTS(SELECT 1 FROM rooms.entitlements e WHERE e.tenant_id=question.tenant_id AND e.room_id=question.room_id AND e.user_id=question.user_id AND e.state IN ('active','grace') AND e.period_end>now()))
+        AND (question.target_character_id IS NULL OR EXISTS(SELECT 1 FROM rooms.masana_participants p JOIN identity.characters c ON c.tenant_id=p.tenant_id AND c.character_id=p.character_id WHERE p.tenant_id=question.tenant_id AND p.room_id=question.room_id AND p.character_id=question.target_character_id AND p.active AND c.state='active'))
+        AND (question.source_lesson_id IS NULL OR EXISTS(SELECT 1 FROM rooms.lessons l WHERE l.tenant_id=question.tenant_id AND l.room_id=question.room_id AND l.lesson_id=question.source_lesson_id AND l.state='published'))
       ORDER BY o.available_at,o.created_at,o.outbox_event_id
       LIMIT 1 FOR UPDATE OF o SKIP LOCKED`);
    if(!x.rows.length)return null;
@@ -62,8 +69,11 @@ export function createPgTeacherQueue(pool:Pool):TeacherQueue {
          AND state='claimed' AND lease_expires_at>now()
        FOR UPDATE`,[job.outboxId,job.tenantId,job.fence]);
      if(!lease.rows.length)return; // stale worker cannot publish or ack
+     // Use the same room-first lock as membership/Masana revocation. A worker
+     // that already called the provider cannot publish after removal commits.
+     await q.query('SELECT room_id FROM rooms.rooms WHERE tenant_id=$1 AND room_id=$2 FOR UPDATE',[job.tenantId,job.roomId]);
      const found=await q.query(`SELECT question.question_id,question.user_id,
-       question.room_id,question.state,room.teacher_character_id
+       question.room_id,question.state,COALESCE(question.target_character_id,room.teacher_character_id) AS teacher_character_id,question.target_character_id,question.source_lesson_id,room.state AS room_state,room.plan_mode
        FROM rooms.questions question JOIN rooms.rooms room
        ON room.tenant_id=question.tenant_id AND room.room_id=question.room_id
        WHERE question.tenant_id=$1 AND question.question_id=$2
@@ -71,7 +81,11 @@ export function createPgTeacherQueue(pool:Pool):TeacherQueue {
        [job.tenantId,job.questionId,job.roomId]);
      if(!found.rows.length)throw Error("rooms_question_missing");
      const source=found.rows[0];
-     if(!["answered","rejected"].includes(source.state)){
+     const authorized=await q.query(`SELECT 1 FROM rooms.memberships m JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id WHERE m.tenant_id=$1 AND m.room_id=$2 AND m.user_id=$3 AND m.state='active' AND u.state='active' AND ($4::text='free' OR EXISTS(SELECT 1 FROM rooms.entitlements e WHERE e.tenant_id=m.tenant_id AND e.room_id=m.room_id AND e.user_id=m.user_id AND e.state IN ('active','grace') AND e.period_end>now())) AND ($5::text IS NULL OR EXISTS(SELECT 1 FROM rooms.masana_participants p JOIN identity.characters c ON c.tenant_id=p.tenant_id AND c.character_id=p.character_id WHERE p.tenant_id=m.tenant_id AND p.room_id=m.room_id AND p.character_id=$5 AND p.active AND c.state='active')) AND ($6::text IS NULL OR EXISTS(SELECT 1 FROM rooms.lessons l WHERE l.tenant_id=m.tenant_id AND l.room_id=m.room_id AND l.lesson_id=$6 AND l.state='published'))`,[job.tenantId,job.roomId,source.user_id,source.plan_mode,source.target_character_id??null,source.source_lesson_id??null]);
+     const currentCreator=await q.query("SELECT 1 FROM creator.agents ca WHERE ca.tenant_id=$1 AND ca.character_id=$2 AND (ca.state<>'published' OR NOT EXISTS(SELECT 1 FROM identity.users cu WHERE cu.tenant_id=ca.tenant_id AND cu.user_id=ca.owner_user_id AND cu.state='active'))",[job.tenantId,source.target_character_id??null]);
+     const allowed=source.room_state==='published'&&authorized.rows.length>0&&currentCreator.rows.length===0;
+     if(!allowed)await q.query("UPDATE rooms.questions SET state='rejected',updated_at=now() WHERE tenant_id=$1 AND question_id=$2 AND state IN ('queued','answering','needs_staff')",[job.tenantId,job.questionId]);
+     if(allowed&&!["answered","rejected"].includes(source.state)){
        // reviewed_by records a MACHINE provenance marker required by the
        // existing schema; it is NOT a person or a manual approval requirement.
        const inserted=await q.query(`INSERT INTO rooms.answers

@@ -66,11 +66,14 @@ describe("Replay private object store",()=>{
 
   it("deletes discarded replay objects with signed DELETE",async()=>{
     let method:string|undefined;
+    let options:RequestInit|undefined;
     const store=createReplayObjectStore({
       endpoint:"https://s3.example.test",region:"test",bucket:"private",accessKey:"access",secret:"0123456789abcdef",
-      fetchImpl:async(_url,init)=>{method=init?.method;return new Response(null,{status:204});},
+      fetchImpl:async(_url,init)=>{method=init?.method;options=init;return new Response(null,{status:204});},
     });
     await store.deleteObject("talk-replays/talk/replay.ogg");
     expect(method).toBe("DELETE");
+    expect(options?.redirect).toBe("error");
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
   });
 });

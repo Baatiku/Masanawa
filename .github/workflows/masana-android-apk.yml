@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          flutter test --no-pub --reporter expanded test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/features/rooms/room_auto_answer_test.dart test/masana_room_link_test.dart test/masanawa_light_theme_test.dart test/ui/reduced_motion_theme_test.dart > "$RUNNER_TEMP/flutter-tests.log" 2>&1
+          flutter test --no-pub --reporter expanded test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/room_community_client_test.dart test/masana_room_link_test.dart test/masanawa_light_theme_test.dart test/ui/reduced_motion_theme_test.dart > "$RUNNER_TEMP/flutter-tests.log" 2>&1
           result=$?
           set -e
           cat "$RUNNER_TEMP/flutter-tests.log"

@@ -23,7 +23,7 @@ const event={
   },
 };
 function setup(allowed:boolean,attempted=1,delivered=1){
-  const query=vi.fn(async()=>({rows:[{allowed}]}));
+  const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[{allowed}]}));
   const send=vi.fn(async()=>({attempted,delivered}));
   return {query,send,worker:createRoomReplyNoticeRuntime({
     pool:{query} as never,
@@ -67,4 +67,19 @@ describe("Room reply outbox Firebase delivery",()=>{
     expect(await worker.runOnce()).toMatchObject({deadLetter:1});
     expect(send).not.toHaveBeenCalled();
   });
+  it("delivers a community post only after current membership, mute and post checks",async()=>{
+    vi.mocked(claimOutboxBatch).mockResolvedValue([{...event,eventType:"rooms.post.created",payload:{userId:event.payload.userId,roomId:event.payload.roomId,postId:"room-post_demo12345678"}}] as never);
+    const {worker,send,query}=setup(true);
+    expect(await worker.runOnce()).toMatchObject({acknowledged:1,delivered:1});
+    expect(query.mock.calls[0]?.[0]).toContain("muted");
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({type:"room_post",postId:"room-post_demo12345678"})}));
+  });
+  it("delivers a targeted invitation without requiring an existing membership",async()=>{
+    vi.mocked(claimOutboxBatch).mockResolvedValue([{...event,eventType:"rooms.member.invited",payload:{userId:event.payload.userId,roomId:event.payload.roomId}}] as never);
+    const {worker,send,query}=setup(true);
+    expect(await worker.runOnce()).toMatchObject({acknowledged:1,delivered:1});
+    expect(query.mock.calls[0]?.[0]).toContain("rooms.membership_invites");
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({type:"room_invite"})}));
+  });
+
 });

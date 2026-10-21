@@ -30,7 +30,8 @@ describe("Rooms canonical outbox direct-answer boundary",()=>{
  it("persists an AI answer directly approved with machine provenance, not human review",async()=>{
    const p=poolFor(sql=>sql.includes("lease_expires_at>now() FOR UPDATE")||sql.includes("AND lease_expires_at>now()\n")?[{state:"claimed"}]
      : sql.includes("SELECT question.question_id")?[{question_id:job.questionId,
-       room_id:job.roomId,state:"answering",teacher_character_id:"character_1",user_id:"fan_1"}]:[]);
+       room_id:job.roomId,state:"answering",teacher_character_id:"character_1",user_id:"fan_1",room_state:"published",plan_mode:"free"}]
+     :sql.includes("SELECT 1 FROM rooms.memberships")?[{allowed:1}]:[]);
    await p.queue.publish(job,"The answer.");
    const joined=p.calls.map(x=>x.sql).join("\n");
    expect(joined).toContain("'approved','masanawa-ai',now()");

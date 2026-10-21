@@ -201,6 +201,8 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "identity/0006_account_deletion_access_revocation.sql",
       "identity/0007_account_deletion_worker_progress.sql",
       "identity/0008_creator_agent_ownership.sql",
+      "identity/0009_creator_completion.sql",
+      "identity/0010_creator_status_cadence.sql",
       "memory/0001_memory_foundation.sql",
       "memory/0002_memory_lifecycle.sql",
       "memory/0003_memory_extraction_liveness.sql",

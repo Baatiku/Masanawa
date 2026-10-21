@@ -101,15 +101,15 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Rooms mounted Flutter question journeys
+      - name: Redesigned Rooms create, timeline and account-isolation journeys
         run: >-
           flutter test --no-pub --reporter expanded
-          test/features/rooms/rooms_screen_test.dart
-          test/rooms_screen_test.dart
+          test/rooms_redesign_root_test.dart
+          test/room_community_screen_test.dart
           test/features/rooms/room_discussion_screen_test.dart
-          test/features/rooms/room_auto_answer_test.dart
+          test/room_community_client_test.dart
           test/features/rooms/room_membership_client_test.dart
-          test/features/rooms/room_membership_screen_test.dart
+          test/room_community_client_test.dart
       - name: Focused Rooms Dart analysis
         run: >-
           dart analyze lib/src/features/rooms/rooms_screen.dart
@@ -117,5 +117,5 @@ jobs:
           lib/src/features/rooms/room_membership_screen.dart
           lib/src/screens/rooms/rooms_screen.dart
           test/features/rooms/room_membership_client_test.dart
-          test/features/rooms/room_membership_screen_test.dart
+          test/room_community_client_test.dart
 

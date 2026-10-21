@@ -28,6 +28,7 @@ export function createPgRoomMembershipRepository(pool:Pool):RoomMembershipReposi
   assertRoom(id);requireFan(a.userId);
   const q=await pool.connect();
   try {await q.query('BEGIN');const row=await lookupRoom(q,a.tenantId,id,true);
+   if(row.owner_user_id)throw new RoomError(403,'community_management_required');
    const result=await fn(q,row);await q.query('COMMIT');return result;
   } catch(e){await q.query('ROLLBACK');throw e;}finally{q.release();}
  }

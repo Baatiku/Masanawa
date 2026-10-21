@@ -1,3 +1,4 @@
+import {statusAuthorOwnership} from "./author_scope.js";
 import type {Pool} from "pg";
 // Structural projection of the canonical @masanawa/feed editorial contract.
 // Keep PostgreSQL free of an undeclared workspace dependency. AF00 will
@@ -35,7 +36,7 @@ const eligibleAuthor=`EXISTS (SELECT 1 FROM masana.character_revisions cr
  JOIN identity.characters c USING(tenant_id,character_id)
  JOIN identity.character_ownership o USING(tenant_id,character_id)
  WHERE cr.tenant_id=feed.posts.tenant_id AND cr.character_id=feed.posts.author_masana_id
-   AND cr.state='approved' AND c.state='active' AND o.kind='platform')`;
+   AND cr.state='approved' AND c.state='active' AND ${statusAuthorOwnership})`;
 const selection="tenant_id,id,author_masana_id,kind,body,media_ids,transcript,state,review_revision,published_by,scheduled_at,updated_at";
 export class PgEditorialReviewRepository {
  constructor(private readonly pool:Pool){}

@@ -1,3 +1,4 @@
+import {statusAuthorOwnership} from "./author_scope.js";
 import type {Pool} from "pg";
 /** PG18 tenant-scoped implementation. Composition injects the canonical Masana approved-revision check. */
 type Row=Record<string,unknown>;
@@ -16,7 +17,7 @@ const eligibleAuthor=`EXISTS (SELECT 1 FROM masana.character_revisions m
  JOIN identity.characters a ON a.tenant_id=m.tenant_id AND a.character_id=m.character_id
  JOIN identity.character_ownership o ON o.tenant_id=a.tenant_id AND o.character_id=a.character_id
  WHERE m.tenant_id=p.tenant_id AND m.character_id=p.author_masana_id
-   AND m.state='approved' AND a.state='active' AND o.kind='platform')`;
+   AND m.state='approved' AND a.state='active' AND ${statusAuthorOwnership})`;
 const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1) AS author_name, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id) AS like_count,
  (SELECT count(*)::int FROM feed.comments c WHERE c.tenant_id=p.tenant_id AND c.post_id=p.id AND c.state='visible') AS comment_count,
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2) AS viewer_liked,

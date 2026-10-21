@@ -66,6 +66,7 @@ export function createPgRoomDiscussionRepository(pool:Pool){
    assertRoom(roomId);validateDiscussionTarget(kind,targetId);
    const userId=requireFan(a.userId);
    return tx(pool,async q=>{
+     const community=await lookupRoom(q,a.tenantId,roomId);if(community.owner_user_id)throw new RoomError(403,'community_timeline_required');
      await access(q,a,roomId,true);await root(q,a,roomId,kind,targetId);
      if(parentReplyId)await parent(q,a,roomId,parentReplyId,kind,targetId);
      const previous=await q.query(

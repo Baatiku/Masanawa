@@ -52,6 +52,7 @@ export function createPgRoomsRepository(pool:Pool):RoomsRepository {
     `SELECT r.*, (SELECT count(*) FROM rooms.memberships m WHERE m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.state='active') AS member_count,
     EXISTS(SELECT 1 FROM rooms.memberships m WHERE m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$2 AND m.state='active') AS joined
     FROM rooms.rooms r WHERE r.tenant_id=$1 AND r.state='published'
+    AND (r.visibility='public' OR EXISTS(SELECT 1 FROM rooms.memberships p WHERE p.tenant_id=r.tenant_id AND p.room_id=r.room_id AND p.user_id=$2 AND p.state='active'))
     AND ($3::text='' OR r.profession_title ILIKE '%' || $3 || '%')
     AND ($4::text='' OR r.language=$4)
     AND ($5::boolean=false OR EXISTS(SELECT 1 FROM rooms.memberships m WHERE m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$2 AND m.state='active'))
@@ -64,7 +65,7 @@ export function createPgRoomsRepository(pool:Pool):RoomsRepository {
    const r=await pool.query(`SELECT r.*,
     (SELECT count(*) FROM rooms.memberships m WHERE m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.state='active') AS member_count,
     EXISTS(SELECT 1 FROM rooms.memberships m WHERE m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$3 AND m.state='active') AS joined
-    FROM rooms.rooms r WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.state='published'`,
+    FROM rooms.rooms r WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.state='published' AND (r.visibility='public' OR EXISTS(SELECT 1 FROM rooms.memberships p WHERE p.tenant_id=r.tenant_id AND p.room_id=r.room_id AND p.user_id=$3 AND p.state='active'))`,
     [a.tenantId,id,a.userId]);
    return r.rows.length?parsePreview(r.rows[0]):null;
  },
@@ -105,6 +106,7 @@ export function createPgRoomsRepository(pool:Pool):RoomsRepository {
    assertRoom(id);const userId=requireFan(a.userId);
    await transaction(pool,async q=>{
      const room=await lookupRoom(q,a.tenantId,id,true);await requirePublishedEligible(q,a,room);
+     if(room.visibility==='private'||room.join_approval)throw new RoomError(403,'invitation_required');
      const prev=await q.query("SELECT state FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 FOR UPDATE",[a.tenantId,id,userId]);
      if(prev.rows[0]?.state==="banned")throw new RoomError(403,"room_banned");
      await q.query(`INSERT INTO rooms.memberships AS current_member(tenant_id,room_id,user_id) VALUES ($1,$2,$3)
@@ -116,6 +118,7 @@ export function createPgRoomsRepository(pool:Pool):RoomsRepository {
  },
  async leave(a,id){
    assertRoom(id);const userId=requireFan(a.userId);
+   const room=await lookupRoom(pool,a.tenantId,id);if(room.owner_user_id===userId)throw new RoomError(409,'transfer_ownership_before_leaving');
    await pool.query("UPDATE rooms.memberships SET state='left',updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND state='active'",[a.tenantId,id,userId]);
  },
  async ask(a,id,raw,key){
@@ -123,6 +126,7 @@ export function createPgRoomsRepository(pool:Pool):RoomsRepository {
    const body=validateQuestion(raw);validateIdempotencyKey(key);
    return transaction(pool,async q=>{
      const room=await lookupRoom(q,a.tenantId,id);
+     if(room.owner_user_id)throw new RoomError(403,'community_timeline_required');
      await requirePublishedEligible(q,a,room);await requireMember(q,a,id,true);
      const duplicate=await q.query(`SELECT question_id,room_id,body,state,queued_at,NULL::text AS answer
        FROM rooms.questions WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND idempotency_key=$4`,

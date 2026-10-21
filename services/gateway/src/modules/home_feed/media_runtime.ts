@@ -2,7 +2,7 @@ import type {ReplayObjectStore} from "../../talk_replay/playback/s3_object_store
 import type {FeedMediaOptions,PublishedPostMedia} from "./media_routes.js";
 /** Explicit canonical Masana storage dependency. A replay bucket is never inferred. */
 export interface StatusMediaConfiguration {
- objects:Pick<ReplayObjectStore,"presignGet"> & {
+ objects:Pick<ReplayObjectStore,"presignGet"> & Partial<Pick<ReplayObjectStore,"putObject"|"deleteObject">> & {
   statObject(objectKey:string):Promise<{contentType:string;bytes:number}|null>;
  };
  approvedDownloadOrigins:readonly string[];
