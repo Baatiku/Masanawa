@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 const source=readFileSync(resolve("src/lib/paths.ts"),"utf8");
 const fn=source.match(/export function safeReturnPath[\s\S]+?\n}\n/)[0].replace("export function safeReturnPath(value: string | null | undefined): string", "function safeReturnPath(value)")+"\nsafeReturnPath";
-const safeReturnPath=Function("URL", "return ("+fn+")")(URL);
+const safeReturnPath=Function("URL", fn+";return safeReturnPath;")(URL);
 test("internal deep links survive",()=>assert.equal(safeReturnPath("/chats?view=unread"),"/chats?view=unread"));
 test("untrusted redirects fail closed",()=>{
   for (const x of ["https://evil.example","//evil.example","/\\evil","/api/bridge/masana","/login?next=%2f%2fevil",null])
