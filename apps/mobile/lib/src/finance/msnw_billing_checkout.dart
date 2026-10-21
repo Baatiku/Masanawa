@@ -229,7 +229,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       if(v is! Map||v['asset']!='MSNW'||v['quoteId']!=next.quoteId||
           v['quoteRevision']!=next.revision||
           v['totalAmountKobo']!=next.totalAmountKobo.toString()||
-          v['amountMicro'] is! String||v['rateKoboPerMsnw'] is! String||
+          v['amountMicro'] is! String||v['rateKoboPerMsnw']!='100'||
           v['availableMicro'] is! String||v['sufficient'] is! bool){
         throw const FormatException('Invalid MSNW price quote');
       }
@@ -253,6 +253,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
           detail('Total','NGN '+q.totalAmount),
           detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
+          detail('Provider','Flutterwave Bills'),
+          detail('Pricing policy','1 MSNW = ₦1'),
           detail('Rate','NGN '+units((BigInt.parse(v['rateKoboPerMsnw'] as String)*
               BigInt.from(10000)).toString())+' / MSNW'),
         ]),

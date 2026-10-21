@@ -1,3 +1,4 @@
+import { MSNW_PRICING_POLICY } from "@masanawa/commerce";
 import { describe, expect, it } from "vitest";
 import { createGatewayApp } from "../app.js";
 import { MsnwCustodyError } from "./custody_send.js";
@@ -40,7 +41,7 @@ describe("canonical MSNW custody Gateway routes", () => {
     expect(zero.statusCode).toBe(200);
     expect(JSON.parse(zero.body)).toEqual({
       asset: "MSNW", scope: "platform_custody",
-      availableMicro: "0", reservedMicro: "0",
+      availableMicro: "0", reservedMicro: "0", pricingPolicy:MSNW_PRICING_POLICY,
     });
     const preview = await app.inject({ method: "POST",
       url: "/v1/wallet/msnw/send/preview",

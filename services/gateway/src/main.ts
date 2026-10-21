@@ -1,3 +1,4 @@
+import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import {createRoomCommunityService} from "./room_community/index.js";
 import {createCreatorCompletionService} from "./creator_agents/completion.js";
@@ -1373,7 +1374,7 @@ export async function startGatewayService(
             ? MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
             : []),
           ...(env.FLUTTERWAVE_BILLS_ENABLED === "true" &&
-               env.MSNW_BILLING_RATE_KOBO_PER_MSNW?.trim()
+               assertMsnwNgnPolicyRate(env.MSNW_BILLING_RATE_KOBO_PER_MSNW)
             ? MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS
             : []),
         ]),
@@ -1478,10 +1479,9 @@ export async function startGatewayService(
   const feeBasisPoints = Number(env.MASANAWA_BILLING_FEE_BPS ?? "0");
   const feeFixedKobo = Number(env.MASANAWA_BILLING_FEE_FIXED_KOBO ?? "0");
 
-  // MSNW billing is enabled only after the owner configures an exact
-  // positive NGN-kobo price per whole MSNW. No fabricated exchange rate,
-  // NGN wallet/Credits conversion, or unbacked custody issuance.
-  const msnwBillingRate = env.MSNW_BILLING_RATE_KOBO_PER_MSNW?.trim();
+  // Owner-fixed NGN reference. Provider capability and settled custody still
+  // govern admission; this reference never creates funds or provider evidence.
+  const msnwBillingRate = billingEnabled ? assertMsnwNgnPolicyRate(env.MSNW_BILLING_RATE_KOBO_PER_MSNW) : "100";
   const msnwBillingLedger = billingEnabled && msnwBillingRate &&
       database.featurePool && database.billingQuotes
     ? createMsnwBillingFunding({

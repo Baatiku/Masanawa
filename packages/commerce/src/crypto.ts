@@ -381,6 +381,7 @@ export interface CryptoRepository {
     readonly userId: UserId;
     readonly event: CryptoProviderPaymentEvent;
   }): Promise<CryptoIntent>;
+  listHoldings?(input: {readonly tenantId: TenantId; readonly userId: UserId}): Promise<readonly {asset:string; network:string|null; amount:string}[]>;
   readBalance(input: {
     readonly tenantId: TenantId;
     readonly userId: UserId;

@@ -8,6 +8,8 @@ import 'crypto_transport.dart';
 
 class CryptoWalletSnapshot {
   const CryptoWalletSnapshot({
+    this.holdingRoutes=const [],
+    this.holdingsVerified=false,
     required this.capabilities,
     required this.depositRoutes,
     required this.conversionRoutes,
@@ -16,6 +18,8 @@ class CryptoWalletSnapshot {
     required this.selectedProviderCode,
   });
 
+  final bool holdingsVerified;
+  final List<CryptoRoute> holdingRoutes;
   final CryptoCapabilities capabilities;
   final List<CryptoRoute> depositRoutes;
   final List<CryptoRoute> conversionRoutes;
@@ -23,10 +27,22 @@ class CryptoWalletSnapshot {
   final Map<String, String> balances;
   final String? selectedProviderCode;
 
+  List<CryptoRoute> get assetRoutes {
+    final routes = <String,CryptoRoute>{
+      for(final route in [...holdingRoutes,...depositRoutes,...conversionRoutes]) route.providerCode:route,
+    };
+    for(final item in history) {
+      routes.putIfAbsent(item.asset,()=>CryptoRoute(providerCode:item.asset,asset:item.asset.toUpperCase(),network:item.network));
+      final target=item.targetAsset;
+      if(target!=null) routes.putIfAbsent(target,()=>CryptoRoute(providerCode:target,asset:target.toUpperCase(),network:item.targetNetwork));
+    }
+    return List.unmodifiable(routes.values);
+  }
+
   CryptoRoute? get selectedRoute {
     final code = selectedProviderCode;
     if (code == null) return null;
-    for (final route in depositRoutes) {
+    for (final route in assetRoutes) {
       if (route.providerCode == code) return route;
     }
     return null;
@@ -47,6 +63,7 @@ class CryptoWalletSnapshot {
     bool clearSelectedProviderCode = false,
   }) {
     return CryptoWalletSnapshot(
+      holdingRoutes:holdingRoutes,holdingsVerified:holdingsVerified,
       capabilities: capabilities ?? this.capabilities,
       depositRoutes: depositRoutes ?? this.depositRoutes,
       conversionRoutes: conversionRoutes ?? this.conversionRoutes,
@@ -104,12 +121,29 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     final conversionRoutes = resources[1] as List<CryptoRoute>;
     final history = resources[2] as List<CryptoIntent>;
 
-    final selected = _initialSelectedCode(depositRoutes, history);
-    final balances = <String, String>{};
+    var holdingsVerified=false;
+    final holdingRoutes=<CryptoRoute>[];
+    final heldBalances=<String,String>{};
+    if(_transport is CryptoHoldingsTransport) {
+      try {
+        final holdings=await (_transport as CryptoHoldingsTransport).holdings();
+        if(epoch!=_epoch) throw StateError('Wallet account changed');
+        for(final item in holdings) {
+          final route=CryptoRoute.fromJson(item);
+          final balance=CryptoBalance.fromJson(item);
+          holdingRoutes.add(route);heldBalances[route.providerCode]=balance.amount;
+        }
+        holdingsVerified=true;
+      } catch(_) { /* Per-asset reads remain available; no fabricated zero. */ }
+    }
+    final inventory = CryptoWalletSnapshot(holdingRoutes:holdingRoutes,capabilities:capabilities,depositRoutes:depositRoutes,
+      conversionRoutes:conversionRoutes,history:history,balances:const {},selectedProviderCode:null).assetRoutes;
+    final selected = _initialSelectedCode(inventory, history);
+    final balances = <String, String>{...heldBalances};
     // Bound parallel balance reads; one unavailable asset never hides others.
-    for (var start = 0; start < depositRoutes.length; start += 4) {
+    for (var start = 0; start < inventory.length; start += 4) {
       if (epoch != _epoch) throw StateError('Wallet account changed');
-      final batch = depositRoutes.skip(start).take(4);
+      final batch = inventory.skip(start).take(4);
       await Future.wait(
         batch.map((route) async {
           try {
@@ -125,6 +159,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     if (epoch != _epoch) throw StateError('Wallet account changed');
 
     return CryptoWalletSnapshot(
+      holdingRoutes:List.unmodifiable(holdingRoutes),holdingsVerified:holdingsVerified,
       capabilities: capabilities,
       depositRoutes: List.unmodifiable(depositRoutes),
       conversionRoutes: List.unmodifiable(conversionRoutes),
@@ -158,7 +193,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     final current = state.valueOrNull;
     if (current == null) return;
     final code = providerCode.trim();
-    if (!current.depositRoutes.any((route) => route.providerCode == code)) {
+    if (!current.assetRoutes.any((route) => route.providerCode == code)) {
       return;
     }
     state = AsyncData(current.copyWith(selectedProviderCode: code));

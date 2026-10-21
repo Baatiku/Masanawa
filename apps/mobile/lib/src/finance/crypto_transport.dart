@@ -3,6 +3,10 @@ import 'package:dio/dio.dart';
 import '../core/network/api_client.dart';
 import 'crypto_models.dart';
 
+abstract interface class CryptoHoldingsTransport {
+  Future<List<Map<String,dynamic>>> holdings();
+}
+
 abstract interface class CryptoWalletTransport {
   Future<CryptoCapabilities> capabilities();
   Future<List<CryptoRoute>> depositRoutes();
@@ -57,7 +61,7 @@ abstract interface class CryptoWalletTransport {
   Future<CryptoIntent> refreshConversion(String requestId);
 }
 
-class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
+class MasanawaCryptoWalletTransport implements CryptoWalletTransport, CryptoHoldingsTransport {
   MasanawaCryptoWalletTransport({
     required Dio dio,
     required String baseUrl,
@@ -131,6 +135,13 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
   }
 
   @override
+  Future<List<Map<String,dynamic>>> holdings() async {
+    final data=await _get('/v1/financial/crypto/holdings');
+    if(data['items'] is! List) throw const FormatException('Invalid holdings');
+    return [for(final row in data['items'] as List) if(row is Map) row.cast<String,dynamic>()];
+  }
+
+  @override
   Future<CryptoCapabilities> capabilities() async {
     try {
       return CryptoCapabilities.fromJson(
@@ -162,12 +173,7 @@ class MasanawaCryptoWalletTransport implements CryptoWalletTransport {
         await _get('/v1/financial/crypto/conversion-routes'),
       );
     } catch (_) {
-      return const [
-        CryptoRoute(providerCode: 'usdttrc20', asset: 'USDT', network: 'TRC-20'),
-        CryptoRoute(providerCode: 'btc', asset: 'BTC', network: 'Bitcoin'),
-        CryptoRoute(providerCode: 'eth', asset: 'ETH', network: 'Ethereum'),
-        CryptoRoute(providerCode: 'sol', asset: 'SOL', network: 'Solana'),
-      ];
+      return const <CryptoRoute>[];
     }
   }
 

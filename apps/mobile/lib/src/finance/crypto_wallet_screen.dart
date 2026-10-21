@@ -15,8 +15,9 @@ import 'crypto_models.dart';
 import 'crypto_state.dart';
 
 class CryptoWalletScreen extends ConsumerStatefulWidget {
-  const CryptoWalletScreen({super.key, this.embedded = false,this.initialProviderCode});
+  const CryptoWalletScreen({super.key, this.embedded = false,this.initialOperation,this.initialProviderCode});
   final bool embedded;
+  final String? initialOperation;
   final String? initialProviderCode;
 
   static String operationTitle(String operation) {
@@ -40,6 +41,27 @@ class CryptoWalletScreen extends ConsumerStatefulWidget {
 
 class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
   bool _busy = false;
+  @override
+  void initState() {
+    super.initState();
+    if(widget.initialOperation!=null&&widget.initialProviderCode!=null) {
+      final owner=ref.read(sessionProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final loaded=await ref.read(cryptoWalletProvider.future);
+          if(!mounted||ref.read(sessionProvider)!=owner)return;
+          final data=loaded.copyWith(selectedProviderCode:widget.initialProviderCode);
+          await _runAction(() async {
+            switch(widget.initialOperation) {
+              case 'deposit': if(data.capabilities.deposits)await _receive(context,ref,data); break;
+              case 'withdraw': if(data.capabilities.withdrawals)await _withdraw(context,ref,data); break;
+              case 'swap': if(data.capabilities.conversions)await _convert(context,ref,data); break;
+            }
+          });
+        } catch(error) {if(mounted)_error(context,error);}
+      });
+    }
+  }
   // In-memory, account-scoped UI inputs. Never persist a withdrawal address
   // into logs, unsecured preferences or a second account's widget.
   _BuyInput? _buyDraft;
@@ -498,7 +520,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
           children: [
               if(widget.initialProviderCode==null) _AssetList(
                 wallet: data,
-                onSelected: (value) => Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>CryptoWalletScreen(initialProviderCode:value))),
+                onSelected: (value) => Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>CryptoWalletScreen(initialProviderCode:value,initialOperation:widget.initialOperation))),
               ),
               if(widget.initialProviderCode!=null)...[
               const SizedBox(height: 10),
@@ -594,10 +616,10 @@ class _AssetList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (wallet.depositRoutes.isEmpty) return const SizedBox.shrink();
+    if (wallet.assetRoutes.isEmpty) return const SizedBox.shrink();
     return Column(
       children: [
-        for (final route in wallet.depositRoutes)
+        for (final route in wallet.assetRoutes)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Material(

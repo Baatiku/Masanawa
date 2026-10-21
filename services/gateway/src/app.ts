@@ -1546,6 +1546,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     const auth = (request: { headers: { authorization?: string | undefined } }) =>
       request.headers.authorization;
 
+    app.get('/v1/financial/crypto/holdings',async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      if(!financial.listHoldings) {reply.code(503);return {error:'crypto.holdings_unavailable'};}
+      return {items:await financial.listHoldings({authorizationHeader:auth(request)})};
+    });
     app.get("/v1/financial/capabilities", async (request) =>
       financial.capabilities({ authorizationHeader: auth(request) }));
 
