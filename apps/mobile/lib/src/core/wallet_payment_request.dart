@@ -1,3 +1,16 @@
+/// Exact MSNW amount parser shared by payment requests and canonical Send.
+/// In integer atomic units; never use floating point or implicit rounding.
+String? parseMsnwRequestAmount(String value) {
+  final trimmed = value.trim();
+  if (!RegExp(r'^[0-9]{1,18}(\.[0-9]{1,6})?$').hasMatch(trimmed)) {
+    return null;
+  }
+  final parts = trimmed.split('.');
+  final atomic = BigInt.parse(parts[0]) * BigInt.from(1000000) +
+      BigInt.parse(parts.length == 2 ? parts[1].padRight(6, '0') : '0');
+  return atomic > BigInt.zero ? atomic.toString() : null;
+}
+
 /// A public navigation hint, never payment approval or a trusted price quote.
 class WalletPaymentRequest {
   const WalletPaymentRequest({required this.accountNumber,required this.userId,required this.expiresAt,this.amountAtomic});

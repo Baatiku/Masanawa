@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'crypto_state.dart';
 import 'msnw_wallet_home.dart';
-import 'msnw_transaction_history.dart';
 
 class WalletPortfolioSummary extends ConsumerWidget {
   const WalletPortfolioSummary({super.key,required this.balance,required this.hidden});
