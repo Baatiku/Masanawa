@@ -17,6 +17,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../core/request_id.dart';
+import '../core/wallet_payment_request.dart';
 import '../theme/masanawa_theme.dart';
 import '../human_calls/human_calls.dart';
 import '../core/voice_note_recorder.dart';
@@ -274,6 +275,17 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     WidgetsBinding.instance.addObserver(this);
     recorder.addListener(_redraw);
     scroll.addListener(_read);
+  }
+
+  Future<void> _pay()async{
+    final c=controller;if(c==null||!c.current||c.conversation?.state!='accepted')return;
+    try{
+      final row=await c.transport.request('GET','/conversations/${widget.conversationId}/payment-recipient');
+      if(!mounted||controller!=c||!c.current)return;
+      final uri=Uri.https('masanawa.com','/pay',{'v':'1','asset':'MSNW','account':row['accountNumber'] is String?row['accountNumber'] as String:'','recipient':row['userId'] is String?row['userId'] as String:'','expires':row['expiresAt'] is String?row['expiresAt'] as String:''});
+      final request=parseWalletPaymentRequest(uri);if(request==null)throw const FormatException('Payment recipient unavailable');
+      await context.push(request.route);
+    }catch(e){if(mounted&&c.current)_notice(context,e);}
   }
 
   void _redraw() {
@@ -677,6 +689,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                   await humanCallStart(context, ref, conversation.handle);
               },
             ),
+          if(conversation?.state=='accepted')IconButton(tooltip:'Pay',icon:const Icon(Icons.payments_outlined),onPressed:c?.current==true?_pay:null),
           IconButton(
             tooltip: 'Search conversation',
             icon: const Icon(Icons.search),

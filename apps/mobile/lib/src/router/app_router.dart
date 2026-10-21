@@ -1,3 +1,4 @@
+import '../screens/wallet/wallet_payment_entry_screen.dart';
 import '../human_chat/human_chat.dart';
 import '../human_calls/human_calls.dart';
 import '../screens/profile/person_profile_screen.dart';
@@ -128,6 +129,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path.startsWith('/status/') ||
           path.startsWith('/masana/') ||
           path.startsWith('/wallet/transactions/') ||
+          path == '/wallet/pay' ||
           path == '/home' ||
           path == '/activity' ||
           path == '/search' ||
@@ -209,6 +211,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             PersonProfileScreen(handle: state.pathParameters['handle']!),
       ),
       GoRoute(path: '/persona/:publicId', redirect: (_, __) => '/masana'),
+      GoRoute(path:'/wallet/pay',builder:(_,state)=>WalletPaymentEntryScreen(location:state.uri.hasQuery?state.uri:null)),
       GoRoute(
         path: '/wallet/transactions/:id',
         builder: (context, state) => WalletScreen(

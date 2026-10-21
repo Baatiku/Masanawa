@@ -1,3 +1,5 @@
+import 'wallet_payment_request.dart';
+
 /// Maps an incoming navigation hint to an existing app route. The Gateway still
 /// authorizes the conversation and every action; links never carry execution
 /// authority.
@@ -5,6 +7,8 @@
 /// Public Masana links resolve straight to the public profile route; the
 /// retired Twin lookup route no longer exists.
 String? shellDeepLinkRoute(Uri uri) {
+  final payment=parseWalletPaymentRequest(uri);
+  if(payment!=null)return payment.route;
   if (uri.userInfo.isNotEmpty || uri.hasPort || uri.fragment.isNotEmpty) {
     return null;
   }

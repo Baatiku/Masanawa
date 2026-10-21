@@ -1,3 +1,5 @@
+import '../core/wallet_payment_request.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -412,14 +414,20 @@ class _AccountBadgeState extends State<MsnwAccountBadge> {
       trailing: value == null
         ? IconButton(tooltip: 'Retry account number', onPressed: loading ? null : load,
             icon: const Icon(Icons.refresh))
-        : IconButton(tooltip: 'Copy Masanawa account number', icon: const Icon(Icons.copy),
+        : Row(mainAxisSize:MainAxisSize.min,children:[
+          IconButton(tooltip:'Share MSNW payment request',icon:const Icon(Icons.share_outlined),onPressed:(){
+            if(widget.currentUserId()!=widget.accountId||widget.accountId==null)return;
+            final request=WalletPaymentRequest(accountNumber:value,userId:widget.accountId!,expiresAt:DateTime.now().toUtc().add(const Duration(days:1)));
+            Share.share(request.link.toString());
+          }),
+          IconButton(tooltip: 'Copy Masanawa account number', icon: const Icon(Icons.copy),
             onPressed: () async {
               if (!visible || widget.currentUserId() != widget.accountId) return;
               await Clipboard.setData(ClipboardData(text: value));
               if (context.mounted && widget.currentUserId() == widget.accountId) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account number copied')));
               }
-            }),
+            })]),
     );
   }
 }

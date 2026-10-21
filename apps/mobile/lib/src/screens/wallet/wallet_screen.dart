@@ -138,7 +138,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     await openWalletPage<void>(
       context: context, 
       title: 'Send MSNW',
-      builder: (_) => _AccountWalletPage(accountId: expected, child: MsnwCustodySendSheet(
+      builder: (_) => _AccountWalletPage(accountId: expected, child: Column(children:[
+        TextButton.icon(onPressed:()=>context.push('/wallet/pay'),icon:const Icon(Icons.link),label:const Text('Open payment request')),
+        Expanded(child:MsnwCustodySendSheet(
         dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
         expectedUserId: expected,
         currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -146,7 +148,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         },
         accessToken: () => ref.read(apiClientProvider).accessToken,
         onCompleted: () { if (mounted) setState(() => _custodyRefresh++); },
-      )),
+      ))])),
     );
   }
 
