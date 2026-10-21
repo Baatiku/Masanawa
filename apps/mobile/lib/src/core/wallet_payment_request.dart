@@ -26,3 +26,10 @@ WalletPaymentRequest? parseWalletPaymentRequest(Uri uri,{DateTime? now,bool inte
   if(expires==null||!expires.isUtc||!expires.isAfter(time)||expires.isAfter(time.add(const Duration(days:7))))return null;
   return WalletPaymentRequest(accountNumber:account,userId:user,expiresAt:expires,amountAtomic:amount);
 }
+
+String? parsePaymentRequestAmount(String input){
+ final value=input.trim();if(!RegExp(r'^[0-9]{1,18}(\.[0-9]{1,6})?$').hasMatch(value))return null;
+ final parts=value.split('.');
+ final atomic=BigInt.parse(parts[0])*BigInt.from(1000000)+BigInt.parse(parts.length==2?parts[1].padRight(6,'0'):'0');
+ return atomic>BigInt.zero?atomic.toString():null;
+}

@@ -11,14 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-String? parseMsnwMicro(String value) {
-    final trimmed = value.trim();
-    if (!RegExp(r'^[0-9]{1,18}(\.[0-9]{1,6})?$').hasMatch(trimmed)) return null;
-    final parts = trimmed.split('.');
-    final atomic = BigInt.parse(parts[0]) * BigInt.from(1000000) +
-      BigInt.parse(parts.length == 2 ? parts[1].padRight(6, '0') : '0');
-    return atomic > BigInt.zero ? atomic.toString() : null;
-  }
+String? parseMsnwMicro(String value)=>parsePaymentRequestAmount(value);
 
 /// Platform-custodied MSNW only. External self-custodied on-chain tokens and
 /// fiat funding awaiting backing are never counted as available Send funds.

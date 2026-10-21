@@ -5,7 +5,7 @@ import { MSNW_PRICING_POLICY, assertMsnwNgnPolicyRate, parseNgnKobo, type Billin
 import type { QuoteId } from "@masanawa/contracts";
 
 export class MsnwBillingError extends Error {
-  constructor(readonly code: string, readonly statusCode = 409) { super(code); }
+  constructor(readonly code: string, readonly statusCode = 409, readonly details?:Record<string,unknown>) { super(code); }
 }
 type Owner = Readonly<{ tenantId: string; userId: string }>;
 const atomic = /^[1-9][0-9]{0,23}$/;
@@ -42,6 +42,29 @@ export function createMsnwBillingFunding(input: Readonly<{
         Date.parse(quote.expiresAt) <= Date.now())
       throw new MsnwBillingError("msnw.billing.quote_expired_or_changed");
   }
+  async function recentPurchase(owner:Owner,terms:{billerCode:string;itemCode:string;customerId:string;serviceAmountKobo:number;categoryCode?:string|null},db:Pick<Pool,'query'>=input.pool){
+    const phoneCategory=['AIRTIME','MOBILEDATA'].includes((terms.categoryCode??'').replaceAll('_','').toUpperCase());
+    const phone=terms.customerId.replace(/^\+?234/,'0');
+    const customers=phoneCategory&&/^0[789][0-9]{9}$/.test(phone)?[phone,'+234'+phone.slice(1),'234'+phone.slice(1)]:[terms.customerId];
+    const result=await db.query(`SELECT fulfillment_reference,state,created_at FROM commerce.msnw_billing_reservations
+     WHERE tenant_id=$1 AND user_id=$2 AND biller_code=$3 AND item_code=$4 AND customer_id=ANY($5::text[]) AND provider_ngn_kobo=$6
+     AND (state='reserved' OR (state='fulfilled' AND settled_at>=statement_timestamp()-interval '5 minutes'))
+     ORDER BY (state='reserved') DESC,COALESCE(settled_at,created_at) DESC,fulfillment_reference DESC LIMIT 1`,
+     [owner.tenantId,owner.userId,terms.billerCode,terms.itemCode,customers,terms.serviceAmountKobo]);
+    const row=result.rows[0];if(!row)return null;
+    if(typeof row.fulfillment_reference!=='string'||!['reserved','fulfilled'].includes(row.state))throw new MsnwBillingError('msnw.billing.history_invalid',503);
+    return {reference:row.fulfillment_reference as string,state:row.state as string,createdAt:row.created_at instanceof Date?row.created_at.toISOString():String(row.created_at)};
+  }
+  async function approveRepeat(owner:Owner,quoteId:string,revision:number,repeatOf:string){
+    const q=await ownedQuote(owner,quoteId);assertUsable(q,revision);
+    if(!/^msnw-bill-[A-Za-z0-9_-]{5,128}$/.test(repeatOf))throw new MsnwBillingError('msnw.billing.repeat_invalid',400);
+    const prior=await recentPurchase(owner,q);
+    if(!prior||prior.state!=='fulfilled'||prior.reference!==repeatOf)throw new MsnwBillingError('msnw.billing.repeat_changed');
+    await input.pool.query(`INSERT INTO commerce.msnw_bill_repeat_consents(tenant_id,user_id,quote_id,quote_revision,repeat_of)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,[owner.tenantId,owner.userId,quoteId,revision,repeatOf]);
+    const consent=await input.pool.query('SELECT repeat_of,quote_revision FROM commerce.msnw_bill_repeat_consents WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3',[owner.tenantId,owner.userId,quoteId]);
+    if(consent.rows[0]?.repeat_of!==repeatOf||Number(consent.rows[0]?.quote_revision)!==revision)throw new MsnwBillingError('msnw.billing.repeat_changed');
+  }
   async function preview(owner: Owner, quoteId: string, revision: number) {
     if (!quoteId || quoteId.length > 180 || !Number.isSafeInteger(revision))
       throw new MsnwBillingError("msnw.billing.quote_invalid",400);
@@ -63,6 +86,7 @@ export function createMsnwBillingFunding(input: Readonly<{
       availableMicro:available,
       sufficient:BigInt(available)>=BigInt(amountMicro),
       customerId:quote.customerId,itemName:quote.itemName,
+      recentPurchase:await recentPurchase(owner,quote),
       expiresAt:quote.expiresAt,
     });
   }
@@ -88,6 +112,25 @@ export function createMsnwBillingFunding(input: Readonly<{
       amountMicro:row.reserved_micro,
       state:row.state as "reserved" | "fulfilled" | "refunded",
     });
+  }
+
+  async function closeUnreserved(owner:Owner,quoteId:string,revision:number){
+    if(!quoteId||quoteId.length>180||!Number.isSafeInteger(revision))throw new MsnwBillingError('msnw.billing.quote_invalid',400);
+    const db=await input.pool.connect();let begun=false;
+    const reference='msnw-bill-'+quoteId;
+    try{
+      await db.query('BEGIN');begun=true;
+      // The canonical reservation path takes this same quote lock before debit.
+      // Expired is a durable fence, not a transient absence/404 assumption.
+      const result=await db.query('SELECT * FROM commerce.billing_quotes WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3 FOR UPDATE',[owner.tenantId,owner.userId,quoteId]);
+      const q=result.rows[0];if(!q)throw new MsnwBillingError('msnw.billing.quote_not_found',404);
+      if(Number(q.revision)!==revision)throw new MsnwBillingError('msnw.billing.quote_changed');
+      const existing=await db.query('SELECT state FROM commerce.msnw_billing_reservations WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3',[owner.tenantId,owner.userId,quoteId]);
+      if(existing.rows[0]){await db.query('COMMIT');begun=false;return {reference,closed:false,state:String(existing.rows[0].state)};}
+      if(q.checkout_tx_ref||q.payment_verified_at||q.fulfillment_reference||!['quoted','confirmed','expired'].includes(q.state))throw new MsnwBillingError('msnw.billing.quote_not_closable');
+      await db.query("UPDATE commerce.billing_quotes SET state='expired',updated_at=statement_timestamp() WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3",[owner.tenantId,owner.userId,quoteId]);
+      await db.query('COMMIT');begun=false;return {reference,closed:true,state:'expired'};
+    }catch(error){if(begun)await db.query('ROLLBACK').catch(()=>undefined);throw error;}finally{db.release();}
   }
 
   const funding: BillingFundingAuthority = {
@@ -142,6 +185,15 @@ export function createMsnwBillingFunding(input: Readonly<{
         if (account.rowCount!==1 ||
             BigInt(String(account.rows[0]?.available_micro ?? "0"))<BigInt(micro))
           throw new MsnwBillingError("msnw.billing.insufficient_funds");
+        // Account lock serializes all new bill keys before checking a match.
+        // Existing-reference replay above remains valid even during an outage.
+        const recent=await recentPurchase({tenantId:request.tenantId,userId:request.userId},{billerCode:request.billerCode,itemCode:request.itemCode,customerId:request.customerId,serviceAmountKobo:ngn,categoryCode:request.categoryCode},db);
+        if(recent?.state==='reserved')throw new MsnwBillingError('msnw.billing.previous_unresolved',409,{recentPurchase:recent});
+        if(recent){
+          const consent=await db.query('SELECT repeat_of,quote_revision FROM commerce.msnw_bill_repeat_consents WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3',[request.tenantId,request.userId,request.quoteId]);
+          if(consent.rows[0]?.repeat_of!==recent.reference||Number(consent.rows[0]?.quote_revision)!==request.quoteRevision)
+            throw new MsnwBillingError('msnw.billing.repeat_confirmation_required',409,{recentPurchase:recent});
+        }
         const reserve=await db.query(
           "UPDATE commerce.msnw_custody_accounts " +
           "SET available_micro=available_micro-$3::numeric," +
@@ -244,5 +296,5 @@ export function createMsnwBillingFunding(input: Readonly<{
       } finally{ db.release(); }
     },
   };
-  return Object.freeze({funding,preview,ownedQuote,reservation});
+  return Object.freeze({funding,preview,ownedQuote,reservation,approveRepeat,closeUnreserved});
 }

@@ -1,5 +1,5 @@
-import '../core/wallet_payment_request.dart';
-import 'package:share_plus/share_plus.dart';
+import 'wallet_payment_request_composer.dart';
+import 'wallet_flow_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -417,8 +417,9 @@ class _AccountBadgeState extends State<MsnwAccountBadge> {
         : Row(mainAxisSize:MainAxisSize.min,children:[
           IconButton(tooltip:'Share MSNW payment request',icon:const Icon(Icons.share_outlined),onPressed:(){
             if(widget.currentUserId()!=widget.accountId||widget.accountId==null)return;
-            final request=WalletPaymentRequest(accountNumber:value,userId:widget.accountId!,expiresAt:DateTime.now().toUtc().add(const Duration(days:1)));
-            Share.share(request.link.toString());
+            final expected=widget.accountId!,token=widget.accessToken();
+            openWalletPage<void>(context:context,title:'Request payment',builder:(_)=>WalletPaymentRequestComposer(accountNumber:value,userId:expected,
+              authorized:()=>mounted&&widget.accountId==expected&&widget.currentUserId()==expected&&widget.accessToken()==token&&token!=null));
           }),
           IconButton(tooltip: 'Copy Masanawa account number', icon: const Icon(Icons.copy),
             onPressed: () async {

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createMsnwBillingService } from "./billing_service.js";
 
-function fixture(existing = false) {
+function fixture(existing = false, recentPurchase:unknown=null) {
   const calls:string[]=[];
   const owner={tenantId:"t1",userId:"u1"};
   const priced={
     quoteId:"quote-1",quoteRevision:1,asset:"MSNW" as const,
     amountMicro:"5000000",rateKoboPerMsnw:"10000",
     availableMicro:"7000000",sufficient:true,
-    totalAmountKobo:"50000",serviceAmountKobo:"50000",
+    totalAmountKobo:"50000",serviceAmountKobo:"50000",recentPurchase,
     customerId:"08030000000",itemName:"Airtime",
     expiresAt:new Date(Date.now()+60000).toISOString(),
   };
@@ -30,6 +30,7 @@ function fixture(existing = false) {
     } as any,
     funding:{
       async preview() {calls.push("preview");return priced;},
+      async approveRepeat(){calls.push("repeat-consent");},
       async reservation() {calls.push("reservation");
         return existing ? {
           reference:"msnw-bill-quote-1",amountMicro:priced.amountMicro,
@@ -87,4 +88,15 @@ describe("MSNW bill confirmation and provider replay fencing",()=>{
     })).rejects.toMatchObject({code:"msnw.billing.auth_required",statusCode:401});
     expect(f.calls).toEqual([]);
   });
+});
+
+it('blocks new unresolved bills and requires explicit exact repeat reference before confirmation',async()=>{
+ const request={authorizationHeader:'Bearer owner',quoteId:'quote-1',quoteRevision:1,expectedAmountMicro:'5000000',expectedRateKoboPerMsnw:'10000'};
+ const pending=fixture(false,{reference:'msnw-bill-original',state:'reserved'});
+ await expect(pending.service.execute(request)).rejects.toMatchObject({code:'msnw.billing.previous_unresolved'});
+ expect(pending.calls).toEqual(['reservation','preview']);
+ const settled=fixture(false,{reference:'msnw-bill-original',state:'fulfilled'});
+ await expect(settled.service.execute(request)).rejects.toMatchObject({code:'msnw.billing.repeat_confirmation_required'});
+ await settled.service.execute({...request,repeatOf:'msnw-bill-original'});
+ expect(settled.calls.slice(-5)).toEqual(['reservation','preview','repeat-consent','confirm','execute']);
 });
