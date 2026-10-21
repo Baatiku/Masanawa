@@ -15,10 +15,11 @@ class _Api extends ApiClient{
  @override Future<BillingCheckoutView> createBillingQuote({required String categoryCode,required String billerCode,required String itemCode,required String customerId,required String amount})async=>BillingCheckoutView(quote:responseQuote,phase:'quoted',checkoutUrl:null,purchase:null);
 }
 class _Adapter implements HttpClientAdapter{
- _Adapter({this.badReference=false});
+ _Adapter({this.badReference=false,this.pending=false});
  final bool badReference;
+ final bool pending;
  final calls=<RequestOptions>[];
- @override Future<ResponseBody> fetch(RequestOptions o,Stream<Uint8List>? s,Future<void>? c)async{calls.add(o);return ResponseBody.fromString(jsonEncode(o.path.endsWith('/preview')?{'asset':'MSNW','quoteId':'test-quote','quoteRevision':1,'totalAmountKobo':'101000','amountMicro':'1010000000','rateKoboPerMsnw':'100','availableMicro':'2000000000','sufficient':true}:{'state':'succeeded','fulfillmentReference':badReference?'another-order':'msnw-bill-test-quote','providerReference':'provider-verified','deliveryCode':'1234-5678-9012-3456'}),200,headers:{Headers.contentTypeHeader:['application/json']});}
+ @override Future<ResponseBody> fetch(RequestOptions o,Stream<Uint8List>? s,Future<void>? c)async{calls.add(o);return ResponseBody.fromString(jsonEncode(o.path.endsWith('/preview')?{'asset':'MSNW','quoteId':'test-quote','quoteRevision':1,'totalAmountKobo':'101000','amountMicro':'1010000000','rateKoboPerMsnw':'100','availableMicro':'2000000000','sufficient':true}:{'state':pending?'pending':'succeeded','fulfillmentReference':badReference?'another-order':'msnw-bill-test-quote','providerReference':pending?null:'provider-verified','deliveryCode':pending?null:'1234-5678-9012-3456'}),200,headers:{Headers.contentTypeHeader:['application/json']});}
  @override void close({bool force=false}){}
 }
 void main(){
@@ -33,7 +34,7 @@ void main(){
  testWidgets('foreign provider reference stays unconfirmed and never offers another charge',(t)async{
   final adapter=_Adapter(badReference:true),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){},initialQuote:BillingQuote.fromJson({...quoteJson,'fulfillmentReference':'msnw-bill-test-quote'})))));
-  await t.pumpAndSettle();expect(find.text('Order status unavailable. Retry this order.'),findsOneWidget);expect(find.text('1234-5678-9012-3456'),findsNothing);expect(find.text('Review & pay MSNW'),findsNothing);expect(adapter.calls.every((o)=>o.method=='GET'),isTrue);
+  await t.pumpAndSettle();expect(find.text('Order status unavailable. Check the original reference before starting another purchase.'),findsOneWidget);expect(find.text('1234-5678-9012-3456'),findsNothing);expect(find.text('Review & pay MSNW'),findsNothing);expect(adapter.calls.every((o)=>o.method=='GET'),isTrue);
  });
 
  testWidgets('returning to original pending receipt only reconciles its GET reference',(t)async{
@@ -50,5 +51,20 @@ void main(){
   await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
   expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('provider-verified'),findsOneWidget);expect(find.text('msnw-bill-test-quote'),findsOneWidget);
   await t.ensureVisible(find.text('Check payment status'));await t.tap(find.text('Check payment status'));await t.pumpAndSettle();expect(adapter.calls.where((o)=>o.path.endsWith('/execute')).length,1);expect(adapter.calls.last.path.endsWith('/msnw-bill-test-quote'),isTrue);expect(find.text('Review & pay MSNW'),findsNothing);
+ });
+ testWidgets('pending bill polls original status with bounded reads and no second debit',(t)async{
+  final adapter=_Adapter(pending:true),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
+  await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
+  await t.tap(find.text('Get verified price'));await t.pumpAndSettle();
+  await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();
+  await t.drag(find.byType(ListView).last,const Offset(0,-700));await t.pumpAndSettle();
+  await t.tap(find.text('Confirm payment'));await t.pump();
+  for(final delay in [const Duration(seconds:5),const Duration(seconds:15),const Duration(seconds:30)]){
+    await t.pump(delay);await t.pump();
+  }
+  await t.pump(const Duration(minutes:2));await t.pump();
+  expect(adapter.calls.where((o)=>o.path.endsWith('/execute')).length,1);
+  expect(adapter.calls.where((o)=>o.method=='GET'&&o.path.endsWith('/msnw-bill-test-quote')).length,3);
+  expect(find.textContaining('Automatic checks have paused'),findsOneWidget);
  });
 }
