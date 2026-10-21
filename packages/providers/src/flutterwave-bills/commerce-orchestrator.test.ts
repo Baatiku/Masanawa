@@ -178,6 +178,24 @@ describe("BillingCommerceOrchestrator", () => {
     });
   });
 
+  it("rejects a provider product substitution before creating a fulfillment record", async () => {
+    const store = new MemoryStore();
+    const orchestrator = new BillingCommerceOrchestrator({
+      store,
+      provider: provider({
+        async validateCustomer(_item, customer) {
+          return {
+            valid: true, responseCode: "00", responseMessage: "Successful",
+            customer, name: "Ada Customer", billerCode: "BIL119",
+            productCode: "DIFFERENT", minimum: null, maximum: null,
+          };
+        },
+      }),
+    });
+    await expect(orchestrator.prepare(purchase)).rejects.toMatchObject({ code: "recipient_mismatch" });
+    expect(await store.read(purchase.fulfillmentReference)).toBeNull();
+  });
+
   it("binds one fulfillment reference to one immutable set of bill terms", async () => {
     const store = new MemoryStore();
     const orchestrator = new BillingCommerceOrchestrator({ provider: provider(), store });

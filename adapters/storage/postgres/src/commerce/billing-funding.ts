@@ -354,6 +354,8 @@ export function createPostgresBillingQuoteRepository(pool: Pool): BillingQuoteRe
         if (row.category_code !== input.categoryCode ||
             row.biller_code !== input.billerCode || row.item_code !== input.itemCode ||
             row.customer_id !== input.customerId ||
+            (row.verified_customer_name != null &&
+              row.verified_customer_name !== input.customerName?.trim()) ||
             amountKobo !== integer(row.service_amount_kobo, "service_amount") ||
             input.currency !== "NGN") {
           throw new Error("financial.billing.quote_terms_mismatch");

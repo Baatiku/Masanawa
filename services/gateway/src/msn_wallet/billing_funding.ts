@@ -161,7 +161,7 @@ export function createMsnwBillingFunding(input: Readonly<{
         }
         const quotes = await db.query(
           "SELECT revision,state,expires_at,checkout_tx_ref,payment_verified_at," +
-          "biller_code,item_code,customer_id,service_amount_kobo,total_amount_kobo," +
+          "biller_code,item_code,customer_id,verified_customer_name,service_amount_kobo,total_amount_kobo," +
           "currency,confirmed_at FROM commerce.billing_quotes " +
           "WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3 FOR UPDATE",
           [request.tenantId,request.userId,request.quoteId]);
@@ -174,6 +174,7 @@ export function createMsnwBillingFunding(input: Readonly<{
               : Date.parse(String(q.expires_at)))<=Date.now() ||
             q.currency!=="NGN" || q.biller_code!==request.billerCode ||
             q.item_code!==request.itemCode || q.customer_id!==request.customerId ||
+            (q.verified_customer_name!=null && q.verified_customer_name!==request.customerName?.trim()) ||
             Number(q.service_amount_kobo)!==ngn)
           throw new MsnwBillingError("msnw.billing.quote_changed");
         const kobo=Number(q.total_amount_kobo);

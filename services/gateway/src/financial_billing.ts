@@ -257,6 +257,7 @@ export function createBillingFinancialService(input: Readonly<{
       billerCode: prepared.billerCode,
       itemCode: prepared.itemCode,
       customerId: prepared.customerId,
+      customerName: prepared.customerName,
       amount: prepared.amount,
       currency: "NGN",
     });

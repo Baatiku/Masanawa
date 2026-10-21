@@ -578,6 +578,25 @@ describeDatabase("billing NGN funding PostgreSQL acceptance", () => {
       verifiedCustomerName: "Ada Customer", verifiedMinimumKobo: 5000,
       verifiedMaximumKobo: 20000,
     });
+    await f.repository.confirmQuote({
+      tenantId: verified.tenantId, userId: verified.userId,
+      quoteId: verified.quoteId, quoteRevision: verified.revision,
+      confirmedAt: new Date().toISOString(),
+    });
+    await expect(f.repository.reserveConfirmedBill({
+      tenantId: verified.tenantId, userId: verified.userId,
+      quoteId: verified.quoteId, quoteRevision: verified.revision,
+      fulfillmentReference: `bill-${verified.quoteId}-r1`,
+      categoryCode: verified.categoryCode, billerCode: verified.billerCode,
+      itemCode: verified.itemCode, customerId: verified.customerId,
+      customerName: "Another customer", amount: "100", currency: "NGN",
+    })).rejects.toThrow("financial.billing.quote_terms_mismatch");
+    const reservation = await pool.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM commerce.ngn_bill_reservations
+        WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3`,
+      [verified.tenantId, verified.userId, verified.quoteId],
+    );
+    expect(reservation.rows[0]?.count).toBe("0");
     await expect(pool.query(
       `UPDATE commerce.billing_quotes SET verified_customer_name='Another customer'
          WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3`,
