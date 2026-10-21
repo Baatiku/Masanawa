@@ -46,7 +46,7 @@ void main(){
   final adapter=_Adapter(),dio=Dio(BaseOptions(baseUrl:'https://test'));dio.httpClientAdapter=adapter;
   await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwBillingCheckoutSheet(api:_Api(dio),dio:dio,baseUrl:'https://test',categoryCode:'ELECTRICITY',item:const BillItem(billerCode:'power',itemCode:'prepaid',name:'Prepaid electricity',amount:'1000',currency:'NGN',labelName:null),customerId:'12345678901',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token',onFund:(){}))));
   await t.tap(find.text('Get verified price'));await t.pumpAndSettle();await t.tap(find.text('Review & pay MSNW'));await t.pumpAndSettle();
-  await t.scrollUntilVisible(find.text('Confirm payment'), 120, scrollable:find.byType(Scrollable).last);await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
+  await t.tap(find.text('Confirm payment'));await t.pumpAndSettle();
   expect(find.text('1234-5678-9012-3456'),findsOneWidget);expect(find.text('provider-verified'),findsOneWidget);expect(find.text('msnw-bill-test-quote'),findsOneWidget);
   await t.ensureVisible(find.text('Check payment status'));await t.tap(find.text('Check payment status'));await t.pumpAndSettle();expect(adapter.calls.where((o)=>o.path.endsWith('/execute')).length,1);expect(adapter.calls.last.path.endsWith('/msnw-bill-test-quote'),isTrue);expect(find.text('Review & pay MSNW'),findsNothing);
  });
