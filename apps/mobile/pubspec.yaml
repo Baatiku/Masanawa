@@ -58,6 +58,8 @@ dependencies:
   share_plus: ^13.3.1
   # Encode unapproved payment-request URLs on device; no camera permission.
   qr_flutter: ^4.1.0
+  # Camera/gallery QR reading; payment links never carry financial authority.
+  mobile_scanner: ^7.4.2
   connectivity_plus: ^7.3.1
   flutter_markdown_plus: ^1.0.12
   audio_session: ^0.2.4
