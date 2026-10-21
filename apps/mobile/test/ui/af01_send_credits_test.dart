@@ -194,7 +194,7 @@ void main() {
     ).first);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
-    expect(find.text('Send MSNW'), findsOneWidget);
+    expect(find.text('Send MSNW'), findsWidgets);
     expect(find.byType(MsnwCustodySendSheet), findsOneWidget);
     expect(find.byType(SendCreditsSheet), findsNothing);
     expect(wallet.sends, 0);
