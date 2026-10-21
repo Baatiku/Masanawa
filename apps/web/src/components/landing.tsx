@@ -29,7 +29,7 @@ export function Landing(){
           <h1>Better connections. <em>More possibilities.</em></h1>
           <p className="hero-lead">Masanawa brings people and Masana together. Chat naturally, share moments, join Rooms and discover conversations worth having.</p>
           <div className="hero-actions"><Link className="button button-primary button-large" href="/register">Join Masanawa <Icon name="arrow"/></Link><a className="button button-secondary button-large" href="#experience">Explore the experience</a></div>
-          <div className="trust-row"><Icon name="shield" size={20}/><span>Private conversations and clear control over your choices</span></div>
+          <div className="trust-row"><Icon name="shield" size={20}/><span>Private conversations and clear control over your choices</span></div><Link href="/preview" className="text-arrow">Preview the web dashboard <Icon name="arrow" size={16}/></Link>
         </div>
         <div className="hero-preview" aria-label="Illustrative Masanawa interface preview">
           <div className="preview-orbit one"/><div className="preview-orbit two"/>

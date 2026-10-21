@@ -42,3 +42,7 @@ jobs:
         run: npm run brand:check
       - name: Production build
         run: npm run build
+      - name: Cloudflare Workers build
+        run: npm run build:cloudflare
+      - name: Check Cloudflare prebuilt deployment bundle
+        run: npm run deploy:cloudflare -- --dry-run

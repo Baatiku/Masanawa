@@ -356,3 +356,23 @@ h1,h2,h3{letter-spacing:-.035em}
  .masana-composer button{padding:10px 13px}
  .masana-turn-recovery{padding:10px 13px}
 }
+/* Non-authenticated, inert design walkthrough. No API requests or wallet actions. */
+.visual-preview{min-height:100vh;background:#f5f9f6}
+.preview-warning{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 24px;background:#fff7e8;border-bottom:1px solid #f0ddb7;color:#74572b;font-size:12px;line-height:1.5}
+.preview-warning strong{font-size:13px}
+.preview-warning span{flex:1;min-width:210px}
+.preview-warning a{color:#166942;font-weight:750;text-decoration:underline}
+.preview-workspace{min-height:calc(100vh - 46px)}
+.preview-workspace .preview-sidebar{height:calc(100vh - 46px)}
+.preview-workspace .app-navigation button{display:flex;align-items:center;gap:14px;padding:12px 14px;min-height:46px;border:0;border-radius:10px;font-size:13px;color:#718578;font-weight:710;background:transparent;text-align:left}
+.preview-workspace .app-navigation button:hover{background:#f5fbf6}
+.preview-workspace .app-navigation button.app-nav-active{background:#e0f8e7;color:#10683f}
+.preview-top-label{font-size:10px;color:#238558;font-weight:820;letter-spacing:.12em}
+.preview-workspace .search-input{min-height:49px;font-size:13px}
+.preview-pill{font-size:12px;padding:8px 16px;background:white;border:1px solid #e4eee7;border-radius:25px;color:#688875}
+.preview-pill.active{background:#dff7e6;color:#127647}
+.preview-empty-state{min-height:325px}
+.preview-inline-action{display:flex;align-items:center;gap:8px;margin-top:20px;border:0;background:transparent;padding:0;color:#156c44;font-weight:800;font-size:12px}
+.preview-workspace .workspace-bottom-nav button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:48px;border:0;background:none;font-size:10px;color:#819787}
+.preview-workspace .workspace-bottom-nav button.active{color:#15864f;font-weight:750}
+@media(max-width:820px){.preview-workspace .preview-sidebar{display:none}.preview-workspace .workspace-topbar{height:58px}.preview-warning{padding:10px 17px}}
