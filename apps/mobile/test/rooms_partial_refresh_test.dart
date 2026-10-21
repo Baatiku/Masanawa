@@ -11,6 +11,7 @@ class _RoomApi extends FakeCommunityApi {
   final String title;
   final bool failInvitations;
   final Completer<List<CommunityRoom>>? delayed;
+  Completer<void>? pendingJoin;
   @override
   Future<List<CommunityRoom>> list(bool joined) =>
       delayed?.future ??
@@ -27,7 +28,24 @@ class _RoomApi extends FakeCommunityApi {
   @override
   Future<List<Map<String, dynamic>>> invitations() async {
     if (failInvitations) throw StateError('temporarily unavailable');
-    return [];
+    return pendingJoin == null
+        ? []
+        : [
+            {
+              'roomId': 'room_old',
+              'inviteId': 'invite_old',
+              'name': 'Old invitation',
+            },
+          ];
+  }
+
+  @override
+  Future<void> action(
+    String id,
+    String action, [
+    Map<String, dynamic>? values,
+  ]) async {
+    if (pendingJoin != null) await pendingJoin!.future;
   }
 }
 
@@ -46,6 +64,27 @@ void main() {
     expect(find.text('Garden'), findsOneWidget);
     expect(find.text('Room invitations unavailable'), findsOneWidget);
     expect(find.text('Retry invitations'), findsOneWidget);
+  });
+
+  testWidgets('old invitation error cannot leak into a replacement account', (
+    tester,
+  ) async {
+    final original = _RoomApi(title: 'Original');
+    original.pendingJoin = Completer<void>();
+    final replacement = _RoomApi(title: 'Replacement');
+    await tester.pumpWidget(MaterialApp(home: RoomsScreen(api: original)));
+    await tester.pumpAndSettle();
+    expect(find.text('Old invitation'), findsOneWidget);
+    await tester.tap(find.text('Accept'));
+    await tester.pump();
+    await tester.pumpWidget(MaterialApp(home: RoomsScreen(api: replacement)));
+    await tester.pumpAndSettle();
+    original.pendingJoin!.completeError(StateError('old account error'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replacement'), findsOneWidget);
+    expect(find.text('Old invitation'), findsNothing);
+    expect(find.text('Original'), findsNothing);
+    expect(find.textContaining('old account error'), findsNothing);
   });
 
   testWidgets('account API change clears prior private Rooms before readback', (
