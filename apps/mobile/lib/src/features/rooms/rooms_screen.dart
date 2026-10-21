@@ -11,6 +11,8 @@ import 'room_discussion_screen.dart';
 import 'room_membership_client.dart';
 import 'room_membership_screen.dart';
 import 'rooms_client.dart';
+import 'room_community_api.dart';
+import 'room_community_screen.dart';
 import 'saved_lessons_client.dart';
 import 'saved_lessons_screen.dart';
 
@@ -52,6 +54,7 @@ class RoomsScreen extends StatefulWidget {
   const RoomsScreen({
     super.key,
     required this.client,
+    this.communityApi,
     this.discussionApi,
     this.discussionAccountScope,
     this.onDiscussionReport,
@@ -61,6 +64,7 @@ class RoomsScreen extends StatefulWidget {
     this.protectDetail,
   });
 
+  final RoomCommunityApi? communityApi;
   final RoomsClient client;
   final RoomDiscussionApi? discussionApi;
   final String? discussionAccountScope;
@@ -81,6 +85,10 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
   bool loading = true;
   Object? error;
   List<RoomInfo> rows = [];
+  List<CommunityRoom> communities = [];
+  Object? communityLoadError;
+  List<Map<String, dynamic>> communityInvites = [];
+  bool acceptingInvite = false;
   int _loadVersion = 0;
   Timer? _searchDebounce;
   final TextEditingController _searchController = TextEditingController();
@@ -141,7 +149,9 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
     try {
       final joinedList = await widget.client.list(joined: true, query: query, language: language);
       if (!mounted || version != _loadVersion) return;
-      final hasJoinedRooms = joinedList.any((r) => r.joined);
+      await loadCommunities(true, version);
+      if (!mounted || version != _loadVersion) return;
+      final hasJoinedRooms = joinedList.any((r) => r.joined) || communities.isNotEmpty;
       if (!_resolvedDefaultTab) {
         _resolvedDefaultTab = true;
         if (!hasJoinedRooms) {
@@ -150,6 +160,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
           _restoredTab.value = 1;
           _applyingInitialTab = false;
           final discoverList = await widget.client.list(joined: false, query: query, language: language);
+          await loadCommunities(false, version);
           if (mounted && version == _loadVersion) {
             setState(() { rows = discoverList; loading = false; });
           }
@@ -167,10 +178,47 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
     setState(() { loading = true; error = null; });
     try {
       final list = await widget.client.list(joined: joined, query: query, language: language);
+      await loadCommunities(joined, version);
       if (mounted && version == _loadVersion) setState(() { rows = list; loading = false; });
     } catch (e) {
       if (mounted && version == _loadVersion) setState(() { error = e; loading = false; });
     }
+  }
+
+  Future<void> loadCommunities(bool joined, int version) async {
+    if (widget.communityApi == null) return;
+    try {
+      final list = await widget.communityApi!.list(joined);
+      final invites = await widget.communityApi!.invitations();
+      if (mounted && version == _loadVersion) {
+        communities = list.where((r) => '${r.name} ${r.description}'.toLowerCase().contains(query.toLowerCase())).toList();
+        communityLoadError = null;
+        communityInvites = invites;
+      }
+    } catch (e) { if (mounted && version == _loadVersion) { communities = []; communityInvites = []; communityLoadError = e; } }
+  }
+  Future<void> acceptCommunityInvite(Map<String, dynamic> invite) async {
+    if (acceptingInvite) return;
+    setState(() => acceptingInvite = true);
+    try {
+      await widget.communityApi!.action('${invite['roomId']}', 'join', {'inviteId': invite['inviteId']});
+      if (mounted) await openCommunity('${invite['roomId']}');
+    } catch (e) { if (mounted) setState(() => communityLoadError = e); }
+    finally { if (mounted) setState(() => acceptingInvite = false); }
+  }
+  Future<void> openCommunity(String id) async {
+    await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+      final detail = RoomCommunityScreen(api: widget.communityApi!, roomId: id, protectDetail: widget.protectDetail);
+      return widget.protectDetail?.call(routeContext, detail) ?? detail;
+    }));
+    if (mounted) load();
+  }
+  Future<void> createCommunity() async {
+    final result = await Navigator.push<CommunityRoom>(context, MaterialPageRoute(builder: (routeContext) {
+      final detail = CreateCommunityRoomScreen(api: widget.communityApi!);
+      return widget.protectDetail?.call(routeContext, detail) ?? detail;
+    }));
+    if (mounted && result != null) await openCommunity(result.id);
   }
 
   void _openRoomDetail(RoomInfo room) => _navigateToChat(room.id);
@@ -200,6 +248,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
         title: const Text('Rooms'),
+        actions: [if (widget.communityApi != null) IconButton(tooltip: 'Create Room', onPressed: createCommunity, icon: const Icon(Icons.add))],
         backgroundColor: u.surfaceCard,
         foregroundColor: u.textPrimary,
         elevation: 0,
@@ -264,6 +313,8 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
               ],
             ),
           ),
+          for (final invite in communityInvites) ListTile(leading: const Icon(Icons.mail_outline), title: Text('${invite['name']}'), subtitle: const Text('Room invitation'), trailing: TextButton(onPressed: acceptingInvite ? null : () => acceptCommunityInvite(invite), child: const Text('Accept'))),
+          if (communityLoadError != null) ListTile(title: Text(communityError(communityLoadError!)), trailing: TextButton(onPressed: load, child: const Text('Retry'))),
           Expanded(
             child: loading
                 ? const MasanawaListSkeleton(semanticLabel: 'Loading Rooms')
@@ -278,7 +329,7 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
                           ],
                         ),
                       )
-                    : rows.isEmpty
+                    : rows.isEmpty && communities.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -312,9 +363,13 @@ class _RoomsScreenState extends State<RoomsScreen> with SingleTickerProviderStat
                             child: ListView.builder(
                               key: PageStorageKey<String>('rooms-${widget.savedLessonsAccountKey ?? widget.discussionAccountScope ?? 'current'}-${joined ? 'joined' : 'discover'}-$query-$language'),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              itemCount: rows.length,
+                              itemCount: communities.length + rows.length,
                               itemBuilder: (context, i) {
-                                final r = rows[i];
+                                if (i < communities.length) {
+                                  final room = communities[i];
+                                  return ListTile(leading: const CircleAvatar(child: Icon(Icons.groups_outlined)), title: Text(room.name), subtitle: Text('${room.description}\n${room.memberCount} members · ${room.visibility}', maxLines: 2, overflow: TextOverflow.ellipsis), trailing: Row(mainAxisSize: MainAxisSize.min, children: [if (room.pinned) const Icon(Icons.push_pin_outlined, size: 18), if (room.muted) const Icon(Icons.notifications_off_outlined, size: 18), if (room.unreadCount > 0) Badge(label: Text('${room.unreadCount}')), const Icon(Icons.chevron_right)]), onTap: () => openCommunity(room.id));
+                                }
+                                final r = rows[i - communities.length];
                                 final profession = cleanProfessionTitle(r.title);
                                 return Column(children:[
                                   ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:4,vertical:6),

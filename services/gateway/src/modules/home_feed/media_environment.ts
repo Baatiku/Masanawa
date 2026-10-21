@@ -21,7 +21,9 @@ export function createConfiguredStatusMedia(
  });
  if(!objects.statObject)throw new TypeError("Status media metadata support unavailable");
  return {
-  objects:{presignGet:objects.presignGet,statObject:objects.statObject},
+  objects:{presignGet:objects.presignGet,statObject:objects.statObject,
+    ...(objects.putObject ? {putObject:objects.putObject} : {}),
+    ...(objects.deleteObject ? {deleteObject:objects.deleteObject} : {})},
   approvedDownloadOrigins:[origin],
  };
 }

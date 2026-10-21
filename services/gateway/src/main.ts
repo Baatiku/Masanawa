@@ -1,3 +1,5 @@
+import {createRoomCommunityService} from "./room_community/index.js";
+import {createCreatorCompletionService} from "./creator_agents/completion.js";
 import { createHumanCommunicationService } from "./human_communication/index.js";
 import { createHumanCallRoomTerminator } from "./human_call_media.js";
 import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
@@ -2720,6 +2722,28 @@ export async function startGatewayService(
             } },
       }),
     } : undefined);
+  const roomCommunity: GatewayAppOptions["roomCommunity"] = options.appOptions?.roomCommunity ??
+    (featurePool && sessions && featureTenant ? createRoomCommunityService({
+      pool: featurePool,
+      authorize: ({authorizationHeader}) => resolveFeatureFan(authorizationHeader),
+      ...(rooms ? {isApprovedMasana: rooms.routes.isApprovedMasana} : {}),
+    }) : undefined);
+  const creatorCompletion: GatewayAppOptions["creatorCompletion"] = options.appOptions?.creatorCompletion ??
+    (featurePool && sessions && featureTenant ? {
+      auth: {fan: resolveFeatureFan},
+      service: createCreatorCompletionService({
+        pool: featurePool as unknown as CreatorPool,
+        ...(mediaConfiguration?.objects.putObject && mediaConfiguration.objects.deleteObject ? {
+          images: {
+            putObject: mediaConfiguration.objects.putObject,
+            statObject: mediaConfiguration.objects.statObject,
+            deleteObject: mediaConfiguration.objects.deleteObject,
+            presignGet: mediaConfiguration.objects.presignGet,
+          },
+          approvedDownloadOrigins: mediaConfiguration.approvedDownloadOrigins,
+        } : {}),
+      }),
+    } : undefined);
   const creatorPolicy: GatewayAppOptions["creatorPolicy"] = options.appOptions?.creatorPolicy ??
     (featurePool && sessions && featureTenant ? {
       service: createCreatorPolicyService(featurePool as unknown as CreatorPool),
@@ -2790,6 +2814,8 @@ export async function startGatewayService(
       ...(rooms ? {rooms} : {}),
       ...(masana ? {masana} : {}),
       ...(creatorAgents ? {creatorAgents} : {}),
+      ...(roomCommunity ? {roomCommunity} : {}),
+      ...(creatorCompletion ? {creatorCompletion} : {}),
       ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),

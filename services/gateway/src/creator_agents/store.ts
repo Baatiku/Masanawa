@@ -107,11 +107,12 @@ export function createPostgresCreatorAgentService(input:{pool:CreatorPool;genera
      "RETURNING character_id,state,revision,handle,seed,generated,status_enabled,published_at",
      [owner.tenantId,owner.userId,item.characterId,at,expectedRevision,suggestedCreatorVoice(item.seed)]);
     if(!advanced.rows[0])throw new CreatorAgentError("creator.stale_draft");
+    const banner=await db.query("SELECT media_id FROM masana.character_media WHERE tenant_id=$1 AND character_id=$2 AND kind='banner' AND approved_by=$3 AND length(btrim(rights_note))>4 ORDER BY created_at DESC LIMIT 1",[owner.tenantId,item.characterId,owner.userId]);
     const profile={
      handle:item.handle,displayName:g.name,profession:g.profession,biography:g.biography,
      lifeStory:"This fictional Masana persona was generated for professional educational assistance.",
      languages:g.languages,talents:g.specializations,goals:g.statusTopics,
-     roomId:null,portraitMediaId:item.seed.portraitMediaId,bannerMediaId:null,socialChannels:[],
+     roomId:null,portraitMediaId:item.seed.portraitMediaId,bannerMediaId:banner.rows[0]?.media_id??null,socialChannels:[],
     };
     await db.query(
      "INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at) "+

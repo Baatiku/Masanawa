@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -611,6 +613,168 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
     }
   }
 
+  Future<void> _editPublished() async {
+    if (!_sameAccount || _busy) return;
+    try {
+      final id = _agent['characterId'] as String;
+      final response = await ref.read(apiClientProvider).dio.get<Map<String,dynamic>>('/v1/creator/masana/${Uri.encodeComponent(id)}/images');
+      if (!_sameAccount) return;
+      final items = response.data?['items'];
+      if (items is List) {
+        for (final kind in ['portrait', 'banner']) {
+          final media = items.whereType<Map>().where((m) => m['kind'] == kind).firstOrNull;
+          if (media != null) _agent[kind == 'portrait' ? 'pendingPortraitMediaId' : 'pendingBannerMediaId'] = media['mediaId'];
+        }
+      }
+    } catch (_) {
+      if (_sameAccount) setState(() => _error = 'Could not restore uploaded images. Try again when connected.');
+      return;
+    }
+    final original = _agent['generated'];
+    if (original is! Map) return;
+    final biography = TextEditingController(text: original['biography']?.toString());
+    final manner = TextEditingController(text: original['manner']?.toString());
+    final greeting = TextEditingController(text: original['greeting']?.toString());
+    final review = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Edit published Masana'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (_agent['pendingPortraitMediaId'] != null || _agent['pendingBannerMediaId'] != null)
+          const Text('This revision also applies your latest uploaded portrait and cover.'),
+        TextField(controller: biography, maxLength: 800, maxLines: 4, decoration: const InputDecoration(labelText: 'Biography')),
+        TextField(controller: manner, maxLength: 400, decoration: const InputDecoration(labelText: 'Personality')),
+        TextField(controller: greeting, maxLength: 500, decoration: const InputDecoration(labelText: 'Greeting'))])),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Review quote'))]));
+    final generated = {...Map<String,dynamic>.from(original), 'biography': biography.text.trim(),
+      'manner': manner.text.trim(), 'greeting': greeting.text.trim()};
+    biography.dispose(); manner.dispose(); greeting.dispose();
+    if (review != true || !_sameAccount) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final id = _agent['characterId'] as String;
+      final key = 'edit_' + DateTime.now().microsecondsSinceEpoch.toString() + '_' + Random.secure().nextInt(1 << 30).toString();
+      final quoted = await ref.read(apiClientProvider).dio.post<Map<String,dynamic>>(
+        '/v1/creator/masana/${Uri.encodeComponent(id)}/edit-quote', data: {
+          'expectedRevision': _agent['revision'], 'generated': generated, 'idempotencyKey': key,
+          if (_agent['pendingPortraitMediaId'] != null) 'portraitMediaId': _agent['pendingPortraitMediaId'],
+          if (_agent['pendingBannerMediaId'] != null) 'bannerMediaId': _agent['pendingBannerMediaId']});
+      if (!_sameAccount) return;
+      final quote = quoted.data;
+      if (quote == null) throw const FormatException('Missing quote');
+      final atomic = BigInt.parse(quote['msnw_atomic'].toString());
+      final amount = (atomic ~/ BigInt.from(1000000)).toString();
+      final approved = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+        title: const Text('Approve published revision'),
+        content: Text('Edit fee: $amount MSNW. This exact quote expires in 10 minutes. Approving applies the revision and charges your existing Wallet once.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve revision'))]));
+      if (approved != true || !_sameAccount) return;
+      await ref.read(apiClientProvider).dio.post<dynamic>('/v1/creator/masana/${Uri.encodeComponent(id)}/edit-confirm', data: {
+        'operationId': quote['operation_id'], 'authorizationRef': quote['authorization_ref'], 'idempotencyKey': key});
+      if (!_sameAccount) return;
+      final response = await ref.read(apiClientProvider).dio.get<Map<String,dynamic>>('/v1/creator/masana/${Uri.encodeComponent(id)}');
+      if (_sameAccount && response.data != null) setState(() => _agent = response.data!);
+    } catch (_) {
+      if (_sameAccount) setState(() => _error = 'Revision could not be confirmed. Refresh before trying another edit; check Wallet receipts if approval was sent.');
+    } finally { if (_sameAccount) setState(() => _busy = false); }
+  }
+
+  Future<void> _uploadImage(String kind) async {
+    if (!_sameAccount || _busy) return;
+    final note = TextEditingController();
+    final accepted = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: Text(kind == 'portrait' ? 'Portrait rights' : 'Cover rights'),
+      content: TextField(controller: note, maxLength: 500, decoration: const InputDecoration(
+        labelText: 'Explain your permission to use this image',
+        helperText: 'Use an image you own or have permission to publish.')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () { if (note.text.trim().length >= 8) Navigator.pop(context, true); }, child: const Text('Choose image'))]));
+    final rights = note.text.trim(); note.dispose();
+    if (accepted != true || !_sameAccount) return;
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1920, imageQuality: 90);
+      if (image == null || !_sameAccount) return;
+      final bytes = await image.readAsBytes();
+      if (!_sameAccount) return;
+      if (bytes.length > 6000000) throw const FormatException('Image too large');
+      setState(() { _busy = true; _error = null; });
+      final id = _agent['characterId'] as String;
+      final response = await ref.read(apiClientProvider).dio.post<Map<String,dynamic>>(
+        '/v1/creator/masana/${Uri.encodeComponent(id)}/images', data: {
+          'kind': kind, 'rightsNote': rights, 'expectedRevision': _agent['revision'],
+          'dataBase64': base64Encode(bytes)});
+      if (!_sameAccount) return;
+      final result = response.data;
+      final fresh = await ref.read(apiClientProvider).dio.get<Map<String,dynamic>>('/v1/creator/masana/${Uri.encodeComponent(id)}');
+      if (!_sameAccount) return;
+      if (fresh.data != null) setState(() {
+        _agent = {..._agent, ...fresh.data!,
+          if (result?['mediaId'] != null) (kind == 'portrait' ? 'pendingPortraitMediaId' : 'pendingBannerMediaId'): result!['mediaId']};
+      });
+      final preview = result?['previewUrl'];
+      if (preview is String && mounted) await showDialog<void>(context: context, builder: (context) => AlertDialog(
+        title: const Text('Image preview'), content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Image.network(preview, height: 200, errorBuilder: (_, __, ___) => const Text('Preview expired. Upload again to retry.')),
+          const Text('Uploaded images on published Masana require a reviewed profile revision before public display.')]),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))]));
+    } catch (_) {
+      if (_sameAccount) setState(() => _error = 'Image could not be uploaded. Check photo permissions and connection, then retry.');
+    } finally { if (_sameAccount) setState(() => _busy = false); }
+  }
+
+  Future<void> _configureStatus() async {
+    if (!_sameAccount || _busy) return;
+    final rights = TextEditingController();
+    var weekly = 1;
+    var enabled = _agent['statusEnabled'] == true;
+    final confirmed = await showDialog<bool>(context: context, builder: (context) =>
+      StatefulBuilder(builder: (context, update) => AlertDialog(
+        title: const Text('Status schedule'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Scheduled content requires review before publication. Only post content you own or have permission to use.'),
+          SwitchListTile(title: const Text('Enable schedule'), value: enabled,
+            onChanged: (value) => update(() => enabled = value)),
+          DropdownButton<int>(value: weekly, isExpanded: true,
+            items: [1, 2].map((n) => DropdownMenuItem(value: n, child: Text('$n posts per week'))).toList(),
+            onChanged: (value) => update(() => weekly = value ?? 1)),
+          TextField(controller: rights, maxLength: 500,
+            decoration: const InputDecoration(labelText: 'Content rights admission')),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () { if (rights.text.trim().length >= 8) Navigator.pop(context, true); }, child: const Text('Save'))],
+      )));
+    final note = rights.text.trim();
+    rights.dispose();
+    if (confirmed != true || !_sameAccount) return;
+    await _manageAction('schedule', {'enabled': enabled, 'postsWeekly': weekly, 'rightsNote': note});
+  }
+
+  Future<void> _retire() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Retire this Masana?'),
+      content: const Text('This stops discovery, new interactions and scheduled Status. Your lifetime free publication remains used. Earnings records stay available.'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Retire'))]));
+    if (confirmed == true && _sameAccount) await _manageAction('retire', {});
+  }
+
+  Future<void> _manageAction(String action, Map<String, dynamic> body) async {
+    if (!_sameAccount || _busy) return;
+    final id = _agent['characterId'];
+    setState(() { _busy = true; _error = null; });
+    try {
+      await ref.read(apiClientProvider).dio.post<dynamic>(
+        '/v1/creator/masana/${Uri.encodeComponent(id as String)}/$action',
+        data: {...body, 'expectedRevision': _agent['revision']});
+      if (!_sameAccount) return;
+      final response = await ref.read(apiClientProvider).dio.get<Map<String, dynamic>>(
+        '/v1/creator/masana/${Uri.encodeComponent(id)}');
+      if (_sameAccount && response.data != null) setState(() => _agent = response.data!);
+    } catch (_) {
+      if (_sameAccount) setState(() => _error = 'Could not save. Refresh this Masana and try again.');
+    } finally { if (_sameAccount) setState(() => _busy = false); }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
@@ -635,6 +799,12 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
             subtitle: Text('${seed['profession']?.toString() ?? ''} · $state'),
           ),
           const Divider(),
+          if (state == 'draft' || state == 'published' || state == 'paused') ...[
+            ListTile(leading: const Icon(Icons.portrait_outlined), title: const Text('Upload or replace portrait'),
+              onTap: _busy ? null : () => _uploadImage('portrait')),
+            ListTile(leading: const Icon(Icons.image_outlined), title: const Text('Upload or replace cover'),
+              onTap: _busy ? null : () => _uploadImage('banner')),
+          ],
           if (state != 'draft')
             ListTile(
               leading: const Icon(Icons.receipt_long_outlined),
@@ -671,6 +841,19 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
                   : const Icon(Icons.chevron_right),
               onTap: _busy ? null : _toggle,
             ),
+          if (state == 'published' || state == 'paused')
+            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit published Masana'),
+              subtitle: const Text('Review the server fee before approval'), onTap: _busy ? null : _editPublished),
+          if (state == 'published' || state == 'paused')
+            ListTile(leading: const Icon(Icons.schedule), title: const Text('Status schedule'),
+              subtitle: Text(_agent['statusEnabled'] == true ? 'Enabled · content requires review' : 'Paused'),
+              onTap: _busy ? null : _configureStatus),
+          const ListTile(leading: Icon(Icons.record_voice_over_outlined),
+            title: Text('Optional voice reference'),
+            subtitle: Text('Custom voice reference is unavailable. Your supported voice remains active.')),
+          if (state == 'published' || state == 'paused' || state == 'draft')
+            ListTile(leading: const Icon(Icons.archive_outlined), title: const Text('Retire Masana'),
+              onTap: _busy ? null : _retire),
           if (state == 'draft')
             ListTile(
               leading: const Icon(Icons.edit_outlined),

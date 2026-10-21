@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../features/rooms/room_discussion_api.dart';
+import '../../features/rooms/room_community_api.dart';
 import '../../features/rooms/room_membership_client.dart';
 import '../../features/rooms/rooms_client.dart';
 import '../../features/rooms/rooms_screen.dart' as canonical;
@@ -170,6 +171,11 @@ class RoomsScreen extends ConsumerWidget {
         ),
         client: AccountBoundRoomsClient(
           delegate: ref.watch(roomsClientProvider),
+          ownerAccount: ownerAccount,
+          currentAccount: currentAccount,
+        ),
+        communityApi: AccountBoundRoomCommunityApi(
+          delegate: HttpRoomCommunityApi(api.dio),
           ownerAccount: ownerAccount,
           currentAccount: currentAccount,
         ),

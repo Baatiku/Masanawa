@@ -1,3 +1,5 @@
+import {registerRoomCommunityRoutes} from "./room_community/index.js";
+import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
@@ -137,6 +139,8 @@ export interface GatewayAppOptions {
   /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
   readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
   /** Owner-scoped creator Masana service. May return provider unavailable, never mock success. */
+  readonly roomCommunity?: Parameters<typeof registerRoomCommunityRoutes>[1];
+  readonly creatorCompletion?: Parameters<typeof registerCreatorCompletionRoutes>[1];
   readonly creatorAgents?: Parameters<typeof registerCreatorAgentRoutes>[1];
   readonly creatorPolicy?: Parameters<typeof registerCreatorPolicyRoutes>[1];
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
@@ -1788,6 +1792,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
   }
   if (options.masana) registerMasanaRoutes(app, options.masana);
+  if (options.roomCommunity) registerRoomCommunityRoutes(app, options.roomCommunity);
+  if (options.creatorCompletion) registerCreatorCompletionRoutes(app, options.creatorCompletion);
   if (options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
   if (options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
