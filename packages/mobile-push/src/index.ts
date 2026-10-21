@@ -70,6 +70,32 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
+/** FCM data reaches the device outside the authenticated app. Carry only
+ * bounded routing hints; message text, balances and payment details stay on
+ * the server until the account owner opens an authorized screen. */
+export function mobilePushSafeData(data: Readonly<Record<string, string>> | undefined):
+    Readonly<Record<string, string>> {
+  if (!data) return Object.freeze({});
+  const safe: Record<string, string> = {};
+  for (const key of ["type", "eventId", "kind", "talkId", "callId", "characterId", "conversationId",
+    "orderId", "roomId", "postId", "questionId"] as const) {
+    const value = data[key];
+    if (typeof value === "string" && /^[A-Za-z0-9_:.-]{1,160}$/u.test(value)) safe[key] = value;
+  }
+  const rawLink = data.deepLink;
+  if (typeof rawLink === "string" && rawLink.length <= 300 &&
+      /^masanawa:\/\/(?:wallet\/transaction|human\/(?:call|chat)|calls\/incoming)\/[A-Za-z0-9_-]{1,128}$/u.test(rawLink)) {
+    try {
+      const link = new URL(rawLink);
+      if (link.protocol === "masanawa:" && link.hostname && !link.username &&
+          !link.password && !link.search && !link.hash && !/\s/u.test(rawLink)) {
+        safe.deepLink = rawLink;
+      }
+    } catch { /* An invalid hint cannot be sent to a device. */ }
+  }
+  return Object.freeze(safe);
+}
+
 /** Per-category opt-out and quiet hours are enforced where delivery occurs,
  * so background workers and all Gateway senders use the same policy.
  */
@@ -169,22 +195,22 @@ export function createFcmPushSender(input: {
 
   const sender: MobilePushSender = {
     async send(request) {
-      const category = pushCategory(request.data);
-      const preview = mobilePushSafePreview(request.data);
+      const safeData = mobilePushSafeData(request.data);
+      const category = pushCategory(safeData);
+      const preview = mobilePushSafePreview(safeData);
       // History is durable even when push is disabled, device permission
       // denied, or quiet hours suppress a nonurgent notification.
-      const eventId = request.data?.eventId ?? `push-${randomUUID()}`;
+      const eventId = safeData.eventId ?? `push-${randomUUID()}`;
       await input.repository.appendNotice({
         tenantId: request.scope.tenantId,
         userId: request.scope.userId,
         eventId: eventId.slice(0, 160),
         category,
         title: preview.title,
-        deepLink: request.data?.deepLink?.startsWith("masanawa://")
-          ? request.data.deepLink.slice(0, 300) : null,
+        deepLink: safeData.deepLink ?? null,
       });
       const preferences = await input.repository.readPreferences(request.scope);
-      if (!pushAllowed(preferences, category, now(), request.data)) {
+      if (!pushAllowed(preferences, category, now(), safeData)) {
         return Object.freeze({ attempted: 0, delivered: 0 });
       }
       const registrations = await input.repository.list(request.scope);
@@ -194,9 +220,9 @@ export function createFcmPushSender(input: {
       const signal = AbortSignal.timeout(10_000);
       const bearer = await accessToken(signal);
       let delivered = 0;
-      const safePreview = mobilePushSafePreview(request.data);
+      const safePreview = mobilePushSafePreview(safeData);
       for (const registration of registrations) {
-        const nativeHumanCall = registration.platform === "android" && request.data?.type === "human_call" && mobilePushAndroidChannel(request.data) === "masanawa_calls";
+        const nativeHumanCall = registration.platform === "android" && safeData.type === "human_call" && mobilePushAndroidChannel(safeData) === "masanawa_calls";
         const response = await fetchImpl(
           `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
             credentials.project_id,
@@ -216,24 +242,24 @@ export function createFcmPushSender(input: {
                   body: safePreview.body,
                 }}),
                 data: {
-                  ...(request.data ?? {}),
+                  ...safeData,
                   masanawa: "1",
                 },
                 android: {
                   priority: "high",
-                  ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
+                  ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
                   ...(nativeHumanCall ? {} : {notification: {
-                    channel_id: mobilePushAndroidChannel(request.data),
+                    channel_id: mobilePushAndroidChannel(safeData),
                     visibility: "PRIVATE",
-                    ...(request.data?.eventId
-                      ? { tag: request.data.eventId.slice(0, 80) } : {}),
-                    ...(mobilePushAndroidChannel(request.data) === "masanawa_calls"
+                    ...(safeData.eventId
+                      ? { tag: safeData.eventId.slice(0, 80) } : {}),
+                    ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                       ? {
                           sound: "default",
                           notification_priority: "PRIORITY_MAX",
-                          tag: `masanawa-call-${request.data?.callId}`,
+                          tag: `masanawa-call-${safeData.callId}`,
                         }
                       : {}),
                   }}),
