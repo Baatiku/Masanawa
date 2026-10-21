@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'msnw_wallet_home.dart';
-import 'msnw_transaction_history.dart';
 
 /// Shared custody detail presentation, never a second balance store.
 class MsnwAssetDetail extends StatelessWidget {
