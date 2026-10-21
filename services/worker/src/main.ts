@@ -1,3 +1,5 @@
+import {createCreatorStatusRuntime} from "./jobs/creator/status.js";
+import {createCreatorStatusModel} from "./jobs/creator/model.js";
 import { pathToFileURL } from "node:url";
 import { readRequiredEnv } from "@masanawa/contracts";
 import {
@@ -122,6 +124,7 @@ export async function startWorkerService(
   // "disabled" customer feature that can accept questions without answers.
   let roomReview: ReturnType<typeof createRoomTeacherRuntime> | undefined;
   let youtubeOutbox: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
+  let creatorStatus: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let feedPublisher: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let roomNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
   let p2pNotices: ReturnType<typeof createYouTubeOutboxScheduler> | undefined;
@@ -176,6 +179,18 @@ export async function startWorkerService(
       }),
       workerId: env.MASANAWA_ROOMS_TEACHER_WORKER_ID ?? "rooms-ai-" + process.pid,
       enabled: () => !drain.isDraining(),
+    });
+    const creatorDrafts=createCreatorStatusRuntime({
+      pool:database.pool,
+      generate:createCreatorStatusModel({
+        ...(env.MASANAWA_GEMINI_CREDENTIALS_JSON ? {credentialsJson:env.MASANAWA_GEMINI_CREDENTIALS_JSON} : {}),
+        ...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY) ? {apiKey:(env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)!} : {}),
+        ...(env.MASANAWA_CREATOR_GENERATION_MODEL ? {model:env.MASANAWA_CREATOR_GENERATION_MODEL} : {}),
+      }),
+    });
+    creatorStatus=createYouTubeOutboxScheduler({runOnce:creatorDrafts.runOnce,
+      enabled:()=>!drain.isDraining(),intervalMs:60000,
+      onError:()=>process.stderr.write(JSON.stringify({event:"creator_status.retry",reason:"batch_failed"})+"\n"),
     });
     // Durable scheduled posts use the canonical feed editorial CAS and audit.
     // Polling needs no new queue or manual feature enablement.
@@ -376,6 +391,7 @@ export async function startWorkerService(
       jobsHealth: () => [
         schedulerHealth("youtube_outbox", youtubeOutbox),
         schedulerHealth("scheduled_feed", feedPublisher),
+        schedulerHealth("creator_status", creatorStatus),
         schedulerHealth("msnw_obligations", msnwObligationRecovery),
         schedulerHealth("msnw_merchant_settlement", msnwMerchantSettlements),
         schedulerHealth("msnw_finality", msnwFinality),
@@ -411,6 +427,7 @@ export async function startWorkerService(
       onAfterClose: async () => {
         await youtubeOutbox?.stop();
         await feedPublisher?.stop();
+    await creatorStatus?.stop();
         await msnwObligationRecovery?.stop();
         await msnwMerchantSettlements?.stop();
         await msnwFinality?.stop();
@@ -431,6 +448,7 @@ export async function startWorkerService(
     roomReview?.start();
     youtubeOutbox?.start();
     feedPublisher?.start();
+    creatorStatus?.start();
     msnwObligationRecovery?.start();
     msnwMerchantSettlements?.start();
     msnwFinality?.start();
@@ -444,6 +462,7 @@ export async function startWorkerService(
   } catch (error) {
     await youtubeOutbox?.stop();
     await feedPublisher?.stop();
+    await creatorStatus?.stop();
     await msnwObligationRecovery?.stop();
     await msnwMerchantSettlements?.stop();
     await msnwFinality?.stop();

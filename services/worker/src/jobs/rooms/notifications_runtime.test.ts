@@ -23,7 +23,7 @@ const event={
   },
 };
 function setup(allowed:boolean,attempted=1,delivered=1){
-  const query=vi.fn(async()=>({rows:[{allowed}]}));
+  const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[{allowed}]}));
   const send=vi.fn(async()=>({attempted,delivered}));
   return {query,send,worker:createRoomReplyNoticeRuntime({
     pool:{query} as never,

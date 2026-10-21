@@ -56,13 +56,13 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
  let eligibility:PgStatusEligibility;
  beforeAll(async()=>{
   db=await createIsolatedPostgresTestDatabase(connection!);
-  await db.pool.query(`CREATE SCHEMA identity; CREATE SCHEMA masana;
+  await db.pool.query(`CREATE SCHEMA identity; CREATE SCHEMA creator; CREATE TABLE creator.agents(tenant_id text,character_id text,owner_user_id text,state text); CREATE TABLE identity.users(tenant_id text,user_id text,state text); CREATE SCHEMA masana;
    CREATE TABLE identity.characters(tenant_id text,character_id text,state text);
-   CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text);
+   CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text,owner_user_id text);
    CREATE TABLE masana.character_revisions(tenant_id text,character_id text,state text);
    CREATE TABLE masana.character_media(tenant_id text,character_id text,media_id text,kind text,rights_note text,approved_by text,object_key text);
    INSERT INTO identity.characters VALUES('tenant_real','masana','active');
-   INSERT INTO identity.character_ownership VALUES('tenant_real','masana','platform');
+   INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES('tenant_real','masana','platform');
    INSERT INTO masana.character_revisions VALUES('tenant_real','masana','approved');
    INSERT INTO masana.character_media VALUES('tenant_real','masana','media_abcdefgh','portrait','cleared license','reviewer','canonical/image.png');`);
   eligibility=new PgStatusEligibility(db.pool);

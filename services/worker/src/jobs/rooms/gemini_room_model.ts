@@ -4,7 +4,7 @@ import type {RoomAnswerModel} from "./teacher.js";
 /** Use the existing Masanawa Gemini credential pool, never client-supplied keys.
  * The worker is a server-side service. A missing provider is a deployment
  * error, not a silent queue that sends every user to staff review. */
-function credentialKeys(value:unknown,depth=0):string[]{
+export function credentialKeys(value:unknown,depth=0):string[]{
  if(depth>8 || value===null || value===undefined)return [];
  if(typeof value==="string"){
    const v=value.trim();
