@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../features/rooms/room_discussion_api.dart';
 import '../../features/rooms/room_community_api.dart';
+import '../../features/rooms/room_community_screen.dart';
 import '../../features/rooms/room_membership_client.dart';
 import '../../features/rooms/rooms_client.dart';
 import '../../features/rooms/rooms_screen.dart' as canonical;
@@ -175,7 +177,9 @@ class RoomsScreen extends ConsumerWidget {
           currentAccount: currentAccount,
         ),
         communityApi: AccountBoundRoomCommunityApi(
-          delegate: HttpRoomCommunityApi(api.dio),
+          delegate: HttpRoomCommunityApi(api.dio, loadMasana: () async =>
+            (await ref.read(agentTransportProvider).loadDirectory()).map((a) =>
+              <String, dynamic>{'characterId': a.characterId, 'displayName': a.displayName}).toList()),
           ownerAccount: ownerAccount,
           currentAccount: currentAccount,
         ),
@@ -222,7 +226,22 @@ class MasanaRoomDetailScreen extends ConsumerWidget {
     }
     return KeyedSubtree(
       key:ValueKey('masana-room-$accountId-$roomId'),
-      child:canonical.RoomHomeScreen(
+      child:_RoomLinkResolver(
+        dio:api.dio,
+        roomId:roomId,
+        accountId:accountId,
+        currentAccount:currentAccount,
+        communityApi:AccountBoundRoomCommunityApi(
+          delegate:HttpRoomCommunityApi(api.dio, loadMasana:() async =>
+            (await ref.read(agentTransportProvider).loadDirectory()).map((a) =>
+              <String,dynamic>{'characterId':a.characterId,'displayName':a.displayName}).toList()),
+          ownerAccount:accountId,currentAccount:currentAccount),
+        protectDetail:(context,detail)=>Consumer(builder:(context,detailRef,_){
+          final active=detailRef.watch(sessionProvider);
+          return active is SessionSignedIn && active.user.id==accountId?detail:
+            const Scaffold(body:Center(child:Text('Session changed. Sign in to view this Room.')));
+        }),
+        legacy:canonical.RoomHomeScreen(
         protectDetail:(routeContext,detail)=>Consumer(builder:(context,detailRef,_){
           final active=detailRef.watch(sessionProvider);
           return active is SessionSignedIn && active.user.id==accountId?detail:
@@ -242,7 +261,37 @@ class MasanaRoomDetailScreen extends ConsumerWidget {
           dio:api.dio,accountKey:accountId,currentAccountKey:currentAccount),
         savedLessonsAccountKey:accountId,
       ),
+      ),
     );
   }
 }
 
+
+/// Resolve the canonical ID without moving professional history into community UI.
+class _RoomLinkResolver extends StatefulWidget {
+  const _RoomLinkResolver({required this.dio,required this.roomId,required this.accountId,
+    required this.currentAccount,required this.communityApi,required this.protectDetail,required this.legacy});
+  final Dio dio;
+  final String roomId,accountId;
+  final String? Function() currentAccount;
+  final RoomCommunityApi communityApi;
+  final Widget Function(BuildContext,Widget) protectDetail;
+  final Widget legacy;
+  @override State<_RoomLinkResolver> createState()=>_RoomLinkResolverState();
+}
+class _RoomLinkResolverState extends State<_RoomLinkResolver> {
+  late Future<bool> community=resolve();
+  Future<bool> resolve() async {
+    if(widget.currentAccount()!=widget.accountId)throw StateError('account_changed');
+    final r=await widget.dio.get<Map<String,dynamic>>('/v1/rooms/${Uri.encodeComponent(widget.roomId)}/community');
+    if(widget.currentAccount()!=widget.accountId)throw StateError('account_changed');
+    return r.data?['ownerUserId'] is String;
+  }
+  @override Widget build(BuildContext context)=>FutureBuilder<bool>(future:community,builder:(context,snapshot){
+    if(snapshot.hasError)return Scaffold(appBar:AppBar(title:const Text('Room')),body:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      const Text('Room unavailable. Check access or try again.'),
+      TextButton(onPressed:()=>setState(()=>community=resolve()),child:const Text('Retry'))])));
+    if(!snapshot.hasData)return const Scaffold(body:Center(child:CircularProgressIndicator()));
+    return snapshot.data! ? RoomCommunityScreen(api:widget.communityApi,roomId:widget.roomId,protectDetail:widget.protectDetail) : widget.legacy;
+  });
+}

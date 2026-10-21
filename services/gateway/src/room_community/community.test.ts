@@ -110,7 +110,7 @@ it('queues each Masana mention once and suppresses provider jobs and publication
  await service.dispatch(a,'POST',p+'/masana',{characterId:'character_masana',active:true,instructions:'Explain simply'});
  const input={body:'Why is the sky blue?',requestId:'mention-one',mentions:['character_masana']};
  await service.dispatch(a,'POST',p+'/timeline',input);await service.dispatch(a,'POST',p+'/timeline',input);
- expect((await db.query('SELECT count(*)::int AS n FROM rooms.questions')).rows[0].n).toBe(1);
+ expect((await db.query<{n:number}>('SELECT count(*)::int AS n FROM rooms.questions')).rows[0]?.n).toBe(1);
  const queue=createPgTeacherQueue(pool),job=await queue.claim('worker');expect(job?.question).toContain('Why is the sky blue?');
  await service.dispatch(a,'DELETE',p+'/masana/character_masana',{});await queue.publish(job!,'The air scatters sunlight.');
  expect((await db.query('SELECT * FROM rooms.answers')).rows).toHaveLength(0);
