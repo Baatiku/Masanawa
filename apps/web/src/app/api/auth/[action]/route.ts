@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ACCESS_COOKIE, REFRESH_COOKIE, NO_STORE, gatewayFetch } from "@/lib/gateway";
+import { ACCESS_COOKIE, REFRESH_COOKIE, NO_STORE, gatewayFetch, tokensFrom } from "@/lib/gateway";
 import { allowedOrigin, setSession, clearSession } from "@/lib/session";
 
 function answer(data:Record<string,unknown>, status=200){return NextResponse.json(data,{status,headers:NO_STORE});}
@@ -22,10 +22,31 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{action:s
   const {action}=await params;
   if(action!=="session")return answer({code:"NOT_FOUND"},404);
   const token=request.cookies.get(ACCESS_COOKIE)?.value;
-  if(!token)return answer({authenticated:false},401);
-  const result=await gatewayFetch("/v1/account/summary","GET",undefined,token);
-  if(result.status===200)return answer({authenticated:true});
-  if(result.status===401)return answer({authenticated:false},401);
+  const refresh=request.cookies.get(REFRESH_COOKIE)?.value;
+  if(!token&&!refresh)return answer({authenticated:false},401);
+  let status=401;
+  let rotated:Record<string,unknown>|null=null;
+  if(token)status=(await gatewayFetch("/v1/account/summary","GET",undefined,token)).status;
+  if(status===401&&refresh){
+    const refreshed=await gatewayFetch("/auth/refresh","POST",{refreshToken:refresh});
+    const pair=refreshed.status===200?tokensFrom(refreshed.data):null;
+    if(pair){
+      rotated=refreshed.data;
+      status=(await gatewayFetch("/v1/account/summary","GET",undefined,pair.access)).status;
+    }else if(refreshed.status!==401){
+      return answer({authenticated:false,unavailable:true,message:"Session service temporarily unavailable. Try again."},503);
+    }
+  }
+  if(status===200){
+    const response=answer({authenticated:true});
+    if(rotated)setSession(response,rotated);
+    return response;
+  }
+  if(status===401){
+    const response=answer({authenticated:false},401);
+    clearSession(response);
+    return response;
+  }
   return answer({authenticated:false,unavailable:true,message:"Unable to verify your session right now."},503);
 }
 export async function POST(request:NextRequest,{params}:{params:Promise<{action:string}>}){
