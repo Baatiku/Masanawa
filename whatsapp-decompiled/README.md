@@ -2,6 +2,8 @@
 
 This directory contains extracted and decoded assets, manifests, vector graphics, Lottie animations, sound effects, and design system tokens reverse-engineered from `WhatsApp.apk` (v2.26.40.72, SDK 37) to serve as a design, interaction, and component reference for Masanawa's WhatsApp-like 5-tab architecture.
 
+**Usage:** Reference inspection is encouraged during mapped canonical P4/P5/P6/P8 tasks. Create original Masanawa components/assets from observed patterns; this tree does not grant permission to redistribute proprietary assets. Inventory counts/names do not prove runtime behavior, audited E2EE or provider readiness. See [implementation assignments](../docs/WHATSAPP-UI-ARCHITECTURE-BENCHMARK.md#5-implementation-assignments).
+
 ---
 
 ## Directory Contents
