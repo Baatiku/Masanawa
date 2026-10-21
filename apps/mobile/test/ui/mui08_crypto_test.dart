@@ -91,6 +91,7 @@ Future<void> mount(
   TextDirection direction = TextDirection.ltr,
   CryptoWalletSnapshot? value,
   bool assetDetails = true,
+  bool signedIn = false,
   CryptoWalletController Function()? controller,
 }) async {
   tester.view.physicalSize = Size(width, 900);
@@ -101,7 +102,7 @@ Future<void> mount(
     ProviderScope(
       key: UniqueKey(),
       overrides: [
-        sessionProvider.overrideWith(_SignedInSession.new),
+        if (signedIn) sessionProvider.overrideWith(_SignedInSession.new),
         apiClientProvider.overrideWithValue(FixtureApprovalApi()),
         cryptoWalletProvider.overrideWith(
           controller ?? () => FixtureWallet(value ?? snapshot()),
@@ -123,7 +124,11 @@ Future<void> mount(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  // Signed-in Wallet status can keep a progress frame scheduled while its
+  // pending-operation read waits on a fixture-less API. The screen itself is
+  // ready after this bounded build pump.
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump();
 }
 
 ThemeData renderTheme() {
@@ -292,7 +297,7 @@ void main() {
   testWidgets(
     'receipt exposes exact network recipient fee and request identity',
     (tester) async {
-      await mount(tester, width: 320, scale: 2);
+      await mount(tester, width: 320, scale: 2, signedIn: true);
       await tester.scrollUntilVisible(find.text('Withdrawal'), 150);
       await tester.tap(find.text('Withdrawal'));
       await tester.pumpAndSettle();
@@ -309,7 +314,7 @@ void main() {
     },
   );
   testWidgets('receive sheet fits keyboard and large text', (tester) async {
-    await mount(tester, width: 320, scale: 2);
+    await mount(tester, width: 320, scale: 2, signedIn: true);
     await tester.scrollUntilVisible(find.text('Receive'), 100);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Receive'));
@@ -331,7 +336,7 @@ void main() {
     'one active withdrawal waits for quote and explicit authorization',
     (tester) async {
       final wallet = DeferredWallet();
-      await mount(tester, width: 320, scale: 2, controller: () => wallet);
+      await mount(tester, width: 320, scale: 2, signedIn: true, controller: () => wallet);
       await tester.scrollUntilVisible(find.text('Withdraw'), 100);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Withdraw'));
@@ -406,7 +411,7 @@ void main() {
   testWidgets('Buy input remains usable with keyboard and large text', (
     tester,
   ) async {
-    await mount(tester, width: 320, scale: 2);
+    await mount(tester, width: 320, scale: 2, signedIn: true);
     await tester.scrollUntilVisible(find.text('Buy'), 100);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Buy'));
@@ -434,6 +439,7 @@ void main() {
         width: 320,
         scale: 2,
         direction: TextDirection.rtl,
+        signedIn: true,
         controller: () => wallet,
       );
       await tester.scrollUntilVisible(find.text('Convert'), 100);

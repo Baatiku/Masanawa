@@ -189,8 +189,12 @@ void main() {
     // A bounded pump tests the entry action without waiting for that loader.
     await tester.pump(const Duration(milliseconds: 200));
     await tester.ensureVisible(find.byTooltip('Send'));
-    await tester.tap(find.byTooltip('Send'));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.ancestor(
+      of: find.text('Send'), matching: find.byType(InkWell),
+    ).first);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.text('Send MSNW'), findsOneWidget);
     expect(find.byType(MsnwCustodySendSheet), findsOneWidget);
     expect(find.byType(SendCreditsSheet), findsNothing);
     expect(wallet.sends, 0);
