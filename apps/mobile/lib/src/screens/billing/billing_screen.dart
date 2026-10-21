@@ -1,3 +1,4 @@
+import '../../finance/bill_beneficiary_book.dart';
 import '../../tokens/feature_colors.dart';
 import 'dart:async';
 import '../../finance/wallet_flow_page.dart';
@@ -151,6 +152,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   List<BillBiller> billers = const [];
   List<BillItem> items = const [];
   List<BillingCheckoutView> history = const [];
+  List<Map<String,String>> beneficiaries=[];
   BillCategory? category;
   BillBiller? biller;
   BillItem? item;
@@ -203,6 +205,18 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           ? value.message
           : fallback;
 
+  Future<void> loadBeneficiaries()async{
+    final owner=_owner,generation=_generation;if(owner==null)return;
+    try{final rows=await BillBeneficiaryBook(owner).read();if(valid(generation,owner))setState(()=>beneficiaries=rows);}
+    catch(_){if(valid(generation,owner))setState(()=>error='Saved beneficiaries are unavailable. Enter the recipient manually.');}
+  }
+  Future<void> removeBeneficiary(Map<String,String> value)async{
+    final owner=_owner,generation=_generation;if(busy||owner==null)return;
+    setState(()=>busy=true);
+    try{await BillBeneficiaryBook(owner).remove(value);if(valid(generation,owner))await loadBeneficiaries();}
+    catch(_){if(valid(generation,owner))setState(()=>error='Saved beneficiary could not be removed.');}
+    finally{if(valid(generation,owner))setState(()=>busy=false);}
+  }
   Future<void> refreshHistory() async {
     final generation = _generation, owner = _owner;
     try {
@@ -218,6 +232,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final generation = ++_generation, owner = _owner;
     setState(() {loading = true; busy = false; error = null;});
     unawaited(refreshHistory());
+    unawaited(loadBeneficiaries());
     try {
       final next = await api.billingCategories();
       if (!valid(generation, owner)) return;
@@ -433,15 +448,19 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         onFund: _showFundingSheet,
       ),
     );
-    if (mounted && _owner == expected) await refreshHistory();
+    if (mounted && _owner == expected) {await refreshHistory();await loadBeneficiaries();}
   }
 
   /// Reload provider catalog, match original recipient and product by
   /// server IDs, then request a NEW quote with current provider terms.
-  Future<void> repeatPreviousBill(BillingCheckoutView historical) async {
+  Future<void> repeatPreviousBill(BillingCheckoutView historical)=>repeatBeneficiary({
+    'categoryCode':historical.quote.categoryCode??'','billerCode':historical.quote.billerCode,
+    'itemCode':historical.quote.itemCode,'customerId':historical.quote.customerId,'currency':historical.quote.currency,'name':historical.quote.itemName,
+  });
+  Future<void> repeatBeneficiary(Map<String,String> previous) async {
     if (busy) return;
-    final owner=_owner, previous=historical.quote;
-    final code=previous.categoryCode;
+    final owner=_owner;
+    final code=previous['categoryCode'];
     if(owner==null || code==null || code.isEmpty){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Sign in again to repeat this bill.')));
@@ -457,18 +476,19 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       final freshBillers=await api.billingBillers(code);
       if(!valid(generation,owner))return;
       final selectedBillers=freshBillers.where(
-        (v)=>v.billerCode==previous.billerCode).toList();
+        (v)=>v.billerCode==previous['billerCode']!).toList();
       if(selectedBillers.length!=1)
         throw StateError('Previous provider no longer available');
-      final freshItems=await api.billingItems(previous.billerCode);
+      final freshItems=await api.billingItems(previous['billerCode']!);
       if(!valid(generation,owner))return;
-      final selected=billingCurrentRepeatProduct(freshItems,previous);
+      final matches=freshItems.where((v)=>v.billerCode==previous['billerCode']&&v.itemCode==previous['itemCode']&&v.currency==previous['currency']).toList();
+      final selected=matches.length==1?matches.single:null;
       if(selected==null)throw StateError('Previous package no longer available');
       final phone=(code.replaceAll('_','')=='AIRTIME' ||
         code.replaceAll('_','')=='MOBILEDATA');
       final recipient=phone
-        ? normalizeNigerianBillingPhone(previous.customerId)
-        : previous.customerId.trim();
+        ? normalizeNigerianBillingPhone(previous['customerId']!)
+        : previous['customerId']!.trim();
       if(recipient==null||recipient.isEmpty)
         throw StateError('Previous recipient needs correction');
       setState((){
@@ -529,7 +549,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       if (before == after) return;
       ++_generation;
       customer.clear();
-      setState(() {history = const []; historyError = null; categories = const [];
+      setState(() {history = const []; beneficiaries=[]; historyError = null; categories = const [];
         billers = const []; items = const []; category = null; biller = null;
         item = null; current = null; walletAction = null; loading = true; busy = false;});
       unawaited(load());
@@ -759,6 +779,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   )),
             const SizedBox(height: 20),
             if (historyError != null) Center(child: TextButton(onPressed: refreshHistory, child: const Text('Retry receipts'))),
+            if(beneficiaries.isNotEmpty)...[
+              Text('Saved bill beneficiaries',style:Theme.of(context).textTheme.titleMedium),
+              const Text('Saved on this device. Every purchase checks current service availability, recipient and price.'),
+              for(final entry in beneficiaries)ListTile(title:Text(entry['name']!),subtitle:Text(entry['customerId']!),
+                onTap:busy?null:()=>repeatBeneficiary(entry),trailing:IconButton(tooltip:'Remove bill beneficiary',onPressed:busy?null:()=>removeBeneficiary(entry),icon:const Icon(Icons.delete_outline))),
+            ],
             if (history.isNotEmpty) ...[
               Text('Recent bill receipts',
                 style: Theme.of(context).textTheme.titleMedium),

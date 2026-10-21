@@ -1,3 +1,4 @@
+import 'bill_beneficiary_book.dart';
 import 'wallet_flow_page.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -19,6 +20,7 @@ bool isValidMsnwBillRecoveryRecord(Map<String,dynamic> value) {
         rev is int && rev>=0 &&
         amount is String && RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(amount) &&
         rate is String && RegExp(r'^[1-9][0-9]{0,15}$').hasMatch(rate) &&
+        (!value.containsKey('repeatOf')||(value['repeatOf'] is String&&RegExp(r'^msnw-bill-[A-Za-z0-9_-]{5,128}$').hasMatch(value['repeatOf'] as String))) &&
         value['customerId'] is String &&
         value['itemName'] is String && value['totalAmount'] is String;
   }
@@ -153,6 +155,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           'quoteRevision':saved['quoteRevision'],
           'expectedAmountMicro':saved['expectedAmountMicro'],
           'expectedRateKoboPerMsnw':saved['expectedRateKoboPerMsnw'],
+          if(saved['repeatOf'] is String)'repeatOf':saved['repeatOf'],
         });
       if(!same(token))return;
       final value=response.data;
@@ -230,7 +233,11 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           v['quoteRevision']!=next.revision||
           v['totalAmountKobo']!=next.totalAmountKobo.toString()||
           v['amountMicro'] is! String||v['rateKoboPerMsnw']!='100'||
-          v['availableMicro'] is! String||v['sufficient'] is! bool){
+          v['availableMicro'] is! String||v['sufficient'] is! bool||
+          (v['recentPurchase']!=null&&(v['recentPurchase'] is! Map||
+            v['recentPurchase']['reference'] is! String||
+            !RegExp(r'^msnw-bill-[A-Za-z0-9_-]{5,128}$').hasMatch(v['recentPurchase']['reference'] as String)||
+            !['reserved','fulfilled'].contains(v['recentPurchase']['state'])))){
         throw const FormatException('Invalid MSNW price quote');
       }
       setState((){quote=next;price=v.cast<String,dynamic>();});
@@ -244,11 +251,15 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     final token=widget.accessToken()?.trim();
     final v=price,q=quote;
     if(busy||pendingBill!=null||token==null||!same(token)||v==null||q==null||
-       v['sufficient']!=true)return;
+       v['sufficient']!=true||v['recentPurchase'] is Map&&v['recentPurchase']['state']=='reserved')return;
     final choice=await openWalletPage<bool>(context:context,
       builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm MSNW bill'),
         content:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if(v['recentPurchase'] is Map)...[
+            const Text('You recently paid for this same service and recipient. Confirm only if you want another purchase.'),
+            detail('Previous reference',v['recentPurchase']['reference'] as String),
+          ],
           detail('Product',q.itemName),detail('Recipient',q.customerId),
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
           detail('Total','NGN '+q.totalAmount),
@@ -262,10 +273,12 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           TextButton(onPressed:()=>Navigator.pop(ctx,false),
             child:const Text('Cancel')),
           FilledButton(onPressed:()=>Navigator.pop(ctx,true),
-            child:const Text('Confirm payment')),
+            child:Text(v['recentPurchase'] is Map?'Pay again intentionally':'Confirm payment')),
         ]));
     if(choice!=true||!same(token)||quote!=q||price!=v)return;
     final original=<String,dynamic>{
+      if(v['recentPurchase'] is Map)'repeatOf':v['recentPurchase']['reference'],
+      'categoryCode':widget.categoryCode,'billerCode':q.billerCode,'itemCode':q.itemCode,'currency':q.currency,
       'quoteId':q.quoteId,
       'quoteRevision':q.revision,
       'expectedAmountMicro':v['amountMicro'],
@@ -330,6 +343,49 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
     }finally{if(same(token))setState(()=>busy=false);}
   }
 
+  Future<void> closeUnsubmitted()async{
+    final saved=pendingBill,token=widget.accessToken()?.trim();
+    if(busy||saved==null||token==null||!same(token)||!isValidMsnwBillRecoveryRecord(saved))return;
+    final choice=await openWalletPage<bool>(context:context,title:'Close unsubmitted bill quote',builder:(ctx)=>WalletReviewContent(
+      title:const Text('Close only if never submitted'),content:Text('The server will check ${saved['fulfillmentReference']}. If it reserved funds, it stays in recovery. Otherwise this exact quote is permanently closed so a fresh quote can be reviewed. This does not cancel or refund a submitted bill.'),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Keep checking status')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Check and close quote'))]));
+    if(choice!=true||!same(token)||pendingBill!=saved)return;
+    setState(()=>busy=true);
+    try{
+      final response=await widget.dio.post<dynamic>(uri('/v1/wallet/msnw/billing/close-unsubmitted'),options:auth(token),data:{'quoteId':saved['quoteId'],'quoteRevision':saved['quoteRevision']});
+      if(!same(token)||pendingBill!=saved)return;
+      final result=response.data;
+      if(result is! Map||result['reference']!=saved['fulfillmentReference']||result['closed'] is! bool)throw const FormatException('Closure not confirmed');
+      if(result['closed']!=true){setState(()=>error='This purchase has reserved funds (${result['state']}). Keep checking its original status.');return;}
+      if(result['state']!='expired')throw const FormatException('Closure not confirmed');
+      await storage.delete(key:pendingStorageKey);if(!same(token)||pendingBill!=saved)return;
+      setState((){pendingBill=null;settledBill=null;quote=null;price=null;receipt=null;uncertain=false;error='Unsubmitted quote closed. Get a fresh verified price before paying.';});
+    }catch(_){if(same(token))setState(()=>error='The original could not be safely closed. Keep its reference and check status.');}
+    finally{if(same(token))setState(()=>busy=false);}
+  }
+
+  Future<void> saveBeneficiary()async{
+    final token=widget.accessToken()?.trim(),saved=settledBill;
+    if(busy||token==null||!same(token)||saved==null||!['succeeded','fulfilled'].contains(receipt?['state']))return;
+    final value=<String,String>{for(final k in ['categoryCode','billerCode','itemCode','customerId','currency'])k:saved[k] is String?saved[k] as String:'','name':saved['itemName'] as String};
+    setState(()=>busy=true);
+    try{await BillBeneficiaryBook(widget.expectedUserId).save(value);if(same(token))setState(()=>error='Beneficiary saved. Future purchases use fresh provider validation and pricing.');}
+    catch(_){if(same(token))setState(()=>error='Beneficiary could not be saved.');}
+    finally{if(same(token))setState(()=>busy=false);}
+  }
+  Future<void> checkMatchingPurchase()async{
+    final token=widget.accessToken()?.trim(),previous=price?['recentPurchase'];
+    if(busy||token==null||!same(token)||previous is! Map)return;
+    setState(()=>busy=true);
+    try{
+      final result=await widget.dio.get<dynamic>(uri('/v1/wallet/msnw/billing/${Uri.encodeComponent(previous['reference'] as String)}'),options:auth(token));
+      if(!same(token))return;
+      final row=result.data;if(row is! Map||row['fulfillmentReference']!=previous['reference']||row['state'] is! String)throw const FormatException('Invalid prior receipt');
+      setState(()=>error='Original purchase: ${row['state']}. Reference: ${previous['reference']}. Return to Bills to open its receipt; refresh the quote before any new purchase.');
+    }catch(_){if(same(token))setState(()=>error='Original status unavailable. Do not start a replacement purchase.');}
+    finally{if(same(token))setState(()=>busy=false);}
+  }
+
   Widget detail(String label,String value)=>Padding(
     padding:const EdgeInsets.symmetric(vertical:6),
     child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -366,6 +422,11 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             if(price!['sufficient']!=true)
               const Text('Insufficient available MSNW'),
           ],
+          if(price?['recentPurchase'] is Map)...[
+            Text(price!['recentPurchase']['state']=='reserved'?'A matching purchase is unresolved. Check it before paying again.':'A matching purchase was recently completed. Review it before intentionally buying again.'),
+            TextButton(onPressed:busy?null:checkMatchingPurchase,child:const Text('Check matching purchase')),
+            if(pendingBill==null&&receipt==null)OutlinedButton(onPressed:busy?null:review,child:const Text('Refresh verified price')),
+          ],
           if(error!=null)Padding(padding:const EdgeInsets.only(top:10),
             child:Text(error!,style:TextStyle(
               color:Theme.of(context).colorScheme.error))),
@@ -382,6 +443,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             Wrap(spacing:8,runSpacing:8,children:[
               OutlinedButton(onPressed:busy?null:recoverPending,
                 child:const Text('Check original status')),
+              OutlinedButton(onPressed:busy?null:closeUnsubmitted,child:const Text('Close only if unsubmitted')),
               if(receipt==null)
                 FilledButton(onPressed:busy?null:retryPending,
                   child:const Text('Retry original purchase')),
@@ -390,7 +452,7 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
           if(quote==null&&pendingBill==null&&receipt==null)
             FilledButton(onPressed:busy?null:review,
             child:const Text('Get verified price')),
-          if(quote!=null&&receipt==null&&!uncertain&&pendingBill==null)
+          if(quote!=null&&receipt==null&&!uncertain&&pendingBill==null&&!(price?['recentPurchase'] is Map&&price!['recentPurchase']['state']=='reserved'))
             FilledButton(onPressed:(busy || price?['sufficient'] != true) ? null : pay,
               child:const Text('Review & pay MSNW')),
           if((uncertain||receipt!=null)&&quote!=null&&pendingBill==null)
@@ -415,6 +477,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
               },
               icon:const Icon(Icons.copy_outlined),
               label:const Text('Copy receipt reference')),
+            if(settledBill!=null&&['succeeded','fulfilled'].contains(receipt!['state']))
+              TextButton.icon(onPressed:busy?null:saveBeneficiary,icon:const Icon(Icons.person_add_alt),label:const Text('Save bill beneficiary')),
             if(terminalReceipt(receipt!['state']))
               TextButton.icon(
                 onPressed:()=>Navigator.of(context).pop(),
