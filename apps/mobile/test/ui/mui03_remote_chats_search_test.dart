@@ -212,7 +212,7 @@ void main() {
     await tester.pump();
     expect(find.text('Local history'), findsOneWidget);
     expect(find.textContaining('Server conversations are not available yet'), findsOneWidget);
-    expect(find.text('Retry server search'), findsOneWidget);
+    expect(find.byTooltip('Retry server search'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

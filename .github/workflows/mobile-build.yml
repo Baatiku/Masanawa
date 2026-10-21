@@ -46,7 +46,25 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
       - name: Test
-        run: flutter test
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/mobile-tests.log" || result=$?
+          if [ "${result:-0}" -ne 0 ]; then
+            # Job logs can be unavailable through the Actions API. Surface the
+            # failing test identities as check annotations for bounded repair.
+            python3 - "$RUNNER_TEMP/mobile-tests.log" <<'PY'
+          import sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          indices = [i for i, line in enumerate(lines) if '[E]' in line][:30]
+          for index in indices:
+              detail = '\n'.join(lines[max(0, index - 35):index + 32])
+              detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Flutter test failure::{detail}')
+          PY
+            exit "$result"
+          fi
       - name: Phone (production APK)
         if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
         run: flutter build apk --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app

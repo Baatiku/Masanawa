@@ -272,6 +272,10 @@ void main() {
             session.signOut();
             await tester.pumpAndSettle();
             await tab(2);
+            await tester.scrollUntilVisible(
+              find.text('Sign in to view your balance'), 120,
+              scrollable: find.byType(Scrollable).first,
+            );
             await save('wallet-outage');
             expect(
               find.text('Sign in to view your balance'),
@@ -298,7 +302,7 @@ void main() {
             await tab(4);
             await save('rooms-unavailable');
             expect(
-              find.text('Sign in to view your Rooms.'),
+              find.text('Sign in to view Rooms.'),
               findsOneWidget,
             );
             await tab(1);
@@ -306,10 +310,8 @@ void main() {
             await save('status-unavailable');
             // Signed-out Status and Rooms deny private content before requesting it.
             await tab(0);
-            expect(
-              tester.widget<TextField>(find.byType(TextField)).controller!.text,
-              isEmpty,
-            );
+            expect(find.byType(TextField), findsNothing);
+            expect(find.text('Sign in to see your conversations.'), findsOneWidget);
             await save('chats');
             expect(tester.takeException(), isNull);
             await tester.pumpWidget(const SizedBox.shrink());

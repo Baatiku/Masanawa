@@ -43,8 +43,8 @@ void main(){
  });
  testWidgets('receipt help opens its exact order without another selection or a payment',(t)async{
   final adapter=_OrderAdapter(),dio=Dio();dio.httpClientAdapter=adapter;
-  await t.pumpWidget(MaterialApp(home:Scaffold(body:MsnwTransactionHistory(dio:dio,baseUrl:'https://test',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token'))));await t.pumpAndSettle();await t.tap(find.text('P2P buy'));await t.pumpAndSettle();
-  await t.scrollUntilVisible(find.text('Order help'),250,scrollable:find.byType(Scrollable).first);await t.tap(find.text('Order help'));await t.pumpAndSettle();
+  await t.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new)],child:MaterialApp(home:Scaffold(body:MsnwTransactionHistory(dio:dio,baseUrl:'https://test',expectedUserId:'owner',currentUserId:()=>'owner',accessToken:()=>'token')))));await t.pumpAndSettle();await t.tap(find.text('P2P buy'));await t.pumpAndSettle();
+  await t.scrollUntilVisible(find.text('Transaction help'),250,scrollable:find.byType(Scrollable).first);await t.tap(find.text('Transaction help'));await t.pumpAndSettle();
   expect(find.text('Verified Bank'),findsOneWidget);expect(find.byType(AppBar),findsOneWidget);expect(adapter.calls.any((o)=>o.path.endsWith('/orders/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')),isTrue);expect(adapter.calls.any((o)=>o.method=='POST'),isFalse);await t.pumpWidget(const SizedBox.shrink());
  });
  testWidgets('dispute does not falsely mark a bank payment as confirmed',(t)async{

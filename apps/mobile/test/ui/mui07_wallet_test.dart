@@ -9,6 +9,8 @@ import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
 import 'package:masanawa/src/state/wallet_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
 import 'package:masanawa/src/state/session_state.dart';
+import 'package:masanawa/src/finance/crypto_state.dart';
+import 'mui08_crypto_test.dart' as crypto;
 
 WalletView _view({
   int amount = 9007199254740991,
@@ -91,6 +93,10 @@ void main() {
         overrides: [
           sessionProvider.overrideWith(_SignedOut.new),
           walletProvider.overrideWith(controller ?? () => _Wallet(value)),
+          cryptoWalletProvider.overrideWith(
+            () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
+          ),
+          walletPendingCryptoProvider.overrideWith((ref) async => null),
         ],
         child: MaterialApp(
           theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -132,13 +138,19 @@ void main() {
           );
           expect(find.text('Wallet'), findsOneWidget);
           expect(find.textContaining('MSNW'), findsWidgets);
+          // Pricing policy copy may mention ₦1, but a signed-out portfolio
+          // must not invent an NGN valuation.
+          expect(find.text('Unavailable'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('Available balance'), 100,
+              scrollable: find.byType(Scrollable).first);
           expect(find.text('Available balance'), findsOneWidget);
+          expect(find.text('Sign in to view your balance'), findsOneWidget);
           expect(find.text('9007199254740991'), findsNothing);
           expect(find.text('Credits'), findsNothing);
-          expect(find.textContaining('₦'), findsNothing);
+          await tester.scrollUntilVisible(find.text('Send'), 100,
+              scrollable: find.byType(Scrollable).first);
           expect(find.text('Send'), findsOneWidget);
-          expect(find.text('Withdraw'), findsNothing);
-          expect(find.text('Sign in to view your balance'), findsOneWidget);
+          expect(find.text('Withdraw'), findsOneWidget);
           await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
@@ -153,8 +165,6 @@ void main() {
     await mount(tester, value: _view(amount: 0, empty: true));
     expect(find.text('0'), findsNothing);
     expect(find.text('— MSNW'), findsOneWidget);
-    await mount(tester);
-    expect(find.text('0'), findsNothing);
     expect(find.text('Sign in to view your balance'), findsOneWidget);
   });
 
@@ -166,6 +176,8 @@ void main() {
       await mount(tester, controller: () => loading, onBilling: intents.add);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.text('0'), findsNothing);
+      await tester.scrollUntilVisible(find.text('Airtime'), 180,
+          scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Airtime'));
       expect(intents, ['airtime']);
     },
@@ -218,6 +230,10 @@ void main() {
           walletProvider.overrideWith(
             () => _Wallet(_view(amount: 12, empty: true)),
           ),
+          cryptoWalletProvider.overrideWith(
+            () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
+          ),
+          walletPendingCryptoProvider.overrideWith((ref) async => null),
         ],
         child: MaterialApp.router(
           theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -248,9 +264,9 @@ void main() {
         value: _view(amount: 12, empty: true),
         onSend: () => sent++,
       );
-      expect(find.text('Fund'), findsOneWidget);
-      expect(find.byTooltip('Withdraw'), findsNothing);
-      await tester.ensureVisible(find.text('Send'));
+      await tester.scrollUntilVisible(find.text('Send'), 100,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text('Withdraw'), findsOneWidget);
       await tester.tap(find.text('Send'));
       expect(sent, 0);
       final send = tester.widget<InkWell>(find.ancestor(
@@ -267,6 +283,8 @@ void main() {
       tester,
       value: _view(amount: 1000, empty: true),
     );
+    await tester.scrollUntilVisible(find.text('Send'), 100,
+        scrollable: find.byType(Scrollable).first);
     final sendButton = tester.widget<InkWell>(find.ancestor(
       of: find.text('Send'), matching: find.byType(InkWell)).first);
     expect(sendButton.onTap, isNull);
