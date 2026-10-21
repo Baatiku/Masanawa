@@ -6,7 +6,7 @@
 **Repository:** `Baatiku/Masanawa` · `contracts/msnw/`  
 **Status:** token source prepared; no mainnet deployment, audited issuance, reserve value, token listing or live circulation asserted.
 
-> **Global product rule.** Masanawa serves an international market. MSNW is a blockchain asset with its own six-decimal accounting unit. No fiat currency — Nigerian naira, US dollars, euros, pounds or otherwise — defines MSNW's on-chain denomination. Paystack, Flutterwave, stablecoin gateways and future payment services are **funding/payout adapters**, each separately qualified for its supported regions and currencies. Do not hardcode a national peg in the token contract.
+> **Global product rule.** Masanawa serves an international market. MSNW is a blockchain asset with its own six-decimal accounting unit. No fiat currency — Nigerian naira, US dollars, euros, pounds or otherwise — defines MSNW's on-chain denomination. Paystack, Flutterwave, stablecoin gateways and future payment services are **funding/payout adapters**, each separately qualified for its supported regions and currencies. Owner policy fixes platform pricing at **1 MSNW = NGN 1**; keep USD/other FX outside the token contract. The contract does not enforce an external market price.
 
 **Wallet integration (owner clarification, 21 October 2026):** this guide governs MSNW issuance only. Masanawa Wallet holds multiple individually qualified assets; Base-first canonical MSNW does not limit BTC/ETH/USDT/USDC/SOL to Base or convert those holdings into MSNW. Portfolio display currency is an estimate, not MSNW’s denomination. Internal Send transfers existing backed custody claims without a blockchain transaction; Withdraw pays the selected held asset externally on its qualified network. No compulsory MSNW intermediary, duplicate customer balance or unqualified wrapped supply. Follow SCREEN-JOURNEYS WLT01–WLT10 and roadmap W12–W14 for custody, pricing, deposits and operations.
 
@@ -28,7 +28,7 @@
 | Mint authority | Separate restricted Safe with dual approvals and off-chain reserve approval |
 | Emergency pause | Independent pause-only role; **governance**, not pauser, unpauses |
 | Upgradeability | Non-upgradeable contract for v1 |
-| Public pricing | **Not decided by the network or token contract.** Requires an explicit published policy before selling to users |
+| Public pricing | **1 MSNW = NGN 1.00**, owner-decided policy `msnw-ngn-1-v1`; foreign values use current FX. External market/redemption mechanisms separately qualified |
 | Customer balance | Official on-chain tokens held at custody, reconciled with Masanawa's own double-entry custody ledger |
 | Multi-chain | Not initially. One canonical contract and supply. Do not issue parallel wrapped supplies without audited bridge rules |
 
@@ -36,13 +36,9 @@
 
 ## 2. Design boundary: MSNW versus currencies
 
-**Do not set `1 MSNW = ₦1` (or `$1`) by default.** First choose the actual economic model:
+**Final owner decision: 1 MSNW = ₦1**, Nigeria-first, policy `msnw-ngn-1-v1`. This supersedes the earlier proposed USD anchor and undecided economic-model options. See [pricing/Flutterwave contract](../MSNW-NGN-PRICING-AND-FLUTTERWAVE-BILLING.md) for exact arithmetic, reserves, quote rollout and provider integration. One kobo maps to 10,000 MSNW atomic units; existing additional creator publication 5,000 MSNW has ₦5,000 reference value. No retrospective customer-balance rewrite or relabelling of old liabilities.
 
-1. **Utility/payment token:** MSNW has a published issuance price and application utility. Its market value and conversion rate may change. Users are not promised redemption at a fixed fiat amount unless explicitly, lawfully committed.
-2. **Redeemable reserve-backed token:** Requires a legal redemption claim, segregation/custody of reserves, reserve asset eligibility, third-party attestation, redemption mechanisms and jurisdiction-specific approvals. If implemented, describe its *actual defined reference basket/unit*, not assumed USD or NGN backing.
-3. **Variable-value market asset:** Pricing based on executable exchange liquidity. No arbitrary synthetic provider conversion. Provide actual quotes, fees, liquidity and expiry. A wallet receipt must not present an estimated price as a guaranteed execution.
-
-The project's current signed `MSNW_MINT_PRICE_KOBO_PER_MSNW` and Paystack merchant settlement paths are **a specialist NGN funding adapter only**. They are not the token's global monetary policy. Global funding adapters must preserve the **original currency** and minor-unit scale, then produce an authorized *integer MSNW atomic amount* after a valid, time-limited FX/asset quote and provider settlement.
+All funding/billing adapters must derive 100 kobo per MSNW from this policy rather than conflicting independent configuration. International funding preserves original currency/minor units and binds real FX into approved atomic amounts. Public trading prices and direct legal fiat redemption are not established merely by the fixed platform reference; qualify liquidity/reserve/custody obligations explicitly. Multi-asset holdings remain independent of MSNW.
 
 Recommended quote contract for each adapter:
 ```text

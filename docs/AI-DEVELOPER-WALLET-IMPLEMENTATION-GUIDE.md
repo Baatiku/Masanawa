@@ -4,9 +4,9 @@
 
 **Owner direction:** one multi-asset Masanawa Wallet. Users hold supported MSNW/USDT/USDC/BTC/ETH/SOL independently, deposit more, **Send internally** to another Masanawa account without blockchain movement, and **Withdraw externally** to a supported network/address. MSNW is the platform asset, not the denomination of all balances; no compulsory conversion through MSNW. Multi-asset custody is required scope, not an optional future exchange add-on.
 
-The exact page tree, portfolio math, network/asset identity, state handling and P2P effects are canonical in [SCREEN-JOURNEYS WLT01–WLT10](SCREEN-JOURNEYS.md#multi-asset-wallet-contract--owner-clarification-21-october-2026). Task status and delivery batches live only in [roadmap W01–W14 and P7-P01–P04](PRODUCT-ROADMAP-20261019.md). Implement these together; reference patterns do not override the owner’s product direction or financial controls.
+The exact page tree, portfolio math, network/asset identity, state handling and P2P effects are canonical in [SCREEN-JOURNEYS WLT01–WLT10](SCREEN-JOURNEYS.md#multi-asset-wallet-contract--owner-clarification-21-october-2026). Task status and delivery batches live only in [roadmap W01–W15 and P7-P01–P04](PRODUCT-ROADMAP-20261019.md). Implement these together; reference patterns do not override the owner’s product direction or financial controls.
 
-- **Portfolio:** estimated total in selected display currency (USD by default where priced), as-of/coverage, exact per-asset holdings and available/reserved. Exclude uncredited incoming funds; reserved ownership counted once. Mark partial/unpriced/stale explicitly. Inventory comes from authoritative holdings, not enabled deposit routes. No assumed MSNW or stablecoin peg.
+- **Portfolio:** estimated total in selected display currency (NGN by default for initial Nigeria onboarding), as-of/coverage, exact per-asset holdings and available/reserved. Exclude uncredited incoming funds; reserved ownership counted once. Mark partial/unpriced/stale explicitly. Inventory comes from authoritative holdings, not enabled deposit routes. MSNW reference is owner-fixed **1 MSNW = ₦1**, policy `msnw-ngn-1-v1`; no USD stablecoin parity assumed.
 - **Navigation:** Deposit / Send / Withdraw / Swap primary; P2P / Bills / Activity secondary. One asset-detail pattern and shared asset/network pickers, review, server approval, result and receipts. No separate MSNW/crypto wallet homes or Funding/Trading balances.
 - **Deposit:** asset → receive from Masanawa account/QR, eligible blockchain network/address-or-invoice, or qualified local payment purchase. Show memo/tag/minimum/expiry/confirmation requirements before payment. Reuse provider invoice contracts honestly; credit once only on verified settlement. P2P purchase is a link to the same marketplace with asset preselected.
 - **Send:** supported held asset → account/@handle/QR → recipient inquiry → amount/fee review → exact server approval → internal custody debit/credit. No blockchain gas or required network choice for a fungible internal custody asset. Current MSNW implementation is the starting authority, not proof of other asset support.
@@ -21,7 +21,7 @@ The exact page tree, portfolio math, network/asset identity, state handling and 
 **Design System Standard:** Clean Green/White WhatsApp Aesthetic (`#075E54`, `#00A884`, `#FFFFFF`, `#E9EDEF`, dark text `#111B21`, 48dp targets).
 **Root Navigation:** Exactly 5 tabs: **Chats · Status · Wallet · Calls · Rooms** (Chats default).
 
-**Execution authority:** Use this guide during P6-W01–W11, P7-S01–S04 and P8-X/U work in the [canonical roadmap](PRODUCT-ROADMAP-20261019.md). Its current task decisions resolve approximate paths or reference descriptions here. Observe and adapt actual reference artifacts; do not infer backend guarantees from resource names. Continue independent implementation when checks are unavailable, using the roadmap unresolved-check policy.
+**Execution authority:** Use this guide during P6-W01–W15, P7-S01–S07 and P8-X/U work in the [canonical roadmap](PRODUCT-ROADMAP-20261019.md). Its current task decisions resolve approximate paths or reference descriptions here. Observe and adapt actual reference artifacts; do not infer backend guarantees from resource names. Continue independent implementation when checks are unavailable, using the roadmap unresolved-check policy.
 
 ---
 
@@ -137,3 +137,6 @@ To complement OPay's fintech architecture, we also reverse-engineered **WhatsApp
 
 Use both trees during implementation to inspect patterns and recreate them with original Masanawa code/assets. Implement the assigned canonical tasks and acceptance criteria; do not directly bundle third-party artwork, sounds or code. Optional extracted ideas are assigned to P8-U03–U08, not an implicit expansion of the first release.
 
+
+## Fixed pricing and real billing provider
+Follow [MSNW NGN pricing/Flutterwave design](MSNW-NGN-PRICING-AND-FLUTTERWAVE-BILLING.md): 1 MSNW = NGN 1; six decimals; one kobo = 10,000 atomic units. W15 propagates versioned policy across funding, billing, conversion and portfolio without rewriting history. S05–S07 complete the existing real Flutterwave Bills adapter through fulfillment/readback; test mocks never count as service integration. Initial NG/NGN merchant scope does not imply global Bills coverage. Retain original references on uncertain outcomes and reconcile exact original charges/refunds.
