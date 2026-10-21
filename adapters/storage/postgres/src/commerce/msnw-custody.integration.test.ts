@@ -20,10 +20,18 @@ suite("MSNW custody Send PostgreSQL acceptance", () => {
     sender = randomUUID();
     recipient = randomUUID();
     const now = new Date().toISOString();
+    await pool.query(
+      "INSERT INTO identity.tenants(tenant_id,created_at,updated_at) VALUES($1,$2,$2)",
+      [tenant,now],
+    );
     for (const [user,name,email] of [
       [sender,"Sender Tester","sender-" + tenant + "@example.com"],
       [recipient,"Recipient Tester","recipient-" + tenant + "@example.com"],
     ]) {
+      await pool.query(
+        "INSERT INTO identity.users(tenant_id,user_id,created_at,updated_at) VALUES($1,$2,$3,$3)",
+        [tenant,user,now],
+      );
       await pool.query(
         "INSERT INTO security.platform_user_profiles " +
         "(tenant_id,user_id,display_name,email,locale,created_at,updated_at) " +

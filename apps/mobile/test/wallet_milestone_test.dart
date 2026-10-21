@@ -122,7 +122,9 @@ void main(){
   testWidgets('send review Back does not pay; explicit confirmation posts once',(tester)async{
     var posts=0;
     final dio=Dio()..httpClientAdapter=_Adapter((o)async{
+      if(o.method=='GET' && o.path.endsWith('/lookup'))return _json('{"found":true,"userId":"b","displayName":"Amina","handle":"amina","accountNumber":"8000000002"}');
       if(o.path.endsWith('/preview'))return _json('{"asset":"MSNW","recipientUserId":"b","recipientName":"Amina","amountMicro":"2000000","feeMicro":"0"}');
+      expect(o.method,'POST');expect(o.path,endsWith('/v1/wallet/msnw/send'));
       posts++;expect(o.data['idempotencyKey'],isNotEmpty);
       return _json('{"asset":"MSNW","state":"completed","operationId":"receipt","recipientUserId":"b","amountMicro":"2000000"}');
     });

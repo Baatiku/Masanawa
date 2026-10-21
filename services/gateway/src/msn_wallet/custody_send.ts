@@ -45,30 +45,24 @@ export function createMsnwCustodyService(pool: Pool) {
   async function resolve(owner: Owner, value: unknown,
     db?: PoolClient) {
     const identifier = recipient(value);
-    let r;
-    if (identifier.handle) {
-      r = await (db ?? pool).query(
-        "SELECT p.user_id, p.display_name, p.masanawa_account_number, t.handle " +
-        "FROM security.platform_user_profiles p " +
-        "LEFT JOIN talks.public_profiles t ON t.tenant_id = p.tenant_id AND t.user_id = p.user_id " +
-        "WHERE p.tenant_id = $1 AND lower(t.handle) = lower($2) LIMIT 2",
-        [owner.tenantId, identifier.handle]
-      );
-    } else {
-      r = await (db ?? pool).query(
-        "SELECT p.user_id, p.display_name, p.masanawa_account_number, t.handle " +
-        "FROM security.platform_user_profiles p " +
-        "LEFT JOIN talks.public_profiles t ON t.tenant_id = p.tenant_id AND t.user_id = p.user_id " +
-        "WHERE p.tenant_id = $1 AND (" +
-        "($2::text IS NOT NULL AND p.masanawa_account_number = $2) OR " +
-        "($3::text IS NOT NULL AND p.email = $3) OR " +
-        "($4::text IS NOT NULL AND p.phone = $4)" +
-        ") LIMIT 2",
-        [owner.tenantId, identifier.accountNumber, identifier.email, identifier.phone]
-      );
-    }
+    const r = await (db ?? pool).query(
+      "SELECT p.user_id, p.display_name, p.masanawa_account_number, t.handle " +
+      "FROM security.platform_user_profiles p " +
+      "JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active' " +
+      "LEFT JOIN talks.public_profiles t ON t.tenant_id=p.tenant_id AND t.user_id=p.user_id " +
+      "WHERE p.tenant_id=$1 AND (" +
+      "($3::text IS NOT NULL AND p.masanawa_account_number=$3) OR " +
+      "($4::text IS NOT NULL AND lower(t.handle)=lower($4)) OR " +
+      "($5::text IS NOT NULL AND p.email=$5) OR ($6::text IS NOT NULL AND p.phone=$6)) " +
+      "AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=p.tenant_id " +
+      "AND b.blocked=true AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id) " +
+      "OR (b.subject_user_id=$2 AND b.viewer_user_id=p.user_id))) " +
+      "AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement se WHERE se.tenant_id=p.tenant_id " +
+      "AND se.target_kind='profile' AND se.target_id=t.handle AND se.visibility IN ('restricted','blocked')) LIMIT 2",
+      [owner.tenantId, owner.userId, identifier.accountNumber, identifier.handle, identifier.email, identifier.phone],
+    );
     if (r.rowCount !== 1) throw new MsnwCustodyError("msnw.recipient_not_found", 404);
-    const row = r.rows[0];
+    const row = r.rows[0]!;
     const userId = row?.user_id, displayName = row?.display_name;
     if (typeof userId !== "string" || typeof displayName !== "string")
       throw new MsnwCustodyError("msnw.recipient_invalid", 409);
@@ -89,6 +83,16 @@ export function createMsnwCustodyService(pool: Pool) {
       handle: target.handle,
       accountNumber: target.accountNumber,
     });
+  }
+  async function account(owner: Owner) {
+    const result = await pool.query(
+      "SELECT masanawa_account_number FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2",
+      [owner.tenantId, owner.userId],
+    );
+    const accountNumber = result.rows[0]?.masanawa_account_number;
+    if (typeof accountNumber !== "string" || !/^8[0-9]{9}$/.test(accountNumber))
+      throw new MsnwCustodyError("msnw.account_unavailable",503);
+    return Object.freeze({ accountNumber });
   }
   async function balance(owner: Owner) {
     const r = await pool.query(
@@ -177,6 +181,12 @@ export function createMsnwCustodyService(pool: Pool) {
         throw new MsnwCustodyError("msnw.insufficient_available",409);
       if (!held.rows.find(row => row.user_id === target.userId))
         throw new MsnwCustodyError("msnw.recipient_unavailable");
+      // Account locks can wait behind another operation. Re-authorize after
+      // that wait so a newly disabled/blocked recipient is not paid using the
+      // earlier name inquiry snapshot.
+      const confirmed = await resolve(owner,input.recipient,db);
+      if (confirmed.userId !== target.userId)
+        throw new MsnwCustodyError("msnw.recipient_changed",409);
       const operationId = randomUUID();
       const debit = await db.query(
         "UPDATE commerce.msnw_custody_accounts " +
@@ -227,6 +237,6 @@ export function createMsnwCustodyService(pool: Pool) {
       asset: "MSNW" as const, state: "completed" as const,
     })));
   }
-  return Object.freeze({ balance, preview, send, lookup, history, lookupRecipient, activity: createWalletActivity(pool) });
+  return Object.freeze({ account, balance, preview, send, lookup, history, lookupRecipient, activity: createWalletActivity(pool) });
 }
 

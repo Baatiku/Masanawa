@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/masanawa_theme.dart';
 
 String formatWalletAtomic(String raw, {int decimals = 6}) {
@@ -338,5 +339,85 @@ class WalletActionRow extends StatelessWidget {
         )),
       );
     });
+  }
+}
+
+/// Internal account identifier, independent of phone and external chain address.
+class MsnwAccountBadge extends StatefulWidget {
+  const MsnwAccountBadge({super.key, required this.dio, required this.baseUrl,
+    required this.accountId, required this.currentUserId, required this.accessToken});
+  final Dio dio;
+  final String baseUrl;
+  final String? accountId;
+  final String? Function() currentUserId, accessToken;
+  @override
+  State<MsnwAccountBadge> createState() => _AccountBadgeState();
+}
+class _AccountBadgeState extends State<MsnwAccountBadge> {
+  String? number, error;
+  bool loading = true;
+  int generation = 0;
+  @override
+  void initState() { super.initState(); load(); }
+  @override
+  void didUpdateWidget(covariant MsnwAccountBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.accountId != widget.accountId) load();
+  }
+  Future<void> load() async {
+    final run = ++generation, account = widget.accountId;
+    final token = widget.accessToken()?.trim();
+    setState(() { number = null; error = null; loading = true; });
+    if (account == null || account != widget.currentUserId() || token == null || token.isEmpty) {
+      setState(() { loading = false; error = 'Sign in to view your account number'; });
+      return;
+    }
+    bool same() => mounted && run == generation && widget.accountId == account &&
+      widget.currentUserId() == account && widget.accessToken()?.trim() == token;
+    try {
+      final response = await widget.dio.get<dynamic>(
+        '${widget.baseUrl.replaceFirst(RegExp(r'/$'), '')}/v1/wallet/account',
+        options: Options(headers: {'Authorization': 'Bearer $token'},
+          followRedirects: false, receiveTimeout: const Duration(seconds: 12)));
+      if (!same()) return;
+      final raw = response.data;
+      if (raw is! Map || raw['accountNumber'] is! String ||
+          !RegExp(r'^8[0-9]{9}$').hasMatch(raw['accountNumber'] as String)) {
+        throw const FormatException('Invalid Masanawa account number');
+      }
+      setState(() { number = raw['accountNumber'] as String; loading = false; });
+    } catch (_) {
+      if (same()) setState(() { loading = false; error = 'Account number unavailable'; });
+    } finally {
+      if (mounted && run == generation && widget.accountId == account &&
+          widget.currentUserId() == account && widget.accessToken()?.trim() != token) {
+        setState(() { number = null; loading = false; error = 'Session refreshed. Please retry'; });
+      }
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    final visible = widget.accountId != null && widget.currentUserId() == widget.accountId;
+    if (!visible) return const SizedBox.shrink();
+    final value = number;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Masanawa account number'),
+      subtitle: loading ? const LinearProgressIndicator() : Text(value == null
+        ? error ?? 'Account number unavailable'
+        : '${value.substring(0,4)} ${value.substring(4,7)} ${value.substring(7)}',
+        textDirection: value == null ? null : TextDirection.ltr),
+      trailing: value == null
+        ? IconButton(tooltip: 'Retry account number', onPressed: loading ? null : load,
+            icon: const Icon(Icons.refresh))
+        : IconButton(tooltip: 'Copy Masanawa account number', icon: const Icon(Icons.copy),
+            onPressed: () async {
+              if (!visible || widget.currentUserId() != widget.accountId) return;
+              await Clipboard.setData(ClipboardData(text: value));
+              if (context.mounted && widget.currentUserId() == widget.accountId) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account number copied')));
+              }
+            }),
+    );
   }
 }

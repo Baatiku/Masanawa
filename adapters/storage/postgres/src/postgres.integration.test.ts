@@ -168,6 +168,9 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
   });
 
   beforeEach(async () => {
+    // Identity owns creator tables too; dropping identity with CASCADE removes
+    // their foreign keys, not the tables. Rebuild the entire owned fixture.
+    await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS world CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS memory CASCADE");
     await pool.query("DROP SCHEMA IF EXISTS creator CASCADE");
@@ -222,6 +225,8 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0110_contact_security_events.sql",
       "security/0111_account_control_states.sql",
       "security/0112_session_client_labels.sql",
+      "security/0113_masanawa_account_number.sql",
+      "security/0114_assign_masanawa_account_numbers.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",

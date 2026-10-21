@@ -27,7 +27,12 @@ export function registerMsnwCustodyRoutes(
     reply.code(mapped.statusCode);
     return { error: mapped.code };
   }
-    app.get("/v1/wallet/lookup", async (request, reply) => {
+  app.get("/v1/wallet/account", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    try { return await input.ledger.account(await owner(request.headers.authorization)); }
+    catch (error) { return failed(reply,error); }
+  });
+  app.get("/v1/wallet/lookup", async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
     try {
       const identity = await owner(request.headers.authorization);
