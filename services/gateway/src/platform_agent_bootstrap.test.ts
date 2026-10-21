@@ -56,6 +56,9 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(Object.keys(MASANA_CHARACTER_DESIGNS)).toHaveLength(26);
    const welcomes=PROFESSIONAL_MASANA_CATALOG.map(s=>MASANA_CHARACTER_DESIGNS[s.key]?.welcome);
    expect(new Set(welcomes).size).toBe(26);
+   // Stock first contact must leave the topic with the user. Specialist
+   // starters remain available as explicit user choices below the greeting.
+   expect(welcomes.every(w=>w && !/teach|lesson|practise|fix it|help with|let us|shall we|bring me/i.test(w))).toBe(true);
    expect(PROFESSIONAL_MASANA_CATALOG.every(s=>
      MASANA_CHARACTER_DESIGNS[s.key]?.starters.length===3)).toBe(true);
  });
