@@ -29,11 +29,34 @@ export function AuthForm({mode}:{mode:Mode}){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [online,setOnline]=useState(true);
+  const [gatewayState,setGatewayState]=useState<"checking"|"online"|"offline">("checking");
+  const [otpChannels,setOtpChannels]=useState<readonly ("email"|"sms")[]|null>(null);
+  const [gatewayRetry,setGatewayRetry]=useState(0);
   useEffect(()=>{
     const update=()=>setOnline(navigator.onLine);
     update();window.addEventListener("online",update);window.addEventListener("offline",update);
     return()=>{window.removeEventListener("online",update);window.removeEventListener("offline",update)};
   },[]);
+  useEffect(()=>{
+    const controller=new AbortController();
+    setGatewayState("checking");
+    fetch("/api/backend/status",{cache:"no-store",signal:controller.signal})
+      .then(async response=>{
+        const data:unknown=await response.json().catch(()=>null);
+        if(controller.signal.aborted)return;
+        setGatewayState(response.ok?"online":"offline");
+        if(response.ok&&data&&typeof data==="object"&&"otpChannels" in data){
+          const raw=(data as {otpChannels?:unknown}).otpChannels;
+          if(Array.isArray(raw)){
+            const supported=raw.filter((c):c is "email"|"sms"=>c==="email"||c==="sms");
+            if(supported.length){setOtpChannels(supported);
+              setMethod(current=>supported.includes(current==="phone"?"sms":"email")?current:supported[0]==="sms"?"phone":"email");
+            }
+          }
+        }
+      }).catch(()=>{if(!controller.signal.aborted)setGatewayState("offline");});
+    return()=>controller.abort();
+  },[gatewayRetry]);
   const recovery=mode==="recovery";
   const identifier=method==="email"?{email:contact.trim().toLowerCase()}:{phone:contact.trim()};
   const title=recovery?"Recover access":mode==="register"?"Join Masanawa":"Welcome back";
@@ -79,7 +102,7 @@ export function AuthForm({mode}:{mode:Mode}){
       {stage==="done"?<Link className="button button-primary button-fill" href="/login">Return to sign in <Icon name="arrow" size={17}/></Link>:
         <form onSubmit={onSubmit} noValidate>
           {stage==="contact"&&<>
-            {!recovery&&<div className="segmented" role="group" aria-label="Verification channel"><button type="button" className={method==="email"?"selected":""} onClick={()=>{setMethod("email");setContact("");setError("");}}>Email</button><button type="button" className={method==="phone"?"selected":""} onClick={()=>{setMethod("phone");setContact("");setError("");}}>Phone</button></div>}
+            {!recovery&&(!otpChannels || otpChannels.length>1)&&<div className="segmented" role="group" aria-label="Verification channel">{(!otpChannels||otpChannels.includes("email"))&&<button type="button" className={method==="email"?"selected":""} onClick={()=>{setMethod("email");setContact("");setError("");}}>Email</button>}{(!otpChannels||otpChannels.includes("sms"))&&<button type="button" className={method==="phone"?"selected":""} onClick={()=>{setMethod("phone");setContact("");setError("");}}>Phone</button>}</div>}
             {mode==="register"&&<label className="input-group">Your name<input required autoComplete="name" maxLength={160} value={name} onChange={e=>setName(e.target.value)} placeholder="How should we call you?"/></label>}
             <label className="input-group">{recovery||method==="phone"?"Phone number":"Email address"}<input required type={recovery||method==="phone"?"tel":"email"} autoComplete={recovery||method==="phone"?"tel":"email"} value={contact} onChange={e=>setContact(e.target.value)} placeholder={recovery||method==="phone"?"+2348012345678":"you@example.com"} maxLength={320}/></label>
             <p className="input-help">Use the contact method registered to your Masanawa account. New accounts may require a display name.</p>
@@ -93,6 +116,11 @@ export function AuthForm({mode}:{mode:Mode}){
         </form>}
       <div className="auth-alternatives">{mode!=="register"&&<p>New to Masanawa? <Link href="/register">Create an account</Link></p>}{mode==="register"&&<p>Already registered? <Link href="/login">Sign in</Link></p>}{!recovery&&<p><Link href="/recovery">Forgot your device password?</Link></p>}{recovery&&<p><Link href="/login">Back to sign in</Link></p>}</div>
       <div className="auth-security"><Icon name="shield" size={17}/> Account access is handled by the Masanawa Gateway.</div>
+      <div className={"auth-gateway-status "+gatewayState} role="status" aria-live="polite">
+        <span className="auth-gateway-dot" aria-hidden="true"/>
+        <span>{gatewayState==="online"?"Connected to your Masanawa account service":gatewayState==="checking"?"Checking the live Masanawa connection…":"Masanawa account service is currently unavailable. Sign-in may fail."}</span>
+        {gatewayState==="offline"&&<button type="button" onClick={()=>setGatewayRetry(n=>n+1)}>Check again</button>}
+      </div>
     </div></section>
   </main>;
 }

@@ -27,11 +27,15 @@ Cloudflare automatically issues a `*.workers.dev` URL **after** successful deplo
 
 If configuring the Worker with **root directory `apps/web`** instead, use the app-local versions of these commands, not the root scripts. Do not combine `apps/web` root and `cd apps/web`.
 
-## Backend setup (later, when Gateway is qualified)
+## Existing Masanawa mobile backend: connected by default
 
-Set Worker **runtime** variable `MASANAWA_GATEWAY_URL` to the canonical publicly reachable **HTTPS origin** of the Masanawa Gateway (for example, `https://your-gateway-host.example`, without trailing path or credentials). This variable is server-side only; no `NEXT_PUBLIC_` prefix. Its absence is intentional for a design-only preview: public pages and `/preview` work, and authenticated endpoints fail closed. Do **not** configure the old NasfamPay backend, direct AI provider secrets, customer wallets, API tokens, or a personal email/password in Worker variables. Do not enable real financial actions without signed-off wallet and authorization tests.
+The Worker BFF now defaults to **the existing Masanawa Railway Gateway**, `https://masanawa-gateway-production-338f.up.railway.app`, if `MASANAWA_GATEWAY_URL` is not configured. This is the **public HTTPS Gateway origin**, not a credential, not a second backend or a new database. Auth, Masana history and authorized inbox traffic reuse the mobile application's shared Gateway, session store and PostgreSQL authority.
 
-The preview Worker uses `nodejs_compat` and an explicit compatibility date in `cloudflare.config.ts` so Cloudflare runtime bindings populate `process.env`. If deploying with CLI outside Git integration, authenticate using `cf auth login` and set `CLOUDFLARE_ACCOUNT_ID` or your Cloudflare profile as described in the vinext documentation. Never commit your Cloudflare API token.
+For a future custom Gateway domain or a staging service, set the **server-side** Worker runtime variable `MASANAWA_GATEWAY_URL` to that HTTPS origin (no path/query). Never set a `NEXT_PUBLIC_` Gateway secret; never copy tokens, Flutterwave credentials, database passwords or provider keys to Cloudflare. A deliberately malformed runtime URL fails closed.
+
+You can check connection from any browser at **`/api/backend/status`**. It returns `connected: true` only when Railway answers `/readyz` successfully. On degraded Gateway releases it returns HTTP 503 with `connected: false` and no private details; this means **fix Railway Gateway readiness**, not the Cloudflare build or static preview. The sign-in screen also shows a real backend health status and the actually enabled OTP channels. Login POSTs remain same-origin and receive HttpOnly session cookies from the Worker; browser credentials never contact Railway directly.
+
+**Operational blocker observed on 21 October 2026:** Multiple recent `masanawa-gateway` Railway deployments failed their `/readyz` health check. Railway still showed a previous version online, but an independent public health probe timed out. Do not claim that OTP/login is production-verified until `/api/backend/status` returns connected and an actual owned account completes sign-in. Investigate Railway service health, migrations, and recent deployment logs. The Cloudflare web deployment cannot repair a Gateway outage.
 
 ## Commands from `apps/web`
 
@@ -50,7 +54,7 @@ npm run deploy:cloudflare
 
 ## Rollout and limitations
 
-- **Design preview first**: leave Gateway URL unset until real-account authentication is qualified, and keep your production domains unchanged.
+- **Production Gateway is selected by default**: real-account login uses the shared Railway Gateway and its data. Keep private preview links controlled and production domains unchanged until credentials, sessions and service health are qualified.
 - Live Masana conversation turns, human messaging, Status, Rooms, voice and Wallet operations remain separate feature acceptance work. The `/preview` route is a design walkthrough, not real product data or a bypass around sign-in.
 - For private review, protect the Worker with Cloudflare Access if desired; an unprotected `workers.dev` preview is publicly reachable by anyone with the address.
 - Verify login cookies, Origin checking, Gateway network access, image loading and any configured custom domain **after** Worker deployment. Check runtime logs in Cloudflare, and redeploy the previous Worker version if necessary.

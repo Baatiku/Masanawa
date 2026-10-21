@@ -55,6 +55,8 @@ export function Workspace({section}:{section:Section}){
   const [offline,setOffline]=useState(false);
   const [menu,setMenu]=useState(false);
   const [reload,setReload]=useState(0);
+  const [refreshing,setRefreshing]=useState(false);
+  const [lastSync,setLastSync]=useState<number|null>(null);
   useEffect(()=>{
     let active=true;
     const onOnline=()=>setOffline(!navigator.onLine);
@@ -68,10 +70,24 @@ export function Workspace({section}:{section:Section}){
     return()=>{active=false;window.removeEventListener("online",onOnline);window.removeEventListener("offline",onOnline);};
   },[]);
   useEffect(()=>{
-    setItems([]);setDataState("idle");setQuery("");setFilter("All");
+    setItems([]);setDataState("idle");setQuery("");setFilter("All");setLastSync(null);
+  },[section]);
+  // The Gateway remains the sole source of truth. Revalidate quietly while the
+  // page is visible; no fabricated unread badges, fake realtime, or AI routing
+  // for human messages.
+  useEffect(()=>{
+    if(session!=="ready"||(section!=="chats"&&section!=="masana"))return;
+    const refresh=()=>{if(document.visibilityState==="visible"&&navigator.onLine)setReload(v=>v+1);};
+    const interval=window.setInterval(refresh,25000);
+    document.addEventListener("visibilitychange",refresh);
+    window.addEventListener("online",refresh);
+    return()=>{window.clearInterval(interval);document.removeEventListener("visibilitychange",refresh);window.removeEventListener("online",refresh);};
+  },[session,section]);
+  useEffect(()=>{
     if(session!=="ready"||(section!=="chats"&&section!=="masana"))return;
     const controller=new AbortController();
-    setDataState("loading");
+    if(items.length){setRefreshing(true);}
+    else setDataState("loading");
     fetch("/api/bridge/"+section,{signal:controller.signal,cache:"no-store",credentials:"same-origin"})
       .then(async res=>{
         const body:unknown=await res.json().catch(()=>null);
@@ -79,8 +95,8 @@ export function Workspace({section}:{section:Section}){
         if(res.status===403){setDataState("denied");return;}
         if(!res.ok){setDataState("error");return;}
         const normalized=normalize(body,section);
-        setItems(normalized);setDataState(normalized.length?"ready":"empty");
-      }).catch(error=>{if(!controller.signal.aborted){setDataState("error");}});
+        setItems(normalized);setDataState(normalized.length?"ready":"empty");setLastSync(Date.now());setRefreshing(false);
+      }).catch(error=>{if(!controller.signal.aborted){setDataState("error");setRefreshing(false);}});
     return()=>controller.abort();
   },[session,section,reload]);
   const visible=useMemo(()=>items.filter(item=>{
@@ -109,6 +125,7 @@ export function Workspace({section}:{section:Section}){
       <div className="workspace-body">
         <div className="workspace-content">
           <div className="workspace-heading"><div><span className="eyebrow">MASANAWA WEB</span><h1>{titles[section]}</h1><p>{subtitles[section]}</p></div>{session==="ready"&&(section==="chats"||section==="masana")&&<Link href="/masana" className="button button-primary">{section==="chats"?"Discover Masana":"Browse Masana"} <Icon name="arrow" size={17}/></Link>}</div>
+          {session==="ready"&&(section==="chats"||section==="masana")&&<div className="workspace-sync" role="status" aria-live="polite"><span className={"workspace-sync-dot"+(refreshing?" syncing":"")} aria-hidden="true"/><span>{refreshing?"Syncing with Masanawa…":lastSync?"Up to date · refreshes every 25 seconds":"Loading your account content…"}</span><button type="button" onClick={retry} disabled={refreshing}>Refresh now</button></div>}
           {offline&&<div className="notice warning" role="status">You're offline. Previously loaded information may be outdated. Reconnect to refresh.</div>}
           {gated?<div className="workspace-gate"><div className="gate-icon"><Icon name={session==="checking"?"globe":session==="guest"?"lock":"shield"} size={27}/></div><h2>{session==="checking"?"Checking your session…":session==="guest"?"Sign in to continue":"Unable to verify your session"}</h2><p>{session==="checking"?"Connecting securely to Masanawa.":session==="guest"?"Your messages, people and Masana belong to your account. Sign in to continue on the web.":"Account services could not be reached. We have not guessed at your account data."}</p>{session!=="checking"&&<div className="gate-actions"><Link className="button button-primary" href={"/login?next="+encodeURIComponent("/"+section)}>Sign in <Icon name="arrow" size={16}/></Link>{session==="unavailable"&&<button className="button button-secondary" onClick={()=>window.location.reload()}>Retry</button>}</div>}</div>:
             <>{(section==="chats"||section==="masana")?<>

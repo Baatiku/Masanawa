@@ -376,3 +376,30 @@ h1,h2,h3{letter-spacing:-.035em}
 .preview-workspace .workspace-bottom-nav button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:48px;border:0;background:none;font-size:10px;color:#819787}
 .preview-workspace .workspace-bottom-nav button.active{color:#15864f;font-weight:750}
 @media(max-width:820px){.preview-workspace .preview-sidebar{display:none}.preview-workspace .workspace-topbar{height:58px}.preview-warning{padding:10px 17px}}
+
+/* Connected experience: honest live status, responsive motion, accessible reduced-motion fallback. */
+.auth-gateway-status{display:flex;align-items:center;gap:9px;margin-top:16px;padding:12px 13px;border:1px solid #e1ede5;border-radius:11px;background:#f6faf7;color:#506e5c;font-size:11px;font-weight:650;line-height:1.5}
+.auth-gateway-status.online{border-color:#ccebd6;background:#f0fcf4;color:#146f44}
+.auth-gateway-status.offline{border-color:#efddce;background:#fff9f2;color:#9c562a}
+.auth-gateway-dot,.workspace-sync-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#b1bfbb;box-shadow:0 0 0 3px #b1bfbb22}
+.auth-gateway-status.online .auth-gateway-dot,.workspace-sync-dot{background:#17ae60;box-shadow:0 0 0 3px #17ae6023}
+.auth-gateway-status.offline .auth-gateway-dot{background:#e28b32;box-shadow:0 0 0 3px #e28b3223}
+.auth-gateway-status button,.workspace-sync button{margin-left:auto;color:#136b45;background:none;border:0;padding:5px 3px;font-size:11px;font-weight:780;text-decoration:underline;text-underline-offset:3px}
+.workspace-sync{display:flex;align-items:center;gap:9px;margin:0 0 16px;color:#6d8978;font-size:11px;font-weight:670;min-height:25px}
+.workspace-sync button{text-decoration:none}
+@keyframes msnw-entry{from{opacity:0;transform:translate3d(0,16px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes msnw-glow{0%,100%{box-shadow:0 0 0 3px #17ae6023}50%{box-shadow:0 0 0 7px #17ae6011}}
+@media(prefers-reduced-motion:no-preference){
+ .hero-copy,.hero-preview{animation:msnw-entry .62s cubic-bezier(.2,.65,.2,1) backwards}
+ .hero-preview{animation-delay:.13s}
+ .feature-card{animation:msnw-entry .58s ease-out backwards}
+ .feature-card:nth-child(2){animation-delay:.10s}
+ .feature-card:nth-child(3){animation-delay:.20s}
+ .feature-card:nth-child(4){animation-delay:.30s}
+ .workspace-heading,.workspace-gate,.masana-profile-hero,.masana-chat-card{animation:msnw-entry .42s ease-out both}
+ .feature-card,.conversation-row,.aside-spotlight,.preview-pill,.app-navigation a,.app-navigation button{transition:transform .22s ease,box-shadow .22s ease,background-color .22s ease,border-color .22s ease}
+ .feature-card:hover,.aside-spotlight:hover{transform:translateY(-4px);box-shadow:0 14px 40px #204b3015}
+ .conversation-row:hover{transform:translateX(3px)}
+ .workspace-sync-dot.syncing,.auth-gateway-status.online .auth-gateway-dot{animation:msnw-glow 1.8s ease-in-out infinite}
+}
+@media(prefers-reduced-motion:reduce){.hero-copy,.hero-preview,.feature-card,.workspace-heading,.workspace-gate,.masana-profile-hero,.masana-chat-card,.workspace-sync-dot,.auth-gateway-dot{animation:none!important;transition:none!important}}

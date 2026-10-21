@@ -24,3 +24,12 @@ Marketing home, OTP login/register, phone password recovery, responsive Chats / 
 The browser/PWA mark is copied by Git SHA from `apps/mobile/assets/brand/masanawa_launcher_foreground.png`. The app excludes the mirrored legacy static files from Next's public folder. **Do not publish the original `apps/web/index.html` via static-site hosting**. Use the Next server output after security, account and deployment verification. The current PR is not evidence of a production release.
 
 Refer to `WEB-SCREEN-CONTRACT.md` and the single canonical roadmap `../../docs/PRODUCT-ROADMAP-20261019.md` for the remaining screen journeys and product authority.
+
+
+## Shared Railway Gateway on Cloudflare Workers
+
+The frontend now connects to the same public Railway Gateway origin used by the mobile application by default, through its secure server-side BFF. There is **no second backend** and no client-side Gateway bearer token. You can override the HTTPS Gateway with `MASANAWA_GATEWAY_URL` (Worker runtime variable).
+
+Open `/api/backend/status` to see if the real Gateway `/readyz` endpoint is reachable, without exposing secrets. The login form displays this status and learns supported OTP channels; sessions, authenticated inbox and Masana history reuse the canonical Gateway. An unhealthy Railway Gateway returns HTTP 503 and blocks reliable login even if the Cloudflare Worker deploy is successful. Health and real-provider tests remain a separate operational gate. The web inbox quietly refreshes authorized Masana data about every 25 seconds while visible; no fabricated conversations or wallet values.
+
+The UI uses Next.js 16 / React 19 with vinext Cloudflare Workers. Animated entrances, responsive hover/press feedback and real sync indicators enhance the live feel and respect `prefers-reduced-motion`. The `/preview` route intentionally remains a read-only design walkthrough with fictional sample data; **log in at `/login`**, not `/preview`, to see authorized backend data.

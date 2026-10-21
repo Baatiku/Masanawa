@@ -1,21 +1,15 @@
 /** Server-only admission boundary; no provider secret, origin or bearer goes to the browser. */
 import "server-only";
+import { resolveGatewayOrigin } from "./gateway-origin";
 
 export const ACCESS_COOKIE = "msnw_web_at";
 export const REFRESH_COOKIE = "msnw_web_rt";
 export type JsonRecord = Record<string, unknown>;
 
 export function gatewayOrigin(): string | null {
-  const raw = process.env.MASANAWA_GATEWAY_URL;
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    const localTest = process.env.NODE_ENV !== "production" && ["localhost","127.0.0.1"].includes(url.hostname);
-    if (url.username || url.password || url.search || url.hash || (!["https:"].includes(url.protocol) && !(localTest && url.protocol === "http:"))) return null;
-    if (url.pathname !== "/" && url.pathname !== "") return null;
-    return url.origin;
-  } catch { return null; }
+  return resolveGatewayOrigin(process.env.MASANAWA_GATEWAY_URL,process.env.NODE_ENV === "production");
 }
+
 export async function gatewayFetch(
   path: string,
   method: "GET"|"POST",
