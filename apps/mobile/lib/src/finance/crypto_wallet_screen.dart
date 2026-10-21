@@ -261,7 +261,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     final owner=_currentAccountId;
     bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
     if(!current())return;
-    final pending=await ref.read(walletPendingCryptoProvider.future);
+    Map<String,dynamic>? pending;
+    try{pending=await ref.read(walletPendingCryptoProvider.future);}
+    catch(_){if(current())_message(context,'Secure recovery is unavailable. No payment was submitted.');return;}
     if(!current())return;
     if(pending!=null){_message(context,'Check the previous operation from Wallet before starting another.');return;}
     final source = wallet.selectedRoute;
@@ -366,7 +368,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     final owner=_currentAccountId;
     bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
     if(!current())return;
-    final pending=await ref.read(walletPendingCryptoProvider.future);
+    Map<String,dynamic>? pending;
+    try{pending=await ref.read(walletPendingCryptoProvider.future);}
+    catch(_){if(current())_message(context,'Secure recovery is unavailable. No payment was submitted.');return;}
     if(!current())return;
     if(pending!=null){_message(context,'Check the previous operation from Wallet before starting another.');return;}
     final route = wallet.selectedRoute;
@@ -461,6 +465,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         requestId:requestId,providerCode:route.providerCode,
         amount:input.amount,destinationAddress:input.address,code:code,
       );
+      if(!current())return;
       final intent = await controller.createWithdrawal(
         requestId: requestId,
         providerCode: route.providerCode,

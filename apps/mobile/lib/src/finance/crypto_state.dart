@@ -57,6 +57,9 @@ class CryptoWalletSnapshot {
   }
 
   CryptoWalletSnapshot copyWith({
+    List<CryptoRoute>? holdingRoutes,
+    bool? holdingsVerified,
+    Map<String,String>? reservedBalances,
     CryptoCapabilities? capabilities,
     List<CryptoRoute>? depositRoutes,
     List<CryptoRoute>? conversionRoutes,
@@ -66,7 +69,7 @@ class CryptoWalletSnapshot {
     bool clearSelectedProviderCode = false,
   }) {
     return CryptoWalletSnapshot(
-      holdingRoutes:holdingRoutes,holdingsVerified:holdingsVerified,reservedBalances:reservedBalances,
+      holdingRoutes:holdingRoutes??this.holdingRoutes,holdingsVerified:holdingsVerified??this.holdingsVerified,reservedBalances:reservedBalances??this.reservedBalances,
       capabilities: capabilities ?? this.capabilities,
       depositRoutes: depositRoutes ?? this.depositRoutes,
       conversionRoutes: conversionRoutes ?? this.conversionRoutes,
@@ -95,6 +98,26 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
 
   bool _submittingOperation=false;
   int _epoch = 0;
+  Future<void> _refreshHeldProjection(String? owner)async{
+    final transport=_transport;
+    if(transport is! CryptoHoldingsTransport)return;
+    try{
+      final rows=await (transport as CryptoHoldingsTransport).holdings();_checkOwner(owner);
+      final routes=<CryptoRoute>[], reserved=<String,String>{}, available=<String,String>{};
+      for(final row in rows){
+        final route=CryptoRoute.fromJson(row);routes.add(route);
+        available[route.providerCode]=CryptoBalance.fromJson(row).amount;
+        reserved[route.providerCode]=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':row['reservedAmount']}).amount;
+      }
+      final latest=state.valueOrNull;if(latest==null)return;
+      state=AsyncData(latest.copyWith(holdingRoutes:List.unmodifiable(routes),holdingsVerified:true,
+        reservedBalances:Map.unmodifiable(reserved),balances:Map.unmodifiable({...latest.balances,...available})));
+    }catch(_){
+      if(owner!=_owner())return;
+      final latest=state.valueOrNull;
+      if(latest!=null)state=AsyncData(latest.copyWith(holdingsVerified:false,reservedBalances:const {}));
+    }
+  }
   Future<void> _prepareOperation(String? owner,Map<String,dynamic> original)async{
     if(owner==null||_submittingOperation)throw StateError('Another operation is pending.');
     _submittingOperation=true;
@@ -265,6 +288,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     final balances = Map<String, String>.from(latest.balances)
       ..[balance.providerCode] = balance.amount;
     state = AsyncData(latest.copyWith(balances: Map.unmodifiable(balances)));
+    await _refreshHeldProjection(owner);
   }
 
   Future<CryptoIntent> createDeposit({
@@ -447,6 +471,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         balances: Map.unmodifiable({...latest.balances, ...balances}),
       );
       state = AsyncData(next);
+      await _refreshHeldProjection(owner);
     }
   }
 }
