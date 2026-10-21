@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
 import '../../finance/wallet_asset_detail.dart';
 import '../../finance/wallet_portfolio_summary.dart';
+import '../../finance/wallet_pending_banner.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_wallet_home.dart';
 import '../../finance/wallet_asset_overview.dart';
@@ -289,6 +290,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           key: PageStorageKey<String>('wallet-assets-${accountId ?? 'signed-out'}'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
+            WalletPendingBanner(hideAmounts:_hiddenOwner==accountId&&_hideBalances),
             WalletPortfolioSummary(balance:_balanceOwner==accountId?_balance:null,hidden:_hiddenOwner==accountId&&_hideBalances),
             MsnwWalletBalanceCard(
               dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,

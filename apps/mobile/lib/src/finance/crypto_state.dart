@@ -5,11 +5,13 @@ import '../core/providers.dart';
 import '../state/session_state.dart';
 import 'crypto_models.dart';
 import 'crypto_transport.dart';
+import 'wallet_pending_operation.dart';
 
 class CryptoWalletSnapshot {
   const CryptoWalletSnapshot({
     this.holdingRoutes=const [],
     this.holdingsVerified=false,
+    this.reservedBalances=const {},
     required this.capabilities,
     required this.depositRoutes,
     required this.conversionRoutes,
@@ -18,6 +20,7 @@ class CryptoWalletSnapshot {
     required this.selectedProviderCode,
   });
 
+  final Map<String,String> reservedBalances;
   final bool holdingsVerified;
   final List<CryptoRoute> holdingRoutes;
   final CryptoCapabilities capabilities;
@@ -54,6 +57,9 @@ class CryptoWalletSnapshot {
   }
 
   CryptoWalletSnapshot copyWith({
+    List<CryptoRoute>? holdingRoutes,
+    bool? holdingsVerified,
+    Map<String,String>? reservedBalances,
     CryptoCapabilities? capabilities,
     List<CryptoRoute>? depositRoutes,
     List<CryptoRoute>? conversionRoutes,
@@ -63,7 +69,7 @@ class CryptoWalletSnapshot {
     bool clearSelectedProviderCode = false,
   }) {
     return CryptoWalletSnapshot(
-      holdingRoutes:holdingRoutes,holdingsVerified:holdingsVerified,
+      holdingRoutes:holdingRoutes??this.holdingRoutes,holdingsVerified:holdingsVerified??this.holdingsVerified,reservedBalances:reservedBalances??this.reservedBalances,
       capabilities: capabilities ?? this.capabilities,
       depositRoutes: depositRoutes ?? this.depositRoutes,
       conversionRoutes: conversionRoutes ?? this.conversionRoutes,
@@ -81,11 +87,77 @@ final cryptoWalletTransportProvider = Provider<CryptoWalletTransport>((ref) {
   return MasanawaCryptoWalletTransport(dio: api.dio, baseUrl: kAgentBaseUrl);
 });
 
+final walletPendingCryptoProvider=FutureProvider<Map<String,dynamic>?>((ref) {
+  final owner=ref.watch(sessionProvider.select((s)=>s is SessionSignedIn?s.user.id:null));
+  return owner==null?Future.value(null):WalletPendingOperationStore(owner).read();
+});
+
 class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   CryptoWalletTransport get _transport =>
       ref.read(cryptoWalletTransportProvider);
 
-  int _epoch = 0;
+  bool _submittingOperation=false;
+  int _epoch = 0, _projectionGeneration=0;
+  Future<void> _refreshHeldProjection(String? owner)async{
+    final epoch=_epoch, projection=++_projectionGeneration;
+    final transport=_transport;
+    if(transport is! CryptoHoldingsTransport)return;
+    try{
+      final rows=await (transport as CryptoHoldingsTransport).holdings();_checkOwner(owner);
+      if(epoch!=_epoch||projection!=_projectionGeneration)return;
+      final routes=<CryptoRoute>[], reserved=<String,String>{}, available=<String,String>{};
+      for(final row in rows){
+        final route=CryptoRoute.fromJson(row);routes.add(route);
+        available[route.providerCode]=CryptoBalance.fromJson(row).amount;
+        reserved[route.providerCode]=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':row['reservedAmount']}).amount;
+      }
+      final latest=state.valueOrNull;if(latest==null)return;
+      state=AsyncData(latest.copyWith(holdingRoutes:List.unmodifiable(routes),holdingsVerified:true,
+        reservedBalances:Map.unmodifiable(reserved),balances:Map.unmodifiable({...latest.balances,...available})));
+    }catch(_){
+      if(owner!=_owner()||epoch!=_epoch||projection!=_projectionGeneration)return;
+      final latest=state.valueOrNull;
+      if(latest!=null)state=AsyncData(latest.copyWith(holdingsVerified:false,reservedBalances:const {}));
+    }
+  }
+  Future<void> _prepareOperation(String? owner,Map<String,dynamic> original)async{
+    if(owner==null||_submittingOperation)throw StateError('Another operation is pending.');
+    _submittingOperation=true;
+    try {
+      if(await WalletPendingOperationStore(owner).read()!=null)throw StateError('Check the previous operation before sending again.');
+      _checkOwner(owner);
+      await WalletPendingOperationStore(owner).save(original);
+      _checkOwner(owner);ref.invalidate(walletPendingCryptoProvider);
+    }catch(_){_submittingOperation=false;rethrow;}
+  }
+  Future<void> _settledOperation(String owner,CryptoIntent intent)async{
+    if(const ['succeeded','failed','refunded','expired'].contains(intent.status)) {
+      await WalletPendingOperationStore(owner).clear(intent.requestId);
+    }
+    _checkOwner(owner);ref.invalidate(walletPendingCryptoProvider);
+  }
+  Future<CryptoIntent?> checkPendingOperation()async{
+    final owner=_owner();if(owner==null)throw StateError('Sign in again.');
+    final original=await WalletPendingOperationStore(owner).read();_checkOwner(owner);
+    if(original==null)return null;
+    var intent=await _transport.intent(original['requestId'] as String);_checkOwner(owner);
+    if(intent==null)throw StateError('Original request not found yet. Do not submit another payment; check again or contact support with its reference.');
+    String units(String value){final parts=value.split('.');return parts[0]+'.'+(parts.length>1?parts[1]:'').padRight(18,'0');}
+    void verify(CryptoIntent intent){
+      if(intent.requestId!=original['requestId']||intent.operation!=original['operation']||intent.asset.toLowerCase()!=(original['providerCode'] as String).toLowerCase()||
+      units(intent.amount)!=units(original['amount'] as String)||
+      (original['destinationAddress']!=null&&intent.destinationAddress!=original['destinationAddress'])||
+      (original['targetProviderCode']!=null&&intent.targetAsset?.toLowerCase()!=(original['targetProviderCode'] as String).toLowerCase()))
+        throw StateError('Original operation terms could not be verified.');
+    }
+    verify(intent);
+    if(!['succeeded','failed','refunded','expired','manual_review'].contains(intent.status)) {
+      intent=intent.operation=='withdraw'?await _transport.refreshWithdrawal(intent.requestId):await _transport.refreshConversion(intent.requestId);_checkOwner(owner);
+    }
+    verify(intent);
+    await _mergeOperation(intent,refreshBalance:true);_checkOwner(owner);
+    await _settledOperation(owner,intent);return intent;
+  }
   String? _owner() => switch (ref.read(sessionProvider)) {
     SessionSignedIn(:final user) => user.id,
     _ => null,
@@ -124,6 +196,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     var holdingsVerified=false;
     final holdingRoutes=<CryptoRoute>[];
     final heldBalances=<String,String>{};
+    final reserves=<String,String>{};
     if(_transport is CryptoHoldingsTransport) {
       try {
         final holdings=await (_transport as CryptoHoldingsTransport).holdings();
@@ -132,6 +205,8 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
           final route=CryptoRoute.fromJson(item);
           final balance=CryptoBalance.fromJson(item);
           holdingRoutes.add(route);heldBalances[route.providerCode]=balance.amount;
+          final reserved=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':item['reservedAmount']});
+          reserves[route.providerCode]=reserved.amount;
         }
         holdingsVerified=true;
       } catch(_) { /* Per-asset reads remain available; no fabricated zero. */ }
@@ -159,7 +234,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     if (epoch != _epoch) throw StateError('Wallet account changed');
 
     return CryptoWalletSnapshot(
-      holdingRoutes:List.unmodifiable(holdingRoutes),holdingsVerified:holdingsVerified,
+      holdingRoutes:List.unmodifiable(holdingRoutes),holdingsVerified:holdingsVerified,reservedBalances:Map.unmodifiable(reserves),
       capabilities: capabilities,
       depositRoutes: List.unmodifiable(depositRoutes),
       conversionRoutes: List.unmodifiable(conversionRoutes),
@@ -203,6 +278,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   }
 
   Future<void> refreshBalance([String? providerCode]) async {
+    final owner=_owner();
     final current = state.valueOrNull;
     if (current == null) return;
     final code = (providerCode ?? current.selectedProviderCode)?.trim();
@@ -215,6 +291,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     final balances = Map<String, String>.from(latest.balances)
       ..[balance.providerCode] = balance.amount;
     state = AsyncData(latest.copyWith(balances: Map.unmodifiable(balances)));
+    await _refreshHeldProjection(owner);
   }
 
   Future<CryptoIntent> createDeposit({
@@ -292,16 +369,14 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     String? stepUpToken,
   }) async {
     final owner = _owner();
-    final result = await _transport.createWithdrawal(
-      requestId: requestId,
-      providerCode: providerCode,
-      amount: amount,
-      destinationAddress: destinationAddress,
-      stepUpToken: stepUpToken,
-    );
-    _checkOwner(owner);
-    await _mergeOperation(result, refreshBalance: true);
-    return result;
+    await _prepareOperation(owner,{'operation':'withdraw','requestId':requestId,'providerCode':providerCode,'amount':amount,'destinationAddress':destinationAddress});
+    try {
+      _checkOwner(owner);
+      final result=await _transport.createWithdrawal(requestId:requestId,providerCode:providerCode,
+        amount:amount,destinationAddress:destinationAddress,stepUpToken:stepUpToken);
+      _checkOwner(owner);await _mergeOperation(result,refreshBalance:true);
+      await _settledOperation(owner!,result);return result;
+    } finally {_submittingOperation=false;}
   }
 
   Future<CryptoConversionQuote> quoteConversion({
@@ -323,15 +398,13 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     required String amount,
   }) async {
     final owner = _owner();
-    final result = await _transport.createConversion(
-      requestId: requestId,
-      providerCode: providerCode,
-      targetProviderCode: targetProviderCode,
-      amount: amount,
-    );
-    _checkOwner(owner);
-    await _mergeOperation(result, refreshBalance: true);
-    return result;
+    await _prepareOperation(owner,{'operation':'convert','requestId':requestId,'providerCode':providerCode,'amount':amount,'targetProviderCode':targetProviderCode});
+    try {
+      _checkOwner(owner);
+      final result=await _transport.createConversion(requestId:requestId,providerCode:providerCode,targetProviderCode:targetProviderCode,amount:amount);
+      _checkOwner(owner);await _mergeOperation(result,refreshBalance:true);
+      await _settledOperation(owner!,result);return result;
+    } finally {_submittingOperation=false;}
   }
 
   Future<CryptoIntent> refreshOperation(CryptoIntent intent) async {
@@ -357,6 +430,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     };
     _checkOwner(owner);
     await _mergeOperation(refreshed, refreshBalance: refreshed.terminal);
+    if(owner!=null)await _settledOperation(owner,refreshed);
     return refreshed;
   }
 
@@ -400,6 +474,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         balances: Map.unmodifiable({...latest.balances, ...balances}),
       );
       state = AsyncData(next);
+      await _refreshHeldProjection(owner);
     }
   }
 }

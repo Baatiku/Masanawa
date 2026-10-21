@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../ui/components/pin_keyboard.dart';
 
 /// One-time code for an exact reviewed financial action. Its server-issued
 /// grant is bound to the financial request and cannot be reused.
@@ -52,6 +53,10 @@ class _WalletStepUpPageState extends State<WalletStepUpPage> {
             labelText:'Six-digit email code',border:OutlineInputBorder()),
           onChanged:(_)=>setState((){}),
         ),
+        const SizedBox(height:20),
+        PinKeyboard(onDigit:(digit){if(_code.text.length<6)setState(()=>_code.text+=digit);},
+          onDelete:(){if(_code.text.isNotEmpty)setState(()=>_code.text=_code.text.substring(0,_code.text.length-1));},
+          onCancel:()=>Navigator.of(context).pop()),
         const SizedBox(height:20),
         FilledButton(
           onPressed:_code.text.length!=6?null:

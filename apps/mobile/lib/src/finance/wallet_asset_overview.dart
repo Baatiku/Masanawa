@@ -45,6 +45,7 @@ class WalletAssetOverview extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (route.network != null) Text(route.network!),
+                  if(wallet.reservedBalances[route.providerCode]!=null)Text(hideBalances?'Reserved: ••••':'Reserved: ${wallet.reservedBalances[route.providerCode]}'),
                   const SizedBox(height: 4),
                   Text(
                     hideBalances ? '••••' : wallet.balances[route.providerCode] == null ? 'Available balance unavailable' : 'Available: ${wallet.balances[route.providerCode]}',

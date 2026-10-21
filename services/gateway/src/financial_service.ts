@@ -129,7 +129,7 @@ export interface FinancialFiatPurchaseView {
 }
 
 export interface FinancialService {
-  listHoldings?(input:{readonly authorizationHeader:string|undefined}):Promise<readonly {providerCode:string;asset:string;network:string|null;amount:string;reservedAmount:null}[]>;
+  listHoldings?(input:{readonly authorizationHeader:string|undefined}):Promise<readonly {providerCode:string;asset:string;network:string|null;amount:string;reservedAmount:string}[]>;
   capabilities(input: {
     readonly authorizationHeader: string | undefined;
   }): Promise<FinancialCapabilities>;
@@ -815,7 +815,7 @@ export function createFinancialService(input: {
       const rows=await input.crypto.listHoldings({tenantId:auth.tenantId,userId:auth.userId});
       return Object.freeze(rows.filter(row=>row.asset.toUpperCase()!=='MSNW').map(row=>{
         const route=splitProviderCurrency(row.asset);
-        return Object.freeze({providerCode:row.asset,asset:route.asset,network:row.network,amount:row.amount,reservedAmount:null});
+        return Object.freeze({providerCode:row.asset,asset:route.asset,network:row.network,amount:row.amount,reservedAmount:row.reservedAmount});
       }));
     },
 

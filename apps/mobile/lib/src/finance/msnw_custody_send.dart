@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import 'wallet_recipient_book.dart';
 import 'msnw_wallet_home.dart' show formatWalletAtomic;
 import 'dart:async';
 import 'dart:convert';
@@ -45,6 +46,20 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
   final quantity = TextEditingController();
   final random = Random.secure();
   final storage = const FlutterSecureStorage();
+  List<Map<String,String>> savedRecipients=[];
+  String? expectedSavedRecipientId;
+  String? verifiedRecipientAccount, verifiedRecipientId, verifiedRecipientName;
+  WalletRecipientBook get recipientBook=>WalletRecipientBook(widget.expectedUserId);
+  Future<void> loadRecipients()async{
+    final token=widget.accessToken()?.trim();if(token==null||!sameSession(token))return;
+    try{final rows=await recipientBook.read();if(sameSession(token))setState(()=>savedRecipients=rows);}catch(_){if(sameSession(token))setState(()=>error='Saved recipients could not be loaded.');}
+  }
+  Future<void> saveRecipient()async{
+    final token=widget.accessToken()?.trim();
+    if(token==null||!sameSession(token)||receipt==null||verifiedRecipientAccount==null||verifiedRecipientId!=receipt!['recipientUserId'])return;
+    try{await recipientBook.save(userId:verifiedRecipientId!,accountNumber:verifiedRecipientAccount!,name:verifiedRecipientName??'Recipient');if(sameSession(token))await loadRecipients();}
+    catch(_){if(sameSession(token))setState(()=>error='Recipient could not be saved.');}
+  }
   Map<String, dynamic>? pending;
   String get pendingStorageKey => 'msnw.send.pending.v1.${widget.expectedUserId}';
   Map<String, dynamic>? preview;
@@ -59,6 +74,8 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
   String? lookupError;
 
   void recipientChanged() {
+    expectedSavedRecipientId=null;
+    verifiedRecipientAccount=null;verifiedRecipientId=null;verifiedRecipientName=null;
     invalidate();
     lookupTimer?.cancel();
     final run = ++lookupGeneration;
@@ -81,7 +98,12 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       if (raw is! Map || raw['found'] != true || raw['userId'] is! String || raw['displayName'] is! String) {
         throw const FormatException('Invalid recipient');
       }
-      setState(() => recipientCard = raw.cast<String, dynamic>());
+      if(expectedSavedRecipientId!=null&&raw['userId']!=expectedSavedRecipientId)throw const FormatException('Saved identity changed');
+      setState(() {
+        recipientCard=raw.cast<String,dynamic>();
+        verifiedRecipientAccount=raw['accountNumber'] is String?raw['accountNumber']:null;
+        verifiedRecipientId=raw['userId'];verifiedRecipientName=raw['displayName'];
+      });
     } catch (_) {
       if (sameSession(token) && run == lookupGeneration) setState(() =>
         lookupError = 'Recipient unavailable. Check the account number or handle and retry.');
@@ -105,7 +127,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     super.initState();
     recipient.addListener(recipientChanged);
     quantity.addListener(invalidate);
-    WidgetsBinding.instance.addPostFrameCallback((_) => restorePending());
+    WidgetsBinding.instance.addPostFrameCallback((_) {restorePending();loadRecipients();});
   }
   @override
   void dispose() {
@@ -152,6 +174,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       );
       if (!sameSession(token)) return;
       final raw = result.data;
+      if(expectedSavedRecipientId!=null && (raw is! Map || raw['recipientUserId']!=expectedSavedRecipientId))throw const FormatException('Saved identity changed');
       if (raw is! Map || raw['asset'] != 'MSNW' ||
           raw['recipientUserId'] is! String ||
           raw['recipientName'] is! String ||
@@ -374,6 +397,14 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
           subtitle:'Send to another Masanawa account. Check the recipient and exact amount before confirming.',
           icon:Icons.north_east_rounded),
         if (receipt == null && pending == null) ...[
+          if(savedRecipients.isNotEmpty) WalletFormSection(title:'Saved recipients',children:[
+            for(final item in savedRecipients)ListTile(title:Text(item['name']!),subtitle:Text(item['accountNumber']!),
+              onTap:busy?null:(){recipient.text=item['accountNumber']!;expectedSavedRecipientId=item['userId'];},
+              trailing:IconButton(tooltip:'Remove saved recipient',icon:const Icon(Icons.delete_outline),onPressed:busy?null:()async{
+                final token=widget.accessToken()?.trim();if(token==null||!sameSession(token))return;
+                try{await recipientBook.remove(item['userId']!);if(sameSession(token))await loadRecipients();}catch(_){if(sameSession(token))setState(()=>error='Recipient could not be removed.');}
+              })),
+          ]),
           WalletFormSection(title:'1. Recipient',children:[
             TextField(controller: recipient, enabled: !busy, maxLength: 320,
               textInputAction: TextInputAction.next,
@@ -444,6 +475,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
             style: TextStyle(fontWeight: FontWeight.bold)),
           SelectableText('Receipt: ' + (receipt!['operationId'] as String)),
           Text('MSNW sent: ' + formatWalletAtomic(receipt!['amountMicro'] as String)),
+          if(verifiedRecipientAccount!=null)OutlinedButton.icon(onPressed:saveRecipient,icon:const Icon(Icons.person_add_alt),label:const Text('Save recipient')),
           FilledButton(onPressed: () => Navigator.pop(context),
             child: const Text('Done')),
         ],
