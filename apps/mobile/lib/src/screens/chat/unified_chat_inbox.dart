@@ -363,9 +363,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     title: const Text(
                       'Server conversations are not available yet. Showing saved conversations.',
                     ),
-                    trailing: TextButton(
+                    trailing: IconButton(
+                      tooltip: 'Retry server search',
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
-                      child: const Text('Retry server search'),
+                      icon: const Icon(Icons.refresh),
                     ),
                   ),
                 if (serverRows.isNotEmpty)

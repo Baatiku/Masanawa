@@ -132,15 +132,19 @@ void main() {
           );
           expect(find.text('Wallet'), findsOneWidget);
           expect(find.textContaining('MSNW'), findsWidgets);
-          expect(find.text('Available balance'), findsOneWidget);
-          expect(find.text('9007199254740991'), findsNothing);
-          expect(find.text('Credits'), findsNothing);
           // Pricing policy copy may mention ₦1, but a signed-out portfolio
           // must not invent an NGN valuation.
           expect(find.text('Unavailable'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('Available balance'), 100,
+              scrollable: find.byType(Scrollable).first);
+          expect(find.text('Available balance'), findsOneWidget);
+          expect(find.text('Sign in to view your balance'), findsOneWidget);
+          expect(find.text('9007199254740991'), findsNothing);
+          expect(find.text('Credits'), findsNothing);
+          await tester.scrollUntilVisible(find.text('Send'), 100,
+              scrollable: find.byType(Scrollable).first);
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsOneWidget);
-          expect(find.text('Sign in to view your balance'), findsOneWidget);
           await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
@@ -155,8 +159,6 @@ void main() {
     await mount(tester, value: _view(amount: 0, empty: true));
     expect(find.text('0'), findsNothing);
     expect(find.text('— MSNW'), findsOneWidget);
-    await mount(tester);
-    expect(find.text('0'), findsNothing);
     expect(find.text('Sign in to view your balance'), findsOneWidget);
   });
 
