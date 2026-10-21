@@ -87,6 +87,54 @@ BillItem? billingCurrentRepeatProduct(
   return matches.length==1?matches.first:null;
 }
 
+/// A recent receipt is advisory only: the Gateway remains the authority for
+/// duplicate admission, fulfillment status, fees and new purchase approval.
+/// Unknown/pending operations should be reconciled under their original ID.
+class BillingRepeatRisk {
+  const BillingRepeatRisk(this.receipt, {required this.pending});
+  final BillingCheckoutView receipt;
+  final bool pending;
+}
+
+int? _fixedBillKobo(String amount) {
+  if (!RegExp(r'^[0-9]{1,15}(\.[0-9]{1,2})?$').hasMatch(amount)) return null;
+  final parts = amount.split('.');
+  return int.parse(parts.first) * 100 +
+      int.parse(parts.length == 2 ? parts.last.padRight(2, '0') : '0');
+}
+
+BillingRepeatRisk? recentBillingRepeatRisk(
+  List<BillingCheckoutView> receipts,
+  BillItem product,
+  String recipient, {
+  DateTime? now,
+}) {
+  final clock = (now ?? DateTime.now()).toUtc();
+  final amountKobo = _fixedBillKobo(product.amount);
+  final ordered = receipts.toList()
+    ..sort((a, b) => b.quote.createdAt.compareTo(a.quote.createdAt));
+  for (final entry in ordered) {
+    final quote = entry.quote;
+    if (quote.billerCode != product.billerCode ||
+        quote.itemCode != product.itemCode ||
+        quote.currency.toUpperCase() != product.currency.toUpperCase() ||
+        quote.customerId.trim() != recipient.trim()) continue;
+    final created = DateTime.tryParse(quote.createdAt)?.toUtc();
+    if (created == null) continue;
+    final age = clock.difference(created);
+    if (age < const Duration(seconds: -30) ||
+        age > const Duration(minutes: 5)) continue;
+    if (entry.phase == 'quoted' || entry.phase == 'failed' ||
+        entry.phase == 'refunded') continue;
+    final pending = !entry.isTerminal;
+    if (pending || (entry.phase == 'fulfilled' &&
+        amountKobo != null && amountKobo == quote.serviceAmountKobo)) {
+      return BillingRepeatRisk(entry, pending: pending);
+    }
+  }
+  return null;
+}
+
 class BillingScreen extends ConsumerStatefulWidget {
   const BillingScreen({super.key, this.initialService});
 
@@ -269,19 +317,92 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     }).toList(growable: false);
   }
 
-  void onSelectBundle(BillItem selected) {
+  Future<void> onSelectBundle(BillItem selected) async {
     final raw = customer.text.trim();
     final phone = mobileCategory ? normalizeNigerianBillingPhone(raw) : raw;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mobileCategory
           ? 'Please enter a valid Nigerian phone number.'
-          : 'Please enter the customer meter/card/reference number.')), 
+          : 'Please enter the customer meter/card/reference number.')),
       );
       return;
     }
     setState(() => item = selected);
-    _showPurchaseConfirmation(selected);
+    await _reviewWithRepeatGuard(selected, phone);
+  }
+
+  Future<void> _openExistingBill(BillingCheckoutView entry) async {
+    final owner = _owner;
+    if(owner == null)return;
+    // A pending/unknown operation must be recovered by its original
+    // provider-backed reference; never open a fresh payable quote here.
+    if (!entry.isTerminal && entry.quote.fulfillmentReference == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('The original payment reference is unavailable. Check bill activity or contact support before trying again.'),
+      ));
+      return;
+    }
+    await openWalletPage<void>(context:context,title:'Bill receipt',
+      builder:(_)=>MsnwBillingCheckoutSheet(
+        api:api,dio:ref.read(dioProvider),baseUrl:kApiBaseUrl,
+        categoryCode:entry.quote.categoryCode ?? '',
+        item:BillItem(billerCode:entry.quote.billerCode,itemCode:entry.quote.itemCode,
+          name:entry.quote.itemName,amount:entry.quote.serviceAmount,
+          currency:entry.quote.currency,labelName:null),
+        customerId:entry.quote.customerId,expectedUserId:owner,
+        currentUserId:()=>_owner,accessToken:()=>api.accessToken,
+        initialQuote:entry.quote,onFund:_showFundingSheet));
+    if(mounted && _owner == owner)await refreshHistory();
+  }
+
+  Future<void> _reviewWithRepeatGuard(BillItem selected, String recipient) async {
+    final owner=_owner, run=_generation, selectedBiller=biller?.billerCode;
+    if(owner==null)return;
+    List<BillingCheckoutView>? fresh;
+    try {
+      fresh=await api.billingHistory(limit:30);
+    } catch (_) {
+      // A history outage is not proof of no pending transaction.
+    }
+    if(!valid(run,owner) || customer.text.trim().isEmpty ||
+        biller?.billerCode!=selectedBiller || item?.itemCode!=selected.itemCode ||
+        (mobileCategory ? normalizeNigerianBillingPhone(customer.text.trim()) : customer.text.trim()) != recipient) return;
+    final risk=fresh==null?null:recentBillingRepeatRisk(fresh,selected,recipient);
+    if(risk!=null){
+      if (!mounted) return;
+      final selection=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
+        title:Text(risk.pending?'Previous purchase is still pending':'Possible repeat purchase'),
+        content:Text(risk.pending
+          ? 'A recent purchase for this recipient and service has not been confirmed as complete. Check the original order rather than paying again.'
+          : 'A matching bill was recently fulfilled. A second purchase will be a new charge. Review only if you intend another purchase.'),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(ctx,'cancel'),child:const Text('Cancel')),
+          if(risk.pending)
+            TextButton(onPressed:()=>Navigator.pop(ctx,'original'),child:const Text('Check original order'))
+          else
+            FilledButton(onPressed:()=>Navigator.pop(ctx,'repeat'),child:const Text('Review another purchase')),
+        ],
+      ));
+      if(!mounted||!valid(run,owner))return;
+      if(selection=='original') {await _openExistingBill(risk.receipt);return;}
+      if(selection!='repeat')return;
+    } else if(fresh==null){
+      if (!mounted) return;
+      final proceed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+        title:const Text('Recent purchase status unavailable'),
+        content:const Text('We could not check recent bill receipts. If an earlier payment may be pending, return to Activity to check it before starting another.'),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Review a new purchase')),
+        ],
+      ));
+      if(proceed!=true||!mounted||!valid(run,owner))return;
+    }
+    if (item?.itemCode!=selected.itemCode ||
+      biller?.billerCode!=selectedBiller ||
+      (mobileCategory ? normalizeNigerianBillingPhone(customer.text.trim()) : customer.text.trim()) != recipient) return;
+    await _showPurchaseConfirmation(selected);
   }
 
   /// Qualified Flutterwave catalog and exact MSNW-only custody billing.
@@ -364,7 +485,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         busy=false;
       });
       if(valid(generation,owner)){
-        await _showPurchaseConfirmation(selected);
+        await _reviewWithRepeatGuard(selected, recipient);
       }
     }catch(_){
       if(valid(generation,owner))setState((){
@@ -516,6 +637,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                 color: u.textPrimary,
               ),
             ),
+            if (mobileCategory) const Text(
+              'Phone prefixes are hints, not proof of your network. If your number was ported, choose its current operator.',
+            ),
             const SizedBox(height: 8),
             if (mobileCategory) Row(
               children: NigerianNetwork.values.map((net) {
@@ -651,21 +775,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     icon:const Icon(Icons.replay_outlined),
                     onPressed:busy?null:()=>repeatPreviousBill(entry),
                   ),
-                  onTap: () async {
-                    final owner = _owner;
-                    if(owner == null)return;
-                    await openWalletPage<void>(context:context,title:'Bill receipt',
-                      builder:(_)=>MsnwBillingCheckoutSheet(
-                        api:api,dio:ref.read(dioProvider),baseUrl:kApiBaseUrl,
-                        categoryCode:entry.quote.categoryCode ?? '',
-                        item:BillItem(billerCode:entry.quote.billerCode,itemCode:entry.quote.itemCode,
-                          name:entry.quote.itemName,amount:entry.quote.serviceAmount,
-                          currency:entry.quote.currency,labelName:null),
-                        customerId:entry.quote.customerId,expectedUserId:owner,
-                        currentUserId:()=>_owner,accessToken:()=>api.accessToken,
-                        initialQuote:entry.quote,onFund:_showFundingSheet));
-                    if(mounted && _owner == owner)await refreshHistory();
-                  },
+                  onTap: ()=>_openExistingBill(entry),
                 ),
             ],
           ],
