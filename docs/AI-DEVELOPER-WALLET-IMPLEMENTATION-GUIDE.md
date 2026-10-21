@@ -1,4 +1,19 @@
 # Masanawa Platform Enhancement & OPay Reverse-Engineering Guide
+
+## Current Wallet implementation contract — 21 October 2026
+
+**Owner direction:** one multi-asset Masanawa Wallet. Users hold supported MSNW/USDT/USDC/BTC/ETH/SOL independently, deposit more, **Send internally** to another Masanawa account without blockchain movement, and **Withdraw externally** to a supported network/address. MSNW is the platform asset, not the denomination of all balances; no compulsory conversion through MSNW. Multi-asset custody is required scope, not an optional future exchange add-on.
+
+The exact page tree, portfolio math, network/asset identity, state handling and P2P effects are canonical in [SCREEN-JOURNEYS WLT01–WLT10](SCREEN-JOURNEYS.md#multi-asset-wallet-contract--owner-clarification-21-october-2026). Task status and delivery batches live only in [roadmap W01–W14 and P7-P01–P04](PRODUCT-ROADMAP-20261019.md). Implement these together; reference patterns do not override the owner’s product direction or financial controls.
+
+- **Portfolio:** estimated total in selected display currency (USD by default where priced), as-of/coverage, exact per-asset holdings and available/reserved. Exclude uncredited incoming funds; reserved ownership counted once. Mark partial/unpriced/stale explicitly. Inventory comes from authoritative holdings, not enabled deposit routes. No assumed MSNW or stablecoin peg.
+- **Navigation:** Deposit / Send / Withdraw / Swap primary; P2P / Bills / Activity secondary. One asset-detail pattern and shared asset/network pickers, review, server approval, result and receipts. No separate MSNW/crypto wallet homes or Funding/Trading balances.
+- **Deposit:** asset → receive from Masanawa account/QR, eligible blockchain network/address-or-invoice, or qualified local payment purchase. Show memo/tag/minimum/expiry/confirmation requirements before payment. Reuse provider invoice contracts honestly; credit once only on verified settlement. P2P purchase is a link to the same marketplace with asset preselected.
+- **Send:** supported held asset → account/@handle/QR → recipient inquiry → amount/fee review → exact server approval → internal custody debit/credit. No blockchain gas or required network choice for a fungible internal custody asset. Current MSNW implementation is the starting authority, not proof of other asset support.
+- **Withdraw:** held asset → eligible network/address/memo → amount/Max/fee/net quote → approval → reserve → submission/readback → receipt. No forced conversion to/from MSNW. One original request across unknown outcomes.
+- **Swap:** owned asset A → eligible B → executable quote → approval → held asset B. Existing MSNW-to-crypto external payout is conversion-and-withdrawal, not general in-Wallet Swap; reuse its adapter without duplicating screens or pretending capability.
+- **P2P:** Buy/Sell/Orders marketplace, distinct from internal Send. Seller escrow is reserved from the same Wallet; buyer is credited on authoritative release. Cancellation/refund returns eligible seller reserves; fiat is counterparty payment, not an in-app fiat balance or direct platform payout. Current MSNW-only escrow needs qualified adapters before other assets are enabled.
+
 ## For AI Developers & Core Contributors
 
 **Document ID:** `GUIDE-AI-DEV-OPAY-INTEGRATION-20261020`
@@ -52,8 +67,8 @@ While researching `opay-decloned/`, look for cross-platform mechanisms that can 
 ### 2. Smart Clipboard Integration Across the Entire App
 - **OPay Pattern:** `ClipboardAutoReader` does not just read bank numbers; it is integrated across onboarding (`OnboardingViewModel$readClipboardPhone`), payment links, and recharge numbers.
 - **Masanawa Opportunity:**
-  - In Chats: Detect copied text containing a 10-digit Masanawa ID and suggest sending a tip or transfer.
-  - In Registration/Login: Detect copied phone number or invitation code and auto-fill.
+  - In Chats: Offer an explicit Paste action; recognize a complete 10-digit Masanawa ID and open the same internal Send review. Never read clipboard in the background.
+  - In Registration/Login: Offer user-triggered Paste for a phone number or invitation code, validate it and allow correction; no background clipboard collection.
 
 ### 3. QR Code Subsystem (`team.opay.qrcode`)
 - **OPay Pattern:** Supports both scanning merchant/user QRs and generating static/dynamic personal QR codes (`MyQRCodeActivity`).
@@ -61,7 +76,7 @@ While researching `opay-decloned/`, look for cross-platform mechanisms that can 
 
 ### 4. Background Resilience & Connection State Handling
 - **OPay Pattern:** Notice strings like `[osdk_result_net_tip]`, `[pay_net_error_label]`: OPay treats poor network as a normal state rather than an unexpected exception. It displays informative inline recovery banners, cached balances, and explicit retry buttons without locking the user out.
-- **Masanawa Opportunity:** Ensure Masanawa's Chat and Wallet tabs handle spotty cellular connections gracefully—optimistic UI updates, clear pending ticks, and deduplicated retries.
+- **Masanawa Opportunity:** Ensure Masanawa's Chat and Wallet tabs handle spotty cellular connections gracefully—optimistic messaging UI, clear pending ticks and deduplicated retries. Financial balances change only after authoritative settlement/readback; cached balances are labelled with verification time.
 
 ---
 
@@ -71,20 +86,20 @@ When implementing the Wallet and Transfer subsystem, adhere strictly to these pr
 
 ### A. Core Distinctions from OPay
 1. **No Domestic Bank Lists:** Masanawa is an international app. Transfers do not route through domestic Nigerian NIBSS inter-bank clearing. They are:
-   - **Internal P2P:** Instant, off-chain, **zero gas fee** between Masanawa users.
-   - **External Crypto:** On-chain withdrawals to verified crypto addresses (USDT, SOL, BTC, ETH).
+   - **Send:** Internal, off-chain custody transfer of each supported asset between Masanawa users, **zero blockchain gas**; disclose any platform fee from the actual quote. Reserve “P2P” in UI for the marketplace.
+   - **Withdraw:** External blockchain payout of the asset users already hold, to an eligible network/address with required memo/tag, exact quote and server-bound approval. Asset/network support is individually qualified.
 2. **No NIP Session IDs & No "Money Saved" Metrics:** Keep receipts clean, fast, and minimal.
 3. **No USSD:** Do not connect or prompt USSD gateways.
 4. **10-Digit Masanawa Account Number:**
    - Generated upon account creation (format: `8012 345 678`, random 10-digit number starting with `8`, not based on phone number).
    - Displayed on Wallet Home with 1-tap copy.
-   - Used for zero-gas P2P transfers.
+   - Used for internal Send and receive request intents, not as a blockchain address.
 5. **Global Verification Presentation:**
    - Do not implement domestic Tier 1/2/3 local banking restrictions.
    - Use Unverified → Verified ID → Pro Merchant only from actual verification evidence. Limits and permissions depend on jurisdiction, risk and provider agreements (P8-X04); do not promise universal coverage or high allowances.
 
 ### B. What to Adapt from OPay's Transfer Flow
-1. **Instant Recipient Name Resolution:** Typing 10 digits immediately calls `GET /v1/wallet/lookup?query=...` and slides in a verified recipient card (Avatar, Display Name, Handle, Verified badge).
+1. **Instant Recipient Name Resolution:** Typing 10 digits immediately calls `GET /v1/wallet/lookup?query=...` and shows a server-resolved recipient card (permitted avatar, display name and handle; verification badge only from actual verification authority).
 2. **Duplicate Transfer Guard:** Intercept duplicate submissions of identical amount to the same user within 5 minutes.
 3. **In-App 3x4 Numeric Keypad:** Accessible custom keypad connected to existing server-bound financial step-up, with weak-PIN rules and platform-backed biometric shortcut where qualified (P6-W05). Client biometric success alone cannot authorize payment.
 4. **Telco Detection for Airtime/Data:** Suggest carriers only from current region-qualified catalog evidence, allow correction and account for number portability (P7-S02); Nigerian examples are not global defaults.
@@ -94,7 +109,7 @@ When implementing the Wallet and Transfer subsystem, adhere strictly to these pr
 
 ## 5. Existing Code & Next Execution Steps
 
-### Current merged foundation — baseline `c944045e`:
+### Inspected foundation — baseline `d340a97b` (21 October 2026):
 - **`packages/security/migrations/0113_masanawa_account_number.sql`**: Added `masanawa_account_number` to user profiles with the generator function `security.generate_masanawa_account_number()`.
 - **Schema proposal, not activated spendable authority — `packages/commerce/migrations/0134_multi_asset_wallet_and_transfers.sql`**: Multi-asset custody accounts (`MSNW`, `USDT`, `USDC`, `SOL`, `BTC`, `ETH`), P2P transfers journal, and crypto deposit addresses table.
 - **`services/gateway/src/msn_wallet/custody_send.ts`**: Updated `resolve()` and `recipient()` to resolve 10-digit Masanawa IDs and `@handles`, plus added `lookupRecipient()`.
@@ -104,11 +119,11 @@ Wallet #230 is merged via `ab15bf7b`: 0114 assigns/backfills stable IDs, the par
 
 ### Your Direct Execution Goals:
 1. **Review & Compare:** Open `opay-decloned/res/layout/` and inspect how OPay lays out `omain_fragment_new_pay.xml`, `pay_activity_cashier.xml`, and `dialog_transfer_repeat_tips.xml`.
-2. **Upgrade Mobile Wallet Home:** Refactor `apps/mobile/lib/src/finance/msnw_wallet_home.dart` and `wallet_screen.dart` into a consolidated portfolio view showing total balance (USD/MSNW), 10-digit ID badge with 1-tap copy, action buttons (`Send`, `Deposit`, `Swap`, `Bills`), and the "My Assets" token list.
-3. **Build Dual-Rail Send Sheet:** In `apps/mobile/lib/src/finance/wallet_flow_page.dart`, implement the P2P tab (10-digit ID lookup card, duplicate guard, clipboard auto-reader) and the External Crypto tab.
+2. **Implement portfolio and authority together (W02/W12/W13):** Reuse `msnw_wallet_home.dart`, `wallet_screen.dart`, `crypto_state.dart` and the existing custody/provider adapters for one holdings inventory, covered portfolio estimate, account badge, primary `Deposit / Send / Withdraw / Swap`, shared asset detail and secondary P2P/Bills/Activity. Deposit routes must not determine held assets; exact MSNW quantity is not a USD total.
+3. **Finish connected operations (W03/W05/W08/W14):** Internal Send and external Withdraw are distinct operations sharing the existing flow components, confirmation, durable recovery and receipts. Implement Deposit and true in-Wallet Swap; keep legacy links as aliases to shared flows. Extend qualified internal custody beyond MSNW before exposing other asset Send. Explicit Paste only, no background clipboard reader.
 4. **Build the Custom In-App Keypad:** In `apps/mobile/lib/src/ui/components/pin_keyboard.dart`, implement the 3x4 numeric keypad with biometric button.
 5. **Explore & Integrate Chat Synergy:** Enable in-chat transfers (`+ -> Pay`) and tap-to-pay on 10-digit IDs in conversation threads.
-6. **Feel Empowered to Surface More:** If you spot other smart implementations in `opay-decloned/` (such as transaction caching, haptic feedback hooks, or notification deduplication), adapt them into Masanawa and keep our codebase world-class!
+6. **Integrate same-Wallet P2P (P7-P01–P04):** asset-aware offers, canonical reserve/release/refund, authorized payment verification/dispute, portfolio effects and operation-linked receipts. Reuse current MSNW escrow; additional assets need real backing/adapter qualification. Complete connected source in larger batches before one focused validation pass. Assign any newly useful benchmark pattern to an existing roadmap task before implementation.
 
 ---
 

@@ -8,6 +8,8 @@
 
 > **Global product rule.** Masanawa serves an international market. MSNW is a blockchain asset with its own six-decimal accounting unit. No fiat currency — Nigerian naira, US dollars, euros, pounds or otherwise — defines MSNW's on-chain denomination. Paystack, Flutterwave, stablecoin gateways and future payment services are **funding/payout adapters**, each separately qualified for its supported regions and currencies. Do not hardcode a national peg in the token contract.
 
+**Wallet integration (owner clarification, 21 October 2026):** this guide governs MSNW issuance only. Masanawa Wallet holds multiple individually qualified assets; Base-first canonical MSNW does not limit BTC/ETH/USDT/USDC/SOL to Base or convert those holdings into MSNW. Portfolio display currency is an estimate, not MSNW’s denomination. Internal Send transfers existing backed custody claims without a blockchain transaction; Withdraw pays the selected held asset externally on its qualified network. No compulsory MSNW intermediary, duplicate customer balance or unqualified wrapped supply. Follow SCREEN-JOURNEYS WLT01–WLT10 and roadmap W12–W14 for custody, pricing, deposits and operations.
+
 ## 1. Product decision record
 
 | Property | Decision |
