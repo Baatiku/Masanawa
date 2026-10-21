@@ -744,11 +744,23 @@ export function createPostgresCryptoRepository(pool: Pool): CryptoRepository {
     async listHoldings(input) {
       const tenantId=parseCanonicalId('tenant',input.tenantId), userId=parseCanonicalId('user',input.userId);
       return withTransaction(pool,async(client)=>{
-        const result=await client.query<{asset:string;network:string|null;amount:string}>(
-          `SELECT asset,network,SUM(CASE direction WHEN 'credit' THEN amount ELSE -amount END)::text AS amount
-           FROM commerce.crypto_ledger_entries WHERE tenant_id=$1 AND user_id=$2
-           GROUP BY asset,network ORDER BY asset,network`,[tenantId,userId]);
-        return Object.freeze(result.rows.map(row=>Object.freeze({...row,amount:canonicalNumeric(row.amount)})));
+        const result=await client.query<{asset:string;network:string|null;amount:string;reservedAmount:string}>(
+          `WITH balances AS (
+             SELECT asset,network,SUM(CASE direction WHEN 'credit' THEN amount ELSE -amount END) AS available
+             FROM commerce.crypto_ledger_entries WHERE tenant_id=$1 AND user_id=$2 GROUP BY asset,network
+           ), reserves AS (
+             SELECT e.asset,e.network,SUM(e.amount) AS reserved
+             FROM commerce.crypto_ledger_entries e JOIN commerce.crypto_intents i
+               ON i.tenant_id=e.tenant_id AND i.user_id=e.user_id AND i.request_id=e.request_id
+             WHERE e.tenant_id=$1 AND e.user_id=$2 AND e.direction='debit'
+               AND e.reason IN ('withdrawal-reserve','withdrawal-fee-reserve','conversion-debit')
+               AND i.status NOT IN ('succeeded','failed','refunded','expired')
+             GROUP BY e.asset,e.network
+           ) SELECT b.asset,b.network,b.available::text AS amount,COALESCE(r.reserved,0)::text AS "reservedAmount"
+             FROM balances b LEFT JOIN reserves r ON r.asset=b.asset AND r.network IS NOT DISTINCT FROM b.network
+             ORDER BY b.asset,b.network`,[tenantId,userId]);
+        return Object.freeze(result.rows.map(row=>Object.freeze({...row,amount:canonicalNumeric(row.amount),reservedAmount:canonicalNumeric(row.reservedAmount)})));
+
       },{isolation:'repeatable read',readOnly:true});
     },
 

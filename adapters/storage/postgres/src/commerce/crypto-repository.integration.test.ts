@@ -37,6 +37,27 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
     expect(await f.repository.listHoldings!({tenantId:createCanonicalId('tenant'),userId:f.userId})).toEqual([]);
   });
 
+  it('projects available and reserved principal plus user fee, then releases exactly once',async()=>{
+    const f=await fundedFixture();const intent=withdrawalIntent(f.tenantId,f.userId);
+    await f.repository.reserveWithdrawalWithFee({intent,networkFee:'0.5',feePayer:'user'});
+    const pending=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
+    expect(Number(pending[0]?.amount)).toBe(89.5);expect(Number(pending[0]?.reservedAmount)).toBe(10.5);
+    await f.repository.settleWithdrawal({tenantId:f.tenantId,userId:f.userId,requestId:intent.requestId,succeeded:false,providerReference:'failed-reserve-readback',updatedAt:instant(30)});
+    const released=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
+    expect(Number(released[0]?.amount)).toBe(100);expect(Number(released[0]?.reservedAmount)).toBe(0);
+  });
+  it('includes conversion debit while pending and removes reservation on settled target credit',async()=>{
+    const f=await fundedFixture();const intent=conversionIntent(f.tenantId,f.userId);
+    await f.repository.reserveConversion(intent);
+    const pending=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
+    expect(Number(pending[0]?.reservedAmount)).toBe(40);
+    await f.repository.bindProviderConversion({tenantId:f.tenantId,userId:f.userId,requestId:intent.requestId,providerConversionId:'inventory-convert',updatedAt:instant(30)});
+    await f.repository.settleConversion({tenantId:f.tenantId,userId:f.userId,requestId:intent.requestId,succeeded:true,targetAmount:'0.00064',providerReference:'inventory-convert',updatedAt:instant(31)});
+    const settled=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
+    expect(settled.every(row=>Number(row.reservedAmount)===0)).toBe(true);
+    expect(settled.some(row=>row.asset==='BTC')).toBe(true);
+  });
+
   function instant(offset = 0) {
     return toInstant(new Date(Date.parse("2026-10-05T00:00:00.000Z") + offset));
   }

@@ -1,3 +1,4 @@
+import 'wallet_pending_banner.dart';
 import 'wallet_flow_page.dart';
 import '../ui/components/masanawa_list_skeleton.dart';
 import 'package:flutter/material.dart';
@@ -79,6 +80,8 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     _convertSource = null;
     _withdrawSource = null;
   }
+  String? get _currentAccountId=>switch(ref.read(sessionProvider)){SessionSignedIn(:final user)=>user.id,_=>null};
+
   Future<void> _runAction(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -116,6 +119,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     WidgetRef ref,
     CryptoWalletSnapshot wallet,
   ) async {
+    final owner=_currentAccountId;
+    bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
+    if(!current())return;
     final capabilities = wallet.capabilities;
     final settlement = capabilities.fiatSettlementProviderCode;
     if (!capabilities.fiatOnRamp ||
@@ -132,7 +138,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         initial: _buyDraft,
       ),
     );
-    if (input == null || !context.mounted) return;
+    if (input == null || !current()) return;
     _buyDraft = input;
 
     try {
@@ -156,7 +162,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         checkout,
         mode: LaunchMode.externalApplication,
       );
-      if (!context.mounted) return;
+      if (!current()) return;
       if (!opened) {
         _message(
           context,
@@ -190,7 +196,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         final refreshed = await ref
             .read(cryptoWalletProvider.notifier)
             .refreshFiatPurchase(purchase.requestId);
-        if (!context.mounted) return;
+        if (!current()) return;
         final message =
             refreshed.status == 'succeeded' && refreshed.cryptoAmount != null
             ? 'Purchase completed: ${refreshed.cryptoAmount} ${refreshed.settlementAsset}'
@@ -198,7 +204,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         _message(context, message);
       }
     } catch (error) {
-      if (context.mounted) {
+      if (current()) {
         _error(context, error);
         _message(context,
           'Could not confirm the purchase. Your amount is retained. '
@@ -212,6 +218,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     WidgetRef ref,
     CryptoWalletSnapshot wallet,
   ) async {
+    final owner=_currentAccountId;
+    bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
+    if(!current())return;
     final route = wallet.selectedRoute;
     if (route == null) return;
     final input = await openWalletPage<_ReceiveInput>(
@@ -221,7 +230,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         initial: _receiveSource == route.providerCode ? _receiveDraft : null,
       ),
     );
-    if (input == null || !context.mounted) return;
+    if (input == null || !current()) return;
     _receiveDraft = input;
     _receiveSource = route.providerCode;
     try {
@@ -234,13 +243,13 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
           );
       _receiveDraft = null;
       _receiveSource = null;
-      if (!context.mounted) return;
+      if (!current()) return;
       await openWalletPage<void>(
         context: context,
         builder: (_) => _DepositDialog(intent: intent),
       );
     } catch (error) {
-      if (context.mounted) _error(context, error);
+      if (current()) _error(context, error);
     }
   }
 
@@ -249,6 +258,12 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     WidgetRef ref,
     CryptoWalletSnapshot wallet,
   ) async {
+    final owner=_currentAccountId;
+    bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
+    if(!current())return;
+    final pending=await ref.read(walletPendingCryptoProvider.future);
+    if(!current())return;
+    if(pending!=null){_message(context,'Check the previous operation from Wallet before starting another.');return;}
     final source = wallet.selectedRoute;
     if (source == null || !wallet.capabilities.conversions) return;
     final targets = wallet.conversionRoutes
@@ -266,7 +281,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         initial: _convertSource == source.providerCode ? _convertDraft : null,
       ),
     );
-    if (input == null || !context.mounted) return;
+    if (input == null || !current()) return;
     _convertDraft = input;
     _convertSource = source.providerCode;
 
@@ -277,7 +292,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         targetProviderCode: input.targetProviderCode,
         amount: input.amount,
       );
-      if (!context.mounted) return;
+      if (!current()) return;
       final confirmed = await openWalletPage<bool>(
         context: context,
         builder: (dialogContext) => WalletReviewContent(
@@ -323,7 +338,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
           ],
         ),
       );
-      if (confirmed != true || !context.mounted) return;
+      if (confirmed != true || !current()) return;
       final intent = await controller.createConversion(
         requestId: createRequestId(),
         providerCode: source.providerCode,
@@ -332,9 +347,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       );
       _convertDraft = null;
       _convertSource = null;
-      if (context.mounted) _operationResult(context, intent);
+      if (current()) _operationResult(context, intent);
     } catch (error) {
-      if (context.mounted) {
+      if (current()) {
         _error(context, error);
         _message(context,
           'Could not confirm conversion. Your input is retained. '
@@ -348,6 +363,12 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
     WidgetRef ref,
     CryptoWalletSnapshot wallet,
   ) async {
+    final owner=_currentAccountId;
+    bool current()=>context.mounted&&owner!=null&&_currentAccountId==owner;
+    if(!current())return;
+    final pending=await ref.read(walletPendingCryptoProvider.future);
+    if(!current())return;
+    if(pending!=null){_message(context,'Check the previous operation from Wallet before starting another.');return;}
     final route = wallet.selectedRoute;
     if (route == null || !wallet.capabilities.withdrawals) return;
     final input = await openWalletPage<_WithdrawInput>(
@@ -357,7 +378,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         initial: _withdrawSource == route.providerCode ? _withdrawDraft : null,
       ),
     );
-    if (input == null || !context.mounted) return;
+    if (input == null || !current()) return;
     _withdrawDraft = input;
     _withdrawSource = route.providerCode;
 
@@ -368,7 +389,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
         amount: input.amount,
         destinationAddress: input.address,
       );
-      if (!context.mounted) return;
+      if (!current()) return;
       final confirmed = await openWalletPage<bool>(
         context: context,
         builder: (dialogContext) => WalletReviewContent(
@@ -424,18 +445,18 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
           ],
         ),
       );
-      if (confirmed != true || !context.mounted) return;
+      if (confirmed != true || !current()) return;
       final requestId=createRequestId();
       final api=ref.read(apiClientProvider);
       await api.beginWithdrawalStepUp(
         requestId:requestId,providerCode:route.providerCode,
         amount:input.amount,destinationAddress:input.address,
       );
-      if(!context.mounted)return;
+      if(!current())return;
       final code=await openWalletPage<String>(
         context:context,wrapScaffold:false,title:'Verify withdrawal',builder:(_)=>const WalletStepUpPage(),
       );
-      if(code==null || !context.mounted)return;
+      if(code==null || !current())return;
       final grant=await api.confirmWithdrawalStepUp(
         requestId:requestId,providerCode:route.providerCode,
         amount:input.amount,destinationAddress:input.address,code:code,
@@ -449,9 +470,9 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
       );
       _withdrawDraft = null;
       _withdrawSource = null;
-      if (context.mounted) _operationResult(context, intent);
+      if (current()) _operationResult(context, intent);
     } catch (error) {
-      if (context.mounted) {
+      if (current()) {
         _error(context, error);
         _message(context,
           'Withdrawal status is not confirmed. Details are retained. '
@@ -532,7 +553,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
                           .read(cryptoWalletProvider.notifier)
                           .refreshBalance(),
               ),
-              const Text('Available funds are shown. Reserved crypto and total valuation remain unverified.'),
+              Text('Reserved: ${data.reservedBalances[data.selectedProviderCode]??'Unavailable'}. Portfolio prices require separate verified rates.'),
               const SizedBox(height: 14),
               _CryptoActions(
                 busy: _busy,
@@ -563,6 +584,7 @@ class _CryptoWalletScreenState extends ConsumerState<CryptoWalletScreen> {
 
               ],
               const SizedBox(height: 22),
+              const WalletPendingBanner(),
               Text(
                 'Activity',
                 style: TextStyle(
