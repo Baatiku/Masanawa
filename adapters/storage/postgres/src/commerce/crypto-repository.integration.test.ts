@@ -42,9 +42,11 @@ describeDatabase("crypto conversion and payout fee PostgreSQL acceptance", () =>
     await f.repository.reserveWithdrawalWithFee({intent,networkFee:'0.5',feePayer:'user'});
     const pending=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
     expect(Number(pending[0]?.amount)).toBe(89.5);expect(Number(pending[0]?.reservedAmount)).toBe(10.5);
+    expect(pending[0]?.totalAmount).toBe('100');
     await f.repository.settleWithdrawal({tenantId:f.tenantId,userId:f.userId,requestId:intent.requestId,succeeded:false,providerReference:'failed-reserve-readback',updatedAt:instant(30)});
     const released=await f.repository.listHoldings!({tenantId:f.tenantId,userId:f.userId});
     expect(Number(released[0]?.amount)).toBe(100);expect(Number(released[0]?.reservedAmount)).toBe(0);
+    expect(released[0]?.totalAmount).toBe('100');
   });
   it('includes conversion debit while pending and removes reservation on settled target credit',async()=>{
     const f=await fundedFixture();const intent=conversionIntent(f.tenantId,f.userId);

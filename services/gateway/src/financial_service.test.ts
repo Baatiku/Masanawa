@@ -338,6 +338,21 @@ function setup(
 }
 const authorizationHeader = "Bearer fixture-token";
 describe("financial service recovery and admission", () => {
+  it("projects exact owned inventory and rejects a provider-code/network collision", async () => {
+    const { service, crypto } = setup();
+    const holdings = vi.fn().mockResolvedValueOnce([
+      { asset: "USDTTRC20", network: "tron", amount: "89.123456789012345678", reservedAmount: "10.5", totalAmount: "99.623456789012345678" },
+    ]).mockResolvedValueOnce([
+      { asset: "USDTTRC20", network: "tron", amount: "8", reservedAmount: "2", totalAmount: "10" },
+      { asset: "USDTTRC20", network: "ethereum", amount: "4", reservedAmount: "0", totalAmount: "4" },
+    ]);
+    Object.assign(crypto, { listHoldings: holdings });
+    await expect(service.listHoldings!({ authorizationHeader })).resolves.toEqual([
+      { providerCode: "USDTTRC20", asset: "USDT", network: "tron", amount: "89.123456789012345678", reservedAmount: "10.5", totalAmount: "99.623456789012345678" },
+    ]);
+    await expect(service.listHoldings!({ authorizationHeader })).rejects.toThrow("financial.crypto.holdings_identity_conflict");
+    expect(holdings).toHaveBeenCalledWith({ tenantId, userId });
+  });
   it("keeps fiat Buy disabled until the account is explicitly activated and custody-backed", async () => {
     await expect(setup(null).service.capabilities({ authorizationHeader }))
       .resolves.toMatchObject({

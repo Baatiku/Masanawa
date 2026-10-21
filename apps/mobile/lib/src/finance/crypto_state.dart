@@ -108,6 +108,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       final routes=<CryptoRoute>[], reserved=<String,String>{}, available=<String,String>{};
       for(final row in rows){
         final route=CryptoRoute.fromJson(row);routes.add(route);
+        if(available.containsKey(route.providerCode))throw const FormatException('Duplicate crypto holding route');
         available[route.providerCode]=CryptoBalance.fromJson(row).amount;
         reserved[route.providerCode]=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':row['reservedAmount']}).amount;
       }
@@ -204,12 +205,16 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         for(final item in holdings) {
           final route=CryptoRoute.fromJson(item);
           final balance=CryptoBalance.fromJson(item);
+          if(heldBalances.containsKey(route.providerCode))throw const FormatException('Duplicate crypto holding route');
           holdingRoutes.add(route);heldBalances[route.providerCode]=balance.amount;
           final reserved=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':item['reservedAmount']});
           reserves[route.providerCode]=reserved.amount;
         }
         holdingsVerified=true;
-      } catch(_) { /* Per-asset reads remain available; no fabricated zero. */ }
+      } catch(_) {
+        holdingRoutes.clear();heldBalances.clear();reserves.clear();
+        /* Per-asset reads remain available; no fabricated zero. */
+      }
     }
     final inventory = CryptoWalletSnapshot(holdingRoutes:holdingRoutes,capabilities:capabilities,depositRoutes:depositRoutes,
       conversionRoutes:conversionRoutes,history:history,balances:const {},selectedProviderCode:null).assetRoutes;

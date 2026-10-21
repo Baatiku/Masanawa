@@ -498,6 +498,8 @@ Focused verification: four backend files **28 passed** (actual SQL warning/ack/s
 
 **Next implementation:** continue W15 FX-bound pricing and W12 qualified internal multi-asset authority alongside W08 exact recovery/support gaps, then W06/W07 identity/payment entry and remaining P7-P/S tasks. Preserve Phase 5 earnings/provider gaps and all Phase 8 acceptance requirements; no parent-phase completion claim.
 
+**W12 inventory identity continuation (21 October 2026):** The existing owned crypto ledger projection now returns exact decimal `totalAmount = available + reserved` from the same read-only repeatable-read snapshot. Gateway checks that each ledger lot's asset/network matches its canonical provider-currency route and refuses collisions that would overwrite another network balance; mobile inventory likewise rejects duplicate provider codes rather than accepting a partial, misleading projection. This is a read-only integrity step, not proof of asset precision, provider backing, spendability, complete multi-asset custody, internal non-MSNW Send or verified portfolio prices. W12 and dependent W02/W03 remain open. Next: establish individually qualified asset/lot identity, precision and backing, then balanced internal transfer authority with exact authorization/replay/concurrency gates. Flutter/device and provider qualification remain separate acceptance work.
+
 
 ## Current NGN quote and receipt-support continuation — W15/W08/W10
 Base `3de49e3207ca2eb9281c453f78933f79071dd9f2` (#244). Source branch `feat/wallet-pricing-support-batch-20261021`; this is a partial source milestone, not completed Phase 6/7 acceptance.
