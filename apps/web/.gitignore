@@ -1,0 +1,8 @@
+# Generated web artifacts and sensitive local configuration
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.local
+.env.*.local
