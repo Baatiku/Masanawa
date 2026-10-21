@@ -53,13 +53,16 @@ jobs:
           if [ "${result:-0}" -ne 0 ]; then
             # Job logs can be unavailable through the Actions API. Surface the
             # failing test identities as check annotations for bounded repair.
-            grep -E '\[E\]' "$RUNNER_TEMP/mobile-tests.log" | head -50 |
-              while IFS= read -r failure; do
-                failure="${failure//'%'/'%25'}"
-                failure="${failure//$'\r'/'%0D'}"
-                failure="${failure//$'\n'/'%0A'}"
-                printf '::error title=Flutter test failure::%s\n' "$failure"
-              done
+            python3 - "$RUNNER_TEMP/mobile-tests.log" <<'PY'
+          import sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          indices = [i for i, line in enumerate(lines) if '[E]' in line][:50]
+          for index in indices:
+              detail = '\n'.join(lines[index:index + 18])
+              detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Flutter test failure::{detail}')
+          PY
             exit "$result"
           fi
       - name: Phone (production APK)
