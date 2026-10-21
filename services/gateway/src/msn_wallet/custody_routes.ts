@@ -33,6 +33,20 @@ export function registerMsnwCustodyRoutes(
     try { await owner(request.headers.authorization); return MSNW_PRICING_POLICY; }
     catch(error) { return failed(reply,error); }
   });
+  app.get('/v1/wallet/support',async(request,reply)=>{
+    reply.header('Cache-Control','private, no-store');
+    try{return await input.ledger.support.read(await owner(request.headers.authorization),(request.query as {operationId?:unknown}).operationId);}
+    catch(error){return failed(reply,error);}
+  });
+  app.post('/v1/wallet/support',{bodyLimit:512},async(request,reply)=>{
+    reply.header('Cache-Control','private, no-store');
+    try{
+      const identity=await owner(request.headers.authorization), body=request.body;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='operationId,reason')throw new WalletActivityError('wallet.support_request_invalid');
+      const row=body as Record<string,unknown>;
+      return await input.ledger.support.open(identity,row.operationId,row.reason);
+    }catch(error){return failed(reply,error);}
+  });
   app.get("/v1/wallet/account", async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
     try { return await input.ledger.account(await owner(request.headers.authorization)); }

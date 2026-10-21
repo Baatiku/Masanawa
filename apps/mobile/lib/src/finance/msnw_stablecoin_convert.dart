@@ -78,6 +78,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
     if(same(token))setState(()=>error=message);
   }
   bool validPending(Map<String,dynamic> v) =>
+      (!v.containsKey('expectedNgnQuoteId') || (v['expectedNgnQuoteId'] is String && RegExp(r'^[A-Za-z0-9:_-]{8,128}$').hasMatch(v['expectedNgnQuoteId'] as String))) &&
       v['amountMicro'] is String &&
       RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(v['amountMicro'] as String) &&
       v['expectedTargetMicro'] is String &&
@@ -242,7 +243,10 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
          response['rateUsdMicroPerMsnw'] is! String||
          response['availableMicro'] is! String||
          response['sufficient'] is! bool||
-         response['providerLiquidityQualified'] is! bool){
+         response['providerLiquidityQualified'] is! bool||response['pricingEvidence'] is! Map||
+         response['pricingEvidence']['policyId']!='msnw-ngn-1-v1'||
+         response['pricingEvidence']['quoteId'] is! String||
+         !RegExp(r'^[A-Za-z0-9:_-]{8,128}$').hasMatch(response['pricingEvidence']['quoteId'] as String)){
         throw const FormatException('Invalid conversion quote');
       }
       setState((){
@@ -288,6 +292,7 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
       'expectedTargetMicro':v['targetMicro'],
       'expectedFeeMicro':v['feeEstimateMicro'],
       'expectedRateUsdMicroPerMsnw':v['rateUsdMicroPerMsnw'],
+      if(v['pricingEvidence'] is Map)'expectedNgnQuoteId':v['pricingEvidence']['quoteId'],
       'idempotencyKey':id,
     };
     if(!validPending(original)) {
@@ -372,7 +377,11 @@ class _MsnwStablecoinConvertSheetState extends State<MsnwStablecoinConvertSheet>
               helperText:'The address must support the selected blockchain. A wrong network can permanently lose funds.',helperMaxLines:4)),
           ]),
           if(price!=null) WalletFormSection(title:'Live quote',children:[
+            const Text('MSNW reference: ₦1. Target amount uses a fresh signed asset quote; no USD parity is assumed.'),
             const SizedBox(height:8),
+            Text('Rate source: ${price!['pricingEvidence']['source']}'),
+            Text('Rate time: ${price!['pricingEvidence']['asOf']}'),
+            Text('Expires: ${price!['expiresAt']}'),
             Text('Reserve MSNW: '+unit(price!['sourceMicro'] as String)),
             Text('Estimated crypto: '+unit(price!['targetMicro'] as String)),
             Text('NOWPayments fee: '+unit(price!['feeEstimateMicro'] as String)),

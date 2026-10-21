@@ -1,3 +1,4 @@
+import { createWalletSupport } from './wallet_support.js';
 import { createWalletActivity } from './wallet_activity.js';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "@masanawa/postgres";
@@ -252,6 +253,7 @@ export function createMsnwCustodyService(pool: Pool) {
       asset: "MSNW" as const, state: "completed" as const,
     })));
   }
-  return Object.freeze({ account, balance, preview, send, lookup, history, lookupRecipient, activity: createWalletActivity(pool) });
+  const activity=createWalletActivity(pool);
+  return Object.freeze({ account, balance, preview, send, lookup, history, lookupRecipient, activity, support:createWalletSupport(pool,activity.read) });
 }
 

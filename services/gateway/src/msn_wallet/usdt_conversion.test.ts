@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Pool } from "@masanawa/postgres";
 import { createMsnwUsdtConversion, parseStableMicro, stableDecimal } from "./usdt_conversion.js";
 
-function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; active?:boolean;} = {}) {
+function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; active?:boolean;ngnQuote?:any;requireNgnQuote?:boolean;} = {}) {
   const commands:string[]=[];
   const calls:string[]=[];
   const providerCode="USDTTRC20";
@@ -41,7 +41,7 @@ function mock(opts: {ownerBalance?:string; treasury?:string; settled?:boolean; a
       available:opts.treasury??"20",pending:"0"}];},
   };
   const service=createMsnwUsdtConversion({
-    pool,payout,custody,rateUsdMicroPerMsnw:"1000000",
+    pool,payout,custody,rateUsdMicroPerMsnw:"1000000",...(opts.ngnQuote?{ngnQuote:opts.ngnQuote}:{}),...(opts.requireNgnQuote!==undefined?{requireNgnQuote:opts.requireNgnQuote}:{}),
     verificationCode:"123456",enabledRoutes:[providerCode],
     approvedDestination:()=>true,
   });
@@ -139,4 +139,18 @@ describe("MSNW independently prefunded NOWPayments crypto payout",()=>{
       .rejects.toMatchObject({code:"msnw.convert.network_unsupported"});
     expect(f.calls).not.toContain("POST");
   });
+});
+
+it("requires fresh NGN evidence for qualified new admission",async()=>{
+ const f=mock({requireNgnQuote:true});
+ await expect(f.service.quote(owner,inputs)).rejects.toThrow('ngn_quote_unavailable');
+ expect(f.calls).not.toContain('POST');
+});
+it("binds NGN rational quote evidence and floors target once",async()=>{
+ const evidence={policyId:'msnw-ngn-1-v1',providerCode:'USDTTRC20',quoteId:'fixture-quote-1',source:'fixture',numerator:'1000000',denominator:'3',asOf:new Date().toISOString(),expiresAt:new Date(Date.now()+120000).toISOString()};
+ const f=mock({requireNgnQuote:true,ngnQuote:async()=>evidence});
+ const quote=await f.service.quote(owner,{...inputs,amountMicro:'3000000'});
+ expect(quote.targetMicro).toBe('1000000');expect(quote.pricingEvidence).toEqual(evidence);
+ await expect(f.service.confirm(owner,{...inputs,expectedTargetMicro:quote.targetMicro,expectedFeeMicro:quote.feeEstimateMicro,expectedRateUsdMicroPerMsnw:quote.rateUsdMicroPerMsnw,expectedNgnQuoteId:'wrong-quote',idempotencyKey:'fixture-reserve-key-123'})).rejects.toThrow();
+ expect(f.calls).not.toContain('POST');
 });
