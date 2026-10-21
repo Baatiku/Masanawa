@@ -142,14 +142,16 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
       final nextId = next is SessionSignedIn ? next.user.id : null;
       final nextEpoch = _currentAuthorizationEpoch;
       if (previousId == nextId && _authorizationEpoch == nextEpoch) return;
-      _authorizationEpoch = nextEpoch;
-      ++_epoch;
-      _sessions = const [];
-      _history = const [];
-      _saving = false;
-      _loading = nextId != null;
-      _confirmSession = null;
-      _confirmAll = false;
+      setState(() {
+        _authorizationEpoch = nextEpoch;
+        ++_epoch;
+        _sessions = const [];
+        _history = const [];
+        _saving = false;
+        _loading = nextId != null;
+        _confirmSession = null;
+        _confirmAll = false;
+      });
       if (nextId != null) Future<void>.microtask(_load);
     });
     return Scaffold(
