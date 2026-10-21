@@ -96,6 +96,7 @@ void main() {
           cryptoWalletProvider.overrideWith(
             () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
           ),
+          walletPendingCryptoProvider.overrideWith((ref) async => null),
         ],
         child: MaterialApp(
           theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -232,6 +233,7 @@ void main() {
           cryptoWalletProvider.overrideWith(
             () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
           ),
+          walletPendingCryptoProvider.overrideWith((ref) async => null),
         ],
         child: MaterialApp.router(
           theme: buildMasanawaTheme(brightness: Brightness.light),
