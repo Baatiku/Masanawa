@@ -451,6 +451,16 @@ export function createHumanCommunicationService(o:HumanOptions){
         }
         return conversationView(db,a,c)
       }
+      if(parts.length===3&&parts[2]==='payment-recipient'&&method==='GET'){
+        if(c.state!=='accepted')fail(403,'Accept the conversation before opening payment');
+        await peer(db,a,target);
+        const recipient=await db.query('SELECT masanawa_account_number FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2',[a.tenantId,target]);
+        const accountNumber=recipient.rows[0]?.masanawa_account_number;
+        if(typeof accountNumber!=='string'||!/^8[0-9]{9}$/.test(accountNumber))fail(409,'Recipient Wallet account unavailable');
+        // Read-only navigation hint. Send independently resolves this same ID,
+        // previews exact terms and requires explicit confirmation; no chat ledger.
+        return {accountNumber,userId:target,asset:'MSNW',expiresAt:new Date(Date.parse(now())+10*60*1000).toISOString()};
+      }
       if(parts[2]==='decision'){
         return idem(db,a,b.requestId,'decision',{
           id,action:b.action

@@ -646,3 +646,20 @@ it('profile-moderated sender cannot admit outgoing messages or notifications',as
  await expect(send({tenantId:'t',userId:'moderated-sender'},'POST','conversations',{handle:'moderatedrecipient',requestId:'moderated-attempt'})).rejects.toMatchObject({statusCode:404});
  expect((await db.query('SELECT * FROM talks.human_outbox')).rows).toHaveLength(count);
 });
+
+it('resolves Chat Pay only for accepted participants and rechecks blocking without moving funds',async()=>{
+ await db.exec(`CREATE SCHEMA IF NOT EXISTS security;
+ CREATE TABLE IF NOT EXISTS security.platform_user_profiles(tenant_id text,user_id text,masanawa_account_number text);
+ INSERT INTO identity.users VALUES('t','payee','active');
+ INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('t','payee','payee','Payee');
+ INSERT INTO security.platform_user_profiles VALUES('t','payee','8123456789');`);
+ const p={tenantId:'t',userId:'payee'};
+ const thread=await send(a,'POST','conversations',{handle:'payee',requestId:'chat-pay-thread-fixture'});
+ const path=`conversations/${thread.id}/payment-recipient`;
+ await expect(send(a,'GET',path)).rejects.toMatchObject({statusCode:403});
+ await send(p,'POST',`conversations/${thread.id}/decision`,{action:'accept',requestId:'chat-pay-accept-fixture'});
+ expect(await send(a,'GET',path)).toEqual({accountNumber:'8123456789',userId:'payee',asset:'MSNW',expiresAt:new Date(clock.getTime()+600000).toISOString()});
+ for(const actor of [eve,other])await expect(send(actor,'GET',path)).rejects.toMatchObject({statusCode:404});
+ await db.query("INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at) VALUES('t','payee','alice',true,statement_timestamp()) ON CONFLICT(tenant_id,viewer_user_id,subject_user_id) DO UPDATE SET blocked=true");
+ await expect(send(a,'GET',path)).rejects.toMatchObject({statusCode:404});
+});

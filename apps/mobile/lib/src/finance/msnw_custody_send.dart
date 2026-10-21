@@ -1,4 +1,5 @@
 import 'wallet_flow_page.dart';
+import '../core/wallet_payment_request.dart';
 import 'wallet_recipient_book.dart';
 import 'msnw_wallet_home.dart' show formatWalletAtomic;
 import 'dart:async';
@@ -30,6 +31,7 @@ class MsnwCustodySendSheet extends StatefulWidget {
     required this.currentUserId,
     required this.accessToken,
     required this.onCompleted,
+    this.paymentRequest,
   });
   final Dio dio;
   final String baseUrl;
@@ -37,6 +39,7 @@ class MsnwCustodySendSheet extends StatefulWidget {
   final String? Function() currentUserId;
   final String? Function() accessToken;
   final VoidCallback onCompleted;
+  final WalletPaymentRequest? paymentRequest;
   @override
   State<MsnwCustodySendSheet> createState() => _MsnwCustodySendSheetState();
 }
@@ -127,7 +130,16 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     super.initState();
     recipient.addListener(recipientChanged);
     quantity.addListener(invalidate);
-    WidgetsBinding.instance.addPostFrameCallback((_) {restorePending();loadRecipients();});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if(!mounted)return;
+      final request=widget.paymentRequest;
+      if(request!=null&&request.expiresAt.isAfter(DateTime.now().toUtc())){
+        recipient.text=request.accountNumber;
+        expectedSavedRecipientId=request.userId;
+        if(request.amountAtomic!=null)quantity.text=formatWalletAtomic(request.amountAtomic!);
+      }
+      restorePending();loadRecipients();
+    });
   }
   @override
   void dispose() {
