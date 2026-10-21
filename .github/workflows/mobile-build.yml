@@ -23,6 +23,7 @@ jobs:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/android-gradle-repositories
       # Pinned channel on purpose: exact SDK pins rot fast. Pin an exact
       # flutter-version once releases stabilize around this app.
       - uses: subosito/flutter-action@v2

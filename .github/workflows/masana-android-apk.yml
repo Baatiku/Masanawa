@@ -37,6 +37,7 @@ jobs:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/android-gradle-repositories
       - name: Install Java for Android Gradle
         uses: actions/setup-java@v4
         with:

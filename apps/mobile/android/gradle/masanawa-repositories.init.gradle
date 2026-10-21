@@ -1,0 +1,18 @@
+// Flutter's included Gradle build needs Maven Central for transitive Kotlin
+// artifacts; the plugin portal alone does not host every BOM/runtime artifact.
+settingsEvaluated { settings ->
+    settings.pluginManagement.repositories {
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+}
+allprojects {
+    buildscript {
+        repositories {
+            mavenCentral()
+            google()
+            gradlePluginPortal()
+        }
+    }
+}
