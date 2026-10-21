@@ -100,4 +100,19 @@ suite("MSNW custody Send PostgreSQL acceptance", () => {
       await db.query("ROLLBACK").catch(() => undefined);
     } finally { db.release(); }
   });
+  it("serializes different keys so concurrent matching sends require an explicit repeat",async()=>{
+    const service=createMsnwCustodyService(pool),owner={tenantId:tenant,userId:sender};
+    const request={recipient:"recipient-"+tenant+"@example.com",recipientUserId:recipient,amountMicro:"200000"};
+    const results=await Promise.allSettled([
+      service.send(owner,{...request,idempotencyKey:randomUUID()}),
+      service.send(owner,{...request,idempotencyKey:randomUUID()}),
+    ]);
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(results.find(r=>r.status==='rejected')).toMatchObject({reason:{code:'msnw.repeat_confirmation_required'}});
+    const preview=await service.preview(owner,request.recipient,request.amountMicro);
+    expect(preview.recentTransfer?.state).toBe('completed');
+    const repeated=await service.send(owner,{...request,idempotencyKey:randomUUID(),repeatOf:preview.recentTransfer!.operationId});
+    expect(repeated.operationId).not.toBe(preview.recentTransfer!.operationId);
+  });
+
 });

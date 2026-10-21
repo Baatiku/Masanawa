@@ -155,7 +155,10 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       if (raw is! Map || raw['asset'] != 'MSNW' ||
           raw['recipientUserId'] is! String ||
           raw['recipientName'] is! String ||
-          raw['amountMicro'] != atomic || raw['feeMicro'] != '0') {
+          raw['amountMicro'] != atomic || raw['feeMicro'] != '0' ||
+          (raw['recentTransfer'] != null && (raw['recentTransfer'] is! Map ||
+            raw['recentTransfer']['operationId'] is! String || raw['recentTransfer']['createdAt'] is! String ||
+            raw['recentTransfer']['state'] != 'completed'))) {
         throw const FormatException('Invalid MSNW transfer preview');
       }
       setState(() {
@@ -180,7 +183,9 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       RegExp(r'^[1-9][0-9]{0,23}$').hasMatch(value['amountMicro'] as String) &&
       value['idempotencyKey'] is String &&
       RegExp(r'^[A-Za-z0-9:_-]{16,128}$')
-          .hasMatch(value['idempotencyKey'] as String);
+          .hasMatch(value['idempotencyKey'] as String) &&
+      (value['repeatOf'] == null || value['repeatOf'] is String &&
+        RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(value['repeatOf'] as String));
 
   Future<void> restorePending() async {
     final token = widget.accessToken()?.trim();
@@ -292,6 +297,19 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       setState(() { receipt = raw.cast<String, dynamic>(); preview = null;
         pending = null; key = null; });
       widget.onCompleted();
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (e.response?.statusCode == 409 && data is Map &&
+          data['error'] == 'msnw.repeat_confirmation_required') {
+        // A canonical rejection rolled back this request; it is not an unknown debit.
+        try { await storage.delete(key: pendingStorageKey); } catch (_) {}
+        if (sameSession(token)) setState(() {
+          pending = null; preview = null; key = null;
+          error = 'A matching transfer completed recently. Check the recipient again and review the warning before intentionally sending again.';
+        });
+      } else if (sameSession(token)) {
+        setState(() => error = 'Transfer outcome is uncertain. Check its status or retry the original request with the same reference. Never start a new one.');
+      }
     } catch (_) {
       if (sameSession(token)) setState(() => error =
           'Transfer outcome is uncertain. Check its status or retry the '
@@ -306,18 +324,20 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
     final token = widget.accessToken()?.trim();
     if (busy || pending != null || current == null || idempotencyKey == null ||
         token == null || token.isEmpty || !sameSession(token)) return;
+    final recent = current['recentTransfer'];
+    final repeating = recent is Map && recent['operationId'] is String;
     final approved = await openWalletPage<bool>(
       context: context, title: 'Review transfer',
       builder: (ctx) => WalletReviewContent(
         title: const Text('Confirm MSNW transfer'),
-        content: Text('Send ' + quantity.text.trim() + ' MSNW to ' +
+        content: Text((repeating ? 'A matching transfer completed in the last five minutes (' + '${recent['createdAt']}' + '). Cancel if you meant to retry that transfer. Sending again creates a separate payment.\n\n' : '') + 'Send ' + quantity.text.trim() + ' MSNW to ' +
           (current['recipientName'] as String) +
           '? Check the recipient carefully. Completed transfers cannot be reversed.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Confirm & send')),
+              child: Text(repeating ? 'Send again intentionally' : 'Confirm & send')),
         ],
       ),
     );
@@ -328,6 +348,7 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
       'recipientUserId': current['recipientUserId'],
       'amountMicro': current['amountMicro'],
       'idempotencyKey': idempotencyKey,
+      if (repeating) 'repeatOf': recent['operationId'],
     };
     if (!validPending(original)) return;
     try {
@@ -407,6 +428,10 @@ class _MsnwCustodySendSheetState extends State<MsnwCustodySendSheet> {
         ] else if (preview != null && receipt == null) ...[
           ListTile(title: Text(preview!['recipientName'] as String),
             subtitle: const Text('Recipient confirmed for this transfer')),
+          if (preview!['recentTransfer'] != null)
+            const ListTile(leading: Icon(Icons.warning_amber_rounded),
+              title: Text('Matching transfer completed recently'),
+              subtitle: Text('Review the previous transfer before sending again.')),
 
           FilledButton(onPressed: busy ? null : send,
             child: const Text('Review and confirm')),
