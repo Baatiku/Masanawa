@@ -191,6 +191,8 @@ export function createReplayObjectStore(input:Readonly<{
       const response=await fetchImpl(url,{
         method:"DELETE",
         headers:authHeaders(url,now(),"DELETE"),
+        redirect:"error",
+        signal:AbortSignal.timeout(10_000),
       });
       if(!response.ok&&response.status!==404){
         throw new Error("talks.replay.object_delete_failed");

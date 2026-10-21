@@ -23,18 +23,19 @@ For each completed checkbox: attach **exact source SHA, paths, tests executed, s
 
 ### Current implementation and next actions — 20 October 2026
 
-**Repository baseline:** `c944045e`. Status is evidence at this baseline, not a permanent branch claim. Phases 1–3 are owner-closed delivery rounds; unfinished creator source remains P5-C and external acceptance remains Phase 8. Planning covers Phases 0–8, including the future feature increments below.
+**Repository baseline:** `9f517836471f6cc92c4b71fd1a84e38f85cb6152` (Phase 4 integrated). Status is evidence at this baseline, not a permanent branch claim. Phases 1–3 are owner-closed delivery rounds; unfinished creator source remains P5-C and external acceptance remains Phase 8. Planning covers Phases 0–8, including the future feature increments below.
 
 | Workstream | Current evidence | Next action |
 |---|---|---|
-| Phase 4 | Contact/profile foundation merged. [#227](https://github.com/Baatiku/Masanawa/pull/227) remains open at `24b0801d3da0245e55e9df973029ad4931b68e8f`, with human messaging/privacy/calls source. | Reconcile fresh main, repair scoped failures, review and merge completed source; P4-11 handset/provider acceptance remains separate. |
-| Phase 5 | P5-R/P5-C implementation is in progress in local branch `feat/phase5-rooms-creators-20261020`; no published PR or complete verification yet. | Integrate Rooms, worker, mobile and creator journeys after P4; publish scoped source with remaining gaps recorded. |
+| Phase 4 | **Merged** [#227](https://github.com/Baatiku/Masanawa/pull/227), `9f517836471f6cc92c4b71fd1a84e38f85cb6152`. Human messaging/privacy/call source integrated; no owner handset/provider acceptance claimed. | Continue P4-11 and APK gates; do not rebuild the implementation. |
+| Phase 5 | Clean Rooms redesign and creator completion in [#234](https://github.com/Baatiku/Masanawa/pull/234), rebased by merge onto current main. Includes owner-authorized old Room data reset. | Integrate tested source; keep explicit creator earnings/provider/automation gaps below open. |
 | Memory/continuity | [#228](https://github.com/Baatiku/Masanawa/pull/228) remains open at `97bfa5e59a09d0b424bcd034236e6e94de38fcda`. | Reconcile shared composition/migrations separately; personal memory never authorizes spending. |
 | Phase 6 | Wallet #230 is **merged**, integration `ab15bf7b88ec4c45b27c60c8b14e99d67d78b7e2`; account assignment/inquiry source is on main. | Qualify W01 and implement W02–W11; do not rebuild the merged resolver/badge. |
 | Guiding docs | Roadmap #231 is **merged**, integration `b957161fa7bbcb1e5f2a01c516883570a000456c`; OPay and WhatsApp references are present. | Execute canonical task IDs; reference docs describe implementation guidance, not independent scope/status. |
 | Phases 7–8 | Services, trust, operations and exact-artifact release acceptance remain open. | Deliver S/X/APK tasks below; enable only qualified capabilities. |
 
-**Evidence:** Phase 4 head `24b0801d` hosted Foundation run [39464787482](https://github.com/Baatiku/Masanawa/actions/runs/39464787482) passed typecheck and 467 test files (2,334 tests); its foundation fixture failed 41 cases at the same stale migration-list assertion. Local expectation repair subsequently reached 37/41, leaving four failures to diagnose; neither run is a full pass. Human concurrency tests passed 2/2 on disposable PostgreSQL 18. Hosted Flutter analysis passed; no full mobile/device/provider success is asserted here. Wallet #230 reports 180 scoped SQL tests and 43 real PostgreSQL tests passing at its own head, not proof of this newer combined tree. Refresh checks and SHAs before integration.
+**Phase 4 evidence:** full hosted Foundation CI passed at `45ff4258` ([run 39521181154](https://github.com/Baatiku/Masanawa/actions/runs/39521181154)); real PostgreSQL 18 foundation/human concurrency 43/43 passed locally; final moderated-sender regression human service suite 17/17 passed. Independent review recommends merge after that repair. Flutter analysis and focused communication tests passed. Android compilation hit included-build Kotlin repository resolution; official Maven repository init configuration was added and its actual build is pending. A merge is not a signed APK, handset/provider test or production deployment.
+
 
 ## Phase 0 — Canonical product authority and repository cleanup
 **Outcome:** Only current product guidance remains in the working tree; operational programs and financial history remain intact.
@@ -162,7 +163,7 @@ This audit starts from main commit 8f360ce9f1e6ce2951688f568855fefd243e7796, con
 
 ### Phase 4 continuation
 
-Reuse #227 source in `services/gateway/src/human_communication/`, human call media, mobile human chat/call controllers, unified inbox/profile/privacy and migration `packages/talks/migrations/0015_human_communication.sql`. One integrator reconciles router, app/main, migration composition and the roadmap. Complete missing or defective behavior against P4-01–11; do not restart Milestone A or replace implementation with disabled controls. Run scoped authorization/replay/call-race checks first, then available full backend and Flutter/Android checks. Record unresolved checks under the forward-progress policy below and continue independent Phase 5 work.
+Reuse #227 source in `services/gateway/src/human_communication/`, human call media, mobile human chat/call controllers, unified inbox/profile/privacy and migration `packages/talks/migrations/0015_human_communication.sql`. One integrator reconciles router, app/main, migration composition and the roadmap. PR #227 is now merged; this continuation is acceptance/fix work, not a new implementation restart. Complete missing or defective behavior against P4-01–11; do not restart Milestone A or replace implementation with disabled controls. Run scoped authorization/replay/call-race checks first, then available full backend and Flutter/Android checks. Record unresolved checks under the forward-progress policy below and continue independent Phase 5 work.
 
 ## Phase 5 — Rooms with humans/Masana and creator completion (P0/P1)
 **Outcome:** Any eligible user creates and manages a Room, invites people and adds Masana; the retired lesson-based Rooms and its records are removed.
@@ -329,10 +330,11 @@ Use **PASS**, **FAIL_UNRESOLVED**, **NOT_RUN_ENV**, **NOT_RUN_EXTERNAL** or **DE
 
 | Current unresolved item | Disposition and next owner/action | Progress impact |
 |---|---|---|
-| #227 foundation fixture: migration expectation plus four remaining local failures | FAIL_UNRESOLVED at `24b0801d` with local fixture edit; integrator diagnoses assertion outputs and retests against fresh main including 0114. | Continue independent P5; qualify affected integration before release. |
+| Phase 4 fixture/install problems | RESOLVED: account identity fixture, 0113/0114 expectations and removed web manifest lock importer repaired; 43 real PostgreSQL tests and hosted Foundation pass. | No longer an implementation blocker. |
+| Android included-build Kotlin dependencies | Prior APK run failed resolving transitive Kotlin via plugin portal; official Maven repositories added in `c05a5b5f`, actual rerun pending. | Continue source; APK02 remains open until an artifact actually builds. |
 | Local Flutter SDK unavailable; download returned 403 | NOT_RUN_ENV; implementer uses hosted Mobile Build and records exact resulting SHA/run. | Continue source and backend work; APK02 still needs actual successful build evidence. |
 | Handset/LiveKit/FCM and real eligible payment-provider acceptance | NOT_RUN_EXTERNAL; owner/device/provider operator executes APK03/04 on supplied candidate. | Continue source/build; only qualified enabled capabilities can earn production acceptance. |
-| Unpublished Phase 5 source and carried creator gaps | In progress, no completion claimed; integrator publishes scoped PR and maps gaps to P5-R/C IDs. | Continue P5 implementation; no blanket phase completion. |
+| Phase 5 carried creator/automation gaps | Published #234; C04 qualified MSNW usage allocation/reversal producer remains missing; optional reference provider and Room automatic-reply agreement unqualified. | Keep these capabilities unavailable; continue independent roadmap tasks, no blanket Phase 5 completion. |
 
 ## 3. Delivery rules: no duplicate implementations
 1. Fresh `main`, open issues/PRs, exact file owners and existing app screens before each milestone. **Issue #220 must be reconciled against main before assuming its features landed.**
@@ -357,3 +359,11 @@ Use **PASS**, **FAIL_UNRESOLVED**, **NOT_RUN_ENV**, **NOT_RUN_EXTERNAL** or **DE
 
 ### Owner clarification — 21 October 2026
 The owner explicitly requests deletion of all retired Rooms history and a clean redesign. This supersedes earlier preservation/migration instructions for Rooms data and UI. Do not preserve old Room IDs/history or lesson interfaces. Migration 0008 implements the Rooms-scoped reset; no production execution is claimed until actually run.
+
+### Phase 5 source/checkpoint — 21 October 2026
+
+Source in #234 includes clean user-created Room root/timeline/create/manage, People invitations and owner-controlled Masana, media/reactions/comments/pins, authorized catch-up/drafts/search/deep links, worker revocation checks, and the Rooms-only reset `0008_reset_retired_rooms.sql`. Old lesson UI/catalog generation is removed; this is not a historical migration. New creator source includes processed image ingress/deletion with durable signed object deletion/HEAD readback, explicit revision quote/approval with canonical once-only custody capture, retirement and rights/cadence controls. `0010_creator_status_cadence.sql` and the existing Worker produce bounded draft → in_review posts, with leases/fences, active owner/canonical ownership/revision checks, pause cancellation, current caps and provider-outage retry. Publication still needs editorial approval. Creator eligibility now revokes on pause/disabled owner and permits valid published creators in existing Status/Rooms contracts.
+
+**Executed evidence:** earlier integrated checkpoint full backend 2,187 passed / 223 skipped; final integrated rerun recorded when complete. Architecture 85/85 passed; scoped expanded Rooms/creator/notification run 81 passed / 2 skipped with one outdated positive authorization fixture, then repaired test 4/4 passed. Clean reset SQL test 1/1; real PostgreSQL migration/Room outbox 4/4, catalog without old reseeding 3/3 and Status/feed/migration/catalog 22/22 passed. Review found comment mention key collisions and answers surviving removed source posts; repaired with actual SQL regression (Room suite 8/8 passed). Worker/provider cleanup and timeout tests passed (9 scoped tests at final cleanup checkpoint). Gateway/Worker source typechecks with skipLibCheck passed before final bounded deletion edits. These counts describe named runs, not additive totals or handset E2E.
+
+**Remaining explicit work:** C04 has no qualified canonical MSNW usage settlement receipt producer; historical Credits cannot be relabelled as MSNW earnings. Keep earnings read-only, no fabricated allocation/payout. Optional cloning requires actual qualified provider/consent/deletion; supported voices remain available. R05 automatic replies/schedules need a real bounded/authorized agreement; mention mode works and automation stays unavailable. Flutter root/draft/session tests are authored; latest hosted analysis/tests/APK and exact installed/provider/deployed validation remain open. No production Rooms deletion or deployment has been executed by this source task.

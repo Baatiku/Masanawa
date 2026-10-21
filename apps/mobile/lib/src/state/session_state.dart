@@ -115,6 +115,8 @@ class SessionError extends SessionState {
 
 class SessionController extends Notifier<SessionState> {
   int _authEpoch = 0;
+  /// Stable through token refresh; changes on restore, login and logout.
+  int get authorizationEpoch => _authEpoch;
   String? _recentlyExpiredOwnerId;
   /// Only a session-expiry redirect may resume this account's protected route.
   String? get recentlyExpiredOwnerId => _recentlyExpiredOwnerId;

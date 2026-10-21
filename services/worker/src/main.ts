@@ -185,7 +185,7 @@ export async function startWorkerService(
     });
     const creatorObjects=createConfiguredStatusObjectStore(env)?.objects;
     if(creatorObjects?.statObject){
-      const cleanup=createCreatorMediaCleanup({pool:database.pool,
+      const cleanup=createCreatorMediaCleanup({pool:database.pool,enabled:()=>!drain.isDraining(),
         objects:{deleteObject:creatorObjects.deleteObject,statObject:creatorObjects.statObject}});
       creatorMediaCleanup=createYouTubeOutboxScheduler({runOnce:cleanup.runOnce,
         enabled:()=>!drain.isDraining(),intervalMs:60000,
