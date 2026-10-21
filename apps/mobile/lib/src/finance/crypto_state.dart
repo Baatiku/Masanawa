@@ -97,12 +97,14 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       ref.read(cryptoWalletTransportProvider);
 
   bool _submittingOperation=false;
-  int _epoch = 0;
+  int _epoch = 0, _projectionGeneration=0;
   Future<void> _refreshHeldProjection(String? owner)async{
+    final epoch=_epoch, projection=++_projectionGeneration;
     final transport=_transport;
     if(transport is! CryptoHoldingsTransport)return;
     try{
       final rows=await (transport as CryptoHoldingsTransport).holdings();_checkOwner(owner);
+      if(epoch!=_epoch||projection!=_projectionGeneration)return;
       final routes=<CryptoRoute>[], reserved=<String,String>{}, available=<String,String>{};
       for(final row in rows){
         final route=CryptoRoute.fromJson(row);routes.add(route);
@@ -113,7 +115,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
       state=AsyncData(latest.copyWith(holdingRoutes:List.unmodifiable(routes),holdingsVerified:true,
         reservedBalances:Map.unmodifiable(reserved),balances:Map.unmodifiable({...latest.balances,...available})));
     }catch(_){
-      if(owner!=_owner())return;
+      if(owner!=_owner()||epoch!=_epoch||projection!=_projectionGeneration)return;
       final latest=state.valueOrNull;
       if(latest!=null)state=AsyncData(latest.copyWith(holdingsVerified:false,reservedBalances:const {}));
     }
@@ -276,6 +278,7 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
   }
 
   Future<void> refreshBalance([String? providerCode]) async {
+    final owner=_owner();
     final current = state.valueOrNull;
     if (current == null) return;
     final code = (providerCode ?? current.selectedProviderCode)?.trim();
