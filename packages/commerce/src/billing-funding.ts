@@ -16,6 +16,8 @@ export interface BillingFundingAuthority {
     billerCode: string;
     itemCode: string;
     customerId: string;
+    /** Fresh provider identity; matched against immutable quote evidence before debit. */
+    customerName?: string | null;
     amount: string;
     currency: "NGN";
   }>): Promise<void>;

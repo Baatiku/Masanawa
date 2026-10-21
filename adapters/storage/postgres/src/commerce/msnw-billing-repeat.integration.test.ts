@@ -19,9 +19,9 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   // Isolated fixture units, never proof of live backing or production issuance.
   await pool.query('INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,100000000)',[owner.tenantId,owner.userId]);
   const quotes=createPostgresBillingQuoteRepository(pool),service=createMsnwBillingFunding({pool,quotes});
-  async function quote(customerId='fixture-customer'){
+  async function quote(customerId='fixture-customer',verifiedCustomerName?:string){
    const at=new Date().toISOString();
-   const q=createBillingQuote({...owner,categoryCode:'AIRTIME',billerCode:'fixture-biller',itemCode:'fixture-item',itemName:'Fixture airtime',customerId,serviceAmountKobo:100,feeAmountKobo:0,createdAt:at,expiresAt:new Date(Date.now()+600000).toISOString()});
+   const q=createBillingQuote({...owner,categoryCode:'AIRTIME',billerCode:'fixture-biller',itemCode:'fixture-item',itemName:'Fixture airtime',customerId,verifiedCustomerName,serviceAmountKobo:100,feeAmountKobo:0,createdAt:at,expiresAt:new Date(Date.now()+600000).toISOString()});
    await quotes.createQuote(q);await quotes.confirmQuote({...owner,quoteId:q.quoteId,quoteRevision:q.revision,confirmedAt:at});
    return {...owner,quoteId:q.quoteId,quoteRevision:q.revision,fulfillmentReference:'msnw-bill-'+q.quoteId,categoryCode:'AIRTIME',billerCode:q.billerCode,itemCode:q.itemCode,customerId,amount:'1',currency:'NGN' as const};
   }
@@ -65,5 +65,13 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   expect(outcomes.filter(r=>r.status==='fulfilled')).toHaveLength(1);
   expect(outcomes.filter(r=>r.status==='rejected')).toHaveLength(1);
   await f.service.funding.reserveConfirmedBill(await f.quote('another-customer'));
+ });
+ it('rejects changed provider account identity before reserving MSNW',async()=>{
+  const f=await fixture(),request=await f.quote('meter-100','Ada Customer');
+  await expect(f.service.funding.reserveConfirmedBill({...request,customerName:'Different Customer'}))
+    .rejects.toMatchObject({code:'msnw.billing.quote_changed'});
+  const before=await pool.query('SELECT available_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[f.owner.tenantId,f.owner.userId]);
+  expect(before.rows[0]?.available_micro).toBe('100000000');
+  await f.service.funding.reserveConfirmedBill({...request,customerName:'Ada Customer'});
  });
 });

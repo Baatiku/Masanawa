@@ -146,6 +146,7 @@ function sameIdentity(
     existing.itemCode === prepared.itemCode &&
     existing.itemName === prepared.itemName &&
     existing.customerId === prepared.customerId &&
+    existing.customerName === prepared.customerName &&
     decimalEqual(existing.amount, prepared.amount) &&
     existing.currency === prepared.currency
   );
@@ -293,7 +294,8 @@ export class BillingCommerceOrchestrator {
       }
       if (
         validation.customer !== preparedBase.customerId ||
-        validation.billerCode !== preparedBase.billerCode
+        validation.billerCode !== preparedBase.billerCode ||
+        (validation.productCode != null && validation.productCode !== preparedBase.itemCode)
       ) {
         throw new BillingCommerceError(
           "recipient_mismatch",
@@ -319,7 +321,7 @@ export class BillingCommerceOrchestrator {
           "Bill amount exceeds the provider maximum",
         );
       }
-      customerName = validation.name;
+      customerName = validation.name?.trim() || null;
     }
 
     const prepared: PreparedBillPurchase = Object.freeze({
