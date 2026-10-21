@@ -4,20 +4,28 @@ This deploys the **editable Masanawa Next.js web source** using [vinext](https:/
 
 ## Cloudflare GitHub integration (Workers, not static Pages)
 
+**First select the correct Git branch.** The default `main` is **not** the Cloudflare-ready Next.js app and will cause `npm error Missing script: "build:cloudflare"` even if you `cd apps/web`. This is a code revision/branch problem, not an npm defect.
+
+For an isolated visual-review Worker, use the explicit deploy branch `deploy/masanawa-cloudflare-preview`. It contains the same app as the draft web PR plus root-level command shims. GitHub link: https://github.com/Baatiku/Masanawa/tree/deploy/masanawa-cloudflare-preview
+
 | Cloudflare field | Set exactly |
 | --- | --- |
 | Repository | `Baatiku/Masanawa` |
-| Branch | `feat/web-masanawa-rebrand-foundation-20261021` (until the PR is merged) |
-| Root directory | `apps/web` |
+| Production / Git branch | `deploy/masanawa-cloudflare-preview` |
+| Root directory | **Leave empty** (repository root) |
 | Worker name | `masanawa-web-preview` |
 | Build command | `npm run build:cloudflare` |
 | Deploy command | `npm run deploy:cloudflare` |
-| Node version | `24` (`NODE_VERSION=24` in build variables if needed) |
-| Publish/output directory | **None**: Workers are not Cloudflare Pages. Internally the build writes `.cloudflare/output/v0`, used by `cf deploy --prebuilt`. |
+| Node version | `24` |
+| Publish/output directory | **None**: Workers are not Cloudflare Pages. Internally the build writes `apps/web/.cloudflare/output/v0`, used by `cf deploy --prebuilt`. |
 
-Cloudflare Dashboard → Workers & Pages → Create application → GitHub → choose repository and branch → select Workers and set the fields above. The Worker name must match `cloudflare.config.ts` exactly. Set build watch paths to `apps/web/**` and, where useful, `pnpm-lock.yaml`, so unrelated mobile commits do not trigger previews. Cloudflare's Git integration usually provisions a deployment API token automatically.
+On Cloudflare: **Workers & Pages → masanawa-web-preview → Settings → Build → Branch control** and change the **production branch** to `deploy/masanawa-cloudflare-preview`. Save that branch setting, verify the Git repository is actually `Baatiku/Masanawa`, then trigger a fresh deployment **of the new branch's HEAD**, rather than retrying the old `main` commit. Cloudflare initially selects the GitHub default branch (`main`) unless changed.
 
-Cloudflare automatically issues a `*.workers.dev` URL **after** a successful deployment. Do not assume the URL exists before deployment. Visit `/` for the marketing page, `/login`, `/register`, `/recovery` for authentication layouts, and **`/preview`** to inspect all five navigation layouts and the Masana rail **without logging in**. The `/preview` data is deliberately fictional, read-only and visibly labeled as a visual demo. It performs no network requests to a Gateway, no messaging and no wallet operations.
+The root build command runs a source guard. A correct checkout prints `MASANAWA_CLOUDFLARE_SOURCE_OK`, followed by the exact Git commit, then builds `apps/web` through vinext. If that string is missing from the build output, Cloudflare has not checked out the intended new commit.
+
+Cloudflare automatically issues a `*.workers.dev` URL **after** successful deployment. Visit `/`, `/login`, `/register`, `/recovery`, and **`/preview`** to inspect the website. The walkthrough data is fictional, read-only and visibly labeled, with no wallet or messaging requests.
+
+If configuring the Worker with **root directory `apps/web`** instead, use the app-local versions of these commands, not the root scripts. Do not combine `apps/web` root and `cd apps/web`.
 
 ## Backend setup (later, when Gateway is qualified)
 
