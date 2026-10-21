@@ -94,6 +94,19 @@ class _CommunityState extends State<RoomCommunityScreen> {
   Future<void> eraseJournal() async {
     try { final key = journalKey; if (key != null) { await storage.delete(key: '$key:draft'); await storage.delete(key: '$key:timeline'); } } catch (_) {}
   }
+  void clearPrivateState() {
+    composer.clear();
+    draftTimer?.cancel();
+    attachments.clear();
+    mentions.clear();
+    roomMasana = [];
+    parentId = null;
+    pendingBody = null;
+    pendingParent = null;
+    pendingKey = null;
+    pendingAttachments = null;
+    restoredDraft = false;
+  }
   Future<void> restoreDraft() async {
     final key = journalKey;
     if (key == null || restoredDraft) return;
@@ -136,17 +149,17 @@ class _CommunityState extends State<RoomCommunityScreen> {
           items = (jsonDecode(cached) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
           offline = 'Showing saved posts. Reconnect and refresh for new activity.';
         }
-      } else { await eraseJournal(); }
+      } else { clearPrivateState(); await eraseJournal(); }
 
       if (value.joined) { try { await widget.api.action(widget.roomId, 'read'); } catch (_) {} }
       if (mounted && current == version) setState(() { room = value; posts = items; loading = false; error = offline; });
-    } catch (e) { if (e is DioException && (e.response?.statusCode == 403 || e.response?.statusCode == 404)) await eraseJournal(); if (mounted && current == version) setState(() { room = null; posts = []; loading = false; error = communityError(e); }); }
+    } catch (e) { if (current == version && (e is StateError || e is DioException && (e.response?.statusCode == 403 || e.response?.statusCode == 404))) { clearPrivateState(); await eraseJournal(); } if (mounted && current == version) setState(() { room = null; posts = []; loading = false; error = communityError(e); }); }
   }
   Future<void> run(Future<void> Function() work) async {
     if (busy) return;
     setState(() { busy = true; error = null; });
     try { await work(); if (mounted) await load(); }
-    catch (e) { if (mounted) setState(() { error = communityError(e); if (e is StateError || e is DioException && e.response?.statusCode == 403) { room = null; posts = []; } }); }
+    catch (e) { if (e is StateError || e is DioException && (e.response?.statusCode == 403 || e.response?.statusCode == 404)) { clearPrivateState(); await eraseJournal(); } if (mounted) setState(() { error = communityError(e); if (e is StateError || e is DioException && (e.response?.statusCode == 403 || e.response?.statusCode == 404)) { room = null; posts = []; } }); }
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> send() => run(() async {
