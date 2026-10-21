@@ -252,3 +252,107 @@ h1,h2,h3{letter-spacing:-.035em}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+
+/* Masana profile, discovery-to-conversation and durable turn recovery. */
+.conversation-list a.conversation-row{color:inherit;transition:background .15s}
+.conversation-list a.conversation-row:hover{background:#f5fbf6}
+.conversation-list a.conversation-row:focus-visible{outline:2px solid #168052;outline-offset:-3px}
+.masana-screen{min-height:100vh;background:#f5f9f6;color:#183b2b}
+.masana-screen-header{height:76px;background:#fff;border-bottom:1px solid #e5eee8}
+.masana-header-inner{height:100%;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.masana-header-inner nav{display:flex;gap:24px;align-items:center}
+.masana-header-inner nav a{display:flex;align-items:center;gap:8px;font-size:13px;color:#688577;font-weight:710}
+.masana-header-inner nav a:hover{color:#15814b}
+.masana-breadcrumb{display:flex;align-items:center;gap:12px;padding:20px 0;color:#809588;font-size:12px}
+.masana-breadcrumb a{color:#307553;font-weight:740}
+.masana-breadcrumb span{color:#b8c9bd}
+.masana-loading-card{border:1px solid #e4ede7;background:#fff;border-radius:20px;max-width:610px;margin:60px auto;padding:65px 32px;text-align:center;display:flex;flex-direction:column;align-items:center}
+.masana-loading-card h1{font-size:28px;margin:18px 0 10px}
+.masana-loading-card p{color:#748d7e;font-size:14px;line-height:1.7;max-width:420px}
+.masana-loading-icon{display:grid;place-items:center;border-radius:18px;background:#e2f9ea;color:#137e4f;width:62px;height:62px}
+.masana-experience-grid{display:grid;grid-template-columns:minmax(0,1fr) 324px;gap:23px;align-items:start;padding-bottom:80px}
+.masana-experience-grid.profile-mode{grid-template-columns:minmax(0,1fr) 355px}
+.masana-primary{min-width:0}
+.masana-avatar{height:49px;width:49px;flex-shrink:0;border-radius:17px;display:grid;place-items:center;background:linear-gradient(145deg,#d4f9e0,#e7f6e6);color:#14834e;border:1px solid #c2efd2;overflow:hidden}
+.masana-avatar.large{height:105px;width:105px;border-radius:30px}
+.masana-avatar img{height:100%;width:100%;object-fit:cover}
+.masana-profile-main,.masana-profile-details,.masana-chat-card{background:#fff;border:1px solid #e4ede8;border-radius:20px;overflow:hidden}
+.masana-profile-hero{padding:48px 39px;background:radial-gradient(circle at 90% 15%,#cbf4d7,transparent 60%),#f0fcf2}
+.masana-profile-hero .masana-avatar{margin:25px 0 21px}
+.masana-profile-hero h1{font-size:43px;line-height:1.14;margin:0 0 12px}
+.masana-profile-hero p{font-size:15px;color:#608571;line-height:1.75;max-width:420px;margin-bottom:25px}
+.masana-about-block{padding:38px 39px 46px}
+.masana-about-block h2{font-size:24px;margin-bottom:13px}
+.masana-about-block p{font-size:14px;line-height:1.85;color:#728879}
+.masana-prompt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:26px}
+.masana-prompt-grid a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px 15px;background:#f5faf6;color:#275b3e;border-radius:13px;font-size:12px;line-height:1.55;font-weight:710}
+.masana-prompt-grid a:hover{background:#e1f8e8}
+.masana-profile-details{padding:0}
+.masana-profile-top{text-align:center;padding:38px 20px 24px;background:#f7fcf8}
+.masana-profile-top .masana-avatar{margin:0 auto 20px}
+.masana-profile-top h2{font-size:26px;margin:10px 0 4px}
+.masana-profile-top p{font-size:13px;color:#7b9283;margin:0}
+.masana-presence{display:inline-flex;gap:6px;align-items:center;background:white;border:1px solid #e4eee7;border-radius:25px;padding:7px 13px;font-size:11px;color:#6a8573;margin-top:17px}
+.presence-dot{width:7px;height:7px;border-radius:50%;background:#9eaaa1}
+.presence-dot.online{background:#25D366}
+.masana-profile-details section{margin:0 24px;border-top:1px solid #edf2ed;padding:23px 0}
+.masana-profile-details section h3{font-size:13px;letter-spacing:0;margin-bottom:12px}
+.masana-profile-details section p{font-size:12px;line-height:1.75;color:#6b8373;margin:0 0 10px}
+.masana-starters{display:grid;gap:8px}
+.masana-starters span{font-size:12px;line-height:1.55;color:#476c52;background:#f5faf6;padding:11px;border-radius:9px}
+.masana-disclaimer{margin:0 18px 20px;padding:14px 12px;background:#fff8eb;border-radius:12px;display:flex;align-items:flex-start;gap:9px;color:#9d6e2c}
+.masana-disclaimer p{font-size:11px;line-height:1.65;margin:0}
+.masina-view-profile{margin-top:12px;width:100%}
+.masana-chat-card{display:flex;flex-direction:column;min-height:min(740px,calc(100dvh - 140px))}
+.masana-chat-top{display:flex;align-items:center;gap:12px;padding:17px 21px;border-bottom:1px solid #edf2ed}
+.masana-chat-top strong{display:block;font-size:14px}
+.masana-chat-top span:not(.masana-avatar){display:block;color:#859887;font-size:11px;margin-top:6px}
+.masana-info-toggle{border:0;background:#ecf8ef;color:#27714b;border-radius:9px;padding:9px 11px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:8px;margin-left:auto}
+.masana-message-list{flex:1;min-height:380px;max-height:65vh;overflow-y:auto;padding:25px 25px;background:radial-gradient(circle at top left,#f7fcf7,transparent 50%),#fbfdfb;display:flex;flex-direction:column;gap:13px}
+.masana-start-chat{margin:auto;text-align:center;max-width:320px;padding:28px 0}
+.masana-start-chat .masana-avatar{margin:0 auto 24px}
+.masana-start-chat h2{font-size:23px}
+.masana-start-chat p{font-size:13px;color:#728878;line-height:1.7}
+.masana-start-chat>span{font-size:11px;color:#9baca1}
+.masana-message{border:1px solid #e7eee8;background:#fff;border-radius:13px 13px 13px 3px;max-width:85%;padding:11px 15px;align-self:flex-start;box-shadow:0 3px 14px #103e2108}
+.masana-message.user{border-radius:13px 13px 3px 13px;align-self:flex-end;background:#dafbdf;border-color:#cfedd6}
+.masana-message-author{font-size:10px;color:#3f8a59;font-weight:800;margin-bottom:8px}
+.masana-message p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.75;color:#2e4837;margin:0}
+.masana-message time{display:block;text-align:right;color:#99aaa0;font-size:10px;margin-top:8px}
+.masana-message.pending-message{font-size:12px;color:#7d967f}
+.chat-notice{margin:11px 18px 0}
+.masana-turn-recovery{display:flex;flex-wrap:wrap;align-items:center;gap:11px;color:#896829;background:#fff9e9;padding:14px 19px;border-top:1px solid #f8e9c4}
+.masana-turn-recovery span{font-size:12px;line-height:1.45;flex:1;min-width:200px}
+.masana-composer{display:flex;align-items:end;gap:12px;padding:17px 20px;border-top:1px solid #ebf1ed}
+.masana-composer textarea{resize:vertical;border:1px solid #e1eae3;background:#fff;border-radius:11px;padding:13px 15px;line-height:1.45;font:inherit;color:#193c29;font-size:13px;flex:1;min-width:0;max-height:180px;outline:none}
+.masana-composer textarea:focus{border-color:#1b995e;box-shadow:0 0 0 3px #25d36620}
+.masana-composer button{min-height:47px}
+.masana-chat-caution{font-size:10px;color:#94a89a;text-align:center;margin:0;padding:0 14px 14px;line-height:1.5}
+.masana-profile-aside .masina-view-profile{display:flex}
+@media(max-width:1020px){.masana-experience-grid,.masana-experience-grid.profile-mode{grid-template-columns:minmax(0,1fr) 285px}}
+@media(max-width:820px){
+ .masana-experience-grid,.masana-experience-grid.profile-mode{grid-template-columns:1fr}
+ .masana-experience-grid.chat-mode .masana-profile-aside{display:none}
+ .masana-experience-grid.chat-mode .masana-profile-aside.visible{display:block}
+ .masana-header-inner nav{gap:12px}
+ .masana-header-inner nav a{font-size:11px}
+ .masana-header-inner nav a:last-child{display:none}
+ .masana-screen-header .brand{font-size:19px}
+ .masana-profile-hero{padding:37px 27px}
+ .masana-about-block{padding:30px 27px}
+ .masana-chat-card{min-height:calc(100dvh - 180px)}
+}
+@media(max-width:560px){
+ .masana-header-inner nav a:first-child{display:none}
+ .masana-header-inner nav a{white-space:nowrap}
+ .masana-profile-hero h1{font-size:31px}
+ .masana-prompt-grid{grid-template-columns:1fr}
+ .masana-chat-top{padding:14px 13px}
+ .masana-chat-top .masana-avatar{height:42px;width:42px}
+ .masana-message-list{padding:20px 13px;min-height:45vh}
+ .masana-message{max-width:94%}
+ .masana-composer{padding:11px;gap:8px}
+ .masana-composer button{padding:10px 13px}
+ .masana-turn-recovery{padding:10px 13px}
+}

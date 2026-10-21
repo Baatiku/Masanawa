@@ -2,6 +2,7 @@
 import Link from "next/link";
 import {useEffect,useMemo,useState} from "react";
 import {Brand,Icon} from "./chrome";
+import {validCharacterId} from "@/lib/masana";
 export type Section="chats"|"status"|"wallet"|"calls"|"rooms"|"masana"|"settings";
 type LoadState="checking"|"guest"|"ready"|"unavailable";
 type DataState="idle"|"loading"|"ready"|"empty"|"error"|"denied";
@@ -39,8 +40,9 @@ function normalize(value:unknown,resource:"chats"|"masana"):Item[]{
     if(!entry||typeof entry!=="object")return [];
     const a=entry as Record<string,unknown>;
     const name=text(a.displayName)||text(a.name)||text(a.characterName)||text(a.title)||text(a.handle)||"Masanawa conversation";
-    const id=text(a.characterId)||text(a.conversationId)||text(a.id)||String(index);
-    const subtitle=text(a.subtitle)||text(a.description)||text(a.lastMessagePreview)||text(a.profession)||"Masana";
+    const id=a.characterId;
+    if(!validCharacterId(id))return [];
+    const subtitle=text(a.lastMessage)||text(a.about)||text(a.roleLabel)||text(a.subtitle)||text(a.profession)||"Masana";
     return [{id,name,subtitle,portrait:safePortrait(a.avatarUrl||a.imageUrl||a.portraitUrl),unread:typeof a.unreadCount==="number"?Math.max(0,a.unreadCount):0}];
   });
 }
@@ -115,7 +117,7 @@ export function Workspace({section}:{section:Section}){
               {filter==="People"?<div className="state-panel"><Icon name="users" size={31}/><h3>Human conversations on web</h3><p>Human messaging is being connected to the web inbox. This view will show your authorized conversations once that integration is ready.</p></div>:
                 dataState==="loading"?<div aria-busy="true" className="skeleton-list">{[1,2,3,4].map(i=><div key={i} className="skeleton-row"><span/><div><span/><span/></div></div>)}</div>:
                 dataState==="error"||dataState==="denied"?<div className="state-panel" role="status"><Icon name="shield" size={32}/><h3>{dataState==="denied"?"Access not permitted":"Unable to load your content"}</h3><p>{dataState==="denied"?"This account cannot access the requested information.":"Your content hasn't been erased. Please retry when the connection is available."}</p><button className="button button-primary" onClick={retry}>Try again</button></div>:
-                visible.length? <div className="conversation-list">{visible.map(item=><div className="conversation-row" key={item.id}><span className="contact-avatar">{item.portrait?<img src={item.portrait} alt=""/>:<Icon name={section==="masana"?"sparkle":"chat"}/>}</span><span className="row-main"><strong>{item.name}</strong><small>{item.subtitle}</small></span>{item.unread>0&&<span className="unread-indicator">{item.unread}</span>}</div>)}</div>:
+                visible.length? <div className="conversation-list">{visible.map(item=><Link href={"/masana/"+encodeURIComponent(item.id)+(section==="chats"?"/chat":"")} className="conversation-row" key={item.id}><span className="contact-avatar">{item.portrait?<img src={item.portrait} alt=""/>:<Icon name={section==="masana"?"sparkle":"chat"}/>}</span><span className="row-main"><strong>{item.name}</strong><small>{item.subtitle}</small></span>{item.unread>0&&<span className="unread-indicator">{item.unread}</span>}</Link>)}</div>:
                 <div className="state-panel"><Icon name={upcoming[section].icon} size={33}/><h3>{query?"No matching results":upcoming[section].title}</h3><p>{query?"Try a different search.":upcoming[section].message}</p>{section==="chats"&&<button className="button button-primary" onClick={findMasana}>Find Masana <Icon name="arrow" size={18}/></button>}{section==="masana"&&<button className="button button-primary" onClick={retry}>Refresh directory</button>}</div>}
               {section==="chats"&&<div className="gentle-note"><Icon name="shield" size={18}/> Human messages never pass through Masana AI endpoints.</div>}
             </>:<div className="workspace-feature"><span className="feature-icon"><Icon name={upcoming[section].icon} size={31}/></span><h2>{upcoming[section].title}</h2><p>{upcoming[section].message}</p><Link className="button button-secondary" href="/chats">Back to Chats <Icon name="arrow" size={16}/></Link></div>}</>}

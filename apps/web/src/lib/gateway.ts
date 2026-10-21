@@ -16,7 +16,13 @@ export function gatewayOrigin(): string | null {
     return url.origin;
   } catch { return null; }
 }
-export async function gatewayFetch(path: string, method: "GET"|"POST", body?: JsonRecord, token?: string) {
+export async function gatewayFetch(
+  path: string,
+  method: "GET"|"POST",
+  body?: JsonRecord,
+  token?: string,
+  options?: { timeoutMs?:number; requestId?:string },
+) {
   const origin = gatewayOrigin();
   if (!origin) return {status:503, data:{code:"GATEWAY_NOT_CONFIGURED"} as JsonRecord};
   try {
@@ -24,12 +30,13 @@ export async function gatewayFetch(path: string, method: "GET"|"POST", body?: Js
       method,
       cache:"no-store",
       redirect:"manual",
-      signal:AbortSignal.timeout(12000),
+      signal:AbortSignal.timeout(options?.timeoutMs??12000),
       headers:{
         accept:"application/json",
         ...(body?{"content-type":"application/json"}:{}),
         ...(token?{authorization:"Bearer "+token}:{}),
         "x-masanawa-client-platform":"web",
+        ...(options?.requestId?{"x-request-id":options.requestId}:{}),
       },
       ...(body?{body:JSON.stringify(body)}:{}),
     });
