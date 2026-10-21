@@ -6,11 +6,17 @@ import '../../features/rooms/room_community_screen.dart';
 import '../../features/rooms/rooms_screen.dart' as redesigned;
 import '../../state/session_state.dart';
 
-RoomCommunityApi _api(WidgetRef ref, String account) => AccountBoundRoomCommunityApi(
-  delegate:HttpRoomCommunityApi(ref.watch(apiClientProvider).dio,loadMasana:() async =>
-    (await ref.read(agentTransportProvider).loadDirectory()).map((a) =>
-      <String,dynamic>{'characterId':a.characterId,'displayName':a.displayName}).toList()),
-  ownerAccount:account,currentAccount:(){final s=ref.read(sessionProvider);return s is SessionSignedIn?s.user.id:null;});
+final roomCommunityApiProvider=Provider<RoomCommunityApi>((ref){
+  final session=ref.watch(sessionProvider);
+  if(session is! SessionSignedIn)throw StateError('account_changed');
+  final account=session.user.id;
+  return AccountBoundRoomCommunityApi(
+    delegate:HttpRoomCommunityApi(ref.watch(apiClientProvider).dio,loadMasana:() async =>
+      (await ref.read(agentDirectoryTransportProvider).loadDirectory()).map((a) =>
+        <String,dynamic>{'characterId':a.characterId,'displayName':a.displayName}).toList()),
+    ownerAccount:account,currentAccount:(){final s=ref.read(sessionProvider);return s is SessionSignedIn?s.user.id:null;});
+});
+RoomCommunityApi _api(WidgetRef ref,String account)=>ref.watch(roomCommunityApiProvider);
 Widget _protect(String account,Widget detail)=>Consumer(builder:(context,ref,_){
   final s=ref.watch(sessionProvider);
   return s is SessionSignedIn&&s.user.id==account?detail:const Scaffold(body:Center(child:Text('Session changed. Sign in to view Rooms.')));

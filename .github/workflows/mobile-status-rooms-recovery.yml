@@ -8,7 +8,7 @@ on:
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/videos/**"
       - "apps/mobile/test/features/rooms/**"
-      - "apps/mobile/test/rooms_screen_test.dart"
+      - "apps/mobile/test/room_community_screen_test.dart"
       - ".github/workflows/mobile-status-rooms-recovery.yml"
   push:
     branches: [main]
@@ -19,7 +19,7 @@ on:
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/videos/**"
       - "apps/mobile/test/features/rooms/**"
-      - "apps/mobile/test/rooms_screen_test.dart"
+      - "apps/mobile/test/room_community_screen_test.dart"
       - ".github/workflows/mobile-status-rooms-recovery.yml"
 permissions:
   contents: read
@@ -45,8 +45,8 @@ jobs:
           test/features/videos/video_availability_test.dart
           test/features/videos/video_repository_test.dart
           test/features/videos/videos_screen_test.dart
-          test/rooms_screen_test.dart
-          test/features/rooms/rooms_screen_test.dart
+          test/room_community_screen_test.dart
+          test/rooms_redesign_root_test.dart
       - name: Focused video and Rooms analysis
         run: >-
           flutter analyze --no-pub --no-fatal-infos
@@ -55,4 +55,4 @@ jobs:
           lib/src/screens/rooms/rooms_screen.dart
           test/features/videos
           test/features/rooms
-          test/rooms_screen_test.dart
+          test/room_community_screen_test.dart

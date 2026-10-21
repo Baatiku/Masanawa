@@ -294,7 +294,7 @@ class _InfoState extends State<_CommunityInfo> {
       if (action == 'remove') { await widget.api.remove(room.id, 'masana/${agent['characterId']}'); }
       else { await widget.api.action(room.id, 'masana', {'characterId': agent['characterId'], 'instructions': agent['instructions'] ?? '', 'active': agent['active'] != true}); }
     }), itemBuilder: (_) => [PopupMenuItem(value: 'toggle', child: Text(agent['active'] == true ? 'Deactivate' : 'Activate mention replies')), const PopupMenuItem(value: 'remove', child: Text('Remove Masana'))]) : null),
-    if (room.role == 'owner') TextButton(onPressed: busy ? null : () async { if (await confirm('Delete Room?', 'The Room closes for all members and invitation links stop working. Retained history and receipts remain under retention rules.')) await run(() async { await widget.api.remove(room.id, ''); if (mounted) Navigator.pop(context); }); }, child: const Text('Delete Room')),
+    if (room.role == 'owner') TextButton(onPressed: busy ? null : () async { if (await confirm('Delete Room?', 'The Room closes for all members and invitation links stop working. This action removes the Room from the community.')) await run(() async { await widget.api.remove(room.id, ''); if (mounted) Navigator.pop(context); }); }, child: const Text('Delete Room')),
     if (room.joined) TextButton(onPressed: busy ? null : () async { if (await confirm('Leave Room?', room.role == 'owner' ? 'Transfer ownership to another member before leaving.' : 'You can rejoin public Rooms. Private Rooms require a new valid invitation.')) { if (room.role == 'owner') return; await run(() async { await widget.api.action(room.id, 'leave'); if (mounted) Navigator.pop(context); }); } }, child: const Text('Leave Room')),
   ]));
 }
