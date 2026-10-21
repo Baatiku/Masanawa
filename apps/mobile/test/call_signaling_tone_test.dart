@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/call_signaling_tone.dart';
@@ -30,6 +31,18 @@ void main() {
     expect((calls[2].arguments as Map)['owner'], (calls[0].arguments as Map)['owner']);
     expect((calls[2].arguments as Map)['owner'], isNot((calls[1].arguments as Map)['owner']));
     await next.close();
+  });
+  testWidgets('a stalled native stop is bounded and cannot reject cleanup', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'stop') return Completer<bool>().future;
+      return true;
+    });
+    final tone=CallSignalingTone();
+    await tone.update(CallTone.outgoing);
+    final closing=tone.close();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await closing;
   });
   test('disposing before a queued start prevents a late ringing sound', () async {
     final tone=CallSignalingTone();

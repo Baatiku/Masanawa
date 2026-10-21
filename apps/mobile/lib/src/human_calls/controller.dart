@@ -522,7 +522,11 @@ class HumanCallController extends ChangeNotifier {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await _tone.close();
+    try {
+      await _tone.close();
+    } catch (_) {
+      // Optional signaling can never prevent microphone/service cleanup.
+    }
     _generation++;
     _signalVersion++;
     _poll?.cancel();
