@@ -1,0 +1,1 @@
+!function(){try{if(window.self!==window.top)return}catch{return}window.requestIdleCallback((function(){window.__call_iabjs_unified_bridge("iabjs_idle_callback",window.__iabjs_unified_bridge_nonce,{})}),{timeout:2e3})}()

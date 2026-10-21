@@ -1,0 +1,1 @@
+(function(otp){const otpInput=document.querySelector('input[autocomplete="one-time-code"]');otpInput instanceof HTMLInputElement&&(otpInput.focus(),otpInput.value=otp,otpInput.dispatchEvent(new Event("input",{bubbles:!0})),otpInput.dispatchEvent(new Event("change",{bubbles:!0})))})
