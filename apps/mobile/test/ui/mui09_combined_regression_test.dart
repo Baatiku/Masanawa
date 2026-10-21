@@ -310,10 +310,8 @@ void main() {
             await save('status-unavailable');
             // Signed-out Status and Rooms deny private content before requesting it.
             await tab(0);
-            expect(
-              tester.widget<TextField>(find.byType(TextField)).controller!.text,
-              isEmpty,
-            );
+            expect(find.byType(TextField), findsNothing);
+            expect(find.text('Sign in to see your conversations.'), findsOneWidget);
             await save('chats');
             expect(tester.takeException(), isNull);
             await tester.pumpWidget(const SizedBox.shrink());
