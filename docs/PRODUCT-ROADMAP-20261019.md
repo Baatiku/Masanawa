@@ -452,6 +452,8 @@ Focused verification: four backend files **28 passed** (actual SQL warning/ack/s
 
 ### Connected communication source batch — 21 October 2026
 
+**Follow-up source correction (21 October 2026, P5-C08):** all 26 stock Masana first-contact greetings now open as ordinary social conversation rather than a lesson, support intake or profession pitch; Gwani/Gwana manner definitions also stop centering support. The three specialist starter prompts per persona remain explicit user choices. This updates future stock bootstrap defaults and does not rewrite administrator-edited or already-published identities. Source assertion guards the opening copy. Backstory-led model behavior, provider voice-note response and installed call quality remain open for device/provider acceptance; source inspection cannot mark P4-A01 or P4-A04 verified fixed.
+
 **Base:** `f99748f867884e068432f80fe83093e7b95d5119`. **Source milestone:** `f57de2f3b20e874b8332cc47c6fe4e5e22eed72d` plus final bounded review repairs in the same PR. This batch follows A01–A03/C08; it does not close Phase 4/5 or skip the remaining roadmap. Owner correction: called Masana **speaks first** with a brief hello; calls already connect/respond, so preserve that path.
 
 | Task | Source delivered | Still open |
