@@ -25,7 +25,7 @@ export function registerMsnwCustodyRoutes(
     const mapped = error instanceof MsnwCustodyError || error instanceof WalletActivityError
       ? error : new MsnwCustodyError("msnw.custody_unavailable");
     reply.code(mapped.statusCode);
-    return { error: mapped.code };
+    return { error: mapped.code, ...(mapped instanceof MsnwCustodyError && mapped.details ? mapped.details : {}) };
   }
   app.get("/v1/wallet/account", async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
@@ -104,12 +104,12 @@ export function registerMsnwCustodyRoutes(
       const identity = await owner(request.headers.authorization);
       const value = request.body as Record<string, unknown>;
       if (!value || typeof value !== "object" || Array.isArray(value) ||
-          Object.keys(value).sort().join(",") !==
-            "amountMicro,idempotencyKey,recipient,recipientUserId")
+          !["amountMicro,idempotencyKey,recipient,recipientUserId","amountMicro,idempotencyKey,recipient,recipientUserId,repeatOf"].includes(Object.keys(value).sort().join(",")))
         throw new MsnwCustodyError("msnw.confirmation_invalid",400);
       return await input.ledger.send(identity, {
         recipient: value.recipient,recipientUserId:value.recipientUserId,
         amountMicro:value.amountMicro,idempotencyKey:value.idempotencyKey,
+        ...(value.repeatOf!==undefined?{repeatOf:value.repeatOf}:{}),
       });
     } catch (error) { return failed(reply,error); }
   });

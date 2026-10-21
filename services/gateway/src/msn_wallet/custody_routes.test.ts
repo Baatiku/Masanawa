@@ -121,4 +121,15 @@ describe("canonical MSNW custody Gateway routes", () => {
     expect(answer.statusCode).toBe(400);
     await app.close();
   });
+  it("passes exact repeat acknowledgement and returns the canonical warning without a debit",async()=>{
+    const id="12345678-1234-1234-1234-123456789abc";
+    const recent={operationId:id,state:"completed",createdAt:"2026-10-21T00:00:00Z"};
+    const app=createGatewayApp({customerAuth:{async authorizeSensitiveMutation(){}} as never,
+      msnwCustody:{authorizer:{async authorize(){return {tenantId:"t",userId:"u"};}},ledger:{
+        async send(_owner:unknown,value:Record<string,unknown>){expect(value.repeatOf).toBe(id);throw new MsnwCustodyError("msnw.repeat_confirmation_required",409,{recentTransfer:recent});}
+      } as any}});
+    const response=await app.inject({method:"POST",url:"/v1/wallet/msnw/send",payload:{recipient:"@recipient",recipientUserId:"r",amountMicro:"1000000",idempotencyKey:"repeat-route-key-001",repeatOf:id}});
+    expect(response.statusCode).toBe(409);expect(response.json()).toEqual({error:"msnw.repeat_confirmation_required",recentTransfer:recent});await app.close();
+  });
+
 });

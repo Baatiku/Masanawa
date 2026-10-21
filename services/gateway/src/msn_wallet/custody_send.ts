@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "@masanawa/postgres";
 
 export class MsnwCustodyError extends Error {
-  constructor(readonly code: string, readonly statusCode = 503) { super(code); }
+  constructor(readonly code: string, readonly statusCode = 503, readonly details?: Readonly<Record<string,unknown>>) { super(code); }
 }
 type Owner = Readonly<{ tenantId: string; userId: string }>;
 const amountPattern = /^[1-9][0-9]{0,23}$/;
@@ -104,13 +104,21 @@ export function createMsnwCustodyService(pool: Pool) {
       availableMicro: decimal(r.rows[0]?.available_micro ?? "0"),
       reservedMicro: decimal(r.rows[0]?.reserved_micro ?? "0") });
   }
+  async function recentTransfer(db: Pick<Pool,"query">, owner:Owner, recipient:string, micro:string) {
+    const r=await db.query("SELECT operation_id::text,created_at FROM commerce.msnw_custody_operations "+
+      "WHERE tenant_id=$1 AND actor_user_id=$2 AND recipient_user_id=$3 AND amount_micro=$4::numeric "+
+      "AND kind='send' AND state='completed' AND created_at>statement_timestamp()-interval '5 minutes' "+
+      "ORDER BY created_at DESC,operation_id DESC LIMIT 1",[owner.tenantId,owner.userId,recipient,micro]);
+    const row=r.rows[0];return row?Object.freeze({operationId:String(row.operation_id),createdAt:at(row.created_at),state:"completed" as const}):null;
+  }
   async function preview(owner: Owner, identifier: unknown, rawAmount: unknown) {
     const micro = amount(rawAmount), target = await resolve(owner,identifier);
     const current = await balance(owner);
     if (BigInt(current.availableMicro) < BigInt(micro))
       throw new MsnwCustodyError("msnw.insufficient_available",409);
     return Object.freeze({ asset: "MSNW" as const, recipientUserId: target.userId,
-      recipientName: target.displayName, amountMicro: micro, feeMicro: "0" as const });
+      recipientName: target.displayName, amountMicro: micro, feeMicro: "0" as const,
+      recentTransfer:await recentTransfer(pool,owner,target.userId,micro) });
   }
   async function lookup(owner: Owner, rawKey: unknown) {
     if (typeof rawKey !== "string" || !keyPattern.test(rawKey))
@@ -130,9 +138,11 @@ export function createMsnwCustodyService(pool: Pool) {
   }
   async function send(owner: Owner, input: Readonly<{
     recipient: unknown; recipientUserId: unknown;
-    amountMicro: unknown; idempotencyKey: unknown;
+    amountMicro: unknown; idempotencyKey: unknown; repeatOf?:unknown;
   }>) {
     const micro = amount(input.amountMicro);
+    if(input.repeatOf!==undefined && (typeof input.repeatOf!=="string"||!/^[0-9a-f-]{36}$/i.test(input.repeatOf)))
+      throw new MsnwCustodyError("msnw.confirmation_invalid",400);
     if (typeof input.idempotencyKey !== "string" ||
         !keyPattern.test(input.idempotencyKey) ||
         typeof input.recipientUserId !== "string")
@@ -187,6 +197,11 @@ export function createMsnwCustodyService(pool: Pool) {
       const confirmed = await resolve(owner,input.recipient,db);
       if (confirmed.userId !== target.userId)
         throw new MsnwCustodyError("msnw.recipient_changed",409);
+      // The existing account locks serialize different request keys as well.
+      // Recheck after waiting: preview/client warnings cannot arbitrate a race.
+      const recent=await recentTransfer(db,owner,target.userId,micro);
+      if(recent && input.repeatOf!==recent.operationId)
+        throw new MsnwCustodyError("msnw.repeat_confirmation_required",409,{recentTransfer:recent});
       const operationId = randomUUID();
       const debit = await db.query(
         "UPDATE commerce.msnw_custody_accounts " +
