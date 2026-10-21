@@ -9,7 +9,6 @@ import 'decision_center_page.dart';
 import 'p2p_disputes_page.dart';
 import 'status_editorial_page.dart';
 import 'admin_videos_page.dart';
-import 'admin_rooms_page.dart';
 import 'admin_masana_page.dart';
 import 'admin_skill_readiness_form.dart';
 
@@ -42,7 +41,6 @@ class _AdminShellState extends State<AdminShell> {
     _AdminSection('Runtime', Icons.timeline_outlined),
     _AdminSection('Status', Icons.article_outlined),
     _AdminSection('Videos', Icons.ondemand_video_outlined),
-    _AdminSection('Rooms', Icons.groups_outlined),
     _AdminSection('Commerce', Icons.account_balance_wallet_outlined),
     _AdminSection('P2P Disputes', Icons.gavel_outlined),
     _AdminSection('Operations', Icons.rule_outlined),
@@ -64,7 +62,6 @@ class _AdminShellState extends State<AdminShell> {
         RuntimeAdminPage(api: widget.api),
         StatusEditorialPage(api: widget.api),
         AdminVideosPage(api: widget.api),
-        AdminRoomsPage(api: widget.api),
         CommerceAdminPage(api: widget.api),
         P2pDisputesPage(api: widget.api),
         OperationsAdminPage(api: widget.api),

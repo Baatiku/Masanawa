@@ -9,10 +9,6 @@ import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/r
 import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
 import { registerYouTubeSourceAdminRoutes } from "./modules/youtube_websub/source_admin_routes.js";
 import type { AdminYouTubeSourceStore } from "./modules/youtube_websub/source_admin.js";
-import { registerRoomsRoutes, type RoomsRoutePorts } from "./modules/rooms/routes.js";
-import { registerRoomDiscussionRoutes, type DiscussionRoutePorts } from "./modules/rooms/discussion_routes.js";
-import { registerRoomBookmarkRoutes, type RoomBookmarkPorts } from "./modules/rooms/bookmark_routes.js";
-import { registerRoomMembershipRoutes, type RoomMembershipRoutePorts } from "./modules/rooms/membership_routes.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
 import {registerMasanaRoutes} from "./modules/masana/service.js";
 import {registerCreatorAgentRoutes} from "./creator_agents/routes.js";
@@ -145,13 +141,6 @@ export interface GatewayAppOptions {
   readonly creatorPolicy?: Parameters<typeof registerCreatorPolicyRoutes>[1];
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
   readonly masanaInbox?: MasanaInboxRoutesDeps;
-  /** Persistent Rooms; never reintroduce legacy live Talk as a Room. */
-  readonly rooms?: Readonly<{
-    routes: RoomsRoutePorts;
-    discussion: DiscussionRoutePorts;
-    bookmarks: RoomBookmarkPorts;
-    membership: RoomMembershipRoutePorts;
-  }>;
   readonly videos?: {
     store: VideoStore;
     resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
@@ -1802,12 +1791,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
   if (options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
-  if (options.rooms && !options.roomCommunity) {
-    registerRoomsRoutes(app, options.rooms.routes);
-    registerRoomDiscussionRoutes(app, options.rooms.discussion);
-    registerRoomBookmarkRoutes(app, options.rooms.bookmarks);
-    registerRoomMembershipRoutes(app, options.rooms.membership);
-  }
   if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
   if (options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
   if (options.humanCommunication) registerHumanCommunicationRoutes(app, options.humanCommunication);
