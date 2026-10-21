@@ -36,6 +36,7 @@ class _RoomsState extends State<RoomsScreen> {
       invitations = [];
       invitationsError = null;
       error = null;
+      accepting = false;
       joined = true;
       search.clear();
       load();
@@ -110,10 +111,14 @@ class _RoomsState extends State<RoomsScreen> {
   }
 
   Future<void> create() async {
-    final room = await open<CommunityRoom>(
-      CreateCommunityRoomScreen(api: widget.api),
-    );
-    if (mounted && room != null) await enter(room.id);
+    final api = widget.api, version = generation;
+    final room = await open<CommunityRoom>(CreateCommunityRoomScreen(api: api));
+    if (mounted &&
+        room != null &&
+        identical(api, widget.api) &&
+        version == generation) {
+      await enter(room.id);
+    }
   }
 
   Future<void> accept(Map<String, dynamic> invite) async {
@@ -134,9 +139,13 @@ class _RoomsState extends State<RoomsScreen> {
         await enter(roomId);
       }
     } catch (e) {
-      if (mounted) setState(() => error = e);
+      if (mounted && identical(api, widget.api) && version == generation) {
+        setState(() => error = e);
+      }
     } finally {
-      if (mounted) setState(() => accepting = false);
+      if (mounted && identical(api, widget.api) && version == generation) {
+        setState(() => accepting = false);
+      }
     }
   }
 
