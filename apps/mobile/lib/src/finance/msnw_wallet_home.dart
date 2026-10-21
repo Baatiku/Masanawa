@@ -1,5 +1,4 @@
-import '../core/wallet_payment_request.dart';
-import 'package:share_plus/share_plus.dart';
+import 'wallet_request_composer.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -415,11 +414,24 @@ class _AccountBadgeState extends State<MsnwAccountBadge> {
         ? IconButton(tooltip: 'Retry account number', onPressed: loading ? null : load,
             icon: const Icon(Icons.refresh))
         : Row(mainAxisSize:MainAxisSize.min,children:[
-          IconButton(tooltip:'Share MSNW payment request',icon:const Icon(Icons.share_outlined),onPressed:(){
-            if(widget.currentUserId()!=widget.accountId||widget.accountId==null)return;
-            final request=WalletPaymentRequest(accountNumber:value,userId:widget.accountId!,expiresAt:DateTime.now().toUtc().add(const Duration(days:1)));
-            Share.share(request.link.toString());
-          }),
+          IconButton(
+            tooltip: 'Request MSNW',
+            icon: const Icon(Icons.request_page_outlined),
+            onPressed: () {
+              final owner = widget.accountId;
+              if (owner == null || widget.currentUserId() != owner) return;
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: true,
+                builder: (_) => WalletRequestComposer(
+                  accountNumber: value,
+                  ownerId: owner,
+                  currentOwnerId: widget.currentUserId,
+                ),
+              );
+            },
+          ),
           IconButton(tooltip: 'Copy Masanawa account number', icon: const Icon(Icons.copy),
             onPressed: () async {
               if (!visible || widget.currentUserId() != widget.accountId) return;
