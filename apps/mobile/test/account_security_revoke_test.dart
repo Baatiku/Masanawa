@@ -62,7 +62,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Sign out device'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out device'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Confirm revoke'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirm revoke'));
     await tester.pumpAndSettle();
