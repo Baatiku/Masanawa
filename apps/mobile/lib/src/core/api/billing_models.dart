@@ -72,6 +72,9 @@ class BillingQuote {
     required this.itemCode,
     required this.itemName,
     required this.customerId,
+    this.verifiedCustomerName,
+    this.verifiedMinimumKobo,
+    this.verifiedMaximumKobo,
     required this.serviceAmountKobo,
     required this.feeAmountKobo,
     required this.totalAmountKobo,
@@ -95,6 +98,9 @@ class BillingQuote {
         itemCode: json['itemCode'] as String,
         itemName: json['itemName'] as String,
         customerId: json['customerId'] as String,
+        verifiedCustomerName: json['verifiedCustomerName'] as String?,
+        verifiedMinimumKobo: (json['verifiedMinimumKobo'] as num?)?.toInt(),
+        verifiedMaximumKobo: (json['verifiedMaximumKobo'] as num?)?.toInt(),
         serviceAmountKobo: (json['serviceAmountKobo'] as num).toInt(),
         feeAmountKobo: (json['feeAmountKobo'] as num).toInt(),
         totalAmountKobo: (json['totalAmountKobo'] as num).toInt(),
@@ -117,6 +123,9 @@ class BillingQuote {
   final String itemCode;
   final String itemName;
   final String customerId;
+  final String? verifiedCustomerName;
+  final int? verifiedMinimumKobo;
+  final int? verifiedMaximumKobo;
   final int serviceAmountKobo;
   final int feeAmountKobo;
   final int totalAmountKobo;
@@ -134,6 +143,8 @@ class BillingQuote {
   String get serviceAmount => _formatKobo(serviceAmountKobo);
   String get feeAmount => _formatKobo(feeAmountKobo);
   String get totalAmount => _formatKobo(totalAmountKobo);
+  String? get verifiedMinimum => verifiedMinimumKobo == null ? null : _formatKobo(verifiedMinimumKobo!);
+  String? get verifiedMaximum => verifiedMaximumKobo == null ? null : _formatKobo(verifiedMaximumKobo!);
 }
 
 class BillingPurchaseReceipt {

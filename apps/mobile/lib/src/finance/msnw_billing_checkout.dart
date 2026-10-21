@@ -220,9 +220,14 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
         customerId:widget.customerId,amount:amount.text.trim());
       if(!same(token))return;
       final next=view.quote;
-      if(next.currency!='NGN'||next.itemCode!=widget.item.itemCode||
+      if(next.currency!='NGN'||next.categoryCode!=widget.categoryCode||
+          next.billerCode!=widget.item.billerCode||next.itemCode!=widget.item.itemCode||
           next.customerId!=widget.customerId||next.state!='quoted'){
         throw const FormatException('Invalid bill quote');
+      }
+      final utility=RegExp(r'ELECTRIC|POWER|UTILITY|CABLE|TV').hasMatch(widget.categoryCode.toUpperCase());
+      if(utility && (next.verifiedCustomerName?.trim().isEmpty ?? true)) {
+        throw const FormatException('Provider customer name unavailable');
       }
       final response=await widget.dio.post<dynamic>(
         uri('/v1/wallet/msnw/billing/preview'),options:auth(token),
@@ -242,8 +247,8 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
       }
       setState((){quote=next;price=v.cast<String,dynamic>();});
     }catch(_){
-      if(same(token))setState(()=>error='Bill pricing unavailable. '
-        'Check the provider details or your MSNW custody balance.');
+      if(same(token))setState(()=>error='Provider customer verification or bill pricing unavailable. '
+        'Check the account and service details; no payment was sent.');
     }finally{if(same(token))setState(()=>busy=false);}
   }
 
@@ -261,6 +266,14 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             detail('Previous reference',v['recentPurchase']['reference'] as String),
           ],
           detail('Product',q.itemName),detail('Recipient',q.customerId),
+          if(q.verifiedCustomerName!=null)
+            detail('Provider-verified account',q.verifiedCustomerName!),
+          if(q.verifiedMinimum!=null)
+            detail('Provider minimum','NGN ${q.verifiedMinimum}'),
+          if(q.verifiedMaximum!=null)
+            detail('Provider maximum','NGN ${q.verifiedMaximum}'),
+          if(q.verifiedCustomerName!=null)
+            detail('Verified for this quote',q.createdAt),
           detail('Service','NGN '+q.serviceAmount),detail('Fee','NGN '+q.feeAmount),
           detail('Total','NGN '+q.totalAmount),
           detail('Payment',units(v['amountMicro'] as String)+' MSNW'),
@@ -414,6 +427,14 @@ class _MsnwBillingCheckoutSheetState extends State<MsnwBillingCheckoutSheet> {
             decoration:const InputDecoration(labelText:'Bill amount (NGN)')),
           if(price!=null)...[
             const SizedBox(height:10),
+            if(quote!.verifiedCustomerName!=null)
+              detail('Provider-verified account',quote!.verifiedCustomerName!),
+            if(quote!.verifiedMinimum!=null)
+              detail('Provider minimum','NGN ${quote!.verifiedMinimum}'),
+            if(quote!.verifiedMaximum!=null)
+              detail('Provider maximum','NGN ${quote!.verifiedMaximum}'),
+            if(quote!.verifiedCustomerName!=null)
+              Text('Verified for this quote at ${quote!.createdAt}. Changing the recipient or service requires a new quote.'),
             detail('Service','NGN '+quote!.serviceAmount),
             detail('Fee','NGN '+quote!.feeAmount),
             detail('Total','NGN '+quote!.totalAmount),

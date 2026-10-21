@@ -18,6 +18,10 @@ export interface BillingQuote {
   readonly itemCode: string;
   readonly itemName: string;
   readonly customerId: string;
+  /** Provider-resolved account identity and limits shown only on the owner's quote. */
+  readonly verifiedCustomerName?: string | null;
+  readonly verifiedMinimumKobo?: number | null;
+  readonly verifiedMaximumKobo?: number | null;
   readonly serviceAmountKobo: number;
   readonly feeAmountKobo: number;
   readonly totalAmountKobo: number;
@@ -131,6 +135,8 @@ export function createBillingQuote(input: Readonly<{
   tenantId: TenantId; userId: UserId; categoryCode?: string | null;
   originatingCharacterId?: string | null; billerCode: string;
   itemCode: string; itemName: string; customerId: string; serviceAmountKobo: number;
+  verifiedCustomerName?: string | null;
+  verifiedMinimumKobo?: number | null; verifiedMaximumKobo?: number | null;
   feeAmountKobo: number; createdAt: string; expiresAt: string; quoteId?: QuoteId;
 }>): BillingQuote {
   if (!Number.isSafeInteger(input.serviceAmountKobo) || input.serviceAmountKobo <= 0) throw new TypeError("Billing service amount is invalid");
@@ -139,6 +145,14 @@ export function createBillingQuote(input: Readonly<{
     throw new RangeError("Billing total exceeds safe range");
   }
   const totalAmountKobo = input.serviceAmountKobo + input.feeAmountKobo;
+  for (const value of [input.verifiedMinimumKobo, input.verifiedMaximumKobo]) {
+    if (value !== null && value !== undefined && (!Number.isSafeInteger(value) || value < 0))
+      throw new TypeError("Billing verified amount limit is invalid");
+  }
+  if (input.verifiedMaximumKobo === 0 ||
+      (input.verifiedMinimumKobo != null && input.verifiedMaximumKobo != null &&
+       input.verifiedMinimumKobo > input.verifiedMaximumKobo))
+    throw new TypeError("Billing verified amount range is invalid");
   const createdAt = instant(input.createdAt, "createdAt");
   const expiresAt = instant(input.expiresAt, "expiresAt");
   if (Date.parse(expiresAt) <= Date.parse(createdAt)) throw new RangeError("Billing quote expiry is invalid");
@@ -154,6 +168,9 @@ export function createBillingQuote(input: Readonly<{
     itemCode: bounded(input.itemCode, "itemCode", 128),
     itemName: bounded(input.itemName, "itemName", 300),
     customerId: bounded(input.customerId, "customerId", 200),
+    verifiedCustomerName: input.verifiedCustomerName == null ? null : bounded(input.verifiedCustomerName, "verifiedCustomerName", 300),
+    verifiedMinimumKobo: input.verifiedMinimumKobo ?? null,
+    verifiedMaximumKobo: input.verifiedMaximumKobo ?? null,
     serviceAmountKobo: input.serviceAmountKobo, feeAmountKobo: input.feeAmountKobo,
     totalAmountKobo, currency: "NGN" as const, state: "quoted" as const,
     confirmedAt: null, expiresAt, checkoutTxRef: null, checkoutUrl: null,

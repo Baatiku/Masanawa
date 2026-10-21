@@ -562,4 +562,30 @@ describeDatabase("billing NGN funding PostgreSQL acceptance", () => {
       [f.tenantId,f.userId,f.quote.quoteId],
     )).rejects.toMatchObject({ code: "23514" });
   });
+
+  it("persists provider verification under the quote owner and fences later edits", async () => {
+    const f = fixture();
+    const verified = createBillingQuote({
+      tenantId: f.tenantId, userId: f.userId, categoryCode: "UTILITYBILLS",
+      billerCode: "BIL102", itemCode: "AT102", itemName: "Utility service",
+      customerId: "METER-102", verifiedCustomerName: "Ada Customer",
+      verifiedMinimumKobo: 5000, verifiedMaximumKobo: 20000,
+      serviceAmountKobo: 10000, feeAmountKobo: 100,
+      createdAt: f.quote.createdAt, expiresAt: f.quote.expiresAt,
+    });
+    const stored = await f.repository.createQuote(verified);
+    expect(stored).toMatchObject({
+      verifiedCustomerName: "Ada Customer", verifiedMinimumKobo: 5000,
+      verifiedMaximumKobo: 20000,
+    });
+    await expect(pool.query(
+      `UPDATE commerce.billing_quotes SET verified_customer_name='Another customer'
+         WHERE tenant_id=$1 AND user_id=$2 AND quote_id=$3`,
+      [verified.tenantId, verified.userId, verified.quoteId],
+    )).rejects.toMatchObject({ code: "23514" });
+    const foreign = await f.repository.readQuote({
+      tenantId: f.tenantId, userId: createCanonicalId("user"), quoteId: verified.quoteId,
+    });
+    expect(foreign).toBeNull();
+  });
 });

@@ -934,6 +934,8 @@ describe("billing service qualification policy", () => {
       const owner = identity();
       const quotes = new MemoryQuotes();
       let validationCalls = 0;
+      let providerName: string | null = "Qualified Customer";
+      let providerProduct = "ITEM900";
       const transport: FlutterwaveBillsTransport = {
         async request(request) {
           if (request.method === "GET" && request.path === "/v3/top-bill-categories") {
@@ -956,8 +958,8 @@ describe("billing service qualification policy", () => {
             validationCalls += 1;
             return { status: 200, body: { status: "success", data: {
               response_code: "00", response_message: "Successful",
-              customer: "CUSTOMER-900", name: "Qualified Customer",
-              biller_code: "BIL900", product_code: "ITEM900",
+              customer: "CUSTOMER-900", name: providerName,
+              biller_code: "BIL900", product_code: providerProduct,
               minimum: "100", maximum: "100",
             } } };
           }
@@ -980,8 +982,24 @@ describe("billing service qualification policy", () => {
         itemCode: "ITEM900",
         customerId: "CUSTOMER-900",
         amount: "100",
-      })).resolves.toMatchObject({ quote: { categoryCode, state: "quoted" } });
+      })).resolves.toMatchObject({ quote: {
+        categoryCode, state: "quoted", verifiedCustomerName: "Qualified Customer",
+        verifiedMinimumKobo: 10000, verifiedMaximumKobo: 10000,
+      } });
       expect(validationCalls).toBe(1);
+      if (categoryCode === "CABLEBILLS" || categoryCode === "UTILITYBILLS") {
+        providerName = null;
+        await expect(service.createQuote({
+          authorizationHeader: "Bearer session", categoryCode, billerCode: "BIL900",
+          itemCode: "ITEM900", customerId: "CUSTOMER-900", amount: "100",
+        })).rejects.toThrow("financial.billing.recipient_name_unavailable");
+        providerName = "Qualified Customer";
+        providerProduct = "ANOTHER-ITEM";
+        await expect(service.createQuote({
+          authorizationHeader: "Bearer session", categoryCode, billerCode: "BIL900",
+          itemCode: "ITEM900", customerId: "CUSTOMER-900", amount: "100",
+        })).rejects.toThrow("financial.billing.recipient_invalid");
+      }
     });
   }
 
