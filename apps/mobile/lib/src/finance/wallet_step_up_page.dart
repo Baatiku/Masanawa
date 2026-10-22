@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/components/pin_keyboard.dart';
+import '../core/private_screen_shield.dart';
 
 /// One-time code for an exact reviewed financial action. Its server-issued
 /// grant is bound to the financial request and cannot be reused.
@@ -22,7 +23,7 @@ class _WalletStepUpPageState extends State<WalletStepUpPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PrivateScreenShield(child: Scaffold(
     appBar:AppBar(title:Text(widget.bankDetails
       ? 'Verify bank details' : 'Verify withdrawal')),
     body:SafeArea(child:ListView(
@@ -65,6 +66,6 @@ class _WalletStepUpPageState extends State<WalletStepUpPage> {
         ),
       ],
     )),
-  );
+  ));
 
 }

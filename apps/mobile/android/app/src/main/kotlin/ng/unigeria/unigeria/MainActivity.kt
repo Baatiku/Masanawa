@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.media.AudioAttributes
 import android.net.Uri
+import android.view.WindowManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -24,6 +25,8 @@ class MainActivity : FlutterActivity() {
     private var callForegroundChannel: MethodChannel? = null
     private var signalingAudio: CallSignalingAudio? = null
     private var toneChannel: MethodChannel? = null
+    private var privacyChannel: MethodChannel? = null
+    private val privateScreenOwners = mutableSetOf<String>()
     private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
@@ -31,6 +34,40 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         signalingAudio = CallSignalingAudio(this)
+        // Recent-apps thumbnails, Android screenshots and untrusted screen
+        // recording are blocked only while sensitive verification/security
+        // routes are visible. Each route has its own idempotent owner token.
+        privacyChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "masanawa/private_screen",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                val owner = call.argument<String>("owner")
+                if (owner.isNullOrBlank() || owner.length > 160) {
+                    result.error("invalid_owner", "Private screen owner required", null)
+                    return@setMethodCallHandler
+                }
+                when (call.method) {
+                    "acquire" -> {
+                        try {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                            privateScreenOwners.add(owner)
+                            result.success(true)
+                        } catch (_: RuntimeException) {
+                            result.error("privacy_unavailable", "Private screen protection unavailable", null)
+                        }
+                    }
+                    "release" -> {
+                        privateScreenOwners.remove(owner)
+                        if (privateScreenOwners.isEmpty()) {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
         toneChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "masanawa/call_tone").also { channel ->
             channel.setMethodCallHandler { call, result ->
                 val owner = call.argument<String>("owner")
@@ -312,6 +349,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        privateScreenOwners.clear()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        privacyChannel?.setMethodCallHandler(null)
+        privacyChannel = null
         signalingAudio?.stop()
         signalingAudio = null
         toneChannel?.setMethodCallHandler(null)
