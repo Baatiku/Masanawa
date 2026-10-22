@@ -36,7 +36,17 @@ WalletTransaction parseWalletActivity(dynamic row) {
     if(field.key=='MSNW credited atomic') {
       details['MSNW credited']='${formatWalletAtomic(field.value as String)} MSNW';
     } else if(field.key=='Crypto amount atomic') {
-      details['Crypto amount']='${formatWalletAtomic(field.value as String)} ${row['details']['Network']??''}';
+      // The network/provider route is not a monetary denomination. Historical
+      // Gateway responses may contain this unformatted atomic value; only the
+      // three supported six-decimal payout routes have a verified ticker.
+      final network=row['details']['Network'];
+      final ticker=network=='USDTTRC20'||network=='USDTMATIC'?'USDT':
+        network=='USDCMATIC'?'USDC':null;
+      if(ticker!=null) {
+        details['Crypto amount']='${formatWalletAtomic(field.value as String)} $ticker';
+      } else {
+        details['Crypto amount (atomic units)']=field.value as String;
+      }
     } else { details[field.key as String]=field.value as String; }
   }
   return WalletTransaction(id:row['id'] as String,category:row['category'] as String,
