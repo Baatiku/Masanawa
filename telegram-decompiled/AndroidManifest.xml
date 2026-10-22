@@ -1,0 +1,504 @@
+<?xml version="1.0" ?>
+<manifest xmlns:ns0="http://schemas.android.com/apk/res/android" ns0:versionCode="72299" ns0:versionName="13.1.0" ns0:installLocation="0" ns0:compileSdkVersion="36" ns0:compileSdkVersionCodename="16" package="org.telegram.messenger.web" platformBuildVersionCode="36" platformBuildVersionName="16">
+  <uses-sdk ns0:minSdkVersion="23" ns0:targetSdkVersion="36"/>
+  <uses-feature ns0:name="android.hardware.location.gps" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.location.network" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.location" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.LOCATION" ns0:required="false"/>
+  <uses-permission ns0:name="com.google.android.c2dm.permission.RECEIVE"/>
+  <uses-permission ns0:name="org.telegram.messenger.web.permission.MAPS_RECEIVE"/>
+  <uses-permission ns0:name="com.google.android.providers.gsf.permission.READ_GSERVICES"/>
+  <uses-permission ns0:name="android.permission.ACCESS_COARSE_LOCATION"/>
+  <uses-permission ns0:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission ns0:name="android.permission.ACCESS_MEDIA_LOCATION"/>
+  <uses-permission ns0:name="android.permission.CALL_PHONE"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+  <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
+  <uses-permission ns0:name="android.permission.READ_CALL_LOG"/>
+  <uses-permission ns0:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+  <permission ns0:name="org.telegram.messenger.web.permission.MAPS_RECEIVE" ns0:protectionLevel="0x00000002"/>
+  <uses-permission ns0:name="android.permission.READ_PHONE_STATE"/>
+  <uses-permission ns0:name="android.permission.READ_PHONE_NUMBERS"/>
+  <uses-permission ns0:name="android.permission.SEND_SMS"/>
+  <supports-screens ns0:anyDensity="true" ns0:smallScreens="true" ns0:normalScreens="true" ns0:largeScreens="true" ns0:resizeable="true" ns0:xlargeScreens="true"/>
+  <uses-feature ns0:glEsVersion="0x00020000" ns0:required="true"/>
+  <uses-feature ns0:name="android.hardware.telephony" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.wifi" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.screen.PORTRAIT" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.microphone" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.camera" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.camera2" ns0:required="false"/>
+  <uses-feature ns0:name="android.hardware.sensor.proximity" ns0:required="false"/>
+  <uses-permission ns0:name="android.permission.READ_CLIPBOARD"/>
+  <uses-permission ns0:name="android.permission.BLUETOOTH_CONNECT"/>
+  <uses-permission ns0:name="android.permission.INTERNET"/>
+  <uses-permission ns0:name="android.permission.RECORD_AUDIO"/>
+  <uses-permission ns0:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+  <uses-permission ns0:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission ns0:name="android.permission.ACCESS_WIFI_STATE"/>
+  <uses-permission ns0:name="android.permission.WAKE_LOCK"/>
+  <uses-permission ns0:name="android.permission.READ_EXTERNAL_STORAGE"/>
+  <uses-permission ns0:name="android.permission.READ_MEDIA_IMAGES"/>
+  <uses-permission ns0:name="android.permission.READ_MEDIA_VIDEO"/>
+  <uses-permission ns0:name="android.permission.READ_MEDIA_AUDIO"/>
+  <uses-permission ns0:name="android.permission.GET_ACCOUNTS"/>
+  <uses-permission ns0:name="android.permission.READ_CONTACTS"/>
+  <uses-permission ns0:name="android.permission.WRITE_CONTACTS"/>
+  <uses-permission ns0:name="android.permission.MANAGE_ACCOUNTS"/>
+  <uses-permission ns0:name="android.permission.READ_PROFILE"/>
+  <uses-permission ns0:name="android.permission.WRITE_SYNC_SETTINGS"/>
+  <uses-permission ns0:name="android.permission.READ_SYNC_SETTINGS"/>
+  <uses-permission ns0:name="android.permission.AUTHENTICATE_ACCOUNTS"/>
+  <uses-permission ns0:name="android.permission.VIBRATE"/>
+  <uses-permission ns0:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission ns0:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <uses-permission ns0:name="android.permission.USE_FINGERPRINT"/>
+  <uses-permission ns0:name="android.permission.USE_BIOMETRIC"/>
+  <uses-permission ns0:name="android.permission.INSTALL_SHORTCUT"/>
+  <uses-permission ns0:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
+  <uses-permission ns0:name="com.android.launcher.permission.UNINSTALL_SHORTCUT"/>
+  <uses-permission ns0:name="android.permission.CAMERA"/>
+  <uses-permission ns0:name="android.permission.BLUETOOTH"/>
+  <uses-permission ns0:name="android.permission.MANAGE_OWN_CALLS"/>
+  <uses-permission ns0:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+  <uses-permission ns0:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission ns0:name="com.sec.android.provider.badge.permission.READ"/>
+  <uses-permission ns0:name="com.sec.android.provider.badge.permission.WRITE"/>
+  <uses-permission ns0:name="com.htc.launcher.permission.READ_SETTINGS"/>
+  <uses-permission ns0:name="com.htc.launcher.permission.UPDATE_SHORTCUT"/>
+  <uses-permission ns0:name="com.sonyericsson.home.permission.BROADCAST_BADGE"/>
+  <uses-permission ns0:name="com.sonymobile.home.permission.PROVIDER_INSERT_BADGE"/>
+  <uses-permission ns0:name="com.anddoes.launcher.permission.UPDATE_COUNT"/>
+  <uses-permission ns0:name="com.majeur.launcher.permission.UPDATE_BADGE"/>
+  <uses-permission ns0:name="com.huawei.android.launcher.permission.CHANGE_BADGE"/>
+  <uses-permission ns0:name="com.huawei.android.launcher.permission.READ_SETTINGS"/>
+  <uses-permission ns0:name="com.huawei.android.launcher.permission.WRITE_SETTINGS"/>
+  <uses-permission ns0:name="android.permission.READ_APP_BADGE"/>
+  <uses-permission ns0:name="com.oppo.launcher.permission.READ_SETTINGS"/>
+  <uses-permission ns0:name="com.oppo.launcher.permission.WRITE_SETTINGS"/>
+  <uses-permission ns0:name="me.everything.badger.permission.BADGE_COUNT_READ"/>
+  <uses-permission ns0:name="me.everything.badger.permission.BADGE_COUNT_WRITE"/>
+  <uses-permission ns0:name="com.android.vending.BILLING"/>
+  <uses-permission ns0:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <uses-permission ns0:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+  <queries>
+    <package ns0:name="com.google.android.apps.maps"/>
+    <intent>
+      <action ns0:name="android.intent.action.VIEW"/>
+      <data ns0:scheme="ton"/>
+    </intent>
+    <package ns0:name="com.google.android.gms.policy_cast_dynamite"/>
+    <intent>
+      <action ns0:name="com.android.vending.billing.InAppBillingService.BIND"/>
+    </intent>
+    <intent>
+      <action ns0:name="com.google.android.apps.play.billingtestcompanion.BillingOverrideService.BIND"/>
+    </intent>
+    <provider ns0:name="androidx.car.app.connection.provider" ns0:authorities="androidx.car.app.connection"/>
+  </queries>
+  <permission ns0:name="org.telegram.messenger.web.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" ns0:protectionLevel="0x00000002"/>
+  <uses-permission ns0:name="org.telegram.messenger.web.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+  <application ns0:theme="@7F100149" ns0:label="@7F0F0000" ns0:icon="@7F0D0002" ns0:name="org.telegram.messenger.ApplicationLoaderImpl" ns0:manageSpaceActivity="org.telegram.ui.ExternalActionActivity" ns0:backupAgent="org.telegram.messenger.BackupAgent" ns0:allowBackup="true" ns0:restoreAnyVersion="true" ns0:hardwareAccelerated="true" ns0:largeHeap="true" ns0:supportsRtl="false" ns0:extractNativeLibs="true" ns0:usesCleartextTraffic="true" ns0:roundIcon="@7F0D0002" ns0:appComponentFactory="androidx.core.app.CoreComponentFactory" ns0:allowAudioPlaybackCapture="true" ns0:requestLegacyExternalStorage="true" ns0:preserveLegacyExternalStorage="true" ns0:enableOnBackInvokedCallback="true">
+    <meta-data ns0:name="com.google.android.maps.v2.API_KEY" ns0:value="AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"/>
+    <service ns0:name="org.telegram.messenger.GcmPushListenerService" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.google.firebase.MESSAGING_EVENT"/>
+      </intent-filter>
+    </service>
+    <uses-library ns0:name="com.google.android.maps" ns0:required="false"/>
+    <meta-data ns0:name="firebase_analytics_collection_deactivated" ns0:value="true"/>
+    <meta-data ns0:name="google_analytics_adid_collection_enabled" ns0:value="false"/>
+    <receiver ns0:name="com.google.android.gms.measurement.AppMeasurementReceiver" ns0:enabled="false" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="com.google.android.gms.measurement.UPLOAD"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.SMSResultService" ns0:exported="false"/>
+    <service ns0:name="com.google.android.gms.measurement.AppMeasurementService" ns0:enabled="false" ns0:exported="false"/>
+    <service ns0:name="org.telegram.messenger.GoogleVoiceClientService" ns0:exported="true" ns0:foregroundServiceType="0x00000001"/>
+    <activity ns0:name="org.telegram.messenger.GoogleVoiceClientActivity" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.google.android.voicesearch.SEND_MESSAGE_TO_CONTACTS"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="text/plain"/>
+      </intent-filter>
+    </activity>
+    <service ns0:name="org.telegram.messenger.SMSJobsNotification" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000201"/>
+    <activity ns0:theme="@7F100149" ns0:name="org.telegram.ui.LaunchActivity" ns0:exported="true" ns0:launchMode="2" ns0:configChanges="0x00000FB0" ns0:windowSoftInputMode="0x00000010" ns0:hardwareAccelerated="true" ns0:supportsPictureInPicture="true">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="image/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="video/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND_MULTIPLE"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="image/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="text/plain"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="*/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.SEND_MULTIPLE"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="*/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="vnd.android.cursor.item/vnd.org.telegram.messenger.android.profile"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <data ns0:scheme="http" ns0:host="telegram.me"/>
+        <data ns0:scheme="https" ns0:host="telegram.me"/>
+        <data ns0:scheme="http" ns0:host="telegram.dog"/>
+        <data ns0:scheme="https" ns0:host="telegram.dog"/>
+        <data ns0:scheme="http" ns0:host="t.me"/>
+        <data ns0:scheme="https" ns0:host="t.me"/>
+      </intent-filter>
+      <intent-filter ns0:icon="@7F0D0000" ns0:priority="1" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <data ns0:scheme="tonsite"/>
+      </intent-filter>
+      <intent-filter ns0:icon="@7F0D0000" ns0:priority="1" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:scheme="tg"/>
+      </intent-filter>
+      <intent-filter ns0:icon="@7F0D0000" ns0:priority="1" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <data ns0:scheme="ton" ns0:host="transfer" ns0:pathPrefix="/"/>
+      </intent-filter>
+      <intent-filter ns0:icon="@7F0D0000" ns0:priority="1" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <data ns0:scheme="tc"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="org.telegram.messenger.CREATE_STICKER_PACK"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="*/*"/>
+      </intent-filter>
+      <meta-data ns0:name="android.service.chooser.chooser_target_service" ns0:value="androidx.sharetarget.ChooserTargetServiceCompat"/>
+      <meta-data ns0:name="android.app.shortcuts" ns0:resource="@7F120008"/>
+      <meta-data ns0:name="com.google.mlkit.vision.DEPENDENCIES" ns0:value="subject_segment"/>
+    </activity>
+    <activity-alias ns0:name="org.telegram.messenger.DefaultIcon" ns0:enabled="true" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+      <meta-data ns0:name="android.app.shortcuts" ns0:resource="@7F120008"/>
+    </activity-alias>
+    <activity-alias ns0:name="org.telegram.ui.CallsActivity" ns0:permission="android.permission.CALL_PHONE" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity">
+      <intent-filter>
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:mimeType="vnd.android.cursor.item/vnd.org.telegram.messenger.android.call"/>
+        <data ns0:mimeType="vnd.android.cursor.item/vnd.org.telegram.messenger.android.call.video"/>
+      </intent-filter>
+    </activity-alias>
+    <activity-alias ns0:icon="@7F0D0006" ns0:name="org.telegram.messenger.NoxIcon" ns0:enabled="false" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity" ns0:roundIcon="@7F0D0006">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
+    <activity-alias ns0:icon="@7F0D0015" ns0:name="org.telegram.messenger.TurboIcon" ns0:enabled="false" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity" ns0:roundIcon="@7F0D0015">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
+    <activity-alias ns0:icon="@7F0D000C" ns0:name="org.telegram.messenger.PremiumIcon" ns0:enabled="false" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity" ns0:roundIcon="@7F0D000C">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
+    <activity-alias ns0:icon="@7F0D000F" ns0:name="org.telegram.messenger.AquaIcon" ns0:enabled="false" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity" ns0:roundIcon="@7F0D000F">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
+    <activity-alias ns0:icon="@7F0D001B" ns0:name="org.telegram.messenger.VintageIcon" ns0:enabled="false" ns0:exported="true" ns0:targetActivity="org.telegram.ui.LaunchActivity" ns0:roundIcon="@7F0D001B">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MAIN"/>
+        <category ns0:name="android.intent.category.LAUNCHER"/>
+        <category ns0:name="android.intent.category.MULTIWINDOW_LAUNCHER"/>
+      </intent-filter>
+    </activity-alias>
+    <activity ns0:name="org.telegram.ui.BubbleActivity" ns0:configChanges="0x000006B0" ns0:windowSoftInputMode="0x00000010" ns0:hardwareAccelerated="true" ns0:allowEmbedded="true" ns0:documentLaunchMode="2" ns0:resizeableActivity="true"/>
+    <activity ns0:theme="@7F10014B" ns0:name="org.telegram.ui.ShareActivity" ns0:exported="true" ns0:stateNotNeeded="true" ns0:excludeFromRecents="true" ns0:configChanges="0x000006B0" ns0:windowSoftInputMode="0x00000020" ns0:hardwareAccelerated="true">
+      <intent-filter ns0:icon="@7F0D0000" ns0:priority="1" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.intent.action.VIEW"/>
+        <category ns0:name="android.intent.category.BROWSABLE"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+        <data ns0:scheme="tgb"/>
+      </intent-filter>
+    </activity>
+    <activity ns0:name="org.telegram.ui.ExternalActionActivity" ns0:exported="true" ns0:configChanges="0x000006B0" ns0:windowSoftInputMode="0x00000020" ns0:hardwareAccelerated="true">
+      <intent-filter ns0:icon="@7F0D0000" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="org.telegram.passport.AUTHORIZE"/>
+        <category ns0:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
+    </activity>
+    <activity ns0:name="org.telegram.ui.ChatsWidgetConfigActivity" ns0:exported="true" ns0:configChanges="0x000006B0" ns0:windowSoftInputMode="0x00000020" ns0:hardwareAccelerated="true">
+      <intent-filter ns0:icon="@7F0D0000" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
+      </intent-filter>
+    </activity>
+    <activity ns0:name="org.telegram.ui.ContactsWidgetConfigActivity" ns0:exported="true" ns0:configChanges="0x000006B0" ns0:windowSoftInputMode="0x00000020" ns0:hardwareAccelerated="true">
+      <intent-filter ns0:icon="@7F0D0000" ns0:roundIcon="@7F0D0001">
+        <action ns0:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
+      </intent-filter>
+    </activity>
+    <activity ns0:name="org.telegram.messenger.OpenChatReceiver" ns0:exported="true" ns0:configChanges="0x000006B0"/>
+    <activity ns0:name="org.telegram.messenger.OpenAttachedMenuBotReceiver" ns0:exported="true" ns0:configChanges="0x000006B0"/>
+    <activity ns0:theme="@7F100148" ns0:name="org.telegram.ui.PopupNotificationActivity" ns0:taskAffinity="" ns0:excludeFromRecents="true" ns0:launchMode="2" ns0:configChanges="0x00000FF0" ns0:windowSoftInputMode="0x00000012" ns0:resizeableActivity="false"/>
+    <activity ns0:theme="@7F10014B" ns0:name="org.telegram.ui.VoIPPermissionActivity" ns0:taskAffinity="org.telegram.messenger.web.voip" ns0:excludeFromRecents="true" ns0:configChanges="0x000006B0"/>
+    <activity ns0:theme="@7F10014C" ns0:name="org.telegram.ui.VoIPFeedbackActivity" ns0:taskAffinity="org.telegram.messenger.web.voip_feedback" ns0:excludeFromRecents="true" ns0:configChanges="0x000006B0"/>
+    <receiver ns0:name="org.telegram.messenger.AutoMessageHeardReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="org.telegram.messenger.ACTION_MESSAGE_HEARD"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.CopyCodeReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="org.telegram.messenger.ACTION_COPY_CODE"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.NotificationsDisabledReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.SmsReceiver" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.google.android.gms.auth.api.phone.SMS_RETRIEVED"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.CallReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="android.intent.action.PHONE_STATE"/>
+      </intent-filter>
+    </receiver>
+    <service ns0:name="org.telegram.messenger.AuthenticatorService" ns0:exported="true" ns0:foregroundServiceType="0x00000001">
+      <intent-filter>
+        <action ns0:name="android.accounts.AccountAuthenticator"/>
+      </intent-filter>
+      <meta-data ns0:name="android.accounts.AccountAuthenticator" ns0:resource="@7F120000"/>
+    </service>
+    <service ns0:name="org.telegram.messenger.ContactsSyncAdapterService" ns0:exported="true" ns0:foregroundServiceType="0x00000001">
+      <intent-filter>
+        <action ns0:name="android.content.SyncAdapter"/>
+      </intent-filter>
+      <meta-data ns0:name="android.content.SyncAdapter" ns0:resource="@7F120009"/>
+      <meta-data ns0:name="android.provider.CONTACTS_STRUCTURE" ns0:resource="@7F120005"/>
+    </service>
+    <service ns0:name="org.telegram.messenger.KeepAliveJob" ns0:permission="android.permission.BIND_JOB_SERVICE" ns0:exported="false" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.BringAppForegroundService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000002"/>
+    <service ns0:name="org.telegram.messenger.NotificationsService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.NotificationRepeat" ns0:exported="false" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.VideoEncodingService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.ui.Stories.recorder.StoryUploadingService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.ImportingService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.LocationSharingService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000009"/>
+    <service ns0:name="org.telegram.messenger.voip.VoIPService" ns0:enabled="true" ns0:exported="false" ns0:foregroundServiceType="0x000000E2"/>
+    <service ns0:name="org.telegram.messenger.MusicPlayerService" ns0:enabled="true" ns0:exported="true" ns0:foregroundServiceType="0x00000002"/>
+    <service ns0:name="org.telegram.messenger.MusicBrowserService" ns0:exported="true" ns0:foregroundServiceType="0x00000002">
+      <intent-filter>
+        <action ns0:name="android.media.browse.MediaBrowserService"/>
+      </intent-filter>
+    </service>
+    <service ns0:name="org.telegram.messenger.voip.TelegramConnectionService" ns0:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE" ns0:exported="true" ns0:foregroundServiceType="0x00000001">
+      <intent-filter>
+        <action ns0:name="android.telecom.ConnectionService"/>
+      </intent-filter>
+    </service>
+    <receiver ns0:name="org.telegram.messenger.MusicPlayerReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="org.telegram.android.musicplayer.close"/>
+        <action ns0:name="org.telegram.android.musicplayer.pause"/>
+        <action ns0:name="org.telegram.android.musicplayer.next"/>
+        <action ns0:name="org.telegram.android.musicplayer.play"/>
+        <action ns0:name="org.telegram.android.musicplayer.previous"/>
+        <action ns0:name="android.intent.action.MEDIA_BUTTON"/>
+        <action ns0:name="android.media.AUDIO_BECOMING_NOISY"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.voip.VoIPMediaButtonReceiver" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="android.intent.action.MEDIA_BUTTON"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.AppStartReceiver" ns0:enabled="true" ns0:exported="false">
+      <intent-filter>
+        <action ns0:name="org.telegram.start"/>
+        <action ns0:name="android.intent.action.BOOT_COMPLETED"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.RefererReceiver" ns0:permission="android.permission.INSTALL_PACKAGES" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.android.vending.INSTALL_REFERRER"/>
+      </intent-filter>
+    </receiver>
+    <receiver ns0:name="org.telegram.messenger.WearReplyReceiver" ns0:enabled="true"/>
+    <service ns0:name="org.telegram.messenger.WearAuthListenerService" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.google.android.gms.wearable.MESSAGE_RECEIVED"/>
+        <data ns0:scheme="wear" ns0:host="*" ns0:pathPrefix="/tg-wear-auth/"/>
+      </intent-filter>
+    </service>
+    <receiver ns0:name="org.telegram.messenger.StopLiveLocationReceiver" ns0:enabled="true"/>
+    <receiver ns0:name="org.telegram.messenger.PopupReplyReceiver" ns0:enabled="true"/>
+    <receiver ns0:name="org.telegram.messenger.NotificationCallbackReceiver" ns0:enabled="true" ns0:exported="false"/>
+    <receiver ns0:name="org.telegram.messenger.ShareBroadcastReceiver" ns0:enabled="true"/>
+    <receiver ns0:name="org.telegram.messenger.CustomTabsCopyReceiver" ns0:enabled="true"/>
+    <receiver ns0:name="org.telegram.messenger.NotificationDismissReceiver" ns0:exported="false"/>
+    <receiver ns0:name="org.telegram.messenger.voip.VoIPActionsReceiver" ns0:exported="false"/>
+    <receiver ns0:name="org.telegram.messenger.ShortcutResultReceiver" ns0:exported="false"/>
+    <provider ns0:name="androidx.core.content.FileProvider" ns0:exported="false" ns0:authorities="org.telegram.messenger.web.provider" ns0:grantUriPermissions="true">
+      <meta-data ns0:name="android.support.FILE_PROVIDER_PATHS" ns0:resource="@7F120007"/>
+    </provider>
+    <provider ns0:name="org.telegram.messenger.NotificationImageProvider" ns0:exported="false" ns0:authorities="org.telegram.messenger.web.notification_image_provider" ns0:grantUriPermissions="true"/>
+    <provider ns0:name="org.telegram.messenger.voip.CallNotificationSoundProvider" ns0:exported="true" ns0:authorities="org.telegram.messenger.web.call_sound_provider"/>
+    <receiver ns0:name="org.telegram.messenger.ChatsWidgetProvider" ns0:exported="false">
+      <meta-data ns0:name="android.appwidget.provider" ns0:resource="@7F120003"/>
+      <intent-filter>
+        <action ns0:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+      </intent-filter>
+    </receiver>
+    <service ns0:name="org.telegram.messenger.ChatsWidgetService" ns0:permission="android.permission.BIND_REMOTEVIEWS" ns0:exported="false" ns0:foregroundServiceType="0x00000001"/>
+    <receiver ns0:name="org.telegram.messenger.ContactsWidgetProvider" ns0:exported="false">
+      <meta-data ns0:name="android.appwidget.provider" ns0:resource="@7F120006"/>
+      <intent-filter>
+        <action ns0:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+      </intent-filter>
+    </receiver>
+    <service ns0:name="org.telegram.messenger.ContactsWidgetService" ns0:permission="android.permission.BIND_REMOTEVIEWS" ns0:exported="false" ns0:foregroundServiceType="0x00000001"/>
+    <service ns0:name="org.telegram.messenger.FilesMigrationService" ns0:exported="false" ns0:foregroundServiceType="0x00000001"/>
+    <uses-library ns0:name="com.sec.android.app.multiwindow" ns0:required="false"/>
+    <meta-data ns0:name="com.sec.android.support.multiwindow" ns0:value="true"/>
+    <meta-data ns0:name="com.sec.android.multiwindow.DEFAULT_SIZE_W" ns0:value="632dp"/>
+    <meta-data ns0:name="com.sec.android.multiwindow.DEFAULT_SIZE_H" ns0:value="598dp"/>
+    <meta-data ns0:name="com.sec.android.multiwindow.MINIMUM_SIZE_W" ns0:value="632dp"/>
+    <meta-data ns0:name="com.sec.android.multiwindow.MINIMUM_SIZE_H" ns0:value="598dp"/>
+    <meta-data ns0:name="com.google.android.gms.wallet.api.enabled" ns0:value="true"/>
+    <meta-data ns0:name="com.google.android.gms.vision.DEPENDENCIES" ns0:value="face,barcode"/>
+    <meta-data ns0:name="android.max_aspect" ns0:value="2.500000"/>
+    <meta-data ns0:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" ns0:value="org.telegram.messenger.chromecast.ChromecastOptionsProvider"/>
+    <service ns0:name="androidx.credentials.playservices.CredentialProviderMetadataHolder" ns0:enabled="true" ns0:exported="false">
+      <meta-data ns0:name="androidx.credentials.CREDENTIAL_PROVIDER_KEY" ns0:value="androidx.credentials.playservices.CredentialProviderPlayServicesImpl"/>
+    </service>
+    <activity ns0:theme="@7F100130" ns0:name="androidx.credentials.playservices.controllers.identityauth.HiddenActivity" ns0:enabled="true" ns0:exported="false" ns0:configChanges="0x000005A0" ns0:fitsSystemWindows="true"/>
+    <activity ns0:theme="@7F100130" ns0:name="androidx.credentials.playservices.controllers.identitycredentials.IdentityCredentialApiHiddenActivity" ns0:enabled="true" ns0:exported="false" ns0:configChanges="0x000005A0" ns0:fitsSystemWindows="true"/>
+    <receiver ns0:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver" ns0:exported="false"/>
+    <service ns0:name="com.google.android.gms.cast.framework.ReconnectionService" ns0:exported="false"/>
+    <uses-library ns0:name="org.apache.http.legacy" ns0:required="false"/>
+    <meta-data ns0:name="com.google.android.play.billingclient.version" ns0:value="8.0.0"/>
+    <activity ns0:theme="@android:01030010" ns0:name="com.android.billingclient.api.ProxyBillingActivity" ns0:exported="false" ns0:configChanges="0x000005B0"/>
+    <activity ns0:theme="@android:01030010" ns0:name="com.android.billingclient.api.ProxyBillingActivityV2" ns0:exported="false" ns0:configChanges="0x000005B0"/>
+    <service ns0:name="com.google.mlkit.common.internal.MlKitComponentDiscoveryService" ns0:exported="false" ns0:directBootAware="true">
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.nl.languageid.bundled.internal.ThickLanguageIdRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.vision.segmentation.subject.internal.SubjectSegmentationRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.vision.label.defaults.thin.ThinLabelRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.nl.languageid.internal.LanguageIdRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.vision.common.internal.VisionCommonRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.mlkit.common.internal.CommonComponentRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+    </service>
+    <provider ns0:name="com.google.mlkit.common.internal.MlKitInitProvider" ns0:exported="false" ns0:authorities="org.telegram.messenger.web.mlkitinitprovider" ns0:initOrder="99"/>
+    <activity ns0:theme="@android:01030010" ns0:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity" ns0:exported="false" ns0:excludeFromRecents="true"/>
+    <service ns0:name="com.google.android.gms.auth.api.signin.RevocationBoundService" ns0:permission="com.google.android.gms.auth.api.signin.permission.REVOCATION_NOTIFICATION" ns0:exported="true" ns0:visibleToInstantApps="true"/>
+    <activity ns0:theme="@android:01030010" ns0:name="com.google.android.gms.common.api.GoogleApiActivity" ns0:exported="false"/>
+    <receiver ns0:name="com.google.firebase.iid.FirebaseInstanceIdReceiver" ns0:permission="com.google.android.c2dm.permission.SEND" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="com.google.android.c2dm.intent.RECEIVE"/>
+      </intent-filter>
+    </receiver>
+    <service ns0:name="com.google.firebase.messaging.FirebaseMessagingService" ns0:exported="false" ns0:directBootAware="true">
+      <intent-filter ns0:priority="-500">
+        <action ns0:name="com.google.firebase.MESSAGING_EVENT"/>
+      </intent-filter>
+    </service>
+    <service ns0:name="com.google.firebase.components.ComponentDiscoveryService" ns0:exported="false" ns0:directBootAware="true">
+      <meta-data ns0:name="com.google.firebase.components:com.google.firebase.messaging.FirebaseMessagingRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.firebase.datatransport.TransportRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+      <meta-data ns0:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsRegistrar" ns0:value="com.google.firebase.components.ComponentRegistrar"/>
+    </service>
+    <provider ns0:name="com.google.firebase.provider.FirebaseInitProvider" ns0:exported="false" ns0:authorities="org.telegram.messenger.web.firebaseinitprovider" ns0:initOrder="100" ns0:directBootAware="true"/>
+    <service ns0:name="androidx.car.app.CarAppMetadataHolderService" ns0:enabled="false" ns0:exported="false" ns0:process="">
+      <meta-data ns0:name="androidx.car.app.CarAppMetadataHolderService.CAR_HARDWARE_MANAGER" ns0:value="androidx.car.app.hardware.ProjectedCarHardwareManager"/>
+    </service>
+    <activity ns0:theme="@android:01030010" ns0:name="androidx.car.app.CarAppPermissionActivity" ns0:exported="false"/>
+    <receiver ns0:name="androidx.car.app.notification.CarAppNotificationBroadcastReceiver" ns0:exported="false"/>
+    <service ns0:name="androidx.sharetarget.ChooserTargetServiceCompat" ns0:permission="android.permission.BIND_CHOOSER_TARGET_SERVICE" ns0:exported="true">
+      <intent-filter>
+        <action ns0:name="android.service.chooser.ChooserTargetService"/>
+      </intent-filter>
+    </service>
+    <provider ns0:name="androidx.startup.InitializationProvider" ns0:exported="false" ns0:authorities="org.telegram.messenger.web.androidx-startup">
+      <meta-data ns0:name="androidx.emoji2.text.EmojiCompatInitializer" ns0:value="androidx.startup"/>
+      <meta-data ns0:name="androidx.lifecycle.ProcessLifecycleInitializer" ns0:value="androidx.startup"/>
+      <meta-data ns0:name="androidx.profileinstaller.ProfileInstallerInitializer" ns0:value="androidx.startup"/>
+    </provider>
+    <meta-data ns0:name="com.google.android.gms.version" ns0:value="@7F0A000A"/>
+    <receiver ns0:name="androidx.profileinstaller.ProfileInstallReceiver" ns0:permission="android.permission.DUMP" ns0:enabled="true" ns0:exported="true" ns0:directBootAware="false">
+      <intent-filter>
+        <action ns0:name="androidx.profileinstaller.action.INSTALL_PROFILE"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="androidx.profileinstaller.action.SKIP_FILE"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="androidx.profileinstaller.action.SAVE_PROFILE"/>
+      </intent-filter>
+      <intent-filter>
+        <action ns0:name="androidx.profileinstaller.action.BENCHMARK_OPERATION"/>
+      </intent-filter>
+    </receiver>
+    <service ns0:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery" ns0:exported="false">
+      <meta-data ns0:name="backend:com.google.android.datatransport.cct.CctBackendFactory" ns0:value="cct"/>
+    </service>
+    <service ns0:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService" ns0:permission="android.permission.BIND_JOB_SERVICE" ns0:exported="false"/>
+    <receiver ns0:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver" ns0:exported="false"/>
+    <activity ns0:theme="@7F100135" ns0:name="com.google.android.play.core.common.PlayCoreDialogWrapperActivity" ns0:exported="false" ns0:stateNotNeeded="true"/>
+  </application>
+</manifest>
