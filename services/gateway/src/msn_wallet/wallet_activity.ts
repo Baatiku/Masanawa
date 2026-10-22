@@ -139,7 +139,7 @@ function normalize(row:Record<string,unknown>):WalletActivityRecord {
   const details=Object.fromEntries(Object.entries(row.details).filter((v):v is [string,string]=>typeof v[1]==='string'));
   for(const [key,label,decimals,asset] of [
     ['Gross MSNW atomic','Gross amount',6,'MSNW'],['Net MSNW atomic','Net amount',6,'MSNW'],
-    ['MSNW credited atomic','MSNW credited',6,'MSNW'],['Crypto amount atomic','Crypto amount',6,details.Network??''],
+    ['MSNW credited atomic','MSNW credited',6,'MSNW'],
     ['Fee MSNW atomic','Fee',6,'MSNW'],['Provider NGN atomic','Provider price',2,'NGN'],['Total NGN atomic','Total price',2,'NGN'],
   ] as const) {
     const value=details[key];
@@ -147,6 +147,19 @@ function normalize(row:Record<string,unknown>):WalletActivityRecord {
       if(!/^[0-9]{1,100}$/.test(value))throw new WalletActivityError('wallet.record_invalid',503);
       details[label]=`${atomic(value,decimals)} ${asset}`.trim();delete details[key];
     }
+  }
+  // A conversion provider route describes a network/rail, not an asset
+  // denomination. All three admitted stablecoin routes settle in micro units;
+  // unknown historical routes retain their *exact* raw amount instead of
+  // presenting an invented currency or decimal precision.
+  const payoutMicro=details['Crypto amount atomic'];
+  if(payoutMicro!==undefined) {
+    if(!/^[0-9]{1,100}$/.test(payoutMicro))throw new WalletActivityError('wallet.record_invalid',503);
+    const route=details.Network;
+    const ticker=route==='USDTTRC20'||route==='USDTMATIC'?'USDT':route==='USDCMATIC'?'USDC':null;
+    if(ticker)details['Crypto amount']=`${atomic(payoutMicro,6)} ${ticker}`;
+    else details['Crypto amount (atomic units)']=payoutMicro;
+    delete details['Crypto amount atomic'];
   }
   return Object.freeze({id:row.id,reference:row.reference,category:row.category,title:row.title,
     amountAtomic:row.amount_atomic,decimals:row.decimals,asset:row.asset,incoming:row.incoming,
