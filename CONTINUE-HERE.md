@@ -20,6 +20,12 @@ Read `AGENTS.md`, the [canonical roadmap](docs/PRODUCT-ROADMAP-20261019.md), [sc
 
 **Unfinished, do not check parent boxes:** owner-reported missing voice replies need recorder→Gateway→provider trace and physical handset proof; Room uploads need cross-process status/replay/Status coverage and authorized media readback; Wallet needs single canonical asset custody with fees/backing, non-MSNW Send and multi-asset escrow; P7-S05–S07 need approved merchant provider and real fulfillment/reconciliation. Continue Phase 4/5 independently while integrating W12–W14/W05 before enabling Phase 7 escrow. PR #228 memory, #232 docs and #236 web are separate; do not overwrite.
 
+## Phase 6 exact crypto holdings arithmetic — 22 October 2026
+
+Completed predecessor: P7 merchant-history #281 merged `54e3befc1decfb8f33cb01a4211df57a0a1198ab` after hosted P2P Escrow Qualification, Foundation, Mobile Build and Status CI passed. An initial hosted P2P failure was traced to `order_read_clock.test.ts` omitting the already-established `created_at` fixture column; the corrected fixture and the complete 48-case P2P suite passed locally and on the final CI SHA. No escrow provider action or multi-asset launch implied.
+
+Next independent P6-W12 source increment: authenticated read-only crypto holdings fail closed if any available/reserved/total string is negative, malformed/exponential or mathematically contradictory; preserve exact fractional atomic representation and route binding. Higgsfield: `vitest run services/gateway/src/financial_service.test.ts` 68 passed, Gateway TypeScript noEmit/skipLibCheck PASS, diff check PASS. Provider, real PostgreSQL release path, cross-device debit and live chain validation remain NOT_RUN; no APK or financial transaction. PR/head in GitHub, and W12/W11 unchanged OPEN.
+
 ## Phase 5 creator fee and Phase 7 merchant-trust source continuation — 22 October 2026
 
 **Merged:** #279 `fbf96d051c78ed847266ae8f07730bfb1e78fb6c` after seven exact-head GitHub workflows; #280 `76d3d01a10d764945ed0bdb48e3b48e81c0b570f` after Foundation and Mobile Build CI. #280 fixes a misleading published-Masana edit approval that truncated fractional MSNW quotes (new exact fee formatter and malformed-quote regression, two focused Flutter tests passed). Full P5-C02 provider/creator completion remains unverified.

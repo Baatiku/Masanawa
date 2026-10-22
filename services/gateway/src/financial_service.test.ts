@@ -353,6 +353,27 @@ describe("financial service recovery and admission", () => {
     await expect(service.listHoldings!({ authorizationHeader })).rejects.toThrow("financial.crypto.holdings_identity_conflict");
     expect(holdings).toHaveBeenCalledWith({ tenantId, userId });
   });
+  it("rejects inconsistent custody arithmetic and malformed or negative provider balances", async () => {
+    const {service,crypto}=setup();
+    const row={asset:'USDTTRC20',network:'tron',amount:'0.000000000000000001',
+      reservedAmount:'0.000000000000000009',totalAmount:'0.000000000000000010'};
+    const holdings=vi.fn()
+      .mockResolvedValueOnce([row])
+      .mockResolvedValueOnce([{...row,totalAmount:'0.000000000000000011'}])
+      .mockResolvedValueOnce([{...row,amount:'-1'}])
+      .mockResolvedValueOnce([{...row,reservedAmount:'1e-6'}]);
+    Object.assign(crypto,{listHoldings:holdings});
+    await expect(service.listHoldings!({authorizationHeader})).resolves.toMatchObject([
+      {amount:row.amount,reservedAmount:row.reservedAmount,totalAmount:row.totalAmount},
+    ]);
+    await expect(service.listHoldings!({authorizationHeader}))
+      .rejects.toThrow('financial.crypto.holdings_total_conflict');
+    await expect(service.listHoldings!({authorizationHeader}))
+      .rejects.toThrow('financial.crypto.holdings_amount_invalid');
+    await expect(service.listHoldings!({authorizationHeader}))
+      .rejects.toThrow('financial.crypto.holdings_amount_invalid');
+    expect(holdings).toHaveBeenCalledTimes(4);
+  });
   it("keeps fiat Buy disabled until the account is explicitly activated and custody-backed", async () => {
     await expect(setup(null).service.capabilities({ authorizationHeader }))
       .resolves.toMatchObject({
