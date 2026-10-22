@@ -1,6 +1,6 @@
 # Telegram reference audit — Wallet, P2P, communication and Android opportunities
 
-**Audit date:** 22 October 2026. **Masanawa baseline:** [main at a788c122](https://github.com/Baatiku/Masanawa/tree/a788c122c8b05e96341574a340ca25828892bd24). **Telegram reference:** [feat/telegram-p2p-wallet-reference at 04a543b](https://github.com/Baatiku/Masanawa/tree/04a543b0886683ce0efa8bebfc95af7c1c05fe9b/telegram-decompiled). **Authority:** [canonical product roadmap](PRODUCT-ROADMAP-20261019.md), [WLT01–WLT10 screen/journey contract](SCREEN-JOURNEYS.md), [AGENTS.md](../AGENTS.md). This is an evidence-led reference analysis, **not a replacement roadmap**. Actionable task IDs are tracked in the canonical roadmap as TG01–TG30 and retain existing P6-W/P7-P/P8-X owners.
+**Audit date:** 22 October 2026. **Masanawa baseline:** [main at a788c122](https://github.com/Baatiku/Masanawa/tree/a788c122c8b05e96341574a340ca25828892bd24). **Telegram reference:** [feat/telegram-p2p-wallet-reference at 04a543b](https://github.com/Baatiku/Masanawa/tree/04a543b0886683ce0efa8bebfc95af7c1c05fe9b/telegram-decompiled). **Authority:** [canonical product roadmap](PRODUCT-ROADMAP-20261019.md), [WLT01–WLT10 screen/journey contract](SCREEN-JOURNEYS.md), [AGENTS.md](../AGENTS.md). This is an evidence-led reference analysis, **not a replacement roadmap**. All 41 TG01–TG41 findings are cross-referenced within the canonical roadmap's existing Phase 4–8 sections and screen journeys; most reuse existing P4/P5/P6-W/P7-P/P8-X owners, while genuinely new deliverables use P4-T01/T02, P5-T01, P6-T01, P7-T01/T02, P8-T01 and optional P8-U09/U10.
 
 ## What was actually inspected; confidence limits
 
@@ -12,6 +12,20 @@
 - **Corrections to the preliminary benchmark:** its Windows file:/// links are nonportable; “settles within 100 milliseconds”, “fraud-proof escrow”, exact 15-minute timer, all listed bank rails, encrypted order chat and precise native class/function claims are **unverified by these uploaded bytes**. Use configured authoritative deadlines, never promise fraud-proof settlement; never treat screenshot or “I paid” as release proof. The dual custodial/seed-wallet narrative is **not** an instruction to create a second wallet in Masanawa. Do not import Telegram wallet textures, icons, theme files, code, fonts or models into our shipped app without rights, security and licensing reviews.
 
 **Status labels below:** **EXISTS** = matching Masanawa source identified, not end-to-end accepted; **PARTIAL** = existing path with missing/unfinished acceptance; **UNVERIFIED** = no proof either way from bounded source audit; **NEW** = distinct proposal, not an assertion that every repository file was scanned. **P0** = complete existing critical journeys; **P1** = worthwhile next product increment; **P2** = optional; **NO** = do not adopt.
+
+## Phase integration and delivery decision
+
+**Total canonical phases:** 0–8 (nine). Phases 1–3 are previous owner-closed development rounds with unresolved acceptance carried into Phases 4–8; the latter **five active delivery phases** remain. **No Phase 9** is needed. The phase-specific tasks and their dependencies are now embedded directly under each phase in [the one canonical roadmap](PRODUCT-ROADMAP-20261019.md), rather than appended as an isolated Telegram workstream. [Screen/journey contract](SCREEN-JOURNEYS.md#telegram-adapted-cross-phase-screen-and-journey-contracts--22-october-2026) maps TGA01–TGA08 to user-facing pages, states and golden tests.
+
+| Existing phase | Telegram findings | New distinct roadmap tasks, if any | Reused work |
+|---|---|---|---|
+| **4 Human chat/calls** | TG02/03, TG24/25, TG27/29 | P4-T01 incoming OS Share; P4-T02 notification reply | P4-02/03/06–11 and P4-A audio/call gates |
+| **5 Rooms/Status/creators** | TG28, TG36/40 (later) | P5-T01 upload resilience | P5-R08/09 and P5-C05 |
+| **6 Unified Wallet** | TG01–06, TG16–20, TG23 | P6-T01 in-chat canonical receipt bubble | P6-W01–W15 |
+| **7 P2P and Bills** | TG07–15, TG20 | P7-T01 server-traceable merchant metrics; P7-T02 participant order discussion | P7-P01–P04 and S01–S07 |
+| **8 Trust/release/future** | TG19/21/22/26, TG30–41 | P8-T01 optional passkey decision/integration; P8-U09 widget, P8-U10 language/media (future) | P8-X01–X06, U01–U08, APK01–05 |
+
+**Only nine distinct new task IDs** are needed to hold the unique integration opportunities. Other TG entries refine existing task acceptance or are explicitly deferred/excluded. Neither checked boxes nor this audit prove fully working functionality: inspect exact current source, test and production records before claiming any phase finished.
 
 ## A. Wallet, transfers, marketplace and trust gap register
 
