@@ -43,6 +43,29 @@ it('enforces broadcast posts, replies, owner roles, bans and revoked links',asyn
  await service.dispatch(c,'POST',path+'/join',{});
  expect((await service.dispatch(c,'POST',path+'/timeline',{body:'Discussion',requestId:'discussion'})).body).toBe('Discussion');
 });
+it('reviews reported Room posts without exposing reporters or accepting forged targets',async()=>{
+ const room=await service.dispatch(a,'POST','',{name:'Moderated room',visibility:'public',postingPolicy:'members',requestId:'moderation-room'});
+ const path=room.id+'/community';
+ await service.dispatch(b,'POST',path+'/join',{});
+ await service.dispatch(c,'POST',path+'/join',{});
+ const post=await service.dispatch(b,'POST',path+'/timeline',{body:'Please review this content',requestId:'reported-post'});
+ await expect(service.dispatch(b,'GET',path+'/reports/summary')).rejects.toMatchObject({statusCode:403});
+ await expect(service.dispatch(c,'POST',path+'/reports',{targetId:'room-post_nonexistent',reason:'Not a room post',requestId:'forged'})).rejects.toMatchObject({statusCode:404});
+ const otherRoom=await service.dispatch(a,'POST','',{name:'Another room',requestId:'other-room'});
+ const otherPost=await service.dispatch(a,'POST',otherRoom.id+'/community/timeline',{body:'Other room post',requestId:'other-post'});
+ await expect(service.dispatch(c,'POST',path+'/reports',{targetId:otherPost.id,reason:'Wrong room',requestId:'cross-room'})).rejects.toMatchObject({statusCode:404});
+ await service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Spam',requestId:'report-post'});
+ await service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Spam',requestId:'report-post'});
+ await expect(service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Changed reason',requestId:'report-post'})).rejects.toMatchObject({statusCode:409});
+ await service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Spam again',requestId:'different-key'});
+ expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toEqual([{postId:post.id,excerpt:'Please review this content',reportCount:1}]);
+ const summary=(await service.dispatch(a,'GET',path+'/reports/summary')).items;
+ expect(JSON.stringify(summary)).not.toContain('eve');
+ expect(JSON.stringify(summary)).not.toContain('Spam');
+ await service.dispatch(a,'DELETE',path+'/posts/'+post.id,{});
+ expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toEqual([]);
+ await expect(service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Already removed',requestId:'removed-post'})).rejects.toMatchObject({statusCode:404});
+});
 it('protects private discovery and legacy join, posting and owner-management bypasses',async()=>{
  const {createPgRoomsRepository}=await import('../../../../adapters/storage/postgres/src/rooms/repository.js');
  const {createPgRoomMembershipRepository}=await import('../../../../adapters/storage/postgres/src/rooms/membership.js');
