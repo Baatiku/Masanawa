@@ -5,9 +5,26 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'room_community_api.dart';
+
+/// An uncertain upload keeps one server request ID, even across process loss.
+/// Only an identical local file may retry it; hashes never leave this device.
+Map<String, dynamic> roomMediaRetryIdentity(String requestId, String name, List<int> bytes) => {
+  'requestId': requestId,
+  'name': name,
+  'size': bytes.length,
+  'sha256': sha256.convert(bytes).toString(),
+};
+
+bool roomMediaRetryMatches(Map<String, dynamic>? pending, Map<String, dynamic> candidate) =>
+    pending != null &&
+    pending['requestId'] == candidate['requestId'] &&
+    pending['name'] == candidate['name'] &&
+    pending['size'] == candidate['size'] &&
+    pending['sha256'] == candidate['sha256'];
 
 String communityRequestId() => 'room-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 30)}';
 String communityError(Object e) {
@@ -75,6 +92,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
   int version = 0;
   // Retain the original media request while its outcome is uncertain.
   Future<void> Function()? retryMediaUpload;
+  Map<String, dynamic>? pendingMedia;
   Timer? draftTimer, catchupTimer;
   bool restoredDraft = false;
   final attachments = <Map<String, dynamic>>[];
@@ -89,7 +107,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
     try {
       final key = journalKey;
       if (key == null) return;
-      final value = jsonEncode({'body': composer.text, 'parentId': parentId, 'requestId': pendingKey, 'pendingBody': pendingBody, 'pendingParent': pendingParent, 'attachments': attachments, 'pendingAttachments': pendingAttachments, 'mentions': mentions.toList()});
+      final value = jsonEncode({'body': composer.text, 'parentId': parentId, 'requestId': pendingKey, 'pendingBody': pendingBody, 'pendingParent': pendingParent, 'attachments': attachments, 'pendingAttachments': pendingAttachments, 'pendingMedia': pendingMedia, 'mentions': mentions.toList()});
       await storage.write(key: '$key:draft', value: value);
       journalKey;
     } catch (_) { /* Draft storage failure never sends a post. */ }
@@ -109,6 +127,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
     pendingKey = null;
     pendingAttachments = null;
     retryMediaUpload = null;
+    pendingMedia = null;
     restoredDraft = false;
   }
   Future<void> restoreDraft() async {
@@ -124,6 +143,8 @@ class _CommunityState extends State<RoomCommunityScreen> {
     pendingBody = value['pendingBody'] as String?;
     pendingParent = value['pendingParent'] as String?;
     pendingAttachments = value['pendingAttachments'] as String?;
+    final restoredMedia = value['pendingMedia'];
+    pendingMedia = restoredMedia is Map ? Map<String, dynamic>.from(restoredMedia) : null;
     mentions.addAll((value['mentions'] as List? ?? []).cast<String>());
     attachments.addAll((value['attachments'] as List? ?? []).map((v) => Map<String, dynamic>.from(v as Map)));
   }
@@ -167,6 +188,8 @@ class _CommunityState extends State<RoomCommunityScreen> {
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> send() => run(() async {
+    if (pendingMedia != null) throw const FormatException(
+      'Resolve or discard the uncertain attachment upload before sending.');
     final body = composer.text.trim();
     if (body.isEmpty && attachments.isEmpty) return;
     final files = '${attachments.map((e) => e['id']).join(',')}|${mentions.join(',')}';
@@ -188,7 +211,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
       allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'mp4', 'm4a'],
     );
     if (file == null || !mounted) return;
-    final requestId = communityRequestId();
+    final requestId = pendingMedia?['requestId'] as String? ?? communityRequestId();
     late Future<void> Function() upload;
     upload = () => run(() async {
       final size = await file.length();
@@ -209,6 +232,15 @@ class _CommunityState extends State<RoomCommunityScreen> {
         throw const FormatException(
           'Attachment changed. Choose the file again.',
         );
+      final identity = roomMediaRetryIdentity(requestId, file.name, bytes);
+      if (pendingMedia != null && !roomMediaRetryMatches(pendingMedia, identity)) {
+        throw const FormatException(
+          'This is not the original attachment. Select the same file or discard the pending upload.');
+      }
+      pendingMedia = identity;
+      // Commit the retry identity before requesting the server. If the reply
+      // vanishes after acceptance, the next app launch must NOT mint a new ID.
+      await persistDraft();
       retryMediaUpload = upload;
       final result = await widget.api.request(widget.roomId, 'POST', 'media', {
         'requestId': requestId,
@@ -223,8 +255,11 @@ class _CommunityState extends State<RoomCommunityScreen> {
         'name': file.name,
         'dataBase64': base64Encode(bytes),
       });
-      attachments.add(result);
+      if (!attachments.any((entry) => entry['id'] == result['id'])) {
+        attachments.add(result);
+      }
       retryMediaUpload = null;
+      pendingMedia = null;
       await persistDraft();
     });
     await upload();
@@ -303,12 +338,12 @@ class _CommunityState extends State<RoomCommunityScreen> {
         if (parentId != null) Row(children: [const Expanded(child: Text('Replying to post')), IconButton(tooltip: 'Cancel reply', onPressed: () => setState(() => parentId = null), icon: const Icon(Icons.close))]),
         if (roomMasana.any((m) => m['active'] == true)) SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final agent in roomMasana.where((m) => m['active'] == true)) Padding(padding: const EdgeInsetsDirectional.only(end: 8), child: FilterChip(label: Text('Mention ${agent['characterId']}'), selected: mentions.contains(agent['characterId']), onSelected: busy ? null : (v) { setState(() { if (v) { mentions.add('${agent['characterId']}'); } else { mentions.remove(agent['characterId']); } }); persistDraft(); }))])),
         for (final file in attachments) Row(children: [Expanded(child: Text('${file['name'] ?? 'Attachment'}')), IconButton(tooltip: 'Remove attachment', onPressed: busy ? null : () { setState(() => attachments.remove(file)); persistDraft(); }, icon: const Icon(Icons.close))]),
-        if (retryMediaUpload != null) Row(children: [
-          const Expanded(child: Text('Upload unconfirmed. Retry the original attachment.')),
-          TextButton(onPressed: busy ? null : () => retryMediaUpload!(), child: const Text('Retry upload')),
-          IconButton(tooltip: 'Discard pending upload', onPressed: busy ? null : () => setState(() => retryMediaUpload = null), icon: const Icon(Icons.close)),
+        if (pendingMedia != null) Row(children: [
+          const Expanded(child: Text('Upload unconfirmed. Retry the original file, or discard this upload.')),
+          TextButton(onPressed: busy ? null : pickAttachment, child: Text(retryMediaUpload == null ? 'Select original' : 'Retry upload')),
+          IconButton(tooltip: 'Discard pending upload', onPressed: busy ? null : () { setState(() { retryMediaUpload = null; pendingMedia = null; }); persistDraft(); }, icon: const Icon(Icons.close)),
         ]),
-        Row(children: [IconButton(tooltip: retryMediaUpload == null ? 'Attach file' : 'Retry original attachment', onPressed: busy ? null : pickAttachment, icon: const Icon(Icons.attach_file)), Expanded(child: TextField(controller: composer, enabled: !busy, maxLength: 4000, minLines: 1, maxLines: 4, decoration: InputDecoration(hintText: parentId != null ? 'Write a comment' : 'Write a post'))), IconButton(tooltip: 'Send post', onPressed: busy || retryMediaUpload != null ? null : send, icon: const Icon(Icons.send))]),
+        Row(children: [IconButton(tooltip: pendingMedia == null ? 'Attach file' : 'Retry original attachment', onPressed: busy ? null : pickAttachment, icon: const Icon(Icons.attach_file)), Expanded(child: TextField(controller: composer, enabled: !busy, maxLength: 4000, minLines: 1, maxLines: 4, decoration: InputDecoration(hintText: parentId != null ? 'Write a comment' : 'Write a post'))), IconButton(tooltip: 'Send post', onPressed: busy || pendingMedia != null ? null : send, icon: const Icon(Icons.send))]),
       ]))),
       if (room?.joined == true && !room!.canPost && parentId == null) const SafeArea(top: false, child: Padding(padding: EdgeInsets.all(16), child: Text('Only admins post. Tap Comment / reply to join the discussion.'))),
     ]));
