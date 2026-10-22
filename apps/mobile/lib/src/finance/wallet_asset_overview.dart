@@ -5,6 +5,19 @@ import '../theme/masanawa_theme.dart';
 import 'crypto_state.dart';
 import 'crypto_wallet_screen.dart';
 
+/// Provider-reported balances may be useful while custody inventory is down,
+/// but cannot be presented as confirmed spendable custody or verified reserves.
+String walletAssetBalanceLabel(CryptoWalletSnapshot wallet, String providerCode, {
+  required bool hidden,
+}) {
+  if (hidden) return '••••';
+  final amount=wallet.balances[providerCode];
+  if (amount == null) return 'Available balance unavailable';
+  return wallet.verifiedCustodyFor(providerCode)
+      ? 'Available: $amount'
+      : 'Provider-reported: $amount (custody unverified)';
+}
+
 class WalletAssetOverview extends ConsumerWidget {
   const WalletAssetOverview({super.key,this.hideBalances=false});
   final bool hideBalances;
@@ -28,6 +41,19 @@ class WalletAssetOverview extends ConsumerWidget {
       ),
       data: (wallet) => Column(
         children: [
+          if (!wallet.holdingsVerified && wallet.assetRoutes.isNotEmpty)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Custody holdings not verified'),
+              subtitle: const Text(
+                'Provider figures are informational, not confirmed spendable funds. '
+                'Retry before reviewing a financial action.'),
+              trailing: TextButton(
+                onPressed: () => ref.read(cryptoWalletProvider.notifier).refresh(),
+                child: const Text('Retry'),
+              ),
+            ),
           for (final route in wallet.assetRoutes) ...[
             Divider(height: 1, color: context.masanawa.structuralBorder),
             ListTile(
@@ -45,10 +71,12 @@ class WalletAssetOverview extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (route.network != null) Text(route.network!),
-                  if(wallet.reservedBalances[route.providerCode]!=null)Text(hideBalances?'Reserved: ••••':'Reserved: ${wallet.reservedBalances[route.providerCode]}'),
+                  if(wallet.verifiedCustodyFor(route.providerCode) &&
+                      wallet.reservedBalances[route.providerCode]!=null)
+                    Text(hideBalances?'Reserved: ••••':'Reserved: ${wallet.reservedBalances[route.providerCode]}'),
                   const SizedBox(height: 4),
                   Text(
-                    hideBalances ? '••••' : wallet.balances[route.providerCode] == null ? 'Available balance unavailable' : 'Available: ${wallet.balances[route.providerCode]}',
+                    walletAssetBalanceLabel(wallet, route.providerCode, hidden: hideBalances),
                     textDirection: TextDirection.ltr,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
