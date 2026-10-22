@@ -9,6 +9,15 @@ import '../../theme/masanawa_theme.dart';
 import '../../state/session_state.dart';
 import 'creator_earnings_screen.dart';
 
+/// The exact server quote is the only amount shown for creator edit approval.
+/// Reject malformed amounts rather than substituting a rounded fee or zero.
+String creatorRevisionFeeLabel(Object? atomic) {
+  if (atomic is! String || !RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(atomic)) {
+    throw const FormatException('Invalid creator fee quote');
+  }
+  return formatCreatorMsnwAtomic(atomic);
+}
+
 /// Reuses current WhatsApp-like profile patterns and the existing MSNW Wallet.
 /// Only authenticated server operations can publish or charge a character.
 class MyMasanaScreen extends ConsumerStatefulWidget {
@@ -661,11 +670,12 @@ class _ManageMasanaScreenState extends ConsumerState<_ManageMasanaScreen> {
       if (!_sameAccount) return;
       final quote = quoted.data;
       if (quote == null) throw const FormatException('Missing quote');
-      final atomic = BigInt.parse(quote['msnw_atomic'].toString());
-      final amount = (atomic ~/ BigInt.from(1000000)).toString();
+      // The approval must show every charged atomic unit, not truncate the
+      // quote to a whole number of MSNW before consent.
+      final amount = creatorRevisionFeeLabel(quote['msnw_atomic']);
       final approved = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
         title: const Text('Approve published revision'),
-        content: Text('Edit fee: $amount MSNW. This exact quote expires in 10 minutes. Approving applies the revision and charges your existing Wallet once.'),
+        content: Text('Exact edit fee: $amount. Review this server quote before it expires. Approving applies the revision and charges your existing Wallet once.'),
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve revision'))]));
       if (approved != true || !_sameAccount) return;
