@@ -29,6 +29,13 @@ class _Transport extends Fake implements CryptoWalletTransport {
   return CryptoBalance(providerCode:code,amount:code=='asset-0'?'0':'12.5');
  }
 }
+class _CustodyTransport extends _Transport implements CryptoHoldingsTransport {
+ List<Map<String,dynamic>> rows=[
+  {'providerCode':'asset-0','asset':'A0','network':'network-0','amount':'5','reservedAmount':'1'},
+  {'providerCode':'asset-1','asset':'A1','network':'network-1','amount':'2','reservedAmount':'0.5'},
+ ];
+ @override Future<List<Map<String,dynamic>>> holdings()async=>rows;
+}
 void main(){
  test('loads all supported balances with bounded concurrency and preserves real zero on partial failure',()async{
   final transport=_Transport();final container=ProviderContainer(overrides:[sessionProvider.overrideWith(_Session.new),cryptoWalletTransportProvider.overrideWithValue(transport)]);addTearDown(container.dispose);
@@ -55,4 +62,29 @@ void main(){
   await old;
   expect(container.read(cryptoWalletProvider).requireValue.balances['asset-0'],'0');
  });
+ test('authoritative holdings win over contradictory provider balance and retired routes are removed',()async{
+  final transport=_CustodyTransport();
+  final container=ProviderContainer(overrides:[
+    sessionProvider.overrideWith(_Session.new),
+    cryptoWalletTransportProvider.overrideWithValue(transport),
+  ]);
+  addTearDown(container.dispose);
+  final first=await container.read(cryptoWalletProvider.future);
+  expect(first.holdingsVerified,isTrue);
+  expect(first.verifiedCustodyFor('asset-0'),isTrue);
+  expect(first.balances['asset-0'],'5');
+  expect(first.reservedBalances['asset-0'],'1');
+  expect(first.balances['asset-1'],'2');
+  transport.rows=[
+    {'providerCode':'asset-1','asset':'A1','network':'network-1','amount':'3','reservedAmount':'0.25'},
+  ];
+  await container.read(cryptoWalletProvider.notifier).refreshBalance('asset-0');
+  final current=container.read(cryptoWalletProvider).requireValue;
+  expect(current.verifiedCustodyFor('asset-0'),isFalse);
+  expect(current.balances.containsKey('asset-0'),isFalse);
+  expect(current.verifiedCustodyFor('asset-1'),isTrue);
+  expect(current.balances['asset-1'],'3');
+  expect(current.reservedBalances['asset-1'],'0.25');
+ });
+
 }

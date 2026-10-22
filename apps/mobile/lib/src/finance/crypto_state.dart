@@ -42,6 +42,12 @@ class CryptoWalletSnapshot {
     return List.unmodifiable(routes.values);
   }
 
+  /// A provider balance read is not proof of spendable custody inventory.
+  /// Only membership in the latest verified holdings projection allows UI
+  /// copy to call an amount "Available" or "Reserved".
+  bool verifiedCustodyFor(String providerCode) => holdingsVerified &&
+      holdingRoutes.any((route) => route.providerCode == providerCode);
+
   CryptoRoute? get selectedRoute {
     final code = selectedProviderCode;
     if (code == null) return null;
@@ -113,8 +119,16 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         reserved[route.providerCode]=CryptoBalance.fromJson({'providerCode':route.providerCode,'amount':row['reservedAmount']}).amount;
       }
       final latest=state.valueOrNull;if(latest==null)return;
+      // Drop held values from the prior projection before replacing it.
+      // Otherwise a removed or expired route keeps showing stale funds.
+      // Independently read provider balances remain informational only.
+      final formerlyHeld={for(final route in latest.holdingRoutes) route.providerCode};
+      final independent={
+        for(final entry in latest.balances.entries)
+          if(!formerlyHeld.contains(entry.key)) entry.key:entry.value,
+      };
       state=AsyncData(latest.copyWith(holdingRoutes:List.unmodifiable(routes),holdingsVerified:true,
-        reservedBalances:Map.unmodifiable(reserved),balances:Map.unmodifiable({...latest.balances,...available})));
+        reservedBalances:Map.unmodifiable(reserved),balances:Map.unmodifiable({...independent,...available})));
     }catch(_){
       if(owner!=_owner()||epoch!=_epoch||projection!=_projectionGeneration)return;
       final latest=state.valueOrNull;
@@ -228,8 +242,13 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
         batch.map((route) async {
           try {
             final result = await _transport.balance(route.providerCode);
-            if (epoch == _epoch && result.providerCode == route.providerCode)
+            // Provider balance reads are informational. A successfully
+            // verified canonical custody projection takes precedence,
+            // including an exact zero and any reserved inventory.
+            if (epoch == _epoch && result.providerCode == route.providerCode &&
+                !heldBalances.containsKey(result.providerCode)) {
               balances[result.providerCode] = result.amount;
+            }
           } catch (_) {
             /* No fabricated zero on unavailable balance. */
           }
