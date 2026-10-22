@@ -2,7 +2,7 @@
 
 Read `AGENTS.md`, the [canonical roadmap](docs/PRODUCT-ROADMAP-20261019.md), [screen and journey contract](docs/SCREEN-JOURNEYS.md), and the current Software Factory instructions before changing source. The roadmap is the sole phase/task/acceptance checklist. Implement connected source batches before consolidated checks. **No APK unless the owner explicitly requests one.**
 
-**Latest merged main:** `1616a94508c29bec1576479cb2804bc22bb1a395` (PR #271). This continuation also merged:
+**Last verified executable-source checkpoint (before this handoff-only merge):** `1616a94508c29bec1576479cb2804bc22bb1a395` (PR #271). This continuation also merged:
 - [#268](https://github.com/Baatiku/Masanawa/pull/268), `e7b89b0`: push/call links bound to call identity and login authorization epoch. Exact-head Mobile Build, Foundation and Mobile Startup CI passed.
 - [#269](https://github.com/Baatiku/Masanawa/pull/269), `24fc20c`: scheduled/retired Room posts no longer expose comments, answers, media or reactions through alternate read paths. Foundation and Status CI passed; Higgsfield focused 17 tests and Gateway types passed.
 - [#270](https://github.com/Baatiku/Masanawa/pull/270), `9e9e491`: members report visible posts; managers see confidential aggregate counts and remove posts; forged/cross-Room/scheduled targets and duplicate report inflation are rejected. Exact-head Foundation, Mobile Build, Rooms Production Build Qualification, Mobile Status/Rooms Recovery and Status CI passed. Higgsfield: 18 Room/Gateway backend tests, 10 Flutter widget/client tests and Gateway types passed.
