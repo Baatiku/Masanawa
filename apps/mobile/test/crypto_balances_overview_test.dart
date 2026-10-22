@@ -30,11 +30,12 @@ class _Transport extends Fake implements CryptoWalletTransport {
  }
 }
 class _CustodyTransport extends _Transport implements CryptoHoldingsTransport {
+ bool failHoldings=false;
  List<Map<String,dynamic>> rows=[
   {'providerCode':'asset-0','asset':'A0','network':'network-0','amount':'5','reservedAmount':'1'},
   {'providerCode':'asset-1','asset':'A1','network':'network-1','amount':'2','reservedAmount':'0.5'},
  ];
- @override Future<List<Map<String,dynamic>>> holdings()async=>rows;
+ @override Future<List<Map<String,dynamic>>> holdings()async {if(failHoldings)throw StateError('custody unavailable');return rows;}
 }
 void main(){
  test('loads all supported balances with bounded concurrency and preserves real zero on partial failure',()async{
@@ -61,6 +62,24 @@ void main(){
   delayed.complete(const CryptoBalance(providerCode:'asset-0',amount:'999'));
   await old;
   expect(container.read(cryptoWalletProvider).requireValue.balances['asset-0'],'0');
+ });
+ test('failed custody refresh removes stale available values while retaining asset routes',()async{
+  final transport=_CustodyTransport();
+  final container=ProviderContainer(overrides:[sessionProvider.overrideWith(_Session.new),cryptoWalletTransportProvider.overrideWithValue(transport)]);
+  addTearDown(container.dispose);
+  final first=await container.read(cryptoWalletProvider.future);
+  expect(first.balances['asset-0'],'5');
+  transport.failHoldings=true;
+  await container.read(cryptoWalletProvider.notifier).refreshBalance('asset-0');
+  final outage=container.read(cryptoWalletProvider).requireValue;
+  expect(outage.holdingsVerified,isFalse);
+  expect(outage.assetRoutes.any((route)=>route.providerCode=='asset-0'),isTrue);
+  expect(outage.balances.containsKey('asset-0'),isFalse);
+  expect(outage.balances.containsKey('asset-1'),isFalse);
+  expect(outage.reservedBalances,isEmpty);
+  transport.failHoldings=false;
+  await container.read(cryptoWalletProvider.notifier).refreshBalance('asset-0');
+  expect(container.read(cryptoWalletProvider).requireValue.balances['asset-0'],'5');
  });
  test('authoritative holdings win over contradictory provider balance and retired routes are removed',()async{
   final transport=_CustodyTransport();
