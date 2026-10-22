@@ -22,6 +22,7 @@ void main() {
       'deepLink': 'masanawa://human/call/$uuid',
     };
     expect(isIncomingCallPush(data), isTrue);
+    expect(mobilePushNavigationLink(data), 'masanawa://human/call/$uuid');
     expect(isIncomingCallPush({...data, 'type': 'status_post'}), isFalse);
     expect(
       isIncomingCallPush({
@@ -30,6 +31,24 @@ void main() {
       }),
       isFalse,
     );
+    expect(humanIncomingCallLink({
+      ...data,
+      'deepLink': 'masanawa://human/call/11111111-1111-4111-8111-111111111111',
+    }), isNull);
+  });
+
+  test('typed incoming call ignores conflicting generic navigation', () {
+    expect(mobilePushNavigationLink({
+      'type': 'incoming_call', 'callId': uuid,
+      'deepLink': 'masanawa://wallet/transaction/order_123',
+    }), 'masanawa://calls/incoming/$uuid');
+    expect(mobilePushNavigationLink({
+      'type': 'human_call', 'callId': uuid,
+      'deepLink': 'masanawa://wallet',
+    }), isNull);
+    expect(mobilePushNavigationLink({
+      'type': 'status_post', 'deepLink': 'https://evil.example/room/room_123',
+    }), isNull);
   });
 
   test('updates, spoofed call IDs, and missing fields never ring', () {
