@@ -132,7 +132,17 @@ class CryptoWalletController extends AsyncNotifier<CryptoWalletSnapshot> {
     }catch(_){
       if(owner!=_owner()||epoch!=_epoch||projection!=_projectionGeneration)return;
       final latest=state.valueOrNull;
-      if(latest!=null)state=AsyncData(latest.copyWith(holdingsVerified:false,reservedBalances:const {}));
+      if(latest!=null){
+        // A failed custody projection invalidates formerly verified amounts.
+        // Do not relabel stale ledger values as fresh provider observations.
+        // Retain routes for asset discovery, but hide the spendable figures.
+        final oldHoldings={for(final route in latest.holdingRoutes) route.providerCode};
+        state=AsyncData(latest.copyWith(
+          holdingsVerified:false,reservedBalances:const {},
+          balances:Map.unmodifiable({for(final entry in latest.balances.entries)
+            if(!oldHoldings.contains(entry.key)) entry.key:entry.value}),
+        ));
+      }
     }
   }
   Future<void> _prepareOperation(String? owner,Map<String,dynamic> original)async{

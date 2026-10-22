@@ -73,6 +73,8 @@ class _CommunityState extends State<RoomCommunityScreen> {
   bool loading = true, busy = false;
   String? error, parentId, pendingBody, pendingParent, pendingKey, pendingAttachments;
   int version = 0;
+  // Retain the original media request while its outcome is uncertain.
+  Future<void> Function()? retryMediaUpload;
   Timer? draftTimer, catchupTimer;
   bool restoredDraft = false;
   final attachments = <Map<String, dynamic>>[];
@@ -106,6 +108,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
     pendingParent = null;
     pendingKey = null;
     pendingAttachments = null;
+    retryMediaUpload = null;
     restoredDraft = false;
   }
   Future<void> restoreDraft() async {
@@ -174,19 +177,59 @@ class _CommunityState extends State<RoomCommunityScreen> {
     await persistDraft();
   });
   Future<void> pickAttachment() async {
-    final file = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'mp4', 'm4a']);
+    // If the previous upload timed out after the server accepted it, retry
+    // that original request; do not silently pick/send another attachment.
+    if (retryMediaUpload != null) {
+      await retryMediaUpload!();
+      return;
+    }
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'mp4', 'm4a'],
+    );
     if (file == null || !mounted) return;
-    await run(() async {
+    final requestId = communityRequestId();
+    late Future<void> Function() upload;
+    upload = () => run(() async {
       final size = await file.length();
-      if (size == null || size > 8000000) throw const FormatException('Choose a file smaller than 8 MB');
+      if (size == null || size > 8000000)
+        throw const FormatException('Choose a file smaller than 8 MB');
       final ext = file.name.split('.').last.toLowerCase();
-      final mime = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'pdf': 'application/pdf', 'mp4': 'video/mp4', 'm4a': 'audio/mp4'}[ext];
+      final mime = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'pdf': 'application/pdf',
+        'mp4': 'video/mp4',
+        'm4a': 'audio/mp4',
+      }[ext];
       if (mime == null) throw const FormatException('Unsupported attachment');
-      final result = await widget.api.request(widget.roomId, 'POST', 'media', {'requestId': communityRequestId(), 'kind': mime.startsWith('image/') ? 'image' : mime.startsWith('audio/') ? 'voice' : mime.startsWith('video/') ? 'video' : 'doc', 'mimeType': mime, 'name': file.name, 'dataBase64': base64Encode(await file.readAsBytes())});
+      final bytes = await file.readAsBytes();
+      if (bytes.length != size)
+        throw const FormatException(
+          'Attachment changed. Choose the file again.',
+        );
+      retryMediaUpload = upload;
+      final result = await widget.api.request(widget.roomId, 'POST', 'media', {
+        'requestId': requestId,
+        'kind': mime.startsWith('image/')
+            ? 'image'
+            : mime.startsWith('audio/')
+            ? 'voice'
+            : mime.startsWith('video/')
+            ? 'video'
+            : 'doc',
+        'mimeType': mime,
+        'name': file.name,
+        'dataBase64': base64Encode(bytes),
+      });
       attachments.add(result);
+      retryMediaUpload = null;
       await persistDraft();
     });
+    await upload();
   }
+
   Future<void> openAttachment(Map<String, dynamic> attachment) => run(() async {
     final result = await widget.api.request(widget.roomId, 'GET', 'media/${attachment['id']}', {});
     final bytes = base64Decode(result['dataBase64'] as String);
@@ -260,7 +303,12 @@ class _CommunityState extends State<RoomCommunityScreen> {
         if (parentId != null) Row(children: [const Expanded(child: Text('Replying to post')), IconButton(tooltip: 'Cancel reply', onPressed: () => setState(() => parentId = null), icon: const Icon(Icons.close))]),
         if (roomMasana.any((m) => m['active'] == true)) SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final agent in roomMasana.where((m) => m['active'] == true)) Padding(padding: const EdgeInsetsDirectional.only(end: 8), child: FilterChip(label: Text('Mention ${agent['characterId']}'), selected: mentions.contains(agent['characterId']), onSelected: busy ? null : (v) { setState(() { if (v) { mentions.add('${agent['characterId']}'); } else { mentions.remove(agent['characterId']); } }); persistDraft(); }))])),
         for (final file in attachments) Row(children: [Expanded(child: Text('${file['name'] ?? 'Attachment'}')), IconButton(tooltip: 'Remove attachment', onPressed: busy ? null : () { setState(() => attachments.remove(file)); persistDraft(); }, icon: const Icon(Icons.close))]),
-        Row(children: [IconButton(tooltip: 'Attach file', onPressed: busy ? null : pickAttachment, icon: const Icon(Icons.attach_file)), Expanded(child: TextField(controller: composer, enabled: !busy, maxLength: 4000, minLines: 1, maxLines: 4, decoration: InputDecoration(hintText: parentId != null ? 'Write a comment' : 'Write a post'))), IconButton(tooltip: 'Send post', onPressed: busy ? null : send, icon: const Icon(Icons.send))]),
+        if (retryMediaUpload != null) Row(children: [
+          const Expanded(child: Text('Upload unconfirmed. Retry the original attachment.')),
+          TextButton(onPressed: busy ? null : () => retryMediaUpload!(), child: const Text('Retry upload')),
+          IconButton(tooltip: 'Discard pending upload', onPressed: busy ? null : () => setState(() => retryMediaUpload = null), icon: const Icon(Icons.close)),
+        ]),
+        Row(children: [IconButton(tooltip: retryMediaUpload == null ? 'Attach file' : 'Retry original attachment', onPressed: busy ? null : pickAttachment, icon: const Icon(Icons.attach_file)), Expanded(child: TextField(controller: composer, enabled: !busy, maxLength: 4000, minLines: 1, maxLines: 4, decoration: InputDecoration(hintText: parentId != null ? 'Write a comment' : 'Write a post'))), IconButton(tooltip: 'Send post', onPressed: busy || retryMediaUpload != null ? null : send, icon: const Icon(Icons.send))]),
       ]))),
       if (room?.joined == true && !room!.canPost && parentId == null) const SafeArea(top: false, child: Padding(padding: EdgeInsets.all(16), child: Text('Only admins post. Tap Comment / reply to join the discussion.'))),
     ]));

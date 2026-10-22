@@ -608,7 +608,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         note = recorder.note;
       }
       if (note == null || !sameAccount()) {
+        // Failed stop (codec, empty file, or interrupted mic) must not silently
+        // discard the recording when the user pressed Send.
+        final failure = recorder.error;
         await _cancelInlineRecording();
+        if (sameAccount() && failure != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+        }
         return;
       }
 
