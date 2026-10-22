@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/private_screen_shield.dart';
 import '../../state/session_state.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'verify_account_email_screen.dart';
@@ -154,7 +155,7 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
       });
       if (nextId != null) Future<void>.microtask(_load);
     });
-    return Scaffold(
+    return PrivateScreenShield(child: Scaffold(
       appBar: AppBar(title: const Text('Account security')),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -291,6 +292,6 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
