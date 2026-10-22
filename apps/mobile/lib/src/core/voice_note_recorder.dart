@@ -64,7 +64,13 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> start({bool Function()? isOwnerCurrent}) async {
     if (state != VoiceNoteState.idle && state != VoiceNoteState.failed) return;
     _isOwnerCurrent = isOwnerCurrent ?? () => true;
-    _levels.clear();note=null;
+    // A previous sent note is owned by the transport after retain(). A new
+    // recording must get fresh ownership so cancel/error can clean its file.
+    // Never delete the already handed-off note when resetting the pointer.
+    _levels.clear();
+    note = null;
+    _path = null;
+    _retained = false;
     if (!_isOwnerCurrent()) return;
     final generation = ++_generation;
     _set(VoiceNoteState.starting);

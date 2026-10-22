@@ -47,6 +47,19 @@ void main() {
     await recorder.close();
     expect(await File(note.path).exists(), true, reason: 'Offline/retry owns the sent file now.');
   });
+  test('retained send stays owned by transport, later cancelled note is deleted', () async {
+    await recorder.start();
+    final handedOff = (await recorder.stop())!;
+    recorder.retain();
+    await recorder.cancel();
+    expect(await File(handedOff.path).exists(), isTrue);
+    await recorder.start();
+    final secondPath = output;
+    expect(secondPath, isNot(handedOff.path));
+    await recorder.cancel();
+    expect(await File(secondPath).exists(), isFalse);
+    expect(await File(handedOff.path).exists(), isTrue);
+  });
   test('measured amplitude envelope survives stop and cancels with microphone custody', () async {
     await recorder.start();
     meter.add(Amplitude(current:-60,max:0));meter.add(Amplitude(current:-30,max:0));meter.add(Amplitude(current:0,max:0));
