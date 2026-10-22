@@ -159,6 +159,20 @@ describe("MSNW P2P exact money and escrow",()=>{
       .toMatchObject({code:"p2p.invalid_cursor"});
   });
 
+  it("public discovery computes seller history only from tenant-scoped terminal orders",async()=>{
+    const {pool,statements}=mock(()=>[]);
+    const service=createP2pService(pool,deniedWallet);
+    await service.offers(actor);
+    await service.offersPage(actor);
+    const listings=statements.filter(sql=>sql.includes('AS completed_orders_30d'));
+    expect(listings).toHaveLength(2);
+    for(const sql of listings){
+      expect(sql).toContain('past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id');
+      expect(sql).toContain("past.created_at>=statement_timestamp()-interval '30 days'");
+      expect(sql).toContain("past.state IN ('completed','cancelled','expired')");
+      expect(sql).not.toContain("past.state IN ('completed','payment_claimed'");
+    }
+  });
   it("seller balance read uses canonical own tenant-scoped custody",async()=>{
     const {pool,statements}=mock(sql=>
       sql.includes("FROM commerce.msnw_custody_accounts")
