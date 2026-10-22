@@ -35,6 +35,25 @@ class _Source implements ConversationArchiveSource {
   }
 }
 
+class _VoiceExportSource extends _Source {
+  _VoiceExportSource(this.mime);
+  final String mime;
+  @override
+  Future<Map<String, dynamic>> page(String? cursor) async => {
+    'items': [{'requestId': 'voice-1', 'characterId': 'character',
+      'kind': 'voice', 'userText': 'Hello', 'reply': 'Hi'}],
+    'nextCursor': null,
+  };
+  @override
+  Future<List<dynamic>> media(String characterId, List<String> requestIds) async => [
+    {'requestId': 'voice-1', 'slot': 8, 'kind': 'voice',
+      'mimeType': mime, 'name': 'masana-reply', 'sizeBytes': 3},
+  ];
+  @override
+  Future<Map<String, dynamic>?> download(String characterId, String requestId, int slot) async =>
+      {'mimeType': mime, 'sizeBytes': 3, 'dataBase64': 'AQID'};
+}
+
 class _RepeatedCursorSource extends _Source {
   @override
   Future<Map<String, dynamic>> page(String? cursor) async => {
@@ -61,6 +80,20 @@ void main() {
     expect(reference['originalName'], '../../outside.png');
     expect(archive.findFile(reference['path'])!.content, [1, 2, 3]);
     expect(archive.files.any((file) => file.name.contains('..')), isFalse);
+  });
+
+  test('encoded AAC and WebM voice replies retain their true file types in export', () async {
+    for (final entry in {'audio/aac': 'aac', 'audio/webm': 'webm',
+      'audio/m4a': 'm4a', 'audio/x-m4a': 'm4a'}.entries) {
+      final destination = Directory('${parent.path}/${entry.value}-voice');
+      final result = await createConversationArchive(directory: destination,
+        source: _VoiceExportSource(entry.key), isCurrent: () => true);
+      final archive = ZipDecoder().decodeBytes(await result.file.readAsBytes());
+      final manifest = jsonDecode(utf8.decode(archive.findFile('conversations.json')!.content as List<int>)) as Map;
+      final path = (manifest['messages'] as List).first['media'][0]['path'];
+      expect(path, 'media/attachment-1.${entry.value}');
+      expect(archive.findFile(path)!.content, [1, 2, 3]);
+    }
   });
 
   test('missing media is reported without claiming its bytes are included', () async {

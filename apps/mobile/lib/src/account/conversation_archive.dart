@@ -165,7 +165,9 @@ Future<ConversationArchiveResult> createConversationArchive({
             final extension = const {
               'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
               'image/gif': 'gif', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3',
-              'audio/mp4': 'm4a', 'audio/wav': 'wav', 'video/mp4': 'mp4',
+              'audio/mp4': 'm4a', 'audio/m4a': 'm4a', 'audio/x-m4a': 'm4a',
+              'audio/aac': 'aac', 'audio/webm': 'webm', 'audio/wav': 'wav',
+              'video/mp4': 'mp4',
               'application/pdf': 'pdf', 'text/plain': 'txt',
             }[(raw['mimeType'] as String).split(';').first.toLowerCase()] ?? 'bin';
             final path = 'media/attachment-${mediaCount + 1}.$extension';
