@@ -13,6 +13,17 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Server-derived *terminal* order counts, not a merchant rating or proof of
+/// payment. Suppress any score-like claim until at least five orders have
+/// closed in the same 30-day window. Unknown data is not zero or 100%.
+String p2pMerchantHistoryLabel(Map<String, dynamic> offer) {
+  final completed = int.tryParse('${offer['completed_orders_30d'] ?? ''}');
+  final closed = int.tryParse('${offer['closed_orders_30d'] ?? ''}');
+  if (completed == null || closed == null || closed < 5 ||
+      completed < 0 || completed > closed) return 'Not enough trading history';
+  return '$completed completed orders · last 30 days';
+}
+
 /// This is a public profile display label, not a verified legal identity.
 String p2pSafeTraderDisplay(Object? raw) {
   if(raw is! String)return 'Masanawa trader';
@@ -797,6 +808,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
               ]),
             ),
         ],
+        if (!own) Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Text(p2pMerchantHistoryLabel(item),
+            style: Theme.of(context).textTheme.labelSmall),
+        ),
         const SizedBox(height: 7),
         Text('Available  ${_msnw(item['remaining_micro'])}'),
         const SizedBox(height: 5),

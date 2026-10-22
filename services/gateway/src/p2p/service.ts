@@ -180,6 +180,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,
         seller.display_name AS seller_display_name,
         (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
+        history.completed_orders_30d,history.closed_orders_30d,
         o.created_at
         FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
           ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
@@ -188,6 +189,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
         CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
           floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        LEFT JOIN LATERAL (
+          SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
+                 count(*)::integer AS closed_orders_30d
+          FROM commerce.msnw_p2p_orders past
+          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
+            AND past.created_at>=statement_timestamp()-interval '30 days'
+            AND past.state IN ('completed','cancelled','expired')
+        ) history ON TRUE
         WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
@@ -205,6 +214,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         p.bank_name,p.method_type,
         seller.display_name AS seller_display_name,
         (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
+        history.completed_orders_30d,history.closed_orders_30d,
         o.created_at,
         to_char(o.created_at AT TIME ZONE 'UTC',
           'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
@@ -218,6 +228,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
         CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
           floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        LEFT JOIN LATERAL (
+          SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
+                 count(*)::integer AS closed_orders_30d
+          FROM commerce.msnw_p2p_orders past
+          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
+            AND past.created_at>=statement_timestamp()-interval '30 days'
+            AND past.state IN ('completed','cancelled','expired')
+        ) history ON TRUE
         WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
