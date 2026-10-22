@@ -9,13 +9,23 @@ class FakeCommunityApi implements RoomCommunityApi {
   final sent = <Map<String, dynamic>>[];
   final creates = <Map<String, dynamic>>[];
   final removed = <String>[];
+  final actions = <String>[];
+  bool failReview = false;
   bool failCreate = true;
   CommunityRoom get value => CommunityRoom(id: 'room_1', name: 'Garden', visibility: 'public', postingPolicy: policy, ownerId: 'owner', role: role, memberCount: 2);
   @override Future<CommunityRoom> room(String id) async => value;
   @override Future<List<Map<String, dynamic>>> invitations() async => [];
   @override Future<List<CommunityRoom>> list(bool joined) async => [value];
-  @override Future<List<Map<String, dynamic>>> items(String id, String collection) async => collection == 'timeline' ? [{'id': 'post_1', 'authorId': 'owner', 'body': 'Welcome gardeners'}] : collection == 'reports/summary' ? [{'postId': 'post_1', 'excerpt': 'Welcome gardeners', 'reportCount': 2}] : [];
-  @override Future<void> action(String id, String action, [Map<String, dynamic>? values]) async { if (values != null) sent.add(values); }
+  @override Future<List<Map<String, dynamic>>> items(String id, String collection) async =>
+    collection == 'timeline' ? [{'id': 'post_1', 'authorId': 'owner', 'body': 'Welcome gardeners'}]
+      : collection == 'reports/summary' ? [{'postId': 'post_1', 'excerpt': 'Welcome gardeners', 'reportCount': 2}]
+      : collection == 'reports/reviews' ? [{'postId': 'post_0', 'decision': 'dismissed', 'reportCount': 1, 'reviewedAt': '2026-10-22T00:00:00Z'}]
+      : [];
+  @override Future<void> action(String id, String action, [Map<String, dynamic>? values]) async {
+    actions.add(action);
+    if (values != null) sent.add(values);
+    if (failReview && action.endsWith('/review')) throw StateError('connection_failed');
+  }
   @override Future<CommunityRoom> create(Map<String, dynamic> values) async { creates.add(values); if (failCreate) throw StateError('offline'); return value; }
   @override Future<CommunityRoom> update(String id, Map<String, dynamic> values) async => value;
   @override Future<String> invite(String id, String requestId) async => 'secret';
@@ -72,8 +82,42 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirm'));
     await tester.pumpAndSettle();
-    expect(api.removed, contains('posts/post_1'));
+    expect(api.actions, contains('reports/post_1/review'));
+    expect(api.sent.last['decision'], 'removed');
+    expect(api.sent.last['requestId'], isNotEmpty);
   });
+  testWidgets('manager dismissal preserves stable retry identity, and audit has no reporter details', (tester) async {
+    final api = FakeCommunityApi()..role = 'owner'..failReview = true;
+    await tester.pumpWidget(MaterialApp(home: RoomCommunityScreen(api: api, roomId: 'room_1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Garden'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reported posts (1)'), 220, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Reported posts (1)'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Dismiss reports'));
+    await tester.tap(find.text('Dismiss reports'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+    final first = api.sent.last['requestId'];
+    expect(find.textContaining('Could not connect'), findsWidgets);
+    api.failReview = false;
+    await tester.scrollUntilVisible(find.text('Dismiss reports'), 120, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Dismiss reports'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+    expect(api.sent.last['decision'], 'dismissed');
+    expect(api.sent.last['requestId'], first);
+    expect(api.actions.where((v) => v == 'reports/post_1/review'), hasLength(2));
+    await tester.scrollUntilVisible(find.text('Moderation history (1)'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Moderation history (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reports dismissed'), findsOneWidget);
+    expect(find.textContaining('reporter'), findsNothing);
+  });
+
   testWidgets('create validation and failed retry retain draft and request identity', (tester) async {
     final api = FakeCommunityApi();
     await tester.pumpWidget(MaterialApp(home: CreateCommunityRoomScreen(api: api)));
