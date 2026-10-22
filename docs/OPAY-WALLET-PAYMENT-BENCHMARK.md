@@ -1,4 +1,7 @@
 # Masanawa Wallet, Payments & Billing Architecture
+
+> **Current authority note (22 October 2026):** This is a *design inspiration*, not evidence of implemented Masanawa flows, KYC limits, regulated payment capability, approved biometrics or tested live provider. Canonical rules: 1 MSNW = ₦1 (`msnw-ngn-1-v1`), not ₦10 or USD 1; FX estimates require qualified rates and timestamps. Screens and status/permission journeys now follow `SCREEN-JOURNEYS.md`, and completion remains in `PRODUCT-ROADMAP-20261019.md`. OPay's decoded XML/smali informs visual structure but never authorizes copying code/assets or inferring backend payment security.
+
 ## Adapted from OPay Simplicity & WhatsApp Design Language
 
 **Document ID:** `MASANAWA-WALLET-SPEC-20261020`  
@@ -39,7 +42,7 @@ Masanawa combines the **operational simplicity and zero-friction execution flow 
 │                                                        │
 │  TOTAL BALANCE                                         │
 │  4,520.00 MSNW                 [ 👁 Hide ]             │
-│  ≈ ₦ 45,200.00                                         │
+│  ≈ ₦ 4,520.00                                         │
 │                                                        │
 │  Account No: 8012 345 678 [ 📋 Copy ]  •  Verified ✓   │
 ├────────────────────────────────────────────────────────┤
@@ -51,7 +54,7 @@ Masanawa combines the **operational simplicity and zero-friction execution flow 
 │  TRANSACTION HISTORY                                   │
 │  ↗ Sent to @fatima (8019 123 456)   -150 MSNW  🟢 Today │
 │  ↙ Received from @ahmad             +500 MSNW  🟢 Y'day │
-│  ⚡ MTN Airtime ₦1,000               -100 MSNW  🟢 Oct 18│
+│  ⚡ MTN Airtime ₦1,000             -1,000 MSNW  🟢 Oct 18│
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -92,7 +95,7 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
 │                                                        │
 │  Amount (MSNW):                                        │
 │  [ 250.00                                   MSNW ]     │
-│  ≈ ₦ 2,500.00      Available: 4,520 MSNW [ Max ]       │
+│  ≈ ₦ 250.00      Available: 4,520 MSNW [ Max ]       │
 │                                                        │
 │  Narration (Optional):                                 │
 │  [ For design work                               ]     │
@@ -111,7 +114,7 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
    - Prevents sending funds to the wrong user.
 
 2. **Smart Clipboard Account Number Detection:**
-   - When the user launches Masanawa or opens the Transfer screen, the app inspects the system clipboard.
+   - Only after an explicit **Paste** or user-initiated clipboard action, the app may inspect the provided clipboard text; never sample the clipboard at startup or silently monitor it.
    - If a 10-digit number or a Masanawa pay link (`masanawa.me/pay/...`) is detected:
      - A bottom sheet appears:  
        > *"Masanawa Account detected in clipboard: **8012 345 678** (Ahmad Ibrahim). Transfer now?"*
@@ -136,7 +139,7 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
 │  Confirm Payment                                [ ✕ ]  │
 │                                                        │
 │  Amount to Pay:                                        │
-│  250.00 MSNW (≈ ₦ 2,500.00)                            │
+│  250.00 MSNW (≈ ₦ 250.00)                            │
 │                                                        │
 │  To:        Ahmad Ibrahim (8012 345 678)               │
 │  From:      MSNW Custody Wallet                        │
@@ -160,8 +163,8 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
 ### 4.1 Custom In-App 3x4 Secure Keypad
 * **Implementation:** Built as an internal Flutter widget (`MasanawaPinKeyboard`), completely bypassing the Android/iOS system soft keyboard.
 * **Security Advantages:**
-  - Prevents 3rd-party malicious keyboard apps from intercepting PIN digits.
-  - Immune to accessibility service keystroke snooping and OS screen recording previews.
+  - Avoids ordinary IME input when an app-owned keypad is actually qualified; **does not by itself prevent screen overlays, compromised devices or malware**.
+  - Is **not** immune to accessibility, screen capture, overlays or malware. Use appropriate native route-level screen protection, server-side verification and regulated-device policy.
   - Crisp haptic feedback on each valid press.
 * **Biometric Shortcut:**
   - The bottom-left key features a Biometric icon (Fingerprint / Face ID). Tapping it instantly prompts device biometrics to authorize payment without entering the PIN manually.
@@ -229,7 +232,7 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
 │                                                        │
 │                 🟢 TRANSFER SUCCESSFUL                 │
 │                      250.00 MSNW                       │
-│                     (≈ ₦ 2,500.00)                     │
+│                     (≈ ₦ 250.00)                     │
 │                                                        │
 │  Recipient:       Ahmad Ibrahim                        │
 │  Masanawa ID:     8012 345 678                         │
@@ -244,7 +247,7 @@ Instead of complex multi-page wizards, Masanawa adopts OPay’s single-view tran
 ```
 
 ### 6.1 Clean, Focused Identifiers
-* **Internal Reference (`MSN-TX-...`):** Unique, cryptographically signed transaction reference.
+* **Internal Reference (`MSN-TX-...`):** Unique canonical backend trace/reference (signature only if an independently verified signed reference format is implemented).
 * **Sender & Beneficiary 10-Digit Masanawa IDs:** Cleanly displayed alongside display names.
 * **Instant Status Badge:** 🟢 *Completed*, 🟡 *Pending / Processing*, 🔴 *Failed*.
 * **Omissions:** *No NIP Session IDs and no "Money Saved" badges.*
@@ -263,14 +266,14 @@ Rather than rigid domestic banking tiers (Tier 1/2/3 with low local caps), Masan
 
 | Verification Status | Requirements | Daily Send Limit | Monthly Volume | Target Profile |
 | :--- | :--- | :--- | :--- | :--- |
-| **Unverified (Base)** | Phone/Email verification | 500 MSNW (≈ $500) | 2,500 MSNW | Casual chatting, tips, micro-transfers |
-| **Verified (ID)** | Government ID / Passport + Live Selfie | 10,000 MSNW (≈ $10,000) | 50,000 MSNW | Standard users, creators, global remittances |
-| **Pro / Merchant** | Business verification / Address proof | 100,000+ MSNW | Custom / Unlimited | Merchants, high-volume creators, P2P vendors |
+| **Unverified (Base)** | Phone/Email verification | **Backend-defined; not asserted here** | **Backend-defined** | Informational example only |
+| **Verified (ID)** | Approved provider-dependent ID checks | **Backend-defined; not asserted here** | **Backend-defined** | Only eligible regions/services |
+| **Pro / Merchant** | Provider-qualified merchant verification | **Backend-defined; not asserted here** | **Backend-defined** | No implied unlimited allowance |
 
 * **Streamlined Verification Flow:**
   - Simple camera scan of passport, national ID card, or driver's license.
   - Automated facial liveness selfie check.
-  - Verification typically resolves within 60 seconds via automated KYC provider.
+  - Verification timing depends on the actual approved provider and manual reviews; never promise a fixed acceptance time.
 
 ---
 
@@ -279,15 +282,15 @@ Rather than rigid domestic banking tiers (Tier 1/2/3 with low local caps), Masan
 | Feature | OPay Android Origin | Masanawa Implementation | Status |
 | :--- | :--- | :--- | :--- |
 | **Primary Account Handle** | Virtual Bank NUBAN (Phone-based) | **Unique 10-Digit Masanawa ID** (Not phone-based) | **Included** |
-| **Transfer Rails** | NIBSS Inter-Bank NIP | **Internal Ledger P2P + Crypto Withdrawals** | **Included** |
-| **Smart Clipboard Detection** | `ClipboardAutoReader` (NUBAN regex) | **Auto-detect 10-digit Masanawa IDs & Links** | **Included** |
-| **Duplicate Transfer Guard** | `dialog_transfer_repeat_tips.xml` | **5-minute repeat transaction intercept modal** | **Included** |
-| **Keypad Security** | `cashier_layout_pin_keyboard_view.xml` | **Custom in-app 3x4 numeric keypad + biometrics** | **Included** |
-| **Airtime Telco Auto-Detect** | Prefix detection in `AirtimeTopUpActivity` | **Nigerian prefix auto-detection (MTN/Airtel/Glo/9mobile)** | **Included** |
-| **Utility Name Lookup** | `ConfirmInfomationListDialog` | **Two-step meter/smartcard name verification dialog** | **Included** |
+| **Transfer Rails** | NIBSS Inter-Bank NIP | **Internal MSNW Send + qualified crypto Withdraw adapters; multi-asset authority unfinished** | **Partial** |
+| **Clipboard handoff** | `ClipboardAutoReader` (NUBAN regex) | **Explicit Paste of 10-digit Masanawa IDs/links; reject background inspection** | **Partial; privacy boundary** |
+| **Duplicate Transfer Guard** | `dialog_transfer_repeat_tips.xml` | **Canonical same-request recovery; repeat warnings only where actually implemented** | **Partial / cross-check W08** |
+| **Keypad Security** | `cashier_layout_pin_keyboard_view.xml` | **Optional app keypad; server-bound step-up, biometrics only when qualified** | **Partial / qualify** |
+| **Airtime Telco Suggestion** | Prefix detection in `AirtimeTopUpActivity` | **Country-aware suggestions; users must confirm operator because numbers are portable** | **Partial, P7-S01** |
+| **Utility Name Lookup** | `ConfirmInfomationListDialog` | **Two-step authenticated provider lookup and final review** | **Partial, P7-S02** |
 | **Balance Privacy** | `iv_eye_status` on home balance | **Global eye toggle for MSNW & fiat counter-value** | **Included** |
-| **Receipt Design** | PDF/PNG with NIP Session ID | **PNG/Chat bubble with Masanawa Reference** | **Included** |
+| **Receipt Design** | Receipt/transaction detail XML | **Canonical activity/receipt exists; redacted in-chat receipt remains P6-T01** | **Partial** |
 | **NIP Session ID** | Mandatory in OPay | *Excluded (Not inter-bank)* | **Removed** |
 | **"Money Saved" Metric** | `item_transaction_details_cost_reduction.xml` | *Excluded (Unnecessary clutter)* | **Removed** |
 | **USSD Gateway** | Pre-formatted USSD strings | *Excluded (No USSD gateway connection)* | **Removed** |
-| **Local Banking Tiers** | Strict Central Bank Tier 1/2/3 | **Global KYC with high international limits** | **Adapted** |
+| **Local Banking Tiers** | Applicable domestic verification progression | **Provider/jurisdiction-specific KYC and server-authorized limits; no invented international limits** | **Open / qualify** |
