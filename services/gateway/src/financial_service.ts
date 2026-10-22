@@ -819,6 +819,21 @@ export function createFinancialService(input: {
         // A provider currency identifies one custody lot. A second network under
         // that code must never overwrite the first balance in the client.
         if(route.network!==row.network||seen.has(row.asset)) throw new Error('financial.crypto.holdings_identity_conflict');
+        // The custody provider owns these claims, but no inconsistent or
+        // unparseable arithmetic may be presented as verified spendable funds.
+        // Never round floating-point token quantities before checking them.
+        const values=[row.amount,row.reservedAmount,row.totalAmount];
+        const number=/^(?:0|[1-9][0-9]{0,77})(?:\.[0-9]{1,78})?$/;
+        if(values.some(value=>typeof value!=='string'||!number.test(value)))
+          throw new Error('financial.crypto.holdings_amount_invalid');
+        const precision=Math.max(...values.map(value=>(value.split('.')[1]??'').length));
+        const exact=(value:string):bigint=>{
+          const [integer='',fraction='']=value.split('.');
+          return BigInt(integer)*10n**BigInt(precision)+
+            BigInt(fraction.padEnd(precision,'0')||'0');
+        };
+        if(exact(row.amount)+exact(row.reservedAmount)!==exact(row.totalAmount))
+          throw new Error('financial.crypto.holdings_total_conflict');
         seen.add(row.asset);
         return Object.freeze({providerCode:row.asset,asset:route.asset,network:row.network,amount:row.amount,reservedAmount:row.reservedAmount,totalAmount:row.totalAmount});
       }));
