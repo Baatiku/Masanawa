@@ -66,7 +66,9 @@ void main(){
   await t.scrollUntilVisible(find.text('USDC'), 110, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
   expect(find.text('USDC'),findsOneWidget);expect(find.text('Provider-reported: 0 (custody unverified)'),findsOneWidget);expect(find.text('Polygon'),findsOneWidget);
   await t.scrollUntilVisible(find.text('Data bundles'),200,scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pumpAndSettle();
-  expect(find.text('Data bundles'),findsOneWidget);expect(find.text('Transactions'),findsOneWidget);expect(t.takeException(),isNull);
+  expect(find.text('Data bundles'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('Transactions'), -140, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
+  expect(find.text('Transactions'),findsOneWidget);expect(t.takeException(),isNull);
   await t.scrollUntilVisible(find.byTooltip('Hide balance'), -160, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
   await t.pump(const Duration(milliseconds: 100));await t.tap(find.byTooltip('Hide balance'));await t.pump();expect(find.text('12.5'),findsNothing);expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••'),findsNWidgets(3));
  });
