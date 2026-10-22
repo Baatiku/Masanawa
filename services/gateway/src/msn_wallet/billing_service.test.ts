@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMsnwBillingService } from "./billing_service.js";
 
-function fixture(existing = false, recentPurchase:unknown=null) {
+function fixture(existing = false, recentPurchase:unknown=null,providerAvailable=true) {
   const calls:string[]=[];
   const owner={tenantId:"t1",userId:"u1"};
   const priced={
@@ -39,12 +39,12 @@ function fixture(existing = false, recentPurchase:unknown=null) {
       },
     } as any,
     billing:{
-      async purchaseMsnwOwned(request: Parameters<NonNullable<Parameters<typeof createMsnwBillingService>[0]["billing"]["purchaseMsnwOwned"]>>[0]) {
+      ...(providerAvailable ? {async purchaseMsnwOwned(request: Parameters<NonNullable<Parameters<typeof createMsnwBillingService>[0]["billing"]["purchaseMsnwOwned"]>>[0]) {
         calls.push("execute");
         expect(request.requestId).toBe("msnw-bill-quote-1");
         expect(request.amount).toBe("500");
         return {fulfillmentReference:request.requestId,state:"succeeded"};
-      },
+      }} : {}),
       async readPurchase(request: Parameters<Parameters<typeof createMsnwBillingService>[0]["billing"]["readPurchase"]>[0]) {
         calls.push("reconcile");
         expect(request.reference).toBe("msnw-bill-quote-1");
@@ -79,6 +79,26 @@ describe("MSNW bill confirmation and provider replay fencing",()=>{
       authorizationHeader:"Bearer owner",quoteId:"quote-1",quoteRevision:1,
       expectedAmountMicro:"5000000",expectedRateKoboPerMsnw:"10000",
     });
+    expect(f.calls).toEqual(["reservation","reconcile"]);
+  });
+  it("does not confirm or spend a new bill when fulfillment is unavailable",async()=>{
+    const request={authorizationHeader:"Bearer owner",quoteId:"quote-1",quoteRevision:1,
+      expectedAmountMicro:"5000000",expectedRateKoboPerMsnw:"10000"};
+    const unavailable=fixture(false,null,false);
+    await expect(unavailable.service.execute(request)).rejects.toMatchObject({
+      code:"msnw.billing.provider_unavailable",statusCode:503,
+    });
+    expect(unavailable.calls).toEqual(["reservation","preview"]);
+    const repeat=fixture(false,{reference:"msnw-bill-original",state:"fulfilled"},false);
+    await expect(repeat.service.execute({...request,repeatOf:"msnw-bill-original"}))
+      .rejects.toMatchObject({code:"msnw.billing.provider_unavailable"});
+    expect(repeat.calls).toEqual(["reservation","preview"]);
+  });
+  it("preserves status-only recovery of an earlier bill despite provider outage",async()=>{
+    const f=fixture(true,null,false);
+    const receipt=await f.service.execute({authorizationHeader:"Bearer owner",quoteId:"quote-1",quoteRevision:1,
+      expectedAmountMicro:"5000000",expectedRateKoboPerMsnw:"10000"});
+    expect(receipt).toMatchObject({state:"pending"});
     expect(f.calls).toEqual(["reservation","reconcile"]);
   });
   it("denies other users before reaching any stored quote or provider",async()=>{
