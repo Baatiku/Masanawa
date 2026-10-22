@@ -89,6 +89,31 @@ it('scopes media bytes and reactions to live members and rejects changed upload 
  await service.dispatch(a,'PATCH',p+'/members/bob',{state:'left'});
  await expect(service.dispatch(b,'GET',p+'/media/'+media.id)).rejects.toMatchObject({statusCode:404});
 });
+it('withholds future and retired Room post content across timeline, replies, media and reactions',async()=>{
+ const r=await service.dispatch(a,'POST','',{name:'Scheduled private room',visibility:'private',requestId:'future-room'}),p=r.id+'/community';
+ const invitation=await service.dispatch(a,'POST',p+'/invites',{});
+ await service.dispatch(b,'POST',p+'/join',{token:invitation.token});
+ const payload={kind:'image',mimeType:'image/png',name:'future.png',dataBase64:Buffer.from([137,80,78,71,13,10,26,10,1]).toString('base64')};
+ const image=await service.dispatch(a,'POST',p+'/media',{...payload,requestId:'future-media'});
+ const post=await service.dispatch(a,'POST',p+'/timeline',{body:'Not yet public',requestId:'future-post',attachments:[{id:image.id}]});
+ const replyImage=await service.dispatch(b,'POST',p+'/media',{...payload,requestId:'reply-media'});
+ const reply=await service.dispatch(b,'POST',p+'/timeline',{body:'Private comment',parentId:post.id,requestId:'future-reply',attachments:[{id:replyImage.id}]});
+ expect(reply.parentId).toBe(post.id);
+ await db.query("UPDATE rooms.lessons SET publish_at=now()+interval '1 hour' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",['t',r.id,post.id]);
+ expect((await service.dispatch(b,'GET',p+'/timeline')).items).toEqual([]);
+ expect((await service.dispatch(b,'GET',p+'/media')).items).toEqual([]);
+ for(const mediaId of [image.id,replyImage.id]){
+  await expect(service.dispatch(b,'GET',p+'/media/'+mediaId)).rejects.toMatchObject({statusCode:404});
+ }
+ await expect(service.dispatch(b,'POST',p+'/posts/'+post.id+'/reactions',{emoji:'👍'})).rejects.toMatchObject({statusCode:404});
+ await db.query("UPDATE rooms.lessons SET publish_at=now()-interval '1 second' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",['t',r.id,post.id]);
+ expect((await service.dispatch(b,'GET',p+'/timeline')).items.map((x:any)=>x.id)).toEqual(expect.arrayContaining([post.id,reply.id]));
+ expect((await service.dispatch(b,'GET',p+'/media')).items.map((x:any)=>x.id)).toEqual(expect.arrayContaining([image.id,replyImage.id]));
+ await service.dispatch(a,'DELETE',p+'/posts/'+post.id,{});
+ expect((await service.dispatch(b,'GET',p+'/timeline')).items).toEqual([]);
+ expect((await service.dispatch(b,'GET',p+'/media')).items).toEqual([]);
+ await expect(service.dispatch(b,'GET',p+'/media/'+replyImage.id)).rejects.toMatchObject({statusCode:404});
+});
 it('keeps targeted invitations private, rechecks blocks and disables stale accounts',async()=>{
  const r=await service.dispatch(a,'POST','',{name:'People room',visibility:'private',requestId:'people'}),p=r.id+'/community';
  expect((await service.dispatch(a,'POST',p+'/participants',{handle:'bob',requestId:'invite-bob'})).status).toBe('invited');
