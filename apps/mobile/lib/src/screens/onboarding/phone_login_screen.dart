@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +31,8 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   OtpChannel _channel = OtpChannel.email;
   List<OtpChannel>? _availableChannels;
   String? _capabilityError;
+  bool _loadingCapabilities = true;
+  int _capabilityAttempt = 0;
   bool _checking = false;
 
   @override
@@ -39,6 +43,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
   @override
   void dispose() {
+    _capabilityAttempt++;
     _phone.dispose();
     _email.dispose();
     super.dispose();
@@ -47,31 +52,38 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   bool get _isEmail => _channel == OtpChannel.email;
 
   Future<void> _loadCapabilities() async {
-    if (mounted) {
-      setState(() {
-        _availableChannels = null;
-        _capabilityError = null;
-      });
-    }
+    final attempt = ++_capabilityAttempt;
+    setState(() {
+      _loadingCapabilities = true;
+      _capabilityError = null;
+    });
     try {
-      final channels = await ref.read(apiClientProvider).authOtpChannels();
-      if (channels.isEmpty) {
-        throw const ApiException(
-          'Sign-in is temporarily unavailable. Please try again shortly.',
-          code: 'AUTH_UNAVAILABLE',
-        );
-      }
-      if (!mounted) return;
+      // Capability discovery is advisory, not a prerequisite for rendering
+      // login. A stalled Gateway must never hold the whole auth screen hostage.
+      final channels = await ref
+          .read(apiClientProvider)
+          .authOtpChannels()
+          .timeout(const Duration(seconds: 8));
+      if (!mounted || attempt != _capabilityAttempt) return;
       setState(() {
         _availableChannels = channels;
-        if (!channels.contains(_channel)) _channel = channels.first;
+        if (!channels.contains(_channel) && _channel != OtpChannel.sms) {
+          _channel = OtpChannel.sms; // Phone/password is not SMS OTP.
+        }
       });
+    } on TimeoutException {
+      if (!mounted || attempt != _capabilityAttempt) return;
+      setState(() => _capabilityError = 'AUTH_UNAVAILABLE');
     } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() => _capabilityError = error.code ?? 'UNKNOWN_AUTH_ERROR');
+      if (!mounted || attempt != _capabilityAttempt) return;
+      setState(() => _capabilityError = error.code ?? 'AUTH_UNAVAILABLE');
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _capabilityError = 'UNKNOWN_AUTH_ERROR');
+      if (!mounted || attempt != _capabilityAttempt) return;
+      setState(() => _capabilityError = 'AUTH_UNAVAILABLE');
+    } finally {
+      if (mounted && attempt == _capabilityAttempt) {
+        setState(() => _loadingCapabilities = false);
+      }
     }
   }
 
@@ -127,14 +139,20 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     final state = ref.watch(sessionProvider);
     final sending = state is SessionSendingOtp;
     final error = state is SessionError ? state : null;
-    final channels = _availableChannels;
+    // Phone/password login is a separate supported route, regardless of
+    // server-advertised OTP channels. Until discovery succeeds, show the
+    // familiar email and phone entry without claiming a usable connection.
+    final channels = <OtpChannel>[
+      OtpChannel.sms,
+      if (_availableChannels == null ||
+          _availableChannels!.contains(OtpChannel.email))
+        OtpChannel.email,
+    ];
 
     return OnboardingScaffold(
       showLogo: false,
       title: l10n.welcomeTitle,
-      subtitle: channels == null
-          ? l10n.checkingSignInMethods
-          : l10n.signInInstruction,
+      subtitle: l10n.signInInstruction,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -143,6 +161,18 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
             child: LanguagePickerButton(),
           ),
           const SizedBox(height: 8),
+          if (_loadingCapabilities) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                l10n.checkingSignInMethods,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
           if (_capabilityError != null) ...[
             Icon(
               Icons.cloud_off_outlined,
@@ -164,109 +194,106 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
             ),
             const SizedBox(height: 18),
             PrimaryButton(label: l10n.retry, onPressed: _loadCapabilities),
-          ] else if (channels == null) ...[
-            const Center(child: CircularProgressIndicator()),
-          ] else ...[
-            if (channels.length > 1) ...[
-              SegmentedButton<OtpChannel>(
-                segments: [
-                  if (channels.contains(OtpChannel.sms))
-                    ButtonSegment(
-                      value: OtpChannel.sms,
-                      label: Text(l10n.phoneMethod),
-                      icon: const Icon(Icons.phone_outlined),
-                    ),
-                  if (channels.contains(OtpChannel.email))
-                    ButtonSegment(
-                      value: OtpChannel.email,
-                      label: Text(l10n.emailMethod),
-                      icon: const Icon(Icons.mail_outline),
-                    ),
-                ],
-                selected: {_channel},
-                onSelectionChanged: sending || _checking
-                    ? null
-                    : (selection) {
-                        setState(() => _channel = selection.first);
-                      },
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_isEmail)
-              TextField(
-                controller: _email,
-                autofocus: false,
-                enabled: !sending,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                style: TextStyle(
-                  fontSize: MasanawaTokens.fontSize['md'],
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                decoration: InputDecoration(
-                  labelText: l10n.emailMethod,
-                  hintText: l10n.emailExample,
-                  prefixIcon: Icon(
-                    Icons.mail_outline,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ],
+          if (channels.length > 1) ...[
+            SegmentedButton<OtpChannel>(
+              segments: [
+                if (channels.contains(OtpChannel.sms))
+                  ButtonSegment(
+                    value: OtpChannel.sms,
+                    label: Text(l10n.phoneMethod),
+                    icon: const Icon(Icons.phone_outlined),
                   ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      MasanawaTokens.radius['md']!,
-                    ),
+                if (channels.contains(OtpChannel.email))
+                  ButtonSegment(
+                    value: OtpChannel.email,
+                    label: Text(l10n.emailMethod),
+                    icon: const Icon(Icons.mail_outline),
                   ),
-                ),
-              )
-            else
-              PhoneField(
-                controller: _phone,
-                initialCountry: _phoneCountry,
-                autofocus: true,
-                enabled: !sending && !_checking,
-                onCountryChanged: (country) => _phoneCountry = country,
-              ),
-            if (error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                AuthErrorLocalizer.message(
-                  l10n,
-                  code: error.code,
-                  stage: AuthFailureStage.sendCode,
-                ),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontSize: MasanawaTokens.fontSize['sm'],
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            PrimaryButton(
-              label: sending
-                  ? l10n.sendingCode
-                  : _checking
-                  ? l10n.continueAction
-                  : _isEmail
-                  ? l10n.sendCode
-                  : l10n.continueAction,
-              loading: sending || _checking,
-              onPressed: sending || _checking
+              ],
+              selected: {_channel},
+              onSelectionChanged: sending || _checking
                   ? null
-                  : _isEmail
-                  ? _sendEmailCode
-                  : _continueWithPhone,
+                  : (selection) {
+                      setState(() => _channel = selection.first);
+                    },
             ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.termsNotice,
-              textAlign: TextAlign.center,
+            const SizedBox(height: 16),
+          ],
+          if (_isEmail)
+            TextField(
+              controller: _email,
+              autofocus: false,
+              enabled: !sending,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
               style: TextStyle(
-                fontSize: MasanawaTokens.fontSize['xs'],
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: MasanawaTokens.fontSize['md'],
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                labelText: l10n.emailMethod,
+                hintText: l10n.emailExample,
+                prefixIcon: Icon(
+                  Icons.mail_outline,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(
+                    MasanawaTokens.radius['md']!,
+                  ),
+                ),
+              ),
+            )
+          else
+            PhoneField(
+              controller: _phone,
+              initialCountry: _phoneCountry,
+              autofocus: true,
+              enabled: !sending && !_checking,
+              onCountryChanged: (country) => _phoneCountry = country,
+            ),
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              AuthErrorLocalizer.message(
+                l10n,
+                code: error.code,
+                stage: AuthFailureStage.sendCode,
+              ),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: MasanawaTokens.fontSize['sm'],
               ),
             ),
           ],
+          const SizedBox(height: 20),
+          PrimaryButton(
+            label: sending
+                ? l10n.sendingCode
+                : _checking
+                ? l10n.continueAction
+                : _isEmail
+                ? l10n.sendCode
+                : l10n.continueAction,
+            loading: sending || _checking,
+            onPressed: sending || _checking
+                ? null
+                : _isEmail
+                ? _sendEmailCode
+                : _continueWithPhone,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.termsNotice,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: MasanawaTokens.fontSize['xs'],
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

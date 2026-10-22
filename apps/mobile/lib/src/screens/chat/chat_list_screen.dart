@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../chat/chat_format.dart';
-import '../../core/startup_metrics.dart';
 import '../../chat/message_parts.dart';
+import '../../core/startup_metrics.dart';
 import '../wallet/wallet_screen.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
@@ -138,84 +138,6 @@ class ChatListScreen extends ConsumerWidget {
     AgentMessagePartKind.callResult => 'Call result',
     AgentMessagePartKind.status => 'Status update',
   };
-
-  List<(ChatThread, AgentMessagePart)> _activity(Iterable<ChatThread> threads) {
-    final items = <(ChatThread, AgentMessagePart)>[];
-    for (final thread in threads) {
-      for (final message in thread.messages.reversed) {
-        for (final part in message.parts.reversed) {
-          final status = part.status?.toLowerCase();
-          final activeWork =
-              part.kind == AgentMessagePartKind.work &&
-              !{'completed', 'fulfilled', 'cancelled'}.contains(status);
-          final needsAttention =
-              part.kind == AgentMessagePartKind.approval ||
-              (part.kind == AgentMessagePartKind.status &&
-                  status == 'failed') ||
-              status == 'waiting_for_approval' ||
-              status == 'waiting_for_input';
-          if (activeWork || needsAttention) {
-            items.add((thread, part));
-          }
-        }
-      }
-    }
-    return items.take(20).toList(growable: false);
-  }
-
-  Future<void> _showActivity(
-    BuildContext context,
-    AgentDirectoryState directory,
-    List<(ChatThread, AgentMessagePart)> items,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(
-              title: Text('Masana activity'),
-              subtitle: Text('Work, approvals and items needing attention'),
-            ),
-            for (final item in items)
-              Builder(
-                builder: (_) {
-                  final agent = directory.find(item.$1.characterId);
-                  final part = item.$2;
-                  return ListTile(
-                    leading: Icon(
-                      part.kind == AgentMessagePartKind.approval
-                          ? Icons.approval_outlined
-                          : part.status == 'failed'
-                          ? Icons.error_outline
-                          : Icons.work_outline,
-                    ),
-                    title: Text(
-                      part.title ??
-                          (agent?.displayName ?? 'Masana') +
-                              (part.kind == AgentMessagePartKind.approval
-                                  ? ' needs approval'
-                                  : ' is working'),
-                    ),
-                    subtitle: Text(
-                      part.body ?? part.status ?? 'Open conversation',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      context.push('/chat/${item.$1.characterId}');
-                    },
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _threadActions(
     BuildContext context,
@@ -381,45 +303,6 @@ class ChatListScreen extends ConsumerWidget {
         ? session.user.name
         : 'Masanawa';
 
-    final threads = chat.chatList
-        .where((thread) => directory.find(thread.characterId) != null)
-        .toList();
-    final activity = _activity(threads);
-    final attention = activity
-        .where(
-          (item) =>
-              item.$2.kind == AgentMessagePartKind.approval ||
-              item.$2.status == 'failed' ||
-              item.$2.status == 'waiting_for_approval' ||
-              item.$2.status == 'waiting_for_input',
-        )
-        .length;
-
-    final activityLabel = !chat.online
-        ? 'Offline · cached conversations available'
-        : attention > 0
-        ? '$attention need attention · ${activity.length} active'
-        : '${activity.length} active work item${activity.length == 1 ? '' : 's'}';
-    final activityStyle = TextStyle(color: u.textPrimary, fontSize: 12.5);
-    final activityText =
-        TextPainter(
-          text: TextSpan(text: activityLabel, style: activityStyle),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(
-          maxWidth:
-              (MediaQuery.sizeOf(context).width -
-                      28 -
-                      25 -
-                      (activity.isNotEmpty ? 18 : 0))
-                  .clamp(1, double.infinity),
-        );
-    final activityHeight = (activityText.height + 16).clamp(
-      38.0,
-      double.infinity,
-    );
-    activityText.dispose();
-
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: masanawaMainHeader(
@@ -462,46 +345,6 @@ class ChatListScreen extends ConsumerWidget {
             onPressed: () => context.push('/settings'),
           ),
         ],
-        bottom: !chat.online || attention > 0
-            ? PreferredSize(
-                preferredSize: Size.fromHeight(activityHeight),
-                child: Semantics(
-                  liveRegion: true,
-                  child: InkWell(
-                    onTap: activity.isEmpty
-                        ? null
-                        : () => _showActivity(context, directory, activity),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            chat.online
-                                ? Icons.pending_actions
-                                : Icons.cloud_off_outlined,
-                            size: 17,
-                            color: u.textMuted,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(activityLabel, style: activityStyle),
-                          ),
-                          if (activity.isNotEmpty)
-                            Icon(
-                              Icons.chevron_right,
-                              size: 18,
-                              color: u.textMuted,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            : null,
       ),
       body: UnifiedChatInbox(
         key: ValueKey(accountKey),
