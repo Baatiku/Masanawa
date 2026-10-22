@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "scripts/reliability/**"
+      - "infra/deployment/standby/**"
       - ".github/workflows/reliability-contract.yml"
   push:
     branches: [main]
     paths:
       - "scripts/reliability/**"
+      - "infra/deployment/standby/**"
       - ".github/workflows/reliability-contract.yml"
   workflow_dispatch:
 
