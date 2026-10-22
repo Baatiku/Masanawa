@@ -40,8 +40,27 @@ it('runs eight-source SQL with exact amounts, original denomination and owner is
  const p=await service.list(owner,{});expect(p.items).toHaveLength(11);expect(p.items.some(r=>r.amountAtomic==='9000000')).toBe(false);
  expect(p.items.find(r=>r.category==='Funding')).toMatchObject({asset:'NGN',amountAtomic:'12345',decimals:2,status:'completed',details:{'MSNW credited':'45 MSNW'}});
  expect(p.items.find(r=>r.category==='Crypto')).toMatchObject({decimals:18,asset:'USDT'});
+ expect(p.items.find(r=>r.category==='Conversions')).toMatchObject({asset:'MSNW',details:{Network:'USDTTRC20','Crypto amount':'0.9 USDT'}});
  expect(p.items.find(r=>r.category==='Rooms')).toMatchObject({incoming:false,asset:'Cr (historical)'});
 });
+it('uses actual payout ticker and retains raw atomic units for unsupported historical provider codes',async()=>{
+ await db.exec(`INSERT INTO commerce.msnw_usdt_payouts VALUES
+ ('10000000-0000-0000-0000-000000000002','t','route-viewer','USDCMATIC',2000000,1234567,'processing','2026-10-14Z','recipient-2'),
+ ('10000000-0000-0000-0000-000000000003','t','route-viewer','LEGACYROUTE',1000000,1999999,'manual_review','2026-10-14Z','recipient-3');`);
+ const results=(await service.list({tenantId:'t',userId:'route-viewer'},{category:'Conversions'})).items;
+ expect(results).toHaveLength(2);
+ const usdc=results.find(r=>r.details.Network==='USDCMATIC');
+ expect(usdc?.details).toMatchObject({Network:'USDCMATIC','Crypto amount':'1.234567 USDC'});
+ expect(usdc?.details).not.toHaveProperty('Crypto amount atomic');
+ const legacy=results.find(r=>r.details.Network==='LEGACYROUTE');
+ expect(legacy?.details).toMatchObject({Network:'LEGACYROUTE','Crypto amount (atomic units)':'1999999'});
+ expect(legacy?.details).not.toHaveProperty('Crypto amount');
+ const exported=await service.exportCsv({tenantId:'t',userId:'route-viewer'},{category:'Conversions'});
+ expect(exported.csv).toContain('1.234567 USDC');
+ expect(exported.csv).toContain('1999999');
+ expect(exported.csv).not.toContain('1999999 LEGACYROUTE');
+});
+
 it('paginates microseconds and ties without skipping or duplication',async()=>{
  const full=await service.list(owner,{category:'Transfers'}),seen:string[]=[];let cursor:string|null=null;
  do{const p=await service.list(owner,{category:'Transfers',limit:1,...(cursor?{cursor}:{})});seen.push(...p.items.map(r=>r.id));cursor=p.nextCursor;}while(cursor);
