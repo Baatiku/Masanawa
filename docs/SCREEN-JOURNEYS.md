@@ -147,6 +147,8 @@ An external withdrawal reserves exact source funds/fees under one original refer
 
 Existing provider-based crypto Deposit asks for an amount and creates an invoice; retain this adapter behavior honestly until reusable addresses are qualified. Existing MSNW conversion accepts an external address and pays out crypto; reuse its quote/recovery authority through an explicitly labelled conversion-and-withdrawal adapter, not a second generic withdraw UI or a pretend in-Wallet swap. It must not make withdrawing an already-held asset depend on converting MSNW.
 
+**Wallet/P2P exhaustive source crosswalk:** [WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md](WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md) defines 59 exact Wallet/P2P screens/sheets, 286 tracked controls/features, actor-scoped bank/payment states, reviewer tools, UI visual composition and provider/device test gates. This overview remains the main application screen tree. One financial ledger and original order receipt remain authoritative; no sixth root tab.
+
 ### P2P balance and payment rules
 
 P2P uses the same asset authority, no separate Funding/Trading wallet and no manual balance transfers between products. Listing an offer does not create holdings; atomically reserve required seller inventory at the server-approved order boundary and prevent overselling. Seller available falls and reserved rises; portfolio owned total remains unchanged except definitive fees. Release removes seller reserved and credits buyer available atomically with balanced fees/receipt. A permitted refund returns reserved to seller available. Buyer pending order is not a second owned asset. All participants see the same authoritative order status.
