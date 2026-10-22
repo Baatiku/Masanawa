@@ -1,9 +1,5 @@
 name: Masana Android APK Compilation
 on:
-  # One requested handset-build qualification. The restricted PR trigger is
-  # removed after its artifact is recorded; ordinary PRs do not build APKs.
-  pull_request:
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       build_apk:
@@ -18,9 +14,7 @@ permissions:
   contents: read
 jobs:
   compile-android:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.build_apk == true) ||
-      (github.event_name == 'pull_request' && github.head_ref == 'feat/oct22-room-voice-apk-qualification')
+    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
