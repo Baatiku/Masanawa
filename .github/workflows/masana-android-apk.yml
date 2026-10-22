@@ -1,9 +1,5 @@
 name: Masana Android APK Compilation
 on:
-  # Owner explicitly requested replacement APK for Railway-outage login fix.
-  # Remove this one-shot head-branch trigger once APK evidence is retained.
-  pull_request:
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       build_apk:
@@ -18,9 +14,7 @@ permissions:
   contents: read
 jobs:
   compile-android:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.build_apk == true) ||
-      (github.event_name == 'pull_request' && github.head_ref == 'fix/startup-auth-agent-activity-oct22')
+    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
