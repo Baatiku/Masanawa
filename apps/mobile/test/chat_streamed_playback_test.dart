@@ -21,6 +21,28 @@ class _Transport implements AgentTransport{
 }
 void main(){
  TestWidgetsFlutterBinding.ensureInitialized();
+ test('completed stream retains actual text chunks when final text is empty', () async {
+  final transport = _Transport();
+  final container = ProviderContainer(overrides: [
+    aiChatProvider.overrideWith(_Controller.new),
+    agentTransportProvider.overrideWithValue(transport),
+    voiceReplyAutoplayProvider.overrideWith(() => _Autoplay(false)),
+  ]);
+  try {
+   final sending = container.read(aiChatProvider.notifier).sendText('agent', 'Hello');
+   await transport.first.future.timeout(const Duration(seconds: 3));
+   transport.finish.complete(const AgentTurnResult(text: ''));
+   await sending;
+   final messages = container.read(aiChatProvider).threads['agent']!.messages;
+   final reply = messages.where((m) => !m.isUser).single;
+   expect(reply.text, 'Partial');
+   expect(reply.deliveryStatus, 'delivered');
+   expect(transport.sends, 1);
+  } finally {
+   container.dispose();
+  }
+ });
+
  const channel=MethodChannel('masanawa/live_pcm');
  for(final mode in ['on','off','call']){
  test('chat reply $mode never plays generating PCM and finalizes once with canonical text',()async{
