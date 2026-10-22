@@ -162,7 +162,7 @@ void main() {
   );
 
   testWidgets(
-    'Chats offline strip stays within its header at 320px with 2x text',
+    'Chats no longer shows unsolicited global agent activity strip',
     (tester) async {
       tester.view.physicalSize = const Size(320, 800);
       tester.view.devicePixelRatio = 1;
@@ -189,11 +189,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final message = find.text('Offline · cached conversations available');
-      expect(
-        tester.getRect(message).bottom,
-        lessThanOrEqualTo(tester.getRect(find.byType(AppBar)).bottom),
-      );
+      expect(find.text('Offline · cached conversations available'), findsNothing);
+      expect(find.text('Masana activity'), findsNothing);
+      expect(find.byType(AppBar), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

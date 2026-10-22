@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -48,33 +50,29 @@ class _TestAuthClient extends ApiClient {
 }
 
 SessionState _sessionFor(String route) => switch (route) {
-      '/password' =>
-        const SessionPasswordRequired('+2348012345678', setup: false),
-      '/otp' =>
-        const SessionAwaitingOtp(OtpChannel.email, 'fan@example.test', 0),
-      '/name' =>
-        const SessionNameRequired(OtpChannel.email, 'fan@example.test', '123456'),
-      _ => const SessionSignedOut(),
-    };
+  '/password' => const SessionPasswordRequired('+2348012345678', setup: false),
+  '/otp' => const SessionAwaitingOtp(OtpChannel.email, 'fan@example.test', 0),
+  '/name' => const SessionNameRequired(
+    OtpChannel.email,
+    'fan@example.test',
+    '123456',
+  ),
+  _ => const SessionSignedOut(),
+};
 
 GoRouter _router(String initialLocation) => GoRouter(
-      initialLocation: initialLocation,
-      routes: [
-        GoRoute(
-          path: '/phone-login',
-          builder: (_, _) => const PhoneLoginScreen(),
-        ),
-        GoRoute(
-          path: '/password',
-          builder: (_, _) => const PasswordScreen(
-            phone: '+2348012345678',
-            setup: false,
-          ),
-        ),
-        GoRoute(path: '/otp', builder: (_, _) => const OtpScreen()),
-        GoRoute(path: '/name', builder: (_, _) => const NameScreen()),
-      ],
-    );
+  initialLocation: initialLocation,
+  routes: [
+    GoRoute(path: '/phone-login', builder: (_, _) => const PhoneLoginScreen()),
+    GoRoute(
+      path: '/password',
+      builder: (_, _) =>
+          const PasswordScreen(phone: '+2348012345678', setup: false),
+    ),
+    GoRoute(path: '/otp', builder: (_, _) => const OtpScreen()),
+    GoRoute(path: '/name', builder: (_, _) => const NameScreen()),
+  ],
+);
 
 Widget _app(
   GoRouter router,
@@ -82,46 +80,105 @@ Widget _app(
   SessionState session, {
   required double textScale,
   ApiClient? api,
-}) =>
-    ProviderScope(
-      overrides: [
-        sessionProvider.overrideWith(() => _FixedSession(session)),
-        apiClientProvider.overrideWithValue(api ?? _TestAuthClient()),
-      ],
-      child: ListenableBuilder(
-        listenable: preference,
-        builder: (context, _) => LocalePreferenceScope(
-          controller: preference,
-          child: MaterialApp.router(
-            routerConfig: router,
-            theme: buildMasanawaTheme(brightness: Brightness.light),
-            locale: preference.localeOverride,
-            supportedLocales: MasanawaLocalization.supportedLocales,
-            localizationsDelegates: MasanawaLocalization.delegates,
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: TextScaler.linear(textScale),
-              ),
-              child: child!,
-            ),
-          ),
+}) => ProviderScope(
+  overrides: [
+    sessionProvider.overrideWith(() => _FixedSession(session)),
+    apiClientProvider.overrideWithValue(api ?? _TestAuthClient()),
+  ],
+  child: ListenableBuilder(
+    listenable: preference,
+    builder: (context, _) => LocalePreferenceScope(
+      controller: preference,
+      child: MaterialApp.router(
+        routerConfig: router,
+        theme: buildMasanawaTheme(brightness: Brightness.light),
+        locale: preference.localeOverride,
+        supportedLocales: MasanawaLocalization.supportedLocales,
+        localizationsDelegates: MasanawaLocalization.delegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
         ),
       ),
-    );
+    ),
+  ),
+);
 
 class _PhoneAndEmailClient extends _TestAuthClient {
   @override
-  Future<List<OtpChannel>> authOtpChannels() async => [OtpChannel.email, OtpChannel.sms];
+  Future<List<OtpChannel>> authOtpChannels() async => [
+    OtpChannel.email,
+    OtpChannel.sms,
+  ];
+}
+
+class _ControlledCapabilityClient extends _TestAuthClient {
+  final calls = <Completer<List<OtpChannel>>>[];
+  @override
+  Future<List<OtpChannel>> authOtpChannels() {
+    final next = Completer<List<OtpChannel>>();
+    calls.add(next);
+    return next.future;
+  }
 }
 
 class _ExpiredOtpClient extends _TestAuthClient {
   @override
-  Future<AuthTokens> otpVerify(String code, {String? phone, String? email, String? name, String? deviceId}) async {
+  Future<AuthTokens> otpVerify(
+    String code, {
+    String? phone,
+    String? email,
+    String? name,
+    String? deviceId,
+  }) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
   }
 }
 
 void main() {
+  testWidgets(
+    'Gateway never answers: login form stays visible, times out and can retry',
+    (tester) async {
+      final client = _ControlledCapabilityClient();
+      final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+      await preference.load();
+      final router = _router('/phone-login');
+      addTearDown(router.dispose);
+      addTearDown(preference.dispose);
+      await tester.pumpWidget(
+        _app(
+          router,
+          preference,
+          const SessionSignedOut(),
+          textScale: 1,
+          api: client,
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Checking available sign-in methods…'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pump();
+      expect(find.text('Checking available sign-in methods…'), findsNothing);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.tap(find.text('Try again'));
+      await tester.pump();
+      expect(client.calls.length, 2);
+      // A late first response may not override newer method discovery.
+      client.calls.first.complete([OtpChannel.sms]);
+      await tester.pump();
+      expect(find.text('Email'), findsWidgets);
+      client.calls.last.complete([OtpChannel.email]);
+      await tester.pump();
+      expect(find.text('Email'), findsWidgets);
+      expect(find.text('Phone'), findsOneWidget);
+    },
+  );
+
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   const routes = ['/phone-login', '/password', '/otp', '/name'];
 
@@ -129,58 +186,63 @@ void main() {
     for (final width in [320.0, 390.0]) {
       for (final language in ['en', 'ar']) {
         for (final scale in [1.0, 2.0]) {
-          testWidgets(
-            '$route: picker centered, tappable at $width px, '
-            '$language, text scale $scale',
-            (tester) async {
-              tester.view.physicalSize = Size(width, 844);
-              tester.view.devicePixelRatio = 1;
-              addTearDown(tester.view.resetPhysicalSize);
-              addTearDown(tester.view.resetDevicePixelRatio);
+          testWidgets('$route: picker centered, tappable at $width px, '
+              '$language, text scale $scale', (tester) async {
+            tester.view.physicalSize = Size(width, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
 
-              final store = _MemoryLocaleStore(language);
-              final preference = LocalePreferenceController(store);
-              await preference.load();
-              final router = _router(route);
-              addTearDown(router.dispose);
-              addTearDown(preference.dispose);
-              await tester.pumpWidget(
-                _app(
-                  router,
-                  preference,
-                  _sessionFor(route),
-                  textScale: scale,
-                ),
-              );
-              await tester.pumpAndSettle();
+            final store = _MemoryLocaleStore(language);
+            final preference = LocalePreferenceController(store);
+            await preference.load();
+            final router = _router(route);
+            addTearDown(router.dispose);
+            addTearDown(preference.dispose);
+            await tester.pumpWidget(
+              _app(router, preference, _sessionFor(route), textScale: scale),
+            );
+            await tester.pumpAndSettle();
 
-              final picker = find.byKey(const Key('language-picker'));
-              expect(picker, findsOneWidget);
-              expect(tester.getCenter(picker).dx, closeTo(width / 2, 1.0));
-              expect(find.byIcon(Icons.language), findsOneWidget);
-              expect(tester.widget<TextButton>(picker).onPressed, isNotNull);
-              final semantics = tester.ensureSemantics();
-              expect(
-                tester.getSemantics(picker).getSemanticsData().hasAction(SemanticsAction.tap),
-                isTrue,
-              );
-              semantics.dispose();
-              expect(tester.takeException(), isNull);
-              expect(store.value, language);
-            },
-          );
+            final picker = find.byKey(const Key('language-picker'));
+            expect(picker, findsOneWidget);
+            expect(tester.getCenter(picker).dx, closeTo(width / 2, 1.0));
+            expect(find.byIcon(Icons.language), findsOneWidget);
+            expect(tester.widget<TextButton>(picker).onPressed, isNotNull);
+            final semantics = tester.ensureSemantics();
+            expect(
+              tester
+                  .getSemantics(picker)
+                  .getSemanticsData()
+                  .hasAction(SemanticsAction.tap),
+              isTrue,
+            );
+            semantics.dispose();
+            expect(tester.takeException(), isNull);
+            expect(store.value, language);
+          });
         }
       }
     }
   }
 
-  testWidgets('phone country stays selected after switching email and phone', (tester) async {
+  testWidgets('phone country stays selected after switching email and phone', (
+    tester,
+  ) async {
     final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
     await preference.load();
     final router = _router('/phone-login');
     addTearDown(router.dispose);
     addTearDown(preference.dispose);
-    await tester.pumpWidget(_app(router, preference, const SessionSignedOut(), textScale: 1, api: _PhoneAndEmailClient()));
+    await tester.pumpWidget(
+      _app(
+        router,
+        preference,
+        const SessionSignedOut(),
+        textScale: 1,
+        api: _PhoneAndEmailClient(),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Phone'));
     await tester.pumpAndSettle();
@@ -200,13 +262,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('expired code during name completion returns to OTP recovery', (tester) async {
+  testWidgets('expired code during name completion returns to OTP recovery', (
+    tester,
+  ) async {
     final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
     await preference.load();
     final router = _router('/name');
     addTearDown(router.dispose);
     addTearDown(preference.dispose);
-    await tester.pumpWidget(_app(router, preference, _sessionFor('/name'), textScale: 1, api: _ExpiredOtpClient()));
+    await tester.pumpWidget(
+      _app(
+        router,
+        preference,
+        _sessionFor('/name'),
+        textScale: 1,
+        api: _ExpiredOtpClient(),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Ada Obi');
     await tester.tap(find.text('Continue'));
@@ -216,8 +288,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('selected language persists across mounted auth routes',
-      (tester) async {
+  testWidgets('selected language persists across mounted auth routes', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
