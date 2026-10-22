@@ -68,6 +68,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
   CommunityRoom? room;
   List<Map<String, dynamic>> posts = [], roomMasana = [];
   final mentions = <String>{};
+  final reportRequestKeys = <String, String>{};
   final composer = TextEditingController(), token = TextEditingController();
   bool loading = true, busy = false;
   String? error, parentId, pendingBody, pendingParent, pendingKey, pendingAttachments;
@@ -196,6 +197,31 @@ class _CommunityState extends State<RoomCommunityScreen> {
       await SharePlus.instance.share(ShareParams(files: [XFile.fromData(bytes, mimeType: result['mimeType'] as String?, name: result['name'] as String? ?? 'Room attachment')]));
     }
   });
+  Future<void> reportPost(String postId) async {
+    var reportReason = '';
+    final selected = await showDialog<String>(context: context, builder: (dialogContext) =>
+      AlertDialog(title: const Text('Report post'), content: TextField(
+        onChanged: (value) => reportReason = value, autofocus: true, maxLength: 2000, minLines: 2, maxLines: 4,
+        decoration: const InputDecoration(labelText: 'What is wrong with this post?'),
+      ), actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        FilledButton(onPressed: () {
+          final value = reportReason.trim();
+          if (value.isNotEmpty) { Navigator.pop(dialogContext, value); }
+        }, child: const Text('Submit report')),
+      ]));
+    if (selected == null || !mounted) return;
+    final key = '$postId:$selected';
+    reportRequestKeys[key] ??= communityRequestId();
+    await run(() async {
+      await widget.api.action(widget.roomId, 'reports', {
+        'targetId': postId, 'reason': selected, 'requestId': reportRequestKeys[key],
+      });
+      reportRequestKeys.remove(key);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post reported for review')));
+    });
+  }
   Future<void> info() async {
     final value = room;
     if (value == null) return;
@@ -221,6 +247,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
           if (post['parentId'] == null) Wrap(children: [
             for (final emoji in ['👍', '❤️', '😂']) TextButton(onPressed: busy ? null : () => run(() async { final reactions = post['reactions'] as List? ?? []; final mine = reactions.any((e) => e['emoji'] == emoji && e['mine'] == true); await widget.api.request(widget.roomId, mine ? 'DELETE' : 'POST', 'posts/${post['id']}/reactions', {'emoji': emoji}); }), child: Text('$emoji ${(post['reactions'] as List? ?? []).where((e) => e['emoji'] == emoji).map((e) => e['count']).join()}')),
           ]),
+          if (room?.joined == true && post['parentId'] == null) TextButton.icon(onPressed: busy ? null : () => reportPost('${post['id']}'), icon: const Icon(Icons.flag_outlined), label: const Text('Report post')),
           if (room?.manages == true && post['parentId'] == null) Wrap(children: [
             TextButton(onPressed: busy ? null : () => run(() => widget.api.modify(widget.roomId, 'posts/${post['id']}', {'pinned': post['pinned'] != true})), child: Text(post['pinned'] == true ? 'Unpin' : 'Pin')),
             TextButton(onPressed: busy ? null : () => run(() => widget.api.modify(widget.roomId, 'posts/${post['id']}', {'commentsEnabled': post['commentsEnabled'] == false})), child: Text(post['commentsEnabled'] == false ? 'Enable comments' : 'Close comments')),
@@ -250,7 +277,7 @@ class _InfoState extends State<_CommunityInfo> {
   late CommunityRoom room = widget.initial;
   late final name = TextEditingController(text: room.name), about = TextEditingController(text: room.description);
   final inviteCode = TextEditingController();
-  List<Map<String, dynamic>> members = [], invites = [], masana = [], sharedMedia = [];
+  List<Map<String, dynamic>> members = [], invites = [], masana = [], sharedMedia = [], reportedPosts = [];
   final reportReason = TextEditingController();
   String? reportKey;
   String? error;
@@ -264,7 +291,8 @@ class _InfoState extends State<_CommunityInfo> {
       final people = room.joined ? await widget.api.items(room.id, 'members') : <Map<String, dynamic>>[];
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
       final links = room.manages ? await widget.api.items(room.id, 'invites') : <Map<String, dynamic>>[];
-      if (mounted) setState(() { members = people; invites = links; masana = agents; sharedMedia = media; });
+      final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
+      if (mounted) setState(() { members = people; invites = links; masana = agents; sharedMedia = media; reportedPosts = flagged; });
     } catch (e) { if (mounted) setState(() => error = communityError(e)); }
   }
   Future<void> run(Future<void> Function() work) async {
@@ -294,6 +322,24 @@ class _InfoState extends State<_CommunityInfo> {
       if (inviteCode.text.isNotEmpty) ...[SelectableText(inviteCode.text), TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: inviteCode.text)), child: const Text('Copy invitation code'))],
       for (final invite in invites) ListTile(title: const Text('Invitation'), subtitle: Text('Expires ${invite['expiresAt']} · ${invite['revoked'] == true ? 'Revoked' : 'Active'}'), trailing: invite['revoked'] == true ? null : TextButton(onPressed: busy ? null : () => run(() async { await widget.api.revoke(room.id, '${invite['inviteId']}'); if (mounted) { inviteCode.clear(); inviteKey = null; } }), child: const Text('Revoke'))),
     ]),
+    if (room.manages) ExpansionTile(
+      title: Text('Reported posts (${reportedPosts.length})'),
+      children: [
+        if (reportedPosts.isEmpty) const ListTile(title: Text('No reported posts to review')),
+        for (final post in reportedPosts) ListTile(
+          title: Text('${post['excerpt'] ?? 'Post'}', maxLines: 3, overflow: TextOverflow.ellipsis),
+          subtitle: Text('${post['reportCount'] ?? 0} member report(s)'),
+          trailing: TextButton(
+            onPressed: busy ? null : () async {
+              if (await confirm('Remove reported post?', 'The post and comments will no longer appear to Room members.')) {
+                await run(() => widget.api.remove(room.id, 'posts/${post['postId']}'));
+              }
+            },
+            child: const Text('Remove post'),
+          ),
+        ),
+      ],
+    ),
     if (room.joined) ExpansionTile(title: const Text('Report Room'), children: [TextField(controller: reportReason, maxLength: 2000, decoration: const InputDecoration(labelText: 'Reason')), TextButton(onPressed: busy ? null : () => run(() async { if (reportReason.text.trim().isEmpty) throw const FormatException('Enter a report reason'); reportKey ??= communityRequestId(); await widget.api.action(room.id, 'reports', {'reason': reportReason.text.trim(), 'requestId': reportKey}); if (mounted) { reportReason.clear(); reportKey = null; ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent for review'))); } }), child: const Text('Send report'))]),
     if (sharedMedia.isNotEmpty) ExpansionTile(title: Text('Shared media (${sharedMedia.length})'), children: [for (final file in sharedMedia) ListTile(leading: const Icon(Icons.attach_file), title: Text('${file['name']}'), subtitle: Text('${file['kind']} · ${file['sizeBytes'] ?? ''} bytes'))]),
     if (room.manages) FilledButton.icon(onPressed: busy ? null : () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = _AddParticipants(api: widget.api, roomId: room.id, owner: room.role == 'owner'); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }, icon: const Icon(Icons.person_add_outlined), label: const Text('Add participants')),
