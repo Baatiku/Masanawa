@@ -13,6 +13,7 @@ import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_wallet_home.dart';
 import '../../finance/wallet_asset_overview.dart';
 import '../../finance/msnw_transaction_history.dart';
+import '../../finance/wallet_recent_activity.dart';
 import '../../finance/wallet_flow_page.dart';
 import '../../finance/msnw_paystack_funding_sheet.dart';
 import '../../finance/msnw_custody_send.dart';
@@ -341,6 +342,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             const SizedBox(height: 12),
             WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
               onOpenBillingService: widget.onOpenBillingService),
+            const SizedBox(height: 22),
+            WalletRecentActivity(
+              key: ValueKey('recent-wallet-${accountId ?? 'signed-out'}'),
+              dio: ref.watch(dioProvider),
+              baseUrl: kApiBaseUrl,
+              accountId: accountId,
+              currentUserId: () => switch(ref.read(sessionProvider)) {
+                SessionSignedIn(:final user) => user.id, _ => null,
+              },
+              accessToken: () => ref.read(apiClientProvider).accessToken,
+              refreshKey: _custodyRefresh,
+              hideAmounts: _hiddenOwner == accountId && _hideBalances,
+              onViewAll: () => setState(() {
+                _tab = 1;
+                _visitedWalletTabs.add(1);
+              }),
+            ),
           ]),
           _visitedWalletTabs.contains(1) ? Column(children: [
             Padding(padding: const EdgeInsets.symmetric(horizontal:16), child:_tabs()),
