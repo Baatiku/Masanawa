@@ -277,7 +277,8 @@ class _InfoState extends State<_CommunityInfo> {
   late CommunityRoom room = widget.initial;
   late final name = TextEditingController(text: room.name), about = TextEditingController(text: room.description);
   final inviteCode = TextEditingController();
-  List<Map<String, dynamic>> members = [], invites = [], masana = [], sharedMedia = [], reportedPosts = [];
+  List<Map<String, dynamic>> members = [], invites = [], masana = [], sharedMedia = [], reportedPosts = [], reportReviews = [];
+  final reviewRequestKeys = <String, String>{};
   final reportReason = TextEditingController();
   String? reportKey;
   String? error;
@@ -292,7 +293,8 @@ class _InfoState extends State<_CommunityInfo> {
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
       final links = room.manages ? await widget.api.items(room.id, 'invites') : <Map<String, dynamic>>[];
       final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
-      if (mounted) setState(() { members = people; invites = links; masana = agents; sharedMedia = media; reportedPosts = flagged; });
+      final reviews = room.manages ? await widget.api.items(room.id, 'reports/reviews') : <Map<String, dynamic>>[];
+      if (mounted) setState(() { members = people; invites = links; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
     } catch (e) { if (mounted) setState(() => error = communityError(e)); }
   }
   Future<void> run(Future<void> Function() work) async {
@@ -301,6 +303,20 @@ class _InfoState extends State<_CommunityInfo> {
     try { await work(); if (mounted) await refresh(); }
     catch (e) { if (mounted) setState(() => error = communityError(e)); }
     finally { if (mounted) setState(() => busy = false); }
+  }
+  Future<void> reviewPost(String postId, String decision) async {
+    final removal = decision == 'removed';
+    if (!await confirm(removal ? 'Remove reported post?' : 'Dismiss reports?',
+      removal ? 'The post, replies and media become unavailable to members. The moderation decision is retained.'
+        : 'Keep the post visible and close the currently reported concerns? New reports can reopen review.')) return;
+    final key = '$postId:$decision';
+    reviewRequestKeys[key] ??= communityRequestId();
+    await run(() async {
+      await widget.api.action(room.id, 'reports/${Uri.encodeComponent(postId)}/review', {
+        'decision': decision, 'requestId': reviewRequestKeys[key],
+      });
+      reviewRequestKeys.remove(key);
+    });
   }
   Future<bool> confirm(String title, String message) async => await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))])) ?? false;
   @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
@@ -323,20 +339,31 @@ class _InfoState extends State<_CommunityInfo> {
       for (final invite in invites) ListTile(title: const Text('Invitation'), subtitle: Text('Expires ${invite['expiresAt']} · ${invite['revoked'] == true ? 'Revoked' : 'Active'}'), trailing: invite['revoked'] == true ? null : TextButton(onPressed: busy ? null : () => run(() async { await widget.api.revoke(room.id, '${invite['inviteId']}'); if (mounted) { inviteCode.clear(); inviteKey = null; } }), child: const Text('Revoke'))),
     ]),
     if (room.manages) ExpansionTile(
+      key: const PageStorageKey('room-reported-posts'),
       title: Text('Reported posts (${reportedPosts.length})'),
       children: [
         if (reportedPosts.isEmpty) const ListTile(title: Text('No reported posts to review')),
-        for (final post in reportedPosts) ListTile(
-          title: Text('${post['excerpt'] ?? 'Post'}', maxLines: 3, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${post['reportCount'] ?? 0} member report(s)'),
-          trailing: TextButton(
-            onPressed: busy ? null : () async {
-              if (await confirm('Remove reported post?', 'The post and comments will no longer appear to Room members.')) {
-                await run(() => widget.api.remove(room.id, 'posts/${post['postId']}'));
-              }
-            },
-            child: const Text('Remove post'),
-          ),
+        for (final post in reportedPosts) Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${post['excerpt'] ?? 'Post'}', maxLines: 3, overflow: TextOverflow.ellipsis),
+            Text('${post['reportCount'] ?? 0} member report(s)'),
+            Wrap(spacing: 4, runSpacing: 4, children: [
+              TextButton(onPressed: busy ? null : () => reviewPost('${post['postId']}', 'dismissed'),
+                child: const Text('Dismiss reports')),
+              TextButton(onPressed: busy ? null : () => reviewPost('${post['postId']}', 'removed'),
+                child: const Text('Remove post')),
+            ]),
+          ]),
+        ),
+      ],
+    ),
+    if (room.manages && reportReviews.isNotEmpty) ExpansionTile(
+      title: Text('Moderation history (${reportReviews.length})'),
+      children: [
+        for (final review in reportReviews) ListTile(
+          title: Text(review['decision'] == 'removed' ? 'Reported post removed' : 'Reports dismissed'),
+          subtitle: Text('${review['reportCount'] ?? 0} report(s) reviewed · ${review['reviewedAt'] ?? ''}'),
         ),
       ],
     ),

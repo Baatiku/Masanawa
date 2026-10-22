@@ -7,7 +7,7 @@ const a={tenantId:'t',userId:'alice'},b={tenantId:'t',userId:'bob'},c={tenantId:
 beforeEach(async()=>{
  db=new PGlite();
  await db.exec(`CREATE SCHEMA creator;CREATE TABLE creator.agents(tenant_id text,character_id text,owner_user_id text,state text);CREATE SCHEMA identity;CREATE TABLE identity.users(tenant_id text,user_id text,state text DEFAULT 'active',PRIMARY KEY(tenant_id,user_id));CREATE TABLE identity.characters(tenant_id text,character_id text,state text DEFAULT 'active',PRIMARY KEY(tenant_id,character_id));INSERT INTO identity.users(tenant_id,user_id) VALUES('t','alice'),('t','bob'),('t','eve'),('other','bob');CREATE SCHEMA talks;CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);INSERT INTO talks.public_profiles VALUES('t','alice','alice','Alice'),('t','bob','bob','Bob'),('t','eve','eve','Eve');CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);CREATE TABLE talks.human_privacy(tenant_id text,user_id text,value jsonb);CREATE FUNCTION talks.human_contact_allowed(text,text,text,text) RETURNS boolean LANGUAGE sql AS 'SELECT false';CREATE SCHEMA events;CREATE TABLE events.outbox(outbox_event_id text,tenant_id text,event_id text,event_type text,schema_version integer,aggregate_type text,aggregate_id text,correlation_id text,destination text,payload jsonb,state text DEFAULT 'pending',attempt int DEFAULT 0,fence bigint DEFAULT 0,lease_owner text,lease_expires_at timestamptz,available_at timestamptz DEFAULT now(),created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),safe_error_code text);`);
- for(const n of ['0001_rooms_free','0002_room_subscriptions','0003_discussion_threads','0006_membership_invites','0007_community_rooms'])await db.exec(await readFile(new URL('../../../../packages/rooms/migrations/'+n+'.sql',import.meta.url),'utf8'));
+ for(const n of ['0001_rooms_free','0002_room_subscriptions','0003_discussion_threads','0006_membership_invites','0007_community_rooms','0009_room_report_reviews'])await db.exec(await readFile(new URL('../../../../packages/rooms/migrations/'+n+'.sql',import.meta.url),'utf8'));
  const pool={query:(s:string,v?:unknown[])=>db.query(s,v),connect:async()=>({query:(s:string,v?:unknown[])=>db.query(s,v),release(){}})};
  service=createRoomCommunityService({pool:pool as any,authorize:async()=>a});
 },30000);
@@ -65,6 +65,43 @@ it('reviews reported Room posts without exposing reporters or accepting forged t
  await service.dispatch(a,'DELETE',path+'/posts/'+post.id,{});
  expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toEqual([]);
  await expect(service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Already removed',requestId:'removed-post'})).rejects.toMatchObject({statusCode:404});
+});
+it('reviews Room post evidence once with a durable audit, replay fencing and private reporter details',async()=>{
+ const room=await service.dispatch(a,'POST','',{name:'Review queue',postingPolicy:'members',requestId:'review-room'}),path=room.id+'/community';
+ await service.dispatch(b,'POST',path+'/join',{});
+ await service.dispatch(c,'POST',path+'/join',{});
+ const post=await service.dispatch(b,'POST',path+'/timeline',{body:'Concern to evaluate',requestId:'review-post'});
+ await service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Sensitive allegation',requestId:'reason-1'});
+ await expect(service.dispatch(b,'GET',path+'/reports/reviews')).rejects.toMatchObject({statusCode:403});
+ await expect(service.dispatch(c,'POST',path+'/reports/'+post.id+'/review',{decision:'dismissed',requestId:'not-manager'})).rejects.toMatchObject({statusCode:403});
+ await expect(service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',{decision:'invalid',requestId:'bad-decision'})).rejects.toMatchObject({statusCode:422});
+ const review={decision:'dismissed',requestId:'stable-review'};
+ expect(await service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',review)).toMatchObject({reviewed:true,decision:'dismissed',reportCount:1});
+ expect(await service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',review)).toMatchObject({reviewed:true,decision:'dismissed',reportCount:1});
+ await expect(service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',{decision:'removed',requestId:'stable-review'})).rejects.toMatchObject({statusCode:409});
+ await expect(service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',{decision:'dismissed',requestId:'different-review'})).rejects.toMatchObject({statusCode:409});
+ expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toEqual([]);
+ const history=(await service.dispatch(a,'GET',path+'/reports/reviews')).items;
+ expect(history).toHaveLength(1);
+ expect(history[0]).toMatchObject({postId:post.id,decision:'dismissed',reportCount:1});
+ expect(JSON.stringify(history)).not.toMatch(/Sensitive allegation|eve|reason|requestId|reviewer_user_id/);
+ expect((await service.dispatch(b,'GET',path+'/timeline')).items.some((item:any)=>item.id===post.id)).toBe(true);
+ // A new concern (including one from a previous reporter) reopens the queue.
+ await service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'New observation',requestId:'reason-2'});
+ expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toMatchObject([{postId:post.id,reportCount:1}]);
+ expect(await service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',{decision:'removed',requestId:'review-remove'})).toMatchObject({reviewed:true,decision:'removed',reportCount:1});
+ expect((await service.dispatch(b,'GET',path+'/timeline')).items.some((item:any)=>item.id===post.id)).toBe(false);
+ expect((await service.dispatch(a,'GET',path+'/reports/summary')).items).toEqual([]);
+ expect((await service.dispatch(a,'GET',path+'/reports/reviews')).items.map((item:any)=>item.decision)).toEqual(['removed','dismissed']);
+ await expect(service.dispatch(c,'POST',path+'/reports',{targetId:post.id,reason:'Late',requestId:'late-report'})).rejects.toMatchObject({statusCode:404});
+});
+it('does not allow reviews without outstanding post reports or across Rooms',async()=>{
+ const room=await service.dispatch(a,'POST','',{name:'Isolated review',requestId:'review-isolation'}),path=room.id+'/community';
+ const post=await service.dispatch(a,'POST',path+'/timeline',{body:'Unreported',requestId:'unreported'});
+ await expect(service.dispatch(a,'POST',path+'/reports/'+post.id+'/review',{decision:'dismissed',requestId:'none'})).rejects.toMatchObject({statusCode:409});
+ const other=await service.dispatch(a,'POST','',{name:'Other review room',requestId:'other-review'}),otherPath=other.id+'/community';
+ await service.dispatch(a,'POST',otherPath+'/timeline',{body:'Other body',requestId:'other-reported-post'});
+ await expect(service.dispatch(a,'POST',otherPath+'/reports/'+post.id+'/review',{decision:'removed',requestId:'cross'})).rejects.toMatchObject({statusCode:404});
 });
 it('protects private discovery and legacy join, posting and owner-management bypasses',async()=>{
  const {createPgRoomsRepository}=await import('../../../../adapters/storage/postgres/src/rooms/repository.js');
