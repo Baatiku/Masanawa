@@ -56,14 +56,18 @@ export function createMsnwBillingService(input: Readonly<{
         quote.rateKoboPerMsnw!==request.expectedRateKoboPerMsnw)
       throw new MsnwBillingError("msnw.billing.quote_repriced");
     if(quote.recentPurchase?.state==='reserved')throw new MsnwBillingError('msnw.billing.previous_unresolved',409,{recentPurchase:quote.recentPurchase});
-    if(quote.recentPurchase){
-      if(request.repeatOf!==quote.recentPurchase.reference)throw new MsnwBillingError('msnw.billing.repeat_confirmation_required',409,{recentPurchase:quote.recentPurchase});
-      await input.funding.approveRepeat(who,request.quoteId,request.quoteRevision,request.repeatOf);
-    }
+    if(quote.recentPurchase&&request.repeatOf!==quote.recentPurchase.reference)
+      throw new MsnwBillingError('msnw.billing.repeat_confirmation_required',409,{recentPurchase:quote.recentPurchase});
     // A completed purchase leaving the warning window does not invalidate the
     // still-current exact bill quote. Reservation rechecks new matches under lock.
     if(!quote.sufficient)
       throw new MsnwBillingError("msnw.billing.insufficient_funds");
+    // A provider outage must not consume a fresh quote or persist repeat consent.
+    // Existing reservations are handled above by read-only status reconciliation.
+    if(!input.billing.purchaseMsnwOwned)
+      throw new MsnwBillingError("msnw.billing.provider_unavailable",503);
+    if(quote.recentPurchase)
+      await input.funding.approveRepeat(who,request.quoteId,request.quoteRevision,request.repeatOf!);
     const approved=await input.quotes.confirmQuote({
       tenantId: who.tenantId as Parameters<BillingQuoteRepository["confirmQuote"]>[0]["tenantId"],
       userId: who.userId as Parameters<BillingQuoteRepository["confirmQuote"]>[0]["userId"],
@@ -73,8 +77,6 @@ export function createMsnwBillingService(input: Readonly<{
     });
     // The existing Flutterwave orchestration rechecks live catalog and
     // beneficiary, idempotently prepares and dispatches only AFTER reserve.
-    if (!input.billing.purchaseMsnwOwned)
-      throw new MsnwBillingError("msnw.billing.provider_unavailable",503);
     return input.billing.purchaseMsnwOwned({
       tenantId:who.tenantId,userId:who.userId,
       requestId:"msnw-bill-"+approved.quoteId,
