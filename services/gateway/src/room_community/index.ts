@@ -131,7 +131,30 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
      const m=(await q.query('INSERT INTO rooms.media(tenant_id,media_id,room_id,user_id,kind,mime_type,name,size_bytes,duration_ms,data_base64,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',[a.tenantId,'room-media_'+randomUUID(),id,a.userId,kind,mime,name,bytes.length,input.durationMs??null,data,key])).rows[0];return mediaView(m);
     }
    }
-   if(operation==='reports'&&method==='POST'){const target=text(input.targetId??id,160),reason=text(input.reason,2000),key=text(input.requestId,160);const old=(await q.query('SELECT target_id,reason FROM rooms.reports WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND request_id=$4',[a.tenantId,id,a.userId,key])).rows[0];if(old){if(old.target_id!==target||old.reason!==reason)fail(409,'idempotency_conflict');return {reported:true};}await q.query('INSERT INTO rooms.reports(tenant_id,report_id,room_id,user_id,target_id,reason,request_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[a.tenantId,'room-report_'+randomUUID(),id,a.userId,target,reason,key]);return {reported:true};}
+   // Moderators review reported *posts*, not who reported them. Reporting a
+   // Room itself remains a separate platform moderation concern.
+   if(operation==='reports'&&method==='GET'&&parts[3]==='summary'){
+    await owned(q,a,id);
+    const results=await q.query(`SELECT p.lesson_id AS "postId",LEFT(p.body,180) AS excerpt,COUNT(DISTINCT reports.user_id)::int AS "reportCount"
+      FROM rooms.reports reports JOIN rooms.lessons p ON p.tenant_id=reports.tenant_id AND p.room_id=reports.room_id AND p.lesson_id=reports.target_id
+      WHERE reports.tenant_id=$1 AND reports.room_id=$2 AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=now())
+      GROUP BY p.lesson_id,p.body,p.created_at ORDER BY COUNT(DISTINCT reports.user_id) DESC,p.created_at DESC LIMIT 100`,[a.tenantId,id]);
+    return {items:results.rows};
+   }
+   if(operation==='reports'&&method==='POST'){
+    const target=text(input.targetId??id,160),reason=text(input.reason,2000),key=text(input.requestId,160);
+    const old=(await q.query('SELECT target_id,reason FROM rooms.reports WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND request_id=$4',[a.tenantId,id,a.userId,key])).rows[0];
+    if(old){if(old.target_id!==target||old.reason!==reason)fail(409,'idempotency_conflict');return {reported:true};}
+    if(target!==id){
+     const post=await q.query("SELECT 1 FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3 AND state='published' AND (publish_at IS NULL OR publish_at<=now())",[a.tenantId,id,target]);
+     if(!post.rows.length)fail(404,'post_not_found');
+    }
+    // A new request ID must not turn one person's report into unlimited votes.
+    const previous=await q.query('SELECT 1 FROM rooms.reports WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND target_id=$4 LIMIT 1',[a.tenantId,id,a.userId,target]);
+    if(previous.rows.length)return {reported:true};
+    await q.query('INSERT INTO rooms.reports(tenant_id,report_id,room_id,user_id,target_id,reason,request_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[a.tenantId,'room-report_'+randomUUID(),id,a.userId,target,reason,key]);
+    return {reported:true};
+   }
    if(operation==='members'&&method==='GET'){const members=await q.query("SELECT user_id AS \"userId\",role,state FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND state='active' ORDER BY role,user_id LIMIT 200",[a.tenantId,id]);return {items:members.rows};}
    if(operation==='members'&&method==='PATCH'){
     await owned(q,a,id);const target=text(parts[3],160);if(target===r.owner_user_id)fail(403,'cannot_modify_owner');
@@ -194,5 +217,5 @@ export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnTy
  const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
- for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/:inviteId',['DELETE']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
+ for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/:inviteId',['DELETE']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
 }
