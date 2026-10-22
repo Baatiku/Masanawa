@@ -40,12 +40,14 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   StreamSubscription<Uri>? _links;
   final _pendingLink = PendingDeepLink();
   bool _linkDrainScheduled = false;
+  late int _linkAuthorizationEpoch;
   late final GoRouter _router;
   late final LocalePreferenceController _localePreference;
 
   @override
   void initState() {
     super.initState();
+    _linkAuthorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     _localePreference = LocalePreferenceController(
       SecureLocalePreferenceStore(),
     );
@@ -111,11 +113,14 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   @override
   Widget build(BuildContext context) {
     ref.listen(sessionProvider, (previous, next) {
+      final nextEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
       if (previous is SessionSignedIn &&
-          (next is! SessionSignedIn || next.user.id != previous.user.id)) {
+          (next is! SessionSignedIn || next.user.id != previous.user.id ||
+              nextEpoch != _linkAuthorizationEpoch)) {
         // A queued private navigation hint cannot cross accounts.
         _pendingLink.clear();
       }
+      _linkAuthorizationEpoch = nextEpoch;
       _scheduleLinkDrain();
     });
     final router = ref.watch(appRouterProvider);

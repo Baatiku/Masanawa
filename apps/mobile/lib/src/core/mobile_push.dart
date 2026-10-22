@@ -87,12 +87,40 @@ const _workNotificationDetails = NotificationDetails(
 
 String? humanIncomingCallLink(Map<String, dynamic> data) {
   final raw = data['deepLink'];
-  if (data['type'] != 'human_call' || raw is! String) return null;
+  final callId = data['callId'];
+  if (data['type'] != 'human_call' || raw is! String || callId is! String ||
+      !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(callId)) {
+    return null;
+  }
   final uri = Uri.tryParse(raw);
-  return uri != null &&
-          shellDeepLinkRoute(uri)?.startsWith('/human/call/') == true
-      ? raw
-      : null;
+  return uri != null && shellDeepLinkRoute(uri) == '/human/call/$callId'
+      ? raw : null;
+}
+
+/// Push metadata is only a navigation hint. A call's typed identity wins over
+/// an optional generic link, so one notification cannot name two calls.
+String? mobilePushNavigationLink(Map<String, dynamic> data) {
+  if (data['type'] == 'human_call') return humanIncomingCallLink(data);
+  if (data['type'] == 'incoming_call') {
+    final callId = data['callId'];
+    if (callId is! String) return null;
+    final raw = 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}';
+    final uri = Uri.tryParse(raw);
+    return uri != null && shellDeepLinkRoute(uri) == '/calls/incoming/$callId'
+        ? raw : null;
+  }
+  final explicit = data['deepLink'];
+  if (explicit is String && explicit.isNotEmpty) {
+    final uri = Uri.tryParse(explicit);
+    return uri != null && shellDeepLinkRoute(uri) != null ? explicit : null;
+  }
+  final characterId = data['characterId'];
+  if (characterId is String) {
+    final raw = 'masanawa://chat/${Uri.encodeComponent(characterId)}';
+    final uri = Uri.tryParse(raw);
+    return uri != null && shellDeepLinkRoute(uri) != null ? raw : null;
+  }
+  return null;
 }
 
 bool isIncomingCallPush(Map<String, dynamic> data) {
@@ -394,20 +422,7 @@ class MobilePushService {
   }
 
   String? _linkFor(RemoteMessage message) {
-    final explicit = message.data['deepLink'];
-    if (explicit is String && explicit.isNotEmpty) return explicit;
-    final callId = message.data['callId'];
-    if (message.data['type'] == 'incoming_call' && callId is String) {
-      final raw = 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}';
-      final uri = Uri.tryParse(raw);
-      if (uri != null && shellDeepLinkRoute(uri) != null) return raw;
-      return null;
-    }
-    final characterId = message.data['characterId'];
-    if (characterId is String && characterId.startsWith('character_')) {
-      return 'masanawa://chat/${Uri.encodeComponent(characterId)}';
-    }
-    return null;
+    return mobilePushNavigationLink(message.data);
   }
 
   void _emitLink(String raw) {
