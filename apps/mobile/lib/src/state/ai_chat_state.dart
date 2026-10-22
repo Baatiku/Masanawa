@@ -1626,8 +1626,13 @@ class AiChatController extends Notifier<AiChatState> {
       // Recorded-message replies are completed clips. The transport can use
       // Gemini Live to generate audio, but chat never plays generation PCM.
       var spokenTranscript = '';
+      var streamedText = '';
       void textDelta(String delta) {
-        if (currentAudioOwner() && spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
+        if (!currentAudioOwner() || delta.isEmpty) return;
+        // A successful transport may deliver text chunks but an empty final
+        // text field. Retain the chunks for the durable completion fallback.
+        streamedText += delta;
+        if (spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
         if (!currentAudioOwner()) return;
@@ -1742,13 +1747,20 @@ class AiChatController extends Notifier<AiChatState> {
           // unsupported format, is malformed, or cannot be cached locally.
         }
       }
-        if (result.text.trim().isEmpty && (result.audioTranscript ?? spokenTranscript).trim().isEmpty && replyAudio == null) {
+        final durableReply = result.text.trim().isNotEmpty
+            ? result.text
+            : result.audioTranscript?.trim().isNotEmpty == true
+                ? result.audioTranscript!
+                : spokenTranscript.trim().isNotEmpty
+                    ? spokenTranscript
+                    : streamedText;
+        if (durableReply.trim().isEmpty && replyAudio == null) {
           throw const ApiException('No reply was received. Check message status before retrying.');
         }
         await _finalizeAiStream(
           characterId,
           streamMessageId,
-          result.text.trim().isNotEmpty ? result.text : (result.audioTranscript ?? spokenTranscript),
+          durableReply,
           parts: result.parts,
           attachment: replyAudio,
           agentRunId: result.agentRunId,
