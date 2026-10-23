@@ -43,6 +43,20 @@ it('enforces broadcast posts, replies, owner roles, bans and revoked links',asyn
  await service.dispatch(c,'POST',path+'/join',{});
  expect((await service.dispatch(c,'POST',path+'/timeline',{body:'Discussion',requestId:'discussion'})).body).toBe('Discussion');
 });
+it('shows authorized display names instead of internal IDs, ordered alongside Room activity',async()=>{
+ const created=await service.dispatch(a,'POST','',{name:'Community display',visibility:'public',postingPolicy:'members',requestId:'people-identity'});
+ const path=created.id+'/community';
+ const own=await service.dispatch(a,'GET',path);
+ expect(own.ownerDisplayName).toBe('Alice');
+ await service.dispatch(b,'POST',path+'/join',{});
+ const post=await service.dispatch(a,'POST',path+'/timeline',{body:'Hello members',requestId:'human-post'});
+ await service.dispatch(b,'POST',path+'/timeline',{body:'Hello Alice',parentId:post.id,requestId:'human-comment'});
+ const timeline=await service.dispatch(b,'GET',path+'/timeline');
+ expect(timeline.items.find((item:any)=>item.id===post.id)).toMatchObject({authorDisplayName:'Alice',authorHandle:'alice'});
+ expect(timeline.items.find((item:any)=>item.parentId===post.id)).toMatchObject({authorDisplayName:'Bob',authorHandle:'bob'});
+ const members=await service.dispatch(a,'GET',path+'/members');
+ expect(members.items.find((m:any)=>m.userId==='bob')).toMatchObject({displayName:'Bob',handle:'bob'});
+});
 it('reviews reported Room posts without exposing reporters or accepting forged targets',async()=>{
  const room=await service.dispatch(a,'POST','',{name:'Moderated room',visibility:'public',postingPolicy:'members',requestId:'moderation-room'});
  const path=room.id+'/community';
