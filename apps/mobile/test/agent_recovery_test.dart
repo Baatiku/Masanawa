@@ -533,9 +533,10 @@ void main() {
       await controller.retryMessage('character-1', userId);
       final thread = c.read(aiChatProvider).threads['character-1']!;
       expect(transport.turns, 2);
-      // Explicit Retry and the durable queue each check authoritative status.
-      // Both checks must preserve the original idempotency key.
+      // Catch reconciliation, explicit Retry and durable queue all inspect
+      // the same original requestId before another transport attempt.
       expect(transport.checkedRequests, [
+        thread.messages.first.requestId,
         thread.messages.first.requestId,
         thread.messages.first.requestId,
       ]);
@@ -567,7 +568,10 @@ void main() {
     expect(userTurns.first.requestId, original.requestId);
     expect(userTurns.last.requestId, isNot(original.requestId));
     expect(userTurns.last.text, original.text);
-    expect(transport.checkedRequests, [original.requestId, userTurns.last.requestId]);
+    // Server-confirmed failure is inspected both on transport error and
+    // on the user's explicit Retry; the NEW attempt has its own id.
+    expect(transport.checkedRequests,
+        [original.requestId, original.requestId, userTurns.last.requestId]);
     expect(transport.turns, 2);
     expect(after.messages.last.text, 'Real Gateway reply');
   });
