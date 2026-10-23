@@ -35,9 +35,9 @@
       "base_sha": "0d9803629393b52e42d82a5cd6b1294215f43772",
       "pr": "",
       "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T06:21:29.591Z",
-      "expires_at": "2026-10-23T06:26:29.591Z",
-      "progress": "Reviewing migration/admission/initiator-key contracts before implementation."
+      "heartbeat_at": "2026-10-23T06:31:34.420Z",
+      "expires_at": "2026-10-23T06:36:34.420Z",
+      "progress": "Direction-aware backend, additive0140 actor-request identity, actual-seller method/reserve and closed-by-default trusted admission interface implemented; typing PASS. Updating real-SQL fixtures for new columns and adding two-direction proofs before native flows."
     }
   ],
   "history": [
