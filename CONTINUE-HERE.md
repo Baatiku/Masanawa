@@ -1,5 +1,13 @@
 # Continue Masanawa — 23 October 2026
 
+## 23 October 2026 — human-call missed outcome, session-epoch and incoming invitation reliability (P4-08/09, P8-X02 partial)
+PR [#331](https://github.com/Baatiku/Masanawa/pull/331), source head before documentation `34bd366d66cd2e76c50a7d522bd3c3b27b4f9cf9`, based on main `8041d9b8efce121ac361373e97b0403bef39658c`. Scoped to `apps/mobile/lib/src/human_calls/{controller,coordinator,screen,transport}.dart`, `apps/mobile/lib/src/calls/incoming_call_coordinator.dart`, and focused incoming/human Flutter regressions.
+- An expired ringing Human call is a server-owned missed/terminal outcome, **not** an implicit client Cancel/Decline; expiry now suppresses active/Answer and performs the authorized GET readback. Manual End of an expired ring also rechecks before a state-changing transition. Duplicate End presses do not issue duplicate transitions.
+- Controllers/transports/banners are fenced to the signed-in **authorizationEpoch**, distinguishing a fresh sign-in to the same ID from a routine token refresh. Late responses and an old call route cannot control another active call. Expired Masana and Human invitations are filtered before display and rechecked at Open.
+- **Evidence at pre-doc source head:** dedicated Chat/Voice/Calls hosted workflow PASS, 183 Flutter tests PASS including new expired Masana banner, backend call contracts PASS, affected Dart analysis 0 errors/warnings; Mobile Build Flutter analyzer and Mobile Build suite PASS. Foundation full serialized backend/Postgres check remained IN_PROGRESS when this entry was prepared. Final merged SHA and exact-head CI must be checked on PR; do **not** infer them from earlier source heads.
+- **OPEN:** live two-device Human call, server expiry under timer/clock skew and overlapping accept/decline, same-ID re-login on a real handset, Android background/locked-screen ringing and microphone/DND/Bluetooth routing, screen readers/RTL/320dp/200% text, Masana provider behavior, production/session revocation and Phase 8 sign-off. No APK or provider/deployed acceptance. Parent P4/P8 and 177-screen/820-item checks remain unchecked.
+
+
 ## Independent Status My posts secondary timeline — 23 October 2026
 
 Reviewed and merged [#325](https://github.com/Baatiku/Masanawa/pull/325) as `f7398910f6c16f4389b771fcb797a076ad2b8e98`. All three checks passed exact head `3bd00af820f8264658dbd5591654065b1cecd092`; merge-tree with Rooms #329 was clean. Original Status source and the other window's reported Higgsfield evidence were preserved; no extra device/provider qualification or APK implied.

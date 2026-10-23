@@ -42,9 +42,14 @@ class GatewayHumanCallsTransport implements HumanCallsTransport {
 }
 
 final humanCallsTransportProvider = Provider<HumanCallsTransport>((ref) {
-  ref.watch(
-    sessionProvider.select((s) => s is SessionSignedIn ? s.user.id : null),
-  );
+  // A same-user logout/login also revokes the previous transport.
+  // Do not recreate it for a routine access-token refresh.
+  ref.watch(sessionProvider.select(
+    (s) => (
+      s is SessionSignedIn ? s.user.id : null,
+      ref.read(sessionProvider.notifier).authorizationEpoch,
+    ),
+  ));
   final api = GatewayHumanCallsTransport(ref.watch(apiClientProvider));
   ref.onDispose(api.cancel);
   return api;

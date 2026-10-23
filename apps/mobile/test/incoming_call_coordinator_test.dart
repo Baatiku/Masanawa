@@ -23,6 +23,27 @@ class _Incoming extends FakeIncoming {
 }
 
 void main() {
+  testWidgets('expired Masana invitations do not display an Open banner',
+      (tester) async {
+    final stale = _Incoming()
+      ..value = IncomingCallRecord(
+        callId: 'expired', characterId: 'character_test',
+        displayName: 'Expired Masana', state: 'ringing',
+        createdAt: DateTime.utc(2020), expiresAt: DateTime.utc(2020, 1, 1, 0, 1),
+      );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [sessionProvider.overrideWith(_Session.new)],
+      child: MaterialApp(home: IncomingCallCoordinator(
+        transportFactory: (_, _) => stale,
+        child: const Scaffold(body: Text('Chats')),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Incoming call from'), findsNothing);
+    expect(find.text('Chats'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'dropped pushes show a passive banner; account switch removes old invitation',
     (tester) async {
