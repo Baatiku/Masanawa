@@ -90,6 +90,7 @@ class _ModerationState extends State<RoomModerationScreen> {
       final yes = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
+          scrollable: true,
           title: const Text('Clear saved retry?'),
           content: const Text(
             'This only clears the retry saved on this device. It does not cancel a delayed server request or prove failure. Refresh current status before making another decision.',
@@ -154,6 +155,7 @@ class _ModerationState extends State<RoomModerationScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Retry original moderation request?'),
         content: const Text(
           'Use the saved reason, decision and request identity. This does not create a new request.',
