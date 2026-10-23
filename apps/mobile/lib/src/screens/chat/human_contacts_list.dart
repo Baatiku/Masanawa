@@ -15,8 +15,11 @@ import '../../ui/components/masanawa_list_skeleton.dart';
 /// Public contacts share the creator profile. Message admission is a separate
 /// server-owned journey; following alone never grants private chat permission.
 class HumanContactsList extends ConsumerStatefulWidget {
-  const HumanContactsList({super.key, required this.query});
+  const HumanContactsList({super.key, required this.query, this.onCall});
   final String query;
+  /// Contacts remains a messaging entry by default. Calls supplies a scoped
+  /// callback so selecting a person never silently opens a chat instead.
+  final Future<void> Function(String handle)? onCall;
   @override
   ConsumerState<HumanContactsList> createState() => _HumanContactsListState();
 }
@@ -210,10 +213,17 @@ class _HumanContactsListState extends ConsumerState<HumanContactsList> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: Icon(widget.onCall == null
+                  ? Icons.chevron_right
+                  : Icons.call_outlined),
               onTap: () async {
                 final owner = _owner;
-                await humanConversationStart(context, ref, person.handle);
+                final startCall = widget.onCall;
+                if (startCall != null) {
+                  await startCall(person.handle);
+                } else {
+                  await humanConversationStart(context, ref, person.handle);
+                }
                 if (mounted && owner == _owner) await _load();
               },
             ),

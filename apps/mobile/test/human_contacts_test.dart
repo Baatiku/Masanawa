@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:masanawa/src/agents/agent_directory.dart';
+import 'package:masanawa/src/calls/masana_voice_route.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/chat/human_contacts_list.dart';
 import 'package:masanawa/src/screens/chat/masana_list_screen.dart';
@@ -40,6 +43,20 @@ class _Directory extends AgentDirectoryController {
   AgentDirectoryState build() => const AgentDirectoryState(loading: false);
 }
 
+class _MasanaDirectory extends AgentDirectoryController {
+  @override
+  AgentDirectoryState build() => const AgentDirectoryState(loading: false, agents: [
+    AgentDirectoryEntry(
+      characterId: 'masana-test',
+      characterVersionId: 'rev-1',
+      displayName: 'Test Masana',
+      roleLabel: 'AI companion',
+      about: 'Voice and chat',
+      presence: AgentPresence.available,
+    ),
+  ]);
+}
+
 class _Contacts implements HumanContactsTransport {
   final requests = <String>[];
   Completer<HumanContactPage>? pending;
@@ -67,6 +84,62 @@ Widget app(_Contacts contacts, Widget child, {_Session? session}) =>
     );
 
 void main() {
+  test('all Masana call actions share the routed voice entry and encode identity', () {
+    final uri = Uri.parse(masanaLiveVoiceRoute('agent /?'));
+    expect(uri.pathSegments, ['chat', 'agent /?']);
+    expect(uri.queryParameters, {'entry': 'live-voice'});
+  });
+
+  testWidgets('Masana call selection enters the routed live-voice mode', (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, __) => const MasanaListScreen(callPicker: true)),
+      GoRoute(
+        path: '/chat/:id',
+        builder: (_, state) => Scaffold(
+          body: Text('Opened ${state.pathParameters['id']} as ${state.uri.queryParameters['entry']}'),
+        ),
+      ),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_Session.new),
+        agentDirectoryProvider.overrideWith(_MasanaDirectory.new),
+      ],
+      child: MaterialApp.router(
+        theme: buildMasanawaTheme(brightness: Brightness.light),
+        routerConfig: router,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test Masana'));
+    await tester.pumpAndSettle();
+    expect(find.text('Opened masana-test as live-voice'), findsOneWidget);
+  });
+
+  testWidgets('call picking opens Humans directly and hides Masana creation', (tester) async {
+    final contacts = _Contacts();
+    await tester.pumpWidget(app(contacts, const MasanaListScreen(initialTab: 1, callPicker: true)));
+    await tester.pumpAndSettle();
+    expect(find.text('New call'), findsOneWidget);
+    expect(find.text('Amina Yusuf'), findsOneWidget);
+    expect(find.text('Create Masana'), findsNothing);
+    expect(contacts.requests, contains(':'));
+  });
+
+  testWidgets('call selection callback invokes voice intent without starting a message', (tester) async {
+    String? chosen;
+    final contacts = _Contacts();
+    await tester.pumpWidget(app(contacts, HumanContactsList(
+      query: '',
+      onCall: (handle) async { chosen = handle; },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Amina Yusuf'));
+    await tester.pumpAndSettle();
+    expect(chosen, 'amina');
+  });
+
   testWidgets('Contacts preserves Masana and Humans as two tabs', (
     tester,
   ) async {
