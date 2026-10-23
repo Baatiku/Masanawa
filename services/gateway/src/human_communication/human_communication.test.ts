@@ -410,6 +410,48 @@ it('searches the complete participant-authorized human call history using litera
   await expect(send(a,'GET','calls',{}, {q:'x'.repeat(81)})).rejects.toMatchObject({statusCode:400});
   await expect(send(a,'GET','calls',{}, {q:12})).rejects.toMatchObject({statusCode:400});
 });
+it('pages tied call timestamps after filtering blocked peers, without gaps or hidden results',async()=>{
+  const timestamp='2026-10-10T09:00:00.123456Z';
+  for(let i=0;i<72;i++){
+    await query('INSERT INTO talks.human_calls(tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat) VALUES($1,$2,$3,$4,$5,$6,$7,$6,$6)',[
+      't',`tied-history-${String(i).padStart(3,'0')}`,'alice',i%9===0?'eve':'bob','cancelled',timestamp,'2026-10-11T09:00:00Z'
+    ]);
+  }
+  // Filtering *after* LIMIT 51 would produce a short page or drop records.
+  await query('INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at) VALUES($1,$2,$3,true,$4)',[
+    't','alice','eve',timestamp
+  ]);
+  try{
+    const firstPage=await send(a,'GET','calls',{}, {q:'tied-history-'});
+    expect(firstPage.items).toHaveLength(50);
+    expect(firstPage.nextCursor).toBeTruthy();
+    const secondPage=await send(a,'GET','calls',{}, {q:'tied-history-',after:firstPage.nextCursor});
+    expect(secondPage.items).toHaveLength(14);
+    expect(secondPage.nextCursor).toBeNull();
+    const all=[...firstPage.items,...secondPage.items];
+    expect(new Set(all.map((c:any)=>c.id)).size).toBe(64);
+    expect(all.every((c:any)=>c.peer.handle==='bob')).toBe(true);
+    expect(all.map((c:any)=>c.id)).toEqual(
+      [...all.map((c:any)=>c.id)].sort().reverse(),
+    );
+    // A blocked caller cannot disclose an otherwise valid cursor/detail.
+    await expect(send(a,'GET','calls/tied-history-000')).rejects.toMatchObject({statusCode:404});
+    await query('INSERT INTO talks.human_calls(tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat) VALUES($1,$2,$3,$4,$5,$6,$7,$6,$6)',[
+      't','tied-hidden-incoming','eve','alice','ringing',timestamp,'2026-11-01T00:00:00Z'
+    ]);
+    expect((await send(a,'GET','calls/incoming')).items.some((c:any)=>c.id==='tied-hidden-incoming')).toBe(false);
+    await query("UPDATE identity.users SET state='suspended' WHERE tenant_id='t' AND user_id='bob'");
+    expect((await send(a,'GET','calls',{}, {q:'tied-history-'})).items).toHaveLength(0);
+    await query("UPDATE identity.users SET state='active' WHERE tenant_id='t' AND user_id='bob'");
+    expect((await send(b,'GET','calls',{}, {q:'tied-history-'})).items).toHaveLength(50);
+    expect((await send(eve,'GET','calls',{}, {q:'tied-history-'})).items).toHaveLength(0);
+  } finally {
+    await query("UPDATE identity.users SET state='active' WHERE tenant_id='t' AND user_id='bob'");
+    await query('DELETE FROM talks.safety_preferences WHERE tenant_id=$1 AND viewer_user_id=$2 AND subject_user_id=$3',['t','alice','eve']);
+    await query("DELETE FROM talks.human_calls WHERE tenant_id=$1 AND id LIKE 'tied-history-%'",['t']);
+    await query("DELETE FROM talks.human_calls WHERE tenant_id='t' AND id='tied-hidden-incoming'");
+  }
+});
 it('retries durable push once after failure and maintains isolated catch-up cursors',async()=>{
   await db.exec('UPDATE talks.human_outbox SET sent_at=now()');
   push.mockRejectedValueOnce(new Error('provider unavailable'));

@@ -35,4 +35,32 @@ describe.skipIf(!url)('human communication real PostgreSQL concurrency',()=>{
   expect(['accepted','cancelled']).toContain(state.state);
   if(state.state==='accepted') await service.dispatch(caller,'POST',`calls/${c.id}/transition`,{action:'end'});
  });
+ it('keeps microsecond-tied authorized history complete after SQL privacy filtering',async()=>{
+  await database.pool.query(`INSERT INTO talks.human_calls
+    (tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat)
+    SELECT 't','pg-tied-'||lpad(n::text,3,'0'),'alice',
+      CASE WHEN n%8=0 THEN 'eve' ELSE 'bob' END,'cancelled',
+      '2026-10-10T10:00:00.123456Z'::timestamptz,
+      '2026-10-11T10:00:00Z'::timestamptz,
+      '2026-10-10T10:00:00Z'::timestamptz,
+      '2026-10-10T10:00:00Z'::timestamptz
+    FROM generate_series(1,80) n`);
+  await database.pool.query(`INSERT INTO talks.safety_preferences
+    (tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    VALUES('t','alice','eve',true,clock_timestamp())`);
+  try{
+   const page=await service.dispatch(a,'GET','calls',{}, {q:'pg-tied-'});
+   expect(page.items).toHaveLength(50);
+   const older=await service.dispatch(a,'GET','calls',{}, {q:'pg-tied-',after:page.nextCursor});
+   expect(older.items).toHaveLength(20);
+   expect(older.nextCursor).toBeNull();
+   const rows=[...page.items,...older.items];
+   expect(new Set(rows.map((r:any)=>r.id)).size).toBe(70);
+   expect(rows.every((r:any)=>r.peer.handle==='bob')).toBe(true);
+   expect(rows.map((r:any)=>r.id)).toEqual([...rows.map((r:any)=>r.id)].sort().reverse());
+  } finally {
+   await database.pool.query("DELETE FROM talks.safety_preferences WHERE tenant_id='t' AND viewer_user_id='alice' AND subject_user_id='eve'");
+   await database.pool.query("DELETE FROM talks.human_calls WHERE tenant_id='t' AND id LIKE 'pg-tied-%'");
+  }
+ });
 });
