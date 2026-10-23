@@ -76,6 +76,10 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       loading = true;
       loadingMore = false;
       pending.clear();
+      // A saved item may have become private, retired or blocked since the last
+      // read. Never keep old content visible while authorization is unknown.
+      items = [];
+      cursor = null;
       error = null;
     });
     try {
@@ -95,11 +99,8 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
             e is DioException &&
             (e.type == DioExceptionType.connectionError ||
                 e.type == DioExceptionType.connectionTimeout);
-        if (e is DioException &&
-            {401, 403, 410}.contains(e.response?.statusCode)) {
-          items = [];
-          cursor = null;
-        }
+        items = [];
+        cursor = null;
         error = 'Saved items could not be refreshed.';
       });
     }
@@ -129,11 +130,13 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       if (!mounted || ticket != epoch || !current) return;
       setState(() {
         loadingMore = false;
-        if (e is DioException &&
-            {401, 403, 410}.contains(e.response?.statusCode)) {
-          items = [];
-          cursor = null;
-        }
+        // Failure to revalidate continuation cannot license stale bookmarks.
+        items = [];
+        cursor = null;
+        offline =
+            e is DioException &&
+            (e.type == DioExceptionType.connectionError ||
+                e.type == DioExceptionType.connectionTimeout);
         error = 'Could not load more saved items.';
       });
     }

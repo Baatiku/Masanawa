@@ -168,7 +168,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         api: widget.api as SavedStatusLibraryApi,
         accountKey: account,
         isAccountCurrent: () => mounted && widget.enabled && widget.accountKey == account,
-        openPost: openPost,
+        openPost: (post) async {
+          // A saved post may have lost visibility since the list read.
+          // Re-authorize the original before opening the content page.
+          final api = widget.api;
+          final currentPost = api is DioFeedApi
+              ? await api.detail(post.id) : post;
+          if (!mounted || widget.accountKey != account) return;
+          await openPost(currentPost);
+        },
         openVideo: widget.onOpenSavedVideo,
       )));
   }

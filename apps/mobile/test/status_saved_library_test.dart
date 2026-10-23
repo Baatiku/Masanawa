@@ -232,6 +232,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'failed saved revalidation hides previously visible post immediately',
+    (tester) async {
+      final api = SavedStub();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedStatusLibraryScreen(
+            api: api,
+            accountKey: 'fan',
+            isAccountCurrent: () => true,
+            openPost: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hello Status'), findsOneWidget);
+
+      final waiting = Completer<SavedStatusPage>();
+      api.loader = (_) => waiting.future;
+      final pendingRefresh =
+          (tester.state(find.byType(SavedStatusLibraryScreen)) as dynamic)
+                  .refresh()
+              as Future<void>;
+      await tester.pump();
+      expect(find.text('Hello Status'), findsNothing);
+      waiting.completeError(
+        DioException(
+          requestOptions: RequestOptions(path: '/v1/saved'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+      await pendingRefresh;
+      await tester.pumpAndSettle();
+      expect(find.text('Hello Status'), findsNothing);
+      expect(
+        find.text('Offline. Saved items are not available offline.'),
+        findsOneWidget,
+      );
+      expect(find.text('Saved items could not be refreshed.'), findsOneWidget);
+    },
+  );
+
   testWidgets('revoked authorization clears private collection', (
     tester,
   ) async {
