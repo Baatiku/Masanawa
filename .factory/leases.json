@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "af1004c6-36bf-42c6-bcc5-27767cfa1111",
-      "owner": "codex-p2p-price-budget-oct23",
-      "scope": "P0-08/P0-09 exact NGN budget and direction-aware best-price eligible listing sort with bound keyset/native filters; no custody mutation or fake reliability ranking",
+      "claim_id": "3177ca00-42c7-4a7a-b957-27767cfa1112",
+      "owner": "codex-p2p-bank-methods-oct23",
+      "scope": "P1-03/05/06/08 masked bank methods and convergent retirement retaining accepted-order instructions",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -45,15 +45,13 @@
         "apps/mobile/lib/src/finance/p2p_methods_page.dart",
         "apps/mobile/test/p2p_methods_page_test.dart"
       ],
-      "branch": "feat/p2p-price-budget-discovery-oct23",
-      "base_sha": "7ce1329004bfa438c40a7234f89158629e6aaa3b",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/326",
-      "claimed_at": "2026-10-23T09:22:01.005Z",
-      "heartbeat_at": "2026-10-23T09:52:08.747Z",
-      "expires_at": "2026-10-23T09:57:08.747Z",
-      "progress": "PR326 exact head8838d231: P2P87backend+7Worker+12realPG and Status CI PASS; Foundation/Mobile running. Re-review clear after404 fence fix;8native PASS. Next independent scope: P1-03/P1-05 verified-method masking and safe retirement preserving immutable accepted-order instructions.",
-      "next_branch": "feat/p2p-bank-method-retirement-oct23",
-      "next_scope": "P1-03/05/06/08 masked bank methods and convergent retirement retaining accepted-order instructions"
+      "branch": "feat/p2p-bank-method-retirement-oct23",
+      "base_sha": "fa13dffc9431ac3c023e150583117e1b43d51160",
+      "pr": "",
+      "claimed_at": "2026-10-23T09:55:47.687Z",
+      "heartbeat_at": "2026-10-23T09:55:47.687Z",
+      "expires_at": "2026-10-23T10:00:47.687Z",
+      "progress": "Connected mask/manage/retire native+HTTP+SQL and13threalPG race implemented; consolidated tests running; read-only review requested."
     }
   ],
   "history": [
@@ -255,6 +253,62 @@
       "next_scope": "P0-08/P0-09 exact NGN budget and direction-aware best-price eligible listing sort with bound keyset/native filters; no custody mutation or fake reliability ranking",
       "released_at": "2026-10-23T09:22:01.005Z",
       "release_reason": "Merged324 at0847c542; f2ef379a all4CI PASS incl84backend+7Worker+11realPG. Next P0-08/09 source separately claimed."
+    },
+    {
+      "claim_id": "af1004c6-36bf-42c6-bcc5-27767cfa1111",
+      "owner": "codex-p2p-price-budget-oct23",
+      "scope": "P0-08/P0-09 exact NGN budget and direction-aware best-price eligible listing sort with bound keyset/native filters; no custody mutation or fake reliability ranking",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/mobile/lib/src/finance/p2p_trader_page.dart",
+        "apps/mobile/test/p2p_trader_page_test.dart",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts",
+        "packages/commerce/migrations/0140_msnw_p2p_buy_offers.sql",
+        "services/gateway/src/p2p/buy_offer_admission.ts",
+        "services/gateway/src/p2p/buy_offers.pglite.test.ts",
+        "services/gateway/src/p2p/service.test.ts",
+        "services/gateway/src/p2p/buy_offer_admission.test.ts",
+        "apps/mobile/test/p2p_buy_offer_journeys_test.dart",
+        "services/gateway/src/p2p/offer_management.test.ts",
+        "services/gateway/src/p2p/order_read_clock.test.ts",
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart",
+        "packages/commerce/migrations/0141_msnw_p2p_offer_editing.sql",
+        "services/gateway/src/p2p/offer_editing.ts",
+        "services/gateway/src/p2p/offer_editing.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
+        "apps/mobile/test/p2p_offer_editor_test.dart",
+        "services/gateway/src/p2p/market_filtering.pglite.test.ts",
+        "apps/mobile/test/p2p_market_filters_test.dart",
+        "services/gateway/src/p2p/method_management.ts",
+        "services/gateway/src/p2p/method_management.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_methods_page.dart",
+        "apps/mobile/test/p2p_methods_page_test.dart"
+      ],
+      "branch": "feat/p2p-price-budget-discovery-oct23",
+      "base_sha": "7ce1329004bfa438c40a7234f89158629e6aaa3b",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/326",
+      "claimed_at": "2026-10-23T09:22:01.005Z",
+      "heartbeat_at": "2026-10-23T09:52:08.747Z",
+      "expires_at": "2026-10-23T09:57:08.747Z",
+      "progress": "PR326 exact head8838d231: P2P87backend+7Worker+12realPG and Status CI PASS; Foundation/Mobile running. Re-review clear after404 fence fix;8native PASS. Next independent scope: P1-03/P1-05 verified-method masking and safe retirement preserving immutable accepted-order instructions.",
+      "next_branch": "feat/p2p-bank-method-retirement-oct23",
+      "next_scope": "P1-03/05/06/08 masked bank methods and convergent retirement retaining accepted-order instructions",
+      "released_at": "2026-10-23T09:55:47.687Z",
+      "release_reason": "PR326 merged fa13dffc all4exactheadCI PASS incl87backend7Worker12realPG; next bankmethod source separately claimed."
     }
   ]
 }
