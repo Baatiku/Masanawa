@@ -28,9 +28,9 @@ describe.skipIf(!connection)('PG18 invitation keyset pages and original lookup',
   try{
    let cursor:string|null=null;const ids:string[]=[];
    do{
-    const response=await app.inject({method:'GET',url:'/v1/rooms/'+path+'/invites?limit=13'+(cursor?'&cursor='+encodeURIComponent(cursor):'')});
+    const response:{statusCode:number;body:string;json():any}=await app.inject({method:'GET',url:'/v1/rooms/'+path+'/invites?limit=13'+(cursor?'&cursor='+encodeURIComponent(cursor):'')});
     expect(response.statusCode).toBe(200);expect(response.body).not.toMatch(/token|hash|recipient_user_id/);
-    const data=response.json();ids.push(...data.items.map((v:any)=>v.inviteId));cursor=data.nextCursor;
+    const data:{items:{inviteId:string}[];nextCursor:string|null}=response.json();ids.push(...data.items.map(v=>v.inviteId));cursor=data.nextCursor;
    }while(cursor);
    expect(ids).toHaveLength(105);expect(new Set(ids).size).toBe(105);
    const read=await app.inject({method:'GET',url:'/v1/rooms/'+path+'/invites/request?requestId=key-0'});
