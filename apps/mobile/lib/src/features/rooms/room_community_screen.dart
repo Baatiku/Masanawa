@@ -367,13 +367,14 @@ class _InfoState extends State<_CommunityInfo> {
   String? reportKey;
   String? error;
   bool busy = false, unavailable = false;
-  int ownershipRefresh = 0;
+  int ownershipRefresh = 0, refreshGeneration = 0;
   @override void initState() { super.initState(); refresh(); }
   @override void dispose() { name.dispose(); about.dispose(); reportReason.dispose(); super.dispose(); }
   Future<void> refresh() async {
+    final version = ++refreshGeneration;
     try {
       final fresh = await widget.api.room(room.id);
-      if (!mounted) return;
+      if (!mounted || version != refreshGeneration) return;
       setState(() {
         room = fresh;
         unavailable = false;
@@ -385,8 +386,8 @@ class _InfoState extends State<_CommunityInfo> {
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
       final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
       final reviews = room.manages ? await widget.api.items(room.id, 'reports/reviews') : <Map<String, dynamic>>[];
-      if (mounted) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
-    } catch (e) { if (mounted) setState(() {
+      if (mounted && version == refreshGeneration) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
+    } catch (e) { if (mounted && version == refreshGeneration) setState(() {
       error = communityError(e);
       if (e is StateError && e.message == 'account_changed' || e is DioException && const [401,403,404].contains(e.response?.statusCode)) {
         unavailable = true; members = []; masana = []; sharedMedia = []; reportedPosts = []; reportReviews = [];
