@@ -1815,19 +1815,20 @@ class AiChatController extends Notifier<AiChatState> {
             );
             return;
           }
-          if (original.state == 'pending' || original.state == 'missing') {
+          if (original.state == 'pending') {
             _removeStreamingPlaceholders(characterId);
-            _setDelivery(characterId, userMsg.id,
-                original.state == 'pending' ? 'processing' : 'queued');
+            _setDelivery(characterId, userMsg.id, 'processing');
             state = state.copyWith(
               sendingIn: {...state.sendingIn}..remove(characterId),
             );
             await _save();
-            // A pending turn stays tied to its original id; the event stream
-            // and next authorized sync will finish it. Missing may be retried
-            // only with this same id after the server positively says missing.
+            // Keep the one original request in progress. Its late server
+            // result is recovered by authorized SSE/status reconciliation.
             return;
           }
+          // A server-confirmed 'missing' request may now show a visible
+          // failed/retry state. Explicit retry rechecks status and reuses the
+          // SAME requestId rather than silently issuing a second operation.
         } catch (_) {
           // Unable to confirm: retain normal visible failed/retry feedback.
           // retryMessage performs another status GET before any resend.
