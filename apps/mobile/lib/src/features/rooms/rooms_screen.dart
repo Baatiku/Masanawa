@@ -93,7 +93,7 @@ class _RoomsState extends State<RoomsScreen> {
     try {
       final api = widget.api;
       final page = api is RoomInvitationPages
-          ? await api.invitationPage()
+          ? await (api as RoomInvitationPages).invitationPage()
           : RoomInvitationPage(await api.invitations(), null);
       if (!mounted || version != generation) return;
       setState(() {
@@ -124,7 +124,7 @@ class _RoomsState extends State<RoomsScreen> {
       olderInvitationsError = null;
     });
     try {
-      final page = await api.invitationPage(cursor: cursor);
+      final page = await (api as RoomInvitationPages).invitationPage(cursor: cursor);
       if (!mounted || version != generation || !identical(api, widget.api))
         return;
       if (page.nextCursor == cursor)

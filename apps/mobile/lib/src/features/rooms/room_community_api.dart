@@ -96,7 +96,7 @@ class AccountBoundRoomCommunityApi implements RoomCommunityApi, RoomInvitationPa
   @override Future<List<Map<String, dynamic>>> invitations() => _guard(delegate.invitations);
   @override Future<RoomInvitationPage> invitationPage({String? cursor}) => _guard(() async {
     final api = delegate;
-    if (api is RoomInvitationPages) return api.invitationPage(cursor: cursor);
+    if (api is RoomInvitationPages) return (api as RoomInvitationPages).invitationPage(cursor: cursor);
     if (cursor != null) throw StateError('invitation_pagination_unavailable');
     return RoomInvitationPage(await api.invitations(), null);
   });
