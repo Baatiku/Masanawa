@@ -1,0 +1,106 @@
+name: Owner-requested Masanawa handset test APK
+on:
+  push:
+    branches: [feat/status-typed-author-oct23]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/owner-handset-acceptance.yml'
+  workflow_dispatch:
+    inputs:
+      build_apk:
+        description: Build a development-signed release-mode handset APK
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  compile-apk:
+    if: github.event_name == 'push' || inputs.build_apk == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/android-gradle-repositories
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+          cache: true
+      - name: Resolve pinned Flutter dependencies
+        run: flutter pub get
+      - name: Exercise five-root smoke contracts (simulation, not on-device)
+        run: |
+          flutter test --no-pub --concurrency=1 \
+            test/status_typed_author_contract_test.dart \
+            test/status_screen_test.dart \
+            test/human_chat_transport_test.dart \
+            test/calls_screen_test.dart \
+            test/room_community_client_test.dart \
+            test/crypto_wallet_test.dart \
+            test/billing_catalog_journey_test.dart
+      - name: Build Android release-mode test APK (debug-key signing if no release keystore)
+        run: |
+          flutter build apk --release \
+            --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app \
+            --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+      - name: Verify signed package and record immutable SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$BIN"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$BIN" > build/app/outputs/flutter-apk/signature-evidence.txt
+          sha256sum "$BIN" > build/app/outputs/flutter-apk/app-release.apk.sha256
+          git rev-parse HEAD > build/app/outputs/flutter-apk/SOURCE_SHA.txt
+          node ../../scripts/reliability/release-provenance.mjs \
+            --apk "$BIN" --pubspec pubspec.yaml --lockfile pubspec.lock \
+            --apksigner "$APKSIGNER" \
+            --output build/app/outputs/flutter-apk/release-evidence.json
+          cat build/app/outputs/flutter-apk/app-release.apk.sha256
+      - name: Preserve build and source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: masanawa-oct23-handset-test-apk
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/mobile/build/app/outputs/flutter-apk/release-evidence.json
+            apps/mobile/build/app/outputs/flutter-apk/SOURCE_SHA.txt
+            apps/mobile/build/app/outputs/flutter-apk/signature-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+  emulator-install-smoke:
+    needs: compile-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: masanawa-oct23-handset-test-apk
+          path: handset
+      - name: Install and launch on emulator (not authenticated five-root acceptance)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            set -euo pipefail
+            APK="$(find handset -name app-release.apk -type f | head -1)"
+            test -s "$APK"
+            adb install -r "$APK"
+            adb shell monkey -p ng.unigeria.unigeria 1
+            sleep 8
+            adb shell dumpsys activity activities | grep -F ng.unigeria.unigeria
+

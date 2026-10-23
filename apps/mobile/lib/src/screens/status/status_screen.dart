@@ -16,6 +16,7 @@ import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../profile/masana_profile_screen.dart';
+import '../profile/person_profile_screen.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Scope every Status operation to the signed-in fan who opened the tab.
@@ -198,6 +199,20 @@ class StatusScreen extends ConsumerWidget {
       ));
     }
 
+    void openHumanProfile(String handle) {
+      if (currentAccount() != account) return;
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Consumer(builder: (context, ref, _) {
+          final active = ref.watch(sessionProvider);
+          if (active is! SessionSignedIn || active.user.id != account) {
+            return const Scaffold(body: Center(
+              child: Text('Sign in to view this profile.')));
+          }
+          return PersonProfileScreen(handle: handle);
+        }),
+      ));
+    }
+
     // Only the current signed-in account may obtain an original-media grant.
     final inlineMedia = AccountBoundFeedMediaApi(
       delegate: DioFeedMediaApi(api.dio, () async => api.accessToken),
@@ -271,6 +286,7 @@ class StatusScreen extends ConsumerWidget {
               mediaApi: inlineMedia,
               onOpenMedia: openMedia,
               onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
+              onHumanProfile: openHumanProfile,
               audioPlaybackAvailable: true,
             ),
         videos: ExternalVideosScreen(

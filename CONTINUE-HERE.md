@@ -1,3 +1,7 @@
+# Continue Masanawa — 23 October 2026
+
+**New work anchored to main b4497c2fb463e8f84157204100b3d1ae3d09bcbf**: feat/status-typed-author-oct23 starts an additive Flutter Status typed-author/profiles/comment projection batch and focused regression tests, without retiring previous Phase 4–8 scope. Current five-root requirements remain 177 screens, 820 atomic tracked items; Phase 3 P3-ST01–ST07 explicitly OPEN. The owner requested a test APK, so the branch contains a narrowly scoped GitHub Actions release-mode, development-signed handset build and optional emulator-install smoke. Confirm CI, exact SHA, checksum, debug signing, actual device evidence and deployment state before making any acceptance claim. Physical handset and live Gateway/provider/ledger acceptance remain OPEN; GitHub artifact builds and emulator boot cannot satisfy five-section signed-in journeys.
+
 # Continue Masanawa — 22 October 2026
 
 Read `AGENTS.md`, the [canonical roadmap](docs/PRODUCT-ROADMAP-20261019.md), [screen and journey contract](docs/SCREEN-JOURNEYS.md), and the current Software Factory instructions before changing source. The roadmap is the sole phase/task/acceptance checklist. Implement connected source batches before consolidated checks. **No APK unless the owner explicitly requests one.**

@@ -6,15 +6,15 @@ import 'feed_inline_media_card.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 
-/// Masana-only Status feed. The coordinating shell supplies account-owned API and identity.
+/// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
-    this.onMasanaProfile,this.onOpenMedia,this.onReport,this.enabled=true,
+    this.onMasanaProfile,this.onHumanProfile,this.onOpenMedia,this.onReport,this.enabled=true,
     this.audioPlaybackAvailable=false,this.authorScoped=false,
     this.mediaApi,this.inlineMediaRenderer});
   final FeedApi api;
   final String accountKey;
-  final ValueChanged<String>? onMasanaProfile;
+  final ValueChanged<String>? onMasanaProfile,onHumanProfile;
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final ValueChanged<String>? onReport;
   final bool enabled;
@@ -115,7 +115,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         else {throw StateError('Reply transport unavailable');}
       },
       canReply:feed is DioFeedApi,
-      onMasanaProfile:widget.onMasanaProfile,onMedia:widget.onOpenMedia==null?null:(id)=>widget.onOpenMedia!(post,id),onReport:widget.onReport,
+      onMasanaProfile:widget.onMasanaProfile,onHumanProfile:widget.onHumanProfile,onMedia:widget.onOpenMedia==null?null:(id)=>widget.onOpenMedia!(post,id),onReport:widget.onReport,
       enabled:widget.enabled,
     )));
   }
@@ -139,7 +139,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         ?const MasanawaListSkeleton(semanticLabel: 'Loading Status updates')
         :items.isEmpty?Center(child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
           const Icon(Icons.article_outlined,size:48),
-          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('You are not following any Masana with updates yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
+          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('No updates from people or Masana you follow yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
           if(mode=='following'&&error==null)
             TextButton(onPressed:(){setState((){mode='for_you';items=[];cursor=null;});refresh();},child:Text(t('Explore For You','Duba Domin Kai')))
           else TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))])))
@@ -152,8 +152,24 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             final post=items[i];
             return Card(key:ValueKey(post.id),margin:const EdgeInsets.symmetric(vertical:5,horizontal:8),
               child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                TextButton.icon(onPressed:widget.onMasanaProfile==null?null:()=>widget.onMasanaProfile!(post.authorMasanaId),
-                  icon:const Icon(Icons.verified_outlined),label:Text(post.authorName??post.authorMasanaId)),
+                Row(children:[
+                  CircleAvatar(radius:20,child:Icon(
+                    post.isHuman?Icons.person_outline:Icons.smart_toy_outlined)),
+                  const SizedBox(width:8),
+                  Expanded(child:TextButton(
+                    onPressed:post.isHuman
+                      ? (post.authorHandle==null||widget.onHumanProfile==null?null:
+                          ()=>widget.onHumanProfile!(post.authorHandle!))
+                      : (widget.onMasanaProfile==null?null:
+                          ()=>widget.onMasanaProfile!(post.authorMasanaId)),
+                    child:Align(alignment:AlignmentDirectional.centerStart,
+                      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(post.displayAuthor,maxLines:2,overflow:TextOverflow.ellipsis),
+                        Text(post.isHuman?'Member':'Masana · AI',
+                          style:Theme.of(context).textTheme.labelSmall),
+                      ])),
+                  )),
+                ]),
                 Padding(padding:const EdgeInsets.only(bottom:4),child:Text(
                   '${post.publishedAt.toLocal().year}-${post.publishedAt.toLocal().month.toString().padLeft(2,'0')}-${post.publishedAt.toLocal().day.toString().padLeft(2,'0')}',
                   style:Theme.of(context).textTheme.bodySmall)),
