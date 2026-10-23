@@ -102,7 +102,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
     final call = c.call?.id == widget.callId ? c.call : null;
     final thisCallActive = call != null && c.active;
     final incoming =
-        call?.incoming == true && call.state == 'ringing' && thisCallActive;
+        call?.incoming == true && call?.state == 'ringing' && thisCallActive;
     final since = c.connectedAt;
     final seconds = since == null
         ? 0
