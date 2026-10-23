@@ -209,6 +209,19 @@ export function createBillingWalletService(input: Readonly<{
       expiresAt,
       createdAt,
     });
+    // A replay can return a persisted funding intent. Never bind a provider
+    // account (or display its details) unless its original owner, amount and
+    // purpose match this exact confirmed request.
+    if (
+      created.tenantId !== identity.tenantId ||
+      created.userId !== identity.userId ||
+      created.amountKobo !== amountKobo ||
+      (created.quoteId ?? null) !== quoteId ||
+      (created.originatingCharacterId ?? null) !==
+        (quoteId ? null : originatingCharacterId)
+    ) {
+      throw new Error("financial.wallet.funding_intent_mismatch");
+    }
     if (created.state !== "creating") return created;
 
     const names = splitName(identity.profile?.name);
@@ -223,6 +236,13 @@ export function createBillingWalletService(input: Readonly<{
     });
     if (parseNgnKobo(account.amount) !== created.amountKobo) {
       throw new Error("financial.wallet.virtual_account_amount_mismatch");
+    }
+    if (
+      account.txRef !== created.txRef ||
+      !account.accountNumber.trim() ||
+      !account.bankName.trim()
+    ) {
+      throw new Error("financial.wallet.virtual_account_binding_mismatch");
     }
     return input.wallet.bindFundingAccount({
       tenantId: identity.tenantId,
@@ -302,6 +322,18 @@ export function createBillingWalletService(input: Readonly<{
     });
     if (!quote) throw new Error("financial.billing.quote_not_found");
     if (quote.revision !== revision) throw new Error("financial.billing.quote_revision_conflict");
+    // Checkout-funded, refunded and terminal quotes cannot be reopened by the
+    // Wallet confirmation route. Reserved bills may only resume the original
+    // fulfillment, never create another funding account.
+    if (!["quoted", "confirmed", "reserved"].includes(quote.state) ||
+        (quote.state === "reserved" && !quote.confirmedAt)) {
+      throw new Error("financial.billing.wallet_confirm_not_allowed");
+    }
+    if (quote.state !== "reserved" &&
+        (!Number.isFinite(Date.parse(quote.expiresAt)) ||
+         Date.parse(quote.expiresAt) <= Date.now())) {
+      throw new Error("financial.billing.quote_expired");
+    }
     if (!quote.confirmedAt) {
       quote = await input.quotes.confirmQuote({
         tenantId: identity.tenantId,
@@ -310,6 +342,9 @@ export function createBillingWalletService(input: Readonly<{
         quoteRevision: revision,
         confirmedAt: new Date().toISOString(),
       });
+    }
+    if (!["confirmed", "reserved"].includes(quote.state)) {
+      throw new Error("financial.billing.wallet_confirm_not_allowed");
     }
     return quote;
   }
@@ -378,7 +413,7 @@ export function createBillingWalletService(input: Readonly<{
       const identity = await owner(request.authorizationHeader);
       const quote = await confirmedQuote(identity, request.quoteId, request.quoteRevision);
       const balanceKobo = await currentBalance(identity);
-      if (balanceKobo < quote.totalAmountKobo) {
+      if (quote.state === "confirmed" && balanceKobo < quote.totalAmountKobo) {
         const shortfall = quote.totalAmountKobo - balanceKobo;
         const funding = await createAccount(
           identity,
