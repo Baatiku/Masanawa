@@ -102,7 +102,11 @@ Future<void> mount(WidgetTester tester, _Api api, {bool narrow = false}) async {
 }
 
 Future<void> open(WidgetTester tester, String label) async {
-  await tester.ensureVisible(find.text(label));
+  await tester.scrollUntilVisible(
+    find.text(label),
+    180,
+    scrollable: find.byType(Scrollable).first,
+  );
   await tester.tap(find.text(label));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
