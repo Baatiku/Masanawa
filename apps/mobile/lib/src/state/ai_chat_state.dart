@@ -1604,7 +1604,9 @@ class AiChatController extends Notifier<AiChatState> {
     );
     await _save();
     await onAccepted?.call();
-    _setDelivery(characterId, userMsg.id, 'sent');
+    // Saving a local draft is not server acceptance. A pending clock stays
+    // until the original request is confirmed by the Gateway. Never show
+    // a sent tick before the remote turn has even started.
     if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
       return;
     final audioOwner = _cacheOwnerId;
@@ -1777,6 +1779,47 @@ class AiChatController extends Notifier<AiChatState> {
               error.statusCode == 403 ||
               error.statusCode == 404)) {
         _bindings.remove(characterId);
+      }
+      // A timeout or disconnected streaming response is NOT evidence the
+      // provider declined the original request. Ask the server about the
+      // same request ID before showing a failure or allowing another send.
+      final turnTransport = _shellTransport;
+      if (turnTransport != null &&
+          userMsg.requestId != null &&
+          userMsg.requestId!.isNotEmpty &&
+          !(error is ApiException &&
+              (error.statusCode == 401 || error.statusCode == 403))) {
+        try {
+          final original = await turnTransport.turnStatus(
+            characterId, userMsg.requestId!,
+          );
+          if (_disposed ||
+              connectionGeneration != _connectionGeneration ||
+              threadGeneration != (_threadGenerations[characterId] ?? 0)) {
+            return;
+          }
+          if (original.state == 'completed') {
+            _removeStreamingPlaceholders(characterId);
+            await _reconcilePendingTurns(characterId, turnTransport);
+            return;
+          }
+          if (original.state == 'pending') {
+            _removeStreamingPlaceholders(characterId);
+            _setDelivery(characterId, userMsg.id, 'processing');
+            return; // Keep original request in recovery, not as failed.
+          }
+        } catch (_) {
+          // Status unavailable: the result is genuinely unknown; preserve
+          // the original request for idempotent reconciliation on reconnect.
+          if (_disposed ||
+              connectionGeneration != _connectionGeneration ||
+              threadGeneration != (_threadGenerations[characterId] ?? 0)) {
+            return;
+          }
+          _removeStreamingPlaceholders(characterId);
+          _setDelivery(characterId, userMsg.id, 'processing');
+          return;
+        }
       }
       _removeStreamingPlaceholders(characterId);
       _setDelivery(characterId, userMsg.id, 'failed');
