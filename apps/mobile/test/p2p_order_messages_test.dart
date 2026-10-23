@@ -35,6 +35,9 @@ class Fixture {
   bool denied = false;
   bool found = true;
   int sends = 0;
+  int reports = 0;
+  final removed = <Map<String, dynamic>>[];
+  String? reportCategory;
   int reads = 0;
   String? sentKey;
   String? savedBeforeSend;
@@ -65,10 +68,15 @@ class Fixture {
             if (failLoad) throw StateError('offline');
             return {
               'items': List.of(items),
+              'removed': List.of(removed),
               'canSend': canSend,
               'orderState': canSend ? 'disputed' : 'completed',
               'nextCursor': null,
             };
+          },
+          report: (id, category, details) async {
+            reports++;
+            reportCategory = category;
           },
           send: (body, key) async {
             sends++;
@@ -266,6 +274,51 @@ void main() {
       await tester.tap(find.text('Send message'));
       await settle(tester);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'reports counterpart text through a validated form without resending a message',
+    (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final f = Fixture()..items.add(message('Send your password', own: false));
+      await tester.pumpWidget(f.page());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Report message'));
+      await tester.pumpAndSettle();
+      expect(find.text('Submit report'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextField).last,
+        'Seller requested my private credentials.',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Submit report'));
+      await tester.pumpAndSettle();
+      expect(f.reports, 1);
+      expect(f.reportCategory, 'scam');
+      expect(f.sends, 0);
+      expect(find.textContaining('Report received'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'a tombstone scrubs a cached message missing from the newest page',
+    (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final f = Fixture()
+        ..items.add(message('Private older content', id: 'older', own: false));
+      await tester.pumpWidget(f.page());
+      await tester.pumpAndSettle();
+      expect(find.text('Private older content'), findsOneWidget);
+      f.items.clear();
+      f.removed.add({
+        'message_id': 'older',
+        'removed_at': '2026-10-23T04:00:00Z',
+      });
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(find.text('Private older content'), findsNothing);
+      expect(find.text('Message removed by a moderator'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },
   );

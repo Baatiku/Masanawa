@@ -26,7 +26,7 @@ export interface P2pOrder {
   rate_kobo_per_msnw: string; payment_deadline: string; state: string;
   version: number; receipt_reference?: string | null;
 }
-interface StoredP2pMessage { message_id:string; body:string; created_at:string|Date }
+interface StoredP2pMessage { message_id:string; body:string; created_at:string|Date; removed_at?:string|Date|null }
 interface P2pMessage extends StoredP2pMessage { is_own:boolean; sender_role:'buyer'|'seller' }
 export type P2pAction = "claim" | "dispute" | "cancel" | "confirm" | "release" | "refund";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -474,7 +474,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND order_id=$2
         AND (seller_id=$3 OR buyer_id=$3)`,[actor.tenantId,id(orderId),actor.userId]));
       const cursor=pageCursor(input.cursor);
-      const result=await pool.query(`SELECT message_id,body,created_at,
+      const result=await pool.query(`SELECT message_id,CASE WHEN removed_at IS NULL THEN body ELSE '' END AS body,removed_at,created_at,
         to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
         CASE WHEN sender_id=$3 THEN true ELSE false END AS is_own,
         CASE WHEN sender_id=$4 THEN 'seller' ELSE 'buyer' END AS sender_role
@@ -490,13 +490,19 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         AND action IN ('reserve','buyer_claimed_payment','dispute_opened','escrow_released',
           'cancelled','expired','late_payment_reported','late_payment_escalated','late_payment_closed')
         ORDER BY created_at DESC,event_id DESC LIMIT 50`,[actor.tenantId,orderId]);
-      return {items:items.map(({created_at_cursor,...item})=>item),nextCursor,events:events.rows,
+      // Include all bounded tombstones, including messages on already-cached older pages.
+      const removed=await pool.query(`SELECT message_id,removed_at FROM commerce.msnw_p2p_order_messages
+        WHERE tenant_id=$1 AND order_id=$2 AND removed_at IS NOT NULL`,[actor.tenantId,orderId]);
+      const removedIds=new Set(removed.rows.map(r=>r.message_id));
+      return {items:items.map(({created_at_cursor,...item})=>removedIds.has(item.message_id)
+          ? {...item,body:'',removed_at:removed.rows.find(r=>r.message_id===item.message_id)?.removed_at}:item),
+        removed:removed.rows,nextCursor,events:events.rows,
         canSend:['awaiting_payment','payment_claimed','disputed'].includes(order.state),
         orderState:order.state};
     },
     async messageByRequest(actor:P2pActor,orderId:string,requestKey:string) {
       const request=key(requestKey);
-      const result=await pool.query(`SELECT m.message_id,m.body,m.created_at,true AS is_own,
+      const result=await pool.query(`SELECT m.message_id,CASE WHEN m.removed_at IS NULL THEN m.body ELSE '' END AS body,m.removed_at,m.created_at,true AS is_own,
         CASE WHEN m.sender_id=o.seller_id THEN 'seller' ELSE 'buyer' END AS sender_role
         FROM commerce.msnw_p2p_order_messages m JOIN commerce.msnw_p2p_orders o
         ON o.tenant_id=m.tenant_id AND o.order_id=m.order_id
@@ -514,13 +520,13 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         // Same row lock as release/refund serializes terminal transitions and sends.
         const order=await orderForUpdate(tx,actor,orderId);
         if(!owns(order,actor))throw new P2pError('p2p.not_found',404);
-        const prior=await tx.query(`SELECT message_id,body,created_at FROM commerce.msnw_p2p_order_messages
+        const prior=await tx.query(`SELECT message_id,body,removed_at,created_at FROM commerce.msnw_p2p_order_messages
           WHERE tenant_id=$1 AND order_id=$2 AND sender_id=$3 AND request_key=$4`,
           [actor.tenantId,orderId,actor.userId,request]);
         if(prior.rows[0]) {
           const previous=take<StoredP2pMessage>(prior);
           if(previous.body!==body)throw new P2pError('p2p.idempotency_conflict');
-          return {...previous,is_own:true,sender_role:actor.userId===order.seller_id?'seller':'buyer',replay:true};
+          return {...previous,body:previous.removed_at?'':previous.body,is_own:true,sender_role:actor.userId===order.seller_id?'seller':'buyer',replay:true};
         }
         if(!['awaiting_payment','payment_claimed','disputed'].includes(order.state))
           throw new P2pError('p2p.discussion_read_only');
@@ -534,6 +540,64 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           (message_id,tenant_id,order_id,sender_id,request_key,body) VALUES($1,$2,$3,$4,$5,$6)
           RETURNING message_id,body,created_at`,[randomUUID(),actor.tenantId,orderId,actor.userId,request,body]));
         return {...saved,is_own:true,sender_role:actor.userId===order.seller_id?'seller':'buyer',replay:false};
+      });
+    },
+    async reportMessage(actor:P2pActor,orderId:string,messageId:string,input:{category:unknown;details:unknown}):Promise<{report_id:string;state:string;created_at:string|Date;replay:boolean}> {
+      id(messageId);
+      if(typeof input.category!=='string'||!['scam','harassment','personal_information','other'].includes(input.category))
+        throw new P2pError('p2p.invalid_report_category',422);
+      const details=reason(input.details);
+      if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(details))
+        throw new P2pError('p2p.invalid_report_details',422);
+      return transact(async tx=>{
+        const order=await orderForUpdate(tx,actor,orderId);
+        if(!owns(order,actor))throw new P2pError('p2p.not_found',404);
+        const message=take<Record<string,unknown>>(await tx.query(`SELECT sender_id FROM commerce.msnw_p2p_order_messages
+          WHERE tenant_id=$1 AND order_id=$2 AND message_id=$3`,[actor.tenantId,orderId,messageId]));
+        if(message.sender_id===actor.userId)throw new P2pError('p2p.report_counterparty_only',422);
+        const prior=await tx.query(`SELECT report_id,state,created_at FROM commerce.msnw_p2p_message_reports
+          WHERE tenant_id=$1 AND order_id=$2 AND message_id=$3 AND reporter_id=$4`,
+          [actor.tenantId,orderId,messageId,actor.userId]);
+        if(prior.rows[0])return {...take<{report_id:string;state:string;created_at:string|Date}>(prior),replay:true};
+        const count=await tx.query(`SELECT count(*)::int AS total FROM commerce.msnw_p2p_message_reports
+          WHERE tenant_id=$1 AND reporter_id=$2 AND created_at>statement_timestamp()-interval '1 hour'`,[actor.tenantId,actor.userId]);
+        if(Number(count.rows[0]?.total)>=20)throw new P2pError('p2p.report_rate_limited',429);
+        return {...take<{report_id:string;state:string;created_at:string|Date}>(await tx.query(`INSERT INTO commerce.msnw_p2p_message_reports
+          (report_id,tenant_id,order_id,message_id,reporter_id,category,details) VALUES($1,$2,$3,$4,$5,$6,$7)
+          RETURNING report_id,state,created_at`,[randomUUID(),actor.tenantId,orderId,messageId,actor.userId,input.category,details])),replay:false};
+      });
+    },
+    async messageReports(actor:P2pActor) {
+      const result=await pool.query(`SELECT r.*,m.body,m.removed_at,m.sender_id FROM commerce.msnw_p2p_message_reports r
+        JOIN commerce.msnw_p2p_order_messages m ON m.tenant_id=r.tenant_id AND m.order_id=r.order_id AND m.message_id=r.message_id
+        WHERE r.tenant_id=$1 AND r.state='open' ORDER BY r.created_at,r.report_id LIMIT 101`,[actor.tenantId]);
+      return {items:result.rows.slice(0,100),hasMore:result.rows.length>100};
+    },
+    async reviewMessageReport(actor:P2pActor,reportId:string,input:{decision:unknown;reason:unknown;version:unknown}) {
+      id(reportId);
+      if(!['dismiss','remove'].includes(String(input.decision))||!Number.isSafeInteger(input.version)||Number(input.version)<1)
+        throw new P2pError('p2p.invalid_message_review',422);
+      const explanation=reason(input.reason);
+      return transact(async tx=>{
+        // Match send/report lock order. No financial state or authority is invoked.
+        const identity=take<Record<string,unknown>>(await tx.query(`SELECT order_id FROM commerce.msnw_p2p_message_reports
+          WHERE tenant_id=$1 AND report_id=$2`,[actor.tenantId,reportId]));
+        await orderForUpdate(tx,actor,String(identity.order_id));
+        const report=take<Record<string,unknown>>(await tx.query(`SELECT * FROM commerce.msnw_p2p_message_reports
+          WHERE tenant_id=$1 AND report_id=$2 FOR UPDATE`,[actor.tenantId,reportId]));
+        const target=input.decision==='remove'?'removed':'dismissed';
+        if(report.state!=='open') {
+          if(report.state===target&&report.reviewed_by===actor.userId&&report.review_reason===explanation&&Number(report.version)===Number(input.version)+1)
+            return {report_id:reportId,state:report.state,version:report.version,replay:true};
+          throw new P2pError('p2p.stale_message_review');
+        }
+        if(Number(report.version)!==input.version)throw new P2pError('p2p.stale_message_review');
+        if(target==='removed')await tx.query(`UPDATE commerce.msnw_p2p_order_messages SET removed_at=coalesce(removed_at,statement_timestamp())
+          WHERE tenant_id=$1 AND order_id=$2 AND message_id=$3`,[actor.tenantId,report.order_id,report.message_id]);
+        return {...take<Record<string,unknown>>(await tx.query(`UPDATE commerce.msnw_p2p_message_reports
+          SET state=$3,version=version+1,reviewed_at=statement_timestamp(),reviewed_by=$4,review_reason=$5
+          WHERE tenant_id=$1 AND report_id=$2 RETURNING report_id,state,version`,
+          [actor.tenantId,reportId,target,actor.userId,explanation])),replay:false};
       });
     },
     async notifications(actor:P2pActor) {
