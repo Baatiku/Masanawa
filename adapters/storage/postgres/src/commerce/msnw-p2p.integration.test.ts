@@ -393,4 +393,27 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[marketTenant])).rows[0].n).toBe(0);
  });
 
+ it('serializes owner method retirement with new reservations while preserving accepted bank instructions',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),method=randomUUID();
+  for(const [user,name] of [[owner,'Synthetic Seller'],[taker,'Synthetic Buyer']])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,$3,$4,'en',now(),now())`,[scope,user,name,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at)
+   VALUES($1,$2,$3,'ng_bank_transfer','Retirement Test Bank','Synthetic Owner','1234567890','retire-test-proof',now())`,[method,scope,owner]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  const ad=await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  const original={offerId:ad.offerId,amountMicro:'100000',idempotencyKey:randomUUID()};
+  const accepted=await api.createOrder(buyer,original),before=await api.order(buyer,accepted.orderId);
+  const race=await Promise.allSettled([api.disableMethod(maker,method),api.disableMethod(maker,method),api.createOrder(buyer,{...original,idempotencyKey:randomUUID()})]);
+  expect(race[0]?.status).toBe('fulfilled');expect(race[1]?.status).toBe('fulfilled');
+  if(race[2]?.status==='rejected')expect(race[2].reason).toMatchObject({code:'p2p.offer_unavailable'});
+  const count=race[2]?.status==='fulfilled'?2:1;
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:String(2000000-count*100500),reserved_micro:String(count*100500)});
+  expect(await api.createOrder(buyer,original)).toMatchObject({orderId:accepted.orderId,replay:true});
+  const after=await api.order(buyer,accepted.orderId);expect(after.payment).toEqual(before.payment);expect(after.payment.account_number).toBe('1234567890');
+  expect(await api.methods(maker)).toEqual([]);expect((await api.managedMethods(maker)).items[0]?.account_last_four).toBe('7890');
+  const first=(race[0] as PromiseFulfilledResult<Record<string,unknown>>).value;
+  expect(await api.disableMethod(maker,method)).toEqual(first);
+  await expect(api.quote(buyer,{offerId:ad.offerId,amountMicro:'100000'})).rejects.toMatchObject({code:'p2p.offer_unavailable'});
+ });
+
 });

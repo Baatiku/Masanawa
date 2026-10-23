@@ -44,7 +44,18 @@ describe.skipIf(!databaseUrl)("Masana call history on PostgreSQL", () => {
   afterAll(async () => {
     await pool?.end();
     if (migrationDirectory) await rm(migrationDirectory, { recursive: true });
-    if (admin) { await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`); await admin.end(); }
+    if (admin) {
+      // pg-pool end() can resolve before a closing client's server backend exits.
+      // Never force-terminate that socket: a late 57P01 becomes an unhandled error.
+      for (let attempt = 0; ; attempt++) {
+        const active = await admin.query("SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname=$1", [name]);
+        if (Number(active.rows[0]?.total) === 0) break;
+        if (attempt === 99) throw new Error("Call-history test connections did not close");
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+      await admin.end();
+    }
   });
 
   it("is registered in the runtime manifest and safely reruns with the same checksum", async () => {
