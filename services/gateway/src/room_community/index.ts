@@ -3,6 +3,7 @@ import type {FastifyInstance} from 'fastify';
 import type {Pool,PoolClient} from '@masanawa/postgres';
 import {incomingInvitationPage,managerInvitationPage,invitationMetadata} from './invitation_pagination.js';
 import {roomListPage} from './room_list_pages.js';
+import {roomTimelinePage} from './timeline_pages.js';
 import {roomContentModeration} from './content_moderation.js';
 import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
@@ -183,12 +184,10 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
      return {...inviteView(v.rows[0]),token,replayed:false};
     }
    }
-   if(operation==='timeline'&&method==='GET'){
-    const posts=await q.query("SELECT * FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND state='published' AND (publish_at IS NULL OR publish_at<=now()) ORDER BY created_at DESC,lesson_id DESC LIMIT 100",[a.tenantId,id]);
-    const comments=await q.query("SELECT d.* FROM rooms.discussion_replies d JOIN rooms.lessons l ON l.tenant_id=d.tenant_id AND l.room_id=d.room_id AND l.lesson_id=d.lesson_id WHERE d.tenant_id=$1 AND d.room_id=$2 AND d.moderation_state='visible' AND l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now()) ORDER BY d.created_at DESC,d.reply_id DESC LIMIT 200",[a.tenantId,id]);
-    const answers=await q.query("SELECT a.*,q.source_lesson_id FROM rooms.answers a JOIN rooms.questions q ON q.tenant_id=a.tenant_id AND q.question_id=a.question_id JOIN rooms.masana_participants p ON p.tenant_id=q.tenant_id AND p.room_id=q.room_id AND p.character_id=q.target_character_id AND p.active WHERE q.tenant_id=$1 AND q.room_id=$2 AND q.source_lesson_id IS NOT NULL AND EXISTS(SELECT 1 FROM rooms.lessons l WHERE l.tenant_id=q.tenant_id AND l.room_id=q.room_id AND l.lesson_id=q.source_lesson_id AND l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now())) AND q.state='answered' AND a.state='approved' ORDER BY a.created_at DESC LIMIT 100",[a.tenantId,id]);
-    return {items:await Promise.all([...answers.rows.map(v=>({id:v.answer_id,body:v.body,authorId:v.teacher_character_id,parentId:v.source_lesson_id,createdAt:iso(v.created_at),pinned:false,commentsEnabled:false,authorKind:'masana'})),...posts.rows.map(postView),...comments.rows.map(v=>({...postView({...v,lesson_id:undefined}),parentId:v.parent_reply_id??v.lesson_id}))].sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt))).map(p=>enrich(q,a,p)))};
-   }
+   if(operation==='timeline'&&method==='GET')return roomTimelinePage(q,a,id,input,async(kind,row)=>{
+    const value=kind==='answer'?{id:row.answer_id,body:row.body,authorId:row.teacher_character_id,parentId:row.source_lesson_id,createdAt:iso(row.created_at),pinned:false,commentsEnabled:false,authorKind:'masana'}:kind==='reply'?{...postView({...row,lesson_id:undefined}),parentId:row.parent_reply_id??row.lesson_id}:postView(row);
+    return enrich(q,a,value);
+   });
    if(operation==='timeline'&&method==='POST'){
     const hasMedia=Array.isArray(input.attachments)&&input.attachments.length>0;const body=text(input.body??'',6000,hasMedia),key=text(input.requestId,160),parent=input.parentId??null;const fingerprint=JSON.stringify([body,parent,input.attachments??[],input.mentions??[]]);
     if(input.media!==undefined||input.mediaUrl!==undefined)fail(422,'room_media_upload_required');

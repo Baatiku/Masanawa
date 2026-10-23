@@ -53,7 +53,61 @@ class RoomListPage {
 abstract interface class RoomListPages {
   Future<RoomListPage> roomPage(bool joined, {String search = '', String? cursor});
 }
-class HttpRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, RoomListPages {
+class RoomTimelinePage {
+  const RoomTimelinePage(this.items, this.nextCursor, {this.parent});
+  final List<Map<String, dynamic>> items;
+  final String? nextCursor;
+  final Map<String, dynamic>? parent;
+}
+
+abstract interface class RoomTimelinePages {
+  Future<RoomTimelinePage> timelinePage(
+    String id, {
+    String search = '',
+    String? parentId,
+    String? cursor,
+  });
+}
+
+Future<RoomTimelinePage> readRoomTimeline(
+  RoomCommunityApi api,
+  String id, {
+  String search = '',
+  String? parentId,
+  String? cursor,
+}) async {
+  if (api is RoomTimelinePages)
+    return (api as RoomTimelinePages).timelinePage(
+      id,
+      search: search,
+      parentId: parentId,
+      cursor: cursor,
+    );
+  if (cursor != null) throw StateError('timeline_pagination_unavailable');
+  final all = await api.items(id, 'timeline');
+  Map<String, dynamic>? parent;
+  if (parentId != null) {
+    for (final row in all) {
+      if (row['id'] == parentId && row['parentId'] == null) parent = row;
+    }
+    if (parent == null) throw StateError('thread_lookup_unavailable');
+  }
+  return RoomTimelinePage(
+    all
+        .where(
+          (row) =>
+              (parentId == null || row['parentId'] == parentId) &&
+              '${row['body'] ?? ''}'.toLowerCase().contains(
+                search.trim().toLowerCase(),
+              ),
+        )
+        .toList(),
+    null,
+    parent: parent,
+  );
+}
+
+class HttpRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, RoomListPages, RoomTimelinePages {
   const HttpRoomCommunityApi(this.http, {this.loadMasana});
   final Dio http;
   final Future<List<Map<String, dynamic>>> Function()? loadMasana;
@@ -76,6 +130,43 @@ class HttpRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, Roo
     if (data['items'] is! List || (data['paginationVersion'] != null && data['paginationVersion'] != 1) || (next != null && (data['paginationVersion'] != 1 || next is! String || next.isEmpty || next.length > 1600))) throw const FormatException('Invalid Room page');
     return RoomListPage((data['items'] as List).map((v) => CommunityRoom.fromJson(Map<String, dynamic>.from(v as Map))).toList(), next as String?);
   }
+  @override
+  Future<RoomTimelinePage> timelinePage(
+    String id, {
+    String search = '',
+    String? parentId,
+    String? cursor,
+  }) async {
+    final data = (await http.get<Map<String, dynamic>>(
+      '${path(id)}/timeline',
+      queryParameters: {
+        'search': search,
+        if (parentId != null) 'parentId': parentId,
+        if (cursor != null) 'cursor': cursor,
+      },
+    )).data!;
+    final next = data['nextCursor'], parent = data['parent'];
+    if (data['items'] is! List ||
+        data['paginationVersion'] != null && data['paginationVersion'] != 1 ||
+        next != null &&
+            (data['paginationVersion'] != 1 ||
+                next is! String ||
+                next.isEmpty ||
+                next.length > 1600) ||
+        parentId != null &&
+            (data['paginationVersion'] != 1 ||
+                parent is! Map ||
+                parent['id'] != parentId))
+      throw const FormatException('Invalid Room timeline page');
+    return RoomTimelinePage(
+      (data['items'] as List)
+          .map((v) => Map<String, dynamic>.from(v as Map))
+          .toList(),
+      next as String?,
+      parent: parent is Map ? Map<String, dynamic>.from(parent) : null,
+    );
+  }
+
   @override Future<CommunityRoom> room(String id) async => CommunityRoom.fromJson((await http.get<Map<String, dynamic>>(path(id))).data!);
   @override Future<CommunityRoom> create(Map<String, dynamic> values) async => CommunityRoom.fromJson((await http.post<Map<String, dynamic>>('/v1/rooms', data: values)).data!);
   @override Future<CommunityRoom> update(String id, Map<String, dynamic> values) async => CommunityRoom.fromJson((await http.patch<Map<String, dynamic>>(path(id), data: values)).data!);
@@ -98,7 +189,7 @@ class HttpRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, Roo
   @override Future<void> member(String id, String userId, Map<String, dynamic> values) async { await http.patch<void>('${path(id)}/members/${Uri.encodeComponent(userId)}', data: values); }
 }
 /// Captures an exact account/session identity, including on failed responses.
-class AccountBoundRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, RoomListPages {
+class AccountBoundRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages, RoomListPages, RoomTimelinePages {
   const AccountBoundRoomCommunityApi({required this.delegate, required this.ownerAccount, required this.currentAccount});
   final RoomCommunityApi delegate;
   final String ownerAccount;
@@ -120,6 +211,21 @@ class AccountBoundRoomCommunityApi implements RoomCommunityApi, RoomInvitationPa
     if (cursor != null) throw StateError('room_pagination_unavailable');
     return RoomListPage(await api.list(joined), null);
   });
+  @override
+  Future<RoomTimelinePage> timelinePage(
+    String id, {
+    String search = '',
+    String? parentId,
+    String? cursor,
+  }) => _guard(
+    () => readRoomTimeline(
+      delegate,
+      id,
+      search: search,
+      parentId: parentId,
+      cursor: cursor,
+    ),
+  );
   @override Future<CommunityRoom> room(String id) => _guard(() => delegate.room(id));
   @override Future<CommunityRoom> create(Map<String, dynamic> values) => _guard(() => delegate.create(values));
   @override Future<CommunityRoom> update(String id, Map<String, dynamic> values) => _guard(() => delegate.update(id, values));
