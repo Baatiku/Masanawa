@@ -160,7 +160,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
  });
  it("Status revocation and ownership transfer remove reads and prevent fan writes, then recover",async()=>{
   const pool=isolated.pool;
-  const [post]=await repo.list("tenant_test","fan_one","for_you",null,20);expect(post).toBeDefined();
+  const [post]=await repo.list("tenant_test","fan_one","for_you",null,20,"masana_one");expect(post).toBeDefined();
   const id=post!.id;
   for(const revoke of [
    "UPDATE identity.characters SET state='inactive' WHERE tenant_id='tenant_test'",
@@ -168,7 +168,10 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    "UPDATE masana.character_revisions SET state='retired' WHERE tenant_id='tenant_test'",
   ]){
    await pool.query(revoke);
-   expect(await repo.list("tenant_test","fan_one","for_you",null,20)).toEqual([]);
+   expect(await repo.list("tenant_test","fan_one","for_you",null,20,"masana_one")).toEqual([]);
+   // A revoked Masana does not hide unrelated active human authors.
+   expect((await repo.list("tenant_test","fan_one","for_you",null,20))
+    .some(entry=>entry.author.type==="human")).toBe(true);
    expect(await repo.find("tenant_test","fan_one",id)).toBeNull();
    expect(await repo.comments("tenant_test",id,"fan_one",null,30)).toEqual([]);
    await expect(repo.setLike("tenant_test","denied_fan",id,true)).rejects.toMatchObject({status:404});

@@ -58,6 +58,9 @@ const projection=`p.*,
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 AND l.reaction_kind='like') AS viewer_liked,
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
 // Resolve comment authors only through tenant-matched active user public profiles.
+// Comments bind $2 as the post UUID; the signed-in viewer is $3, unlike
+// list/detail/reaction endpoints. Never compare a UUID slot with a human ID.
+const commentEligibleAuthor=eligibleAuthor.replace(/\$2\b/g,"$3");
 const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  AND person.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
  THEN jsonb_build_object('type','human','id',person.user_id,
@@ -229,7 +232,7 @@ export class PgHomeFeedRepository {
    LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
      AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
-   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${eligibleAuthor})
+   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${commentEligibleAuthor})
    AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3))
    AND ($4::uuid IS NULL OR (CASE WHEN $6::text='newest' THEN (c.created_at,c.id)<(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) ELSE (c.created_at,c.id)>(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) END))
    ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,[tenant,post,viewer,before,limit,sort]);

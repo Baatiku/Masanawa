@@ -68,6 +68,8 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    await expect(repo.publishHumanText("foreign","fanA",{...args,idempotencyKey:"human-foreign001"}))
     .rejects.toMatchObject({status:403,code:"human_profile_unavailable"});
    expect((await repo.list("tenant","fanB","for_you",null,21)).map(p=>p.id)).toContain(created.id);
+   // In comment queries $2 is post UUID and $3 is the viewer.
+   expect(await repo.comments("tenant",created.id,"fanB",null,20)).toEqual([]);
    await repo.setSave("tenant","fanB",created.id,true);
    const savedRepo=new PgSavedLibraryRepository(db as unknown as Pool);
    const saved=await savedRepo.list("tenant","fanB",null,20);
