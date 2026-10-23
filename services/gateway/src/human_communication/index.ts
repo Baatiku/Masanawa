@@ -326,8 +326,20 @@ export function createHumanCommunicationService(o:HumanOptions){
             handle:b.handle
           }
           ,async()=>{
-            const busy=await db.query("SELECT 1 FROM talks.human_calls WHERE tenant_id=$1 AND state IN ('ringing','accepted') AND (caller IN ($2,$3) OR recipient IN ($2,$3))",[a.tenantId,a.userId,target]);
-            const state=busy.rows.length?'busy':'ringing';
+            // The worker is a fallback, not the deadline authority. A caller
+            // must not stay Busy just because scheduled recovery has not run
+            // since an earlier ring or a dead accepted session expired.
+            // Participant identity row locks above serialize this with actual
+            // Answer/End on both phones before checking for an active call.
+            const active=await db.query("SELECT * FROM talks.human_calls WHERE tenant_id=$1 AND state IN ('ringing','accepted') AND (caller IN ($2,$3) OR recipient IN ($2,$3))",[a.tenantId,a.userId,target]);
+            const timestamp=Date.parse(now());
+            for(const c of active.rows){
+              const expired=c.state==='ringing'
+                ? Date.parse(iso(c.expires_at)!)<=timestamp
+                : Math.min(Date.parse(iso(c.caller_heartbeat)!),Date.parse(iso(c.recipient_heartbeat)!))<=timestamp-120000;
+              if(expired)await terminal(db,a,c,c.state==='ringing'?'missed':'ended');
+            }
+            const state=active.rows.some(c=>c.state==='ringing'||c.state==='accepted')?'busy':'ringing';
             const cid=randomUUID();
             await db.query('INSERT INTO talks.human_calls(tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat,ended_at) VALUES($1,$2,$3,$4,$5,$6,$7,$6,$6,$8)',[a.tenantId,cid,a.userId,target,state,now(),new Date(Date.parse(now())+60000).toISOString(),state==='busy'?now():null]);
             await event(db,a,[a.userId,target],'call.updated',null,cid,state==='ringing');

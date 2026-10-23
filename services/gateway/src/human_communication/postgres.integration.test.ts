@@ -35,6 +35,24 @@ describe.skipIf(!url)('human communication real PostgreSQL concurrency',()=>{
   expect(['accepted','cancelled']).toContain(state.state);
   if(state.state==='accepted') await service.dispatch(caller,'POST',`calls/${c.id}/transition`,{action:'end'});
  });
+ it('does not treat expired ringing or stale accepted calls as busy before the worker runs',async()=>{
+  const past=new Date(Date.now()-180000).toISOString();
+  await database.pool.query(`INSERT INTO talks.human_calls
+    (tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat)
+    VALUES('t','pg-stale-ring','alice','bob','ringing',$1,$1,$1,$1)`,[past]);
+  const first=await service.dispatch(e,'POST','calls',{handle:'bob',requestId:'pg-replace-ring'});
+  expect(first.state).toBe('ringing');
+  expect((await service.dispatch(a,'GET','calls/pg-stale-ring')).state).toBe('missed');
+  await service.dispatch(e,'POST',`calls/${first.id}/transition`,{action:'cancel'});
+
+  await database.pool.query(`INSERT INTO talks.human_calls
+    (tenant_id,id,caller,recipient,state,created_at,answered_at,expires_at,caller_heartbeat,recipient_heartbeat)
+    VALUES('t','pg-stale-media','alice','bob','accepted',$1,$1,$1,$1,$1)`,[past]);
+  const second=await service.dispatch(e,'POST','calls',{handle:'bob',requestId:'pg-replace-media'});
+  expect(second.state).toBe('ringing');
+  expect((await service.dispatch(a,'GET','calls/pg-stale-media')).state).toBe('ended');
+  await service.dispatch(e,'POST',`calls/${second.id}/transition`,{action:'cancel'});
+ });
  it('keeps microsecond-tied authorized history complete after SQL privacy filtering',async()=>{
   await database.pool.query(`INSERT INTO talks.human_calls
     (tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat)
