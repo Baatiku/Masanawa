@@ -86,12 +86,16 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     return Scaffold(
       appBar: _index == 1 || _index == 2
           ? masanawaMainHeader(context, actions: [
-              IconButton(
-                tooltip: 'Search Masanawa',
-                icon: const Icon(Icons.search_outlined),
-                onPressed: accountKey == 'signed-out'
-                    ? null : () => context.push('/search'),
-              ),
+              // Status search previously opened the global Masana directory.
+              // Until server-side searchable Status posts exist, do not offer
+              // an action that searches a different content collection.
+              if (_index == 2)
+                IconButton(
+                  tooltip: 'Search Masanawa',
+                  icon: const Icon(Icons.search_outlined),
+                  onPressed: accountKey == 'signed-out'
+                      ? null : () => context.push('/search'),
+                ),
               IconButton(
                 tooltip: 'Notification activity',
                 icon: const Icon(Icons.notifications_none_outlined),
