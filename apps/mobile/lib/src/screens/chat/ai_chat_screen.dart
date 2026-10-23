@@ -1183,13 +1183,19 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     }
 
     ref.watch(voiceReplyAutoplayProvider);
+    final hasVisibleAgentOutput = allMessages.any((m) =>
+        !m.isUser && m.deliveryStatus == 'streaming' && m.text.trim().isNotEmpty);
+    // A submitted voice note does not prove the agent is recording, and a
+    // locally queued text is not proof that inference/typing has started.
     final workingLabel = !sending
         ? agent.presenceLabel
-        : lastUser?.attachment?.kind == 'voice'
-        ? 'Recording…'
-        : lastUser?.attachment != null
-        ? 'Reviewing attachment…'
-        : 'Typing…';
+        : hasVisibleAgentOutput
+        ? 'Replying…'
+        : lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') == true
+        ? 'Processing voice note…'
+        : lastUser?.allAttachments.isNotEmpty == true
+        ? 'Uploading attachment…'
+        : 'Waiting for reply…';
 
     if (widget.entryMode != AiChatEntryMode.liveVoice &&
         widget.entryMode != AiChatEntryMode.liveTalk &&
@@ -1501,12 +1507,16 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                               : 0),
                       itemBuilder: (context, index) {
                         if (index >= messages.length) {
-                          return const _TypingBubble();
+                          return const _TypingBubble(waiting: true);
                         }
                         final message = messages[index];
-                        if (!message.isUser && message.deliveryStatus == 'streaming') {
-                          return _TypingBubble(recording: lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') ?? false);
+                        if (!message.isUser && message.deliveryStatus == 'streaming' &&
+                            message.text.trim().isEmpty && message.parts.isEmpty) {
+                          return const _TypingBubble(waiting: true);
                         }
+                        // Render streamed text as it arrives, not a spinner for
+                        // the entire inference; the first delta is actual proof
+                        // the agent has begun responding.
                         final failedParts = message.parts.where(
                           (p) =>
                               p.kind == AgentMessagePartKind.status &&
@@ -5039,8 +5049,8 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
 }
 
 class _TypingBubble extends StatelessWidget {
-  const _TypingBubble({this.recording = false});
-  final bool recording;
+  const _TypingBubble({this.waiting = false});
+  final bool waiting;
 
   @override
   Widget build(BuildContext context) {
@@ -5062,11 +5072,11 @@ class _TypingBubble extends StatelessWidget {
         ),
         child: Semantics(
           liveRegion: true,
-          label: recording ? 'Recording voice reply' : 'Typing',
+          label: waiting ? 'Waiting for agent reply' : 'Agent replying',
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(recording ? Icons.mic : Icons.more_horiz, color: u.brand, size: 20),
+            Icon(waiting ? Icons.hourglass_empty : Icons.more_horiz, color: u.brand, size: 20),
             const SizedBox(width: 6),
-            Text(recording ? 'Recording…' : 'Typing…', style: TextStyle(color: u.textMuted, fontSize: 13)),
+            Text(waiting ? 'Waiting for reply…' : 'Replying…', style: TextStyle(color: u.textMuted, fontSize: 13)),
           ]),
         ),
       ),
