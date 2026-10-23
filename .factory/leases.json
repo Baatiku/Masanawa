@@ -35,12 +35,12 @@
         "apps/mobile/test/p2p_marketplace_journeys_test.dart"
       ],
       "branch": "feat/p2p-maker-buy-source-oct23",
-      "base_sha": "0d9803629393b52e42d82a5cd6b1294215f43772",
-      "pr": "",
+      "base_sha": "80e66ae8025a3e3d42040bbeaf48e567ee963e6e",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/319",
       "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T08:26:22.986Z",
-      "expires_at": "2026-10-23T08:31:22.986Z",
-      "progress": "75backend+17existingFlutter+5newtwo-directionFlutter PASS; review transaction-timeout issue fixed by actor-only admission API, focused9+typing PASS. Real custody concurrency/refund/identity test authored for exact-head hosted PG. Consolidated checks running, preparing PR."
+      "heartbeat_at": "2026-10-23T08:32:31.528Z",
+      "expires_at": "2026-10-23T08:37:31.528Z",
+      "progress": "PR319 exact head e82da4f27bed3644eee29c35b0fce454626a4eae tree matches Higgsfield; 86backend/Worker+32Flutter PASS, review fixes complete; awaiting exact-head hosted full-migration/realPG and Mobile/Foundation/Status checks."
     }
   ],
   "history": [
