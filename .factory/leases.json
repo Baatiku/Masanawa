@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "517787fa-b330-4dfc-a937-582da785302a",
-      "owner": "codex-p2p-maker-buy-oct23",
-      "scope": "P7-P01/P02 MSNW maker-buy/taker-Sell source using canonical actual-seller escrow; default closed until trusted maker-buyer admission supplied",
+      "claim_id": "p2p-edit-recovery-oct23-0852",
+      "owner": "codex-p2p-ad-editing-oct23",
+      "scope": "P2-18 own ad editing/revision/quote-fence source; recover unpublished batch after sandbox replacement",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -39,13 +39,13 @@
         "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
         "apps/mobile/test/p2p_offer_editor_test.dart"
       ],
-      "branch": "feat/p2p-maker-buy-source-oct23",
-      "base_sha": "80e66ae8025a3e3d42040bbeaf48e567ee963e6e",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/319",
-      "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T08:49:58.622Z",
-      "expires_at": "2026-10-23T08:54:58.623Z",
-      "progress": "PR319 integration head ef0bdb4 P2P10realPG+Mobile+Status PASS; Foundation pending. Higgsfield unexpectedly resolves new volume at08:47; published319 safe. Unpublished ad-editing batch had4SQL PASS and actor-only revision implementation; recovering source/toolchain from recorded commands, no edit completion claim."
+      "branch": "feat/p2p-versioned-ad-editing-oct23",
+      "base_sha": "d012c73e3c487f3e0efe6b1575a2e76cf1e04078",
+      "pr": "",
+      "claimed_at": "2026-10-23T08:50:56.304Z",
+      "heartbeat_at": "2026-10-23T08:50:56.304Z",
+      "expires_at": "2026-10-23T08:55:56.304Z",
+      "progress": "Recovering source and SDK in unique /home/user/masanawa-p2p-oct23 after new volume; no edit completion/CI claim. Prior fourSQL proofs passed on lost worktree; reconstruct and rerun."
     }
   ],
   "history": [
@@ -147,6 +147,54 @@
       "progress": "PR313 head32262018: hosted P2P qualification PASS69backend+7worker+9realPG incl cross-order quota; Status PASS. Independent final review no blockers. Exact-head typing+8 Flutter pass after startup segfault retry. Await Foundation/Mobile.",
       "released_at": "2026-10-23T06:21:29.591Z",
       "release_reason": "Merged313 at0d980362 all4 exact-headCI PASS, no blocking review; continuing maker-buy/taker-Sell source with explicit admission gap."
+    },
+    {
+      "claim_id": "517787fa-b330-4dfc-a937-582da785302a",
+      "owner": "codex-p2p-maker-buy-oct23",
+      "scope": "P7-P01/P02 MSNW maker-buy/taker-Sell source using canonical actual-seller escrow; default closed until trusted maker-buyer admission supplied",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/mobile/lib/src/finance/p2p_trader_page.dart",
+        "apps/mobile/test/p2p_trader_page_test.dart",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts",
+        "packages/commerce/migrations/0140_msnw_p2p_buy_offers.sql",
+        "services/gateway/src/p2p/buy_offer_admission.ts",
+        "services/gateway/src/p2p/buy_offers.pglite.test.ts",
+        "services/gateway/src/p2p/service.test.ts",
+        "services/gateway/src/p2p/buy_offer_admission.test.ts",
+        "apps/mobile/test/p2p_buy_offer_journeys_test.dart",
+        "services/gateway/src/p2p/offer_management.test.ts",
+        "services/gateway/src/p2p/order_read_clock.test.ts",
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart",
+        "packages/commerce/migrations/0141_msnw_p2p_offer_editing.sql",
+        "services/gateway/src/p2p/offer_editing.ts",
+        "services/gateway/src/p2p/offer_editing.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
+        "apps/mobile/test/p2p_offer_editor_test.dart"
+      ],
+      "branch": "feat/p2p-maker-buy-source-oct23",
+      "base_sha": "80e66ae8025a3e3d42040bbeaf48e567ee963e6e",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/319",
+      "claimed_at": "2026-10-23T06:21:29.591Z",
+      "heartbeat_at": "2026-10-23T08:49:58.622Z",
+      "expires_at": "2026-10-23T08:54:58.623Z",
+      "progress": "PR319 integration head ef0bdb4 P2P10realPG+Mobile+Status PASS; Foundation pending. Higgsfield unexpectedly resolves new volume at08:47; published319 safe. Unpublished ad-editing batch had4SQL PASS and actor-only revision implementation; recovering source/toolchain from recorded commands, no edit completion claim.",
+      "released_at": "2026-10-23T08:50:56.303Z",
+      "release_reason": "PR319 merged d012c73e final ef0bdb4 all4CI PASS incl10realPG. Next P2-18 editing batch recovery is separately claimed."
     }
   ]
 }
