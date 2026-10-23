@@ -13,14 +13,16 @@
         "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
         "apps/mobile/lib/src/finance/p2p_order_messages.dart",
         "apps/mobile/test/p2p_order_messages_test.dart",
-        "apps/mobile/test/p2p_marketplace_journeys_test.dart"
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts"
       ],
       "branch": "feat/p2p-order-discussion-oct23",
       "base_sha": "25e3ca1d892b23d92ab98114e29dfb6811af0c44",
       "pr": "",
       "claimed_at": "2026-10-23T04:29:54.693Z",
-      "heartbeat_at": "2026-10-23T04:40:48.986Z",
-      "expires_at": "2026-10-23T04:45:48.986Z"
+      "heartbeat_at": "2026-10-23T04:43:29.746Z",
+      "expires_at": "2026-10-23T04:48:29.747Z"
     }
   ],
   "history": []
