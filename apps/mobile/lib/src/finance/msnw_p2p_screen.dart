@@ -1,3 +1,4 @@
+import 'p2p_methods_page.dart';
 import 'p2p_order_messages.dart';
 import 'p2p_trader_page.dart';
 import 'wallet_flow_page.dart';
@@ -37,7 +38,7 @@ String p2pSafeTraderDisplay(Object? raw) {
 String _maskedP2pAccount(Object? value) {
   final number=value?.toString()??'';
   return RegExp(r'^[0-9]{10}$').hasMatch(number)
-    ? '••••${number.substring(6)}' : '••••';
+    ? '••••${number.substring(6)}' : RegExp(r'^••••[0-9]{4}$').hasMatch(number) ? number : '••••';
 }
 
 /// Exact six-decimal MSNW amounts: UI never uses floating point for financial input.
@@ -780,6 +781,19 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     ),
   );
 
+  Future<void> _manageMethods()async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');}
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMethodsPage(
+      expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
+      load:()async{authorize();return _json(await _request('GET','/methods/manage'));},
+      disable:(methodId)async{authorize();await _request('POST','/methods/$methodId/disable',<String,dynamic>{});},
+    )));
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base){
+      setState((){_cached.clear();_nextCursors.clear();_list=_load();});
+    }
+  }
+
   Future<void> _verifySellerBank() async {
     final owner=widget.expectedUserId,base=widget.baseUrl;
     bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
@@ -1518,10 +1532,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       appBar: AppBar(title: Text(switch (_tab) {
         1 => 'My ads', 3 => 'Order updates', _ => 'MSNW P2P',
       }), actions: [PopupMenuButton<int>(tooltip: 'P2P options',
-        onSelected: (value) => _reload(value),
+        onSelected: (value) {if(value==5){_manageMethods();}else{_reload(value);}},
         itemBuilder: (_) => const [
           PopupMenuItem(value: 1, child: Text('My ads')),
           PopupMenuItem(value: 3, child: Text('Order updates')),
+          PopupMenuItem(value: 5, child: Text('Manage bank methods')),
         ],
           ),
         ],

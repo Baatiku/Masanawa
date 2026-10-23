@@ -169,7 +169,23 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try {return await deps.service.sellerCapacity(await actor(req.headers.authorization));}
     catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/methods/manage',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.managedMethods(await actor(req.headers.authorization));}
+    catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/methods/:methodId/disable',{bodyLimit:256},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{
+      const a=await actor(req.headers.authorization),body=req.body;
+      if(body!==undefined&&body!==null&&
+        (typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==0))
+        throw new P2pError('p2p.invalid_method_update',422);
+      return await deps.service.disableMethod(a,(req.params as {methodId:string}).methodId);
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/methods", async (req,reply) => {
+    reply.header("Cache-Control","no-store");
     try { return {items:await deps.service.methods(await actor(req.headers.authorization))}; }
     catch(error){return respond(error,reply);}
   });

@@ -258,7 +258,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P0-01 | S | User enters marketplace from same Wallet, not ordinary internal Send. |
 | P0-02 | P | Primary Buy / Sell / Orders navigation, Updates and My Offers nested. |
 | P0-03 | S | Seller's sell offers allow taker **Buy** with server-capped stock. |
-| P0-04 | N | Buy advertisements allow taker **Sell** held crypto to a maker buyer. |
+| P0-04 | S/P | Maker-buy/taker-Sell source uses actual-seller canonical escrow and original-request recovery; default closed pending trusted identity/risk/geography admission. |
 | P0-05 | N/Q | Eligible asset filter based on *actual* multi-asset escrow support. |
 | P0-06 | N | Fiat currency filter with supported eligible payment methods and quote currency. |
 | P0-07 | P | Payment method filter excludes unavailable/unsupported method. |
@@ -272,7 +272,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P0-15 | N | Median payment/release time if independently observed (not inferred from ratings). |
 | P0-16 | N | Terms preview clearly distinguished from verified banking instructions. |
 | P0-17 | P | Suspended/fully consumed ad disappears or is disabled without stale checkout. |
-| P0-18 | N | Public trader profile and other eligible ads accessible through offer card. |
+| P0-18 | S/P | Eligible public trader context and paginated ads are accessible from offer cards; no fabricated merchant badge or score, device/provider acceptance remains open. |
 | P0-19 | P | Marketplace pages use cursor pagination and duplicate-proof merge. |
 | P0-20 | S/P | Skeleton, no ads, no matching filtered ads, offline cache, error/Retry states. |
 | P0-21 | P/Q | Country/AML/block/fraud eligibility checked before disclosure and before order submit. |
@@ -283,12 +283,12 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 |---|---|---|
 | P1-01 | S/P | Bank directory and verified receiving bank enrollment through owner-bound API. |
 | P1-02 | P | Verify account number/name/identity with actual provider, no simulated approval. |
-| P1-03 | N/P | Mask own bank and counterpart private details until accepted order requires them. |
+| P1-03 | S/P | Own-method APIs return masked digits; full original receiving instructions remain participant-only after acceptance. Provider/device privacy acceptance remains open. |
 | P1-04 | N | Add more than one eligible owned method per trader if policy permits. |
-| P1-05 | N | Rename, choose default, deactivate, delete an unused method. |
-| P1-06 | N | Bank method update during open orders retains immutable order-specific snapshot. |
+| P1-05 | S/P | Owner-bound deactivation, masked history, original-ID retry/readback and provider reverification path are implemented in source; rename/default selection/unused deletion remain open. |
+| P1-06 | S/P | Immutable verified method records preserve accepted-order instructions after ad edits/deactivation; device/provider acceptance remains open. |
 | P1-07 | N | Supported rail, bank/provider, network routing, transfer type/interbank permission. |
-| P1-08 | N | Explicit account-ownership matching and third-party-payment restriction text. |
+| P1-08 | S/P | Existing provider-bound ownership match plus explicit own-account/third-party-payment guidance in method management; live provider/user-policy qualification remains open. |
 | P1-09 | N | Method country, currency, transfer window, bank availability and limits. |
 | P1-10 | N | Trading identity/region/KYC/AML level and capability shown before ad creation. |
 | P1-11 | N | Merchant verification workflow only with a real provider and audit trail. |
@@ -306,7 +306,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | ID | State | Atomic requirement / user-observable acceptance |
 |---|---|---|
 | P2-01 | S/P | Existing **sell** ad editor: verified bank selection, rate, min/max, inventory. |
-| P2-02 | N | Equivalent **buy** ad editor with trader's role and funding semantics. |
+| P2-02 | S/P | Buy-ad editor/review/recovery source is integrated; enablement remains closed pending independently qualified maker admission. |
 | P2-03 | N/Q | Server-qualified asset and fiat pairing, eligible region and method list. |
 | P2-04 | S/P | Exact positive amount/price precision; client and backend both validate. |
 | P2-05 | P | Offer stock and fee reserve shown separately from actual available balance. |
@@ -318,9 +318,9 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P2-11 | N | Message template/auto-reply restricted to order-specific channel, not general DMs. |
 | P2-12 | N | Buyer/seller qualification conditions with valid privacy/legal basis. |
 | P2-13 | N | Public / private / paused availability only if server product supports them. |
-| P2-14 | N | Offer Preview with every field before explicit Publish. |
+| P2-14 | S/P | Exact bank/rate/limits/inventory/direction preview precedes explicit publishing; device/provider acceptance remains open. |
 | P2-15 | S/P | Stable idempotency key persists across uncertain **sell** offer publishing. |
-| P2-16 | N | Stable idempotency and exact freeze for **buy** ad publishing. |
+| P2-16 | S/P | Buy-ad publishing retains exact original payload/key and account-fenced recovery; trusted admission and production acceptance remain open. |
 | P2-17 | S/P | Pausing/resuming/closing own sell ad without altering active orders. |
 | P2-18 | S/P | Versioned own-ad price/limits/bank/remaining edits and original-request audit/recovery are implemented in source; accepted orders stay immutable. Public terms/moderation and device/production acceptance remain open. |
 | P2-19 | N | Taking a break/merchant offline status with no accidental active ad exposure. |
@@ -690,6 +690,18 @@ Native filters preserve separate unit drafts, show active sort/NGN limit, cap an
 Higgsfield: final 87 backend/storage tests and Gateway typing PASS; eight new native cases PASS (exact precision/range, unit/clear, actual query/prefill, 320dp/200% RTL, account replacement, refreshed quote exceeding the limit, delayed-404 order/ad recovery after account replacement). Earlier nine marketplace and nineteen combined affected cases passed; intermittent Flutter test-shell startup segmentation faults are separate runtime failures, not assertion passes. Exact-head hosted Mobile/full suites and the authored twelfth real PostgreSQL no-custody-write discovery test are recorded on the actual PR when run. Independent read-only review found no remaining material blockers after fixing the recovery error-response fence; final delta evidence belongs to that PR. No new ledger, admission policy, production migration, APK, device/provider or live funds operation.
 
 P0-08/P0-09 remain partial; reliability/independent settlement timing, block/report-ad policy, merchant/risk/geography admission, protected media/retention, individually qualified assets/rails and all staff/device/provider/production gates remain open. No parent checkbox or 177-screen/820-requirement total is closed or changed. Next: verify exact published tree, hosted checks and review, merge the coherent source batch, then continue remaining independent P2P source while keeping external gates explicit.
+
+## 23 October 2026 — P2P verified bank-method management (P1-03/05/06/08 partial)
+
+Predecessor [PR #326](https://github.com/Baatiku/Masanawa/pull/326) merged as `fa13dffc9431ac3c023e150583117e1b43d51160`; exact head `8838d2310a9eac1a829c38d13bf6469d577afe2c` passed all four hosted workflows, including 87 backend/storage, 7 Worker and 12 real PostgreSQL tests, full Mobile analysis/tests and Foundation. NGN limit/best-price discovery and account/error-response recovery fences are integrated source. Real-font filter rendering was inspected; no physical-device/provider acceptance implied.
+
+This connected P7-P01/T01 batch adds a secondary **P2P options → Manage bank methods** page with masked account endings, verified-method versus merchant-trust guidance, own-account/third-party-payment warning, explicit deactivation confirmation and authoritative readback/retry. Existing active-method API now masks bank numbers on the server, not only in Flutter. Management/history returns only the last four digits; full original bank instructions remain participant-only on accepted orders and in the existing verification result.
+
+Owner/tenant-scoped deactivation converges on the original method ID and first `disabled_at` timestamp. It locks the same existing row used by reservation/editing; no reverse offer lock, deletion, reactivation, custody mutation or new migration is introduced. New quote/ad/order eligibility excludes retired methods. Accepted orders keep the immutable original bank record, deadlines, custody and original-request recovery. Reuse requires actual provider reverification, never a client-side enable toggle. Disabled history is retained. Rename/default selection/unused deletion and provider policy remain incomplete.
+
+Validation: consolidated Higgsfield source/native checks and independent review are in progress; the thirteenth real PostgreSQL race test is authored for exact-head hosted qualification. Record actual results and merge SHA on the source PR; do not assume passes. Native account/session/base fences, lost-result readback, offline retry and 320dp/200% RTL are covered by focused cases. No APK, production migration/deployment, real provider enrollment or live-funds action.
+
+P1-03/05/06/08 and all parent gates remain OPEN/partial. Remaining P2P source includes report-ad/block policy, public terms moderation, trusted merchant/risk/geography admission, protected discussion media/retention, qualified asset/rail support and staff/device/provider/production acceptance. The five-contract 177-screen/820-requirement inventory is unchanged. Next: finish consolidated checks/review, publish exact tree and merge compatible green source, then continue remaining independent P2P requirements.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
