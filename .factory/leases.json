@@ -32,15 +32,20 @@
         "apps/mobile/test/p2p_buy_offer_journeys_test.dart",
         "services/gateway/src/p2p/offer_management.test.ts",
         "services/gateway/src/p2p/order_read_clock.test.ts",
-        "apps/mobile/test/p2p_marketplace_journeys_test.dart"
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart",
+        "packages/commerce/migrations/0141_msnw_p2p_offer_editing.sql",
+        "services/gateway/src/p2p/offer_editing.ts",
+        "services/gateway/src/p2p/offer_editing.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
+        "apps/mobile/test/p2p_offer_editor_test.dart"
       ],
       "branch": "feat/p2p-maker-buy-source-oct23",
       "base_sha": "80e66ae8025a3e3d42040bbeaf48e567ee963e6e",
       "pr": "https://github.com/Baatiku/Masanawa/pull/319",
       "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T08:32:31.528Z",
-      "expires_at": "2026-10-23T08:37:31.528Z",
-      "progress": "PR319 exact head e82da4f27bed3644eee29c35b0fce454626a4eae tree matches Higgsfield; 86backend/Worker+32Flutter PASS, review fixes complete; awaiting exact-head hosted full-migration/realPG and Mobile/Foundation/Status checks."
+      "heartbeat_at": "2026-10-23T08:35:49.064Z",
+      "expires_at": "2026-10-23T08:40:49.064Z",
+      "progress": "PR319 head e82da4f2 P2P qualification PASS79backend+7Worker+10realPG/fullmigrations; Status PASS; final review no findings. Awaiting Mobile/Foundation. Next connected P2-18 lane: versioned ad editing and quote revision fencing."
     }
   ],
   "history": [
