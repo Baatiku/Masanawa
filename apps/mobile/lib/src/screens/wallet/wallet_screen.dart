@@ -7,7 +7,6 @@ import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 import '../../finance/crypto_wallet_screen.dart';
 import '../../finance/wallet_asset_detail.dart';
-import '../../finance/wallet_portfolio_summary.dart';
 import '../../finance/wallet_pending_banner.dart';
 import '../../finance/msn_balance_transport.dart';
 import '../../finance/msnw_wallet_home.dart';
@@ -90,18 +89,10 @@ class WalletScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
-  int _tab = 0;
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialTransactionId != null) {
-      _tab = 1;
-      _visitedWalletTabs.add(1);
-    }
-  }
-  // Build the history tab only after its first visit, then keep its filters,
-  // query, list position and in-flight loading state mounted when switching.
-  final Set<int> _visitedWalletTabs = <int>{0};
+  // A receipt deep link opens the canonical scoped history once, not a
+  // home tab or a second history store. Account changes discard the view.
+  bool _initialReceiptOpened=false;
+  bool _assetsExpanded = true;
   int _custodyRefresh = 0;
   MsnwCustodyBalance? _balance;
   String? _balanceOwner;
@@ -129,6 +120,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     if(session is! SessionSignedIn)return;
     await openWalletPage<void>(context:context,title:'MSNW',builder:(_)=>_AccountWalletPage(accountId:session.user.id,
       child:MsnwAssetDetail(balance:_balanceOwner==session.user.id?_balance:null,onDeposit:_depositChoices,onSend:_sendMsnw,
+        onReceiveMsnw:_receive,onConvertWithdraw:_convertMsnw,
         onActivity:()=>openWalletPage<void>(context:context,title:'Activity',builder:(_)=>_history(session.user.id)))));
   }
 
@@ -198,19 +190,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     Navigator.of(context).push<void>(MaterialPageRoute<void>(builder:(_)=>CryptoWalletScreen(initialOperation:operation)));
   }
 
-  void _openCrypto() {
-    final navigate = widget.onOpenCrypto;
-    if (navigate != null) { navigate(); return; }
-    // Navigating over the Wallet instead of replacing its Scaffold keeps
-    // search, transaction history and the asset list alive for Back.
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: '/wallet/crypto-assets'),
-        builder: (_) => const CryptoWalletScreen(),
-      ),
-    );
-  }
-
   Future<void> _fund() async {
     final qualified = widget.onAddMoney;
     if (qualified != null) {
@@ -253,11 +232,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           readAccessToken: () => ref.read(apiClientProvider).accessToken))));
   }
 
-  Widget _history(String accountId) => _AccountWalletPage(accountId: accountId,
+  Widget _history(String accountId,{String? receiptId}) => _AccountWalletPage(accountId: accountId,
     child: MsnwTransactionHistory(
       key: ValueKey('history-$accountId'),
       refreshKey: _custodyRefresh,
-      initialSearch: widget.initialTransactionId,
+      initialSearch: receiptId??widget.initialTransactionId,
       dio: ref.read(dioProvider), baseUrl: kApiBaseUrl,
       expectedUserId: accountId,
       currentUserId: () => switch (ref.read(sessionProvider)) {
@@ -265,125 +244,199 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       }, accessToken: () => ref.read(apiClientProvider).accessToken));
 
   @override Widget build(BuildContext context) {
-    final u = context.masanawa;
-    // Never show a legacy Credits projection as MSNW, even when it holds
-    // historical value. Only an MSNW-asset readback may display a balance.
-    final accountId = switch (ref.watch(sessionProvider)) {
-      SessionSignedIn(:final user) => user.id, _ => null,
+    final u=context.masanawa;
+    final accountId=switch(ref.watch(sessionProvider)){
+      SessionSignedIn(:final user)=>user.id,_=>null,
     };
-    // The old callback was legacy Credits Send. MSNW is the only
-    // customer-facing Send authority; use the canonical custody API.
-    final openCrypto = _openCrypto;
+    final hidden=_hiddenOwner==accountId&&_hideBalances;
+    final billing=widget.onOpenBillingService ??
+      (String category)=>context.push('/billing?service=$category');
+    void viewHistory([String? receiptId]){
+      if(accountId==null)return;
+      final owner=accountId;
+      openWalletPage<void>(context:context,title:'Transaction history',
+        builder:(_)=>_history(owner,receiptId:receiptId));
+    }
+    if(widget.initialTransactionId!=null&&!_initialReceiptOpened&&accountId!=null){
+      _initialReceiptOpened=true;
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted&&accountId==switch(ref.read(sessionProvider)){
+          SessionSignedIn(:final user)=>user.id,_=>null,
+        }){viewHistory(widget.initialTransactionId);}
+      });
+    }
     return Scaffold(
-      backgroundColor: u.surfaceCard,
-      appBar: widget.embeddedInShell
-          ? null
-          : AppBar(
-              title: const Text('Wallet'),
-              leading: IconButton(
-                tooltip: 'Back',
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.of(context).canPop()
-                    ? Navigator.of(context).pop()
-                    : context.go('/home?tab=wallet'),
-              ),
-            ),
-      body: Column(children: [
-        Expanded(child: IndexedStack(index: _tab, children: [ListView(
-          key: PageStorageKey<String>('wallet-assets-${accountId ?? 'signed-out'}'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28), children: [
-            WalletPendingBanner(hideAmounts:_hiddenOwner==accountId&&_hideBalances),
-            WalletPortfolioSummary(balance:_balanceOwner==accountId?_balance:null,hidden:_hiddenOwner==accountId&&_hideBalances),
-            MsnwWalletBalanceCard(
-              dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl,
-              accountId: accountId, refreshKey: _custodyRefresh,
-              currentUserId: () => switch (ref.read(sessionProvider)) {
-                SessionSignedIn(:final user) => user.id, _ => null,
-              }, accessToken: () => ref.read(apiClientProvider).accessToken,
-              onFund: _fund,
-              onVisibilityChanged:(hidden)=>setState((){_hiddenOwner=accountId;_hideBalances=hidden;}),
-              onBalance:(value){if(mounted&&accountId==switch(ref.read(sessionProvider)){SessionSignedIn(:final user)=>user.id,_=>null})setState((){_balance=value;_balanceOwner=accountId;});}),
-            MsnwAccountBadge(
-              dio: ref.watch(dioProvider), baseUrl: kApiBaseUrl, accountId: accountId,
-              currentUserId: () => switch (ref.read(sessionProvider)) {
-                SessionSignedIn(:final user) => user.id, _ => null,
-              }, accessToken: () => ref.read(apiClientProvider).accessToken),
-            const SizedBox(height: 24),
-            WalletActionRow(onSend: accountId == null ? null : _sendMsnw,
-              onConvert: accountId == null ? null : ()=>_openCryptoOperation('swap'),
-              onDeposit: accountId == null ? null : _depositChoices,
-              onWithdraw: accountId == null ? null : ()=>_openCryptoOperation('withdraw'),
-              onReceive: accountId == null ? null : _receive,
-              onP2p: accountId == null ? null : _openP2p),
-            const SizedBox(height: 24),
-            Wrap(spacing:12,children:[TextButton(onPressed:accountId==null?null:_openP2p,child:const Text('P2P')),TextButton(onPressed:accountId==null?null:_convertMsnw,child:const Text('Convert MSNW & withdraw'))]),
-            _tabs(),
-            const SizedBox(height: 12),
-            ListTile(contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(backgroundColor: u.brand.withValues(alpha: .10),
-                child: Text('M', style: TextStyle(color: u.brandStrong, fontWeight: FontWeight.w800))),
-              title: const Text('MSNW', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Masanawa'),
-                Text(_hiddenOwner == accountId && _hideBalances ? '••••'
-                  : _balanceOwner == accountId && _balance != null
-                    ? formatWalletAtomic(_balance!.available) : '—',
-                  textDirection: TextDirection.ltr,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              ]),
-              trailing: const Icon(Icons.chevron_right, size: 18), onTap: _assetDetail),
-            Divider(height: 1, color: u.structuralBorder),
-            WalletAssetOverview(hideBalances:_hiddenOwner==accountId&&_hideBalances),
-            ListTile(contentPadding:EdgeInsets.zero,title:const Text('All crypto assets'),trailing:const Icon(Icons.chevron_right),onTap:openCrypto),
-            const SizedBox(height: 20),
-            Align(alignment: Alignment.centerLeft, child: Text('Bills & services',
-              style: Theme.of(context).textTheme.titleMedium)),
-            const SizedBox(height: 12),
-            WalletServiceShortcuts(onBuyBills: widget.onBuyBills,
-              onOpenBillingService: widget.onOpenBillingService),
-            const SizedBox(height: 22),
-            WalletRecentActivity(
-              key: ValueKey('recent-wallet-${accountId ?? 'signed-out'}'),
-              dio: ref.watch(dioProvider),
-              baseUrl: kApiBaseUrl,
-              accountId: accountId,
-              currentUserId: () => switch(ref.read(sessionProvider)) {
-                SessionSignedIn(:final user) => user.id, _ => null,
+      backgroundColor:u.surfaceCard,
+      appBar:widget.embeddedInShell?null:AppBar(
+        title:const Text('Wallet'),
+        leading:IconButton(tooltip:'Back',icon:const Icon(Icons.arrow_back),
+          onPressed:()=>Navigator.of(context).canPop()
+            ? Navigator.of(context).pop() : context.go('/home?tab=wallet')),
+      ),
+      body:ListView(
+        key:PageStorageKey<String>('wallet-home-${accountId??'signed-out'}'),
+        physics:const AlwaysScrollableScrollPhysics(),
+        padding:const EdgeInsets.fromLTRB(16,12,16,32),
+        children:[
+          WalletPendingBanner(hideAmounts:hidden),
+          MsnwWalletBalanceCard(
+            dio:ref.watch(dioProvider),baseUrl:kApiBaseUrl,
+            accountId:accountId,refreshKey:_custodyRefresh,
+            includeAccountSummary:true,
+            currentUserId:()=>switch(ref.read(sessionProvider)){
+              SessionSignedIn(:final user)=>user.id,_=>null,
+            },
+            accessToken:()=>ref.read(apiClientProvider).accessToken,
+            onFund:_depositChoices,
+            onVisibilityChanged:(v)=>setState((){
+              _hiddenOwner=accountId;_hideBalances=v;
+            }),
+            onBalance:(v){
+              if(mounted&&accountId==switch(ref.read(sessionProvider)){
+                SessionSignedIn(:final user)=>user.id,_=>null,
+              })setState((){_balance=v;_balanceOwner=accountId;});
+            },
+          ),
+          const SizedBox(height:12),
+          _WalletHomeActionCard(label:'Withdraw',icon:Icons.call_made_outlined,
+            enabled:accountId!=null,onTap:()=>_openCryptoOperation('withdraw')),
+          _WalletHomeActionCard(label:'Send',icon:Icons.north_east_outlined,
+            enabled:accountId!=null,onTap:_sendMsnw),
+          _WalletHomeActionCard(label:'Swap',icon:Icons.swap_horiz_outlined,
+            enabled:accountId!=null,onTap:()=>_openCryptoOperation('swap')),
+          _WalletHomeActionCard(label:'P2P',icon:Icons.people_alt_outlined,
+            enabled:accountId!=null,onTap:_openP2p),
+          _WalletHomeActionCard(label:'Airtime',icon:Icons.phone_android_outlined,
+            enabled:accountId!=null,onTap:()=>billing('airtime')),
+          _WalletHomeActionCard(label:'Data',icon:Icons.wifi_outlined,
+            enabled:accountId!=null,onTap:()=>billing('data')),
+          _WalletHomeActionCard(label:'TV',icon:Icons.live_tv_outlined,
+            enabled:accountId!=null,onTap:()=>billing('tv')),
+          _WalletHomeActionCard(label:'Electricity',icon:Icons.bolt_outlined,
+            enabled:accountId!=null,onTap:()=>billing('electricity')),
+          _WalletCompositeCard(
+            title:'My assets',icon:Icons.account_balance_wallet_outlined,
+            onOpen:accountId==null?null:()=>setState(
+              ()=>_assetsExpanded=!_assetsExpanded),
+            child:accountId==null
+              ? const Padding(padding:EdgeInsets.all(12),
+                  child:Text('Sign in to view your assets.'))
+              : !_assetsExpanded
+              ? const Padding(padding:EdgeInsets.all(8),
+                  child:Text('Tap My assets to show verified holdings'))
+              : Column(children:[
+                  ListTile(
+                    contentPadding:EdgeInsets.zero,
+                    leading:CircleAvatar(
+                      backgroundColor:u.brand.withValues(alpha:.09),
+                      child:Text('M',style:TextStyle(color:u.brandStrong,
+                        fontWeight:FontWeight.bold))),
+                    title:const Text('MSNW'),
+                    subtitle:Text(hidden?'Balance hidden'
+                      :_balanceOwner==accountId&&_balance!=null
+                      ? 'Available: ${formatWalletAtomic(_balance!.available)} MSNW'
+                      :'Verified balance unavailable'),
+                    trailing:const Icon(Icons.chevron_right),
+                    onTap:_assetDetail,
+                  ),
+                  WalletAssetOverview(ownedOnly:true,hideBalances:hidden),
+                ]),
+          ),
+          _WalletCompositeCard(
+            title:'Transaction history',icon:Icons.receipt_long_outlined,
+            onOpen:accountId==null?null:()=>viewHistory(),
+            child:WalletRecentActivity(
+              key:ValueKey('wallet-preview-${accountId??'signed-out'}'),
+              compact:true,dio:ref.watch(dioProvider),baseUrl:kApiBaseUrl,
+              accountId:accountId,
+              currentUserId:()=>switch(ref.read(sessionProvider)){
+                SessionSignedIn(:final user)=>user.id,_=>null,
               },
-              accessToken: () => ref.read(apiClientProvider).accessToken,
-              refreshKey: _custodyRefresh,
-              hideAmounts: _hiddenOwner == accountId && _hideBalances,
-              onViewAll: () => setState(() {
-                _tab = 1;
-                _visitedWalletTabs.add(1);
-              }),
+              accessToken:()=>ref.read(apiClientProvider).accessToken,
+              refreshKey:_custodyRefresh,hideAmounts:hidden,
+              onViewAll:()=>viewHistory(),
+              onOpenReceipt:(id)=>viewHistory(id),
             ),
-          ]),
-          _visitedWalletTabs.contains(1) ? Column(children: [
-            Padding(padding: const EdgeInsets.symmetric(horizontal:16), child:_tabs()),
-            if(accountId != null) ...[
-              Align(alignment:Alignment.centerRight,child:TextButton.icon(
-                onPressed:()=>openWalletPage<void>(context:context,title:'Transaction history',builder:(_)=>_history(accountId)),
-                icon:const Icon(Icons.open_in_full,size:18),label:const Text('View all transactions'))),
-              Expanded(child:_history(accountId)),
-            ]
-            else const Expanded(child:Center(child:Text('Sign in to view transactions'))),
-          ]) : const SizedBox.shrink(),
-        ])),
-      ]),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _tabs() => Row(children: [
-    for (final item in [(0, 'My assets'), (1, 'Transactions')])
-      Expanded(child:TextButton(
-        style:TextButton.styleFrom(
-          foregroundColor: _tab == item.$1 ? context.masanawa.brandStrong : context.masanawa.textMuted,
-          backgroundColor: _tab == item.$1 ? context.masanawa.brand.withValues(alpha:.08) : null,
-          shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),
-        onPressed:()=>setState(() { _tab=item.$1; _visitedWalletTabs.add(_tab); }),child:Text(item.$2))),
-  ]);
+}
+
+
+/// One native vertically scrollable action surface. It grows with accessibility
+/// text rather than hiding P2P or Bills behind a grid or horizontal carousel.
+class _WalletHomeActionCard extends StatelessWidget {
+  const _WalletHomeActionCard({required this.label,required this.icon,
+    required this.onTap,required this.enabled});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool enabled;
+  @override Widget build(BuildContext context){
+    final u=context.masanawa;
+    return Padding(padding:const EdgeInsets.only(bottom:8),child:Material(
+      key:ValueKey('wallet-action-${label.toLowerCase()}'),
+      color:u.surfaceCard,
+      shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16),
+        side:BorderSide(color:u.structuralBorder)),
+      clipBehavior:Clip.antiAlias,
+      child:InkWell(
+        onTap:enabled?onTap:null,
+        child:ConstrainedBox(constraints:const BoxConstraints(minHeight:60),
+          child:Padding(padding:const EdgeInsets.symmetric(
+            horizontal:14,vertical:8),child:Row(children:[
+            Container(width:38,height:38,alignment:Alignment.center,
+              decoration:BoxDecoration(color:u.surfaceMuted,
+                borderRadius:BorderRadius.circular(12)),
+              child:Icon(icon,color:enabled?u.textPrimary:u.textMuted)),
+            const SizedBox(width:12),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,
+              mainAxisSize:MainAxisSize.min,children:[
+                Text(label,style:TextStyle(fontWeight:FontWeight.w600,
+                  color:enabled?u.textPrimary:u.textMuted)),
+                if(!enabled)Text('Sign in to continue',
+                  style:TextStyle(fontSize:12,color:u.textMuted)),
+              ])),
+            Icon(enabled?Icons.chevron_right:Icons.lock_outline,
+              color:u.textMuted),
+          ]))),
+        ),
+      ),
+    );
+  }
+}
+
+/// The last two cards contain actual account-scoped projections. Their titles
+/// are actionable card labels, never free-floating home section headings.
+class _WalletCompositeCard extends StatelessWidget {
+  const _WalletCompositeCard({required this.title,required this.icon,
+    required this.child,required this.onOpen});
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final VoidCallback? onOpen;
+  @override Widget build(BuildContext context){
+    final u=context.masanawa;
+    return Padding(padding:const EdgeInsets.only(bottom:8),child:Material(
+      key:ValueKey('wallet-composite-${title.toLowerCase().replaceAll(' ', '-')}'),
+      color:u.surfaceCard,
+      shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16),
+        side:BorderSide(color:u.structuralBorder)),
+      child:Padding(padding:const EdgeInsets.fromLTRB(14,4,14,12),child:
+        Column(children:[
+          ListTile(contentPadding:EdgeInsets.zero,
+            leading:Icon(icon,color:u.textPrimary),
+            title:Text(title,style:const TextStyle(fontWeight:FontWeight.w700)),
+            trailing:Icon(Icons.chevron_right,color:u.textMuted),
+            onTap:onOpen),
+          child,
+        ]),
+      ),
+    ));
+  }
 }
 
 class _AccountWalletPage extends ConsumerWidget {

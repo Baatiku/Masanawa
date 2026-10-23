@@ -19,8 +19,15 @@ String walletAssetBalanceLabel(CryptoWalletSnapshot wallet, String providerCode,
 }
 
 class WalletAssetOverview extends ConsumerWidget {
-  const WalletAssetOverview({super.key,this.hideBalances=false});
+  const WalletAssetOverview({super.key,this.hideBalances=false,this.ownedOnly=false});
   final bool hideBalances;
+  /// WLT01 composite card shows only verified held quantities, not deposit
+  /// route suggestions or provider-reported informational balances.
+  final bool ownedOnly;
+  static bool _positive(String? value) {
+    if(value==null||value.trim().isEmpty)return false;
+    return !RegExp(r'^0+(?:\.0+)?$').hasMatch(value.trim());
+  }
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(sessionProvider) is! SessionSignedIn)
@@ -39,8 +46,12 @@ class WalletAssetOverview extends ConsumerWidget {
           child: const Text('Retry'),
         ),
       ),
-      data: (wallet) => Column(
-        children: [
+      data: (wallet) {
+        final ownedRoutes=wallet.assetRoutes.where((route)=>
+          !ownedOnly || (wallet.verifiedCustodyFor(route.providerCode) &&
+           (_positive(wallet.balances[route.providerCode]) ||
+            _positive(wallet.reservedBalances[route.providerCode])))).toList();
+        return Column(children: [
           if (!wallet.holdingsVerified && wallet.assetRoutes.isNotEmpty)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -54,7 +65,13 @@ class WalletAssetOverview extends ConsumerWidget {
                 child: const Text('Retry'),
               ),
             ),
-          for (final route in wallet.assetRoutes) ...[
+          if(ownedOnly && ownedRoutes.isEmpty)
+            ListTile(contentPadding:EdgeInsets.zero,
+              title:Text(wallet.holdingsVerified
+                ? 'No verified crypto holdings yet'
+                : 'Crypto holdings verification unavailable'),
+              subtitle:const Text('Balances are shown only after custody verification.')),
+          for (final route in ownedRoutes) ...[
             Divider(height: 1, color: context.masanawa.structuralBorder),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -92,8 +109,8 @@ class WalletAssetOverview extends ConsumerWidget {
               ),
             ),
           ],
-        ],
-      ),
+        ]);
+      },
     );
   }
 }

@@ -52,6 +52,7 @@ class MsnwWalletBalanceCard extends StatefulWidget {
     this.refreshKey = 0,
     this.onBalance,
     this.onVisibilityChanged,
+    this.includeAccountSummary = false,
   });
   final Dio dio;
   final String baseUrl;
@@ -61,6 +62,8 @@ class MsnwWalletBalanceCard extends StatefulWidget {
   final int refreshKey;
   final ValueChanged<MsnwCustodyBalance?>? onBalance;
   final ValueChanged<bool>? onVisibilityChanged;
+  /// Wallet root embeds its verified account inside this same green card.
+  final bool includeAccountSummary;
   @override
   State<MsnwWalletBalanceCard> createState() => _BalanceState();
 }
@@ -168,9 +171,11 @@ class _BalanceState extends State<MsnwWalletBalanceCard> {
       key: const ValueKey('wallet-balance-card'),
       decoration: BoxDecoration(
         color: u.brand,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(widget.includeAccountSummary ? 20 : 24),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: widget.includeAccountSummary
+          ? const EdgeInsets.fromLTRB(16, 8, 16, 12)
+          : const EdgeInsets.fromLTRB(20, 12, 20, 20),
       child: IconTheme(
         data: IconThemeData(color: ink),
         child: DefaultTextStyle(
@@ -263,10 +268,20 @@ class _BalanceState extends State<MsnwWalletBalanceCard> {
                       foregroundColor: ink,
                     ),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Fund'),
+                    label: Text(widget.includeAccountSummary ? 'Deposit' : 'Fund'),
                   ),
                 ],
               ),
+              if (widget.includeAccountSummary) ...[
+                Divider(color: ink.withValues(alpha:.20),height:12),
+                MsnwAccountBadge(
+                  dio:widget.dio,baseUrl:widget.baseUrl,
+                  accountId:widget.accountId,
+                  currentUserId:widget.currentUserId,
+                  accessToken:widget.accessToken,
+                  compact:true,foregroundColor:ink,
+                ),
+              ],
             ],
           ),
         ),
@@ -348,11 +363,14 @@ class WalletActionRow extends StatelessWidget {
 /// Internal account identifier, independent of phone and external chain address.
 class MsnwAccountBadge extends StatefulWidget {
   const MsnwAccountBadge({super.key, required this.dio, required this.baseUrl,
-    required this.accountId, required this.currentUserId, required this.accessToken});
+    required this.accountId, required this.currentUserId, required this.accessToken,
+    this.compact=false, this.foregroundColor});
   final Dio dio;
   final String baseUrl;
   final String? accountId;
   final String? Function() currentUserId, accessToken;
+  final bool compact;
+  final Color? foregroundColor;
   @override
   State<MsnwAccountBadge> createState() => _AccountBadgeState();
 }
@@ -403,6 +421,32 @@ class _AccountBadgeState extends State<MsnwAccountBadge> {
     final visible = widget.accountId != null && widget.currentUserId() == widget.accountId;
     if (!visible) return const SizedBox.shrink();
     final value = number;
+    if(widget.compact){
+      final ink=widget.foregroundColor??Theme.of(context).colorScheme.onPrimary;
+      return Row(children:[
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text('Wallet account',style:TextStyle(fontSize:12,color:ink.withValues(alpha:.80))),
+          if(loading)
+            const LinearProgressIndicator(minHeight:2)
+          else Text(value==null?(error??'Account number unavailable'):
+            '${value.substring(0,4)} ${value.substring(4,7)} ${value.substring(7)}',
+            textDirection:value==null?null:TextDirection.ltr,
+            style:TextStyle(fontWeight:FontWeight.w600,color:ink)),
+        ])),
+        if(value==null)
+          IconButton(tooltip:'Retry account number',onPressed:loading?null:load,
+            color:ink,icon:const Icon(Icons.refresh))
+        else IconButton(tooltip:'Copy Masanawa account number',color:ink,
+          icon:const Icon(Icons.copy),onPressed:()async{
+            if(widget.currentUserId()!=widget.accountId)return;
+            await Clipboard.setData(ClipboardData(text:value));
+            if(context.mounted&&widget.currentUserId()==widget.accountId){
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content:Text('Account number copied')));
+            }
+          }),
+      ]);
+    }
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: const Text('Masanawa account number'),
