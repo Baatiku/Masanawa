@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'room_community_api.dart';
+import 'room_request_id.dart';
 
 /// Secondary Room info destination. Server responses own all permissions and
 /// outcomes; a submitted appeal is never presented as an approved restoration.

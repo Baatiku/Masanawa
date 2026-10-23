@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -11,6 +10,7 @@ import 'room_community_api.dart';
 import 'room_invitation_links.dart';
 import 'room_ownership_transfer.dart';
 import 'room_moderation_screen.dart';
+import 'room_request_id.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -28,7 +28,6 @@ bool roomMediaRetryMatches(Map<String, dynamic>? pending, Map<String, dynamic> c
     pending['size'] == candidate['size'] &&
     pending['sha256'] == candidate['sha256'];
 
-String communityRequestId() => 'room-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 30)}';
 String communityError(Object e) {
   if (e is StateError && e.message == 'account_changed') return 'Session changed. Return to Rooms and sign in again.';
   if (e is FormatException) return e.message;
