@@ -188,7 +188,7 @@ describe("MSNW P2P exact money and escrow",()=>{
 
   it("pages funded public offers without exposing own or unbacked sellers",async()=>{
     const {pool,statements}=mock(sql=>sql.includes("CROSS JOIN LATERAL")&&
-      sql.includes("ORDER BY o.created_at DESC,o.offer_id DESC")
+      sql.includes("ORDER BY sort_terms.price ASC,o.created_at DESC,o.offer_id DESC")
       ?[{offer_id:offerId,seller_id:"seller-b",created_at:"2026-10-18T04:00:00Z",
         min_micro:"1000000",max_micro:"2000000",remaining_micro:"2000000"}]:[]);
     const pages=await createP2pService(pool,deniedWallet).offersPage(actor);
@@ -259,7 +259,7 @@ describe("MSNW P2P exact money and escrow",()=>{
   });
 
   it("retains PostgreSQL microsecond precision in a busy offer seek cursor",async()=>{
-    const page=mock(sql=>sql.includes("ORDER BY o.created_at DESC,o.offer_id DESC")
+    const page=mock(sql=>sql.includes("ORDER BY sort_terms.price ASC,o.created_at DESC,o.offer_id DESC")
       ?[{
         offer_id:offerId,created_at:"2026-10-18T04:00:00.123Z",
         created_at_cursor:"2026-10-18T04:00:00.123456Z",

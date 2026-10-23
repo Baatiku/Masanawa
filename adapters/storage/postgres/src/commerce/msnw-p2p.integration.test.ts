@@ -375,4 +375,22 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    await expect(pool.query('UPDATE commerce.msnw_p2p_offer_edits SET result_revision=99 WHERE tenant_id=$1',[tenant])).rejects.toThrow('immutable');
  });
 
+ it('pages price-ranked eligible ads and exact kobo budgets on full PostgreSQL without custody writes',async()=>{
+   const marketTenant='tenant_'+randomUUID(),maker='user_'+randomUUID(),taker='user_'+randomUUID(),method=randomUUID();
+   for(const user of [maker,taker])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Market SQL Test',$3,'en',now(),now())`,[marketTenant,user,user+'@example.com']);
+   await pool.query('INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,40000000)',[marketTenant,maker]);
+   await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at) VALUES($1,$2,$3,'ng_bank_transfer','Market Test Bank','Market SQL Test','5555555555','test-only-market-proof',now())`,[method,marketTenant,maker]);
+   const svc=service(),makerActor={tenantId:marketTenant,userId:maker},actor={tenantId:marketTenant,userId:taker};
+   for(let n=25;n>0;n--)await svc.createOffer(makerActor,{paymentMethodId:method,rateKoboPerMsnw:String(n*100),minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+   const one=await svc.offersPage(actor,{sort:'best_price'}),two=await svc.offersPage(actor,{sort:'best_price',cursor:one.nextCursor!});
+   expect([...one.items,...two.items].map(x=>x.rate_kobo_per_msnw)).toEqual(Array.from({length:25},(_,i)=>String((i+1)*100)));
+   expect(new Set([...one.items,...two.items].map(x=>x.offer_id)).size).toBe(25);
+   const budget=await svc.offersPage(actor,{sort:'best_price',fiatKobo:'15'});
+   expect(budget.items).toHaveLength(1);expect(budget.items[0]).toMatchObject({rate_kobo_per_msnw:'100',budget_amount_micro:'150000'});
+   expect((await svc.offersPage(actor,{fiatKobo:'9'})).items).toHaveLength(0);
+   const balances=(await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1',[marketTenant])).rows;
+   expect(balances).toEqual([{available_micro:'40000000',reserved_micro:'0'}]);
+   expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[marketTenant])).rows[0].n).toBe(0);
+ });
+
 });
