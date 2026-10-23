@@ -71,6 +71,26 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    expect((await repo.list("tenant","fanA","mine",null,21)).map(p=>p.id))
     .toEqual([created.id]);
    expect(await repo.list("tenant","fanB","mine",null,21)).toHaveLength(0);
+   // Search is evaluated by the same SQL authorization predicate as the feed,
+   // not by filtering a downloaded first page. Percent/underscore are literal.
+   await db.query(`INSERT INTO feed.posts(tenant_id,author_type,author_user_id,
+     author_masana_id,audience,kind,body,media_ids,idempotency_key,published_by,published_at)
+    SELECT 'tenant','human','fanA',NULL,'public','text',
+      CASE WHEN i=1 THEN 'River%actual' WHEN i=2 THEN 'River_actual'
+           ELSE 'River chapter '||i::text END,
+      ARRAY[]::text[],'river-search-'||i::text,'fanA',
+      now()-make_interval(secs=>i::int) FROM generate_series(1,31) i`);
+   const hits=await repo.list('tenant','fanB','for_you',null,21,undefined,'river');
+   expect(hits).toHaveLength(21);
+   const last=hits[20]!;
+   const older=await repo.list('tenant','fanB','for_you',
+     {at:last.publishedAt,id:last.id},21,undefined,'river');
+   expect(older).toHaveLength(10);
+   expect(new Set([...hits,...older].map(p=>p.id)).size).toBe(31);
+   expect((await repo.list('tenant','fanB','for_you',null,21,undefined,'River%')).map(p=>p.body))
+     .toEqual(['River%actual']);
+   expect((await repo.list('tenant','fanB','for_you',null,21,undefined,'River_')).map(p=>p.body))
+     .toEqual(['River_actual']);
    // In comment queries $2 is post UUID and $3 is the viewer.
    expect(await repo.comments("tenant",created.id,"fanB",null,20)).toEqual([]);
    await repo.setSave("tenant","fanB",created.id,true);
@@ -81,6 +101,9 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    await db.query("INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked) VALUES('tenant','fanB','fanA',true)");
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();
    expect(await savedRepo.list("tenant","fanB",null,20)).toHaveLength(0);
+   expect(await repo.list("tenant","fanB","for_you",null,21,undefined,"river")).toHaveLength(0);
+   // Leave this pre-existing lifecycle test's later own-post counts unchanged.
+   await db.query("DELETE FROM feed.posts WHERE tenant_id='tenant' AND idempotency_key LIKE 'river-search-%'");
    await db.query("DELETE FROM talks.safety_preferences");
    await db.query("INSERT INTO talks.safety_enforcement(tenant_id,target_kind,target_id,revision,visibility,reason_code) VALUES('tenant','profile','amina',1,'blocked','fraud')");
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();

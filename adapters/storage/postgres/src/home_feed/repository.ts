@@ -68,7 +68,7 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string) {
+ async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
@@ -81,8 +81,10 @@ export class PgHomeFeedRepository {
           AND f.follower_user_id=$2 AND f.followed_user_id=p.author_user_id)))))
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
    AND ($7::text IS NULL OR p.author_masana_id=$7)
+   AND ($8::text IS NULL OR p.body ILIKE $8 ESCAPE E'\\\\')
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,
-   [tenant,viewer,mode,before?.at??null,before?.id??null,limit,authorMasanaId??null]);
+   [tenant,viewer,mode,before?.at??null,before?.id??null,limit,authorMasanaId??null,
+    search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`]);
   return rows.rows.map(item);
  }
  async find(tenant:string,viewer:string|null,id:string){

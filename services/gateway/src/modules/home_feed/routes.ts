@@ -1,7 +1,7 @@
 import type {FastifyInstance,FastifyRequest} from "fastify";
 type Actor={kind:"fan"|"staff"|"masana";tenantId:string;id:string;permissions?:readonly string[];approved?:boolean};
 type FeedPort={
- list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string):Promise<unknown>;
+ list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string,search?:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  publishHumanText?(a:Actor,p:{body:string;idempotencyKey:string;audience:"public"}):Promise<unknown>;
@@ -41,8 +41,22 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   if(Object.keys(q).some(key=>key.startsWith("authorMasanaId[")||key.startsWith("authorMasanaId."))||
     (author!==undefined&&(typeof author!=="string"||author.length>128)))
     return rep.code(422).send({code:"invalid_author"});
-  return o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
-    typeof author==="string"?author:undefined);
+  const search=q.search;
+  if(Object.keys(q).some(key=>key.startsWith("search[")||key.startsWith("search."))||
+    search!==undefined&&(typeof search!=="string"||search!==search.trim()||
+      search.length<2||Buffer.byteLength(search,"utf8")>80))
+    return rep.code(422).send({code:"invalid_search"});
+  const parameters=new URL(req.raw.url??"/v1/feed","http://local").searchParams;
+  if(parameters.getAll("search").length>1||parameters.getAll("cursor").length>1)
+    return rep.code(422).send({code:"invalid_search_query"});
+  if(Object.keys(q).some(k=>k.startsWith("cursor[")||k.startsWith("cursor."))||
+    q.cursor!==undefined&&(typeof q.cursor!=="string"||!q.cursor))
+    return rep.code(422).send({code:"invalid_cursor"});
+  return search===undefined
+   ?o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
+    typeof author==="string"?author:undefined)
+   :o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
+    typeof author==="string"?author:undefined,search as string);
  }));
  // Self-publishing is a separate fan route, never Masana editorial authority.
  // Start with explicitly public TEXT ONLY; unsupported audiences/media cannot

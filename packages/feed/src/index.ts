@@ -15,7 +15,7 @@ export class FeedError extends Error {constructor(readonly status:number,readonl
 export interface HumanTextPublish {body:string;idempotencyKey:string;audience:"public"}
 
 export interface Repository {
- list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string):Promise<readonly Post[]>;
+ list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string,search?:string):Promise<readonly Post[]>;
  find(tenant:string,viewer:string|null,id:string):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
  publishHumanText?(tenant:string,userId:string,value:HumanTextPublish):Promise<Post>;
@@ -39,18 +39,37 @@ export function decodeCursor(value?:string):{at:string;id:string}|null{
  if(!Array.isArray(decoded)||decoded.length!==2||typeof decoded[0]!=="string"||typeof decoded[1]!=="string"||!Number.isFinite(Date.parse(decoded[0]))||!uid.test(decoded[1]))throw Error("invalid");
  return {at:decoded[0],id:decoded[1]};}catch{throw new FeedError(422,"invalid_cursor")}
 }
+/** Search cursors are bound to the literal text and collection mode. Never
+ * accept an ordinary feed cursor to silently continue a different query. */
+function searchCursor(raw:string,term:string,mode:FeedMode){
+ if(raw.length>512||!/^[-_A-Za-z0-9]+$/.test(raw))throw new FeedError(422,"invalid_cursor");
+ try {
+  const decoded:unknown=JSON.parse(Buffer.from(raw,"base64url").toString("utf8"));
+  if(!Array.isArray(decoded)||decoded.length!==4||typeof decoded[0]!=="string"||
+    !Number.isFinite(Date.parse(decoded[0]))||typeof decoded[1]!=="string"||!uid.test(decoded[1])||
+    decoded[2]!==term||decoded[3]!==mode)throw Error("scope mismatch");
+  return {at:decoded[0] as string,id:decoded[1] as string};
+ }catch {throw new FeedError(422,"invalid_cursor")}
+}
 export class FeedService {
  constructor(private readonly repo:Repository,private readonly approvedMasana:(tenant:string,id:string)=>Promise<boolean>,
   private readonly approvedMedia:(tenant:string,masana:string,mediaId:string,kind:PostKind)=>Promise<boolean> = async () => false){}
- async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string,authorMasanaId?:string){
+ async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string,authorMasanaId?:string,search?:string){
   requireId(tenant);if(viewer)requireId(viewer);
   if(mode!=="for_you"&&mode!=="following"&&mode!=="mine")throw new FeedError(422,"invalid_mode");
   if((mode==="following"||mode==="mine")&&!viewer)throw new FeedError(401,"authentication_required");
   if(mode==="mine"&&authorMasanaId!==undefined)throw new FeedError(422,"unsupported_author_filter");
   if(authorMasanaId!==undefined)requireId(authorMasanaId);
-  const rows=await this.repo.list(tenant,viewer,mode,decodeCursor(cursor),21,authorMasanaId);
+  if(search!==undefined&&(typeof search!=="string"||search!==search.trim()||
+    search.length<2||Buffer.byteLength(search,"utf8")>80))throw new FeedError(422,"invalid_search");
+  const after=cursor?(search===undefined?decodeCursor(cursor):searchCursor(cursor,search,mode)):null;
+  const rows=search===undefined
+   ?await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId)
+   :await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId,search);
   const items=rows.slice(0,20);
-  return {items,nextCursor:rows.length>20&&items.length>0?Buffer.from(JSON.stringify([items[items.length-1]!.publishedAt,items[items.length-1]!.id])).toString("base64url"):null};
+  const last=items[items.length-1];
+  return {items,nextCursor:rows.length>20&&last?Buffer.from(JSON.stringify(
+    search===undefined?[last.publishedAt,last.id]:[last.publishedAt,last.id,search,mode])).toString("base64url"):null};
  }
  async detail(tenant:string,viewer:string|null,id:string){requireId(tenant);requirePostId(id);
   const post=await this.repo.find(tenant,viewer,id);if(!post)throw new FeedError(404,"post_not_found");return post}
