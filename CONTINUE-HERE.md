@@ -1,5 +1,9 @@
 # Continue Masanawa — 23 October 2026
 
+## Calls detail action source merged — 23 October 2026
+
+[PR #308](https://github.com/Baatiku/Masanawa/pull/308) **MERGED** to `main 27d49e8156a4d9f01be576677daacedf078be36e` from exact head `325e77c37eb4095ddae0815f3bd5226bb0607beb`; hosted **Mobile Build (full Flutter analysis/tests), Foundation CI, and Chat Voice/Calls Regression all PASS**. The earlier analysis failure came from two `const` constructors around runtime test fixtures and was fixed before the final green checks. P4-09 / CL02 / L0-06/08/10/15 source partial: single-Masana call details now offer verified-owner text Message beside true live-voice Call again and profile, while group-Masana history no longer misleadingly redials or messages an arbitrary member as if it were the old group; it sends users back to the existing `Call multiple Masana` entry. Focused widget checks cover text-chat intent, group distinction and 320dp/200%-text layout; no physical-device accessibility acceptance is implied. The source-only integration preserved #301 Wallet, #307 Rooms, #309 P2P, and other parallel work. Earlier [#303](https://github.com/Baatiku/Masanawa/pull/303) (human-call history/search) and [#305](https://github.com/Baatiku/Masanawa/pull/305) (Human/Masana chooser and live-voice route) remain merged. No APK generated or provider/production action. All P4/P8 call media, device, locked-screen, two-party, auth/privacy and production gates remain OPEN; the five 177-screen/820-item contracts are not complete.
+
 
 ## Room ownership transfer consent — 23 October 2026
 
