@@ -1,5 +1,16 @@
 # Continue Masanawa — 23 October 2026
 
+## Confirmed integrated Calls and Chats source — 23 October 2026 (latest main `7892c756`)
+
+Four sequential, scoped PRs merged into GitHub `main`, with **Foundation CI, Masanawa Chat Voice and Calls Regression (including actual PostgreSQL), and Status Video Integration each PASS at each exact PR head**:
+
+1. [#339](https://github.com/Baatiku/Masanawa/pull/339) — privacy-qualified bounded human Call history, incoming visibility and lossless microsecond keyset → merge `ed2aff3fe9c43b4d4d901fa9985c22961285329e`.
+2. [#340](https://github.com/Baatiku/Masanawa/pull/340) — expire prior ringing/accepted participant calls inside serialized new-call admission before returning Busy → merge `4604c4ff3f02bf8ed19adb18e22ec44077857067`.
+3. [#341](https://github.com/Baatiku/Masanawa/pull/341) — privacy-qualified 50-item Human Chats inbox, literal full-history peer search, exact request filtering and microsecond cursor → merge `cfc1052903b4ec3cf2c0f977e39a19c5530faba8`.
+4. [#342](https://github.com/Baatiku/Masanawa/pull/342) — lossless human message-history pagination and deleted-plaintext exclusion from search while retaining ordinary tombstones → merge `7892c756d2a3be5d376e623f77e39bf6505d9061`.
+
+The sections immediately below preserve their **pre-merge local-evidence timestamps**; later hosted real-PostgreSQL jobs **DID PASS**, not locally run. Local final combined worktree: PGlite human communication **23/23**, architecture **85/85**, complete recursive TypeScript package typechecks and `git diff --check` **PASS**. No live call/provider/device/Android OS/background audio, installed APK, Flutterwave Bills fulfillment, production deployment or complete-phase acceptance was performed. Higgsfield available tools here only offer media/website workflows, not Flutter/device instrumentation. Preserve other windows' Status/Rooms/Wallet/P2P and shared #300 paths. Keep all five contracts' **177 screens, 820 atomic requirements** and unfinished P4/P8 parent checkboxes OPEN. Safe next Calls/Chats work requires physical two-account provider qualification, durable native push/offline/account-switch and P4-10 safety/report/retention acceptance; independent Bills/live financial rails remain externally gated.
+
 ## Chats: lossless human message-history cursor and deleted-text search fence — 23 October 2026 (partial source)
 
 Next independently stacked P4-05/07, CM-14/19/21 and P8-X02 batch after the privacy-qualified inbox PR: message-history search now ignores the original plaintext of `deleted` human messages while ordinary unfiltered history still displays honest tombstones. The existing authorized per-thread `before` anchor uses `created_at::text` from PostgreSQL, not a JavaScript Date that loses microseconds at a tied page boundary; thread/tenant participant authorization and original `(created_at,id)` order stay unchanged. No new deletion semantics, delivery confirmation, stored media handling, replay, payment or provider power.
