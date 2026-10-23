@@ -190,13 +190,14 @@ function evaluateReceipt(
   const customerMatches =
     receipt.customerId !== null && receipt.customerId === current.customerId;
   const currencyMatches = receipt.currency === "NGN";
-  // The reference is already exact, but a provider that explicitly names a
-  // different product must not certify delivery or authorize ledger settlement.
-  // Some qualified provider responses omit this optional product field.
-  const productMatches =
-    receipt.product === null || receipt.product === current.itemCode;
+  // Flutterwave status "product" identifies a broad service (e.g. AIRTIME),
+  // NOT necessarily the selected catalog item_code (e.g. AT099). Compare
+  // only an explicitly supplied item_code against the immutable quoted item.
+  // Missing optional item-code evidence must never be fabricated from product.
+  const itemMatches =
+    receipt.itemCode == null || receipt.itemCode === current.itemCode;
   const evidenceMatches =
-    amountMatches && customerMatches && currencyMatches && productMatches;
+    amountMatches && customerMatches && currencyMatches && itemMatches;
 
   if (receipt.status === "successful") {
     return nextRecord(current, {
