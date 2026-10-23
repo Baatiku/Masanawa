@@ -91,6 +91,9 @@ class HumanCallController extends ChangeNotifier {
       ownerId.isNotEmpty &&
       (authorizationEpoch == null ||
           currentAuthorizationEpoch?.call() == authorizationEpoch);
+  /// Local audio stops immediately on End, but a new call must wait for the
+  /// Gateway to confirm the previous call's terminal state.
+  bool get endConfirmationPending => sameAccount && _pendingEnd;
   bool get audioReady =>
       active &&
       _media?.audio != null &&
@@ -328,6 +331,12 @@ class HumanCallController extends ChangeNotifier {
           generation != _generation ||
           version != _signalVersion)
         return;
+      // The invitation may expire or be resolved on another device while
+      // Android's microphone permission prompt is still on screen.
+      if (!active || call?.id != record.id || call?.state != 'ringing') {
+        await refresh();
+        return;
+      }
       final data = await api.request(
         'POST',
         '/calls/${record.id}/transition',
@@ -488,6 +497,14 @@ class HumanCallController extends ChangeNotifier {
     }
   }
 
+  /// Safe to retry after network loss. Reuses the same logical call and
+  /// never restarts local media or creates a second outgoing invitation.
+  Future<void> retryEndConfirmation() async {
+    if (!sameAccount || !_localEnd || !_pendingEnd || _ending) return;
+    await _confirmEnd();
+    if (_pendingEnd) _startPolling();
+  }
+
   Future<void> _confirmEnd() async {
     final record = call;
     if (record == null || !sameAccount || _ending) return;
@@ -529,6 +546,7 @@ class HumanCallController extends ChangeNotifier {
           if (!_pendingEnd) {
             _poll?.cancel();
             _poll = null;
+            error = null;
           }
         }
       } catch (_) {}
