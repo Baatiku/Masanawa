@@ -102,6 +102,30 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try {return {items:await deps.service.myOffers(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/offers/:offerId/edit',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.offerForEdit(await actor(req.headers.authorization),(req.params as {offerId:string}).offerId);}
+    catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/wallet/msnw/p2p/offer-edits/by-request/:requestKey',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.offerEditByRequest(await actor(req.headers.authorization),(req.params as {requestKey:string}).requestKey);}
+    catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/offers/:offerId/edit',{bodyLimit:2048},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{
+      const a=await actor(req.headers.authorization),b=req.body as Record<string,unknown>|null;
+      const fields=['expectedRevision','paymentMethodId','rateKoboPerMsnw','minMicro','maxMicro','remainingMicro'];
+      if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!fields.includes(k))||
+        fields.some(k=>typeof b[k] !== (k==='expectedRevision'?'number':'string'))||typeof req.headers['idempotency-key']!=='string')throw new P2pError('p2p.invalid_offer_edit',422);
+      const result=await deps.service.editOffer(a,{offerId:(req.params as {offerId:string}).offerId,
+        requestKey:req.headers['idempotency-key'],expectedRevision:b.expectedRevision as number,
+        paymentMethodId:b.paymentMethodId as string,rateKoboPerMsnw:b.rateKoboPerMsnw as string,
+        minMicro:b.minMicro as string,maxMicro:b.maxMicro as string,remainingMicro:b.remainingMicro as string});
+      return reply.code(result.replay?200:201).send(result);
+    }catch(error){return respond(error,reply);}
+  });
   app.post("/v1/wallet/msnw/p2p/offers/:offerId/pause",async(req,reply)=>{
     try {return await deps.service.pauseOffer(await actor(req.headers.authorization),
       (req.params as {offerId:string}).offerId);}
@@ -277,8 +301,9 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       const a=await actor(req.headers.authorization);
       const body=req.body as Record<string,unknown>|null;
       if(!body||typeof body!=="object"||Array.isArray(body)||
-        Object.keys(body).some(k=>!['offerId','amountMicro','expectedRateKoboPerMsnw','expectedFeeBps','paymentMethodId'].includes(k))||
-        (body.paymentMethodId!==undefined&&typeof body.paymentMethodId!=='string'))
+        Object.keys(body).some(k=>!['offerId','amountMicro','expectedRateKoboPerMsnw','expectedFeeBps','paymentMethodId','expectedTermsRevision'].includes(k))||
+        (body.paymentMethodId!==undefined&&typeof body.paymentMethodId!=='string')||
+        (body.expectedTermsRevision!==undefined&&(!Number.isSafeInteger(body.expectedTermsRevision)||Number(body.expectedTermsRevision)<1)))
         throw new P2pError("p2p.invalid_order",422);
       const key=req.headers["idempotency-key"];
       const result=await deps.service.createOrder(a,{
@@ -287,6 +312,7 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
         ...(typeof body.paymentMethodId==='string'?{paymentMethodId:body.paymentMethodId}:{}),
         ...(typeof body.expectedRateKoboPerMsnw==="string"
           ?{expectedRateKoboPerMsnw:body.expectedRateKoboPerMsnw}:{}),
+        ...(typeof body.expectedTermsRevision==='number'?{expectedTermsRevision:body.expectedTermsRevision}:{}),
         ...(typeof body.expectedFeeBps==="number"
           ?{expectedFeeBps:body.expectedFeeBps}:{}),
       });

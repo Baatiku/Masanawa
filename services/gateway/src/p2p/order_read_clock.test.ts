@@ -16,7 +16,7 @@ it('reads an owner-bound bank/deadline with database time and never moves escrow
   INSERT INTO commerce.msnw_custody_accounts VALUES('tenant-a','seller',1005000);
   INSERT INTO commerce.msnw_p2p_offers VALUES('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','tenant-a','seller','cccccccc-cccc-4ccc-8ccc-cccccccccccc',150000,1000000,2000000,2000000,50,'active',statement_timestamp());
   INSERT INTO commerce.msnw_p2p_payment_methods VALUES('other-tenant','cccccccc-cccc-4ccc-8ccc-cccccccccccc','Wrong Bank','Other','9999999999','bank','seller',statement_timestamp(),NULL);`);
-  await db.exec("ALTER TABLE commerce.msnw_p2p_offers ADD COLUMN offer_side text DEFAULT 'sell'");
+  await db.exec("ALTER TABLE commerce.msnw_p2p_offers ADD COLUMN offer_side text DEFAULT 'sell', ADD COLUMN terms_revision integer NOT NULL DEFAULT 1");
   const query=async(sql:string,values?:unknown[])=>{const r=await db.query(sql,values);return{rows:r.rows,rowCount:r.affectedRows??r.rows.length};};
   const pool={query,async connect(){throw new Error('Read must not open a write transaction');}} as P2pPool;
   const denied: MsnwEscrowAuthority={async reserve(){throw new Error('no reserve');},async release(){throw new Error('no release');},async refund(){throw new Error('no refund');}};

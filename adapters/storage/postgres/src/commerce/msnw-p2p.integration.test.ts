@@ -339,4 +339,40 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect(await admitted().createOrder(thirdActor,{...input,paymentMethodId:thirdMethod})).toMatchObject({orderId:independent.orderId,replay:true});
  });
 
+ it('serializes maker edits with stock and quotes without rewriting accepted escrow or bank instructions',async()=>{
+   const svc=service(),maker={tenantId:tenant,userId:seller},taker={tenantId:tenant,userId:buyer};
+   const ad=await offer(),before=await account(seller);
+   const oldQuote=await svc.quote(taker,{offerId:ad,amountMicro:'100000'});
+   const accepted=await svc.createOrder(taker,{offerId:ad,amountMicro:'100000',idempotencyKey:randomUUID(),expectedTermsRevision:oldQuote.termsRevision});
+   const original=(await pool.query('SELECT rate_kobo_per_msnw::text,payment_method_id,amount_micro::text FROM commerce.msnw_p2p_orders WHERE order_id=$1',[accepted.orderId])).rows[0];
+   const bank=randomUUID();
+   await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at) VALUES($1,$2,$3,'ng_bank_transfer','Edited Test Bank','Escrow Seller','4444444444','test-only-edit-bank',now())`,[bank,tenant,seller]);
+   const snapshot=await svc.offerForEdit(maker,ad),balanceBeforeEdit=await account(seller),key=randomUUID();
+   const input={offerId:ad,requestKey:key,expectedRevision:Number(snapshot.revision),paymentMethodId:bank,rateKoboPerMsnw:'160000',minMicro:'100000',maxMicro:'1000000',remainingMicro:'1000000'};
+   const duplicate=await Promise.all([svc.editOffer(maker,input),svc.editOffer(maker,input)]);
+   expect(duplicate.filter(x=>!x.replay)).toHaveLength(1);expect(duplicate[0].revision).toBe(duplicate[1].revision);
+   expect(await account(seller)).toEqual(balanceBeforeEdit);
+   expect((await pool.query('SELECT rate_kobo_per_msnw::text,payment_method_id,amount_micro::text FROM commerce.msnw_p2p_orders WHERE order_id=$1',[accepted.orderId])).rows[0]).toEqual(original);
+   expect((await svc.order(taker,accepted.orderId)).payment).toMatchObject({account_number:'0123456789'});
+   await expect(svc.createOrder(taker,{offerId:ad,amountMicro:'100000',idempotencyKey:randomUUID(),expectedTermsRevision:oldQuote.termsRevision})).rejects.toMatchObject({code:'p2p.quote_changed'});
+   await expect(svc.createOrder(taker,{offerId:ad,amountMicro:'100000',idempotencyKey:randomUUID()})).rejects.toMatchObject({code:'p2p.quote_changed'});
+   const fresh=await svc.quote(taker,{offerId:ad,amountMicro:'100000'});
+   const second=await svc.createOrder(taker,{offerId:ad,amountMicro:'100000',idempotencyKey:randomUUID(),expectedTermsRevision:fresh.termsRevision});
+   expect((await svc.order(taker,second.orderId)).payment).toMatchObject({account_number:'4444444444'});
+   const latest=await svc.offerForEdit(maker,ad);
+   const competing=await Promise.allSettled([
+     svc.editOffer(maker,{...input,requestKey:randomUUID(),expectedRevision:Number(latest.revision),rateKoboPerMsnw:'170000'}),
+     svc.editOffer(maker,{...input,requestKey:randomUUID(),expectedRevision:Number(latest.revision),rateKoboPerMsnw:'180000'}),
+   ]);
+   expect(competing.filter(x=>x.status==='fulfilled')).toHaveLength(1);
+   expect((competing.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'p2p.offer_edit_stale'});
+   await pool.query('UPDATE commerce.msnw_p2p_payment_methods SET disabled_at=now() WHERE method_id=$1',[bank]);
+   expect(await svc.editOffer(maker,input)).toMatchObject({replay:true});
+   expect(await svc.offerEditByRequest(maker,key)).toMatchObject({offerId:ad,revision:duplicate[0].revision});
+   await expect(svc.offerEditByRequest(taker,key)).rejects.toMatchObject({status:404});
+   await svc.action(taker,accepted.orderId,'cancel');await svc.action(taker,second.orderId,'cancel');
+   expect(await account(seller)).toEqual(before);
+   await expect(pool.query('UPDATE commerce.msnw_p2p_offer_edits SET result_revision=99 WHERE tenant_id=$1',[tenant])).rejects.toThrow('immutable');
+ });
+
 });
