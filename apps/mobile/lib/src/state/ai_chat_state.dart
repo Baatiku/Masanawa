@@ -1785,6 +1785,54 @@ class AiChatController extends Notifier<AiChatState> {
               error.statusCode == 404)) {
         _bindings.remove(characterId);
       }
+      // A timed-out HTTP stream is not proof the Gateway failed the turn.
+      // Reconcile the ORIGINAL request first. This GET cannot start another
+      // inference or charge, and it also rescues a reply finished after
+      // the client stream was interrupted.
+      final pendingTransport = _shellTransport;
+      final originalId = userMsg.requestId;
+      if (pendingTransport != null && originalId != null &&
+          originalId.isNotEmpty &&
+          !(error is ApiException &&
+              (error.statusCode == 401 || error.statusCode == 403))) {
+        try {
+          final original = await pendingTransport.turnStatus(characterId, originalId);
+          if (_disposed || connectionGeneration != _connectionGeneration ||
+              audioOwner != _cacheOwnerId ||
+              threadGeneration != (_threadGenerations[characterId] ?? 0)) {
+            return;
+          }
+          if (original.state == 'completed') {
+            _removeStreamingPlaceholders(characterId);
+            _setDelivery(characterId, userMsg.id, 'delivered');
+            await _appendAi(characterId, original.reply ?? '',
+              parts: [
+                for (final part in original.parts)
+                  AgentMessagePart.fromJson(part),
+              ],
+              agentRunId: original.agentRunId,
+              requestId: originalId,
+            );
+            return;
+          }
+          if (original.state == 'pending' || original.state == 'missing') {
+            _removeStreamingPlaceholders(characterId);
+            _setDelivery(characterId, userMsg.id,
+                original.state == 'pending' ? 'processing' : 'queued');
+            state = state.copyWith(
+              sendingIn: {...state.sendingIn}..remove(characterId),
+            );
+            await _save();
+            // A pending turn stays tied to its original id; the event stream
+            // and next authorized sync will finish it. Missing may be retried
+            // only with this same id after the server positively says missing.
+            return;
+          }
+        } catch (_) {
+          // Unable to confirm: retain normal visible failed/retry feedback.
+          // retryMessage performs another status GET before any resend.
+        }
+      }
       _removeStreamingPlaceholders(characterId);
       _setDelivery(characterId, userMsg.id, 'failed');
       final feedback = AgentFeedback.fromError(error, conversation: true);
