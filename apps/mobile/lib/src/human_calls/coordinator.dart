@@ -24,6 +24,7 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
   StreamSubscription<Uri>? _push;
   HumanCallRecord? _incoming;
   String? _owner;
+  int? _authorizationEpoch;
   int _epoch = 0;
   bool _loading = false, _foreground = true;
   @override
@@ -62,6 +63,8 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn) return;
     final owner = session.user.id, epoch = _epoch;
+    final authorizationEpoch =
+        ref.read(sessionProvider.notifier).authorizationEpoch;
     _loading = true;
     try {
       final result = await ref
@@ -71,14 +74,19 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
       if (!mounted ||
           epoch != _epoch ||
           active is! SessionSignedIn ||
-          active.user.id != owner)
+          active.user.id != owner ||
+          ref.read(sessionProvider.notifier).authorizationEpoch !=
+              authorizationEpoch)
         return;
       final rows = result['items'];
       final calls = rows is List
           ? rows
                 .whereType<Map>()
                 .map((r) => HumanCallRecord.fromJson(r.cast<String, dynamic>()))
-                .where((c) => c.state == 'ringing')
+                .where((c) =>
+                    c.state == 'ringing' &&
+                    (c.expiresAt == null ||
+                        c.expiresAt!.isAfter(DateTime.now())))
                 .toList()
           : <HumanCallRecord>[];
       setState(() => _incoming = calls.isEmpty ? null : calls.first);
@@ -93,8 +101,11 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final owner = session is SessionSignedIn ? session.user.id : null;
-    if (owner != _owner) {
+    final authorizationEpoch =
+        ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (owner != _owner || authorizationEpoch != _authorizationEpoch) {
       _owner = owner;
+      _authorizationEpoch = authorizationEpoch;
       _epoch++;
       _incoming = null;
       _loading = false;
@@ -106,12 +117,28 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
     if (owner == null) return widget.child;
     final c = ref.watch(humanCallControllerProvider);
     final active = c.active ? c.call : null;
-    final incoming = active == null ? _incoming : null;
+    final incoming = active == null &&
+            _incoming?.state == 'ringing' &&
+            (_incoming?.expiresAt == null ||
+                _incoming!.expiresAt!.isAfter(DateTime.now()))
+        ? _incoming
+        : null;
     final call = active ?? incoming;
     final router = ref.watch(appRouterProvider);
     final alreadyShowing = router.routerDelegate.currentConfiguration.uri.path
         .startsWith('/human/call/');
     if (call == null || alreadyShowing) return widget.child;
+    void openCall() {
+      final current = ref.read(sessionProvider);
+      if (current is! SessionSignedIn ||
+          current.user.id != owner ||
+          ref.read(sessionProvider.notifier).authorizationEpoch !=
+              authorizationEpoch ||
+          (call.state == 'ringing' &&
+              call.expiresAt != null &&
+              !call.expiresAt!.isAfter(DateTime.now()))) return;
+      router.push('/human/call/${Uri.encodeComponent(call.id)}');
+    }
     return Stack(
       children: [
         widget.child,
@@ -138,11 +165,9 @@ class _HumanCallCoordinatorState extends ConsumerState<HumanCallCoordinator>
                     ? 'Open incoming call'
                     : 'Return to call',
                 icon: const Icon(Icons.open_in_full),
-                onPressed: () =>
-                    router.push('/human/call/${Uri.encodeComponent(call.id)}'),
+                onPressed: openCall,
               ),
-              onTap: () =>
-                  router.push('/human/call/${Uri.encodeComponent(call.id)}'),
+              onTap: openCall,
             ),
           ),
         ),

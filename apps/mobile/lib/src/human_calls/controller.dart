@@ -43,6 +43,8 @@ class HumanCallController extends ChangeNotifier {
     required this.audioFactory,
     required this.ownerId,
     required this.currentOwner,
+    this.authorizationEpoch,
+    this.currentAuthorizationEpoch,
     required this.requestMicrophone,
     required this.startForeground,
     required this.stopForeground,
@@ -53,6 +55,10 @@ class HumanCallController extends ChangeNotifier {
   final HumanCallAudio Function() audioFactory;
   final String ownerId;
   final String? Function() currentOwner;
+  /// A fresh login to the same user ID is still a distinct authorization.
+  /// Null is reserved for isolated test controllers without a session provider.
+  final int? authorizationEpoch;
+  final int Function()? currentAuthorizationEpoch;
   final Future<bool> Function() requestMicrophone;
   final Future<void> Function() startForeground, stopForeground;
   final bool autoPoll;
@@ -72,9 +78,19 @@ class HumanCallController extends ChangeNotifier {
   DateTime? connectedAt, _lastHeartbeat, _lastVerified;
   String? _pendingHandle, _pendingRequest, _requestedCallId;
   bool get active =>
-      sameAccount && !_localEnd && call != null && !call!.terminal;
+      sameAccount &&
+      !_localEnd &&
+      call != null &&
+      !call!.terminal &&
+      (call!.state != 'ringing' ||
+          call!.expiresAt == null ||
+          call!.expiresAt!.isAfter(DateTime.now()));
   bool get sameAccount =>
-      !_closed && currentOwner() == ownerId && ownerId.isNotEmpty;
+      !_closed &&
+      currentOwner() == ownerId &&
+      ownerId.isNotEmpty &&
+      (authorizationEpoch == null ||
+          currentAuthorizationEpoch?.call() == authorizationEpoch);
   bool get audioReady =>
       active &&
       _media?.audio != null &&
@@ -217,13 +233,8 @@ class HumanCallController extends ChangeNotifier {
     }
     final record = call;
     if (record == null) return;
-    if (active &&
-        record.state == 'ringing' &&
-        record.expiresAt != null &&
-        !record.expiresAt!.isAfter(DateTime.now())) {
-      await end();
-      return;
-    }
+    // An expired ring is resolved by the server (normally as missed).
+    // Sending cancel/decline here would overwrite the truthful outcome.
     _refreshing = true;
     final generation = _generation, version = _signalVersion;
     try {
@@ -298,6 +309,7 @@ class HumanCallController extends ChangeNotifier {
         record == null ||
         !record.incoming ||
         record.state != 'ringing' ||
+        !active ||
         busy)
       return;
     busy = true;
@@ -461,7 +473,9 @@ class HumanCallController extends ChangeNotifier {
   }
 
   Future<void> end() async {
-    if (call == null || !sameAccount) return;
+    // Two taps must not increment generation or fire parallel transitions.
+    if (call == null || !sameAccount || _localEnd || _pendingEnd || _ending)
+      return;
     _localEnd = true;
     _pendingEnd = !call!.terminal;
     _generation++;
@@ -479,15 +493,22 @@ class HumanCallController extends ChangeNotifier {
     if (record == null || !sameAccount || _ending) return;
     _ending = true;
     final generation = _generation;
+    final expiredRing = record.state == 'ringing' &&
+        record.expiresAt != null &&
+        !record.expiresAt!.isAfter(DateTime.now());
     final action = record.state == 'ringing'
         ? (record.incoming ? 'decline' : 'cancel')
         : 'end';
     try {
-      final data = await api.request(
-        'POST',
-        '/calls/${record.id}/transition',
-        data: {'action': action},
-      );
+      // The authoritative call state can become missed while the device sleeps.
+      // Resolve that state before considering any user-ended transition.
+      final data = expiredRing
+          ? await api.request('GET', '/calls/${record.id}')
+          : await api.request(
+              'POST',
+              '/calls/${record.id}/transition',
+              data: {'action': action},
+            );
       if (!sameAccount || generation != _generation || call?.id != record.id)
         return;
       call = HumanCallRecord.fromJson(data);
@@ -544,13 +565,19 @@ class HumanCallController extends ChangeNotifier {
 
 final humanCallControllerProvider = ChangeNotifierProvider<HumanCallController>(
   (ref) {
-    final session = ref.watch(
-      sessionProvider.select((s) => s is SessionSignedIn ? s.user.id : null),
-    );
+    final authorization = ref.watch(sessionProvider.select(
+      (s) => (
+        s is SessionSignedIn ? s.user.id : null,
+        ref.read(sessionProvider.notifier).authorizationEpoch,
+      ),
+    ));
     final controller = HumanCallController(
       api: ref.watch(humanCallsTransportProvider),
       audioFactory: LiveKitHumanCallAudio.new,
-      ownerId: session ?? '',
+      ownerId: authorization.$1 ?? '',
+      authorizationEpoch: authorization.$2,
+      currentAuthorizationEpoch: () =>
+          ref.read(sessionProvider.notifier).authorizationEpoch,
       currentOwner: () {
         final s = ref.read(sessionProvider);
         return s is SessionSignedIn ? s.user.id : null;

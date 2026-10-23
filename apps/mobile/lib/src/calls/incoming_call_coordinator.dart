@@ -78,9 +78,17 @@ class _IncomingCallCoordinatorState
           );
       final calls = await transport.list();
       if (!mounted || generation != _generation || account() == null) return;
-      final ringing = calls.where((call) => call.ringing).toList()
+      final ringing = calls
+          .where((call) =>
+              call.ringing && call.expiresAt.isAfter(DateTime.now()))
+          .toList()
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      setState(() => _call = ringing.isEmpty ? null : ringing.first);
+      setState(() {
+        // Mark the credentials that authorized this exact banner even when
+        // the widget first mounts with an already signed-in session.
+        _identity = identity;
+        _call = ringing.isEmpty ? null : ringing.first;
+      });
     } catch (_) {
       /* Keep the last hint; opening it rechecks authority. */
     } finally {
@@ -115,7 +123,9 @@ class _IncomingCallCoordinatorState
         unawaited(_refresh());
       }
     });
-    final call = _call;
+    final call = _call?.expiresAt.isAfter(DateTime.now()) == true
+        ? _call
+        : null;
     return Column(
       children: [
         if (call != null)
@@ -128,6 +138,10 @@ class _IncomingCallCoordinatorState
                 title: Text('Incoming call from ${call.displayName}'),
                 trailing: TextButton(
                   onPressed: () {
+                    final current = ref.read(sessionProvider);
+                    if (current is! SessionSignedIn ||
+                        !identical(current.tokens, _identity) ||
+                        !call.expiresAt.isAfter(DateTime.now())) return;
                     final router = GoRouter.of(context);
                     final target =
                         '/calls/incoming/${Uri.encodeComponent(call.callId)}';
