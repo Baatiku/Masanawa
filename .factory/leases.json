@@ -23,10 +23,10 @@
       ],
       "branch": "feat/p2p-order-discussion-oct23",
       "base_sha": "25e3ca1d892b23d92ab98114e29dfb6811af0c44",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/304",
       "claimed_at": "2026-10-23T04:29:54.693Z",
-      "heartbeat_at": "2026-10-23T04:50:02.824Z",
-      "expires_at": "2026-10-23T04:55:02.824Z"
+      "heartbeat_at": "2026-10-23T04:55:09.319Z",
+      "expires_at": "2026-10-23T05:00:09.319Z"
     }
   ],
   "history": []
