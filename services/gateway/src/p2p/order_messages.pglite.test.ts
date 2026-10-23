@@ -23,6 +23,7 @@ async function fixture(){
  CREATE TABLE commerce.msnw_p2p_events(event_id uuid,tenant_id text,order_id uuid,
  action text,to_state text,reason text,actor_id text,created_at timestamptz DEFAULT now());`);
  await db.exec(readFileSync(new URL('../../../../packages/commerce/migrations/0138_msnw_p2p_order_messages.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../../../packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql',import.meta.url),'utf8'));
  await db.query(`INSERT INTO commerce.msnw_p2p_orders(order_id,tenant_id,seller_id,buyer_id)
  VALUES($1,'tenant-a','seller','buyer'),($2,'tenant-a','seller','someone-else')`,[orderId,otherOrder]);
  const query=async(sql:string,values?:unknown[])=>{const r=await db.query(sql,values);return {rows:r.rows as Record<string,unknown>[],rowCount:r.affectedRows??r.rows.length};};
@@ -30,7 +31,7 @@ async function fixture(){
  const escrow={reserve:vi.fn(),release:vi.fn(),refund:vi.fn()};
  const service=createP2pService(pool,escrow);
  const app=Fastify();cleanups.push(()=>app.close());
- registerP2pRoutes(app,{service,authorize:async header=>{
+ registerP2pRoutes(app,{service,authorizeOperator:async h=>{if(h!=='staff')throw Object.assign(new Error('denied'),{statusCode:403});return {tenantId:'tenant-a',userId:'staff'};},authorize:async header=>{
    const a=({buyer,seller,stranger,cross} as Record<string,typeof buyer>)[header??''];
    if(!a)throw Object.assign(new Error('revoked'),{statusCode:401});return a;
  }});
@@ -123,4 +124,71 @@ describe('P7-T02 actual SQL and HTTP participant discussion', {timeout:30_000},(
   const first=await t.app.inject(req);expect(first.statusCode).toBe(201);expect(first.headers['cache-control']).toBe('no-store');
   const second=await t.app.inject(req);expect(second.statusCode).toBe(200);expect(second.json().message_id).toBe(first.json().message_id);
  });
+ it('deduplicates participant reports without redaction, private identity leaks or escrow changes',async()=>{
+  const t=await fixture();const message=await t.send('Please send your account password.','request_0001',seller);
+  const report=await t.service.reportMessage(buyer,orderId,message.message_id,{category:'scam',details:'Asking for my private credentials.'});
+  expect(report).toMatchObject({state:'open',replay:false});
+  expect(await t.service.reportMessage(buyer,orderId,message.message_id,{category:'other',details:'Duplicate retry after network loss.'})).toMatchObject({report_id:report.report_id,replay:true});
+  expect((await t.service.messagesPage(buyer,orderId)).items[0]!.body).toContain('password');
+  expect(JSON.stringify(await t.service.messagesPage(seller,orderId))).not.toMatch(/reporter_id|details|private credentials/);
+  expect((await t.service.messageReports({tenantId:'tenant-a',userId:'staff'})).items).toHaveLength(1);
+  expect((await t.service.messageReports({tenantId:'tenant-b',userId:'staff'})).items).toHaveLength(0);
+  for(const fn of Object.values(t.escrow))expect(fn).not.toHaveBeenCalled();
+ });
+ it('hides removed bodies on pages, original-request recovery and duplicate send, preserving restricted evidence',async()=>{
+  const t=await fixture();const m=await t.send('My private password is secret.');
+  const r=await t.service.reportMessage(seller,orderId,m.message_id,{category:'personal_information',details:'Please hide personal credentials.'});
+  const actor={tenantId:'tenant-a',userId:'staff'};
+  const input={decision:'remove',reason:'Contains private account credentials.',version:1};
+  expect(await t.service.reviewMessageReport(actor,String(r.report_id),input)).toMatchObject({state:'removed',version:2});
+  expect(await t.service.reviewMessageReport(actor,String(r.report_id),input)).toMatchObject({replay:true});
+  await expect(t.service.reviewMessageReport(actor,String(r.report_id),{...input,decision:'dismiss'})).rejects.toMatchObject({code:'p2p.stale_message_review'});
+  const page=await t.service.messagesPage(buyer,orderId);
+  expect(page.items[0]).toMatchObject({body:''});expect(page.removed).toHaveLength(1);
+  expect(await t.service.messageByRequest(buyer,orderId,'request_0001')).toMatchObject({body:''});
+  expect(await t.send('My private password is secret.')).toMatchObject({body:'',replay:true});
+  await expect(t.send('Changed text')).rejects.toMatchObject({code:'p2p.idempotency_conflict'});
+  expect(String((await t.db.query<{body:string}>('SELECT body FROM commerce.msnw_p2p_order_messages')).rows[0]!.body)).toContain('secret');
+  expect((await t.db.query('SELECT reviewed_by,review_reason FROM commerce.msnw_p2p_message_reports')).rows[0]).toMatchObject({reviewed_by:'staff',review_reason:input.reason});
+  expect(JSON.stringify(page)).not.toMatch(/secret|credentials|reviewed_by|review_reason/);
+  await expect(t.db.query('DELETE FROM commerce.msnw_p2p_message_reports WHERE report_id=$1',[r.report_id])).rejects.toThrow('append-only');
+  await expect(t.db.query("UPDATE commerce.msnw_p2p_message_reports SET review_reason='Altered private explanation' WHERE report_id=$1",[r.report_id])).rejects.toThrow('immutable review');
+  expect((await t.db.query('SELECT state,version FROM commerce.msnw_p2p_orders WHERE order_id=$1',[orderId])).rows[0]).toMatchObject({state:'awaiting_payment',version:1});
+  for(const fn of Object.values(t.escrow))expect(fn).not.toHaveBeenCalled();
+ });
+ it('denies foreign/self reports, invalid review versions and customer attempts to moderate',async()=>{
+  const t=await fixture();const m=await t.send();
+  const input={category:'scam',details:'Please investigate this message.'};
+  for(const a of [stranger,cross])await expect(t.service.reportMessage(a,orderId,m.message_id,input)).rejects.toMatchObject({status:404});
+  await expect(t.service.reportMessage(buyer,orderId,m.message_id,input)).rejects.toMatchObject({status:422});
+  await expect(t.service.reportMessage(seller,orderId,m.message_id,{...input,category:'forged'})).rejects.toMatchObject({status:422});
+  const r=await t.service.reportMessage(seller,orderId,m.message_id,input);
+  const url=`/v1/admin/msnw/p2p/message-reports/${r.report_id}/review`;
+  for(const authorization of ['buyer','seller','stranger']){
+    expect((await t.app.inject({url:'/v1/admin/msnw/p2p/message-reports',headers:{authorization}})).statusCode).toBe(403);
+    expect((await t.app.inject({method:'POST',url,headers:{authorization},payload:{decision:'remove',reason:'private moderation reason',version:1}})).statusCode).toBe(403);
+  }
+  await expect(t.service.reviewMessageReport({tenantId:'tenant-b',userId:'staff'},String(r.report_id),{decision:'remove',reason:'private moderation reason',version:1})).rejects.toMatchObject({status:404});
+  await expect(t.service.reviewMessageReport({tenantId:'tenant-a',userId:'staff'},String(r.report_id),{decision:'remove',reason:'private moderation reason',version:2})).rejects.toMatchObject({code:'p2p.stale_message_review'});
+  for(const decision of [['remove'],{decision:'remove'},null,1]) {
+    const invalid=await t.app.inject({method:'POST',url,headers:{authorization:'staff'},payload:{decision,reason:'private moderation reason',version:1}});
+    expect(invalid.statusCode).toBe(422);
+  }
+  const done=await t.app.inject({method:'POST',url,headers:{authorization:'staff'},payload:{decision:'dismiss',reason:'No prohibited content is present.',version:1}});
+  expect(done.statusCode).toBe(200);expect(done.headers['cache-control']).toBe('no-store');
+  expect((await t.service.messagesPage(buyer,orderId)).items[0]!.body).not.toBe('');
+ });
+ it('reports terminal-order content and includes older-page tombstones in every refresh',async()=>{
+  const t=await fixture();const m=await t.send('Older private message');
+  await t.db.query("UPDATE commerce.msnw_p2p_order_messages SET created_at=now()-interval '1 day'");
+  await t.db.query("UPDATE commerce.msnw_p2p_orders SET state='completed'");
+  const r=await t.service.reportMessage(seller,orderId,m.message_id,{category:'harassment',details:'This older message needs review.'});
+  await t.service.reviewMessageReport({tenantId:'tenant-a',userId:'staff'},String(r.report_id),{decision:'remove',reason:'Abusive message confirmed by staff.',version:1});
+  for(let n=0;n<45;n++)await t.db.query(`INSERT INTO commerce.msnw_p2p_order_messages(message_id,tenant_id,order_id,sender_id,request_key,body)
+    VALUES($1,'tenant-a',$2,'seller',$3,'Newer message')`,[`eeeeeeee-eeee-4eee-8eee-${n.toString().padStart(12,'0')}`,orderId,`newer_${n.toString().padStart(4,'0')}`]);
+  const page=await t.service.messagesPage(buyer,orderId);
+  expect(page.items).toHaveLength(40);expect(page.items.map(x=>x.message_id)).not.toContain(m.message_id);
+  expect(page.removed[0]).toMatchObject({message_id:m.message_id});expect(page.canSend).toBe(false);
+ });
+
 });

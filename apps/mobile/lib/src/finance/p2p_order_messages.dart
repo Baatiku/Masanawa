@@ -15,6 +15,7 @@ class P2pOrderMessagesPage extends StatefulWidget {
     required this.loadPage,
     required this.send,
     required this.findRequest,
+    this.report,
     this.storage = const FlutterSecureStorage(),
   });
   final String orderId;
@@ -23,6 +24,12 @@ class P2pOrderMessagesPage extends StatefulWidget {
   final Future<Map<String, dynamic>> Function(String? cursor) loadPage;
   final Future<Map<String, dynamic>> Function(String body, String key) send;
   final Future<Map<String, dynamic>> Function(String key) findRequest;
+  final Future<void> Function(
+    String messageId,
+    String category,
+    String details,
+  )?
+  report;
   final FlutterSecureStorage storage;
   @override
   State<P2pOrderMessagesPage> createState() => _P2pOrderMessagesPageState();
@@ -46,6 +53,8 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
   int _generation = 0;
   Timer? _timer;
   bool _foreground = true;
+  bool _reporting = false;
+  final _removed = <String>{};
   String get _storageKey =>
       'masanawa.p2p.message.${widget.expectedUserId}.${widget.orderId}';
   bool get _same =>
@@ -87,6 +96,7 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
     setState(() {
       _accountGone = true;
       _items.clear();
+      _removed.clear();
       _events.clear();
       _pending = null;
       _canSend = false;
@@ -105,6 +115,7 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
     }
     if (_denied(error)) {
       _items.clear();
+      _removed.clear();
       _events.clear();
       _restricted = true;
       _canSend = false;
@@ -199,11 +210,30 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
         }
         events.add(Map<String, dynamic>.from(raw));
       }
+      final tombstones = page['removed'] ?? const [];
+      if (tombstones is! List ||
+          tombstones.any(
+            (r) =>
+                r is! Map ||
+                r['message_id'] is! String ||
+                DateTime.tryParse('${r['removed_at']}') == null,
+          )) {
+        throw const FormatException('Invalid moderation state');
+      }
       setState(() {
+        _removed.addAll(tombstones.map((r) => r['message_id'] as String));
+        for (final item in parsed.values) {
+          if (item['removed_at'] != null)
+            _removed.add(item['message_id'] as String);
+        }
         _events
           ..clear()
           ..addAll(events);
         _items.addAll(parsed);
+        for (final id in _removed) {
+          if (_items[id] != null)
+            _items[id] = {..._items[id]!, 'body': '', 'removed': true};
+        }
         if (older || _cursor == null) _cursor = page['nextCursor'] as String?;
         _canSend = page['canSend'] == true;
         _state = '${page['orderState'] ?? ''}';
@@ -227,7 +257,7 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
   Future<void> _accepted(Map<String, dynamic> message) async {
     final pending = _pending;
     if (pending == null ||
-        message['body'] != pending['body'] ||
+        (message['removed_at'] == null && message['body'] != pending['body']) ||
         message['message_id'] is! String ||
         message['is_own'] != true) {
       throw const FormatException('Message acknowledgement mismatch');
@@ -281,6 +311,98 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
         );
     } finally {
       if (_live) setState(() => _sending = false);
+      if (!_same) _clearAccount();
+    }
+  }
+
+  Future<void> _report(Map<String, dynamic> message) async {
+    if (!_live || _restricted || _reporting || widget.report == null) return;
+    var category = 'scam';
+    var details = '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: const Text('Report message'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Staff will review the message. A report does not pause or settle this order. Do not include bank credentials.',
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'scam',
+                      child: Text('Scam or payment pressure'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'harassment',
+                      child: Text('Harassment'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'personal_information',
+                      child: Text('Personal information'),
+                    ),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  isExpanded: true,
+                  onChanged: (v) => update(() => category = v ?? category),
+                ),
+                TextField(
+                  maxLength: 2000,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'What happened?',
+                    helperText: 'Use 10–2000 characters.',
+                  ),
+                  onChanged: (v) => update(() => details = v.trim()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: details.length < 10
+                  ? null
+                  : () => Navigator.pop(ctx, true),
+              child: const Text('Submit report'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !_live || _restricted) return;
+    setState(() => _reporting = true);
+    try {
+      await widget.report!(message['message_id'] as String, category, details)
+          .timeout(_timeout);
+      if (mounted && _same) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Report received for staff review. Order status is unchanged.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (_live)
+        setState(
+          () => _failure(
+            error,
+            'Report outcome unknown. You can report this message again; duplicate reports are kept as one case.',
+          ),
+        );
+    } finally {
+      if (_live) setState(() => _reporting = false);
       if (!_same) _clearAccount();
     }
   }
@@ -515,7 +637,21 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
                             '${message['is_own'] == true ? 'You · ' : ''}${message['sender_role'] == 'seller' ? 'Seller' : 'Buyer'}',
                             style: Theme.of(context).textTheme.labelLarge,
                           ),
-                          SelectableText(message['body'] as String),
+                          if (message['removed'] == true ||
+                              message['removed_at'] != null)
+                            const Text('Message removed by a moderator')
+                          else
+                            SelectableText(message['body'] as String),
+                          if (message['is_own'] != true &&
+                              widget.report != null &&
+                              !_restricted)
+                            TextButton.icon(
+                              onPressed: _reporting
+                                  ? null
+                                  : () => _report(message),
+                              icon: const Icon(Icons.flag_outlined, size: 18),
+                              label: const Text('Report message'),
+                            ),
                           Text(
                             _when(message['created_at']),
                             style: Theme.of(context).textTheme.labelSmall,

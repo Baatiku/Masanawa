@@ -691,6 +691,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
               currentUserId: widget.currentUserId,
               loadPage: (cursor) async => _json(await _request('GET',
                 '/orders/$id/messages${cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'}')),
+              report: (messageId, category, details) async {
+                await _request('POST', '/orders/$id/messages/$messageId/report',
+                  {'category': category, 'details': details});
+              },
               send: (body, key) async => _json(await _request('POST',
                 '/orders/$id/messages', {'body': body}, key)),
               findRequest: (key) async => _json(await _request('GET',

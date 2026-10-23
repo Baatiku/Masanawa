@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/admin_api.dart';
+import 'p2p_message_reports_page.dart';
 import '../core/admin_auth_api.dart';
 
 /// Reuses the existing admin session and Gateway; no separate operator login.
@@ -328,6 +329,15 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       subtitle:const Text('Authorized resolutions only. Bank claims and screenshots '
         'do not automatically release escrow.'),
       trailing:Wrap(spacing:4,children:[
+        IconButton(tooltip:'Review reported order messages',
+          onPressed:()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>
+            P2pMessageReportsPage(currentSession:()=>widget.api.currentAccessToken,load:() async {
+              final r=await _dio.get<dynamic>('$_base/v1/admin/msnw/p2p/message-reports',options:_auth);
+              return Map<String,dynamic>.from(r.data as Map);
+            },review:(id,decision,reason,version)async {
+              await _dio.post<dynamic>('$_base/v1/admin/msnw/p2p/message-reports/$id/review',
+                options:_auth,data:{'decision':decision,'reason':reason,'version':version});
+            }))),icon:const Icon(Icons.flag_outlined)),
         IconButton(tooltip:'Review P2P financial reconciliation',
           onPressed:_submitting?null:_showReconciliation,
           icon:const Icon(Icons.monitor_heart_outlined)),

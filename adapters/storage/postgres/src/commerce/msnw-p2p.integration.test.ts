@@ -235,4 +235,26 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    expect(await account(seller)).toEqual(before);
  });
 
+ it('serializes duplicate abuse reports and competing staff reviews without custody movement',async()=>{
+   const offerId=await offer(),actor={tenantId:tenant,userId:buyer},maker={tenantId:tenant,userId:seller};
+   const order=await service().createOrder(actor,{offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+   const before=await account(seller),message=await service().sendMessage(maker,order.orderId,{body:'Give me private credentials',requestKey:randomUUID()});
+   const reports=await Promise.all(Array.from({length:5},()=>service().reportMessage(actor,order.orderId,message.message_id,{category:'scam',details:'Requests private banking credentials.'})));
+   expect(new Set(reports.map(r=>r.report_id)).size).toBe(1);expect(reports.filter(r=>!r.replay)).toHaveLength(1);
+   const reportId=reports[0]!.report_id;
+   const results=await Promise.allSettled([
+     service().reviewMessageReport({tenantId:tenant,userId:'staff-one'},reportId,{decision:'remove',reason:'Confirmed private credential request.',version:1}),
+     service().reviewMessageReport({tenantId:tenant,userId:'staff-two'},reportId,{decision:'dismiss',reason:'Review found no prohibited content.',version:1}),
+   ]);
+   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+   const rejected=results.find(r=>r.status==='rejected') as PromiseRejectedResult;
+   expect(rejected.reason).toMatchObject({code:'p2p.stale_message_review'});
+   const row=(await pool.query('SELECT state,version,reviewed_by FROM commerce.msnw_p2p_message_reports WHERE report_id=$1',[reportId])).rows[0];
+   expect(row.version).toBe(2);
+   const page=await service().messagesPage(actor,order.orderId);
+   expect(page.items[0]!.body).toBe(row.state==='removed'?'':'Give me private credentials');
+   expect(await account(seller)).toEqual(before);
+   await service().action(actor,order.orderId,'cancel');
+ });
+
 });

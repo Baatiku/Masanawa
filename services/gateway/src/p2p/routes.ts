@@ -188,6 +188,34 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return reply.code(result.replay?200:201).send(result);
     }catch(error){return respond(error,reply);}
   });
+  app.post('/v1/wallet/msnw/p2p/orders/:orderId/messages/:messageId/report',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await actor(req.headers.authorization);
+      const p=req.params as {orderId:string;messageId:string};
+      const body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['category','details'].includes(k)))
+        throw new P2pError('p2p.invalid_report',422);
+      const result=await deps.service.reportMessage(a,p.orderId,p.messageId,{category:body.category,details:body.details});
+      return reply.code(result.replay?200:201).send(result);
+    }catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/admin/msnw/p2p/message-reports',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.messageReports(await operator(req.headers.authorization));}
+    catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/admin/msnw/p2p/message-reports/:reportId/review',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await operator(req.headers.authorization);
+      const body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['decision','reason','version'].includes(k)))
+        throw new P2pError('p2p.invalid_message_review',422);
+      return await deps.service.reviewMessageReport(a,(req.params as {reportId:string}).reportId,
+        {decision:body.decision,reason:body.reason,version:body.version});
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/notifications",async(req,reply)=>{
     try {return {items:await deps.service.notifications(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
