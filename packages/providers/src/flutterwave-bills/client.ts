@@ -45,7 +45,10 @@ export type FlutterwaveBillReceipt = Readonly<{
   amount: string | null;
   currency: "NGN" | null;
   customerId: string | null;
+  /** Provider service/category name; not proof of the selected catalog item. */
   product: string | null;
+  /** Only populated when provider independently returns an explicit item_code. */
+  itemCode?: string | null;
   productName: string | null;
   extra: unknown;
 }>;
@@ -364,6 +367,7 @@ export class FlutterwaveBillsClient {
       currency: row.currency === undefined || row.currency === null ? null : textValue(row.currency, "receipt currency", 3) === "NGN" ? "NGN" : null,
       customerId: optionalText(row.customer_id, "receipt customer", 200),
       product: optionalText(row.product, "receipt product", 200),
+      itemCode: optionalText(row.item_code, "receipt item code", 128),
       productName: optionalText(row.product_name, "receipt product name", 300),
       extra: row.extra ?? null,
     });
