@@ -2,7 +2,7 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "p2p-edit-recovery-oct23-0852",
+      "claim_id": "a6445010-79e6-4f24-ae51-987628aa3b3f",
       "owner": "codex-p2p-ad-editing-oct23",
       "scope": "P2-18 own ad editing/revision/quote-fence source; recover unpublished batch after sandbox replacement",
       "paths": [
@@ -43,9 +43,9 @@
       "base_sha": "d012c73e3c487f3e0efe6b1575a2e76cf1e04078",
       "pr": "",
       "claimed_at": "2026-10-23T08:50:56.304Z",
-      "heartbeat_at": "2026-10-23T08:50:56.304Z",
-      "expires_at": "2026-10-23T08:55:56.304Z",
-      "progress": "Recovering source and SDK in unique /home/user/masanawa-p2p-oct23 after new volume; no edit completion/CI claim. Prior fourSQL proofs passed on lost worktree; reconstruct and rerun."
+      "heartbeat_at": "2026-10-23T08:58:00.513Z",
+      "expires_at": "2026-10-23T09:03:00.513Z",
+      "progress": "Recovered complete editor backend/native source into unique original checkout at d012c73e; 80P2Pbackend tests and Gatewaytyping PASS. SDK/deps restored; fresh Flutter pub downloads in progress. Independent review requested; realPG edit/quote/immutable audit race test authored. External recovery copy saved."
     }
   ],
   "history": [
