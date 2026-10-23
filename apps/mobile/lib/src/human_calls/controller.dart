@@ -181,6 +181,13 @@ class HumanCallController extends ChangeNotifier {
 
   Future<void> open(String id) async {
     if (!sameAccount) return;
+    // Do not replace the original call while an End confirmation is pending.
+    // Its retry must never address another call opened from a stale route.
+    if (_pendingEnd && call?.id != id) {
+      error = 'Finish ending your previous call first.';
+      _changed();
+      return;
+    }
     if (active && call!.id != id) {
       error = 'Another call is already active.';
       _changed();

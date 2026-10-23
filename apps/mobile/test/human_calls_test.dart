@@ -158,6 +158,39 @@ void main() {
     await c.close();
   });
 
+  test('another route cannot overwrite a call awaiting End confirmation', () async {
+    final api = _Api()..current = record('accepted');
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    api.before = (method, path) async {
+      if (path.endsWith('/transition')) throw StateError('End response lost');
+    };
+    await c.end();
+    expect(c.endConfirmationPending, isTrue);
+
+    await c.open('call-two');
+    expect(c.call?.id, 'call-one');
+    expect(c.endConfirmationPending, isTrue);
+    expect(c.error, contains('Finish ending'));
+    expect(api.actions.where((x) => x == 'GET /calls/call-two'), isEmpty);
+
+    api.before = null;
+    await c.retryEndConfirmation();
+    expect(c.call?.id, 'call-one');
+    expect(c.call?.state, 'ended');
+    expect(c.endConfirmationPending, isFalse);
+    await c.close();
+  });
+
   test('server-confirmed terminal GET clears stale end confirmation error', () async {
     final api = _Api()..current = record('accepted');
     final c = HumanCallController(
