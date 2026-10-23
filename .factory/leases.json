@@ -45,9 +45,9 @@
       "base_sha": "0847c542311764bf35346cf4d0aead920cec1a37",
       "pr": "",
       "claimed_at": "2026-10-23T09:22:01.005Z",
-      "heartbeat_at": "2026-10-23T09:33:23.150Z",
-      "expires_at": "2026-10-23T09:38:23.150Z",
-      "progress": "Discovery3actualSQL+17mock fixes+typing PASS;19native PASS incl320dp200%RTL and stale-account quote review denial. Final broad87backend/storage and affectednative pass running after exact owner/base order/bank-intent fences. Review no blockers; final delta/PG12 authored pending. New branch still basedf2ef; rebase delta onto merged0847main beforepublish."
+      "heartbeat_at": "2026-10-23T09:38:02.727Z",
+      "expires_at": "2026-10-23T09:43:02.727Z",
+      "progress": "Final broad87backend/storage PASS, typingPASS,6newnative PASS inclquote driftcap/accountswitch/320RTL. Existing9native and19affected passed beforelastbudget/fence delta; startupsegfault retries distinguished. Finalreviewrequested,12threalPGreadqualification authored. Preparing docs/PR/rebase from f2ef to mergedmain0847."
     }
   ],
   "history": [
