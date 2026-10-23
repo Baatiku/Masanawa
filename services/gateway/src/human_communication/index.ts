@@ -192,7 +192,9 @@ export function createHumanCommunicationService(o:HumanOptions){
     }
   }
   async function call(db:HumanSql,a:Actor,id:string){
-    const r=await db.query('SELECT * FROM talks.human_calls WHERE tenant_id=$1 AND id=$2 AND (caller=$3 OR recipient=$3)',[a.tenantId,id,a.userId]);
+    // Keep the full PostgreSQL timestamp for keyset pagination. Driver Date
+    // objects can truncate microseconds and silently skip tied call rows.
+    const r=await db.query('SELECT *, created_at::text AS cursor_created_at FROM talks.human_calls WHERE tenant_id=$1 AND id=$2 AND (caller=$3 OR recipient=$3)',[a.tenantId,id,a.userId]);
     if(!r.rows[0])fail(404,'Call unavailable');
     const c=r.rows[0] as Row;
     await peer(db,a,c.caller===a.userId?c.recipient:c.caller);
@@ -338,11 +340,11 @@ export function createHumanCommunicationService(o:HumanOptions){
           let condition = '';
           if (id === 'incoming') {
             values.push(now());
-            condition = "AND recipient=$2 AND state='ringing' AND expires_at>$3";
+            condition = "AND c.recipient=$2 AND c.state='ringing' AND c.expires_at>$3";
           } else if (q.after) {
             const anchor = await call(db, a, str(q.after));
-            values.push(anchor.created_at, anchor.id);
-            condition = 'AND (created_at,id)<($3,$4)';
+            values.push(anchor.cursor_created_at, anchor.id);
+            condition = 'AND (c.created_at,c.id)<($3,$4)';
           }
           // A search must cover the full authorized call history, not only the
           // first 50 rows cached by a phone. Match the peer's public identity
@@ -354,10 +356,31 @@ export function createHumanCommunicationService(o:HumanOptions){
             if (search) {
               values.push(search);
               const param = `$${values.length}`;
-              condition += ` AND (strpos(lower(state),${param})>0 OR strpos(lower(id),${param})>0 OR strpos(CASE WHEN caller=$2 THEN 'outgoing' ELSE 'incoming' END,${param})>0 OR EXISTS(SELECT 1 FROM talks.public_profiles p WHERE p.tenant_id=$1 AND p.user_id=CASE WHEN caller=$2 THEN recipient ELSE caller END AND (strpos(lower(p.handle),${param})>0 OR strpos(lower(p.display_name),${param})>0)))`;
+              condition += ` AND (strpos(lower(c.state),${param})>0 OR strpos(lower(c.id),${param})>0 OR strpos(CASE WHEN c.caller=$2 THEN 'outgoing' ELSE 'incoming' END,${param})>0 OR EXISTS(SELECT 1 FROM talks.public_profiles p WHERE p.tenant_id=$1 AND p.user_id=c.peer_id AND (strpos(lower(p.handle),${param})>0 OR strpos(lower(p.display_name),${param})>0)))`;
             }
           }
-          const rows = await db.query(`SELECT * FROM talks.human_calls WHERE tenant_id=$1 AND (caller=$2 OR recipient=$2) ${condition} ORDER BY created_at DESC,id DESC`, values);
+          // Apply the same current public-profile, active-account, block and
+          // moderation visibility rules as peer() *before* LIMIT. Otherwise a
+          // hidden call consumes a page slot and can conceal older permitted
+          // results. Never fetch the entire history into a Gateway request.
+          const visiblePeer = `EXISTS (SELECT 1 FROM talks.public_profiles p
+            JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
+            WHERE p.tenant_id=$1 AND p.user_id=c.peer_id AND u.state='active'
+            AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences b
+              WHERE b.tenant_id=$1 AND b.blocked AND
+              ((b.viewer_user_id=$2 AND b.subject_user_id=c.peer_id) OR
+               (b.viewer_user_id=c.peer_id AND b.subject_user_id=$2)))
+            AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement s
+              WHERE s.tenant_id=$1 AND s.target_kind='profile'
+              AND (s.target_id=p.handle OR s.target_id IN
+                (SELECT me.handle FROM talks.public_profiles me
+                 WHERE me.tenant_id=$1 AND me.user_id=$2))
+              AND s.visibility<>'public'))`;
+          const rows = await db.query(`SELECT c.* FROM (
+            SELECT *, CASE WHEN caller=$2 THEN recipient ELSE caller END AS peer_id
+            FROM talks.human_calls WHERE tenant_id=$1 AND (caller=$2 OR recipient=$2)
+          ) c WHERE ${visiblePeer} ${condition}
+          ORDER BY c.created_at DESC,c.id DESC LIMIT 51`, values);
           const items = [];
           for (const row of rows.rows) {
             try { items.push(await callView(db, a, row)); }
