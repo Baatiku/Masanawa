@@ -1,4 +1,5 @@
 import type {Pool} from "pg";
+import {statusAuthorOwnership} from "./author_scope.js";
 // Structural DTO equivalent to the canonical packages/feed/src/saved.ts port.
 type SavedCursor={at:string;kind:"post"|"video";id:string};
 type SavedItem={kind:"post"|"video";id:string;savedAt:string;post?:Record<string,unknown>;video?:Record<string,unknown>};
@@ -9,10 +10,25 @@ export class PgSavedLibraryRepository {
   async list(tenant:string,fan:string,before:SavedCursor|null,limit:number):Promise<readonly SavedItem[]> {
     const sql=String.raw`WITH saved_items AS (
       SELECT 'post'::text AS kind, s.post_id AS id, s.created_at AS saved_at,
-        jsonb_build_object('id',p.id,'authorMasanaId',p.author_masana_id,
-          'authorName',COALESCE((SELECT r.profile->>'displayName'
-            FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id
-              AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1),p.author_masana_id),
+        jsonb_build_object('id',p.id,'authorMasanaId',COALESCE(p.author_masana_id,''),
+          'author',CASE WHEN p.author_type='human' THEN
+            (SELECT jsonb_build_object('type','human','id',hp.user_id,
+              'handle',hp.handle,'displayName',hp.display_name,'avatarUrl',hp.avatar_url)
+              FROM talks.public_profiles hp
+              JOIN identity.users hu ON hu.tenant_id=hp.tenant_id AND hu.user_id=hp.user_id
+              WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id AND hu.state='active')
+            ELSE jsonb_build_object('type','masana','id',p.author_masana_id,
+              'displayName',COALESCE((SELECT r.profile->>'displayName'
+                FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id
+                 AND r.character_id=p.author_masana_id AND r.state='approved'
+                 LIMIT 1),p.author_masana_id)) END,
+          'authorName',CASE WHEN p.author_type='human'
+            THEN (SELECT hp.display_name FROM talks.public_profiles hp
+              WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id)
+            ELSE COALESCE((SELECT r.profile->>'displayName'
+              FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id
+              AND r.character_id=p.author_masana_id AND r.state='approved'
+              LIMIT 1),p.author_masana_id) END,
           'kind',p.kind,'body',p.body,'media',p.media_ids,'transcript',p.transcript,
           'publishedAt',p.published_at,'likeCount',
             (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like'),
@@ -30,8 +46,25 @@ export class PgSavedLibraryRepository {
           'viewerSaved',true) AS payload
       FROM feed.saves s JOIN feed.posts p ON p.tenant_id=s.tenant_id AND p.id=s.post_id
       WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published'
-        AND EXISTS(SELECT 1 FROM masana.character_revisions r
-          WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved')
+        AND ((p.author_type='masana' AND EXISTS(
+          SELECT 1 FROM masana.character_revisions r
+          JOIN identity.characters a ON a.tenant_id=r.tenant_id AND a.character_id=r.character_id
+          JOIN identity.character_ownership o ON o.tenant_id=a.tenant_id AND o.character_id=a.character_id
+          WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id
+            AND r.state='approved' AND a.state='active' AND ${statusAuthorOwnership}))
+          OR (p.author_type='human' AND EXISTS(
+            SELECT 1 FROM identity.users hu JOIN talks.public_profiles hp
+              ON hp.tenant_id=hu.tenant_id AND hp.user_id=hu.user_id
+            WHERE hu.tenant_id=p.tenant_id AND hu.user_id=p.author_user_id
+              AND hu.state='active'
+              AND hp.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
+              AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement enforcement
+                WHERE enforcement.tenant_id=p.tenant_id AND enforcement.target_kind='profile'
+                  AND enforcement.target_id=hp.handle AND enforcement.visibility<>'public')
+              AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences block
+                WHERE block.tenant_id=p.tenant_id AND block.blocked AND
+                  ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
+                   OR (block.viewer_user_id=p.author_user_id AND block.subject_user_id=$2))))))
       UNION ALL
       SELECT 'video'::text,v.video_id,v.created_at,
         jsonb_build_object('id',i.item_id,'provider',i.provider,'sourceUrl',i.source_url,

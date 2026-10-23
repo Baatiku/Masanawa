@@ -152,12 +152,16 @@ abstract class FeedApi {
   Future<void> comment(String postId,String body,String idempotencyKey);
   Future<List<FeedComment>> comments(String postId);
 }
+abstract class HumanStatusPublisher {
+  /// Public text only; the Gateway derives human owner from the current session.
+  Future<FeedPost> publishHumanText(String body,String idempotencyKey);
+}
 abstract class ReactionFeedApi {
   /// One authoritative reaction per signed-in user and post; null clears it.
   Future<void> react(String postId,String? kind);
 }
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
-class DioFeedApi implements FeedApi, ReactionFeedApi {
+class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher {
   DioFeedApi(this._dio,this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -185,6 +189,13 @@ class DioFeedApi implements FeedApi, ReactionFeedApi {
     }
     await _dio.put<void>('/v1/posts/' + Uri.encodeComponent(id) + '/reaction',
       data:{'kind':kind},options:await _options(authRequired:true));
+  }
+  @override
+  Future<FeedPost> publishHumanText(String body,String idempotencyKey) async {
+    final r=await _dio.post<Map<String,dynamic>>('/v1/posts/human',
+      data:{'body':body,'audience':'public'},
+      options:await _options(key:idempotencyKey,authRequired:true));
+    return FeedPost.fromJson(r.data??const <String,dynamic>{});
   }
   @override
   Future<void> save(String id,bool enabled) async {

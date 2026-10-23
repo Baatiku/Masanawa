@@ -22,6 +22,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES('tenant_test','masana_one','platform'),('tenant_thread','masana_one','platform');`);
   await pool.query("CREATE SCHEMA talks");
   await pool.query(readFileSync(new URL("../../../../../packages/talks/migrations/0003_talk_profiles.sql",import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/talks/migrations/0009_talk_safety.sql",import.meta.url),"utf8"));
   await pool.query("INSERT INTO identity.users(tenant_id,user_id,state) VALUES('tenant_test','fan_one','active')");
   await pool.query("INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('tenant_test','fan_one','musa_verified','Musa Verified')");
   await pool.query("CREATE SCHEMA masana; CREATE TABLE masana.character_media(tenant_id text, character_id text, media_id text, rights_note text, approved_by text, object_key text, kind text); CREATE TABLE masana.follows(tenant_id text NOT NULL,fan_user_id text NOT NULL,character_id text NOT NULL,PRIMARY KEY(tenant_id,fan_user_id,character_id)); CREATE TABLE masana.character_revisions(tenant_id text NOT NULL,character_id text NOT NULL,state text NOT NULL,profile jsonb NOT NULL); INSERT INTO masana.character_revisions VALUES ('tenant_test','masana_one','approved','{\"displayName\":\"Teacher\"}'::jsonb)");
@@ -38,6 +39,9 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   const reactionMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0005_status_reactions.sql",import.meta.url),"utf8");
   await pool.query(reactionMigration);
   await pool.query(reactionMigration); // safe expand-only rerun
+  const humanMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0006_human_public_status.sql",import.meta.url),"utf8");
+  await pool.query(humanMigration);
+  await pool.query(humanMigration); // historic Masana IDs retained and idempotent
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -100,6 +104,26 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    ["tenant_test",id,"fan_one"])).rows[0]?.n).toBe(1);
   await repo.setReaction("tenant_test","fan_one",id,null);
   expect((await repo.find("tenant_test","fan_one",id))?.viewerReaction).toBeNull();
+ });
+ it("ST1 two real PG users see canonical human text post, never duplicate/forge",async()=>{
+  const pool=isolated.pool;
+  await pool.query("INSERT INTO identity.users(tenant_id,user_id,state) VALUES('tenant_test','fan_two','active')");
+  await pool.query("INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('tenant_test','fan_two','zainab_verified','Zainab')");
+  const request={body:"A public update",audience:"public" as const,idempotencyKey:"real-human-status-001"};
+  const created=await repo.publishHumanText("tenant_test","fan_one",request);
+  expect(created.author).toMatchObject({type:"human",id:"fan_one",handle:"musa_verified",displayName:"Musa Verified"});
+  expect((await repo.publishHumanText("tenant_test","fan_one",request)).id).toBe(created.id);
+  await expect(repo.publishHumanText("tenant_test","fan_one",{...request,body:"Different post"}))
+    .rejects.toMatchObject({status:409,code:"idempotency_conflict"});
+  expect((await repo.list("tenant_test","fan_two","for_you",null,25)).map(p=>p.id)).toContain(created.id);
+  await pool.query("INSERT INTO talks.follows(tenant_id,follower_user_id,followed_user_id,created_at) VALUES('tenant_test','fan_two','fan_one',now())");
+  expect((await repo.list("tenant_test","fan_two","following",null,25)).map(p=>p.id)).toContain(created.id);
+  await pool.query("UPDATE identity.users SET state='disabled' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
+  expect(await repo.find("tenant_test","fan_two",created.id)).toBeNull();
+  await pool.query("UPDATE identity.users SET state='active' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
+  expect((await repo.find("tenant_test","fan_two",created.id))?.id).toBe(created.id);
+  const rows=await pool.query("SELECT count(*)::int AS n FROM feed.posts WHERE tenant_id='tenant_test' AND author_type='human' AND author_user_id='fan_one'");
+  expect(rows.rows[0]?.n).toBe(1);
  });
  it("C22 keeps historic comment bytes intact across forward-only migration",async()=>{
   const rows=await isolated.pool.query("SELECT body,fan_id,parent_comment_id FROM feed.comments WHERE tenant_id='tenant_upgrade' AND id=$1::uuid",[legacyCommentId]);

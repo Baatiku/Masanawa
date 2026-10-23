@@ -4,6 +4,7 @@ type FeedPort={
  list(t:string,v:string|null,m:"for_you"|"following",c?:string,authorMasanaId?:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
+ publishHumanText?(a:Actor,p:{body:string;idempotencyKey:string;audience:"public"}):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
  react?(a:Actor,id:string,kind:"like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null):Promise<unknown>;
  comment(a:Actor,id:string,text:string,key:string,newAccount:boolean,parentId?:string|null):Promise<unknown>;
@@ -40,6 +41,19 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
     return rep.code(422).send({code:"invalid_author"});
   return o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
     typeof author==="string"?author:undefined);
+ }));
+ // Self-publishing is a separate fan route, never Masana editorial authority.
+ // Start with explicitly public TEXT ONLY; unsupported audiences/media cannot
+ // be silently downgraded to public posts.
+ app.post("/v1/posts/human",async(req,rep)=>run(req,rep,async({actor})=>{
+  const a=member(actor),b=object(req.body);
+  if(a.kind!=="fan")return rep.code(403).send({code:"human_author_required"});
+  if(Object.keys(b).some(k=>k!=="body"&&k!=="audience")||
+    b.audience!=="public"||typeof b.body!=="string")
+   return rep.code(422).send({code:"unsupported_human_post"});
+  if(!o.service.publishHumanText)return rep.code(503).send({code:"human_publishing_unavailable"});
+  return o.service.publishHumanText(a,{
+   body:b.body,idempotencyKey:str(req.headers["idempotency-key"]),audience:"public"});
  }));
  app.get("/v1/posts/:id",async(req,rep)=>run(req,rep,async({tenant,viewer})=>o.service.detail(tenant,viewer,str(object(req.params).id))));
  app.get("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{

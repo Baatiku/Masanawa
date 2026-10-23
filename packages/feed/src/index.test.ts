@@ -5,6 +5,30 @@ function mock(){
  return {list:vi.fn(async()=>[post]),find:vi.fn(async(t:string)=>t==="tenant"?post:null),publish:vi.fn(async()=>post),setLike:vi.fn(async()=>true),setSave:vi.fn(async()=>true),comment:vi.fn(async()=>({id:"comment",postId:post.id,body:"ok",state:"pending" as const,createdAt:"now"})),comments:vi.fn(async()=>[])} satisfies Repository;
 }
 const fan={kind:"fan" as const,tenantId:"tenant",id:"fan"};
+describe("ST1 human self-published public text",()=>{
+ it("only fan may publish with server actor, stable key and trimmed content",async()=>{
+  const repo={...mock(),publishHumanText:vi.fn(async()=>post)};
+  const svc=new FeedService(repo,async()=>true);
+  await svc.publishHumanText(fan,{body:"  Hello world  ",audience:"public",idempotencyKey:"human-status-key001"});
+  expect(repo.publishHumanText).toHaveBeenCalledWith("tenant","fan",{
+    body:"Hello world",audience:"public",idempotencyKey:"human-status-key001"});
+ });
+ it("never accepts a forged staff/Masana post or a private audience silently made public",async()=>{
+  const repo={...mock(),publishHumanText:vi.fn(async()=>post)};
+  const svc=new FeedService(repo,async()=>true);
+  const req={body:"My own post",audience:"public" as const,idempotencyKey:"human-status-key001"};
+  await expect(svc.publishHumanText({...fan,kind:"staff"} as never,req)).rejects.toMatchObject({status:403});
+  await expect(svc.publishHumanText({...fan,kind:"masana"} as never,req)).rejects.toMatchObject({status:403});
+  await expect(svc.publishHumanText(fan,{...req,audience:"followers"} as never)).rejects.toMatchObject({status:422,code:"unsupported_audience"});
+  await expect(svc.publishHumanText(fan,{...req,body:"  "})).rejects.toMatchObject({status:422});
+  expect(repo.publishHumanText).not.toHaveBeenCalled();
+ });
+ it("does not fabricate success if the database writer is unavailable",async()=>{
+  const svc=new FeedService(mock(),async()=>true);
+  await expect(svc.publishHumanText(fan,{body:"Hello",audience:"public",idempotencyKey:"human-status-key001"}))
+    .rejects.toMatchObject({status:503,code:"human_publishing_unavailable"});
+ });
+});
 describe("ST2 server reaction contract",()=>{
  it("sets one typed reaction from trusted fan identity, including remove",async()=>{
   const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};

@@ -17,6 +17,7 @@ import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../profile/masana_profile_screen.dart';
 import '../profile/person_profile_screen.dart';
+import '../../features/home_feed/status_human_compose_screen.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Scope every Status operation to the signed-in fan who opened the tab.
@@ -55,6 +56,9 @@ class AccountBoundFeedApi extends DioFeedApi {
   @override
   Future<void> react(String id, String? kind) =>
       _checked(() => super.react(id, kind));
+  @override
+  Future<FeedPost> publishHumanText(String body,String idempotencyKey) =>
+      _checked(() => super.publishHumanText(body,idempotencyKey));
   @override
   Future<void> comment(String id, String body, String key) =>
       _checked(() => super.comment(id, body, key));
@@ -279,6 +283,27 @@ class StatusScreen extends ConsumerWidget {
       ));
     }
 
+    Future<bool> openHumanCompose() async {
+      if(currentAccount()!=account)return false;
+      final result=await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(builder: (_) => Consumer(
+          builder: (routeContext, ref, __) {
+            final active=ref.watch(sessionProvider);
+            if(active is! SessionSignedIn||active.user.id!=account) {
+              return const Scaffold(body:Center(
+                child:Text('Sign in to create a Status.')));
+            }
+            return StatusHumanComposeScreen(
+              accountKey:account,
+              publisher:feed as HumanStatusPublisher,
+              isAccountCurrent:()=>currentAccount()==account,
+            );
+          },
+        )),
+      );
+      return result==true&&currentAccount()==account;
+    }
+
     return KeyedSubtree(
       key: ValueKey('status-account-$account'),
       child: MasanawaStatusTabs(
@@ -290,6 +315,7 @@ class StatusScreen extends ConsumerWidget {
               onOpenMedia: openMedia,
               onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
               onHumanProfile: openHumanProfile,
+              onCreateHumanStatus: openHumanCompose,
               audioPlaybackAvailable: true,
             ),
         videos: ExternalVideosScreen(
