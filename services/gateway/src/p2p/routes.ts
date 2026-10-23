@@ -53,9 +53,16 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
   };
   app.get("/v1/wallet/msnw/p2p/offers/page",async(req,reply)=>{
     try {
-      const query=req.query as {cursor?:unknown};
-      return await deps.service.offersPage(await actor(req.headers.authorization),{
-        ...(typeof query.cursor==="string"?{cursor:query.cursor}:{})});
+      const a=await actor(req.headers.authorization);
+      const query=req.query as Record<string,unknown>;
+      const input:Record<string,string>={};
+      for(const field of ['cursor','amountMicro','search','asset','fiat','method']) {
+        if(query[field]!==undefined){
+          if(typeof query[field]!=='string')throw new P2pError('p2p.invalid_filter',422);
+          input[field]=query[field];
+        }
+      }
+      return await deps.service.offersPage(a,input);
     }catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/my-offers/page",async(req,reply)=>{
@@ -150,6 +157,36 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       });
       return reply.code(created.replay?200:201).send(created);
     } catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/messages',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await actor(req.headers.authorization);
+      const q=req.query as {cursor?:unknown};
+      if(q.cursor!==undefined&&typeof q.cursor!=='string')throw new P2pError('p2p.invalid_cursor',422);
+      return await deps.service.messagesPage(a,(req.params as {orderId:string}).orderId,
+        typeof q.cursor==='string'?{cursor:q.cursor}:{});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/messages/by-request/:requestKey',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await actor(req.headers.authorization);
+      const p=req.params as {orderId:string;requestKey:string};
+      return await deps.service.messageByRequest(a,p.orderId,p.requestKey);
+    }catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/orders/:orderId/messages',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await actor(req.headers.authorization);
+      const body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='body'))
+        throw new P2pError('p2p.invalid_message',422);
+      const result=await deps.service.sendMessage(a,(req.params as {orderId:string}).orderId,
+        {body:body.body,requestKey:req.headers['idempotency-key']});
+      return reply.code(result.replay?200:201).send(result);
+    }catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/notifications",async(req,reply)=>{
     try {return {items:await deps.service.notifications(await actor(req.headers.authorization))};}

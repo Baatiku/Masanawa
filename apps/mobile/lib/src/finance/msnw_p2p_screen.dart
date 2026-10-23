@@ -1,3 +1,4 @@
+import 'p2p_order_messages.dart';
 import 'wallet_flow_page.dart';
 import 'p2p_order_presentation.dart';
 import 'wallet_step_up_page.dart';
@@ -127,6 +128,27 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   late String _orderFilter;
   final _nextCursors = <int,String?>{};
   bool _loadingMore = false;
+  String _marketAmount = '';
+  String _marketSearch = '';
+  int _marketRevision = 0;
+  bool get _hasMarketFilters => _marketAmount.isNotEmpty || _marketSearch.isNotEmpty;
+  String get _offerQuery {
+    final values = <String, String>{
+      if (_marketAmount.isNotEmpty) 'amountMicro': _micro(_marketAmount),
+      if (_marketSearch.isNotEmpty) 'search': _marketSearch,
+    };
+    return values.isEmpty ? '' : '?${Uri(queryParameters: values).query}';
+  }
+  Future<void> _filterOffers() async {
+    final result = await openWalletPage<Map<String, String>>(context: context,
+      title: 'Filter offers', builder: (_) => MsnwP2pMarketFilters(
+        amount: _marketAmount, search: _marketSearch));
+    if (!mounted || !_sameAccount || result == null) return;
+    setState(() {
+      _marketAmount = result['amount'] ?? ''; _marketSearch = result['search'] ?? '';
+      _marketRevision++; _cached.remove(0); _nextCursors.remove(0); _list = _load();
+    });
+  }
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _buyDrafts = <String, String>{};
@@ -348,7 +370,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     return r.data;
   }
   String _listEndpoint(int tab,String filter) => switch(tab) {
-    0 => '/offers/page',
+    0 => '/offers/page$_offerQuery',
     1 => '/my-offers/page',
     2 => '/orders/page?filter=$filter',
     _ => '/notifications/page',
@@ -356,11 +378,13 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
 
   Future<List<Map<String, dynamic>>> _load() async {
     final tab = _tab;
+    if (tab == 4) return <Map<String, dynamic>>[];
     final filter = _orderFilter;
+    final revision = _marketRevision;
     final json = _json(await _request('GET',_listEndpoint(tab,filter)));
     final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
-    if (_sameAccount && (tab != 2 || filter == _orderFilter)) {
+    if (_sameAccount && (tab != 0 || revision == _marketRevision) && (tab != 2 || filter == _orderFilter)) {
       _cached[tab] = items;
       _nextCursors[tab] = json['nextCursor'] as String?;
     }
@@ -383,6 +407,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     final cursor = _nextCursors[tab];
     if (_loadingMore || cursor == null || !_sameAccount) return;
     final filter = _orderFilter;
+    final revision = _marketRevision;
     setState(() => _loadingMore = true);
     try {
       final base = _listEndpoint(tab,filter);
@@ -391,6 +416,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         '$base${separator}cursor=${Uri.encodeComponent(cursor)}'));
       final next = (json['items'] as List<dynamic>? ?? []).map(_json).toList();
       if (!mounted || !_sameAccount || _tab != tab ||
+        (tab == 0 && revision != _marketRevision) ||
         (tab == 2 && filter != _orderFilter)) return;
       final existing = _cached[tab] ?? <Map<String, dynamic>>[];
       final idKey = switch(tab) {0||1=>'offer_id',2=>'order_id',_=>'event_id'};
@@ -656,6 +682,20 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         act: (action, [reason]) async {
           await _request('POST','/orders/$id/$action',
             reason == null ? {} : {'reason': reason});
+        },
+        openMessages: (pageContext) async {
+          if (!_sameAccount || !pageContext.mounted) return;
+          await openWalletPage<void>(context: pageContext, title: 'Order messages',
+            wrapScaffold: false, builder: (_) => P2pOrderMessagesPage(
+              orderId: id, expectedUserId: widget.expectedUserId,
+              currentUserId: widget.currentUserId,
+              loadPage: (cursor) async => _json(await _request('GET',
+                '/orders/$id/messages${cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'}')),
+              send: (body, key) async => _json(await _request('POST',
+                '/orders/$id/messages', {'body': body}, key)),
+              findRequest: (key) async => _json(await _request('GET',
+                '/orders/$id/messages/by-request/${Uri.encodeComponent(key)}')),
+            ));
         },
         userId: widget.expectedUserId,
         loadReceipt: () async => _json(await _request('GET','/orders/$id/receipt')),
@@ -962,11 +1002,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Widget _empty() {
-    final title = ['No offers available', 'No sell offers yet',
-      'No P2P orders yet', 'No updates yet'][_tab];
-    final description = ['Sellers with funded capacity appear here.',
+    final title = _tab == 0 && _hasMarketFilters ? 'No offers match your filters' : ['No offers available', 'No sell offers yet',
+      'No P2P orders yet', 'No updates yet', 'Buyer ads are not available yet'][_tab];
+    final description = _tab == 0 && _hasMarketFilters ? 'Change or clear the filters to see other eligible offers.' : ['Sellers with funded capacity appear here.',
       'Create an offer to sell MSNW using your verified bank.',
-      'Your purchases and sales appear here.', 'Order activity appears here.'][_tab];
+      'Your purchases and sales appear here.', 'Order activity appears here.',
+      'You can create a sell ad for buyers to find. Your existing ads are in My ads.'][_tab];
     return Padding(padding: const EdgeInsets.all(35),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.receipt_long_outlined, size: 38,
@@ -975,7 +1016,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         Text(title, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
         Text(description, textAlign: TextAlign.center),
-        TextButton.icon(onPressed: () => _reload(), icon: const Icon(Icons.refresh),
+        if (_tab == 4) ...[
+          const SizedBox(height: 12),
+          FilledButton.icon(onPressed: _busy ? null : _sell,
+            icon: const Icon(Icons.add), label: const Text('Create sell ad')),
+          TextButton(onPressed: () => _reload(1), child: const Text('My ads')),
+        ] else TextButton.icon(onPressed: () => _reload(), icon: const Icon(Icons.refresh),
           label: const Text('Refresh')),
       ]));
   }
@@ -1018,19 +1064,36 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         child: Text('Sign in again to continue')));
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('MSNW P2P')),
+      appBar: AppBar(title: Text(switch (_tab) {
+        1 => 'My ads', 3 => 'Order updates', _ => 'MSNW P2P',
+      }), actions: [PopupMenuButton<int>(tooltip: 'P2P options',
+        onSelected: (value) => _reload(value),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 1, child: Text('My ads')),
+          PopupMenuItem(value: 3, child: Text('Order updates')),
+        ])]),
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverToBoxAdapter(child: Column(children: [
         SingleChildScrollView(scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Row(children: [
-            for (final (index, title) in [(0, 'Buy'), (1, 'Sell'),
-              (2, 'Orders'), (3, 'Updates')])
+            for (final (index, title) in [(0, 'Buy'), (4, 'Sell'),
+              (2, 'Orders')])
               Padding(padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(label: Text(title), showCheckmark: false,
                   selected: _tab == index,
                   onSelected: (_) { if (_tab != index) _reload(index); })),
+          ])),
+        if (_tab == 0) Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            const Text('MSNW / NGN · Bank transfer'),
+            TextButton.icon(onPressed: _filterOffers, icon: const Icon(Icons.tune),
+              label: Text(_hasMarketFilters ? 'Filters applied' : 'Filter offers')),
+            if (_hasMarketFilters) TextButton(onPressed: () => setState(() {
+              _marketAmount = ''; _marketSearch = ''; _marketRevision++;
+              _cached.remove(0); _nextCursors.remove(0); _list = _load();
+            }), child: const Text('Clear filters')),
           ])),
         if (!_recoveryReady) ListTile(
           leading: const Icon(Icons.lock_clock_outlined),
@@ -1112,7 +1175,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             final cached = _cached[_tab] ?? <Map<String, dynamic>>[];
             if (snapshot.connectionState != ConnectionState.done &&
                 cached.isEmpty) return Semantics(
-                  label: 'Loading P2P ${['offers','sell offers','orders','updates'][_tab]}',
+                  label: 'Loading P2P ${['offers','sell offers','orders','updates','buyer ads'][_tab]}',
                   liveRegion: true,
                   child: _loading());
             final items = snapshot.hasData ? snapshot.data! : cached;
@@ -1792,10 +1855,11 @@ class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
     required this.uploadEvidence,required this.openEvidence,
-    required this.loadReceipt,required this.userId});
+    required this.loadReceipt,required this.userId,required this.openMessages});
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
   final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
+  final Future<void> Function(BuildContext) openMessages;
   final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(Map<String,dynamic>) uploadEvidence;
@@ -2117,6 +2181,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('P2P order'),actions:[
+      IconButton(onPressed:()=>widget.openMessages(context),tooltip:'Order messages',icon:const Icon(Icons.forum_outlined)),
       IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh)),
     ]),
     body:FutureBuilder<Map<String,dynamic>>(future:_future,builder:(context,s){
@@ -2152,6 +2217,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         ),
         const SizedBox(height:16),
         P2pOrderProgress(state:state),
+
         const SizedBox(height:14),
         if(state=='awaiting_payment'||state=='payment_claimed') ...[
           P2pOrderBankDetails(bankName:'${p['bank_name']??''}',
@@ -2296,4 +2362,46 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       ]);
     }),
   );
+}
+
+class MsnwP2pMarketFilters extends StatefulWidget {
+  const MsnwP2pMarketFilters({super.key, required this.amount, required this.search});
+  final String amount;
+  final String search;
+  @override State<MsnwP2pMarketFilters> createState() => _MsnwP2pMarketFiltersState();
+}
+class _MsnwP2pMarketFiltersState extends State<MsnwP2pMarketFilters> {
+  final _form = GlobalKey<FormState>();
+  late final _amount = TextEditingController(text: widget.amount);
+  late final _search = TextEditingController(text: widget.search);
+  @override void dispose() { _amount.dispose(); _search.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.all(16), child: Form(key: _form, child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('MSNW / NGN'),
+        const Text('Verified bank transfer methods · Newest offers first'),
+        const SizedBox(height: 16),
+        TextFormField(controller: _amount,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Amount in MSNW', hintText: 'Optional', border: OutlineInputBorder()),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) return null;
+            try {
+              final amount = BigInt.parse(_micro(value));
+              if (amount > BigInt.from(1000000).pow(3)) return 'Amount is out of range.';
+              return null;
+            } catch (_) { return 'Enter a positive amount with up to 6 decimals.'; }
+          }),
+        const SizedBox(height: 16),
+        TextFormField(controller: _search, maxLength: 80,
+          decoration: const InputDecoration(labelText: 'Trader name or ad reference', hintText: 'Optional', border: OutlineInputBorder()),
+          validator: (value) => value != null && RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)
+            ? 'Remove control characters.' : null),
+        const SizedBox(height: 12),
+        FilledButton(onPressed: () {
+          if (_form.currentState?.validate() != true) return;
+          Navigator.pop(context, {'amount': _amount.text.trim(), 'search': _search.text.trim()});
+        }, child: const Text('Apply filters')),
+        TextButton(onPressed: () => Navigator.pop(context, <String, String>{}), child: const Text('Clear filters')),
+      ])));
 }
