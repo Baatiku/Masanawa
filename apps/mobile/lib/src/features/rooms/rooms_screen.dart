@@ -286,15 +286,56 @@ class _RoomsState extends State<RoomsScreen> {
           widget.protectDetail?.call(routeContext, detail) ?? detail,
     ),
   );
-  Future<void> enter(String id) async {
+  Future<void> enter(String id, {bool refreshOnReturn = false}) async {
+    final api = widget.api, version = generation;
+    // Invalidate an older page that was still in flight when navigation began.
+    roomRead++;
+    setState(() => loadingOlderRooms = false);
     await open<void>(
       RoomCommunityScreen(
-        api: widget.api,
+        api: api,
         roomId: id,
         protectDetail: widget.protectDetail,
       ),
     );
-    if (mounted) load();
+    if (!scoped(version, api)) return;
+    if (refreshOnReturn) {
+      await loadRooms();
+      return;
+    }
+    final read = ++roomRead;
+    try {
+      final fresh = await api.room(id);
+      if (!scoped(version, api) || read != roomRead) return;
+      if (fresh.id != id) throw const FormatException('Room response mismatch');
+      final query = search.text.trim().toLowerCase();
+      final eligible =
+          (joined ? fresh.joined : fresh.visibility == 'public') &&
+          '${fresh.name} ${fresh.description}'.toLowerCase().contains(query);
+      setState(() {
+        rooms = [
+          for (final room in rooms)
+            if (room.id != id) room else if (eligible) fresh,
+        ];
+        error = null;
+      });
+    } catch (e) {
+      if (!scoped(version, api) || read != roomRead) return;
+      setState(() {
+        error = e;
+        if (e is DioException &&
+            const [403, 404].contains(e.response?.statusCode)) {
+          rooms = rooms.where((room) => room.id != id).toList();
+          invitations = invitations
+              .where((invite) => invite['roomId'] != id)
+              .toList();
+        } else if (accessLost(e)) {
+          rooms = [];
+          invitations = [];
+          roomCursor = invitationCursor = null;
+        }
+      });
+    }
   }
 
   Future<void> create() async {
@@ -304,7 +345,7 @@ class _RoomsState extends State<RoomsScreen> {
         room != null &&
         identical(api, widget.api) &&
         version == generation) {
-      await enter(room.id);
+      await enter(room.id, refreshOnReturn: true);
     }
   }
 
@@ -374,15 +415,12 @@ class _RoomsState extends State<RoomsScreen> {
         () => invitations = invitations
             .where(
               (item) =>
-                  item['inviteId'] != inviteId || item['roomId'] != roomId,
+                  item['roomId'] != roomId ||
+                  decline && item['inviteId'] != inviteId,
             )
             .toList(),
       );
-      if (decline) {
-        await load();
-      } else {
-        await enter(roomId);
-      }
+      if (!decline) await enter(roomId, refreshOnReturn: true);
     } catch (e) {
       if (current()) setState(() => invitationActionError = e);
     } finally {

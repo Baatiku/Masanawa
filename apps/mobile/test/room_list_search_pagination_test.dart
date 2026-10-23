@@ -8,7 +8,7 @@ import 'package:masanawa/src/features/rooms/rooms_screen.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
 
-CommunityRoom room(String id, String name, {bool pinned = false}) =>
+CommunityRoom makeRoom(String id, String name, {bool pinned = false}) =>
     CommunityRoom(
       id: id,
       name: name,
@@ -30,6 +30,28 @@ class _Pages extends FakeCommunityApi
       showInvitations = false;
   Completer<RoomListPage>? pendingMore, pendingSearch;
   String delayedQuery = 'old';
+  bool denyVisited = false, failVisited = false;
+  int roomReads = 0;
+  @override
+  Future<CommunityRoom> room(String id) async {
+    roomReads++;
+    if (roomReads > 1 && denyVisited) {
+      throw DioException(
+        requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 403),
+      );
+    }
+    if (roomReads > 1 && failVisited) throw StateError('outage');
+    return CommunityRoom(
+      id: id,
+      name: '${prefix}Room two',
+      visibility: 'public',
+      postingPolicy: 'members',
+      ownerId: 'owner',
+      role: 'member',
+    );
+  }
+
   @override
   Future<RoomListPage> roomPage(
     bool joined, {
@@ -46,17 +68,19 @@ class _Pages extends FakeCommunityApi
         );
       if (failMore) throw StateError('outage');
       return RoomListPage([
-        room('room_one', '${prefix}Room one', pinned: true),
-        room('room_two', '${prefix}Room two'),
+        makeRoom('room_one', '${prefix}Room one', pinned: true),
+        makeRoom('room_two', '${prefix}Room two'),
       ], repeated ? 'rooms-next' : null);
     }
     if (search.isNotEmpty) {
       if (pendingSearch != null && search == delayedQuery)
         return pendingSearch!.future;
-      return RoomListPage([room('room_match', '${prefix}Match $search')], null);
+      return RoomListPage([
+        makeRoom('room_match', '${prefix}Match $search'),
+      ], null);
     }
     return RoomListPage([
-      room('room_one', '${prefix}Room one', pinned: true),
+      makeRoom('room_one', '${prefix}Room one', pinned: true),
     ], 'rooms-next');
   }
 
@@ -122,6 +146,29 @@ Future<void> query(WidgetTester tester, String value) async {
 }
 
 void main() {
+  for (final mode in ['success', 'denied', 'outage']) {
+    testWidgets('return from Room preserves older pages with $mode readback', (
+      tester,
+    ) async {
+      final api = _Pages()
+        ..denyVisited = mode == 'denied'
+        ..failVisited = mode == 'outage';
+      await mount(tester, api);
+      await more(tester);
+      await tester.tap(find.text('Room two'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(api.calls.length, 2);
+      expect(api.invitationCursors, [null]);
+      expect(find.text('Room one'), findsOneWidget);
+      expect(
+        find.text('Room two'),
+        mode == 'denied' ? findsNothing : findsOneWidget,
+      );
+      expect(find.text('No Rooms yet'), findsNothing);
+    });
+  }
   testWidgets(
     'clear search starts a fresh canonical first page without resetting invitations',
     (tester) async {
@@ -174,7 +221,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await query(tester, 'new');
     api.pendingSearch!.complete(
-      RoomListPage([room('room_old', 'Old private search')], null),
+      RoomListPage([makeRoom('room_old', 'Old private search')], null),
     );
     await tester.pumpAndSettle();
     expect(find.text('Match new'), findsOneWidget);
@@ -223,7 +270,7 @@ void main() {
     await more(tester);
     await query(tester, 'new');
     api.pendingMore!.complete(
-      RoomListPage([room('room_secret', 'Old private page')], null),
+      RoomListPage([makeRoom('room_secret', 'Old private page')], null),
     );
     await tester.pumpAndSettle();
     expect(find.text('Match new'), findsOneWidget);
@@ -254,7 +301,7 @@ void main() {
     await more(tester);
     await mount(tester, current);
     old.pendingMore!.complete(
-      RoomListPage([room('room_secret', 'Private late Room')], null),
+      RoomListPage([makeRoom('room_secret', 'Private late Room')], null),
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Private'), findsNothing);

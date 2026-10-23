@@ -22,7 +22,8 @@ void main(){
   await tester.tap(find.text('Discover'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField),'does not exist');
-  await tester.pump();
+  await tester.pump(const Duration(milliseconds:300));
+  await tester.pumpAndSettle();
   expect(find.text('No Rooms match this search'),findsOneWidget);
   expect(find.byTooltip('Create Room'),findsOneWidget);
  });
