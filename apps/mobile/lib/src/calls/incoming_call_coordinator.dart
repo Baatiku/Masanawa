@@ -83,7 +83,12 @@ class _IncomingCallCoordinatorState
               call.ringing && call.expiresAt.isAfter(DateTime.now()))
           .toList()
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      setState(() => _call = ringing.isEmpty ? null : ringing.first);
+      setState(() {
+        // Mark the credentials that authorized this exact banner even when
+        // the widget first mounts with an already signed-in session.
+        _identity = identity;
+        _call = ringing.isEmpty ? null : ringing.first;
+      });
     } catch (_) {
       /* Keep the last hint; opening it rechecks authority. */
     } finally {
