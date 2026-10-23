@@ -385,6 +385,25 @@ it('recovers ring deadlines and stale calls durably',async()=>{
   )
 }
 );
+it('reaps expired participant calls before fresh admission without a worker tick',async()=>{
+  const expired=await send(a,'POST','calls',{handle:'bob',requestId:'expired-busy-ring'});
+  expect(expired.state).toBe('ringing');
+  clock=new Date(clock.getTime()+61000);
+  const replacement=await send(eve,'POST','calls',{handle:'bob',requestId:'replace-expired-ring'});
+  expect(replacement.state).toBe('ringing');
+  expect((await send(a,'GET',`calls/${expired.id}`)).state).toBe('missed');
+  expect((await send(eve,'POST','calls',{handle:'bob',requestId:'replace-expired-ring'})).id).toBe(replacement.id);
+  expect((await send(a,'POST','calls',{handle:'bob',requestId:'still-busy'})).state).toBe('busy');
+  await send(eve,'POST',`calls/${replacement.id}/transition`,{action:'cancel'});
+
+  const connected=await send(a,'POST','calls',{handle:'bob',requestId:'expired-busy-accepted'});
+  await send(b,'POST',`calls/${connected.id}/transition`,{action:'accept'});
+  clock=new Date(clock.getTime()+121000);
+  const next=await send(eve,'POST','calls',{handle:'bob',requestId:'replace-expired-accepted'});
+  expect(next.state).toBe('ringing');
+  expect((await send(a,'GET',`calls/${connected.id}`)).state).toBe('ended');
+  await send(eve,'POST',`calls/${next.id}/transition`,{action:'cancel'});
+});
 it('searches the complete participant-authorized human call history using literal peer/outcome terms',async()=>{
   const old = '2026-10-01T09:00:00Z';
   // Many unrelated recent calls must not hide an older human match behind
