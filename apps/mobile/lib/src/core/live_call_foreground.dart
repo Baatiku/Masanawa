@@ -1,5 +1,8 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
 import 'audio_failure.dart';
 
 /// Android microphone service belongs to continuous calls, never voice notes.
@@ -8,10 +11,19 @@ class LiveCallForeground {
   static const MethodChannel _channel = MethodChannel('masanawa/live_call');
   static int _owners = 0;
   static bool get active => _owners > 0;
+  static final _activity = ValueNotifier<bool>(false);
+
+  /// Observe call takeover without acquiring a microphone or native service.
+  static ValueListenable<bool> get activity => _activity;
+  static void _acquire() {
+    _owners++;
+    _activity.value = true;
+  }
+
   static bool get _android => Platform.isAndroid;
   static Future<void> startOrThrow({bool? android}) async {
     if (!(android ?? _android)) {
-      _owners++;
+      _acquire();
       return;
     }
     try {
@@ -21,7 +33,7 @@ class LiveCallForeground {
           'Android could not start the call service. Keep the app open, end other calls, then retry.',
         );
       }
-      _owners++;
+      _acquire();
     } on MissingPluginException {
       throw const AudioFailure(
         'app_update',
@@ -46,6 +58,7 @@ class LiveCallForeground {
 
   static Future<void> stop() async {
     if (_owners > 0) _owners--;
+    _activity.value = active;
     if (_owners > 0) return;
     if (!_android) return;
     try {
