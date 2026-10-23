@@ -38,9 +38,9 @@
       "base_sha": "0d9803629393b52e42d82a5cd6b1294215f43772",
       "pr": "",
       "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T08:19:21.604Z",
-      "expires_at": "2026-10-23T08:24:21.604Z",
-      "progress": "Recovered preserved maker-buy work; 74/75 backend tests PASS, one expected market shape assertion to update; typing PASS. Native direction flows implemented, analyzer has lint info only; adding custody and native journey proofs."
+      "heartbeat_at": "2026-10-23T08:26:22.986Z",
+      "expires_at": "2026-10-23T08:31:22.986Z",
+      "progress": "75backend+17existingFlutter+5newtwo-directionFlutter PASS; review transaction-timeout issue fixed by actor-only admission API, focused9+typing PASS. Real custody concurrency/refund/identity test authored for exact-head hosted PG. Consolidated checks running, preparing PR."
     }
   ],
   "history": [
