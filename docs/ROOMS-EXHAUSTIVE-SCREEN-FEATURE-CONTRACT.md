@@ -105,6 +105,16 @@ Mobile retains rows/cursors on transient failures, deduplicates pages, rejects r
 | R1-23 | P | No visible post/empty comments/error states are distinct. |
 | R1-24 | N/P | Reported post public state not changed by unreviewed single report. |
 
+### Shared-media history and source navigation — 23 October 2026 (partial source)
+
+Base `main 9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786`; source `80fd9d04add69577b27f6d20f0b63035d419c96d`, branch `feat/rooms-shared-media-library-oct23`, [PR #333](https://github.com/Baatiku/Masanawa/pull/333). P5-R04/R06/R08/R09, R1-16/18/19 and R5/P8: Room Info → Shared media → Photos/Videos/Audio/Files, literal filename search, dated rows, older pages/Retry and exact source-parent thread. Every metadata page reapplies current membership/entitlement, tenant/Room, published/due parent and visible-reply rules. Unsent uploads are excluded; full PostgreSQL microseconds and media-ID ties avoid cap/tie omissions. History selects metadata only, with no attachment byte bodies/uploader/request IDs. Additive migration 0016 adds a read index. Existing byte GET, posting/financial/provider authority and canonical identity projections are preserved.
+
+The new secondary Flutter library replaces Info's truncated passive filename panel. Search/type changes discard old results; older pages deduplicate and reject cursor cycles, transient failures retain recoverable rows, access denial clears private metadata and invalidates pending pages. Account/Room/API changes fence old callbacks and source navigation; periodic membership readback removes revoked results. Source return revalidates previously loaded pages and retains the library's search/filter/scroll context. No persistent media cache, automatic body download or new external-share action. Existing protected thread/viewer owns attachment opening.
+
+**Evidence:** Gateway strict typing and production dependency build PASS. Six new backend cases, two actual PostgreSQL HTTP cases and fourteen Flutter/transport cases authored; local consolidated Room suite and exact-head hosted Flutter/full checks in progress at this checkpoint. Source parser/formatter is not Flutter validation. Higgsfield unavailable in this session; final exact-head checks and merge evidence belong to #333. No APK, live provider, deployed migration or handset acceptance.
+
+**OPEN:** all P5/P8 parent and 177-screen/820-item acceptance gates; link extraction/library, native image/video/audio/PDF preview qualification, durable cache/push/media revocation and process-death recovery, versioned author edit/delete, member pagination, central platform moderation/staffing and device/provider/deployed qualification. Preserve other windows' Status/Wallet/P2P/Calls source and pending #300 identity/layout work. Safe merge target: fresh main with all current-head checks green; next source is author editing/removal and member paging.
+
 ### R2 Membership, access, visibility and permissions
 | ID | State | Required small action / observable result |
 |---|---|---|

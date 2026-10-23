@@ -83,6 +83,8 @@ Rooms R06 recovery checkpoint: [#329](https://github.com/Baatiku/Masanawa/pull/3
 
 Rooms R04 thread/history checkpoint: [#332](https://github.com/Baatiku/Masanawa/pull/332), source `bb070f05`, adds scoped body search, chronological older pages, an exact parent plus paged thread replies, parent-bound composer/closed-thread state, revalidated loaded pages on Back and account/Room/query fences. 92 backend tests (23 PG18) PASS; seventeen Flutter/transport cases authored, hosted validation pending. No physical-device/provider or full roadmap acceptance implied.
 
+Rooms R05/RM11 shared-media checkpoint: [#333](https://github.com/Baatiku/Masanawa/pull/333), source `80fd9d04`, adds Info → Shared media → type/search/dated older pages → exact authorized source thread → Back retaining context and revalidating loaded history. Loading, no matches, transient Retry, invalid protocol, revoked membership, old query/account/Room responses and compact large-text RTL are distinct. Metadata-only reads do not automatically fetch bodies; current protected thread/viewer opens attachments. Link extraction/native preview and device/provider/deployed acceptance remain open. Fourteen new Flutter/transport cases authored; hosted qualification pending.
+
 ### State contract applying to every H/R route
 - **Loading:** compact list/profile skeleton; retain permitted cached content during refresh. Don't block first paint on contacts/provider discovery.
 - **Empty:** Humans “Find someone to start a conversation”, joined Rooms “Create or discover a Room”, search “No matches”; one useful action. Empty creator sections are omitted.
