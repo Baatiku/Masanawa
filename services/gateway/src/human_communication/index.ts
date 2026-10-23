@@ -344,6 +344,19 @@ export function createHumanCommunicationService(o:HumanOptions){
             values.push(anchor.created_at, anchor.id);
             condition = 'AND (created_at,id)<($3,$4)';
           }
+          // A search must cover the full authorized call history, not only the
+          // first 50 rows cached by a phone. Match the peer's public identity
+          // (not their private phone/email), outcome or original call reference.
+          // strpos is literal: '%' and '_' cannot turn into wildcard matches.
+          if (id !== 'incoming' && q.q !== undefined) {
+            if (typeof q.q !== 'string' || q.q.trim().length > 80) fail(400, 'Invalid call search');
+            const search = q.q.trim().toLowerCase();
+            if (search) {
+              values.push(search);
+              const param = `$${values.length}`;
+              condition += ` AND (strpos(lower(state),${param})>0 OR strpos(lower(id),${param})>0 OR strpos(CASE WHEN caller=$2 THEN 'outgoing' ELSE 'incoming' END,${param})>0 OR EXISTS(SELECT 1 FROM talks.public_profiles p WHERE p.tenant_id=$1 AND p.user_id=CASE WHEN caller=$2 THEN recipient ELSE caller END AND (strpos(lower(p.handle),${param})>0 OR strpos(lower(p.display_name),${param})>0)))`;
+            }
+          }
           const rows = await db.query(`SELECT * FROM talks.human_calls WHERE tenant_id=$1 AND (caller=$2 OR recipient=$2) ${condition} ORDER BY created_at DESC,id DESC`, values);
           const items = [];
           for (const row of rows.rows) {

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/calls/call_history.dart';
 import 'package:masanawa/src/calls/call_lifecycle_reporter.dart';
 import 'package:masanawa/src/core/api/models.dart';
+import 'package:masanawa/src/human_calls/transport.dart';
 import 'package:masanawa/src/screens/calls/calls_screen.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
@@ -50,6 +51,38 @@ class _Transport implements CallHistoryTransport {
   }) => searchHandler?.call(cursor, query) ?? handler(cursor);
 }
 
+class _HumanHistory implements HumanCallsTransport {
+  _HumanHistory(this.handler);
+  final Future<Map<String, dynamic>> Function(String path) handler;
+  final paths = <String>[];
+  @override
+  Future<Map<String, dynamic>> request(String method, String path,
+      {Map<String, dynamic>? data}) {
+    expect(method, 'GET');
+    paths.add(path);
+    return handler(path);
+  }
+  @override
+  void cancel() {}
+}
+
+Map<String, dynamic> humanPage(String id, String name,
+        {String? nextCursor, String state = 'missed'}) => {
+      'items': [
+        {
+          'id': id,
+          'peer': {'handle': name.toLowerCase(), 'displayName': name},
+          'state': state,
+          'direction': 'incoming',
+          'createdAt': '2026-10-11T01:00:00Z',
+          'answeredAt': null,
+          'endedAt': '2026-10-11T01:01:00Z',
+          'expiresAt': '2026-10-11T01:01:00Z',
+        },
+      ],
+      'nextCursor': nextCursor,
+    };
+
 CallHistoryPage page(String name, {String? nextCursor}) => CallHistoryPage(
   calls: [
     CallHistoryItem.fromJson({
@@ -72,11 +105,13 @@ Future<void> _mount(
   WidgetTester tester,
   _Session session,
   CallHistoryTransport transport,
+  {HumanCallsTransport? human}
 ) => tester.pumpWidget(
   ProviderScope(
     overrides: [
       sessionProvider.overrideWith(() => session),
       callHistoryTransportProvider.overrideWithValue(transport),
+      if (human != null) humanCallsTransportProvider.overrideWithValue(human),
     ],
     child: MaterialApp(
       theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -90,6 +125,45 @@ void main() {
     await _mount(tester,_Session(),_Transport((_)async=>page('Amina')));await tester.pumpAndSettle();
     await tester.tap(find.text('Amina'));await tester.pumpAndSettle();
     expect(find.text('Call details'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);
+  });
+  testWidgets('human search reads matching older calls from the server, not just cached recents', (tester) async {
+    final human = _HumanHistory((path) async {
+      if (path == '/calls') return humanPage('recent', 'Recent human');
+      if (path == '/calls?q=farrah') return humanPage('older', 'Farrah', nextCursor: 'older-cursor');
+      if (path == '/calls?q=farrah&after=older-cursor') return humanPage('oldest', 'Farrah older');
+      return {'items': [], 'nextCursor': null};
+    });
+    await _mount(tester, _Session(), _Transport((_) async => const CallHistoryPage(calls: [])), human: human);
+    await tester.pumpAndSettle();
+    expect(find.text('Recent human'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'farrah');
+    await tester.pump(const Duration(milliseconds: 355));
+    await tester.pumpAndSettle();
+    expect(find.text('Recent human'), findsNothing);
+    expect(find.text('Farrah'), findsOneWidget);
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(find.text('Farrah older'), findsOneWidget);
+    expect(human.paths, containsAll(['/calls?q=farrah', '/calls?q=farrah&after=older-cursor']));
+  });
+
+  testWidgets('human call search response cannot leak after newer query', (tester) async {
+    final pending = Completer<Map<String, dynamic>>();
+    final human = _HumanHistory((path) {
+      if (path.contains('q=amina')) return pending.future;
+      if (path.contains('q=bello')) return Future.value(humanPage('new', 'Bello'));
+      return Future.value({'items': [], 'nextCursor': null});
+    });
+    await _mount(tester, _Session(), _Transport((_) async => const CallHistoryPage(calls: [])), human: human);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'amina');
+    await tester.pump(const Duration(milliseconds: 355));
+    await tester.enterText(find.byType(TextField), 'bello');
+    pending.complete(humanPage('old', 'Amina'));
+    await tester.pump(const Duration(milliseconds: 355));
+    await tester.pumpAndSettle();
+    expect(find.text('Amina'), findsNothing);
+    expect(find.text('Bello'), findsOneWidget);
   });
   testWidgets('labels incoming missed history and preserves outgoing history', (tester) async {
     await _mount(tester, _Session(), _Transport((_) async => CallHistoryPage(calls: [

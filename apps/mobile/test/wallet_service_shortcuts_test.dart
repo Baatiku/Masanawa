@@ -90,7 +90,13 @@ void main(){
     expect(key,findsOneWidget);
     expect(tester.takeException(),isNull);
   }
-  await tester.scrollUntilVisible(find.text('Airtime'),-200,scrollable:scroll);
+  await tester.scrollUntilVisible(find.text('Airtime'),-140,scrollable:scroll);
+  await tester.pumpAndSettle();
+  // After traversing all ten cards, a 200%-scaled row may sit precisely on
+  // the top viewport edge; scroll it fully into the tappable area.
+  await tester.drag(scroll,const Offset(0,110));
+  await tester.pumpAndSettle();
+  expect(find.text('Airtime').hitTestable(),findsOneWidget);
   await tester.tap(find.text('Airtime'));
   expect(chosen,['airtime']);
   await tester.pump();

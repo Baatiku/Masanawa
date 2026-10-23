@@ -385,6 +385,31 @@ it('recovers ring deadlines and stale calls durably',async()=>{
   )
 }
 );
+it('searches the complete participant-authorized human call history using literal peer/outcome terms',async()=>{
+  const old = '2026-10-01T09:00:00Z';
+  // Many unrelated recent calls must not hide an older human match behind
+  // the first page. Searching does not expose a third party's calls.
+  for (let i=0;i<55;i++) {
+    await query('INSERT INTO talks.human_calls(tenant_id,id,caller,recipient,state,created_at,expires_at,caller_heartbeat,recipient_heartbeat) VALUES($1,$2,$3,$4,$5,$6,$7,$6,$6)',[
+      't',`history-filler-${i}`,'alice','eve','cancelled',new Date(Date.parse(old)+i*60000).toISOString(),'2026-10-02T09:00:00Z'
+    ]);
+  }
+  const byPeer=await send(a,'GET','calls',{}, {q:'  bOb  '});
+  expect(byPeer.items.length).toBeGreaterThan(0);
+  expect(byPeer.items.every((c:any)=>c.peer.handle==='bob')).toBe(true);
+  expect((await send(a,'GET','calls',{}, {q:'%_'})).items).toHaveLength(0);
+  expect((await send(a,'GET','calls',{}, {q:'history-filler-0'})).items.map((c:any)=>c.id)).toContain('history-filler-0');
+  const searchPage=await send(a,'GET','calls',{}, {q:'cancelled'});
+  expect(searchPage.items).toHaveLength(50);
+  expect(searchPage.nextCursor).toBeTruthy();
+  const older=await send(a,'GET','calls',{}, {q:'cancelled',after:searchPage.nextCursor});
+  expect(older.items.length).toBeGreaterThan(0);
+  expect(older.items.some((c:any)=>searchPage.items.some((first:any)=>first.id===c.id))).toBe(false);
+  expect((await send(b,'GET','calls',{}, {q:'history-filler'})).items).toHaveLength(0);
+  expect((await send(eve,'GET','calls',{}, {q:'history-filler'})).items).toHaveLength(50);
+  await expect(send(a,'GET','calls',{}, {q:'x'.repeat(81)})).rejects.toMatchObject({statusCode:400});
+  await expect(send(a,'GET','calls',{}, {q:12})).rejects.toMatchObject({statusCode:400});
+});
 it('retries durable push once after failure and maintains isolated catch-up cursors',async()=>{
   await db.exec('UPDATE talks.human_outbox SET sent_at=now()');
   push.mockRejectedValueOnce(new Error('provider unavailable'));

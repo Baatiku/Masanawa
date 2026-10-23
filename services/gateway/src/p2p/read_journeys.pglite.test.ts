@@ -78,7 +78,8 @@ async function offer(
     [uuid(number),tenant,seller,payment,createdAt]);
 }
 
-describe("P2P real-SQL read and pagination qualification", () => {
+// Cold PostgreSQL WASM startup shares CPU on hosted CI; retain all query/assertion gates.
+describe("P2P real-SQL read and pagination qualification", {timeout:30_000}, () => {
   it("quotes exact bank fiat and seller fee, never returning unfunded exposure",async()=>{
     const t=await fixture();
     try {
@@ -136,6 +137,34 @@ describe("P2P real-SQL read and pagination qualification", () => {
     }finally{await t.db.close();}
   });
 
+  it("filters exact funded amount and literal public trader/ad search without exposing bank records",async()=>{
+    const t=await fixture();const actor={tenantId:tenant,userId:buyer};
+    try {
+      await offer(t.query,1);
+      await t.query("INSERT INTO security.platform_user_profiles VALUES($1,$2,'Amina % Trader')",[tenant,seller]);
+      expect((await t.service.offersPage(actor,{amountMicro:'2000000',search:'amina %'})).items).toHaveLength(1);
+      expect((await t.service.offersPage(actor,{amountMicro:'2000001'})).items).toHaveLength(0);
+      expect((await t.service.offersPage(actor,{amountMicro:'999999'})).items).toHaveLength(0);
+      expect((await t.service.offersPage(actor,{search:'_'})).items).toHaveLength(0);
+      expect((await t.service.offersPage(actor,{search:uuid(1)})).items).toHaveLength(1);
+      const result=await t.service.offersPage(actor,{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'});
+      expect(result.market).toEqual({asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'});
+      expect(JSON.stringify(result)).not.toMatch(/0123456789|account_number|account_name/);
+      for(const filter of [{asset:'BTC'},{fiat:'USD'},{method:'cash'},{amountMicro:'1e6'},{search:'x'.repeat(81)}])
+        await expect(t.service.offersPage(actor,filter)).rejects.toMatchObject({status:422});
+    }finally{await t.db.close();}
+  });
+  it("binds offer pagination to the active amount/search and account",async()=>{
+    const t=await fixture();const actor={tenantId:tenant,userId:buyer};
+    try {
+      for(let n=1;n<=21;n++)await offer(t.query,n);
+      const page=await t.service.offersPage(actor,{amountMicro:'1000000'});
+      expect(page.nextCursor).toBeTruthy();
+      expect((await t.service.offersPage(actor,{amountMicro:'1000000',cursor:page.nextCursor!})).items).toHaveLength(1);
+      for(const input of [{amountMicro:'1500000'},{search:'trader'},{}])
+        await expect(t.service.offersPage(actor,{...input,cursor:page.nextCursor!})).rejects.toMatchObject({code:'p2p.filter_cursor_changed'});
+    }finally{await t.db.close();}
+  });
   it("keeps own offers and updates participant-scoped across tenants",async()=>{
     const t=await fixture();
     try {

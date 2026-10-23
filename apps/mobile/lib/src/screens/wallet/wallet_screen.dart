@@ -198,9 +198,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     }
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('MSNW funding is not available yet.'),
-      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('MSNW funding is not available yet.'),
+        ));
+      }
       return;
     }
     final userId = session.user.id;
@@ -294,7 +296,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             onBalance:(v){
               if(mounted&&accountId==switch(ref.read(sessionProvider)){
                 SessionSignedIn(:final user)=>user.id,_=>null,
-              })setState((){_balance=v;_balanceOwner=accountId;});
+              }){setState((){_balance=v;_balanceOwner=accountId;});}
             },
           ),
           const SizedBox(height:12),
@@ -345,7 +347,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           _WalletCompositeCard(
             title:'Transaction history',icon:Icons.receipt_long_outlined,
             onOpen:accountId==null?null:()=>viewHistory(),
-            child:WalletRecentActivity(
+            child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              WalletRecentActivity(
               key:ValueKey('wallet-preview-${accountId??'signed-out'}'),
               compact:true,dio:ref.watch(dioProvider),baseUrl:kApiBaseUrl,
               accountId:accountId,
@@ -356,7 +359,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               refreshKey:_custodyRefresh,hideAmounts:hidden,
               onViewAll:()=>viewHistory(),
               onOpenReceipt:(id)=>viewHistory(id),
-            ),
+              ),
+              Align(alignment:Alignment.centerRight,child:TextButton(
+                onPressed:accountId==null?null:()=>viewHistory(),
+                child:const Text('View all'))),
+            ]),
           ),
         ],
       ),

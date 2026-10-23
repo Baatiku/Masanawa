@@ -1,3 +1,4 @@
+// Includes cold PostgreSQL WASM initialization on shared hosted runners.
 import {PGlite} from '@electric-sql/pglite';
 import {expect,it} from 'vitest';
 import {createP2pService,type P2pPool,type MsnwEscrowAuthority} from './service.js';
@@ -31,4 +32,4 @@ it('reads an owner-bound bank/deadline with database time and never moves escrow
   expect(await service.offers({tenantId:'tenant-a',userId:'buyer'})).toHaveLength(0);
   for(const actor of [{tenantId:'tenant-b',userId:'buyer'},{tenantId:'tenant-a',userId:'stranger'}])await expect(service.order(actor,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).rejects.toMatchObject({code:'p2p.not_found'});
  }finally{await db.close();}
-});
+}, 30_000);

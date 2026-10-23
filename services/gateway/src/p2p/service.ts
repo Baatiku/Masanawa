@@ -26,6 +26,8 @@ export interface P2pOrder {
   rate_kobo_per_msnw: string; payment_deadline: string; state: string;
   version: number; receipt_reference?: string | null;
 }
+interface StoredP2pMessage { message_id:string; body:string; created_at:string|Date }
+interface P2pMessage extends StoredP2pMessage { is_own:boolean; sender_role:'buyer'|'seller' }
 export type P2pAction = "claim" | "dispute" | "cancel" | "confirm" | "release" | "refund";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const safeKey = /^[A-Za-z0-9_-]{8,128}$/;
@@ -204,7 +206,24 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       return rows.rows;
     },
     /** Seek-paginated listings keep tenant visibility and reserve capacity rules. */
-    async offersPage(actor:P2pActor,input:{cursor?:string}={}) {
+    async offersPage(actor:P2pActor,input:{cursor?:string;amountMicro?:string;search?:string;
+      asset?:string;fiat?:string;method?:string}={}) {
+      if((input.asset!==undefined&&input.asset!=='MSNW')||
+        (input.fiat!==undefined&&input.fiat!=='NGN'))throw new P2pError('p2p.unsupported_market',422);
+      if(input.method!==undefined&&input.method!=='ng_bank_transfer')
+        throw new P2pError('p2p.unsupported_method',422);
+      const amount=input.amountMicro===undefined?null:
+        positive(input.amountMicro,10n**18n,'p2p.invalid_amount').toString();
+      const search=input.search?.trim()??'';
+      if(search.length>80||/[\u0000-\u001f\u007f]/.test(search))
+        throw new P2pError('p2p.invalid_search',422);
+      const context=createHash('sha256').update(JSON.stringify([actor.tenantId,actor.userId,amount,search])).digest('hex').slice(0,24);
+      if(input.cursor){
+        pageCursor(input.cursor);
+        const raw=JSON.parse(Buffer.from(input.cursor,'base64url').toString('utf8'));
+        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''))
+          throw new P2pError('p2p.filter_cursor_changed',422);
+      }
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
       const result=await pool.query(`SELECT o.offer_id,
@@ -239,12 +258,19 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
+          AND ($6::numeric IS NULL OR (o.min_micro<=$6::numeric
+            AND LEAST(o.max_micro,capacity.amount)>=$6::numeric))
+          AND ($7::text='' OR position(lower($7::text) in lower(COALESCE(seller.display_name,'')))>0
+            OR o.offer_id::text=$7::text)
           AND ($3::timestamptz IS NULL OR
             (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
         ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,time,afterId,limit+1]);
+        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search]);
       const items=result.rows.slice(0,limit);
-      return {items,nextCursor:nextPageCursor(items,result.rows.length,limit)};
+      const cursor=nextPageCursor(items,result.rows.length,limit);
+      const nextCursor=cursor?Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(cursor,'base64url').toString('utf8')),context})).toString('base64url'):null;
+      return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'},
+        filters:{amountMicro:amount,search},sort:'newest'};
     },
     async myOffersPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
@@ -441,6 +467,74 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         FROM commerce.msnw_p2p_late_payment_cases
         WHERE tenant_id=$1 AND order_id=$2`,[actor.tenantId,orderId]);
       return { ...order, payment: method,latePayment:late.rows[0]??null };
+    },
+    /** Participant-only text channel; bank/evidence and settlement stay separate. */
+    async messagesPage(actor:P2pActor, orderId:string, input:{cursor?:string}={}) {
+      const order = take<P2pOrder>(await pool.query(`SELECT order_id,seller_id,buyer_id,state
+        FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND order_id=$2
+        AND (seller_id=$3 OR buyer_id=$3)`,[actor.tenantId,id(orderId),actor.userId]));
+      const cursor=pageCursor(input.cursor);
+      const result=await pool.query(`SELECT message_id,body,created_at,
+        to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
+        CASE WHEN sender_id=$3 THEN true ELSE false END AS is_own,
+        CASE WHEN sender_id=$4 THEN 'seller' ELSE 'buyer' END AS sender_role
+        FROM commerce.msnw_p2p_order_messages WHERE tenant_id=$1 AND order_id=$2
+        AND ($5::timestamptz IS NULL OR (created_at,message_id)<($5::timestamptz,$6::uuid))
+        ORDER BY created_at DESC,message_id DESC LIMIT 41`,
+        [actor.tenantId,orderId,actor.userId,order.seller_id,cursor.time,cursor.id]);
+      const items=result.rows.slice(0,40);
+      const nextCursor=nextPageCursor(items,result.rows.length,40,'created_at','message_id');
+      // Public state transitions only: private operator reasons/evidence never enter chat.
+      const events=await pool.query(`SELECT event_id,action,to_state,created_at
+        FROM commerce.msnw_p2p_events WHERE tenant_id=$1 AND order_id=$2
+        AND action IN ('reserve','buyer_claimed_payment','dispute_opened','escrow_released',
+          'cancelled','expired','late_payment_reported','late_payment_escalated','late_payment_closed')
+        ORDER BY created_at DESC,event_id DESC LIMIT 50`,[actor.tenantId,orderId]);
+      return {items:items.map(({created_at_cursor,...item})=>item),nextCursor,events:events.rows,
+        canSend:['awaiting_payment','payment_claimed','disputed'].includes(order.state),
+        orderState:order.state};
+    },
+    async messageByRequest(actor:P2pActor,orderId:string,requestKey:string) {
+      const request=key(requestKey);
+      const result=await pool.query(`SELECT m.message_id,m.body,m.created_at,true AS is_own,
+        CASE WHEN m.sender_id=o.seller_id THEN 'seller' ELSE 'buyer' END AS sender_role
+        FROM commerce.msnw_p2p_order_messages m JOIN commerce.msnw_p2p_orders o
+        ON o.tenant_id=m.tenant_id AND o.order_id=m.order_id
+        WHERE m.tenant_id=$1 AND m.order_id=$2 AND m.sender_id=$3 AND m.request_key=$4
+        AND (o.seller_id=$3 OR o.buyer_id=$3)`,[actor.tenantId,id(orderId),actor.userId,request]);
+      return take<Record<string,unknown>>(result,'p2p.message_not_found');
+    },
+    async sendMessage(actor:P2pActor,orderId:string,input:{body:unknown;requestKey:unknown}):Promise<P2pMessage & {replay:boolean}> {
+      const request=key(input.requestKey);
+      if(typeof input.body!=='string'||!input.body.trim()||input.body.length>2000||
+        Buffer.byteLength(input.body,'utf8')>8000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(input.body))
+        throw new P2pError('p2p.invalid_message',422);
+      const body=input.body.trim();
+      return transact(async tx=>{
+        // Same row lock as release/refund serializes terminal transitions and sends.
+        const order=await orderForUpdate(tx,actor,orderId);
+        if(!owns(order,actor))throw new P2pError('p2p.not_found',404);
+        const prior=await tx.query(`SELECT message_id,body,created_at FROM commerce.msnw_p2p_order_messages
+          WHERE tenant_id=$1 AND order_id=$2 AND sender_id=$3 AND request_key=$4`,
+          [actor.tenantId,orderId,actor.userId,request]);
+        if(prior.rows[0]) {
+          const previous=take<StoredP2pMessage>(prior);
+          if(previous.body!==body)throw new P2pError('p2p.idempotency_conflict');
+          return {...previous,is_own:true,sender_role:actor.userId===order.seller_id?'seller':'buyer',replay:true};
+        }
+        if(!['awaiting_payment','payment_claimed','disputed'].includes(order.state))
+          throw new P2pError('p2p.discussion_read_only');
+        const count=await tx.query(`SELECT count(*)::int AS total,
+          count(*) FILTER (WHERE sender_id=$3 AND created_at>statement_timestamp()-interval '1 minute')::int AS recent
+          FROM commerce.msnw_p2p_order_messages WHERE tenant_id=$1 AND order_id=$2`,
+          [actor.tenantId,orderId,actor.userId]);
+        if(Number(count.rows[0]?.total)>=2000||Number(count.rows[0]?.recent)>=20)
+          throw new P2pError('p2p.message_rate_limited',429);
+        const saved=take<StoredP2pMessage>(await tx.query(`INSERT INTO commerce.msnw_p2p_order_messages
+          (message_id,tenant_id,order_id,sender_id,request_key,body) VALUES($1,$2,$3,$4,$5,$6)
+          RETURNING message_id,body,created_at`,[randomUUID(),actor.tenantId,orderId,actor.userId,request,body]));
+        return {...saved,is_own:true,sender_role:actor.userId===order.seller_id?'seller':'buyer',replay:false};
+      });
     },
     async notifications(actor:P2pActor) {
       // The outbox is durable and tenant/user-scoped; processing push attempts

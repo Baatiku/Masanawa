@@ -26,19 +26,22 @@ class WalletAssetOverview extends ConsumerWidget {
   final bool ownedOnly;
   static bool _positive(String? value) {
     if(value==null||value.trim().isEmpty)return false;
-    return !RegExp(r'^0+(?:\.0+)?$').hasMatch(value.trim());
+    final quantity=value.trim();
+    if(!RegExp(r'^[0-9]+(?:\.[0-9]+)?$').hasMatch(quantity)){return false;}
+    return quantity.replaceAll(RegExp(r'[0.]'),'').isNotEmpty;
   }
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(sessionProvider) is! SessionSignedIn)
+    if (ref.watch(sessionProvider) is! SessionSignedIn) {
       return const SizedBox.shrink();
+    }
     final snapshot = ref.watch(cryptoWalletProvider);
     return snapshot.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(20),
         child: LinearProgressIndicator(),
       ),
-      error: (_, __) => ListTile(
+      error: (_, _) => ListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('Crypto assets unavailable'),
         trailing: TextButton(
