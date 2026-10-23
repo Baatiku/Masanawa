@@ -23,6 +23,10 @@ void main() {
     final call=CallHistoryItem.fromJson(record);
     expect(call.duration,const Duration(seconds:65));expect(call.outcomeLabel,'Connection lost');expect(call.isGroupCall,isTrue);
     expect(CallHistoryItem.fromJson({...record,'endedAt':null}).duration,isNull);
+    expect(CallHistoryItem.fromJson({...record,'endedAt':'2026-10-17T09:59:00Z'}).duration,isNull);
+    expect(CallHistoryItem.fromJson({...record,'state':'ringing','endedAt':null,'endReason':null}).outcomeLabel,'Ringing');
+    expect(CallHistoryItem.fromJson({...record,'state':'missed','direction':'outgoing','endReason':null}).outcomeLabel,'Not answered');
+    expect(CallHistoryItem.fromJson({...record,'state':'missed','direction':'incoming','endReason':null}).outcomeLabel,'Missed call');
     expect(CallHistoryItem.fromJson({...record,'endReason':'unknown future reason'}).endReason,isNull);
     expect(()=>CallHistoryItem.fromJson({...record,'endedAt':'bad'}),throwsFormatException);
   });

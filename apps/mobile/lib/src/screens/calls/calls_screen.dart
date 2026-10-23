@@ -244,15 +244,9 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
   List<HumanCallRecord> _humanCalls = [];
   bool _humanFailed = false;
   List<Object> get _timeline {
-    final q = _query.toLowerCase();
-    final rows = <Object>[
-      ..._calls,
-      ..._humanCalls.where(
-        (c) =>
-            q.isEmpty ||
-            '${c.name} ${c.handle} ${c.state}'.toLowerCase().contains(q),
-      ),
-    ];
+    // Both services search their complete authorized history on the server.
+    // Filtering only the cached human page silently loses older matches.
+    final rows = <Object>[..._calls, ..._humanCalls];
     DateTime at(Object c) =>
         c is HumanCallRecord ? c.createdAt : (c as CallHistoryItem).createdAt;
     rows.sort((a, b) => at(b).compareTo(at(a)));
@@ -308,7 +302,11 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
       _query = query;
       _invalidQuery = query.length > 80;
       _calls = [];
+      _humanCalls = [];
       _nextCursor = null;
+      _humanNextCursor = null;
+      _humanFailed = false;
+      _humanLoading = false;
       _loading = !_invalidQuery;
       _failed = false;
     });
@@ -342,26 +340,33 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     setState(() {
       _loading = true;
       _failed = false;
+      _humanLoading = true;
     });
     try {
       // Load each participant kind independently: an unavailable human service
       // must not delay existing Masana history (or vice versa).
-      _humanLoading = true;
       unawaited(() async {
         try {
           if (refresh || _humanNextCursor != null) {
             try {
+              final params = <String, String>{
+                if (_query.isNotEmpty) 'q': _query,
+                if (!refresh && _humanNextCursor != null)
+                  'after': _humanNextCursor!,
+              };
               final human = await ref
                   .read(humanCallsTransportProvider)
                   .request(
                     'GET',
-                    refresh || _humanNextCursor == null
-                        ? '/calls'
-                        : '/calls?after=${Uri.encodeComponent(_humanNextCursor!)}',
-                  );
+                    Uri(path: '/calls', queryParameters: params.isEmpty ? null : params).toString(),
+                  ).timeout(const Duration(seconds: 10));
               if (!mounted || generation != _generation || !_sameAccount)
                 return;
               final previousHuman = refresh ? <HumanCallRecord>[] : _humanCalls;
+              if (human['items'] is! List ||
+                  (human['nextCursor'] != null && human['nextCursor'] is! String)) {
+                throw const FormatException('Invalid human call history');
+              }
               final newHuman = (human['items'] as List)
                   .map(
                     (r) => HumanCallRecord.fromJson(
@@ -385,9 +390,8 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
             }
           }
         } finally {
-          if (mounted && generation == _generation && _sameAccount) {
+          if (mounted && generation == _generation && _sameAccount)
             setState(() => _humanLoading = false);
-          }
         }
       }());
       if (!refresh && _nextCursor == null) {
@@ -452,6 +456,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
               semanticLabel: 'Loading call history',
             ),
           if (!_loading &&
+              !_humanLoading &&
               !_failed &&
               !_invalidQuery &&
               _calls.isEmpty &&
@@ -497,7 +502,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
             ),
           if (_humanFailed && !_failed)
             ListTile(
-              title: const Text('Could not refresh people calls.'),
+              title: const Text('Could not refresh people calls. Results may be incomplete.'),
               trailing: TextButton(
                 onPressed: () => _load(refresh: true),
                 child: const Text('Retry'),
@@ -535,7 +540,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          '${call.isGroupCall ? 'Group · ' : ''}${_label(call.state)}${call.duration == null ? '' : ' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
+                          '${call.isGroupCall ? 'Group · ' : ''}${call.outcomeLabel}${call.duration == null ? '' : ' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
                           style: TextStyle(color: u.textMuted, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -619,7 +624,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              '${call.state} · ${_date(context, call.createdAt)}',
+              '${_humanLabel(call)} · ${_date(context, call.createdAt)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -640,7 +645,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
               ListTile(
                 title: Text(call.name),
                 subtitle: Text(
-                  '${call.direction} · ${call.state}\n${_date(context, call.createdAt)}${call.answeredAt != null && call.endedAt != null ? '\n${call.endedAt!.difference(call.answeredAt!).inSeconds} seconds' : ''}',
+                  '${call.incoming ? 'Incoming' : 'Outgoing'} · ${_humanLabel(call)}\n${_date(context, call.createdAt)}${call.answeredAt != null ? '\nAccepted: ${_date(context, call.answeredAt!)}' : ''}${call.endedAt != null ? '\nEnded: ${_date(context, call.endedAt!)}' : ''}\nConnected-media duration not verified',
                 ),
               ),
               ListTile(
@@ -674,14 +679,15 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     );
   }
 
-  String _label(String state) => switch (state) {
-    'connecting' => 'Connecting',
-    'active' => 'Connected',
-    'ended' => 'Ended',
-    'missed' => 'Missed',
+  String _humanLabel(HumanCallRecord call) => switch (call.state) {
+    'ringing' => 'Ringing',
+    'accepted' => 'Answering',
+    'busy' => 'Busy',
+    'missed' => call.incoming ? 'Missed' : 'Not answered',
     'declined' => 'Declined',
     'cancelled' => 'Cancelled',
-    _ => 'Expired',
+    'ended' => 'Ended',
+    _ => 'Unavailable',
   };
   String _date(BuildContext context, DateTime timestamp) {
     final local = timestamp.toLocal();
