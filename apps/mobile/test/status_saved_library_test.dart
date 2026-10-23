@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
+import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
 import 'package:masanawa/src/features/home_feed/saved_status_library_screen.dart';
 
 const _postId = '381026c2-9d56-47b1-b73d-1784e24e41e2';
@@ -89,6 +90,54 @@ class FeedStub extends SavedStub implements FeedApi {
 }
 
 void main() {
+  testWidgets('pushed post detail is replaced on live account revocation', (tester) async {
+    final active = ValueNotifier<bool>(true);
+    Widget guard(Widget content) => ValueListenableBuilder<bool>(
+      valueListenable: active,
+      builder: (_, allowed, __) => allowed ? content : const Scaffold(
+        body: Center(child: Text('Account access changed'))),
+    );
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
+      api: FeedStub(), accountKey: 'fan', wrapAccountRoute: guard,
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open post'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hello Status'), findsOneWidget);
+    active.value = false;
+    await tester.pumpAndSettle();
+    expect(find.text('Hello Status'), findsNothing);
+    expect(find.text('Account access changed'), findsOneWidget);
+    expect(find.byType(FeedPostDetailScreen), findsNothing);
+    active.value = true;
+    await tester.pumpAndSettle();
+    expect(find.byType(FeedPostDetailScreen), findsOneWidget);
+    active.dispose();
+  });
+
+  testWidgets('pushed Saved library does not leak old account posts on switch', (tester) async {
+    final active = ValueNotifier<bool>(true);
+    Widget guard(Widget content) => ValueListenableBuilder<bool>(
+      valueListenable: active,
+      builder: (_, allowed, __) => allowed ? content : const Scaffold(
+        body: Center(child: Text('Account access changed'))),
+    );
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
+      api: FeedStub(), accountKey: 'fan', wrapAccountRoute: guard,
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Saved'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approved original'), findsOneWidget);
+    active.value = false;
+    await tester.pumpAndSettle();
+    expect(find.text('Approved original'), findsNothing);
+    expect(find.text('Hello Status'), findsNothing);
+    expect(find.text('Account access changed'), findsOneWidget);
+    expect(find.byType(SavedStatusLibraryScreen), findsNothing);
+    active.dispose();
+  });
+
   test('mixed collection validates author and approved video projection', () {
     final page = SavedStatusPage.fromJson({
       'items': [savedPost(), savedVideo()],

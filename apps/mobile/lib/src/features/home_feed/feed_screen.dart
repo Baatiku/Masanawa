@@ -14,7 +14,7 @@ class MasanaFeedScreen extends StatefulWidget {
     this.onMasanaProfile,this.onHumanProfile,this.onOpenMedia,this.onReport,this.enabled=true,
     this.audioPlaybackAvailable=false,this.authorScoped=false,
     this.mediaApi,this.inlineMediaRenderer,this.onCreateHumanStatus,
-    this.onOpenSavedVideo});
+    this.onOpenSavedVideo,this.wrapAccountRoute});
   final FeedApi api;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile;
@@ -23,6 +23,9 @@ class MasanaFeedScreen extends StatefulWidget {
   final bool enabled;
   final Future<bool> Function()? onCreateHumanStatus;
   final Future<void> Function(ExternalVideo)? onOpenSavedVideo;
+  /// Session owner installs a reactive guard on each pushed page. Switching
+  /// accounts hides previous-account content without waiting for a request.
+  final Widget Function(Widget content)? wrapAccountRoute;
   final bool audioPlaybackAvailable;
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
@@ -145,8 +148,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }
   }
   Future<void> openPost(FeedPost post) async {
+    if(!widget.enabled||widget.accountKey.isEmpty)return;
     final feed=widget.api,account=widget.accountKey;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>FeedPostDetailScreen(
+    final guard=widget.wrapAccountRoute;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_){
+      final detail=FeedPostDetailScreen(
       initialPost:post,accountKey:account,
       loadPost:(id)=>feed is DioFeedApi?feed.detail(id):Future.value(post),
       loadThread:(id,sort)=>feed is DioFeedApi?feed.thread(id,sort):feed.comments(id),
@@ -160,13 +166,16 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       canReply:feed is DioFeedApi,
       onMasanaProfile:widget.onMasanaProfile,onHumanProfile:widget.onHumanProfile,onMedia:widget.onOpenMedia==null?null:(id)=>widget.onOpenMedia!(post,id),onReport:widget.onReport,
       enabled:widget.enabled,
-    )));
+      );
+      return guard?.call(detail)??detail;
+    }));
   }
   void openSaved() {
     if(widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty) return;
     final account = widget.accountKey;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
-      SavedStatusLibraryScreen(
+    final guard=widget.wrapAccountRoute;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) {
+      final saved=SavedStatusLibraryScreen(
         api: widget.api as SavedStatusLibraryApi,
         accountKey: account,
         isAccountCurrent: () => mounted && widget.enabled && widget.accountKey == account,
@@ -180,7 +189,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           await openPost(currentPost);
         },
         openVideo: widget.onOpenSavedVideo,
-      )));
+      );
+      return guard?.call(saved)??saved;
+    }));
   }
   void openComments(FeedPost post) {
     // Use the complete thread page so typing, scrolling and keyboard focus
