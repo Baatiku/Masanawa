@@ -15,11 +15,18 @@ export class PgSavedLibraryRepository {
               AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1),p.author_masana_id),
           'kind',p.kind,'body',p.body,'media',p.media_ids,'transcript',p.transcript,
           'publishedAt',p.published_at,'likeCount',
-            (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id),
+            (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like'),
+          'reactionCounts',COALESCE((SELECT jsonb_object_agg(rc.reaction_kind,rc.n)
+            FROM (SELECT l.reaction_kind,count(*)::int AS n FROM feed.likes l
+              WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id
+              GROUP BY l.reaction_kind) rc),'{}'::jsonb),
+          'viewerReaction',(SELECT l.reaction_kind FROM feed.likes l
+            WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 LIMIT 1),
           'commentCount',(SELECT count(*)::int FROM feed.comments c
             WHERE c.tenant_id=p.tenant_id AND c.post_id=p.id AND c.state='visible'),
           'viewerLiked',EXISTS(SELECT 1 FROM feed.likes l
-            WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2),
+            WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2
+              AND l.reaction_kind='like'),
           'viewerSaved',true) AS payload
       FROM feed.saves s JOIN feed.posts p ON p.tenant_id=s.tenant_id AND p.id=s.post_id
       WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published'

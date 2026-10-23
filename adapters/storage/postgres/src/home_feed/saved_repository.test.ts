@@ -10,6 +10,10 @@ describe("C25 PG query fences",()=>{
     expect(sql).toContain("v.tenant_id=$1 AND v.fan_id=$2");
     expect(sql).toContain("i.review_state='approved'");
     expect(sql).toContain("p.state='published'");
+    expect(sql).toContain("'reactionCounts'");
+    expect(sql).toContain("'viewerReaction'");
+    expect(sql).toContain("l.reaction_kind='like'");
+
     expect(values).toEqual(["tenant-one","fan-one",null,null,null,21]);
   });
   it("cannot insert a hidden video and removes only current fan's save",async()=>{
