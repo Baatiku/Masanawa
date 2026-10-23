@@ -83,7 +83,8 @@ it('exposes read-only HTTP route, no-store cache, and bounded query validation',
   const response=await app.inject({method:'GET',url:'/v1/rooms/'+roomId+'/community/members/page?limit=7&search=Member',headers:{authorization:'bob'}});
   expect(response.statusCode).toBe(200);
   expect(response.headers['cache-control']).toBe('no-store');
-  expect(response.json()).toMatchObject({paginationVersion:1,items:[{role:'member'}]});
+  expect(response.json().paginationVersion).toBe(1);
+  expect(response.json().items[0].role).toBe('member');
   expect(response.json().items).toHaveLength(7);
   expect((await app.inject({method:'GET',url:'/v1/rooms/'+roomId+'/community/members/page?limit=999',headers:{authorization:'bob'}})).statusCode).toBe(422);
  }finally{await app.close();}
