@@ -257,4 +257,27 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    await service().action(actor,order.orderId,'cancel');
  });
 
+ it('enforces one actor report quota across concurrently reported different orders',async()=>{
+   const user='quota_'+randomUUID(),actor={tenantId:tenant,userId:user},maker={tenantId:tenant,userId:seller};
+   await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at)
+     VALUES($1,$2,'Quota Test',$3,'en',now(),now())`,[tenant,user,user+'@example.com']);
+   const offerId=await offer();
+   const one=await service().createOrder(actor,{offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+   const two=await service().createOrder(actor,{offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+   const before=await account(seller),messages=[];
+   for(let n=0;n<20;n++)messages.push(await service().sendMessage(maker,one.orderId,{body:'Message '+n,requestKey:randomUUID()}));
+   const other=await service().sendMessage(maker,two.orderId,{body:'Other order message',requestKey:randomUUID()});
+   for(let n=0;n<19;n++)await service().reportMessage(actor,one.orderId,messages[n]!.message_id,{category:'other',details:'Test report for quota boundary.'});
+   const results=await Promise.allSettled([
+     service().reportMessage(actor,one.orderId,messages[19]!.message_id,{category:'other',details:'One more report on first order.'}),
+     service().reportMessage(actor,two.orderId,other.message_id,{category:'other',details:'One more report on second order.'}),
+   ]);
+   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+   expect((results.find(r=>r.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'p2p.report_rate_limited',status:429});
+   expect((await pool.query('SELECT count(*)::int AS count FROM commerce.msnw_p2p_message_reports WHERE tenant_id=$1 AND reporter_id=$2',[tenant,user])).rows[0].count).toBe(20);
+   expect(await service().reportMessage(actor,one.orderId,messages[0]!.message_id,{category:'other',details:'Retry an already accepted report.'})).toMatchObject({replay:true});
+   expect(await account(seller)).toEqual(before);
+   await service().action(actor,one.orderId,'cancel');await service().action(actor,two.orderId,'cancel');
+ });
+
 });

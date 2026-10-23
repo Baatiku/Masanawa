@@ -287,6 +287,16 @@ void main() {
       await tester.tap(find.text('Report message'));
       await tester.pumpAndSettle();
       expect(find.text('Submit report'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, '😀' * 5);
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Submit report'),
+            )
+            .onPressed,
+        isNull,
+      );
       await tester.enterText(
         find.byType(TextField).last,
         'Seller requested my private credentials.',

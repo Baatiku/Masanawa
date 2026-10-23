@@ -28,6 +28,12 @@ export interface P2pOrder {
 }
 interface StoredP2pMessage { message_id:string; body:string; created_at:string|Date; removed_at?:string|Date|null }
 interface P2pMessage extends StoredP2pMessage { is_own:boolean; sender_role:'buyer'|'seller' }
+function messageReportReason(value:unknown):string {
+  const text=reason(value);
+  if([...text].length<10||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(text))
+    throw new P2pError('p2p.invalid_report_details',422);
+  return text;
+}
 export type P2pAction = "claim" | "dispute" | "cancel" | "confirm" | "release" | "refund";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const safeKey = /^[A-Za-z0-9_-]{8,128}$/;
@@ -173,41 +179,30 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     });
     await setState(tx, actor, order, "completed", "escrow_released", undefined, receipt);
   }
-  return Object.freeze({
-    async offers(actor: P2pActor) {
-      // Display only presently funded capacity. The existing per-order locked
-      // reservation remains the sole escrow authority; discovery never moves funds.
-      const rows = await pool.query(`SELECT o.offer_id,o.seller_id,o.rate_kobo_per_msnw::text,
-        o.min_micro::text,LEAST(o.max_micro,capacity.amount)::text AS max_micro,
-        capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,
-        seller.display_name AS seller_display_name,
-        (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
-        history.completed_orders_30d,history.closed_orders_30d,
-        o.created_at
-        FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
-          ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
-        LEFT JOIN security.platform_user_profiles seller
-          ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
-        JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
-        CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
-          floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
-        LEFT JOIN LATERAL (
-          SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
-                 count(*)::integer AS closed_orders_30d
-          FROM commerce.msnw_p2p_orders past
-          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
-            AND past.created_at>=statement_timestamp()-interval '30 days'
-            AND past.state IN ('completed','cancelled','expired')
-        ) history ON TRUE
-        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
-          AND capacity.amount>=o.min_micro AND capacity.amount>0
-          AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
-        ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId,actor.userId]);
-      return rows.rows;
-    },
+  // Public trader context is discoverable only through a currently eligible ad.
+  // No raw user ID, receiving account, email, KYC record or invented badge is returned.
+  async function traderReference(actor:P2pActor,offerId:string) {
+    return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,seller.display_name,
+      statement_timestamp() AS as_of,
+      (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
+        AND past.seller_id=o.seller_id AND past.created_at>=statement_timestamp()-interval '30 days'
+        AND past.state='completed') AS completed,
+      (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
+        AND past.seller_id=o.seller_id AND past.created_at>=statement_timestamp()-interval '30 days'
+        AND past.state IN ('completed','cancelled','expired')) AS closed
+      FROM commerce.msnw_p2p_offers o
+      JOIN commerce.msnw_p2p_payment_methods p ON p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
+        AND p.owner_id=o.seller_id
+      JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+      LEFT JOIN security.platform_user_profiles seller ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
+      WHERE o.tenant_id=$1 AND o.offer_id=$2 AND o.seller_id<>$3 AND o.state='active'
+        AND p.verified_at IS NOT NULL AND p.disabled_at IS NULL
+        AND LEAST(o.remaining_micro::numeric,floor(c.available_micro::numeric*10000/(10000+o.fee_bps)))>=o.min_micro
+        AND o.remaining_micro>0`,[actor.tenantId,offerId,actor.userId]),'p2p.trader_unavailable');
+  }
     /** Seek-paginated listings keep tenant visibility and reserve capacity rules. */
-    async offersPage(actor:P2pActor,input:{cursor?:string;amountMicro?:string;search?:string;
-      asset?:string;fiat?:string;method?:string}={}) {
+  async function offersPage(actor:P2pActor,input:{cursor?:string;amountMicro?:string;search?:string;
+      asset?:string;fiat?:string;method?:string;traderOfferId?:string}={}) {
       if((input.asset!==undefined&&input.asset!=='MSNW')||
         (input.fiat!==undefined&&input.fiat!=='NGN'))throw new P2pError('p2p.unsupported_market',422);
       if(input.method!==undefined&&input.method!=='ng_bank_transfer')
@@ -217,11 +212,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       const search=input.search?.trim()??'';
       if(search.length>80||/[\u0000-\u001f\u007f]/.test(search))
         throw new P2pError('p2p.invalid_search',422);
-      const context=createHash('sha256').update(JSON.stringify([actor.tenantId,actor.userId,amount,search])).digest('hex').slice(0,24);
+      const trader=input.traderOfferId===undefined?null:await traderReference(actor,id(input.traderOfferId));
+      const scope:unknown[]=[actor.tenantId,actor.userId,amount,search];
+      if(input.traderOfferId!==undefined)scope.push(input.traderOfferId);
+      const context=createHash('sha256').update(JSON.stringify(scope)).digest('hex').slice(0,24);
       if(input.cursor){
         pageCursor(input.cursor);
         const raw=JSON.parse(Buffer.from(input.cursor,'base64url').toString('utf8'));
-        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''))
+        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''||input.traderOfferId!==undefined))
           throw new P2pError('p2p.filter_cursor_changed',422);
       }
       const {time,id:afterId}=pageCursor(input.cursor);
@@ -258,6 +256,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
+          AND ($8::text IS NULL OR o.seller_id=$8::text)
           AND ($6::numeric IS NULL OR (o.min_micro<=$6::numeric
             AND LEAST(o.max_micro,capacity.amount)>=$6::numeric))
           AND ($7::text='' OR position(lower($7::text) in lower(COALESCE(seller.display_name,'')))>0
@@ -265,12 +264,50 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           AND ($3::timestamptz IS NULL OR
             (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
         ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search]);
+        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search,trader?.seller_id??null]);
       const items=result.rows.slice(0,limit);
       const cursor=nextPageCursor(items,result.rows.length,limit);
       const nextCursor=cursor?Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(cursor,'base64url').toString('utf8')),context})).toString('base64url'):null;
       return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'},
-        filters:{amountMicro:amount,search},sort:'newest'};
+        filters:{amountMicro:amount,search},sort:'newest',
+        ...(trader?{trader:{displayName:trader.display_name,completedOrders30d:trader.completed,
+          closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId}}:{})};
+    }
+  return Object.freeze({
+    async offers(actor: P2pActor) {
+      // Display only presently funded capacity. The existing per-order locked
+      // reservation remains the sole escrow authority; discovery never moves funds.
+      const rows = await pool.query(`SELECT o.offer_id,o.seller_id,o.rate_kobo_per_msnw::text,
+        o.min_micro::text,LEAST(o.max_micro,capacity.amount)::text AS max_micro,
+        capacity.amount::text AS remaining_micro,o.fee_bps,p.bank_name,p.method_type,
+        seller.display_name AS seller_display_name,
+        (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
+        history.completed_orders_30d,history.closed_orders_30d,
+        o.created_at
+        FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
+          ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+        LEFT JOIN security.platform_user_profiles seller
+          ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
+        JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+        CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
+          floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        LEFT JOIN LATERAL (
+          SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
+                 count(*)::integer AS closed_orders_30d
+          FROM commerce.msnw_p2p_orders past
+          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
+            AND past.created_at>=statement_timestamp()-interval '30 days'
+            AND past.state IN ('completed','cancelled','expired')
+        ) history ON TRUE
+        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
+          AND capacity.amount>=o.min_micro AND capacity.amount>0
+          AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
+        ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId,actor.userId]);
+      return rows.rows;
+    },
+    offersPage,
+    async traderProfile(actor:P2pActor,offerId:string,input:{cursor?:string}={}) {
+      return offersPage(actor,{...input,traderOfferId:id(offerId)});
     },
     async myOffersPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
@@ -546,10 +583,11 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       id(messageId);
       if(typeof input.category!=='string'||!['scam','harassment','personal_information','other'].includes(input.category))
         throw new P2pError('p2p.invalid_report_category',422);
-      const details=reason(input.details);
-      if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(details))
-        throw new P2pError('p2p.invalid_report_details',422);
+      const details=messageReportReason(input.details);
       return transact(async tx=>{
+        // The hourly actor quota spans orders. A per-order lock alone cannot serialize it.
+        await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',
+          ['msnw-p2p-reports:'+actor.tenantId+':'+actor.userId]);
         const order=await orderForUpdate(tx,actor,orderId);
         if(!owns(order,actor))throw new P2pError('p2p.not_found',404);
         const message=take<Record<string,unknown>>(await tx.query(`SELECT sender_id FROM commerce.msnw_p2p_order_messages
@@ -577,7 +615,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       id(reportId);
       if(typeof input.decision!=='string'||!['dismiss','remove'].includes(input.decision)||!Number.isSafeInteger(input.version)||Number(input.version)<1)
         throw new P2pError('p2p.invalid_message_review',422);
-      const explanation=reason(input.reason);
+      const explanation=messageReportReason(input.reason);
       return transact(async tx=>{
         // Match send/report lock order. No financial state or authority is invoked.
         const identity=take<Record<string,unknown>>(await tx.query(`SELECT order_id FROM commerce.msnw_p2p_message_reports

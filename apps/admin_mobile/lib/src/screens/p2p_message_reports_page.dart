@@ -104,7 +104,7 @@ class _P2pMessageReportsPageState extends State<P2pMessageReportsPage> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: reason.length < 10
+              onPressed: reason.runes.length < 10
                   ? null
                   : () => Navigator.pop(ctx, true),
               child: const Text('Confirm review'),

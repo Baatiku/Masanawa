@@ -65,6 +65,16 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.offersPage(a,input);
     }catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/offers/:offerId/trader',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try {
+      const a=await actor(req.headers.authorization);
+      const q=req.query as {cursor?:unknown};
+      if(q.cursor!==undefined&&typeof q.cursor!=='string')throw new P2pError('p2p.invalid_cursor',422);
+      return await deps.service.traderProfile(a,(req.params as {offerId:string}).offerId,
+        typeof q.cursor==='string'?{cursor:q.cursor}:{});
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/my-offers/page",async(req,reply)=>{
     try {
       const query=req.query as {cursor?:unknown};
