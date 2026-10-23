@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:masanawa/src/calls/call_details_screen.dart';
 import 'package:masanawa/src/calls/call_history.dart';
 import 'package:masanawa/src/calls/call_outcome.dart';
@@ -25,7 +26,44 @@ void main(){
  testWidgets('full detail shows actual duration, outcome and profile action at phone width',(t)async{
   t.view.physicalSize=const Size(360,800);t.view.devicePixelRatio=1;addTearDown(t.view.resetPhysicalSize);addTearDown(t.view.resetDevicePixelRatio);
   await mount(t,_Session(),_Transport(()async=>item));await t.pumpAndSettle();
-  expect(find.text('Call details'),findsOneWidget);expect(find.text('01:05'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);expect(t.takeException(),isNull);
+  expect(find.text('Call details'),findsOneWidget);expect(find.text('01:05'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);expect(find.text('Message'),findsOneWidget);expect(t.takeException(),isNull);
+ });
+ testWidgets('Message opens text chat for the verified Masana, not a new call',(t)async{
+  final router=GoRouter(routes:[
+   GoRoute(path:'/',builder:(_,__)=>CallDetailsScreen(ownerId:'a',initial:item)),
+   GoRoute(path:'/chat/:id',builder:(_,state)=>Scaffold(body:Text('Text chat ${state.pathParameters['id']} ${state.uri.queryParameters['entry']??'default'}'))),
+  ]);
+  addTearDown(router.dispose);
+  await t.pumpWidget(ProviderScope(overrides:[
+   sessionProvider.overrideWith(_Session.new),
+   callHistoryTransportProvider.overrideWithValue(_Transport(()async=>item)),
+  ],child:MaterialApp.router(routerConfig:router)));
+  await t.pumpAndSettle();
+  await t.tap(find.text('Message'));await t.pumpAndSettle();
+  expect(find.text('Text chat agent-a default'),findsOneWidget);
+ });
+ testWidgets('group call details never redial an arbitrary member as a one-to-one call',(t)async{
+  final groupItem=CallHistoryItem(callId:item.callId,characterId:item.characterId,displayName:'Team Masana',state:'ended',groupId:'group-1',createdAt:item.createdAt);
+  await mount(t,_Session(),_Transport(()async=>groupItem));await t.pumpAndSettle();
+  expect(find.text('Back to Calls'),findsOneWidget);
+  expect(find.text('Call again'),findsNothing);
+  expect(find.text('Message'),findsNothing);
+  expect(find.text('View profile'),findsNothing);
+  expect(find.textContaining('An old group call cannot be redialled'),findsOneWidget);
+  expect(t.takeException(),isNull);
+ });
+ testWidgets('one-to-one call actions wrap at 320dp with 200% text',(t)async{
+  t.view.physicalSize=const Size(320,900);t.view.devicePixelRatio=1;
+  addTearDown(t.view.resetPhysicalSize);addTearDown(t.view.resetDevicePixelRatio);
+  await t.pumpWidget(ProviderScope(overrides:[
+   sessionProvider.overrideWith(_Session.new),
+   callHistoryTransportProvider.overrideWithValue(_Transport(()async=>item)),
+  ],child:MaterialApp(home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:CallDetailsScreen(ownerId:'a',initial:item)))));
+  await t.pumpAndSettle();
+  expect(find.text('Call again'),findsOneWidget);
+  expect(find.text('Message'),findsOneWidget);
+  expect(find.text('View profile'),findsOneWidget);
+  expect(t.takeException(),isNull);
  });
  testWidgets('late result cannot expose previous account detail',(t)async{
   final pending=Completer<CallHistoryItem>();final s=_Session();
