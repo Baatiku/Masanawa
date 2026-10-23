@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../social/talk_social_profiles.dart';
+import '../../calls/masana_voice_route.dart';
 import '../../state/talk_social_profile_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
@@ -151,9 +152,7 @@ class _PersonaBody extends StatelessWidget {
               _QuickActionCard(
                 icon: Icons.call_outlined,
                 label: 'Audio Call',
-                onTap: () => context.push(
-                  '/chat/${Uri.encodeComponent(profile.publicId)}?mode=liveVoice',
-                ),
+                onTap: () => context.push(masanaLiveVoiceRoute(profile.publicId)),
               ),
             ],
           ),

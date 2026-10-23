@@ -10,6 +10,7 @@ import '../screens/profile/masana_profile_screen.dart';
 import '../state/agent_directory_state.dart';
 import '../state/session_state.dart';
 import 'call_history.dart';
+import 'masana_voice_route.dart';
 import 'group_call_transport.dart';
 
 String callDurationLabel(Duration duration){
@@ -75,7 +76,7 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
     Text('${item.isGroupCall?'Group call · ':''}${item.incoming?'Incoming':'Outgoing'} audio call',textAlign:TextAlign.center),
     const SizedBox(height:20),Text(item.outcomeLabel,textAlign:TextAlign.center,style:Theme.of(context).textTheme.titleMedium),
     const SizedBox(height:20),Wrap(alignment:WrapAlignment.center,spacing:12,runSpacing:8,children:[
-     OutlinedButton.icon(onPressed:LiveCallForeground.active?null:()=>context.push('/chat/${Uri.encodeComponent(item.characterId)}?mode=liveVoice'),icon:const Icon(Icons.call_outlined),label:const Text('Call again')),
+     OutlinedButton.icon(onPressed:LiveCallForeground.active?null:()=>context.push(masanaLiveVoiceRoute(item.characterId)),icon:const Icon(Icons.call_outlined),label:const Text('Call again')),
      OutlinedButton.icon(onPressed:()=>profile(item.characterId),icon:const Icon(Icons.person_outline),label:const Text('View profile')),
     ]),const SizedBox(height:24),
     ListTile(contentPadding:EdgeInsets.zero,title:const Text('Started'),subtitle:Text(date(item.createdAt))),

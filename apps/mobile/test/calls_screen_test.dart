@@ -7,6 +7,8 @@ import 'package:masanawa/src/calls/call_history.dart';
 import 'package:masanawa/src/calls/call_lifecycle_reporter.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/human_calls/transport.dart';
+import 'package:masanawa/src/social/human_contacts.dart';
+import 'package:masanawa/src/state/human_contacts_state.dart';
 import 'package:masanawa/src/screens/calls/calls_screen.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
@@ -66,6 +68,14 @@ class _HumanHistory implements HumanCallsTransport {
   void cancel() {}
 }
 
+class _Contacts implements HumanContactsTransport {
+  @override
+  Future<HumanContactPage> load({String query = '', String? after}) async =>
+      const HumanContactPage(items: [
+        HumanContact(handle: 'amina', displayName: 'Amina Yusuf'),
+      ]);
+}
+
 Map<String, dynamic> humanPage(String id, String name,
         {String? nextCursor, String state = 'missed'}) => {
       'items': [
@@ -105,13 +115,14 @@ Future<void> _mount(
   WidgetTester tester,
   _Session session,
   CallHistoryTransport transport,
-  {HumanCallsTransport? human}
+  {HumanCallsTransport? human, HumanContactsTransport? contacts}
 ) => tester.pumpWidget(
   ProviderScope(
     overrides: [
       sessionProvider.overrideWith(() => session),
       callHistoryTransportProvider.overrideWithValue(transport),
       if (human != null) humanCallsTransportProvider.overrideWithValue(human),
+      if (contacts != null) humanContactsTransportProvider.overrideWithValue(contacts),
     ],
     child: MaterialApp(
       theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -125,6 +136,38 @@ void main() {
     await _mount(tester,_Session(),_Transport((_)async=>page('Amina')));await tester.pumpAndSettle();
     await tester.tap(find.text('Amina'));await tester.pumpAndSettle();
     expect(find.text('Call details'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);
+  });
+  testWidgets('New call chooses human contacts with immediate Call intent, not a new chat', (tester) async {
+    await _mount(tester, _Session(), _Transport((_) async => const CallHistoryPage(calls: [])), contacts: _Contacts());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('New call'));
+    await tester.pumpAndSettle();
+    expect(find.text('Call a person'), findsOneWidget);
+    expect(find.text('Call a Masana'), findsOneWidget);
+    await tester.tap(find.text('Call a person'));
+    await tester.pumpAndSettle();
+    expect(find.text('New call'), findsOneWidget);
+    expect(find.text('Amina Yusuf'), findsOneWidget);
+    expect(find.text('Create Masana'), findsNothing);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('New call'), findsOneWidget);
+    expect(find.text('Amina Yusuf'), findsNothing);
+  });
+
+  testWidgets('account change while choosing a call cannot open old-account picker', (tester) async {
+    final session = _Session();
+    await _mount(tester, session, _Transport((_) async => const CallHistoryPage(calls: [])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('New call'));
+    await tester.pumpAndSettle();
+    session.change('account-b');
+    await tester.pump();
+    await tester.tap(find.text('Call a person'));
+    await tester.pumpAndSettle();
+    expect(find.text('New voice call'), findsNothing);
+    expect(find.text('New call'), findsNothing);
+    expect(find.text('Sign in to see your calls.'), findsNothing);
   });
   testWidgets('human search reads matching older calls from the server, not just cached recents', (tester) async {
     final human = _HumanHistory((path) async {
@@ -282,7 +325,7 @@ void main() {
     expect(find.text('First page'), findsOneWidget);
     expect(queries, contains('/null'));
     expect(find.byTooltip('Call multiple Masana'), findsOneWidget);
-    expect(find.byTooltip('Choose a contact'), findsOneWidget);
+    expect(find.byTooltip('New call'), findsOneWidget);
   });
 
   testWidgets('stale query A result is fenced as soon as B is typed', (tester) async {
