@@ -179,6 +179,7 @@ function evaluateReceipt(
       providerReference: receipt.providerReference,
       providerStatus: receipt.status,
       lastEvidenceAt: at,
+      deliveryCode: null,
     });
   }
 
@@ -189,37 +190,48 @@ function evaluateReceipt(
   const customerMatches =
     receipt.customerId !== null && receipt.customerId === current.customerId;
   const currencyMatches = receipt.currency === "NGN";
+  // Flutterwave status "product" identifies a broad service (e.g. AIRTIME),
+  // NOT necessarily the selected catalog item_code (e.g. AT099). Compare
+  // only an explicitly supplied item_code against the immutable quoted item.
+  // Missing optional item-code evidence must never be fabricated from product.
+  const itemMatches =
+    receipt.itemCode == null || receipt.itemCode === current.itemCode;
+  const evidenceMatches =
+    amountMatches && customerMatches && currencyMatches && itemMatches;
 
   if (receipt.status === "successful") {
     return nextRecord(current, {
-      state:
-        amountMatches && customerMatches && currencyMatches
-          ? "succeeded"
-          : "manual_review",
+      state: evidenceMatches ? "succeeded" : "manual_review",
       providerReference: receipt.providerReference,
       providerStatus: receipt.status,
       lastEvidenceAt: at,
-      deliveryCode: amountMatches && customerMatches && currencyMatches &&
-        typeof receipt.extra === "string" && receipt.extra.trim().length > 0 && receipt.extra.trim().length <= 1000
-          ? receipt.extra.trim() : current.deliveryCode ?? null,
+      deliveryCode: evidenceMatches
+        ? typeof receipt.extra === "string" &&
+            receipt.extra.trim().length > 0 &&
+            receipt.extra.trim().length <= 1000
+          ? receipt.extra.trim()
+          : current.deliveryCode ?? null
+        : null,
     });
   }
 
   if (receipt.status === "failed") {
     return nextRecord(current, {
-      state: amountMatches && customerMatches && currencyMatches ? "failed" : "manual_review",
+      state: evidenceMatches ? "failed" : "manual_review",
       providerReference: receipt.providerReference,
       providerStatus: receipt.status,
       lastEvidenceAt: at,
+      deliveryCode: null,
     });
   }
 
   if (receipt.status === "reversed") {
     return nextRecord(current, {
-      state: amountMatches && customerMatches && currencyMatches ? "reversed" : "manual_review",
+      state: evidenceMatches ? "reversed" : "manual_review",
       providerReference: receipt.providerReference,
       providerStatus: receipt.status,
       lastEvidenceAt: at,
+      deliveryCode: null,
     });
   }
 
@@ -442,7 +454,10 @@ export class BillingCommerceOrchestrator {
     );
     if (current.state === "succeeded" && (receipt === null || receipt.status === "pending" || receipt.status === "unknown")) return current;
     if (receipt === null) {
-      if (current.state === "checking") return current;
+      // A durable ready row has not crossed the dispatch CAS. A harmless
+      // status read with no provider result must not permanently turn it into
+      // an uncertain, non-dispatchable payment.
+      if (current.state === "ready" || current.state === "checking") return current;
       return await this.#store.compareAndSet(
         current.revision,
         nextRecord(current, {
