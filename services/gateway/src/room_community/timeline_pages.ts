@@ -30,7 +30,7 @@ export async function roomTimelinePage(q:Pick<PoolClient,'query'>,a:RoomCommunit
  const rows=(await q.query(`SELECT page.*,to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_time FROM (
   SELECT p.lesson_id AS row_id,'post'::text AS row_kind,p.created_at AS page_at,to_jsonb(p) AS payload FROM rooms.lessons p
    WHERE p.tenant_id=$1 AND p.room_id=$2 AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND $4::text IS NULL AND p.body ILIKE $3 ESCAPE '#'
-  UNION ALL SELECT d.reply_id,'reply',d.created_at,to_jsonb(d) FROM rooms.discussion_replies d JOIN rooms.lessons p ON p.tenant_id=d.tenant_id AND p.room_id=d.room_id AND p.lesson_id=d.lesson_id
+  UNION ALL SELECT d.reply_id,'reply',d.created_at,to_jsonb(d)||jsonb_build_object('parent_comments_enabled',p.comments_enabled) FROM rooms.discussion_replies d JOIN rooms.lessons p ON p.tenant_id=d.tenant_id AND p.room_id=d.room_id AND p.lesson_id=d.lesson_id
    WHERE d.tenant_id=$1 AND d.room_id=$2 AND d.moderation_state='visible' AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND ($4::text IS NULL OR d.lesson_id=$4) AND d.body ILIKE $3 ESCAPE '#'
   UNION ALL SELECT ans.answer_id,'answer',ans.created_at,to_jsonb(ans)||jsonb_build_object('source_lesson_id',question.source_lesson_id) FROM rooms.answers ans
    JOIN rooms.questions question ON question.tenant_id=ans.tenant_id AND question.question_id=ans.question_id
