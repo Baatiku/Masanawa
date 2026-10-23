@@ -29,6 +29,37 @@ describe("ST1 human publishing route",()=>{
   expect(publishHumanText).not.toHaveBeenCalled();await app.close();
  });
 });
+describe("ST3 human own-post routes",()=>{
+ it("uses verified fan and never trusts request identity fields",async()=>{
+  const app=Fastify(),editHumanText=vi.fn(async()=>({id:"ok"})),removeHumanPost=vi.fn(async()=>({state:"removed"}));
+  await registerHomeFeedRoutes(app,{service:{editHumanText,removeHumanPost} as never,
+   principal:async()=>({kind:"fan",id:"trusted",tenantId:"tenant"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2",path="/v1/posts/"+id+"/human";
+  expect((await app.inject({method:"PATCH",url:path,payload:{expectedBody:"Old",body:"New"}})).statusCode).toBe(200);
+  expect(editHumanText).toHaveBeenCalledWith({kind:"fan",id:"trusted",tenantId:"tenant"},id,"Old","New");
+  for(const body of [{expectedBody:"Old",body:"New",authorId:"other"},{body:"New"},{}])
+   expect((await app.inject({method:"PATCH",url:path,payload:body})).statusCode).toBe(422);
+  expect((await app.inject({method:"DELETE",url:path,payload:{authorId:"other"}})).statusCode).toBe(422);
+  expect((await app.inject({method:"DELETE",url:path})).statusCode).toBe(200);
+  expect(removeHumanPost).toHaveBeenCalledTimes(1);
+  await app.close();
+ });
+ it("denies unsigned requests and Masana or staff actions",async()=>{
+  const path="/v1/posts/381026c2-9d56-47b1-b73d-1784e24e41e2/human";
+  for(const kind of [null,"masana","staff"] as const) {
+   const app=Fastify(),editHumanText=vi.fn(),removeHumanPost=vi.fn();
+   await registerHomeFeedRoutes(app,{service:{editHumanText,removeHumanPost} as never,
+    principal:async()=>kind?{kind,id:"actor",tenantId:"tenant"}:null,
+    tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+   const code=kind?403:401;
+   expect((await app.inject({method:"PATCH",url:path,payload:{expectedBody:"Old",body:"New"}})).statusCode).toBe(code);
+   expect((await app.inject({method:"DELETE",url:path})).statusCode).toBe(code);
+   expect(editHumanText).not.toHaveBeenCalled();expect(removeHumanPost).not.toHaveBeenCalled();
+   await app.close();
+  }
+ });
+});
 describe("ST2 strict reaction transport",()=>{
  it("uses authenticated fan and exact reaction, never body actor",async()=>{
   const app=Fastify(),react=vi.fn(async()=>({kind:"love"}));

@@ -62,6 +62,44 @@ void main() {
     },
   );
 
+  test('human owner edits with original text and removes without forged identity',() async {
+    final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
+    final requests=<RequestOptions>[];
+    dio.interceptors.add(InterceptorsWrapper(onRequest:(request,handler){
+      requests.add(request);
+      handler.resolve(Response<Map<String,dynamic>>(
+        requestOptions:request,statusCode:200,data:request.method=='PATCH'
+          ? {..._humanPost(),'body':'Edited'} : {'state':'removed'}));
+    }));
+    final api=AccountBoundFeedApi(superDio:dio,
+      superToken:() async => 'synthetic',ownerAccount:'fan_a',
+      currentAccount:()=> 'fan_a');
+    final edited=await api.editHumanText(_humanPost()['id'] as String,'My post','Edited');
+    expect(edited.body,'Edited');
+    await api.removeHumanPost(edited.id);
+    expect(requests,hasLength(2));
+    expect(requests[0].method,'PATCH');
+    expect(requests[0].path,'/v1/posts/' + edited.id + '/human');
+    expect(requests[0].data,{'expectedBody':'My post','body':'Edited'});
+    expect(requests[1].method,'DELETE');
+    expect(requests[1].path,'/v1/posts/' + edited.id + '/human');
+    expect(requests[1].data,isNull);
+    expect(requests.every((request)=>request.headers['Authorization']=='Bearer synthetic'),isTrue);
+  });
+
+  test('changed account blocks own-post mutation before network',() async {
+    var actor='fan_b',requests=0;
+    final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest:(r,h){
+      requests++;h.resolve(Response(requestOptions:r,statusCode:200,data:_humanPost()));
+    }));
+    final api=AccountBoundFeedApi(superDio:dio,superToken:() async=>'token',
+      ownerAccount:'fan_a',currentAccount:()=>actor);
+    await expectLater(api.editHumanText(_humanPost()['id'] as String,'Old','New'),throwsStateError);
+    await expectLater(api.removeHumanPost(_humanPost()['id'] as String),throwsStateError);
+    expect(requests,0);
+  });
+
   test(
     'account switch before human publication blocks the request before network',
     () async {

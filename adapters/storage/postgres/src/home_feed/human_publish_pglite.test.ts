@@ -82,6 +82,10 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    await db.query("INSERT INTO talks.safety_enforcement(tenant_id,target_kind,target_id,revision,visibility,reason_code) VALUES('tenant','profile','amina',1,'blocked','fraud')");
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();
    expect(await savedRepo.list("tenant","fanB",null,20)).toHaveLength(0);
+   await expect(repo.editHumanText("tenant","fanA",created.id,args.body,"Invisible edit"))
+    .rejects.toMatchObject({status:404});
+   const unchanged=await db.query<{body:string}>("SELECT body FROM feed.posts WHERE id=$1",[created.id]);
+   expect(unchanged.rows[0]?.body).toBe(args.body);
    await expect(repo.publishHumanText("tenant","fanA",{...args,idempotencyKey:"human-restricted001"}))
     .rejects.toMatchObject({status:403,code:"human_profile_unavailable"});
    await db.query("DELETE FROM talks.safety_enforcement");
@@ -95,8 +99,36 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
     .rejects.toMatchObject({status:403});
    await db.query("UPDATE identity.users SET state='active' WHERE tenant_id='tenant' AND user_id='fanA'");
    expect((await repo.find("tenant","fanB",created.id))?.id).toBe(created.id);
+   // Two accounts, CAS editing, idempotent removal and original audit row.
+   await expect(repo.editHumanText("tenant","fanB",created.id,args.body,"Other edit"))
+    .rejects.toMatchObject({status:404});
+   const updated=await repo.editHumanText("tenant","fanA",created.id,args.body,"Edited public Status");
+   expect(updated.body).toBe("Edited public Status");
+   expect((await repo.editHumanText("tenant","fanA",created.id,args.body,"Edited public Status")).body)
+    .toBe("Edited public Status");
+   await expect(repo.editHumanText("tenant","fanA",created.id,args.body,"Stale overwrite"))
+    .rejects.toMatchObject({status:409,code:"post_edit_conflict"});
+   await expect(repo.editHumanText("tenant","fanA",oldId,"Historic approved body","Cannot edit Masana"))
+    .rejects.toMatchObject({status:404});
+   await expect(repo.removeHumanPost("tenant","fanB",created.id))
+    .rejects.toMatchObject({status:404});
+   expect(await repo.removeHumanPost("tenant","fanA",created.id))
+    .toEqual({id:created.id,state:"removed"});
+   expect(await repo.removeHumanPost("tenant","fanA",created.id))
+    .toEqual({id:created.id,state:"removed"});
+   expect(await repo.find("tenant","fanA",created.id)).toBeNull();
+   expect(await repo.find("tenant","fanB",created.id)).toBeNull();
+   expect((await repo.list("tenant","fanB","for_you",null,21)).map(p=>p.id))
+    .not.toContain(created.id);
+   expect(await savedRepo.list("tenant","fanB",null,20)).toHaveLength(0);
+   expect(await repo.comments("tenant",created.id,"fanA",null,20)).toHaveLength(0);
+   await expect(repo.editHumanText("tenant","fanA",created.id,"Edited public Status","Undo removal"))
+    .rejects.toMatchObject({status:404});
+   const retained=await db.query<{state:string}>(
+    "SELECT state FROM feed.posts WHERE tenant_id='tenant' AND id=$1",[created.id]);
+   expect(retained.rows[0]?.state).toBe("removed");
    const totals=await db.query<{n:number}>("SELECT count(*)::int AS n FROM feed.posts WHERE tenant_id='tenant' AND author_type='human'");
    expect(totals.rows[0]?.n).toBe(1);
   } finally {await db.close();}
- });
+ },25000);
 });

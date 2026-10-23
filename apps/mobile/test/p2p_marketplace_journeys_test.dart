@@ -227,13 +227,13 @@ void main() {
     final adapter=_P2pAdapter();
     await t.pumpWidget(_app(adapter));
     await t.pumpAndSettle();
-    expect(find.text('Check unfinished sell offer'),findsOneWidget);
-    await t.tap(find.text('Check unfinished sell offer'));
+    expect(find.text('Check unfinished ad'),findsOneWidget);
+    await t.tap(find.text('Check unfinished ad'));
     await t.pumpAndSettle();
     expect(adapter.calls.any((o)=>o.path.contains(
       '/offers/by-request/p2p-recover-unique-123')),isTrue);
     expect(adapter.calls.where((o)=>o.method=='POST'),isEmpty);
-    expect(find.text('Check unfinished sell offer'),findsNothing);
+    expect(find.text('Check unfinished ad'),findsNothing);
     expect(t.takeException(),isNull);
   });
 

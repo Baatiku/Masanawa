@@ -1,3 +1,4 @@
+import {createOfferEditing} from "./offer_editing.js";
 import { createHash, randomUUID } from "node:crypto";
 import {readBuyOfferAdmission,type BuyOfferAdmission} from "./buy_offer_admission.js";
 
@@ -293,6 +294,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }
   return Object.freeze({
+    ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {
       const rights=await admission(actor);
       return {makerBuy: rights.canMakeBuyOffer,takerSell:rights.canTakeBuyOffer,
@@ -771,7 +773,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     async quote(actor:P2pActor,input:{offerId:string;amountMicro:string;paymentMethodId?:string}) {
       const offerId=id(input.offerId);
       const offer=take<Record<string,unknown>>(await pool.query(`SELECT o.offer_id,o.seller_id,o.offer_side,
-        o.payment_method_id,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
+        o.payment_method_id,o.terms_revision,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
         o.remaining_micro::text,o.fee_bps,o.state,p.bank_name,p.verified_at,p.disabled_at,
         LEAST(o.remaining_micro::numeric,floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)))::text AS funded_micro
         FROM commerce.msnw_p2p_offers o
@@ -795,7 +797,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       const amount=BigInt(amounts.amountMicro);
       if(amount<BigInt(String(offer.min_micro))||amount>BigInt(String(offer.max_micro))||amount>BigInt(String(offer.funded_micro)))
         throw new P2pError('p2p.offer_limit',422);
-      return {offerId,offerSide:side,takerAction:side==='buy'?'sell':'buy',
+      return {offerId,termsRevision:Number(offer.terms_revision??1),offerSide:side,takerAction:side==='buy'?'sell':'buy',
         ...(side==='buy'?{receivingMethodId}:{}),
         amountMicro:amounts.amountMicro,fiatKobo:amounts.fiatKobo,feeMicro:amounts.feeMicro,
         rateKoboPerMsnw:String(offer.rate_kobo_per_msnw),feeBps:Number(offer.fee_bps),
@@ -813,7 +815,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       return {orderId:String(row.order_id),state:String(row.state)};
     },
     async createOrder(actor: P2pActor, input: { offerId: string; amountMicro: string;
-      idempotencyKey: string; expectedRateKoboPerMsnw?: string; expectedFeeBps?: number;paymentMethodId?:string }) {
+      idempotencyKey: string; expectedRateKoboPerMsnw?: string; expectedFeeBps?: number;paymentMethodId?:string;expectedTermsRevision?:number }) {
       const orderKey = key(input.idempotencyKey), offerId = id(input.offerId);
       return transact(async tx => {
         // Serialization covers *both* duplicate requests and concurrent offers.
@@ -831,7 +833,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           return {orderId: String(prior.order_id), replay: true};
         }
         const offer=take<Record<string,unknown>>(await tx.query(`SELECT o.offer_id,o.seller_id,o.offer_side,
-          o.payment_method_id,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
+          o.payment_method_id,o.terms_revision,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
           o.remaining_micro::text,o.fee_bps,o.state,p.verified_at,p.disabled_at
           FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
           ON o.payment_method_id=p.method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
@@ -846,6 +848,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
             input.expectedFeeBps !== Number(offer.fee_bps))) {
           throw new P2pError("p2p.quote_changed",409);
         }
+        const termsRevision=Number(offer.terms_revision??1);
+        if((input.expectedTermsRevision!==undefined&&input.expectedTermsRevision!==termsRevision)||
+          (input.expectedTermsRevision===undefined&&termsRevision>1))throw new P2pError('p2p.quote_changed',409);
         const side=String(offer.offer_side??'sell');
         const sellerId=side==='buy'?actor.userId:String(offer.seller_id);
         const buyerId=side==='buy'?String(offer.seller_id):actor.userId;

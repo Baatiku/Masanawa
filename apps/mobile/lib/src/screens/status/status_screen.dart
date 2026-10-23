@@ -66,6 +66,12 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<FeedPost> publishHumanText(String body,String idempotencyKey) =>
       _checked(() => super.publishHumanText(body,idempotencyKey));
   @override
+  Future<FeedPost> editHumanText(String id,String expectedBody,String body) =>
+    _checked(() => super.editHumanText(id,expectedBody,body));
+  @override
+  Future<void> removeHumanPost(String id) =>
+    _checked(() => super.removeHumanPost(id));
+  @override
   Future<void> comment(String id, String body, String key) =>
       _checked(() => super.comment(id, body, key));
   @override

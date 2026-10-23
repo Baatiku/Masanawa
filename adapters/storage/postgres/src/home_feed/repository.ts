@@ -115,6 +115,45 @@ export class PgHomeFeedRepository {
   if(!projected)throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
   return projected;
  }
+ async editHumanText(tenant:string,userId:string,id:string,expectedBody:string,body:string) {
+  // One atomic ownership + compare-and-swap update. Re-check canonical
+  // identity, profile moderation and block policy on both writes and replays.
+  const changed=await this.pool.query(`UPDATE feed.posts p SET body=$5,updated_at=now()
+   WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
+     AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
+     AND p.audience='public' AND p.body=$4 AND ${eligibleAuthor} RETURNING p.id`,
+    [tenant,userId,id,expectedBody,body]);
+  if(changed.rows.length===0) {
+   const current=await this.pool.query(`SELECT p.body FROM feed.posts p
+     WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
+       AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
+       AND p.audience='public' AND ${eligibleAuthor}`,[tenant,userId,id]);
+   if(current.rows.length===0)
+    throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
+   if(current.rows[0]?.body!==body)
+    throw Object.assign(new Error('post_edit_conflict'),{status:409,code:'post_edit_conflict'});
+   // Uncertain transport replay: this exact requested body is durable.
+  }
+  const projected=await this.find(tenant,userId,id);
+  if(!projected)throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
+  return projected;
+ }
+ async removeHumanPost(tenant:string,userId:string,id:string):Promise<{id:string;state:"removed"}>{
+  // Preserve immutable original author/reaction/comment identifiers for
+  // moderation and dispute audit; every normal reader requires published.
+  const changed=await this.pool.query(`UPDATE feed.posts p SET state='removed',updated_at=now()
+   WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
+     AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
+     AND ${eligibleAuthor} RETURNING p.id`,[tenant,userId,id]);
+  if(changed.rows.length===0) {
+   const old=await this.pool.query(`SELECT state FROM feed.posts
+     WHERE tenant_id=$1 AND author_type='human' AND author_user_id=$2
+     AND id=$3::uuid AND kind='text'`,[tenant,userId,id]);
+   if(old.rows[0]?.state!=='removed')
+    throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
+  }
+  return {id,state:'removed'};
+ }
  async publish(tenant:string,publisher:string,v:{authorMasanaId:string;kind:string;body:string;media:readonly string[];transcript:string|null;idempotencyKey:string}){
   const added=await this.pool.query(`INSERT INTO feed.posts
    (tenant_id,author_masana_id,kind,body,media_ids,transcript,idempotency_key,published_by)
