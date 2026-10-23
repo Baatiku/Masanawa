@@ -4,7 +4,7 @@
     {
       "claim_id": "6e88c21e-997b-49b0-a639-b9b380767f92",
       "owner": "codex-p2p-oct23",
-      "scope": "P7-T02-order-discussion",
+      "scope": "P7-P01-T02 P2P-only source; bounded P2P documentation hunks",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -15,14 +15,18 @@
         "apps/mobile/test/p2p_order_messages_test.dart",
         "apps/mobile/test/p2p_marketplace_journeys_test.dart",
         "services/gateway/src/p2p/read_journeys.pglite.test.ts",
-        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts"
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "CONTINUE-HERE.md"
       ],
       "branch": "feat/p2p-order-discussion-oct23",
       "base_sha": "25e3ca1d892b23d92ab98114e29dfb6811af0c44",
       "pr": "",
       "claimed_at": "2026-10-23T04:29:54.693Z",
-      "heartbeat_at": "2026-10-23T04:43:29.746Z",
-      "expires_at": "2026-10-23T04:48:29.747Z"
+      "heartbeat_at": "2026-10-23T04:46:08.428Z",
+      "expires_at": "2026-10-23T04:51:08.428Z"
     }
   ],
   "history": []
