@@ -78,6 +78,9 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<List<FeedComment>> thread(String id, String sort) =>
       _checked(() => super.thread(id, sort));
   @override
+  Future<List<FeedComment>> threadPage(String id, String sort, {String? before}) =>
+      _checked(() => super.threadPage(id, sort, before: before));
+  @override
   Future<void> sendThreadComment(
     String id, String body, String key, String? parentId,
   ) => _checked(() => super.sendThreadComment(id, body, key, parentId));

@@ -7,12 +7,15 @@ import 'feed_api.dart';
 class FeedPostDetailScreen extends StatefulWidget {
   const FeedPostDetailScreen({super.key,required this.initialPost,
     required this.accountKey,required this.loadPost,required this.loadThread,
+    this.loadMoreThread,
     required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,this.onReport,
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
   final Future<FeedPost> Function(String) loadPost;
   final Future<List<FeedComment>> Function(String,String) loadThread;
+  /// Optional server-backed continuation; omitted for offline/test-only feeds.
+  final Future<List<FeedComment>> Function(String,String,String) ? loadMoreThread;
   final Future<void> Function(String,String,String,String?) sendComment;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile,onMedia,onReport;
   final bool enabled,canReply;
@@ -25,6 +28,8 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
   String? error,replyTo,pendingBody,pendingKey,pendingParent;
   String sort='newest';
   bool loading=true,sending=false,offline=false,denied=false;
+  bool loadingMore=false,hasMore=false;
+  String? pageError,commentCursor;
   int generation=0;
   String t(String en,String ha)=>Localizations.localeOf(context).languageCode=='ha'?ha:en;
   @override void initState(){super.initState();post=widget.initialPost;
@@ -33,19 +38,23 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     super.didUpdateWidget(old);
     if(old.accountKey!=widget.accountKey||old.initialPost.id!=widget.initialPost.id){
       generation++;post=null;comments=[];error=null;replyTo=null;
-      pendingBody=null;pendingKey=null;pendingParent=null;sending=false;input.clear();refresh();
+      pendingBody=null;pendingKey=null;pendingParent=null;sending=false;input.clear();
+      loadingMore=false;hasMore=false;commentCursor=null;pageError=null;refresh();
     }else if(!old.enabled&&widget.enabled){refresh();}
   }
   @override void dispose(){generation++;input.dispose();super.dispose();}
   Future<void> refresh() async {
     if(!widget.enabled)return;
     final ticket=++generation;
-    setState((){loading=true;error=null;denied=false;});
+    setState((){loading=true;error=null;denied=false;pageError=null;
+      loadingMore=false;hasMore=false;commentCursor=null;});
     try {
       final p=await widget.loadPost(widget.initialPost.id);
       final thread=await widget.loadThread(p.id,sort);
       if(!mounted||ticket!=generation)return;
-      setState((){post=p;comments=thread;loading=false;offline=false;});
+      setState((){post=p;comments=thread;loading=false;offline=false;
+        hasMore=widget.loadMoreThread!=null&&thread.length>=30;
+        commentCursor=thread.isEmpty?null:thread.last.id;});
     }on DioException catch(e){
       if(!mounted||ticket!=generation)return;
       setState((){loading=false;denied=e.response?.statusCode==401||
@@ -54,9 +63,55 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
           e.type==DioExceptionType.connectionError;
         error=denied?t('Not permitted or post unavailable','Ba a da izini ko babu labarin'):
           t('Unable to load post','An kasa dauko labarin');});
-    }catch(_){
+    }catch(e){
       if(mounted&&ticket==generation)setState((){
-        loading=false;error=t('Unable to load post','An kasa dauko labarin');});
+        loading=false;
+        if(e is StateError&&e.message=='account_changed') {
+          denied=true;post=null;comments=[];hasMore=false;commentCursor=null;
+        }
+        error=t('Unable to load post','An kasa dauko labarin');});
+    }
+  }
+  Future<void> loadOlderComments() async {
+    final p=post,cursor=commentCursor;
+    if(!widget.enabled||loading||loadingMore||!hasMore||p==null||
+        cursor==null||widget.loadMoreThread==null)return;
+    final ticket=generation,expectedSort=sort;
+    setState((){loadingMore=true;pageError=null;});
+    try {
+      final page=await widget.loadMoreThread!(p.id,expectedSort,cursor);
+      if(!mounted||ticket!=generation||sort!=expectedSort)return;
+      setState(() {
+        final seen=comments.map((c)=>c.id).toSet();
+        comments=[...comments,...page.where((c)=>seen.add(c.id))];
+        // Move by the actual last returned row even if concurrent pages overlap.
+        // A non-advancing cursor must terminate to avoid an infinite Load more.
+        final next=page.isEmpty?null:page.last.id;
+        hasMore=page.length>=30&&next!=cursor;
+        commentCursor=next;
+        loadingMore=false;
+      });
+    }on DioException catch(e) {
+      if(!mounted||ticket!=generation||sort!=expectedSort)return;
+      setState(() {
+        loadingMore=false;
+        if(e.response?.statusCode==401||e.response?.statusCode==403||
+           e.response?.statusCode==404||e.response?.statusCode==410) {
+          denied=true;post=null;comments=[];hasMore=false;commentCursor=null;
+        }
+        pageError=t('Could not load older comments. Retry.',
+          'An kasa dauko tsofaffin sharhi. Sake gwadawa.');
+      });
+    }catch (e) {
+      if(!mounted||ticket!=generation||sort!=expectedSort)return;
+      setState((){
+        loadingMore=false;
+        if(e is StateError&&e.message=='account_changed') {
+          denied=true;post=null;comments=[];hasMore=false;commentCursor=null;
+        }
+        pageError=t('Could not load older comments. Retry.',
+          'An kasa dauko tsofaffin sharhi. Sake gwadawa.');
+      });
     }
   }
   Future<void> submit() async {
@@ -145,7 +200,15 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
                 onSelected:(_){setState(()=>sort='oldest');refresh();}),
             ]),
             if(comments.isEmpty&&!loading)Text(t('No comments yet','Babu sharhi tukuna')),
-            for(final c in comments)commentRow(c)
+            for(final c in comments)commentRow(c),
+            if(pageError!=null)Text(pageError!),
+            if(hasMore)Center(child:TextButton.icon(
+              onPressed:loadingMore?null:loadOlderComments,
+              icon:loadingMore?const SizedBox(width:16,height:16,
+                child:CircularProgressIndicator(strokeWidth:2)):
+                const Icon(Icons.expand_more),
+              label:Text(loadingMore?t('Loading comments…','Ana dauko sharhi…'):
+                t('Load older comments','Dauko tsofaffin sharhi')))),
           ]))
         ]))),
         if(!denied&&p!=null)Padding(padding:const EdgeInsets.all(8),child:Column(children:[
