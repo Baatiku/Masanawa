@@ -12,14 +12,15 @@
         "packages/commerce/migrations/0138_msnw_p2p_order_messages.sql",
         "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
         "apps/mobile/lib/src/finance/p2p_order_messages.dart",
-        "apps/mobile/test/p2p_order_messages_test.dart"
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart"
       ],
       "branch": "feat/p2p-order-discussion-oct23",
       "base_sha": "25e3ca1d892b23d92ab98114e29dfb6811af0c44",
       "pr": "",
       "claimed_at": "2026-10-23T04:29:54.693Z",
-      "heartbeat_at": "2026-10-23T04:37:48.673Z",
-      "expires_at": "2026-10-23T04:42:48.673Z"
+      "heartbeat_at": "2026-10-23T04:40:48.986Z",
+      "expires_at": "2026-10-23T04:45:48.986Z"
     }
   ],
   "history": []
