@@ -1,4 +1,5 @@
 import 'p2p_order_messages.dart';
+import 'p2p_trader_page.dart';
 import 'wallet_flow_page.dart';
 import 'p2p_order_presentation.dart';
 import 'wallet_step_up_page.dart';
@@ -817,6 +818,19 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     ),
   );
 
+  Future<void> _viewTrader(Map<String,dynamic> ad) async {
+    if(!_sameAccount||_busy)return;
+    final offerId=ad['offer_id'];
+    if(offerId is! String)return;
+    final selected=await openWalletPage<Map<String,dynamic>>(
+      context:context,title:'Trader profile',wrapScaffold:false,
+      builder:(_)=>P2pTraderPage(expectedUserId:widget.expectedUserId,
+        currentUserId:widget.currentUserId,formatMsnw:_msnw,formatNgn:_ngn,
+        load:(cursor)async=>_json(await _request('GET',
+          '/offers/$offerId/trader${cursor==null?'':'?cursor=${Uri.encodeQueryComponent(cursor)}'}'))));
+    if(mounted&&_sameAccount&&selected!=null)await _buy(selected);
+  }
+
   Widget _offerTile(Map<String, dynamic> item, bool own) => _tile(
     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       CircleAvatar(
@@ -840,6 +854,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             maxLines:1,overflow:TextOverflow.ellipsis,
             style:Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontWeight:FontWeight.w600)),
+          TextButton(onPressed:_busy?null:()=>_viewTrader(item),
+            child:const Text('View trader profile')),
           if(item['bank_method_verified']==true)
             Padding(
               padding:const EdgeInsets.only(top:3),

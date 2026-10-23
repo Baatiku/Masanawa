@@ -44,6 +44,13 @@ class _P2pAdapter implements HttpClientAdapter {
           'remaining_micro': '100000000',
           'bank_name': 'A genuine verified bank account name',
         }]}
+      : path.endsWith('/trader')
+      ? <String,dynamic>{'trader':{'displayName':'Public Seller','completedOrders30d':7,
+          'closedOrders30d':10,'windowDays':30,'asOf':'2026-10-23T05:00:00Z'},
+          'items':[{'offer_id':'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'rate_kobo_per_msnw':'150000','min_micro':'1000000','max_micro':'30000000',
+            'remaining_micro':'100000000','bank_name':'Verified Bank','bank_method_verified':true}],
+          'nextCursor':null}
       : path.contains('/offers/by-request/')
       ? <String,dynamic>{
           'offerId':'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -251,6 +258,21 @@ void main() {
     expect(adapter.calls.any((o)=>o.path.contains(
       '/orders/by-request/p2p-prior-order-123456')),isTrue);
     expect(adapter.calls.where((o)=>o.method=='POST'),isEmpty);
+  });
+
+  testWidgets('marketplace opens public trader then reuses the authoritative buy quote review',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter();
+    await t.pumpWidget(_app(adapter));await t.pumpAndSettle();
+    await t.tap(find.text('View trader profile'));await t.pumpAndSettle();
+    expect(find.text('Public Seller'),findsOneWidget);
+    expect(adapter.calls.any((r)=>r.path.endsWith('/trader')),isTrue);
+    await t.ensureVisible(find.text('Review buy quote'));await t.tap(find.text('Review buy quote'));await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField).last,'1');await t.pump();
+    await t.tap(find.text('Review price and fees'));await t.pumpAndSettle();
+    expect(find.text('Review P2P order'),findsOneWidget);
+    expect(adapter.calls.any((r)=>r.path.contains('/quote?')),isTrue);
+    expect(adapter.calls.where((r)=>r.method=='POST'),isEmpty);
+    await t.pumpWidget(const SizedBox());
   });
 
 }

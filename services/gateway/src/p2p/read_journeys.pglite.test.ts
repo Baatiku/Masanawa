@@ -1,3 +1,5 @@
+import Fastify from "fastify";
+import {registerP2pRoutes} from "./routes.js";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
 import {
@@ -188,4 +190,73 @@ describe("P2P real-SQL read and pagination qualification", {timeout:30_000}, () 
         .toHaveLength(0);
     }finally{await t.db.close();}
   });
+  it("returns only public trader context and that trader's presently funded ads with exact cohort counts",async()=>{
+    const t=await fixture();
+    try {
+      await offer(t.query,1);await offer(t.query,2);await offer(t.query,3);
+      await t.query(`INSERT INTO commerce.msnw_p2p_payment_methods
+        SELECT tenant_id,$1,bank_name,account_name,account_number,method_type,'other-seller',verified_at,disabled_at
+        FROM commerce.msnw_p2p_payment_methods WHERE method_id=$2`,[uuid(999),payment]);
+      await t.query("INSERT INTO commerce.msnw_custody_accounts VALUES($1,'other-seller',2010000)",[tenant]);
+      await t.query("UPDATE commerce.msnw_p2p_offers SET seller_id='other-seller',payment_method_id=$1 WHERE offer_id=$2",[uuid(999),uuid(3)]);
+      await t.query("INSERT INTO security.platform_user_profiles VALUES($1,$2,'Public Seller')",[tenant,seller]);
+      for(const [n,state,age] of [[1,'completed',2],[2,'cancelled',3],[3,'expired',4],[4,'awaiting_payment',2],[5,'completed',31]] as const)
+        await t.query(`INSERT INTO commerce.msnw_p2p_orders(order_id,tenant_id,seller_id,buyer_id,state,created_at)
+          VALUES($1,$2,$3,$4,$5,statement_timestamp()-($6::int*interval '1 day'))`,[uuid(100+n),tenant,seller,buyer,state,age]);
+      const profile=await t.service.traderProfile({tenantId:tenant,userId:buyer},uuid(1));
+      expect(profile.trader).toMatchObject({displayName:'Public Seller',completedOrders30d:1,closedOrders30d:3,windowDays:30,sourceOfferId:uuid(1)});
+      expect(profile.items.map(r=>r.offer_id)).toEqual([uuid(2),uuid(1)]);
+      expect(profile.items.every(r=>r.remaining_micro==='2000000')).toBe(true);
+      expect(JSON.stringify(profile)).not.toMatch(/seller_id|user_id|account_number|0123456789|account_name|buyer_id|email|verification_reference/);
+      await t.query("UPDATE commerce.msnw_p2p_offers SET state='paused' WHERE offer_id=$1",[uuid(2)]);
+      expect((await t.service.traderProfile({tenantId:tenant,userId:buyer},uuid(1))).items).toHaveLength(1);
+    } finally {await t.db.close();}
+  });
+  it('denies cross-tenant, self, paused, revoked-method and unfunded profile references',async()=>{
+    const t=await fixture();try {
+      await offer(t.query,1);
+      for(const actor of [{tenantId:'other',userId:buyer},{tenantId:tenant,userId:seller}])
+        await expect(t.service.traderProfile(actor,uuid(1))).rejects.toMatchObject({status:404});
+      await t.query("UPDATE commerce.msnw_p2p_offers SET state='paused'");
+      await expect(t.service.traderProfile({tenantId:tenant,userId:buyer},uuid(1))).rejects.toMatchObject({status:404});
+      await t.query("UPDATE commerce.msnw_p2p_offers SET state='active'");
+      await t.query('UPDATE commerce.msnw_p2p_payment_methods SET disabled_at=now()');
+      await expect(t.service.traderProfile({tenantId:tenant,userId:buyer},uuid(1))).rejects.toMatchObject({status:404});
+      await t.query('UPDATE commerce.msnw_p2p_payment_methods SET disabled_at=NULL');
+      await t.query('UPDATE commerce.msnw_custody_accounts SET available_micro=0');
+      await expect(t.service.traderProfile({tenantId:tenant,userId:buyer},uuid(1))).rejects.toMatchObject({status:404});
+    }finally{await t.db.close();}
+  });
+  it('binds profile ad pagination to its reference and account without changing ordinary market cursors',async()=>{
+    const t=await fixture();try {
+      for(let n=1;n<=25;n++)await offer(t.query,n);
+      const actor={tenantId:tenant,userId:buyer};
+      const first=await t.service.traderProfile(actor,uuid(1));
+      expect(first.items).toHaveLength(20);
+      const second=await t.service.traderProfile(actor,uuid(1),{cursor:first.nextCursor!});
+      expect(second.items).toHaveLength(5);expect(second.nextCursor).toBeNull();
+      expect(new Set([...first.items,...second.items].map(r=>r.offer_id)).size).toBe(25);
+      const stripped=JSON.parse(Buffer.from(first.nextCursor!,'base64url').toString());delete stripped.context;
+      await expect(t.service.traderProfile(actor,uuid(1),{cursor:Buffer.from(JSON.stringify(stripped)).toString('base64url')})).rejects.toMatchObject({status:422});
+      await expect(t.service.traderProfile(actor,uuid(2),{cursor:first.nextCursor!})).rejects.toMatchObject({status:422});
+      await expect(t.service.traderProfile({tenantId:tenant,userId:'another'},uuid(1),{cursor:first.nextCursor!})).rejects.toMatchObject({status:422});
+      await expect(t.service.offersPage(actor,{cursor:first.nextCursor!})).rejects.toMatchObject({status:422});
+      const market=await t.service.offersPage(actor);
+      expect((await t.service.offersPage(actor,{cursor:market.nextCursor!})).items).toHaveLength(5);
+    }finally{await t.db.close();}
+  });
+
+  it('serves authenticated no-store profile HTTP responses and rejects foreign references',async()=>{
+    const t=await fixture(),app=Fastify();try {
+      await offer(t.query,1);
+      registerP2pRoutes(app,{service:t.service,authorize:async header=>({tenantId:header==='foreign'?'other':tenant,userId:buyer})});
+      const url=`/v1/wallet/msnw/p2p/offers/${uuid(1)}/trader`;
+      expect((await app.inject({url})).statusCode).toBe(401);
+      const first=await app.inject({url,headers:{authorization:'buyer'}});
+      expect(first.statusCode).toBe(200);expect(first.headers['cache-control']).toBe('no-store');
+      expect(first.json().trader).toMatchObject({completedOrders30d:0,closedOrders30d:0});
+      expect((await app.inject({url,headers:{authorization:'foreign'}})).statusCode).toBe(404);
+    }finally{await app.close();await t.db.close();}
+  });
+
 });

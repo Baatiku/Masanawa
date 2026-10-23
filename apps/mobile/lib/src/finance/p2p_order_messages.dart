@@ -370,7 +370,7 @@ class _P2pOrderMessagesPageState extends State<P2pOrderMessagesPage>
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: details.length < 10
+              onPressed: details.runes.length < 10
                   ? null
                   : () => Navigator.pop(ctx, true),
               child: const Text('Submit report'),

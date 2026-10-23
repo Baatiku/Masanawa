@@ -14,7 +14,10 @@ const cleanups:Array<()=>Promise<unknown>>=[];
 afterEach(async()=>{for(const cleanup of cleanups.splice(0).reverse())await cleanup();});
 async function fixture(){
  const db=new PGlite();cleanups.push(()=>db.close());
- await db.exec(`CREATE SCHEMA commerce;
+ // PGlite has no advisory lock implementation. This sequential fixture stubs only
+ // that primitive; hosted real PostgreSQL tests prove cross-order quota serialization.
+ await db.exec(`CREATE FUNCTION public.pg_advisory_xact_lock(integer) RETURNS void
+ LANGUAGE sql AS 'SELECT'; CREATE SCHEMA commerce;
  CREATE TABLE commerce.msnw_p2p_orders(order_id uuid,tenant_id text,offer_id uuid,
  seller_id text,buyer_id text,amount_micro bigint DEFAULT 100,fee_micro bigint DEFAULT 1,
  fiat_kobo bigint DEFAULT 100,rate_kobo_per_msnw bigint DEFAULT 100,
@@ -189,6 +192,16 @@ describe('P7-T02 actual SQL and HTTP participant discussion', {timeout:30_000},(
   const page=await t.service.messagesPage(buyer,orderId);
   expect(page.items).toHaveLength(40);expect(page.items.map(x=>x.message_id)).not.toContain(m.message_id);
   expect(page.removed[0]).toMatchObject({message_id:m.message_id});expect(page.canSend).toBe(false);
+ });
+
+ it('rejects reasons below ten Unicode characters before a database constraint can return 503',async()=>{
+  const t=await fixture();const m=await t.send();
+  const url=`/v1/wallet/msnw/p2p/orders/${orderId}/messages/${m.message_id}/report`;
+  expect((await t.app.inject({method:'POST',url,headers:{authorization:'seller'},payload:{category:'other',details:'😀'.repeat(5)}})).statusCode).toBe(422);
+  const r=await t.service.reportMessage(seller,orderId,m.message_id,{category:'other',details:'😀'.repeat(10)});
+  const review=`/v1/admin/msnw/p2p/message-reports/${r.report_id}/review`;
+  expect((await t.app.inject({method:'POST',url:review,headers:{authorization:'staff'},payload:{decision:'dismiss',reason:'😀'.repeat(5),version:1}})).statusCode).toBe(422);
+  expect((await t.app.inject({method:'POST',url:review,headers:{authorization:'staff'},payload:{decision:'dismiss',reason:'😀'.repeat(10),version:1}})).statusCode).toBe(200);
  });
 
 });

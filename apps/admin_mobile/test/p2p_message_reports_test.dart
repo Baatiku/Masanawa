@@ -46,6 +46,16 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.enterText(find.byType(TextField), '😀' * 5);
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Confirm review'),
+            )
+            .onPressed,
+        isNull,
+      );
       await tester.enterText(
         find.byType(TextField),
         'Verified prohibited credential request.',
