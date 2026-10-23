@@ -70,22 +70,45 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     return project(q,a,await room(q,a,id,true));
    });
   }
-  if(parts[0]==='invitations'&&method==='GET')return tx(async q=>{await active(q,a);const v=await q.query(`SELECT i.invite_id AS "inviteId",r.room_id AS "roomId",r.profession_title AS name FROM rooms.membership_invites i JOIN rooms.rooms r ON r.tenant_id=i.tenant_id AND r.room_id=i.room_id WHERE i.tenant_id=$1 AND i.recipient_user_id=$2 AND i.revoked_at IS NULL AND i.accepted_by IS NULL AND i.expires_at>now() AND r.state='published' ORDER BY i.created_at DESC LIMIT 100`,[a.tenantId,a.userId]);return {items:v.rows};});
+  if(parts[0]==='invitations'&&method==='GET')return tx(async q=>{await active(q,a);const v=await q.query(`SELECT i.invite_id AS "inviteId",r.room_id AS "roomId",r.profession_title AS name,i.expires_at AS "expiresAt"
+   FROM rooms.membership_invites i JOIN rooms.rooms r ON r.tenant_id=i.tenant_id AND r.room_id=i.room_id
+   JOIN identity.users sender ON sender.tenant_id=i.tenant_id AND sender.user_id=i.created_by AND sender.state='active'
+   LEFT JOIN rooms.memberships m ON m.tenant_id=i.tenant_id AND m.room_id=i.room_id AND m.user_id=$2
+   WHERE i.tenant_id=$1 AND i.recipient_user_id=$2 AND i.revoked_at IS NULL AND i.accepted_by IS NULL AND i.expires_at>now() AND r.state='published'
+   AND COALESCE(m.state,'') NOT IN ('active','banned')
+   AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=i.tenant_id AND b.blocked
+    AND ((b.viewer_user_id=$2 AND b.subject_user_id IN (i.created_by,r.owner_user_id)) OR (b.subject_user_id=$2 AND b.viewer_user_id IN (i.created_by,r.owner_user_id))))
+   ORDER BY i.created_at DESC,i.invite_id DESC LIMIT 100`,[a.tenantId,a.userId]);return {items:v.rows.map(v=>({...v,expiresAt:iso(v.expiresAt)}))};});
   if(['mine','discover'].includes(parts[0]??'')&&method==='GET')return tx(async q=>{await active(q,a);
    const r=await q.query(`SELECT r.*,m.role AS member_role,m.state AS member_state,m.muted,m.pinned FROM rooms.rooms r LEFT JOIN rooms.memberships m ON m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$2
     WHERE r.tenant_id=$1 AND r.state='published' AND (($3='mine' AND m.state='active') OR ($3='discover' AND r.visibility='public' AND COALESCE(m.state,'')<>'banned'))
+    AND ($3='mine' OR NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=r.tenant_id AND b.blocked AND ((b.viewer_user_id=$2 AND b.subject_user_id=r.owner_user_id) OR (b.subject_user_id=$2 AND b.viewer_user_id=r.owner_user_id))))
     AND ($4='' OR r.profession_title ILIKE '%'||$4||'%') ORDER BY COALESCE(m.pinned,false) DESC,r.updated_at DESC,r.room_id LIMIT 100`,[a.tenantId,a.userId,parts[0],text(input.search??'',100,true)]);
    return {items:await Promise.all(r.rows.map(r=>project(q,a,r)))};
   });
   const id=parts[0];if(!id||parts[1]!=='community')fail(404,'not_found');
   const operation=parts[2]??'';
   return tx(async q=>{await active(q,a);
+   // A recipient can decline without first joining or reading a private Room.
+   // Use the same Room lock as accept/revoke/retire so only one outcome wins.
+   if(operation==='invitations'&&parts[4]==='decline'&&method==='POST'){
+    const invitationId=text(parts[3],160);
+    const visible=await q.query("SELECT room_id FROM rooms.rooms WHERE tenant_id=$1 AND room_id=$2 AND state='published' FOR UPDATE",[a.tenantId,id]);
+    if(!visible.rows.length)fail(404,'invitation_not_found');
+    const invite=(await q.query('SELECT * FROM rooms.membership_invites WHERE tenant_id=$1 AND room_id=$2 AND invite_id=$3 AND recipient_user_id=$4 FOR UPDATE',[a.tenantId,id,invitationId,a.userId])).rows[0];
+    if(!invite)fail(404,'invitation_not_found');
+    if(invite.accepted_by)fail(409,'invitation_already_accepted');
+    await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND invite_id=$3',[a.tenantId,id,invitationId]);
+    return {declined:true};
+   }
    // Invite acceptance may inspect private metadata only after a valid token.
    if(operation==='join'&&method==='POST'){
     const r=(await q.query("SELECT * FROM rooms.rooms WHERE tenant_id=$1 AND room_id=$2 AND state='published' FOR UPDATE",[a.tenantId,id])).rows[0];if(!r)fail(404,'room_not_found');
     const m=(await q.query('SELECT state FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,a.userId])).rows[0];if(m?.state==='banned')fail(403,'room_banned');
+    if(r.owner_user_id)await unblocked(q,a,r.owner_user_id);
     if(r.plan_mode==='paid'){const e=await q.query("SELECT 1 FROM rooms.entitlements WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND state IN ('active','grace') AND period_end>now()",[a.tenantId,id,a.userId]);if(!e.rows.length)fail(403,'subscription_not_verified');}
-    if(input.token||input.inviteId){const i=(await q.query("SELECT * FROM rooms.membership_invites WHERE tenant_id=$1 AND room_id=$2 AND (($3::text IS NOT NULL AND token_hash=$3) OR ($4::text IS NOT NULL AND invite_id=$4 AND recipient_user_id=$5)) AND revoked_at IS NULL AND expires_at>now() FOR UPDATE",[a.tenantId,id,input.token?hash(text(input.token,200)):null,input.inviteId?text(input.inviteId,160):null,a.userId])).rows[0];if(!i||(i.accepted_by&&i.accepted_by!==a.userId)||(i.recipient_user_id&&i.recipient_user_id!==a.userId))fail(403,'invalid_invite');await unblocked(q,a,i.created_by);
+    if(input.token||input.inviteId){const i=(await q.query("SELECT * FROM rooms.membership_invites WHERE tenant_id=$1 AND room_id=$2 AND (($3::text IS NOT NULL AND token_hash=$3) OR ($4::text IS NOT NULL AND invite_id=$4 AND recipient_user_id=$5)) AND revoked_at IS NULL AND expires_at>now() FOR UPDATE",[a.tenantId,id,input.token?hash(text(input.token,200)):null,input.inviteId?text(input.inviteId,160):null,a.userId])).rows[0];if(!i||(i.accepted_by&&(i.accepted_by!==a.userId||m?.state!=='active'))||(i.recipient_user_id&&i.recipient_user_id!==a.userId))fail(403,'invalid_invite');await unblocked(q,a,i.created_by);
+     const sender=await q.query("SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2 AND state='active'",[a.tenantId,i.created_by]);if(!sender.rows.length)fail(403,'invalid_invite');
      await q.query('UPDATE rooms.membership_invites SET accepted_by=$4,accepted_at=COALESCE(accepted_at,now()) WHERE tenant_id=$1 AND room_id=$2 AND invite_id=$3',[a.tenantId,id,i.invite_id,a.userId]);
     }else if(m?.state!=='active'&&(r.visibility==='private'||r.join_approval))fail(403,'invitation_required');
     await q.query(`INSERT INTO rooms.memberships AS m(tenant_id,room_id,user_id) VALUES($1,$2,$3) ON CONFLICT(tenant_id,room_id,user_id) DO UPDATE SET state='active',role=CASE WHEN m.state='active' THEN m.role ELSE 'member' END,updated_at=now()`,[a.tenantId,id,a.userId]);
@@ -196,7 +219,9 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     if(!['admin','member'].includes(role)||!['active','left','banned'].includes(state))fail(422,'invalid_member');
     // Removed/banned people must consent to rejoin; management may unban to left.
     if(state==='active'&&old.state!=='active')fail(409,'member_must_rejoin');
-    await q.query('UPDATE rooms.memberships SET role=$4,state=$5,updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target,state==='active'?role:'member',state]);return {updated:true};
+    await q.query('UPDATE rooms.memberships SET role=$4,state=$5,updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target,state==='active'?role:'member',state]);
+    if(state!=='active')await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND recipient_user_id=$3',[a.tenantId,id,target]);
+    return {updated:true};
    }
    if(operation==='invites'){
     await owned(q,a,id);
@@ -249,5 +274,5 @@ export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnTy
  const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
- for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/:inviteId',['DELETE']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
+ for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
 }
