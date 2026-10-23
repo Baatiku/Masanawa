@@ -12,6 +12,7 @@ import 'room_ownership_transfer.dart';
 import 'room_moderation_screen.dart';
 import 'room_request_id.dart';
 import 'room_media_library.dart';
+import 'room_content_changes.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -111,7 +112,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
       pendingParent,
       pendingKey,
       pendingAttachments;
-  int version = 0, scopeGeneration = 0;
+  int version = 0, scopeGeneration = 0, contentRefresh = 0;
   // Retain the original media request while its outcome is uncertain.
   Future<void> Function()? retryMediaUpload;
   Map<String, dynamic>? pendingMedia;
@@ -744,6 +745,17 @@ class _CommunityState extends State<RoomCommunityScreen> {
       );
     }
   });
+  Future<void> editContent(Map<String,dynamic> post) async {
+    final scope = scopeGeneration, api = widget.api, id = widget.roomId, protect = widget.protectDetail;
+    if (api is AccountBoundRoomCommunityApi) api.assertActive();
+    await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+      final detail = RoomContentChanges(api: api, roomId: id, initialItem: Map.unmodifiable(post), protectDetail: protect);
+      return protect?.call(routeContext, detail) ?? detail;
+    }));
+    if (!mounted || scope != scopeGeneration || !identical(api, widget.api)) return;
+    setState(() => contentRefresh++);
+    await load(retainPages: loadedPages);
+  }
   Future<void> reportPost(String postId, {bool reply = false}) async {
     final read = version, api = widget.api, id = widget.roomId;
     var reportReason = '';
@@ -905,6 +917,9 @@ class _CommunityState extends State<RoomCommunityScreen> {
               ),
             ],
           ),
+        if (room?.joined == true)
+          RoomContentChanges(key: ValueKey('content-$scopeGeneration-${widget.roomId}-$contentRefresh'), api: widget.api, roomId: widget.roomId, embedded: true,
+            protectDetail: widget.protectDetail, onCommitted: () => load(retainPages: loadedPages)),
         if (room == null && !loading)
           Padding(
             padding: const EdgeInsets.all(16),
@@ -1026,6 +1041,14 @@ class _CommunityState extends State<RoomCommunityScreen> {
                             ),
                           if (post['parentId'] != null)
                             const Text('Reply', style: TextStyle(fontSize: 12)),
+                          if (post['authorKind'] == 'masana') const Text('AI · Masana'),
+                          if (post['createdAt'] is String && DateTime.tryParse(post['createdAt'] as String) != null)
+                            Text(DateTime.parse(post['createdAt'] as String).toLocal().toIso8601String().substring(0,16).replaceFirst('T', ' ')),
+                          if (post['editedAt'] != null) const Text('Edited'),
+                          if (post['canEdit'] == true || post['canDelete'] == true)
+                            TextButton.icon(onPressed: busy || loading ? null : () => editContent(Map<String,dynamic>.from(post)),
+                              icon: const Icon(Icons.edit_outlined), label: const Text('Edit or remove your content')),
+
                           if (post['pinned'] == true) const Text('Pinned'),
                           SelectableText('${post['body'] ?? ''}'),
                           for (final attachment
@@ -1125,6 +1148,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
                                         : 'Close comments',
                                   ),
                                 ),
+                                if (post['canDelete'] != true)
                                 TextButton(
                                   onPressed: busy || loading
                                       ? null
