@@ -1183,13 +1183,18 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     }
 
     ref.watch(voiceReplyAutoplayProvider);
+    final activeReply = allMessages.where(
+      (m) => !m.isUser && m.deliveryStatus == 'streaming',
+    ).lastOrNull;
     final workingLabel = !sending
         ? agent.presenceLabel
-        : lastUser?.attachment?.kind == 'voice'
-        ? 'Recording…'
-        : lastUser?.attachment != null
-        ? 'Reviewing attachment…'
-        : 'Typing…';
+        : activeReply?.text.trim().isNotEmpty == true
+        ? 'Responding…'
+        : lastUser?.allAttachments.any(
+              (a) => a.kind == 'voice' || a.kind == 'audio',
+            ) == true
+        ? 'Processing voice note…'
+        : 'Waiting for reply…';
 
     if (widget.entryMode != AiChatEntryMode.liveVoice &&
         widget.entryMode != AiChatEntryMode.liveTalk &&
@@ -1501,11 +1506,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                               : 0),
                       itemBuilder: (context, index) {
                         if (index >= messages.length) {
-                          return const _TypingBubble();
+                          return const _TypingBubble(label: 'Waiting for reply…');
                         }
                         final message = messages[index];
-                        if (!message.isUser && message.deliveryStatus == 'streaming') {
-                          return _TypingBubble(recording: lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') ?? false);
+                        // Show actual text chunks as soon as they arrive.
+                        // Never hide streamed text behind a perpetual typing dot.
+                        if (!message.isUser &&
+                            message.deliveryStatus == 'streaming' &&
+                            message.text.trim().isEmpty) {
+                          return const _TypingBubble(
+                            label: 'Waiting for reply…',
+                          );
                         }
                         final failedParts = message.parts.where(
                           (p) =>
@@ -3902,9 +3913,9 @@ class _ChatBubble extends StatelessWidget {
                             'queued' => Icons.cloud_off_outlined,
                             'failed' => Icons.error_outline,
                             'stopped' => Icons.stop_circle_outlined,
-                            'sent' => Icons.done,
+                            'sent' || 'delivered' => Icons.done,
                             'read' => Icons.done_all,
-                            _ => Icons.done_all,
+                            _ => Icons.schedule,
                           },
                           size: 14,
                           color: message.deliveryStatus == 'failed'
@@ -5039,8 +5050,8 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
 }
 
 class _TypingBubble extends StatelessWidget {
-  const _TypingBubble({this.recording = false});
-  final bool recording;
+  const _TypingBubble({this.label = 'Waiting for reply…'});
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -5062,11 +5073,11 @@ class _TypingBubble extends StatelessWidget {
         ),
         child: Semantics(
           liveRegion: true,
-          label: recording ? 'Recording voice reply' : 'Typing',
+          label: label,
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(recording ? Icons.mic : Icons.more_horiz, color: u.brand, size: 20),
+            Icon(Icons.more_horiz, color: u.brand, size: 20),
             const SizedBox(width: 6),
-            Text(recording ? 'Recording…' : 'Typing…', style: TextStyle(color: u.textMuted, fontSize: 13)),
+            Text(label, style: TextStyle(color: u.textMuted, fontSize: 13)),
           ]),
         ),
       ),
