@@ -205,12 +205,19 @@ function evaluateReceipt(
       providerReference: receipt.providerReference,
       providerStatus: receipt.status,
       lastEvidenceAt: at,
+      // A recharge_token is a provider-issued delivery artifact, unlike
+      // response code "200" or a client-marked-paid flag. Only expose it after
+      // the original reference, amount, recipient and currency are verified.
       deliveryCode: evidenceMatches
-        ? typeof receipt.extra === "string" &&
-            receipt.extra.trim().length > 0 &&
-            receipt.extra.trim().length <= 1000
-          ? receipt.extra.trim()
-          : current.deliveryCode ?? null
+        ? typeof receipt.rechargeToken === "string" &&
+            receipt.rechargeToken.trim().length > 0 &&
+            receipt.rechargeToken.trim().length <= 1000
+          ? receipt.rechargeToken.trim()
+          : typeof receipt.extra === "string" &&
+              receipt.extra.trim().length > 0 &&
+              receipt.extra.trim().length <= 1000
+            ? receipt.extra.trim()
+            : current.deliveryCode ?? null
         : null,
     });
   }
