@@ -416,4 +416,22 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   await expect(api.quote(buyer,{offerId:ad.offerId,amountMicro:'100000'})).rejects.toMatchObject({code:'p2p.offer_unavailable'});
  });
 
+ it('serializes private default selection and removes only unused methods without financial mutation',async()=>{
+  const api=service(),actor={tenantId:tenant,userId:seller},second=randomUUID();
+  const balances=(await pool.query('SELECT user_id,available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 ORDER BY user_id',[tenant])).rows;
+  const journal=(await pool.query('SELECT count(*)::int AS total FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[tenant])).rows[0];
+  await api.recordVerifiedMethod(actor,{methodId:second,bankName:'Synthetic Second Bank',bankCode:'058',accountName:'Escrow Seller',accountNumber:'0123456788',verificationReference:'test-preferences-proof'});
+  await Promise.all([api.preferMethod(actor,methodId),api.preferMethod(actor,second)]);
+  expect((await api.methods(actor)).filter(m=>m.preferred)).toHaveLength(1);
+  await api.renameMethod(actor,methodId,'My reserve bank');
+  await expect(api.archiveMethod(actor,methodId)).rejects.toMatchObject({code:'p2p.method_in_use'});
+  const orderId=(await pool.query('SELECT order_id FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND payment_method_id=$2 LIMIT 1',[tenant,methodId])).rows[0].order_id;
+  expect((await api.order(actor,orderId)).payment).toMatchObject({bank_name:'Test Bank',account_number:'0123456789',account_name:'Escrow Seller'});
+  const archived=await api.archiveMethod(actor,second);expect(await api.archiveMethod(actor,second)).toEqual(archived);
+  expect((await api.managedMethods(actor)).items.some(m=>m.method_id===second)).toBe(false);
+  expect((await pool.query('SELECT account_number,archived_at FROM commerce.msnw_p2p_payment_methods WHERE method_id=$1',[second])).rows[0]).toMatchObject({account_number:'0123456788'});
+  expect((await pool.query('SELECT user_id,available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 ORDER BY user_id',[tenant])).rows).toEqual(balances);
+  expect((await pool.query('SELECT count(*)::int AS total FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[tenant])).rows[0]).toEqual(journal);
+ });
+
 });

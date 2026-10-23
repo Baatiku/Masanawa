@@ -169,6 +169,23 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try {return await deps.service.sellerCapacity(await actor(req.headers.authorization));}
     catch(error){return respond(error,reply);}
   });
+  app.post('/v1/wallet/msnw/p2p/methods/:methodId/label',{bodyLimit:512},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{
+      const a=await actor(req.headers.authorization),b=req.body as Record<string,unknown>|null;
+      if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).join(',')!=='label')throw new P2pError('p2p.invalid_method_label',422);
+      return await deps.service.renameMethod(a,(req.params as {methodId:string}).methodId,b.label);
+    }catch(error){return respond(error,reply);}
+  });
+  for(const operation of ['prefer','archive'] as const)app.post('/v1/wallet/msnw/p2p/methods/:methodId/'+operation,{bodyLimit:256},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{
+      const a=await actor(req.headers.authorization),b=req.body;
+      if(b!==undefined&&b!==null&&(typeof b!=='object'||Array.isArray(b)||Object.keys(b).length!==0))throw new P2pError('p2p.invalid_method_update',422);
+      const methodId=(req.params as {methodId:string}).methodId;
+      return operation==='prefer'?await deps.service.preferMethod(a,methodId):await deps.service.archiveMethod(a,methodId);
+    }catch(error){return respond(error,reply);}
+  });
   app.get('/v1/wallet/msnw/p2p/methods/manage',async(req,reply)=>{
     reply.header('Cache-Control','no-store');
     try{return await deps.service.managedMethods(await actor(req.headers.authorization));}
