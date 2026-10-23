@@ -39,6 +39,47 @@ String communityError(Object e) {
   return 'Could not connect. Your draft is kept here; reconnect and retry.';
 }
 
+/// A stable message feed: pinned/newest root posts, their replies below
+/// the parent in chronological order. Unexpected orphan replies remain visible.
+List<Map<String, dynamic>> roomTimelineForDisplay(
+    List<Map<String, dynamic>> items) {
+  final byId = <String, Map<String, dynamic>>{
+    for (final item in items) if (item['id'] is String) item['id'] as String: item,
+  };
+  final roots = items.where((item) =>
+      item['parentId'] == null || !byId.containsKey(item['parentId'])).toList()
+    ..sort((a, b) {
+      final pinned = (b['pinned'] == true ? 1 : 0) -
+          (a['pinned'] == true ? 1 : 0);
+      if (pinned != 0) return pinned;
+      final date = '${b['createdAt'] ?? ''}'.compareTo('${a['createdAt'] ?? ''}');
+      return date != 0 ? date : '${b['id'] ?? ''}'.compareTo('${a['id'] ?? ''}');
+    });
+  final result = <Map<String, dynamic>>[];
+  final seen = <String>{};
+  void addThread(Map<String, dynamic> item) {
+    final id = '${item['id'] ?? ''}';
+    if (!seen.add(id)) return;
+    result.add(item);
+    final replies = items.where((p) => p['parentId'] == id).toList()
+      ..sort((a, b) {
+        final date = '${a['createdAt'] ?? ''}'.compareTo('${b['createdAt'] ?? ''}');
+        return date != 0 ? date : '${a['id'] ?? ''}'.compareTo('${b['id'] ?? ''}');
+      });
+    for (final reply in replies) { addThread(reply); }
+  }
+  for (final item in roots) { addThread(item); }
+  for (final item in items) { addThread(item); }
+  return result;
+}
+
+/// Profile names originate from the membership-authorized backend, not IDs.
+String roomAuthorLabel(Map<String, dynamic> post) {
+  final name = post['authorDisplayName'];
+  if (name is String && name.trim().isNotEmpty) return name.trim();
+  return post['authorKind'] == 'masana' ? 'Masana' : 'Room member';
+}
+
 class CreateCommunityRoomScreen extends StatefulWidget {
   const CreateCommunityRoomScreen({super.key, required this.api});
   final RoomCommunityApi api;
@@ -312,14 +353,22 @@ class _CommunityState extends State<RoomCommunityScreen> {
       if (error != null) MaterialBanner(content: Text(error!), actions: [TextButton(onPressed: busy ? null : load, child: const Text('Retry'))]),
       if (room == null) Padding(padding: const EdgeInsets.all(16), child: Column(children: [TextField(controller: token, decoration: const InputDecoration(labelText: 'Private Room invitation code')), TextButton(onPressed: busy ? null : () => run(() => widget.api.action(widget.roomId, 'join', {'token': token.text.trim()})), child: const Text('Accept invitation'))])),
       if (room != null && !room!.joined) ...[
-        Padding(padding: const EdgeInsets.all(20), child: Column(children: [Text(room!.description), Text('Owner: ${room!.ownerId}'), Text('${room!.visibility} · ${room!.postingPolicy == 'admins' ? 'Admins only post' : 'All members post'}'), if (room!.visibility == 'private') TextField(controller: token, decoration: const InputDecoration(labelText: 'Invitation code')), FilledButton(onPressed: busy ? null : () => run(() => widget.api.action(widget.roomId, 'join', {'token': token.text.trim()})), child: const Text('Join Room'))])),
+        Padding(padding: const EdgeInsets.all(20), child: Column(children: [Text(room!.description), Text('${room!.visibility} · ${room!.postingPolicy == 'admins' ? 'Admins only post' : 'All members post'}'), if (room!.visibility == 'private') TextField(controller: token, decoration: const InputDecoration(labelText: 'Invitation code')), FilledButton(onPressed: busy ? null : () => run(() => widget.api.action(widget.roomId, 'join', {'token': token.text.trim()})), child: const Text('Join Room'))])),
       ],
       Expanded(child: RefreshIndicator(onRefresh: load, child: ListView(padding: const EdgeInsets.all(16), children: [
         if (room?.joined == true && posts.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No posts yet.')),
-        for (final post in posts) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${post['authorId'] ?? ''}', style: Theme.of(context).textTheme.labelLarge),
+        for (final post in roomTimelineForDisplay(posts)) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            CircleAvatar(radius: 16, child: Icon(post['authorKind']=='masana'?Icons.auto_awesome:Icons.person_outline, size: 16)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(roomAuthorLabel(post), maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall)),
+            if (post['pinned'] == true)
+              const Icon(Icons.push_pin_outlined, size: 16),
+          ]),
           if (post['parentId'] != null) const Text('Reply', style: TextStyle(fontSize: 12)),
-          if (post['pinned'] == true) const Text('Pinned'),
+          
           SelectableText('${post['body'] ?? ''}'),
           for (final attachment in post['attachments'] as List? ?? []) TextButton.icon(onPressed: busy ? null : () => openAttachment(Map<String, dynamic>.from(attachment as Map)), icon: const Icon(Icons.attach_file), label: Text('${attachment['name'] ?? 'Open attachment'}')),
           if (post['parentId'] == null) Wrap(children: [
@@ -403,7 +452,7 @@ class _InfoState extends State<_CommunityInfo> {
   }
   Future<bool> confirm(String title, String message) async => await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))])) ?? false;
   @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
-    Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('Owner: ${room.ownerId}'), Text('${room.visibility} · ${room.memberCount} members'),
+    Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('${room.visibility} · ${room.memberCount} members'),
     if (room.joined) ...[
       SwitchListTile(title: const Text('Mute notifications'), value: room.muted, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'muted': v}); room = await widget.api.room(room.id); })),
       SwitchListTile(title: const Text('Pin Room'), value: room.pinned, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'pinned': v}); room = await widget.api.room(room.id); })),
@@ -454,12 +503,12 @@ class _InfoState extends State<_CommunityInfo> {
     if (sharedMedia.isNotEmpty) ExpansionTile(title: Text('Shared media (${sharedMedia.length})'), children: [for (final file in sharedMedia) ListTile(leading: const Icon(Icons.attach_file), title: Text('${file['name']}'), subtitle: Text('${file['kind']} · ${file['sizeBytes'] ?? ''} bytes'))]),
     if (room.manages) FilledButton.icon(onPressed: busy ? null : () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = _AddParticipants(api: widget.api, roomId: room.id, owner: room.role == 'owner'); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }, icon: const Icon(Icons.person_add_outlined), label: const Text('Add participants')),
     const SizedBox(height: 16), Text('Members', style: Theme.of(context).textTheme.titleMedium),
-    for (final person in members) ListTile(title: Text('${person['userId']}'), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() async {
+    for (final person in members) ListTile(title: Text('${person['displayName'] ?? 'Room member'}'), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() async {
       if (action == 'admin' || action == 'member') { await widget.api.member(room.id, '${person['userId']}', {'role': action}); }
       else if (action == 'transfer') { if (await confirm('Transfer ownership?', 'This member becomes the owner and you lose owner controls.')) room = await widget.api.update(room.id, {'ownerId': person['userId']}); }
       else if (await confirm('Remove member?', 'They lose access to this Room.')) { await widget.api.member(room.id, '${person['userId']}', {'state': action}); }
     }), itemBuilder: (_) => [if (room.role == 'owner') ...[const PopupMenuItem(value: 'admin', child: Text('Make admin')), const PopupMenuItem(value: 'member', child: Text('Make member')), const PopupMenuItem(value: 'transfer', child: Text('Transfer ownership'))], const PopupMenuItem(value: 'left', child: Text('Remove')), const PopupMenuItem(value: 'banned', child: Text('Ban'))]) : null),
-    for (final agent in masana) ListTile(title: Text('Masana ${agent['characterId']}'), subtitle: Text('${agent['instructions'] ?? ''}\nMention and direct replies only'), trailing: room.role == 'owner' ? PopupMenuButton<String>(enabled: !busy, onSelected: (action) => run(() async {
+    for (final agent in masana) ListTile(title: Text('Masana participant'), subtitle: Text('${agent['instructions'] ?? ''}\nMention and direct replies only'), trailing: room.role == 'owner' ? PopupMenuButton<String>(enabled: !busy, onSelected: (action) => run(() async {
       if (action == 'remove') { await widget.api.remove(room.id, 'masana/${agent['characterId']}'); }
       else { await widget.api.action(room.id, 'masana', {'characterId': agent['characterId'], 'instructions': agent['instructions'] ?? '', 'active': agent['active'] != true}); }
     }), itemBuilder: (_) => [PopupMenuItem(value: 'toggle', child: Text(agent['active'] == true ? 'Deactivate' : 'Activate mention replies')), const PopupMenuItem(value: 'remove', child: Text('Remove Masana'))]) : null),
