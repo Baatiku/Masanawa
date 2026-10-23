@@ -46,12 +46,12 @@
         "apps/mobile/test/p2p_methods_page_test.dart"
       ],
       "branch": "feat/p2p-bank-method-retirement-oct23",
-      "base_sha": "fa13dffc9431ac3c023e150583117e1b43d51160",
-      "pr": "",
+      "base_sha": "9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/334",
       "claimed_at": "2026-10-23T09:55:47.687Z",
-      "heartbeat_at": "2026-10-23T15:16:21.262Z",
-      "expires_at": "2026-10-23T15:21:21.262Z",
-      "progress": "4newactualSQL/HTTP PASS, Gateway typing PASS; broad88P2P had87PASS+liveclocktestassertion repaired. Native30PASS2FAIL due320dp scroll/header; moved management toexistingmenu andscrolltest repaired, affectedrerun running. Read-onlyreviewpending."
+      "heartbeat_at": "2026-10-23T15:24:12.642Z",
+      "expires_at": "2026-10-23T15:29:12.642Z",
+      "progress": "Published334 head e1fd44bf tree d522880f onfreshmain9d6d; independentread-onlyreview no materialfindings.4SQLHTTP+typingPASS;6newnative and4editPASS,320scrollrepairrerunpendingcoldHiggsfield. Hosted4CIpending incl13realPG."
     }
   ],
   "history": [
