@@ -45,15 +45,24 @@
         "apps/mobile/lib/src/finance/p2p_methods_page.dart",
         "apps/mobile/test/p2p_methods_page_test.dart",
         "packages/commerce/migrations/0142_msnw_p2p_method_preferences.sql",
-        "services/gateway/src/call_history/postgres_repository.test.ts"
+        "services/gateway/src/call_history/postgres_repository.test.ts",
+        "packages/commerce/migrations/0143_msnw_p2p_ad_reports.sql",
+        "services/gateway/src/p2p/ad_reports.ts",
+        "services/gateway/src/p2p/ad_reports.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_ad_reports.dart",
+        "apps/mobile/test/p2p_ad_reports_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_ad_reports_page.dart",
+        "apps/admin_mobile/test/p2p_ad_reports_test.dart"
       ],
       "branch": "feat/p2p-method-preferences-oct23",
       "base_sha": "7875ba9b8933c206bf32b2c08b7f04beec6dbbfe",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/335",
       "claimed_at": "2026-10-23T20:15:34.081Z",
-      "heartbeat_at": "2026-10-23T20:15:34.081Z",
-      "expires_at": "2026-10-23T20:20:34.081Z",
-      "progress": "Sourcecommit640dc1a8 in sparseworktree /home/user/masanawa-p2p-next-oct23;30focusedbackend+typing+30combinedFlutter+extraRTL PASS; reviewclear;14thPGauthored. Rebasingonto334mergedmain7875 andpublishing."
+      "heartbeat_at": "2026-10-23T20:22:47.111Z",
+      "expires_at": "2026-10-23T20:27:47.111Z",
+      "progress": "PR335 c63a177f exacttree7649c3ba; P2P+StatusCI PASS, Mobile/Foundationrunning. Source30backend+typing+30native+extraRTL+finalnickname-selectionPASS; reviewclear. NextP1-18 adreport/history/staffreasonedreview source starts independently; existingeligibility/custodyunchanged.",
+      "next_branch": "feat/p2p-ad-reporting-oct23",
+      "next_scope": "P1-18 customer ad reporting, own original receipts/history, operator review with immutable public snapshot; no escrow/ad availability mutation"
     }
   ],
   "history": [
