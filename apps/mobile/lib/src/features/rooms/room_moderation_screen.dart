@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'room_community_api.dart';
 import 'room_request_id.dart';
+import 'room_moderation_request.dart';
 
 /// Secondary Room info destination. Server responses own all permissions and
 /// outcomes; a submitted appeal is never presented as an approved restoration.
@@ -13,9 +12,11 @@ class RoomModerationScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.roomId,
+    this.requestStore,
   });
   final RoomCommunityApi api;
   final String roomId;
+  final RoomModerationRequestStore? requestStore;
   @override
   State<RoomModerationScreen> createState() => _ModerationState();
 }
@@ -25,7 +26,197 @@ class _ModerationState extends State<RoomModerationScreen> {
       reports = [],
       appeals = [],
       history = [];
-  final keys = <String, String>{};
+  late RoomModerationRequestStore journal;
+  PendingRoomModeration? pending;
+  bool restored = false, pendingChecked = false;
+  String? outcome, focusPath;
+
+  Future<Map<String, dynamic>?> operationStatus(
+    PendingRoomModeration op,
+    RoomCommunityApi api,
+    String id,
+  ) async {
+    final data = await api.request(
+      id,
+      'GET',
+      'moderation/operations',
+      op.lookup,
+    );
+    if (data['operationVersion'] != 1 ||
+        data['item'] != null && data['item'] is! Map)
+      throw const FormatException('Unavailable operation recovery');
+    if (data['item'] == null) return null;
+    final item = Map<String, dynamic>.from(data['item'] as Map);
+    final lookup = op.lookup;
+    if (item['action'] != lookup['action'])
+      throw const FormatException('Mismatched moderation receipt');
+    if (op.isReport) {
+      if (item['targetId'] != lookup['targetId'] ||
+          item['targetKind'] != lookup['targetKind'] ||
+          item['decision'] != op.payload['decision'] ||
+          item['reviewId'] is! String ||
+          (item['reviewId'] as String).isEmpty)
+        throw const FormatException('Mismatched review receipt');
+    } else if (item['appealId'] is! String ||
+        (item['appealId'] as String).isEmpty ||
+        item['reviewId'] is! String ||
+        !const ['pending', 'upheld', 'restored'].contains(item['status']) ||
+        (op.isAppeal
+            ? item['reviewId'] != lookup['targetId']
+            : item['appealId'] != lookup['targetId'] ||
+                  item['status'] != op.payload['decision'])) {
+      throw const FormatException('Mismatched appeal receipt');
+    }
+    return item;
+  }
+
+  Future<void> clearSavedRetry() async {
+    final op = pending;
+    if (op == null ||
+        !pendingChecked ||
+        !verified ||
+        busy ||
+        loading ||
+        confirming ||
+        !authorized())
+      return;
+    final version = generation,
+        scope = scopeGeneration,
+        api = widget.api,
+        id = widget.roomId,
+        store = journal;
+    setState(() => confirming = true);
+    try {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Clear saved retry?'),
+          content: const Text(
+            'This only clears the retry saved on this device. It does not cancel a delayed server request or prove failure. Refresh current status before making another decision.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Clear saved retry'),
+            ),
+          ],
+        ),
+      );
+      if (!current(version) || yes != true) return;
+      // A receipt arriving while the confirmation was open must be recovered.
+      final receipt = await operationStatus(op, api, id);
+      if (!current(version)) return;
+      if (receipt != null) {
+        await load();
+        return;
+      }
+      await store.write(null);
+      if (!current(version)) return;
+      setState(() {
+        pending = null;
+        pendingChecked = false;
+        verified = false;
+        error = 'Saved retry cleared. A delayed request may still complete. Refresh current status before another decision.';
+      });
+    } catch (_) {
+      if (current(version))
+        setState(() {
+          verified = false;
+          error = 'Could not clear the saved retry safely. Check the original request status.';
+        });
+    } finally {
+      if (mounted &&
+          scope == scopeGeneration &&
+          identical(api, widget.api) &&
+          id == widget.roomId &&
+          authorized())
+        setState(() => confirming = false);
+    }
+  }
+
+  Future<void> retryOriginal() async {
+    final op = pending;
+    if (op == null ||
+        !pendingChecked ||
+        !verified ||
+        busy ||
+        loading ||
+        confirming ||
+        !authorized() ||
+        !op.isAppeal && !manager)
+      return;
+    final version = generation;
+    setState(() => confirming = true);
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Retry original moderation request?'),
+        content: const Text(
+          'Use the saved reason, decision and request identity. This does not create a new request.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Retry original'),
+          ),
+        ],
+      ),
+    );
+    if (!current(version)) return;
+    setState(() => confirming = false);
+    if (yes == true) await submit(op);
+  }
+
+  Future<void> submit(PendingRoomModeration op) async {
+    final version = generation,
+        scope = scopeGeneration,
+        api = widget.api,
+        id = widget.roomId;
+    setState(() {
+      busy = true;
+      pendingChecked = false;
+    });
+    try {
+      final store = journal;
+      await store.write(op.encode());
+      if (!current(version)) return;
+      await api.request(id, 'POST', op.path, op.payload);
+      if (!current(version)) return;
+      // POST acknowledgement is not the recovery receipt. Read the actor-bound
+      // operation and exact older case before changing visible outcome.
+      await load();
+    } catch (e) {
+      if (!current(version)) return;
+      setState(() {
+        verified = false;
+        if (e is DioException &&
+            const [401, 403, 404].contains(e.response?.statusCode))
+          clearDetails();
+        error = 'The outcome is unconfirmed. Check the original request status before retrying.';
+      });
+    } finally {
+      if (mounted &&
+          scope == scopeGeneration &&
+          identical(api, widget.api) &&
+          id == widget.roomId &&
+          authorized())
+        setState(() {
+          busy = false;
+          confirming = false;
+        });
+    }
+  }
+
   final cursors = <String, String?>{};
   final paging = <String>{};
   final pageErrors = <String>{};
@@ -73,6 +264,7 @@ class _ModerationState extends State<RoomModerationScreen> {
     pageErrors.clear();
     manager = false;
     verified = false;
+    outcome = focusPath = null;
   }
 
   Future<void> more(String path) async {
@@ -83,6 +275,7 @@ class _ModerationState extends State<RoomModerationScreen> {
         loading ||
         confirming ||
         !verified ||
+        pending != null ||
         !authorized())
       return;
     final version = generation, api = widget.api, id = widget.roomId;
@@ -158,7 +351,12 @@ class _ModerationState extends State<RoomModerationScreen> {
       if (cursors[path] != null)
         TextButton(
           onPressed:
-              busy || loading || confirming || paging.isNotEmpty || !verified
+              busy ||
+                  loading ||
+                  confirming ||
+                  paging.isNotEmpty ||
+                  !verified ||
+                  pending != null
               ? null
               : () => more(path),
           child: Text(
@@ -193,6 +391,9 @@ class _ModerationState extends State<RoomModerationScreen> {
   @override
   void initState() {
     super.initState();
+    journal =
+        widget.requestStore ??
+        SecureRoomModerationRequestStore(widget.api, widget.roomId);
     load();
   }
 
@@ -200,14 +401,21 @@ class _ModerationState extends State<RoomModerationScreen> {
   void didUpdateWidget(covariant RoomModerationScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.api, widget.api) ||
-        oldWidget.roomId != widget.roomId) {
+        oldWidget.roomId != widget.roomId ||
+        !identical(oldWidget.requestStore, widget.requestStore)) {
       generation++;
       scopeGeneration++;
       cases = [];
       reports = [];
       appeals = [];
       history = [];
-      keys.clear();
+      journal =
+          widget.requestStore ??
+          SecureRoomModerationRequestStore(widget.api, widget.roomId);
+      restored = false;
+      pending = null;
+      pendingChecked = false;
+      outcome = focusPath = null;
       cursors.clear();
       paging.clear();
       pageErrors.clear();
@@ -239,13 +447,66 @@ class _ModerationState extends State<RoomModerationScreen> {
     setState(() {
       loading = true;
       verified = false;
+      pendingChecked = false;
       error = null;
       cursors.clear();
       paging.clear();
       pageErrors.clear();
     });
     try {
+      if (!restored) {
+        final raw = await journal.read();
+        if (!current(version)) return;
+        pending = raw == null ? null : PendingRoomModeration.decode(raw);
+        restored = true;
+      }
       final room = await api.room(id);
+      if (!current(version)) return;
+      final original = pending;
+      if (original != null) {
+        final receipt = await operationStatus(original, api, id);
+        if (!current(version)) return;
+        if (receipt == null) {
+          pendingChecked = true;
+        } else {
+          await journal.write(null);
+          if (!current(version)) return;
+          pending = null;
+          pendingChecked = false;
+          outcome = original.isReport
+              ? 'Original review confirmed: ${receipt['decision']}.'
+              : 'Original appeal operation confirmed: ${receipt['status']}.';
+          focusPath = original.isAppeal
+              ? 'moderation/cases/${Uri.encodeComponent('${receipt['reviewId']}')}'
+              : !original.isReport && room.manages
+              ? 'moderation/appeals/${Uri.encodeComponent('${receipt['appealId']}')}'
+              : null;
+        }
+      }
+      Map<String, dynamic>? focused;
+      final focusedPath = focusPath;
+      if (focusPath != null &&
+          (focusPath!.startsWith('moderation/cases/') || room.manages)) {
+        try {
+          final data = await api.request(id, 'GET', focusedPath!, {});
+          if (!current(version)) return;
+          if (data['moderationVersion'] != 1 || data['item'] is! Map)
+            throw const FormatException('Unconfirmed original case');
+          focused = Map<String, dynamic>.from(data['item'] as Map);
+          final expected = focusedPath.split('/').last;
+          if (focused[focusedPath.startsWith('moderation/cases/')
+                  ? 'reviewId'
+                  : 'appealId'] !=
+              expected)
+            throw const FormatException('Mismatched original case');
+        } on DioException catch (e) {
+          if (!current(version)) return;
+          if (e.response?.statusCode != 404) rethrow;
+          focusPath = null;
+        }
+      } else {
+        focusPath = null;
+      }
       final ownData = await api.request(id, 'GET', ownPath, {});
       final reportData = room.manages
           ? await api.request(id, 'GET', reportPath, {})
@@ -269,9 +530,19 @@ class _ModerationState extends State<RoomModerationScreen> {
       if (!current(version)) return;
       setState(() {
         manager = room.manages;
-        cases = own;
+        cases = focused != null && focusPath?.startsWith(ownPath) == true
+            ? [
+                focused,
+                ...own.where((v) => v['reviewId'] != focused!['reviewId']),
+              ]
+            : own;
         reports = flagged;
-        appeals = queue;
+        appeals = focused != null && focusPath?.startsWith(appealPath) == true
+            ? [
+                focused,
+                ...queue.where((v) => v['appealId'] != focused!['appealId']),
+              ]
+            : queue;
         history = reviews;
         cursors.addAll(next);
         verified = true;
@@ -303,6 +574,7 @@ class _ModerationState extends State<RoomModerationScreen> {
         confirming ||
         paging.isNotEmpty ||
         !verified ||
+        pending != null ||
         !authorized())
       return;
     final version = generation,
@@ -347,22 +619,22 @@ class _ModerationState extends State<RoomModerationScreen> {
         ),
       );
       if (!current(version) || selected == null) return;
-      final payload = {...values, reasonField: selected};
-      final fingerprint = '$path:${jsonEncode(payload)}';
-      keys[fingerprint] ??= communityRequestId();
-      setState(() => busy = true);
-      final result = await api.request(id, 'POST', path, {
-        ...payload,
-        'requestId': keys[fingerprint],
+      final op = PendingRoomModeration(path, {
+        ...values,
+        reasonField: selected,
+        'requestId': communityRequestId(),
       });
+      // Fail closed on older gateways before saving or sending a new intent.
+      final prior = await operationStatus(op, api, id);
       if (!current(version)) return;
-      if (path.startsWith('reply-reports/')
-          ? (result['reviewed'] != true ||
-                result['decision'] != values['decision'])
-          : (result['moderationVersion'] != 1 || result['appeal'] is! Map))
-        throw const FormatException('Unconfirmed moderation response');
-      // Only canonical GET state changes the visible decision/permissions.
-      await load();
+      if (prior != null)
+        throw const FormatException('Request identity already used');
+      setState(() {
+        pending = op;
+        pendingChecked = false;
+        outcome = null;
+      });
+      await submit(op);
     } catch (e) {
       if (!current(version)) return;
       setState(() {
@@ -396,7 +668,12 @@ class _ModerationState extends State<RoomModerationScreen> {
         body: const Center(child: Text('Session changed. Return to Rooms.')),
       );
     final enabled =
-        verified && !busy && !loading && !confirming && paging.isEmpty;
+        verified &&
+        !busy &&
+        !loading &&
+        !confirming &&
+        paging.isEmpty &&
+        pending == null;
     String label(dynamic value) => value == 'restored'
         ? 'Content restored'
         : value == 'upheld'
@@ -411,6 +688,51 @@ class _ModerationState extends State<RoomModerationScreen> {
           children: [
             if (loading || busy) const LinearProgressIndicator(),
             if (error != null) Text(error!),
+            if (outcome != null) Text(outcome!),
+            if (pending != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Original moderation request needs confirmation',
+                      ),
+                      const Text(
+                        'A missing item in the first page does not prove that the request failed.',
+                      ),
+                      TextButton(
+                        onPressed: busy || loading || confirming ? null : load,
+                        child: const Text('Check original request status'),
+                      ),
+                      TextButton(
+                        onPressed:
+                            busy ||
+                                loading ||
+                                confirming ||
+                                !verified ||
+                                !pendingChecked ||
+                                !pending!.isAppeal && !manager
+                            ? null
+                            : retryOriginal,
+                        child: const Text('Retry saved moderation request'),
+                      ),
+                      TextButton(
+                        onPressed:
+                            busy ||
+                                loading ||
+                                confirming ||
+                                !verified ||
+                                !pendingChecked
+                            ? null
+                            : clearSavedRetry,
+                        child: const Text('Clear saved retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             TextButton(
               onPressed: busy || loading || confirming || paging.isNotEmpty
                   ? null
