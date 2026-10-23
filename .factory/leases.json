@@ -39,15 +39,21 @@
         "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
         "apps/mobile/test/p2p_offer_editor_test.dart",
         "services/gateway/src/p2p/market_filtering.pglite.test.ts",
-        "apps/mobile/test/p2p_market_filters_test.dart"
+        "apps/mobile/test/p2p_market_filters_test.dart",
+        "services/gateway/src/p2p/method_management.ts",
+        "services/gateway/src/p2p/method_management.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_methods_page.dart",
+        "apps/mobile/test/p2p_methods_page_test.dart"
       ],
       "branch": "feat/p2p-price-budget-discovery-oct23",
       "base_sha": "7ce1329004bfa438c40a7234f89158629e6aaa3b",
       "pr": "https://github.com/Baatiku/Masanawa/pull/326",
       "claimed_at": "2026-10-23T09:22:01.005Z",
-      "heartbeat_at": "2026-10-23T09:49:53.381Z",
-      "expires_at": "2026-10-23T09:54:53.381Z",
-      "progress": "PR326 exact head8838d231: P2P87backend+7Worker+12realPG and Status CI PASS; Foundation/Mobile running. Re-review clear after404 fence fix;8native PASS. Next independent scope: P1-03/P1-05 verified-method masking and safe retirement preserving immutable accepted-order instructions."
+      "heartbeat_at": "2026-10-23T09:52:08.747Z",
+      "expires_at": "2026-10-23T09:57:08.747Z",
+      "progress": "PR326 exact head8838d231: P2P87backend+7Worker+12realPG and Status CI PASS; Foundation/Mobile running. Re-review clear after404 fence fix;8native PASS. Next independent scope: P1-03/P1-05 verified-method masking and safe retirement preserving immutable accepted-order instructions.",
+      "next_branch": "feat/p2p-bank-method-retirement-oct23",
+      "next_scope": "P1-03/05/06/08 masked bank methods and convergent retirement retaining accepted-order instructions"
     }
   ],
   "history": [
