@@ -32,6 +32,10 @@ class _Api extends ModerationTestApi {
       failLookup = false,
       wrongReceipt = false;
   Completer<Map<String, dynamic>>? lookupPending;
+  Completer<CommunityRoom>? roomPending;
+  @override
+  Future<CommunityRoom> room(String id) =>
+      roomPending?.future ?? super.room(id);
   final attempts = <Map<String, dynamic>>[], reads = <String>[];
   @override
   Future<Map<String, dynamic>> request(
@@ -129,6 +133,36 @@ Future<void> appeal(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'old Room read cannot query a replacement accounts pending identity',
+    (tester) async {
+      final first = _Api()..roomPending = Completer<CommunityRoom>();
+      final oldStore = _Store()..value = saved().encode();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RoomModerationScreen(
+            api: first,
+            roomId: 'room_1',
+            requestStore: oldStore,
+          ),
+        ),
+      );
+      await tester.pump();
+      final next = _Api();
+      final newStore = _Store()
+        ..value = PendingRoomModeration(saved().path, {
+          ...saved().payload,
+          'requestId': 'new_account_identity',
+        }).encode();
+      await mount(tester, next, newStore);
+      first.roomPending!.complete(first.value);
+      await tester.pumpAndSettle();
+      expect(first.reads, isEmpty);
+      expect(newStore.value, contains('new_account_identity'));
+      expect(next.attempts, isEmpty);
+    },
+  );
+
   testWidgets(
     'clearing a saved retry is explicit and does not claim server cancellation',
     (tester) async {

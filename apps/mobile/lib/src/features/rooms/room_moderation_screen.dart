@@ -459,6 +459,7 @@ class _ModerationState extends State<RoomModerationScreen> {
         restored = true;
       }
       final room = await api.room(id);
+      if (!current(version)) return;
       final original = pending;
       if (original != null) {
         final receipt = await operationStatus(original, api, id);
@@ -481,20 +482,23 @@ class _ModerationState extends State<RoomModerationScreen> {
         }
       }
       Map<String, dynamic>? focused;
+      final focusedPath = focusPath;
       if (focusPath != null &&
           (focusPath!.startsWith('moderation/cases/') || room.manages)) {
         try {
-          final data = await api.request(id, 'GET', focusPath!, {});
+          final data = await api.request(id, 'GET', focusedPath!, {});
+          if (!current(version)) return;
           if (data['moderationVersion'] != 1 || data['item'] is! Map)
             throw const FormatException('Unconfirmed original case');
           focused = Map<String, dynamic>.from(data['item'] as Map);
-          final expected = focusPath!.split('/').last;
-          if (focused[focusPath!.startsWith('moderation/cases/')
+          final expected = focusedPath.split('/').last;
+          if (focused[focusedPath.startsWith('moderation/cases/')
                   ? 'reviewId'
                   : 'appealId'] !=
               expected)
             throw const FormatException('Mismatched original case');
         } on DioException catch (e) {
+          if (!current(version)) return;
           if (e.response?.statusCode != 404) rethrow;
           focusPath = null;
         }
