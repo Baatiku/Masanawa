@@ -79,6 +79,8 @@ Rooms R01/R02 implementation checkpoint: [#327](https://github.com/Baatiku/Masan
 
 Rooms R06 moderation checkpoint: [#328](https://github.com/Baatiku/Masanawa/pull/328), source `1b7dac52`, adds independently paged author removal cases, reported replies, appeals and review history, with retained transient-error pages, current role/read checks, account/Room fences and no optimistic restoration. Six backend read endpoints are paged; current scoped actions remain canonical. Local typing/build PASS; initial Room suite 75/77 PASS, seven affected cases PASS after correcting private-Room 404 assertions (19 actual PG18 cases covered overall). Exact-head hosted Flutter remains pending. Device/platform-safety acceptance remains open.
 
+Rooms R06 recovery checkpoint: [#329](https://github.com/Baatiku/Masanawa/pull/329), source `2864f6a8`, adds exact older-case/appeal and original actor-receipt lookup, encrypted pending request, read-only restart recovery, confirmed original retry and explicit local-only retry clearing with fresh readback required. Fourteen Flutter/storage cases authored; 84 backend cases covered after repairing the new HTTP route declarations, including 21 actual PG18 cases. Final hosted/device/provider gates remain separate.
+
 ### State contract applying to every H/R route
 - **Loading:** compact list/profile skeleton; retain permitted cached content during refresh. Don't block first paint on contacts/provider discovery.
 - **Empty:** Humans “Find someone to start a conversation”, joined Rooms “Create or discover a Room”, search “No matches”; one useful action. Empty creator sections are omitted.
