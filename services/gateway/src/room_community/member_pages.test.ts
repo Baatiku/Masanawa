@@ -64,6 +64,7 @@ it('fences cursors to viewer, room and literal query; rejects malformed paging',
  const first:Page=await service.dispatch(bob,'GET',roomId+'/community/members/page',{limit:3,search:'Member'});
  expect(first.nextCursor).toBeTruthy();
  const other=(await service.dispatch(alice,'POST','',{name:'Other Room',requestId:'other-roster'})).id;
+ await service.dispatch(bob,'POST',other+'/community/join',{});
  for(const [actor,path,input] of [
   [alice,roomId+'/community/members/page',{search:'Member',cursor:first.nextCursor}],
   [bob,other+'/community/members/page',{search:'Member',cursor:first.nextCursor}],
