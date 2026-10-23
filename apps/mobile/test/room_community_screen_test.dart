@@ -101,6 +101,7 @@ void main() {
     await tester.tap(find.text('Confirm'));
     await tester.pumpAndSettle();
     final first = api.sent.last['requestId'];
+    await tester.scrollUntilVisible(find.textContaining('Could not connect'), -120, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Could not connect'), findsWidgets);
     api.failReview = false;
     await tester.scrollUntilVisible(find.text('Dismiss reports'), 120, scrollable: find.byType(Scrollable).first);

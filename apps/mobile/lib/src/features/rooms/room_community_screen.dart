@@ -11,6 +11,7 @@ import 'room_invitation_links.dart';
 import 'room_ownership_transfer.dart';
 import 'room_moderation_screen.dart';
 import 'room_request_id.dart';
+import 'room_media_library.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -1374,7 +1375,7 @@ class _CommunityInfo extends StatefulWidget {
 class _InfoState extends State<_CommunityInfo> {
   late CommunityRoom room = widget.initial;
   late final name = TextEditingController(text: room.name), about = TextEditingController(text: room.description);
-  List<Map<String, dynamic>> members = [], masana = [], sharedMedia = [], reportedPosts = [], reportReviews = [];
+  List<Map<String, dynamic>> members = [], masana = [], reportedPosts = [], reportReviews = [];
   final reviewRequestKeys = <String, String>{};
   final ownershipRequestKeys = <String, String>{};
   final reportReason = TextEditingController();
@@ -1392,19 +1393,18 @@ class _InfoState extends State<_CommunityInfo> {
       setState(() {
         room = fresh;
         unavailable = false;
-        if (!room.joined) { members = []; masana = []; sharedMedia = []; }
+        if (!room.joined) { members = []; masana = []; }
         if (!room.manages) { reportedPosts = []; reportReviews = []; }
       });
-      final media = room.joined ? await widget.api.items(room.id, 'media') : <Map<String, dynamic>>[];
       final people = room.joined ? await widget.api.items(room.id, 'members') : <Map<String, dynamic>>[];
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
       final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
       final reviews = room.manages ? await widget.api.items(room.id, 'reports/reviews') : <Map<String, dynamic>>[];
-      if (mounted && version == refreshGeneration) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
+      if (mounted && version == refreshGeneration) setState(() { members = people; masana = agents; reportedPosts = flagged; reportReviews = reviews; });
     } catch (e) { if (mounted && version == refreshGeneration) setState(() {
       error = communityError(e);
       if (e is StateError && e.message == 'account_changed' || e is DioException && const [401,403,404].contains(e.response?.statusCode)) {
-        unavailable = true; members = []; masana = []; sharedMedia = []; reportedPosts = []; reportReviews = [];
+        unavailable = true; members = []; masana = []; reportedPosts = []; reportReviews = [];
         name.clear(); about.clear(); reportReason.clear();
       }
     }); }
@@ -1482,7 +1482,20 @@ class _InfoState extends State<_CommunityInfo> {
       ],
     ),
     if (room.joined) ExpansionTile(title: const Text('Report Room'), children: [TextField(controller: reportReason, maxLength: 2000, decoration: const InputDecoration(labelText: 'Reason')), TextButton(onPressed: busy ? null : () => run(() async { if (reportReason.text.trim().isEmpty) throw const FormatException('Enter a report reason'); reportKey ??= communityRequestId(); await widget.api.action(room.id, 'reports', {'reason': reportReason.text.trim(), 'requestId': reportKey}); if (mounted) { reportReason.clear(); reportKey = null; ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent for review'))); } }), child: const Text('Send report'))]),
-    if (sharedMedia.isNotEmpty) ExpansionTile(title: Text('Shared media (${sharedMedia.length})'), children: [for (final file in sharedMedia) ListTile(leading: const Icon(Icons.attach_file), title: Text('${file['name']}'), subtitle: Text('${file['kind']} · ${file['sizeBytes'] ?? ''} bytes'))]),
+    if (room.joined) ListTile(leading: const Icon(Icons.perm_media_outlined), title: const Text('Shared media'), subtitle: const Text('Photos, videos, audio and files'), trailing: const Icon(Icons.chevron_right), onTap: busy ? null : () async {
+      final api = widget.api, id = room.id, protect = widget.protectDetail;
+      await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+        final detail = RoomMediaLibrary(api: api, roomId: id, openPost: (postId) async {
+          if (!mounted || !identical(api, widget.api) || id != room.id) throw StateError('account_changed');
+          await Navigator.push<void>(routeContext, MaterialPageRoute(builder: (threadContext) {
+            final thread = RoomCommunityScreen(api: api, roomId: id, threadPostId: postId, protectDetail: protect);
+            return protect?.call(threadContext, thread) ?? thread;
+          }));
+        });
+        return protect?.call(routeContext, detail) ?? detail;
+      }));
+      if (mounted && identical(api, widget.api) && id == room.id) await refresh();
+    }),
     if (room.manages) FilledButton.icon(onPressed: busy ? null : () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = _AddParticipants(api: widget.api, roomId: room.id, owner: room.role == 'owner'); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }, icon: const Icon(Icons.person_add_outlined), label: const Text('Add participants')),
     const SizedBox(height: 16), Text('Members', style: Theme.of(context).textTheme.titleMedium),
     for (final person in members) ListTile(title: Text('${person['userId']}'), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() async {
