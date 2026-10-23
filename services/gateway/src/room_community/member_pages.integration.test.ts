@@ -34,9 +34,10 @@ describe.skipIf(!connection)('PostgreSQL 18 authorized Rooms member roster pages
    const base='/v1/rooms/'+roomId+'/community/members/page';
    let cursor:string|null=null;const ids:string[]=[];
    do{
-    const response=await app.inject({method:'GET',url:base+'?limit=41'+(cursor?'&cursor='+encodeURIComponent(cursor):''),headers:{authorization:'bob'}});
+    const response:{statusCode:number;json():unknown}=await app.inject({method:'GET',url:base+'?limit=41'+(cursor?'&cursor='+encodeURIComponent(cursor):''),headers:{authorization:'bob'}});
     expect(response.statusCode).toBe(200);
-    const page=response.json();ids.push(...page.items.map((item:{userId:string})=>item.userId));cursor=page.nextCursor;
+    const page=response.json() as {items:{userId:string}[];nextCursor:string|null};
+    ids.push(...page.items.map(item=>item.userId));cursor=page.nextCursor;
    }while(cursor);
    expect(ids).toHaveLength(222);expect(new Set(ids).size).toBe(222);
    const found=(await app.inject({method:'GET',url:base+'?search='+encodeURIComponent('literal%_!'),headers:{authorization:'bob'}})).json();
