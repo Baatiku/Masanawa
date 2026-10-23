@@ -10,7 +10,8 @@ function mock(queries: (sql:string)=>Record<string,unknown>[]) {
   const tx={
     async query(sql:string){
       statements.push(sql);
-      const rows=queries(sql);
+      const rows=sql.startsWith('SELECT method_id FROM commerce.msnw_p2p_payment_methods')
+        ?[{method_id:offerId}]:queries(sql);
       return {rows,rowCount:rows.length};
     },
     release:vi.fn(),
@@ -45,7 +46,7 @@ describe("MSNW P2P exact money and escrow",()=>{
     expect(statements.some(s=>s.includes("INSERT INTO commerce.msnw_p2p_orders"))).toBe(false);
   });
   it("idempotent replay never reserves twice",async()=>{
-    const {pool,statements}=mock(sql=>sql.includes("SELECT order_id,offer_id,amount_micro::text")
+    const {pool,statements}=mock(sql=>sql.includes("SELECT order_id,offer_id,payment_method_id,seller_id,amount_micro::text")
       ?[{order_id:"same-order",offer_id:offerId,amount_micro:"1000000"}]:[]);
     const reserve=vi.fn();
     const p2p=createP2pService(pool,{...deniedWallet,reserve});
@@ -55,7 +56,7 @@ describe("MSNW P2P exact money and escrow",()=>{
     expect(statements).toContain("COMMIT");
   });
   it("same idempotency key cannot alter order amount",async()=>{
-    const {pool}=mock(sql=>sql.includes("SELECT order_id,offer_id,amount_micro::text")
+    const {pool}=mock(sql=>sql.includes("SELECT order_id,offer_id,payment_method_id,seller_id,amount_micro::text")
       ?[{order_id:"same-order",offer_id:offerId,amount_micro:"1000000"}]:[]);
     await expect(createP2pService(pool,deniedWallet).createOrder(actor,{
       offerId,amountMicro:"2000000",idempotencyKey:key,
@@ -118,7 +119,7 @@ describe("MSNW P2P exact money and escrow",()=>{
   });
   it("rejects a changed reviewed rate or fee before reserving escrow",async()=>{
     const {pool,statements}=mock(sql=>
-      sql.includes("SELECT order_id,offer_id,amount_micro::text")?[]:
+      sql.includes("SELECT order_id,offer_id,payment_method_id,seller_id,amount_micro::text")?[]:
       sql.includes("FROM commerce.msnw_p2p_offers o JOIN")?[{
         offer_id:offerId,seller_id:"seller-b",payment_method_id:offerId,
         rate_kobo_per_msnw:"150000",min_micro:"1000000",max_micro:"5000000",
@@ -167,7 +168,8 @@ describe("MSNW P2P exact money and escrow",()=>{
     const listings=statements.filter(sql=>sql.includes('AS completed_orders_30d'));
     expect(listings).toHaveLength(2);
     for(const sql of listings){
-      expect(sql).toContain('past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id');
+      expect(sql).toContain('past.tenant_id=o.tenant_id');
+      expect(sql).toContain('(past.seller_id=o.seller_id OR past.buyer_id=o.seller_id)');
       expect(sql).toContain("past.created_at>=statement_timestamp()-interval '30 days'");
       expect(sql).toContain("past.state IN ('completed','cancelled','expired')");
       expect(sql).not.toContain("past.state IN ('completed','payment_claimed'");

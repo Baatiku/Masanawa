@@ -31,7 +31,7 @@ async function fixture() {
     CREATE TABLE commerce.msnw_p2p_offers (
       offer_id uuid, tenant_id text, seller_id text, payment_method_id uuid,
       rate_kobo_per_msnw bigint, min_micro bigint, max_micro bigint,
-      remaining_micro bigint, fee_bps integer, state text,
+      remaining_micro bigint, fee_bps integer, state text, offer_side text DEFAULT 'sell',
       created_at timestamptz
     );
     CREATE TABLE commerce.msnw_p2p_orders (
@@ -150,7 +150,7 @@ describe("P2P real-SQL read and pagination qualification", {timeout:30_000}, () 
       expect((await t.service.offersPage(actor,{search:'_'})).items).toHaveLength(0);
       expect((await t.service.offersPage(actor,{search:uuid(1)})).items).toHaveLength(1);
       const result=await t.service.offersPage(actor,{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'});
-      expect(result.market).toEqual({asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'});
+      expect(result.market).toEqual({asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer',offerSide:'sell'});
       expect(JSON.stringify(result)).not.toMatch(/0123456789|account_number|account_name/);
       for(const filter of [{asset:'BTC'},{fiat:'USD'},{method:'cash'},{amountMicro:'1e6'},{search:'x'.repeat(81)}])
         await expect(t.service.offersPage(actor,filter)).rejects.toMatchObject({status:422});
