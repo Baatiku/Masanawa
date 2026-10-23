@@ -45,9 +45,9 @@
       "base_sha": "0847c542311764bf35346cf4d0aead920cec1a37",
       "pr": "",
       "claimed_at": "2026-10-23T09:22:01.005Z",
-      "heartbeat_at": "2026-10-23T09:38:02.727Z",
-      "expires_at": "2026-10-23T09:43:02.727Z",
-      "progress": "Final broad87backend/storage PASS, typingPASS,6newnative PASS inclquote driftcap/accountswitch/320RTL. Existing9native and19affected passed beforelastbudget/fence delta; startupsegfault retries distinguished. Finalreviewrequested,12threalPGreadqualification authored. Preparing docs/PR/rebase from f2ef to mergedmain0847."
+      "heartbeat_at": "2026-10-23T09:43:36.502Z",
+      "expires_at": "2026-10-23T09:48:36.502Z",
+      "progress": "87 backend/storage PASS; 8 new native tests PASS including delayed404 account-switch order/ad recovery after review fix. Re-review pending; preparing exact-head PR and hosted12realPG qualification."
     }
   ],
   "history": [
