@@ -1,5 +1,11 @@
 # Continue Masanawa — 23 October 2026
 
+## Independent Status own-post edit and removal — 23 October 2026
+
+Scope `feat/status-own-public-edit-remove-oct23` (P3-ST02 partial; same tenant, user and canonical feed ownership): server-authorized human PATCH/DELETE, optimistic text CAS, idempotent tombstone, eligible-active-profile gates, approved Masana posts untouched, original IDs and moderation ledger retained; Flutter owner-only Edit/Remove actions with confirmation, original text, account fencing and error states. Source paths `packages/feed/src/index.ts`, `adapters/storage/postgres/src/home_feed/repository.ts`, Gateway Status routes, `apps/mobile/lib/src/features/home_feed/feed_api.dart`, `feed_screen.dart`, `apps/mobile/lib/src/screens/status/status_screen.dart` and corresponding focused tests; no Bills/Wallet/Rooms/Calls/Chats modifications. Higgsfield Flutter 3.47.7: 21 scoped Flutter tests PASS, 41 backend/PGlite PASS, TypeScript noEmit PASS. Exact-head hosted CI and production/device/user-policy E2E remain to be checked. All Phase 3 parent checkboxes OPEN; no APK.
+
+
+
 ## Reply moderation and author appeals — 23 October 2026
 
 Base `main 0d9803629393b52e42d82a5cd6b1294215f43772`; source `188e92f4701f7c4c7e546ffda3b017573108d9a5`, `feat/rooms-reply-moderation-appeals-oct23`, [#315](https://github.com/Baatiku/Masanawa/pull/315). P5-R06/R08/R09 and R3-01–11/15–19 partial: reply reporting/review, own removal cases, reasoned appeals and independent manager Uphold/Restore with removal revision fencing, later-delete protection, original-reference receipts and derivative/media suppression. Paths: new Room migration 0011, `content_moderation.ts` and distinct unit/PG18 tests, minimal community router/report/retry wiring, new `room_moderation_screen.dart` plus widget tests, migration fixtures and scoped CI. Local Room suite 52 PASS (13 actual PG18); final current-removal follow-up 15 PASS; Gateway typing/build PASS. Exact-head hosted Flutter/full CI and actual merge SHA must be recorded on #315 before integration. No APK, provider charge, production migration or deployment. Central Room reports, access-lost/platform appeal policy, pagination, anti-spam, staffing and device/push/provider gates remain OPEN. Safe merge target: fresh main after CI/review, preserving #300 identity labels and other windows' source.

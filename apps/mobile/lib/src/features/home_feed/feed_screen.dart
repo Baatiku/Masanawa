@@ -147,6 +147,70 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       }
     }
   }
+  Future<void> manageOwnPost(FeedPost post,String operation) async {
+    if(widget.api is! HumanPostManager||!post.isHuman||
+        post.authorId!=widget.accountKey||pendingActions.contains(post.id))return;
+    final scope=generation,account=widget.accountKey;
+    if(operation=='remove') {
+      final approved=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+        title:Text(t('Remove this Status?','Cire wannan labari?')),
+        content:Text(t('This removes the post from public Status. Existing references will no longer open.',
+          'Ba za a sake ganin wannan labari a Status ba.')),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),child:Text(t('Cancel','Soke'))),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:Text(t('Remove','Cire'))),
+        ]));
+      if(approved!=true||!mounted||scope!=generation||account!=widget.accountKey)return;
+      setState(()=>pendingActions.add(post.id));
+      try {
+        await (widget.api as HumanPostManager).removeHumanPost(post.id);
+        if(!mounted||scope!=generation||account!=widget.accountKey)return;
+        setState(()=>items.removeWhere((p)=>p.id==post.id));
+        await refresh();
+      }catch(_) {
+        if(!mounted||scope!=generation||account!=widget.accountKey)return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+          'Removal unconfirmed. Refresh to check before trying again.',
+          'Ba a tabbatar da cirewa ba. Sake duba labaran.'))));
+      }finally {
+        if(mounted&&scope==generation)setState(()=>pendingActions.remove(post.id));
+      }
+      return;
+    }
+    if(operation!='edit')return;
+    var draft=post.body;
+    final next=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
+      title:Text(t('Edit public Status','Gyara labari')),
+      content:TextFormField(initialValue:post.body,onChanged:(text)=>draft=text,
+        maxLength:2000,maxLines:5,minLines:2,autofocus:true,
+        decoration:InputDecoration(hintText:t('Your update','Sabuntawarka'))),
+      actions:[
+        TextButton(onPressed:()=>Navigator.pop(ctx),child:Text(t('Cancel','Soke'))),
+        FilledButton(onPressed:()=>Navigator.pop(ctx,draft.trim()),
+          child:Text(t('Save edit','Ajiye gyara'))),
+      ]));
+    if(next==null||next==post.body||!mounted||scope!=generation||account!=widget.accountKey)return;
+    if(next.isEmpty||next.length>2000){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
+        t('Enter 1–2000 characters.','Rubuta haruffa 1 zuwa 2000.'))));
+      return;
+    }
+    setState(()=>pendingActions.add(post.id));
+    try {
+      final updated=await (widget.api as HumanPostManager).editHumanText(post.id,post.body,next);
+      if(!mounted||scope!=generation||account!=widget.accountKey)return;
+      if(!updated.isHuman||updated.authorId!=account||updated.id!=post.id)throw StateError('author_mismatch');
+      final index=items.indexWhere((p)=>p.id==post.id);
+      if(index>=0)setState(()=>items[index]=updated);
+    }catch(_){
+      if(!mounted||scope!=generation||account!=widget.accountKey)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Edit unconfirmed or changed elsewhere. Refresh the post before retrying.',
+        'Ba a tabbatar da gyara ba. Sake dauko labarin.'))));
+    }finally{
+      if(mounted&&scope==generation)setState(()=>pendingActions.remove(post.id));
+    }
+  }
   Future<void> openPost(FeedPost post) async {
     if(!widget.enabled||widget.accountKey.isEmpty)return;
     final feed=widget.api,account=widget.accountKey;
@@ -263,6 +327,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                           style:Theme.of(context).textTheme.labelSmall),
                       ])),
                   )),
+                  if(post.isHuman&&post.authorId==widget.accountKey&&
+                    widget.api is HumanPostManager)
+                    PopupMenuButton<String>(
+                      key:ValueKey('status-own-actions-' + post.id),
+                      tooltip:t('Manage your Status','Sarrafa labarinka'),
+                      enabled:!pendingActions.contains(post.id),
+                      onSelected:(value)=>manageOwnPost(post,value),
+                      itemBuilder:(_)=>[
+                        PopupMenuItem(value:'edit',child:Text(t('Edit post','Gyara labari'))),
+                        PopupMenuItem(value:'remove',child:Text(t('Remove post','Cire labari'))),
+                      ]),
                 ]),
                 Padding(padding:const EdgeInsets.only(bottom:4),child:Text(
                   '${post.publishedAt.toLocal().year}-${post.publishedAt.toLocal().month.toString().padLeft(2,'0')}-${post.publishedAt.toLocal().day.toString().padLeft(2,'0')}',

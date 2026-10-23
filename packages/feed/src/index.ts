@@ -19,6 +19,8 @@ export interface Repository {
  find(tenant:string,viewer:string|null,id:string):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
  publishHumanText?(tenant:string,userId:string,value:HumanTextPublish):Promise<Post>;
+ editHumanText?(tenant:string,userId:string,postId:string,expectedBody:string,body:string):Promise<Post>;
+ removeHumanPost?(tenant:string,userId:string,postId:string):Promise<{id:string;state:"removed"}>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
  setReaction?(tenant:string,fan:string,post:string,kind:ReactionKind|null):Promise<ReactionKind|null>;
  setSave(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
@@ -77,6 +79,19 @@ export class FeedService {
   if(!this.repo.publishHumanText)throw new FeedError(503,"human_publishing_unavailable");
   return this.repo.publishHumanText(actor.tenantId,user,{
    body:value.body.trim(),audience:"public",idempotencyKey:value.idempotencyKey});
+ }
+ async editHumanText(actor:Actor,postId:string,expectedBody:string,body:string) {
+  const user=this.fan(actor);requirePostId(postId);
+  if(typeof expectedBody!=="string"||typeof body!=="string"||
+    !expectedBody.trim()||expectedBody.trim().length>2000||
+    !body.trim()||body.trim().length>2000)throw new FeedError(422,"invalid_post_text");
+  if(!this.repo.editHumanText)throw new FeedError(503,"human_edit_unavailable");
+  return this.repo.editHumanText(actor.tenantId,user,postId,expectedBody.trim(),body.trim());
+ }
+ async removeHumanPost(actor:Actor,postId:string) {
+  const user=this.fan(actor);requirePostId(postId);
+  if(!this.repo.removeHumanPost)throw new FeedError(503,"human_remove_unavailable");
+  return this.repo.removeHumanPost(actor.tenantId,user,postId);
  }
  private fan(actor:Actor){if(actor.kind!=="fan")throw new FeedError(403,"fan_only_action");requireId(actor.tenantId);requireId(actor.id);return actor.id}
  async like(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);
