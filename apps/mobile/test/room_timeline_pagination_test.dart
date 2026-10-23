@@ -286,12 +286,36 @@ void main() {
       final api = _Pages();
       await mount(tester, api);
       await tap(tester, 'Load older posts');
-      await tap(tester, 'Open parent thread');
+      await tester.scrollUntilVisible(
+        find.text('Open parent thread'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      final offset = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .pixels;
+      await tester.tap(find.text('Open parent thread'));
+      await tester.pumpAndSettle();
       expect(api.reads.last['parent'], 'post_old');
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(api.reads.last['parent'], isNull);
       expect(api.reads.last['cursor'], 'root-next');
+      expect(
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .pixels,
+        closeTo(offset, 1),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Original parent'),
+        -180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Original parent'), findsOneWidget);
       expect(find.text('Latest post'), findsOneWidget);
     },
