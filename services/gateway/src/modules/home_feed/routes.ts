@@ -5,6 +5,7 @@ type FeedPort={
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
+ react?(a:Actor,id:string,kind:"like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null):Promise<unknown>;
  comment(a:Actor,id:string,text:string,key:string,newAccount:boolean,parentId?:string|null):Promise<unknown>;
  comments(t:string,id:string,v:string|null,b?:string,sort?:"newest"|"oldest"):Promise<unknown>;
 };
@@ -53,6 +54,14 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   return rep.code(410).send({code:"use_editorial_review_workflow"});
  }));
  app.put("/v1/posts/:id/like",async(req,rep)=>run(req,rep,async({actor})=>o.service.like(member(actor),str(object(req.params).id),view(object(req.body).enabled))));
+ app.put("/v1/posts/:id/reaction",async(req,rep)=>run(req,rep,async({actor})=>{
+  const a=member(actor),b=object(req.body),kind=b.kind;
+  if(!Object.prototype.hasOwnProperty.call(b,"kind")||
+   (kind!==null&&!["like","love","care","haha","wow","sad","angry"].includes(kind as string)))
+   return rep.code(422).send({code:"invalid_reaction"});
+  if(!o.service.react)return rep.code(503).send({code:"reactions_unavailable"});
+  return o.service.react(a,str(object(req.params).id),kind as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null);
+ }));
  app.put("/v1/posts/:id/save",async(req,rep)=>run(req,rep,async({actor})=>o.service.save(member(actor),str(object(req.params).id),view(object(req.body).enabled))));
  app.post("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({actor})=>{
   const a=member(actor),b=object(req.body);

@@ -1,8 +1,12 @@
 
 export type PostKind = "text"|"image"|"audio";
 export type FeedMode = "for_you"|"following";
+export type ReactionKind = "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry";
+export const reactionKinds:readonly ReactionKind[] = ["like","love","care","haha","wow","sad","angry"];
+
 export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; permissions?:readonly string[]; approved?:boolean};
-export interface Post {id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean}
+export interface Post {id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean;
+ viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId?:string|null;
  author?:{type:"human";id:string;handle:string;displayName:string}|null}
 export interface Publish {authorMasanaId:string;kind:PostKind;body:string;media?:readonly string[];transcript?:string|null;idempotencyKey:string}
@@ -12,6 +16,7 @@ export interface Repository {
  find(tenant:string,viewer:string|null,id:string):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
+ setReaction?(tenant:string,fan:string,post:string,kind:ReactionKind|null):Promise<ReactionKind|null>;
  setSave(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
  comment(tenant:string,fan:string,post:string,text:string,key:string,pending:boolean,parentId?:string|null):Promise<Comment>;
  comments(tenant:string,post:string,viewer:string|null,before:string|null,limit:number,sort?:"newest"|"oldest"):Promise<readonly Comment[]>;
@@ -62,6 +67,13 @@ export class FeedService {
  private fan(actor:Actor){if(actor.kind!=="fan")throw new FeedError(403,"fan_only_action");requireId(actor.tenantId);requireId(actor.id);return actor.id}
  async like(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);
   await this.detail(actor.tenantId,fan,post);return this.repo.setLike(actor.tenantId,fan,post,enabled)}
+ async react(actor:Actor,post:string,kind:ReactionKind|null){
+  const fan=this.fan(actor);requirePostId(post);
+  if(kind!==null&&!reactionKinds.includes(kind))throw new FeedError(422,"invalid_reaction");
+  await this.detail(actor.tenantId,fan,post);
+  if(!this.repo.setReaction)throw new FeedError(503,"reactions_unavailable");
+  return this.repo.setReaction(actor.tenantId,fan,post,kind);
+ }
  async save(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);
   await this.detail(actor.tenantId,fan,post);return this.repo.setSave(actor.tenantId,fan,post,enabled)}
  async comment(actor:Actor,post:string,body:string,idempotencyKey:string,isNewAccount:boolean,parentId?:string|null){

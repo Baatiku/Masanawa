@@ -1,6 +1,30 @@
 import {describe,it,expect,vi} from "vitest";
 import type {Pool} from "pg";
 import {PgHomeFeedRepository} from "./repository.js";
+describe("ST2 canonical one-actor reaction row",()=>{
+ it("upserts the same tenant/post/fan row rather than appending reactions",async()=>{
+  const query=vi.fn(async(_sql:string,_binds:unknown[])=>({rows:[{admitted:true}]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  expect(await repo.setReaction("tenant","fan",id,"angry")).toBe("angry");
+  const sql=String(query.mock.calls[0]?.[0]);
+  expect(sql).toContain("ON CONFLICT (tenant_id,post_id,fan_id)");
+  expect(sql).toContain("SET reaction_kind=EXCLUDED.reaction_kind");
+  expect(sql).toContain("p.state='published'");
+  expect(query.mock.calls[0]?.[1]).toEqual(["tenant","fan",id,"angry"]);
+  await repo.setReaction("tenant","fan",id,null);
+  const clear=String(query.mock.calls[1]?.[0]);
+  expect(clear).toContain("DELETE FROM feed.likes l USING eligible e");
+  expect(clear).toContain("l.fan_id=$2");
+ });
+ it("denies reactions whose author ceased to be public",async()=>{
+  const query=vi.fn(async()=>({rows:[{admitted:false}]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  await expect(repo.setReaction("tenant","fan",id,"love")).rejects.toMatchObject({status:404});
+  await expect(repo.setReaction("tenant","fan",id,null)).rejects.toMatchObject({status:404});
+ });
+});
 describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
  it("passes viewer, tenant and follows mode via SQL binds",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[]}));

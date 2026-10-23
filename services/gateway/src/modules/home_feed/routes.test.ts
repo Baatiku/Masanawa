@@ -1,6 +1,41 @@
 import {describe,it,expect,vi} from "vitest";
 import Fastify from "fastify";
 import {registerHomeFeedRoutes} from "./routes.js";
+describe("ST2 strict reaction transport",()=>{
+ it("uses authenticated fan and exact reaction, never body actor",async()=>{
+  const app=Fastify(),react=vi.fn(async()=>({kind:"love"}));
+  await registerHomeFeedRoutes(app,{service:{react} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"trusted"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  const result=await app.inject({method:"PUT",url:"/v1/posts/"+id+"/reaction",
+    payload:{kind:"love",fanId:"forged"}});
+  expect(result.statusCode).toBe(200);
+  expect(react).toHaveBeenCalledWith({kind:"fan",tenantId:"tenant",id:"trusted"},id,"love");
+  const clear=await app.inject({method:"PUT",url:"/v1/posts/"+id+"/reaction",payload:{kind:null}});
+  expect(clear.statusCode).toBe(200);
+  expect(react).toHaveBeenLastCalledWith({kind:"fan",tenantId:"tenant",id:"trusted"},id,null);
+  await app.close();
+ });
+ it("rejects missing/invalid kinds and denies guest before ledger access",async()=>{
+  const app=Fastify(),react=vi.fn();
+  await registerHomeFeedRoutes(app,{service:{react} as never,
+   principal:async()=>null,tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const path="/v1/posts/381026c2-9d56-47b1-b73d-1784e24e41e2/reaction";
+  expect((await app.inject({method:"PUT",url:path,payload:{kind:"love"}})).statusCode).toBe(401);
+  expect(react).not.toHaveBeenCalled();
+  await app.close();
+  const authed=Fastify();
+  await registerHomeFeedRoutes(authed,{service:{react} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"fan"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  for(const payload of [{kind:"super_like"},{kind:42},{}]) {
+   expect((await authed.inject({method:"PUT",url:path,payload})).statusCode).toBe(422);
+  }
+  expect(react).not.toHaveBeenCalled();
+  await authed.close();
+ });
+});
 describe("J06 HTTP cannot publish as fan or leak across tenant",()=>{
  it("fails closed without feature enablement",async()=>{
   const app=Fastify();

@@ -35,6 +35,9 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(threadMigration); // idempotent upgrade rehearsal, never rewrite 0001
   await pool.query("INSERT INTO masana.character_revisions(tenant_id,character_id,state,profile) VALUES('tenant_thread','masana_one','approved',jsonb_build_object('displayName','Teacher'))");
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0004_editorial_review.sql",import.meta.url),"utf8"));
+  const reactionMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0005_status_reactions.sql",import.meta.url),"utf8");
+  await pool.query(reactionMigration);
+  await pool.query(reactionMigration); // safe expand-only rerun
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -76,6 +79,27 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect((await repo.comments("tenant_test",id,"fan_other",null,30))).toHaveLength(0);
   const tasks=await isolated.pool.query("SELECT * FROM events.outbox WHERE tenant_id=$1 AND event_type=$2",["tenant_test","feed.comment.pending"]);
   expect(tasks.rows).toHaveLength(1);
+ });
+ it("ST2 one historic Like becomes Like/Love/Care without duplicating the actor",async()=>{
+  const p=await repo.find("tenant_test","fan_one",(await repo.list("tenant_test","fan_one","for_you",null,20))[0]!.id);
+  expect(p).toBeDefined();
+  const id=p!.id;
+  const original=await repo.find("tenant_test","fan_one",id);
+  expect(original?.viewerReaction).toBe("like");
+  expect(original?.likeCount).toBe(1);
+  expect(await repo.setReaction("tenant_test","fan_one",id,"love")).toBe("love");
+  const loved=await repo.find("tenant_test","fan_one",id);
+  expect(loved?.viewerReaction).toBe("love");
+  expect(loved?.likeCount).toBe(0);
+  expect(loved?.reactionCounts?.love).toBe(1);
+  await repo.setReaction("tenant_test","fan_one",id,"care");
+  const changed=await repo.find("tenant_test","fan_one",id);
+  expect(changed?.reactionCounts?.care).toBe(1);
+  expect(changed?.reactionCounts?.love).toBeUndefined();
+  expect((await isolated.pool.query("SELECT count(*)::int AS n FROM feed.likes WHERE tenant_id=$1 AND post_id=$2 AND fan_id=$3",
+   ["tenant_test",id,"fan_one"])).rows[0]?.n).toBe(1);
+  await repo.setReaction("tenant_test","fan_one",id,null);
+  expect((await repo.find("tenant_test","fan_one",id))?.viewerReaction).toBeNull();
  });
  it("C22 keeps historic comment bytes intact across forward-only migration",async()=>{
   const rows=await isolated.pool.query("SELECT body,fan_id,parent_comment_id FROM feed.comments WHERE tenant_id='tenant_upgrade' AND id=$1::uuid",[legacyCommentId]);

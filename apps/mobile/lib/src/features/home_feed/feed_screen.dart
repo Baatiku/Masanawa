@@ -103,6 +103,42 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if(mounted&&scope==generation)setState(()=>pendingActions.remove(p.id));
     }
   }
+  Future<void> react(FeedPost post,String? kind) async {
+    if(!widget.enabled||widget.api is! ReactionFeedApi||
+        pendingActions.contains(post.id))return;
+    final index=items.indexWhere((row)=>row.id==post.id);
+    if(index<0)return;
+    final version=generation;
+    setState(() {
+      pendingActions.add(post.id);
+      items[index]=post.withReaction(kind);
+    });
+    try {
+      await (widget.api as ReactionFeedApi).react(post.id,kind);
+      // Verify the authoritative counters after concurrent reaction writes.
+      if(widget.api is DioFeedApi) {
+        final projected=await (widget.api as DioFeedApi).detail(post.id);
+        if(!mounted||version!=generation)return;
+        final now=items.indexWhere((row)=>row.id==post.id);
+        if(now>=0)setState(()=>items[now]=projected);
+      }
+    }catch(e) {
+      if(!mounted||version!=generation)return;
+      if(accessLost(e)) {
+        setState(() {clearProjection();error=e.toString();});
+        return;
+      }
+      final now=items.indexWhere((row)=>row.id==post.id);
+      if(now>=0)setState(()=>items[now]=post);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text(t('Reaction not confirmed. Refresh or retry.',
+            'Ba a tabbatar da martani ba. Sake gwadawa.'))));
+    }finally{
+      if(mounted&&version==generation) {
+        setState(()=>pendingActions.remove(post.id));
+      }
+    }
+  }
   void openPost(FeedPost post) {
     final feed=widget.api,account=widget.accountKey;
     Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>FeedPostDetailScreen(
@@ -192,9 +228,41 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                   label:Text(post.kind=='audio'?t('Play audio','Kunna sauti'):t('View image','Duba hoto')),
                   onPressed:widget.onOpenMedia==null||(post.kind=='audio'&&!widget.audioPlaybackAvailable)
                     ?null:()=>widget.onOpenMedia!(post,id))).toList()),
+                if(post.totalReactions>0)
+                  Padding(padding:const EdgeInsets.only(top:6),child:Text(
+                    FeedPost.reactionKinds.where((kind)=>
+                      (post.effectiveReactionCounts[kind]??0)>0).map((kind)=>
+                        (FeedPost.reactionEmoji[kind]??'')+' '+post.effectiveReactionCounts[kind].toString()).join('  '),
+                    style:Theme.of(context).textTheme.bodySmall,
+                  )),
                 Wrap(spacing:4,children:[
                   TextButton.icon(onPressed:pendingActions.contains(post.id)?null:()=>action(post,like:true),icon:Icon(post.liked?Icons.favorite:Icons.favorite_border),
                     label:Text('${post.likeCount}')),
+                  if(widget.api is ReactionFeedApi)
+                    PopupMenuButton<String>(
+                      tooltip:t('React to post','Martani ga labari'),
+                      enabled:!pendingActions.contains(post.id),
+                      icon:const Icon(Icons.add_reaction_outlined),
+                      onSelected:(kind)=>react(post,
+                        kind=='clear'||kind==post.currentReaction?null:kind),
+                      itemBuilder:(_)=>[
+                        for(final kind in FeedPost.reactionKinds)
+                          PopupMenuItem<String>(
+                            value:kind,
+                            child:Row(children:[
+                              Text((FeedPost.reactionEmoji[kind]??'')+'  '+
+                                kind[0].toUpperCase()+kind.substring(1)),
+                              if(kind==post.currentReaction)
+                                const Icon(Icons.check,size:18),
+                            ]),
+                          ),
+                        if(post.currentReaction!=null)
+                          PopupMenuItem<String>(
+                            value:'clear',
+                            child:Text(t('Remove reaction','Cire martani')),
+                          ),
+                      ],
+                    ),
                   TextButton.icon(onPressed:()=>openComments(post),icon:const Icon(Icons.mode_comment_outlined),label:Text('${post.commentCount}')),
                   IconButton(tooltip:t('Save','Ajiye'),onPressed:pendingActions.contains(post.id)?null:()=>action(post,like:false),
                     icon:Icon(post.saved?Icons.bookmark:Icons.bookmark_border)),

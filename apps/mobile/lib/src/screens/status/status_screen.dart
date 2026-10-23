@@ -53,6 +53,9 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<void> save(String id, bool enabled) =>
       _checked(() => super.save(id, enabled));
   @override
+  Future<void> react(String id, String? kind) =>
+      _checked(() => super.react(id, kind));
+  @override
   Future<void> comment(String id, String body, String key) =>
       _checked(() => super.comment(id, body, key));
   @override
