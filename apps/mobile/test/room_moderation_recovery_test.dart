@@ -383,6 +383,11 @@ void main() {
     await tap(tester, 'Retry saved moderation request');
     expect(find.text('Retry original moderation request?'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tap(tester, 'Clear saved retry');
+    expect(find.text('Clear saved retry?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
   test('pending schema rejects foreign routes, malformed decisions and oversized payloads', () {
     expect(
