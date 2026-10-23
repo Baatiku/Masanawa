@@ -207,4 +207,32 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    await expect(pool.query(`DELETE FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1 AND order_id=$2`,[tenant,value.orderId]))
      .rejects.toThrow("append-only");
  });
+ it("serializes duplicate discussion sends across real connections without moving escrow",async()=>{
+   const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
+   const order=await service().createOrder(actor,{offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+   const before=await account(seller),requestKey=randomUUID();
+   const results=await Promise.all(Array.from({length:5},()=>service().sendMessage(actor,order.orderId,{body:'Please check your bank.',requestKey})));
+   expect(new Set(results.map(m=>m.message_id)).size).toBe(1);
+   expect(results.filter(m=>!m.replay)).toHaveLength(1);
+   expect((await service().messagesPage(actor,order.orderId)).items).toHaveLength(1);
+   expect(await account(seller)).toEqual(before);
+   await service().action(actor,order.orderId,'cancel');
+   expect(await service().sendMessage(actor,order.orderId,{body:'Please check your bank.',requestKey})).toMatchObject({replay:true});
+   await expect(service().sendMessage(actor,order.orderId,{body:'After cancellation',requestKey:randomUUID()}))
+     .rejects.toMatchObject({code:'p2p.discussion_read_only'});
+ });
+ it("races terminal cancellation with discussion safely on the same persisted order lock",async()=>{
+   const offerId=await offer(),actor={tenantId:tenant,userId:buyer};
+   const before=await account(seller);
+   const order=await service().createOrder(actor,{offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+   const result=await Promise.allSettled([
+     service().action(actor,order.orderId,'cancel'),
+     service().sendMessage(actor,order.orderId,{body:'Checking this order',requestKey:randomUUID()}),
+   ]);
+   expect(result[0].status).toBe('fulfilled');
+   if(result[1].status==='rejected')expect(result[1].reason).toMatchObject({code:'p2p.discussion_read_only'});
+   expect((await service().messagesPage(actor,order.orderId)).canSend).toBe(false);
+   expect(await account(seller)).toEqual(before);
+ });
+
 });

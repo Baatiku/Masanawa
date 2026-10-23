@@ -74,11 +74,11 @@
 | **P10 S/P** Order overview | buying/selling headline, escrow/reservation stage, fixed asset/fiat/fees, protected reference, deadline | Instructions P11, Order chat P13, Evidence P14, Help P15, receipt P18 | active/pending/paid/disputed/expired/settled/reversed, stale server clock |
 | **P11 S/P** Payment instructions | participant-only bank/account/name/amount/reference, exact source-of-truth version, copy | external bank transfer → return; buyer marks paid P12 | no payment before accept, bank mismatch, share/screenshot deception, third-party payer |
 | **P12 S/P** Mark paid | explicit actual-bank-transfer attestation, what was sent/when, confirm claim (not settlement) | creates auditable claim → waiting seller P10 | deadline race, over/under/partial payment, repeated claim, cancellation unsafe |
-| **P13 N** Order-only conversation | participant identities/order header, chronological text, limited attachment preview, send status, moderator notice | replies, reference, report; close→P10 | wrong user, blocked, offline retry, revoked, harassment/PII, account switch |
+| **P13 P** Order-only conversation | participant identities/order header, chronological text, limited attachment preview, send status, moderator notice | replies, reference, report; close→P10 | wrong user, blocked, offline retry, revoked, harassment/PII, account switch |
 | **P14 S/P** Payment proof/evidence | owner/time/type, privacy banner, upload/presigned retrieval, evidence history | authorized upload, download, image/pdf preview, redact/report | forged image, large file, revoked rights, duplicate upload, expired links |
 | **P15 P** Dispute/appeal center | categorized reasons, protected order timeline, evidence, other party response, staffed case status | open/respond/withdraw only if lawful, return P10 | partial payment, nonreceipt, chargeback, fraud, conflicting release/refund |
 | **P16 S/P** My orders | all/active/finished, Buy/Sell, asset/fiat/status/date, incoming requests and updates | order row→P10; support resume; refresh | order missing, offline/stale snapshot, pagination, cross-account |
-| **P17 N** Detailed order timeline | immutable created/accepted/escrowed/instructions/paid/released/disputed/refunded event trail | event expands evidence/reference; W19 receipt | delayed event, out-of-order, overpayment and reopened dispute |
+| **P17 P** Detailed order timeline | immutable created/accepted/escrowed/instructions/paid/released/disputed/refunded event trail | event expands evidence/reference; W19 receipt | delayed event, out-of-order, overpayment and reopened dispute |
 | **P18 S/P** P2P receipt | exact asset qty, fiat external denomination, original rate, fees, owner, status/reference | share redacted, Wallet Activity, Help | partial/reversed/cancelled not green-success; no proof by share |
 | **P19 P** Trade updates | contextual order/offer alerts, priority and read state | open referenced P10/P22; notifications within Wallet | locked preview, muted, delayed update, duplicate push |
 | **P20 S/P** Verify receiving method | bank/provider picker, account name inquiry and ownership, approval/step-up | verified method→P21; no method in public offer comment | wrong/ported account, provider offline, unsafe changes during active order |
@@ -96,6 +96,9 @@
 | **P32 S/P/Q** Admin case/reconciliation | active disputes/late payments, ledger reserve/release/refund, participant evidence ACL, operator decision and audit | approved resolution with dual auth and readback | forged staff role, race release/refund, tampered evidence, lost audit, appeals |
 
 **Mandatory UI affordances on each list:** skeleton without noninteractive phantom buttons; zero-state explaining why no data; error with a real scoped Retry; refresh with last-known-fresh indicator; row accessible action label and not color-only status; explicit count, paging/scroll restoration, appropriate density and readable truncation. Touching Back during a pending network mutation never starts another transaction. Number of active tabs can be **Buy, Sell, Orders** with My Offers/Updates nested so P2P is familiar without feature overload. **P01/P02 are directions, not different Wallet ledgers.**
+
+
+**23 October 2026 P2P source batch (partial; exact PR/head and hosted checks in GitHub):** native Buy/Sell/Orders navigation now keeps My ads and Order updates secondary; Sell truthfully explains that maker-buy/taker-sell is not enabled, while existing sell-ad creation/management survives. Buy discovery adds exact MSNW quantity and literal public trader/ad-reference filters, enforced against verified NG bank methods and actual seller-funded capacity; pagination is bound to account/filter context. P13/P2P16 adds authenticated buyer/seller-only plain-text discussion, server timestamps/roles, bounded history and safe order activity (no private staff reasons), encrypted account/order-scoped original-request recovery, read-only terminal/settling orders and no message-triggered escrow movement. New migration `0138_msnw_p2p_order_messages.sql` is additive; no historical balance or audit rewrite. **Still OPEN:** maker buy ads/taker Sell, other assets/fiats/rails, merchant/risk admission, profile/avatar identity, attachments inside discussion, abuse reports/moderator removals/retention, delivered/read receipts, live staff appeals and two-device/provider/production acceptance. P7-P01–P04/T01/T02 and P8 gates remain unchecked. No APK or live financial operation.
 
 ## 3. Atomic feature acceptance inventory — no small control omitted
 
@@ -258,10 +261,10 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P0-04 | N | Buy advertisements allow taker **Sell** held crypto to a maker buyer. |
 | P0-05 | N/Q | Eligible asset filter based on *actual* multi-asset escrow support. |
 | P0-06 | N | Fiat currency filter with supported eligible payment methods and quote currency. |
-| P0-07 | N | Payment method filter excludes unavailable/unsupported method. |
-| P0-08 | N | Fiat/asset input amount filter with min/max and exact rate fitting. |
+| P0-07 | P | Payment method filter excludes unavailable/unsupported method. |
+| P0-08 | P | Fiat/asset input amount filter with min/max and exact rate fitting. |
 | P0-09 | N | Sort best eligible price, trade availability, seller reliability with explained criteria. |
-| P0-10 | N | Search by verified trader/merchant name and offer ID without sensitive PII. |
+| P0-10 | P | Search by verified trader/merchant name and offer ID without sensitive PII. |
 | P0-11 | P | Offer cards show unit price, available volume, order min/max, payment method. |
 | P0-12 | S/P | Readable seller display with *verified bank-method* label, not invented KYC badge. |
 | P0-13 | S/P | 30-day completed-order count shown only when sufficient terminal sample. |
@@ -380,10 +383,10 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 ### P5 — In-order messages, evidence, case handling, refunds and notices (P7-P03/P7-T02)
 | ID | State | Atomic requirement / user-observable acceptance |
 |---|---|---|
-| P5-01 | N | Dedicated order-scoped two-party discussion (not general Chat room/AI). |
-| P5-02 | N | Text bubbles with participant avatar, time, delivered/failed/retry original ID. |
-| P5-03 | N | Order-context system messages for escrow, paid claim, escalation and decision. |
-| P5-04 | N | Block third user/other tenant/order cross-read, unauthorized reply, impersonation. |
+| P5-01 | P | Dedicated order-scoped two-party discussion (not general Chat room/AI). |
+| P5-02 | P | Text bubbles with participant avatar, time, delivered/failed/retry original ID. |
+| P5-03 | P | Order-context system messages for escrow, paid claim, escalation and decision. |
+| P5-04 | P | Block third user/other tenant/order cross-read, unauthorized reply, impersonation. |
 | P5-05 | N | Restricted MIME/size attachment preview within order chat. |
 | P5-06 | P | Receipt/evidence upload to participant-only order storage, 2MB cap in source. |
 | P5-07 | S/P | Evidence list includes creator, date, file type, authorized preview/download. |
@@ -411,7 +414,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-01 | S/P | P2P order list with stable cursor, all/active/finished and user Buy/Sell role. |
 | P6-02 | N | Asset/fiat/method/date/status filters for order history and offers. |
 | P6-03 | P | My Offers and Updates nested below primary Buy/Sell/Orders flow. |
-| P6-04 | N | Dedicated order event timeline rather than only current status chip. |
+| P6-04 | P | Dedicated order event timeline rather than only current status chip. |
 | P6-05 | S/P | Canonical receipt and Wallet Activity point to same operation and roles. |
 | P6-06 | N | Merchant profile shows live eligible offers and real statistics, not fake rating. |
 | P6-07 | N | Merchant pause-all or scheduled availability if actually supported server-side. |

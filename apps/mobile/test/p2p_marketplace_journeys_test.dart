@@ -114,7 +114,9 @@ void main() {
     final adapter = _P2pAdapter();
     await t.pumpWidget(_app(adapter));
     await t.pumpAndSettle();
-    await t.tap(find.text('Sell'));
+    await t.tap(find.byTooltip('P2P options'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('My ads'));
     await t.pumpAndSettle();
     expect(find.textContaining('₦1500.00 / MSNW'), findsWidgets);
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);
@@ -123,6 +125,43 @@ void main() {
     expect(find.text('Close offer'), findsOneWidget);
     expect(adapter.calls.where((o) => o.method == 'POST'), isEmpty);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('Buy Sell Orders are primary; My ads and updates are secondary with no fake Sell request', (t) async {
+    _mockSecureRecovery();
+    final adapter = _P2pAdapter();
+    await t.pumpWidget(_app(adapter)); await t.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsNWidgets(3));
+    expect(find.widgetWithText(ChoiceChip, 'Updates'), findsNothing);
+    final before = adapter.calls.length;
+    await t.tap(find.widgetWithText(ChoiceChip, 'Sell')); await t.pumpAndSettle();
+    expect(find.text('Buyer ads are not available yet'), findsOneWidget);
+    expect(adapter.calls.length, before);
+    await t.tap(find.text('My ads')); await t.pumpAndSettle();
+    expect(adapter.calls.any((r) => r.path.contains('/my-offers/page')), isTrue);
+    expect(find.text('Create offer'), findsOneWidget);
+    expect(adapter.calls.where((r) => r.method != 'GET'), isEmpty);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('explicit filters use exact atomic amount and literal trader search; clear restores discovery', (t) async {
+    _mockSecureRecovery(); final adapter = _P2pAdapter();
+    await t.pumpWidget(_app(adapter)); await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(ChoiceChip, 'Buy')); await t.pumpAndSettle();
+    await t.tap(find.text('Filter offers')); await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'Amount in MSNW'), '1.000001');
+    await t.enterText(find.widgetWithText(TextFormField, 'Trader name or ad reference'), 'Amina %');
+    await t.tap(find.text('Apply filters')); await t.pumpAndSettle();
+    final request = adapter.calls.lastWhere((r) => r.path.contains('/offers/page'));
+    final uri = Uri.parse(request.uri.toString());
+    expect(uri.queryParameters['amountMicro'], '1000001');
+    expect(uri.queryParameters['search'], 'Amina %');
+    expect(find.text('Filters applied'), findsOneWidget);
+    await t.tap(find.text('Clear filters')); await t.pumpAndSettle();
+    expect(adapter.calls.last.uri.queryParameters.containsKey('amountMicro'), isFalse);
+    expect(adapter.calls.where((r) => r.method != 'GET'), isEmpty);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
   });
 
   testWidgets('Buy review displays actual quote before posting', (t) async {
@@ -157,10 +196,11 @@ void main() {
     expect(t.takeException(), isNull);
     await t.tap(find.text('Sell'));
     await t.pumpAndSettle();
-    expect(find.text('Create offer'), findsOneWidget);
-    await t.ensureVisible(find.text('Create offer'));
+    expect(find.text('Buyer ads are not available yet'), findsOneWidget);
+    expect(find.text('Create sell ad'), findsOneWidget);
+    await t.ensureVisible(find.text('Create sell ad'));
     await t.pumpAndSettle();
-    expect(find.text('Create offer').hitTestable(), findsOneWidget);
+    expect(find.text('Create sell ad').hitTestable(), findsOneWidget);
     expect(t.takeException(), isNull);
     expect(adapter.calls.every((r) => r.method == 'GET'), isTrue);
   });
