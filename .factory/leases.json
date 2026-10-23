@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "f7d105af-bf40-4108-857b-63774c79bd15",
-      "owner": "codex-p2p-trader-oct23",
-      "scope": "P7-T01/P27 actual public trader context and eligible offer pagination; two minor report validation/quota findings",
+      "claim_id": "517787fa-b330-4dfc-a937-582da785302a",
+      "owner": "codex-p2p-maker-buy-oct23",
+      "scope": "P7-P01/P02 MSNW maker-buy/taker-Sell source using canonical actual-seller escrow; default closed until trusted maker-buyer admission supplied",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -23,15 +23,21 @@
         "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
         "apps/mobile/lib/src/finance/p2p_trader_page.dart",
         "apps/mobile/test/p2p_trader_page_test.dart",
-        "services/gateway/src/p2p/read_journeys.pglite.test.ts"
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts",
+        "packages/commerce/migrations/0140_msnw_p2p_buy_offers.sql",
+        "services/gateway/src/p2p/buy_offer_admission.ts",
+        "services/gateway/src/p2p/buy_offers.pglite.test.ts",
+        "services/gateway/src/p2p/service.test.ts",
+        "services/gateway/src/p2p/buy_offer_admission.test.ts",
+        "apps/mobile/test/p2p_buy_offer_journeys_test.dart"
       ],
-      "branch": "feat/p2p-trader-context-oct23",
-      "base_sha": "f542ab802816df03bbe2232e223270444c8f7171",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/313",
-      "claimed_at": "2026-10-23T05:50:23.133Z",
-      "heartbeat_at": "2026-10-23T06:14:36.008Z",
-      "expires_at": "2026-10-23T06:19:36.008Z",
-      "progress": "PR313 head32262018: hosted P2P qualification PASS69backend+7worker+9realPG incl cross-order quota; Status PASS. Independent final review no blockers. Exact-head typing+8 Flutter pass after startup segfault retry. Await Foundation/Mobile."
+      "branch": "feat/p2p-maker-buy-source-oct23",
+      "base_sha": "0d9803629393b52e42d82a5cd6b1294215f43772",
+      "pr": "",
+      "claimed_at": "2026-10-23T06:21:29.591Z",
+      "heartbeat_at": "2026-10-23T06:21:29.591Z",
+      "expires_at": "2026-10-23T06:26:29.591Z",
+      "progress": "Reviewing migration/admission/initiator-key contracts before implementation."
     }
   ],
   "history": [
@@ -99,6 +105,40 @@
       "next_branch": "feat/p2p-trader-context-oct23",
       "released_at": "2026-10-23T05:50:23.133Z",
       "release_reason": "PR309 merged f542ab802816df03bbe2232e223270444c8f7171; final f070431 all4 CI PASS; read-only review no blockers; independent next P2P lane continues."
+    },
+    {
+      "claim_id": "f7d105af-bf40-4108-857b-63774c79bd15",
+      "owner": "codex-p2p-trader-oct23",
+      "scope": "P7-T01/P27 actual public trader context and eligible offer pagination; two minor report validation/quota findings",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/mobile/lib/src/finance/p2p_trader_page.dart",
+        "apps/mobile/test/p2p_trader_page_test.dart",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts"
+      ],
+      "branch": "feat/p2p-trader-context-oct23",
+      "base_sha": "f542ab802816df03bbe2232e223270444c8f7171",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/313",
+      "claimed_at": "2026-10-23T05:50:23.133Z",
+      "heartbeat_at": "2026-10-23T06:14:36.008Z",
+      "expires_at": "2026-10-23T06:19:36.008Z",
+      "progress": "PR313 head32262018: hosted P2P qualification PASS69backend+7worker+9realPG incl cross-order quota; Status PASS. Independent final review no blockers. Exact-head typing+8 Flutter pass after startup segfault retry. Await Foundation/Mobile.",
+      "released_at": "2026-10-23T06:21:29.591Z",
+      "release_reason": "Merged313 at0d980362 all4 exact-headCI PASS, no blocking review; continuing maker-buy/taker-Sell source with explicit admission gap."
     }
   ]
 }
