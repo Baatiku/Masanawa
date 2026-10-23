@@ -1,4 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
+import {moderationPage} from './moderation_pages.js';
 import type {PoolClient} from '@masanawa/postgres';
 import type {RoomCommunityActor} from './index.js';
 type Row=Record<string,any>;
@@ -26,14 +27,15 @@ export async function roomContentModeration(q:Sql,a:RoomCommunityActor,room:Row,
   if(method==='GET'&&parts[3]==='summary'){
    await requireManager();
    const sql=kind==='post'
-    ? `SELECT p.lesson_id AS "postId",LEFT(p.body,180) AS excerpt,COUNT(DISTINCT r.user_id)::int AS "reportCount" FROM rooms.reports r JOIN rooms.lessons p ON p.tenant_id=r.tenant_id AND p.room_id=r.room_id AND p.lesson_id=r.target_id WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.target_kind='post' AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND ${pending} GROUP BY p.lesson_id,p.body,p.created_at ORDER BY COUNT(DISTINCT r.user_id) DESC,p.created_at DESC LIMIT 100`
-    : `SELECT d.reply_id AS "replyId",p.lesson_id AS "postId",LEFT(d.body,180) AS excerpt,COUNT(DISTINCT r.user_id)::int AS "reportCount" FROM rooms.reports r JOIN rooms.discussion_replies d ON d.tenant_id=r.tenant_id AND d.room_id=r.room_id AND d.reply_id=r.target_id JOIN rooms.lessons p ON p.tenant_id=d.tenant_id AND p.room_id=d.room_id AND p.lesson_id=d.lesson_id WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.target_kind='reply' AND d.moderation_state='visible' AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND ${pending} GROUP BY d.reply_id,d.body,d.created_at,p.lesson_id ORDER BY COUNT(DISTINCT r.user_id) DESC,d.created_at DESC LIMIT 100`;
-   return {items:(await q.query(sql,params)).rows};
+    ? `SELECT p.lesson_id AS page_id,p.created_at AS page_at,COUNT(DISTINCT r.user_id)::bigint AS page_rank,p.lesson_id AS "postId",LEFT(p.body,180) AS excerpt,COUNT(DISTINCT r.user_id)::int AS "reportCount" FROM rooms.reports r JOIN rooms.lessons p ON p.tenant_id=r.tenant_id AND p.room_id=r.room_id AND p.lesson_id=r.target_id WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.target_kind='post' AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND ${pending} GROUP BY p.lesson_id,p.body,p.created_at`
+    : `SELECT d.reply_id AS page_id,d.created_at AS page_at,COUNT(DISTINCT r.user_id)::bigint AS page_rank,d.reply_id AS "replyId",p.lesson_id AS "postId",LEFT(d.body,180) AS excerpt,COUNT(DISTINCT r.user_id)::int AS "reportCount" FROM rooms.reports r JOIN rooms.discussion_replies d ON d.tenant_id=r.tenant_id AND d.room_id=r.room_id AND d.reply_id=r.target_id JOIN rooms.lessons p ON p.tenant_id=d.tenant_id AND p.room_id=d.room_id AND p.lesson_id=d.lesson_id WHERE r.tenant_id=$1 AND r.room_id=$2 AND r.target_kind='reply' AND d.moderation_state='visible' AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=statement_timestamp()) AND ${pending} GROUP BY d.reply_id,d.body,d.created_at,p.lesson_id`;
+   const page=await moderationPage(q,a,roomId,resource+'/summary',input,sql,params,100);
+   return {pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({...(kind==='post'?{postId:v.postId}:{replyId:v.replyId,postId:v.postId}),excerpt:v.excerpt,reportCount:Number(v.reportCount)}))};
   }
   if(method==='GET'&&parts[3]==='reviews'){
    await requireManager();
-   const rows=(await q.query('SELECT target_id,decision,report_count,reviewed_at FROM rooms.report_reviews WHERE tenant_id=$1 AND room_id=$2 AND target_kind=$3 ORDER BY reviewed_at DESC,review_id DESC LIMIT 30',[...params,kind])).rows;
-   return {items:rows.map(v=>({[kind==='post'?'postId':'replyId']:v.target_id,decision:v.decision,reportCount:Number(v.report_count),reviewedAt:iso(v.reviewed_at)}))};
+   const page=await moderationPage(q,a,roomId,resource+'/reviews',input,'SELECT review_id AS page_id,reviewed_at AS page_at,0::bigint AS page_rank,target_id,decision,report_count,reviewed_at FROM rooms.report_reviews WHERE tenant_id=$1 AND room_id=$2 AND target_kind=$3',[...params,kind],30);
+   return {pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({reviewId:v.page_id,[kind==='post'?'postId':'replyId']:v.target_id,decision:v.decision,reportCount:Number(v.report_count),reviewedAt:iso(v.reviewed_at)}))};
   }
   if(method==='POST'&&parts[4]==='review'){
    await requireManager();
@@ -79,15 +81,15 @@ export async function roomContentModeration(q:Sql,a:RoomCommunityActor,room:Row,
  const appealView=(v:Row)=>({appealId:v.appeal_id,reviewId:v.review_id,status:v.state,createdAt:iso(v.created_at),decidedAt:iso(v.decided_at),publicReason:v.public_reason});
  if(resource==='moderation'&&parts[3]==='cases'){
   if(method==='GET'&&!parts[4]){
-   const rows=(await q.query(`SELECT v.*,ap.appeal_id,ap.state AS appeal_state,ap.created_at AS appeal_created,ap.decided_at,ap.public_reason AS appeal_reason,
+   const page=await moderationPage(q,a,roomId,'moderation/cases',input,`SELECT v.review_id AS page_id,v.reviewed_at AS page_at,0::bigint AS page_rank,v.*,ap.appeal_id,ap.state AS appeal_state,ap.created_at AS appeal_created,ap.decided_at,ap.public_reason AS appeal_reason,
     CASE WHEN v.target_kind='post' THEN p.state='retired' AND p.moderation_revision=v.target_revision AND p.removed_by_review_id=v.review_id
       ELSE d.moderation_state='removed' AND d.moderation_revision=v.target_revision AND d.removed_by_review_id=v.review_id END AS current_removal
     FROM rooms.report_reviews v LEFT JOIN rooms.moderation_appeals ap ON ap.tenant_id=v.tenant_id AND ap.review_id=v.review_id AND ap.author_user_id=$3
     LEFT JOIN rooms.lessons p ON p.tenant_id=v.tenant_id AND p.room_id=v.room_id AND p.lesson_id=v.target_id AND v.target_kind='post'
     LEFT JOIN rooms.discussion_replies d ON d.tenant_id=v.tenant_id AND d.room_id=v.room_id AND d.reply_id=v.target_id AND v.target_kind='reply'
     WHERE v.tenant_id=$1 AND v.room_id=$2 AND v.target_author_user_id=$3 AND v.decision='removed'
-    ORDER BY v.reviewed_at DESC,v.review_id DESC LIMIT 30`,[...params,a.userId])).rows;
-   return {moderationVersion:1,items:rows.map(v=>({reviewId:v.review_id,targetId:v.target_id,targetKind:v.target_kind,reviewedAt:iso(v.reviewed_at),publicReason:v.public_reason,
+    `,[...params,a.userId],30);
+   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({reviewId:v.review_id,targetId:v.target_id,targetKind:v.target_kind,reviewedAt:iso(v.reviewed_at),publicReason:v.public_reason,
     canAppeal:v.current_removal===true&&!v.appeal_id,appeal:v.appeal_id?{appealId:v.appeal_id,status:v.appeal_state,createdAt:iso(v.appeal_created),decidedAt:iso(v.decided_at),publicReason:v.appeal_reason}:null}))};
   }
   if(method==='POST'&&parts[5]==='appeal'){
@@ -107,9 +109,9 @@ export async function roomContentModeration(q:Sql,a:RoomCommunityActor,room:Row,
  if(resource==='moderation'&&parts[3]==='appeals'){
   await requireManager();
   if(method==='GET'&&!parts[4]){
-   const rows=(await q.query(`SELECT ap.*,v.target_id,v.target_kind,v.public_reason AS removal_reason FROM rooms.moderation_appeals ap JOIN rooms.report_reviews v ON v.tenant_id=ap.tenant_id AND v.review_id=ap.review_id
-    WHERE ap.tenant_id=$1 AND ap.room_id=$2 ORDER BY (ap.state='pending') DESC,ap.created_at DESC,ap.appeal_id DESC LIMIT 30`,params)).rows;
-   return {moderationVersion:1,items:rows.map(v=>({...appealView(v),targetId:v.target_id,targetKind:v.target_kind,reason:v.reason,removalReason:v.removal_reason,canReview:v.state==='pending'&&v.author_user_id!==a.userId}))};
+   const page=await moderationPage(q,a,roomId,'moderation/appeals',input,`SELECT ap.appeal_id AS page_id,ap.created_at AS page_at,CASE WHEN ap.state='pending' THEN 1 ELSE 0 END::bigint AS page_rank,ap.*,v.target_id,v.target_kind,v.public_reason AS removal_reason FROM rooms.moderation_appeals ap JOIN rooms.report_reviews v ON v.tenant_id=ap.tenant_id AND v.review_id=ap.review_id
+    WHERE ap.tenant_id=$1 AND ap.room_id=$2`,params,30);
+   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({...appealView(v),targetId:v.target_id,targetKind:v.target_kind,reason:v.reason,removalReason:v.removal_reason,canReview:v.state==='pending'&&v.author_user_id!==a.userId}))};
   }
   if(method==='POST'&&parts[5]==='review'){
    const id=text(parts[4]),decision=text(input.decision,20),reason=text(input.publicReason,2000),key=text(input.requestId);
