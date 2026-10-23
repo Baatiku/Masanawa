@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 
 import 'room_community_api.dart';
 import 'room_community_screen.dart';
@@ -19,6 +20,9 @@ class _RoomsState extends State<RoomsScreen> {
   bool joined = true, loading = true, accepting = false;
   Object? error;
   Object? invitationsError;
+  String? invitationCursor;
+  bool loadingOlderInvitations = false;
+  Object? olderInvitationsError;
   int generation = 0, invitationOperation = 0;
   Object? invitationActionError;
   @override
@@ -39,6 +43,9 @@ class _RoomsState extends State<RoomsScreen> {
       rooms = [];
       invitations = [];
       invitationsError = null;
+      invitationCursor = null;
+      loadingOlderInvitations = false;
+      olderInvitationsError = null;
       error = null;
       accepting = false;
       joined = true;
@@ -60,6 +67,9 @@ class _RoomsState extends State<RoomsScreen> {
     setState(() {
       loading = true;
       error = null;
+      invitationCursor = null;
+      loadingOlderInvitations = false;
+      olderInvitationsError = null;
     });
     try {
       final result = await widget.api.list(joined);
@@ -81,10 +91,14 @@ class _RoomsState extends State<RoomsScreen> {
     }
     if (!mounted || version != generation) return;
     try {
-      final pending = await widget.api.invitations();
+      final api = widget.api;
+      final page = api is RoomInvitationPages
+          ? await (api as RoomInvitationPages).invitationPage()
+          : RoomInvitationPage(await api.invitations(), null);
       if (!mounted || version != generation) return;
       setState(() {
-        invitations = pending;
+        invitations = page.items;
+        invitationCursor = page.nextCursor;
         invitationsError = null;
       });
     } catch (e) {
@@ -94,6 +108,49 @@ class _RoomsState extends State<RoomsScreen> {
           invitationsError = e;
         });
       }
+    }
+  }
+
+  Future<void> olderInvitations() async {
+    final api = widget.api, cursor = invitationCursor, version = generation;
+    if (api is! RoomInvitationPages ||
+        cursor == null ||
+        loadingOlderInvitations ||
+        loading ||
+        accepting)
+      return;
+    setState(() {
+      loadingOlderInvitations = true;
+      olderInvitationsError = null;
+    });
+    try {
+      final page = await (api as RoomInvitationPages).invitationPage(cursor: cursor);
+      if (!mounted || version != generation || !identical(api, widget.api))
+        return;
+      if (page.nextCursor == cursor)
+        throw const FormatException('Repeated invitation cursor');
+      final byId = <String, Map<String, dynamic>>{
+        for (final row in [...invitations, ...page.items])
+          '${row['roomId']}:${row['inviteId']}': row,
+      };
+      setState(() {
+        invitations = byId.values.toList();
+        invitationCursor = page.nextCursor;
+      });
+    } catch (e) {
+      if (mounted && version == generation)
+        setState(() {
+          olderInvitationsError = e;
+          if (e is StateError && e.message == 'account_changed' ||
+              e is DioException &&
+                  const [401, 403, 404].contains(e.response?.statusCode)) {
+            invitations = [];
+            invitationCursor = null;
+          }
+        });
+    } finally {
+      if (mounted && version == generation)
+        setState(() => loadingOlderInvitations = false);
     }
   }
 
@@ -316,6 +373,24 @@ class _RoomsState extends State<RoomsScreen> {
             SliverToBoxAdapter(
               child: Column(
                 children: [
+                  if (invitationCursor != null)
+                    TextButton(
+                      onPressed: loadingOlderInvitations || accepting || loading
+                          ? null
+                          : olderInvitations,
+                      child: Text(
+                        loadingOlderInvitations
+                            ? 'Loading older invitations…'
+                            : 'Load older invitations',
+                      ),
+                    ),
+                  if (olderInvitationsError != null)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Could not load older invitations. Your current invitations are still available. Retry the same page.',
+                      ),
+                    ),
                   if (accepting) const LinearProgressIndicator(),
                   if (invitationActionError != null)
                     Padding(

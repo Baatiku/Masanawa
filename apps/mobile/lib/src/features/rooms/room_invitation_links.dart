@@ -71,7 +71,7 @@ class _InvitationLinksState extends State<RoomInvitationLinks> {
   late RoomInvitationRequestStore journal;
   List<Map<String, dynamic>> rows = [];
   Map<String, dynamic>? original;
-  String? pending, code, error;
+  String? pending, code, error, nextCursor;
   bool restored = false,
       compatible = false,
       busy = false,
@@ -102,6 +102,7 @@ class _InvitationLinksState extends State<RoomInvitationLinks> {
     pending = null;
     code = null;
     error = null;
+    nextCursor = null;
     restored = false;
     compatible = false;
     busy = false;
@@ -191,17 +192,46 @@ class _InvitationLinksState extends State<RoomInvitationLinks> {
           .toList();
       if (!values.every(valid))
         throw const FormatException('Invalid invitation list');
+      final cursor = result['nextCursor'];
+      if (cursor != null &&
+          (result['paginationVersion'] != 1 ||
+              cursor is! String ||
+              cursor.isEmpty ||
+              cursor.length > 1200))
+        throw const FormatException('Invalid invitation cursor');
       final matches = values.where(
         (value) =>
             value['kind'] == 'code' &&
             pending != null &&
             value['requestId'] == pending,
       );
+      Map<String, dynamic>? found = matches.isEmpty ? null : matches.first;
+      if (found == null &&
+          pending != null &&
+          result['paginationVersion'] == 1) {
+        final key = pending;
+        final lookup = await api.request(roomId, 'GET', 'invites/request', {
+          'requestId': key,
+        });
+        if (!current(version) || read != readGeneration) return;
+        if (lookup['issuanceVersion'] != 1 ||
+            (lookup['item'] != null && lookup['item'] is! Map))
+          throw const FormatException('Unavailable original request');
+        if (lookup['item'] != null) {
+          final item = Map<String, dynamic>.from(lookup['item'] as Map);
+          if (!valid(item) ||
+              item['kind'] != 'code' ||
+              item['requestId'] != key)
+            throw const FormatException('Mismatched original request');
+          found = item;
+        }
+      }
       setState(() {
         compatible = true;
         rows = values;
+        nextCursor = cursor as String?;
         // Absence from a capped list is not proof that a request never committed.
-        original = matches.isEmpty ? null : matches.first;
+        original = found;
         if (original == null || original!['status'] != 'active') code = null;
       });
       await finishIfInactive(version);
@@ -214,8 +244,65 @@ class _InvitationLinksState extends State<RoomInvitationLinks> {
           code = null;
           rows = [];
           original = null;
+          nextCursor = null;
         }
         error = 'Could not verify invitation status. Refresh before creating or copying a code.';
+      });
+    } finally {
+      if (current(version) && read == readGeneration)
+        setState(() => checking = false);
+    }
+  }
+
+  Future<void> older() async {
+    final cursor = nextCursor,
+        version = generation,
+        api = widget.api,
+        roomId = widget.roomId;
+    if (cursor == null || checking || busy || !authorized()) return;
+    final read = ++readGeneration;
+    setState(() {
+      checking = true;
+      error = null;
+    });
+    try {
+      final result = await api.request(roomId, 'GET', 'invites', {
+        'cursor': cursor,
+      });
+      if (!current(version) || read != readGeneration) return;
+      final next = result['nextCursor'];
+      if (result['issuanceVersion'] != 1 ||
+          result['paginationVersion'] != 1 ||
+          result['items'] is! List ||
+          next == cursor ||
+          (next != null &&
+              (next is! String || next.isEmpty || next.length > 1200)))
+        throw const FormatException('Invalid invitation page');
+      final values = (result['items'] as List)
+          .map((v) => Map<String, dynamic>.from(v as Map))
+          .toList();
+      if (!values.every(valid))
+        throw const FormatException('Invalid invitation metadata');
+      final combined = <String, Map<String, dynamic>>{
+        for (final row in [...rows, ...values]) row['inviteId'] as String: row,
+      };
+      setState(() {
+        rows = combined.values.toList();
+        nextCursor = next as String?;
+      });
+    } catch (e) {
+      if (!current(version) || read != readGeneration) return;
+      setState(() {
+        if (e is DioException &&
+            const [401, 403, 404].contains(e.response?.statusCode)) {
+          rows = [];
+          code = null;
+          original = null;
+          nextCursor = null;
+          compatible = false;
+        }
+        error =
+            'Could not load older invitations. Refresh or retry the same page.';
       });
     } finally {
       if (current(version) && read == readGeneration)
@@ -377,6 +464,11 @@ class _InvitationLinksState extends State<RoomInvitationLinks> {
                   ),
               ],
             ),
+          ),
+        if (nextCursor != null)
+          TextButton(
+            onPressed: busy || checking ? null : older,
+            child: const Text('Load older invitations'),
           ),
       ],
     );
