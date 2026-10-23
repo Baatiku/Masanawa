@@ -6,6 +6,7 @@ on:
       - "services/gateway/src/room_community/**"
       - "tests/support/room-community-database.ts"
       - "tests/support/room-moderation-pages.ts"
+      - "tests/support/room-timeline-pages.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
       - "apps/mobile/test/room_invitation_links_test.dart"
       - "apps/mobile/test/room_ownership_transfer_test.dart"
@@ -14,6 +15,7 @@ on:
       - "apps/mobile/test/room_moderation_recovery_test.dart"
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
+      - "apps/mobile/test/room_timeline_pagination_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -33,6 +35,7 @@ on:
       - "services/gateway/src/room_community/**"
       - "tests/support/room-community-database.ts"
       - "tests/support/room-moderation-pages.ts"
+      - "tests/support/room-timeline-pages.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
       - "apps/mobile/test/room_invitation_links_test.dart"
       - "apps/mobile/test/room_ownership_transfer_test.dart"
@@ -41,6 +44,7 @@ on:
       - "apps/mobile/test/room_moderation_recovery_test.dart"
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
+      - "apps/mobile/test/room_timeline_pagination_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -133,6 +137,7 @@ jobs:
           test/room_moderation_recovery_test.dart
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
+          test/room_timeline_pagination_test.dart
           test/rooms_partial_refresh_test.dart
           test/room_community_screen_test.dart
           test/features/rooms/room_discussion_screen_test.dart
@@ -159,6 +164,8 @@ jobs:
       - name: Focused Rooms Dart analysis
         run: >-
           dart analyze lib/src/features/rooms/rooms_screen.dart
+          lib/src/features/rooms/room_community_api.dart
+          lib/src/features/rooms/room_community_screen.dart
           test/room_invitation_consent_test.dart
           lib/src/features/rooms/room_invitation_links.dart
           lib/src/features/rooms/room_ownership_transfer.dart
@@ -169,6 +176,7 @@ jobs:
           test/room_moderation_recovery_test.dart
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
+          test/room_timeline_pagination_test.dart
           test/room_ownership_transfer_test.dart
           test/room_invitation_links_test.dart
           lib/src/features/rooms/room_membership_client.dart
