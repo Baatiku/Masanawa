@@ -44,15 +44,16 @@
         "services/gateway/src/p2p/method_management.pglite.test.ts",
         "apps/mobile/lib/src/finance/p2p_methods_page.dart",
         "apps/mobile/test/p2p_methods_page_test.dart",
-        "packages/commerce/migrations/0142_msnw_p2p_method_preferences.sql"
+        "packages/commerce/migrations/0142_msnw_p2p_method_preferences.sql",
+        "services/gateway/src/call_history/postgres_repository.test.ts"
       ],
       "branch": "feat/p2p-bank-method-retirement-oct23",
       "base_sha": "9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786",
       "pr": "https://github.com/Baatiku/Masanawa/pull/334",
       "claimed_at": "2026-10-23T09:55:47.687Z",
-      "heartbeat_at": "2026-10-23T15:36:28.204Z",
-      "expires_at": "2026-10-23T15:41:28.204Z",
-      "progress": "PR334 finald08b1193 P2P91backend/storage+7Worker+13realPG/build/types PASS; StatusPASS; Mobile/Foundationfinishing.7newnative+4editor pass, realfontvisualpassed/inspected, reviewclear. Next preferences source starts isolatedsparse worktree /home/user/masanawa-p2p-next-oct23.",
+      "heartbeat_at": "2026-10-23T15:43:38.079Z",
+      "expires_at": "2026-10-23T15:48:38.079Z",
+      "progress": "334 finald08P2P91+7+13PG/Mobile/StatusPASS; Foundation2630assertionsPASS butunhandled57P01 Callhistorytestcleanup. Claimedtest-onlyrepair waitforactualclosedPGbackendsbeforenon-forceDROP. Preferences sourcebatchstarted sparsecheckout, validationrepairingpnpm symlinkrunner.",
       "next_scope": "P1-05 private method nickname/default and unused retirement cleanup, retaining immutable accepted instructions",
       "next_branch": "feat/p2p-method-preferences-oct23"
     }
