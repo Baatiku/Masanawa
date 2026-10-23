@@ -8,7 +8,7 @@ import 'package:masanawa/src/features/rooms/room_moderation_screen.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
 
-class _Api extends FakeCommunityApi {
+class ModerationTestApi extends FakeCommunityApi {
   bool denied = false, loseResponse = false;
   Completer<Map<String, dynamic>>? pending;
   final writes = <Map<String, dynamic>>[];
@@ -53,6 +53,48 @@ class _Api extends FakeCommunityApi {
         requestOptions: RequestOptions(),
         response: Response(requestOptions: RequestOptions(), statusCode: 403),
       );
+    if (method == 'GET' && resource == 'moderation/operations') {
+      for (final write in writes.reversed) {
+        final path = '${write['resource']}', parts = path.split('/');
+        final report = path.startsWith('reply-reports/'),
+            author = path.startsWith('moderation/cases/');
+        final action = report
+            ? 'report-review'
+            : author
+            ? 'appeal'
+            : 'appeal-review';
+        if (values['requestId'] != write['requestId'] ||
+            values['action'] != action ||
+            values['targetId'] != parts[report ? 1 : 2])
+          continue;
+        return {
+          'operationVersion': 1,
+          'item': report
+              ? {
+                  'action': action,
+                  'reviewId': 'review_new',
+                  'targetId': parts[1],
+                  'targetKind': 'reply',
+                  'decision': write['decision'],
+                  'reportCount': 1,
+                }
+              : {
+                  'action': action,
+                  'reviewId': 'review_1',
+                  'appealId': 'appeal_1',
+                  'status': author
+                      ? ((cases.single['appeal'] as Map?)?['status'] ??
+                            'pending')
+                      : appeals.single['status'],
+                },
+        };
+      }
+      return {'operationVersion': 1, 'item': null};
+    }
+    if (method == 'GET' && resource.startsWith('moderation/cases/'))
+      return {'moderationVersion': 1, 'item': cases.single};
+    if (method == 'GET' && resource.startsWith('moderation/appeals/'))
+      return {'moderationVersion': 1, 'item': appeals.single};
     if (method == 'GET')
       return resource == 'moderation/cases'
           ? {'moderationVersion': 1, 'items': cases}
@@ -84,7 +126,11 @@ class _Api extends FakeCommunityApi {
   }
 }
 
-Future<void> mount(WidgetTester tester, _Api api, {bool narrow = false}) async {
+Future<void> mount(
+  WidgetTester tester,
+  ModerationTestApi api, {
+  bool narrow = false,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       builder: (context, child) => MediaQuery(
@@ -143,7 +189,7 @@ void main() {
   testWidgets(
     'member appeals their own case explicitly and sees pending, not restored',
     (tester) async {
-      final api = _Api();
+      final api = ModerationTestApi();
       await mount(tester, api);
       expect(find.text('Reported replies'), findsNothing);
       await open(tester, 'Appeal removal');
@@ -158,7 +204,7 @@ void main() {
     },
   );
   testWidgets('cancel does not submit or change the removal', (tester) async {
-    final api = _Api();
+    final api = ModerationTestApi();
     await mount(tester, api);
     await open(tester, 'Appeal removal');
     await tester.tap(find.text('Cancel'));
@@ -169,7 +215,7 @@ void main() {
   testWidgets(
     'reply report action uses its own target, then canonical queue readback',
     (tester) async {
-      final api = _Api()..role = 'owner';
+      final api = ModerationTestApi()..role = 'owner';
       await mount(tester, api);
       await open(tester, 'Remove reply');
       await confirm(tester);
@@ -186,7 +232,7 @@ void main() {
     testWidgets(
       'manager confirms $decision and displays recorded author-facing response',
       (tester) async {
-        final api = _Api()..role = 'owner';
+        final api = ModerationTestApi()..role = 'owner';
         await mount(tester, api);
         await open(
           tester,
@@ -211,7 +257,7 @@ void main() {
   testWidgets(
     'lost committed appeal response blocks new action until canonical refresh',
     (tester) async {
-      final api = _Api()..loseResponse = true;
+      final api = ModerationTestApi()..loseResponse = true;
       await mount(tester, api);
       await open(tester, 'Appeal removal');
       await confirm(tester);
@@ -231,7 +277,7 @@ void main() {
     },
   );
   testWidgets('permission loss scrubs private cases and queue', (tester) async {
-    final api = _Api()..role = 'owner';
+    final api = ModerationTestApi()..role = 'owner';
     await mount(tester, api);
     api.denied = true;
     await tester.tap(find.text('Refresh moderation status'));
@@ -243,7 +289,8 @@ void main() {
   testWidgets(
     'API replacement while confirming cannot send the previous account case',
     (tester) async {
-      final first = _Api(), second = _Api()..cases.clear();
+      final first = ModerationTestApi(),
+          second = ModerationTestApi()..cases.clear();
       await mount(tester, first);
       await open(tester, 'Appeal removal');
       await mount(tester, second);
@@ -255,8 +302,9 @@ void main() {
   testWidgets('late old account write cannot replace new account data', (
     tester,
   ) async {
-    final first = _Api()..pending = Completer<Map<String, dynamic>>(),
-        second = _Api()..cases.clear();
+    final first = ModerationTestApi()
+          ..pending = Completer<Map<String, dynamic>>(),
+        second = ModerationTestApi()..cases.clear();
     await mount(tester, first);
     await open(tester, 'Appeal removal');
     await tester.enterText(find.byType(TextField), 'Context');
@@ -278,7 +326,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await mount(tester, _Api()..role = 'owner', narrow: true);
+      await mount(tester, ModerationTestApi()..role = 'owner', narrow: true);
       await open(tester, 'Restore content');
       expect(find.text('Restore content?'), findsOneWidget);
       expect(tester.takeException(), isNull);

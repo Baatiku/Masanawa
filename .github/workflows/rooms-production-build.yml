@@ -11,6 +11,7 @@ on:
       - "apps/mobile/test/room_ownership_transfer_test.dart"
       - "apps/mobile/test/room_moderation_screen_test.dart"
       - "apps/mobile/test/room_moderation_pagination_test.dart"
+      - "apps/mobile/test/room_moderation_recovery_test.dart"
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
       - "services/gateway/src/main.ts"
@@ -37,6 +38,7 @@ on:
       - "apps/mobile/test/room_ownership_transfer_test.dart"
       - "apps/mobile/test/room_moderation_screen_test.dart"
       - "apps/mobile/test/room_moderation_pagination_test.dart"
+      - "apps/mobile/test/room_moderation_recovery_test.dart"
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
       - "services/gateway/src/main.ts"
@@ -128,6 +130,7 @@ jobs:
           test/room_ownership_transfer_test.dart
           test/room_moderation_screen_test.dart
           test/room_moderation_pagination_test.dart
+          test/room_moderation_recovery_test.dart
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
           test/rooms_partial_refresh_test.dart
@@ -160,8 +163,10 @@ jobs:
           lib/src/features/rooms/room_invitation_links.dart
           lib/src/features/rooms/room_ownership_transfer.dart
           lib/src/features/rooms/room_moderation_screen.dart
+          lib/src/features/rooms/room_moderation_request.dart
           test/room_moderation_screen_test.dart
           test/room_moderation_pagination_test.dart
+          test/room_moderation_recovery_test.dart
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
           test/room_ownership_transfer_test.dart

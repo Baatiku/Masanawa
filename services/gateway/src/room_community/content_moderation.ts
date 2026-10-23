@@ -1,5 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {moderationPage} from './moderation_pages.js';
+import {moderationOperation} from './moderation_operations.js';
 import type {PoolClient} from '@masanawa/postgres';
 import type {RoomCommunityActor} from './index.js';
 type Row=Record<string,any>;
@@ -78,19 +79,24 @@ export async function roomContentModeration(q:Sql,a:RoomCommunityActor,room:Row,
   }
   fail(404,'not_found');
  }
+ if(resource==='moderation'&&parts[3]==='operations'&&method==='GET'&&!parts[4])return moderationOperation(q,a,roomId,input);
  const appealView=(v:Row)=>({appealId:v.appeal_id,reviewId:v.review_id,status:v.state,createdAt:iso(v.created_at),decidedAt:iso(v.decided_at),publicReason:v.public_reason});
  if(resource==='moderation'&&parts[3]==='cases'){
-  if(method==='GET'&&!parts[4]){
-   const page=await moderationPage(q,a,roomId,'moderation/cases',input,`SELECT v.review_id AS page_id,v.reviewed_at AS page_at,0::bigint AS page_rank,v.*,ap.appeal_id,ap.state AS appeal_state,ap.created_at AS appeal_created,ap.decided_at,ap.public_reason AS appeal_reason,
+  if(method==='GET'&&!parts[5]){
+   const exact=parts[4]?text(parts[4]):null;
+   if(exact&&(input.cursor!==undefined||input.limit!==undefined))fail(422,'invalid_moderation_input');
+   const page=await moderationPage(q,a,roomId,'moderation/cases',exact?{}:input,`SELECT v.review_id AS page_id,v.reviewed_at AS page_at,0::bigint AS page_rank,v.*,ap.appeal_id,ap.state AS appeal_state,ap.created_at AS appeal_created,ap.decided_at,ap.public_reason AS appeal_reason,
     CASE WHEN v.target_kind='post' THEN p.state='retired' AND p.moderation_revision=v.target_revision AND p.removed_by_review_id=v.review_id
       ELSE d.moderation_state='removed' AND d.moderation_revision=v.target_revision AND d.removed_by_review_id=v.review_id END AS current_removal
     FROM rooms.report_reviews v LEFT JOIN rooms.moderation_appeals ap ON ap.tenant_id=v.tenant_id AND ap.review_id=v.review_id AND ap.author_user_id=$3
     LEFT JOIN rooms.lessons p ON p.tenant_id=v.tenant_id AND p.room_id=v.room_id AND p.lesson_id=v.target_id AND v.target_kind='post'
     LEFT JOIN rooms.discussion_replies d ON d.tenant_id=v.tenant_id AND d.room_id=v.room_id AND d.reply_id=v.target_id AND v.target_kind='reply'
-    WHERE v.tenant_id=$1 AND v.room_id=$2 AND v.target_author_user_id=$3 AND v.decision='removed'
-    `,[...params,a.userId],30);
-   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({reviewId:v.review_id,targetId:v.target_id,targetKind:v.target_kind,reviewedAt:iso(v.reviewed_at),publicReason:v.public_reason,
-    canAppeal:v.current_removal===true&&!v.appeal_id,appeal:v.appeal_id?{appealId:v.appeal_id,status:v.appeal_state,createdAt:iso(v.appeal_created),decidedAt:iso(v.decided_at),publicReason:v.appeal_reason}:null}))};
+    WHERE v.tenant_id=$1 AND v.room_id=$2 AND v.target_author_user_id=$3 AND v.decision='removed' AND ($4::text IS NULL OR v.review_id=$4)
+    `,[...params,a.userId,exact],exact?1:30);
+   const items=page.items.map(v=>({reviewId:v.review_id,targetId:v.target_id,targetKind:v.target_kind,reviewedAt:iso(v.reviewed_at),publicReason:v.public_reason,
+    canAppeal:v.current_removal===true&&!v.appeal_id,appeal:v.appeal_id?{appealId:v.appeal_id,status:v.appeal_state,createdAt:iso(v.appeal_created),decidedAt:iso(v.decided_at),publicReason:v.appeal_reason}:null}));
+   if(exact){if(!items.length)fail(404,'moderation_case_not_found');return {moderationVersion:1,item:items[0]};}
+   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items};
   }
   if(method==='POST'&&parts[5]==='appeal'){
    const reviewId=text(parts[4]),reason=text(input.reason,2000),key=text(input.requestId);
@@ -108,10 +114,14 @@ export async function roomContentModeration(q:Sql,a:RoomCommunityActor,room:Row,
  }
  if(resource==='moderation'&&parts[3]==='appeals'){
   await requireManager();
-  if(method==='GET'&&!parts[4]){
-   const page=await moderationPage(q,a,roomId,'moderation/appeals',input,`SELECT ap.appeal_id AS page_id,ap.created_at AS page_at,CASE WHEN ap.state='pending' THEN 1 ELSE 0 END::bigint AS page_rank,ap.*,v.target_id,v.target_kind,v.public_reason AS removal_reason FROM rooms.moderation_appeals ap JOIN rooms.report_reviews v ON v.tenant_id=ap.tenant_id AND v.review_id=ap.review_id
-    WHERE ap.tenant_id=$1 AND ap.room_id=$2`,params,30);
-   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items:page.items.map(v=>({...appealView(v),targetId:v.target_id,targetKind:v.target_kind,reason:v.reason,removalReason:v.removal_reason,canReview:v.state==='pending'&&v.author_user_id!==a.userId}))};
+  if(method==='GET'&&!parts[5]){
+   const exact=parts[4]?text(parts[4]):null;
+   if(exact&&(input.cursor!==undefined||input.limit!==undefined))fail(422,'invalid_moderation_input');
+   const page=await moderationPage(q,a,roomId,'moderation/appeals',exact?{}:input,`SELECT ap.appeal_id AS page_id,ap.created_at AS page_at,CASE WHEN ap.state='pending' THEN 1 ELSE 0 END::bigint AS page_rank,ap.*,v.target_id,v.target_kind,v.public_reason AS removal_reason FROM rooms.moderation_appeals ap JOIN rooms.report_reviews v ON v.tenant_id=ap.tenant_id AND v.review_id=ap.review_id
+    WHERE ap.tenant_id=$1 AND ap.room_id=$2 AND ($3::text IS NULL OR ap.appeal_id=$3)`,[...params,exact],exact?1:30);
+   const items=page.items.map(v=>({...appealView(v),targetId:v.target_id,targetKind:v.target_kind,reason:v.reason,removalReason:v.removal_reason,canReview:v.state==='pending'&&v.author_user_id!==a.userId}));
+   if(exact){if(!items.length)fail(404,'appeal_not_found');return {moderationVersion:1,item:items[0]};}
+   return {moderationVersion:1,pageVersion:1,nextCursor:page.nextCursor,items};
   }
   if(method==='POST'&&parts[5]==='review'){
    const id=text(parts[4]),decision=text(input.decision,20),reason=text(input.publicReason,2000),key=text(input.requestId);
