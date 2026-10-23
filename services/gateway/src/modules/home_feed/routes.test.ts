@@ -152,3 +152,34 @@ describe("J06 HTTP cannot publish as fan or leak across tenant",()=>{
  });
 
 });
+
+describe("C22 Status comment pagination cursor contract",()=>{
+ it("forwards a verified UUID continuation and explicit sort to the same authorized thread",async()=>{
+  const app=Fastify(),comments=vi.fn(async()=>[]);
+  await registerHomeFeedRoutes(app,{service:{comments} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"trusted_fan"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const after="9b8c8884-7a31-49d9-aee5-521364b54aef";
+  const result=await app.inject({method:"GET",url:
+   "/v1/posts/381026c2-9d56-47b1-b73d-1784e24e41e2/comments?sort=oldest&before="+after});
+  expect(result.statusCode).toBe(200);
+  expect(comments).toHaveBeenCalledWith("tenant","381026c2-9d56-47b1-b73d-1784e24e41e2",
+   "trusted_fan",after,"oldest");
+  await app.close();
+ });
+ it("rejects malformed or object-shaped cursors without resetting to page one",async()=>{
+  const app=Fastify(),comments=vi.fn();
+  await registerHomeFeedRoutes(app,{service:{comments} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"trusted_fan"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  for(const query of ["before=not-a-comment", "before%5B0%5D=foreign", "before=", "before=%2F..%2F"]) {
+   // A nested before[0] query is not recognized by Fastify's default query parser.
+   // Explicitly reject it rather than serving another first page.
+   const r=await app.inject({method:"GET",url:
+    "/v1/posts/381026c2-9d56-47b1-b73d-1784e24e41e2/comments?"+query});
+   expect(r.statusCode).toBe(422);
+  }
+  expect(comments).not.toHaveBeenCalled();
+  await app.close();
+ });
+});
