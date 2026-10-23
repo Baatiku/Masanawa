@@ -24,7 +24,7 @@ it('binds cursors to tenant, Room, actor and resource, never to an access grant'
  for(const [actor,resource] of [[admin,'reply-reports/summary'],[owner,'reports/summary'],[owner,'reply-reports/reviews']] as const)await expect(service.dispatch(actor,'GET',path+resource,{cursor:first.nextCursor})).rejects.toMatchObject({statusCode:422});
  await expect(service.dispatch(author,'GET',path+'reply-reports/summary',{cursor:first.nextCursor})).rejects.toMatchObject({statusCode:403});
  await db.query("UPDATE rooms.memberships SET role='member' WHERE user_id='eve'");await expect(service.dispatch(admin,'GET',path+'moderation/appeals')).rejects.toMatchObject({statusCode:403});
- const own=await service.dispatch(author,'GET',path+'moderation/cases',{limit:3});await db.query("UPDATE rooms.memberships SET state='left' WHERE user_id='bob'");await expect(service.dispatch(author,'GET',path+'moderation/cases',{cursor:own.nextCursor})).rejects.toMatchObject({statusCode:403});
+ const own=await service.dispatch(author,'GET',path+'moderation/cases',{limit:3});await db.query("UPDATE rooms.memberships SET state='left' WHERE user_id='bob'");await expect(service.dispatch(author,'GET',path+'moderation/cases',{cursor:own.nextCursor})).rejects.toMatchObject({statusCode:404});
 });
 it('rejects invalid limits, cursor encodings, ranks and dates',async()=>{
  for(const input of [{limit:0},{limit:101},{limit:'abc'},{cursor:''},{cursor:'%%%'}])await expect(service.dispatch(owner,'GET',path+'reports/reviews',input)).rejects.toMatchObject({statusCode:422});

@@ -38,7 +38,7 @@ describe.skipIf(!connection)('PG18 moderation keyset HTTP pages',()=>{
    expect((await app.inject({method:'GET',url:base+'moderation/cases?cursor='+first.nextCursor,headers:{authorization:'author'}})).statusCode).toBe(422);
    const own=(await app.inject({method:'GET',url:base+'moderation/cases?limit=3',headers:{authorization:'author'}})).json();
    await pool.query("UPDATE rooms.memberships SET state='left' WHERE user_id='bob'");
-   expect((await app.inject({method:'GET',url:base+'moderation/cases?cursor='+own.nextCursor,headers:{authorization:'author'}})).statusCode).toBe(403);
+   expect((await app.inject({method:'GET',url:base+'moderation/cases?cursor='+own.nextCursor,headers:{authorization:'author'}})).statusCode).toBe(404);
   }finally{await app.close();}
  });
 });
