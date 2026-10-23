@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -147,11 +146,34 @@ Future<void> mount(
 
 Future<void> saveEdit(WidgetTester t) async {
   await t.enterText(find.byType(TextField), 'Updated text');
-  await t.tap(find.text('Save edits'));
+  await t.pump();
+  final save = find.widgetWithText(FilledButton, 'Save edits');
+  expect(t.widget<FilledButton>(save).onPressed, isNotNull);
+  await t.tap(save);
   await t.pumpAndSettle();
 }
 
 void main() {
+  testWidgets(
+    'an accepted earlier target cannot be mistaken for saving the selected post',
+    (t) async {
+      final change = saved(id: 'post_other', key: 'earlier'),
+          api = _Api(),
+          store = _Store();
+      store.value = change.encode();
+      api.receipts['earlier'] = api.accepted(change);
+      await mount(t, api, store);
+      expect(
+        find.textContaining('Your earlier post change was confirmed'),
+        findsOneWidget,
+      );
+      expect(find.text('Your edit was saved.'), findsNothing);
+      expect(find.text('Save edits'), findsNothing);
+      expect(api.mutations, isEmpty);
+      expect(store.value, isNull);
+    },
+  );
+
   testWidgets(
     'timeline opens the author editor and Back reads the edited canonical version',
     (t) async {

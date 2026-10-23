@@ -187,7 +187,12 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     pending = null;
     body.clear();
     completed = true;
-    status = change.action == 'edit'
+    final anotherTarget =
+        widget.initialItem != null &&
+        widget.initialItem!['id'] != change.targetId;
+    status = anotherTarget
+        ? 'Your earlier post change was confirmed. Return to the Room to edit this post.'
+        : change.action == 'edit'
         ? 'Your edit was saved.'
         : 'Your content was removed.';
     await widget.onCommitted?.call();
