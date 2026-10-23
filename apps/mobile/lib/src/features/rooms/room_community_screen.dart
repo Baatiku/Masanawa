@@ -9,6 +9,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'room_community_api.dart';
 import 'room_invitation_links.dart';
+import 'room_ownership_transfer.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -361,21 +362,38 @@ class _InfoState extends State<_CommunityInfo> {
   late final name = TextEditingController(text: room.name), about = TextEditingController(text: room.description);
   List<Map<String, dynamic>> members = [], masana = [], sharedMedia = [], reportedPosts = [], reportReviews = [];
   final reviewRequestKeys = <String, String>{};
+  final ownershipRequestKeys = <String, String>{};
   final reportReason = TextEditingController();
   String? reportKey;
   String? error;
-  bool busy = false;
+  bool busy = false, unavailable = false;
+  int ownershipRefresh = 0, refreshGeneration = 0;
   @override void initState() { super.initState(); refresh(); }
   @override void dispose() { name.dispose(); about.dispose(); reportReason.dispose(); super.dispose(); }
   Future<void> refresh() async {
+    final version = ++refreshGeneration;
     try {
+      final fresh = await widget.api.room(room.id);
+      if (!mounted || version != refreshGeneration) return;
+      setState(() {
+        room = fresh;
+        unavailable = false;
+        if (!room.joined) { members = []; masana = []; sharedMedia = []; }
+        if (!room.manages) { reportedPosts = []; reportReviews = []; }
+      });
       final media = room.joined ? await widget.api.items(room.id, 'media') : <Map<String, dynamic>>[];
       final people = room.joined ? await widget.api.items(room.id, 'members') : <Map<String, dynamic>>[];
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
       final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
       final reviews = room.manages ? await widget.api.items(room.id, 'reports/reviews') : <Map<String, dynamic>>[];
-      if (mounted) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
-    } catch (e) { if (mounted) setState(() => error = communityError(e)); }
+      if (mounted && version == refreshGeneration) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
+    } catch (e) { if (mounted && version == refreshGeneration) setState(() {
+      error = communityError(e);
+      if (e is StateError && e.message == 'account_changed' || e is DioException && const [401,403,404].contains(e.response?.statusCode)) {
+        unavailable = true; members = []; masana = []; sharedMedia = []; reportedPosts = []; reportReviews = [];
+        name.clear(); about.clear(); reportReason.clear();
+      }
+    }); }
   }
   Future<void> run(Future<void> Function() work) async {
     if (busy) return;
@@ -399,9 +417,12 @@ class _InfoState extends State<_CommunityInfo> {
     });
   }
   Future<bool> confirm(String title, String message) async => await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))])) ?? false;
-  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
+  @override Widget build(BuildContext context) => unavailable
+    ? Scaffold(appBar: AppBar(title: const Text('Room info')), body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Text('Room access is unavailable.'), TextButton(onPressed: busy ? null : () => run(refresh), child: const Text('Retry'))])))
+    : Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
     Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('Owner: ${room.ownerId}'), Text('${room.visibility} · ${room.memberCount} members'),
     if (room.joined) ...[
+      RoomOwnershipTransferPanel(key: ValueKey('ownership-${room.ownerId}-$ownershipRefresh'), api: widget.api, roomId: room.id, onChanged: refresh),
       SwitchListTile(title: const Text('Mute notifications'), value: room.muted, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'muted': v}); room = await widget.api.room(room.id); })),
       SwitchListTile(title: const Text('Pin Room'), value: room.pinned, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'pinned': v}); room = await widget.api.room(room.id); })),
     ],
@@ -451,9 +472,17 @@ class _InfoState extends State<_CommunityInfo> {
     const SizedBox(height: 16), Text('Members', style: Theme.of(context).textTheme.titleMedium),
     for (final person in members) ListTile(title: Text('${person['userId']}'), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() async {
       if (action == 'admin' || action == 'member') { await widget.api.member(room.id, '${person['userId']}', {'role': action}); }
-      else if (action == 'transfer') { if (await confirm('Transfer ownership?', 'This member becomes the owner and you lose owner controls.')) room = await widget.api.update(room.id, {'ownerId': person['userId']}); }
+      else if (action == 'transfer') {
+        if (await confirm('Offer Room ownership?', 'This member must open Room info and accept. You stay owner until then.')) {
+          final target = '${person['userId']}';
+          ownershipRequestKeys[target] ??= communityRequestId();
+          final result = await widget.api.request(room.id, 'POST', 'ownership-transfer', {'targetUserId': target, 'requestId': ownershipRequestKeys[target]});
+          if (result['ownershipVersion'] != 1 || (result['transfer'] as Map?)?['targetUserId'] != target) throw const FormatException('Could not verify the ownership offer. Refresh Room info.');
+          ownershipRequestKeys.remove(target); ownershipRefresh++;
+        }
+      }
       else if (await confirm('Remove member?', 'They lose access to this Room.')) { await widget.api.member(room.id, '${person['userId']}', {'state': action}); }
-    }), itemBuilder: (_) => [if (room.role == 'owner') ...[const PopupMenuItem(value: 'admin', child: Text('Make admin')), const PopupMenuItem(value: 'member', child: Text('Make member')), const PopupMenuItem(value: 'transfer', child: Text('Transfer ownership'))], const PopupMenuItem(value: 'left', child: Text('Remove')), const PopupMenuItem(value: 'banned', child: Text('Ban'))]) : null),
+    }), itemBuilder: (_) => [if (room.role == 'owner') ...[const PopupMenuItem(value: 'admin', child: Text('Make admin')), const PopupMenuItem(value: 'member', child: Text('Make member')), const PopupMenuItem(value: 'transfer', child: Text('Offer ownership'))], const PopupMenuItem(value: 'left', child: Text('Remove')), const PopupMenuItem(value: 'banned', child: Text('Ban'))]) : null),
     for (final agent in masana) ListTile(title: Text('Masana ${agent['characterId']}'), subtitle: Text('${agent['instructions'] ?? ''}\nMention and direct replies only'), trailing: room.role == 'owner' ? PopupMenuButton<String>(enabled: !busy, onSelected: (action) => run(() async {
       if (action == 'remove') { await widget.api.remove(room.id, 'masana/${agent['characterId']}'); }
       else { await widget.api.action(room.id, 'masana', {'characterId': agent['characterId'], 'instructions': agent['instructions'] ?? '', 'active': agent['active'] != true}); }

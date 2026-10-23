@@ -7,6 +7,7 @@ on:
       - "tests/support/room-community-database.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
       - "apps/mobile/test/room_invitation_links_test.dart"
+      - "apps/mobile/test/room_ownership_transfer_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -27,6 +28,7 @@ on:
       - "tests/support/room-community-database.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
       - "apps/mobile/test/room_invitation_links_test.dart"
+      - "apps/mobile/test/room_ownership_transfer_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -107,22 +109,43 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Redesigned Rooms create, timeline and account-isolation journeys
+        shell: bash
         run: >-
           flutter test --no-pub --reporter expanded
           test/rooms_redesign_root_test.dart
           test/room_invitation_consent_test.dart
           test/room_invitation_links_test.dart
+          test/room_ownership_transfer_test.dart
           test/rooms_partial_refresh_test.dart
           test/room_community_screen_test.dart
           test/features/rooms/room_discussion_screen_test.dart
           test/room_community_client_test.dart
           test/features/rooms/room_membership_client_test.dart
           test/room_community_client_test.dart
+          2>&1 | tee "$RUNNER_TEMP/rooms-flutter.log"
+      - name: Expose bounded Flutter failure diagnostics in check annotations
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'rooms-flutter.log'
+          if path.exists():
+              log = re.sub(r'\x1b\[[0-9;]*m', '', path.read_text(errors='replace'))
+              lines = log.splitlines()
+              # Unit/widget fixtures only; never print environment or credentials.
+              text = '\n'.join(lines[-240:])
+              for start in range(0, len(text), 3500):
+                  part = text[start:start+3500].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::error title=Rooms Flutter diagnostics::' + part)
+          PY
       - name: Focused Rooms Dart analysis
         run: >-
           dart analyze lib/src/features/rooms/rooms_screen.dart
           test/room_invitation_consent_test.dart
           lib/src/features/rooms/room_invitation_links.dart
+          lib/src/features/rooms/room_ownership_transfer.dart
+          test/room_ownership_transfer_test.dart
           test/room_invitation_links_test.dart
           lib/src/features/rooms/room_membership_client.dart
           lib/src/features/rooms/room_membership_screen.dart

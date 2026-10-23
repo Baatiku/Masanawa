@@ -7,7 +7,7 @@ const a={tenantId:'t',userId:'alice'},b={tenantId:'t',userId:'bob'},c={tenantId:
 beforeEach(async()=>{
  db=new PGlite();
  await db.exec(`CREATE SCHEMA creator;CREATE TABLE creator.agents(tenant_id text,character_id text,owner_user_id text,state text);CREATE SCHEMA identity;CREATE TABLE identity.users(tenant_id text,user_id text,state text DEFAULT 'active',PRIMARY KEY(tenant_id,user_id));CREATE TABLE identity.characters(tenant_id text,character_id text,state text DEFAULT 'active',PRIMARY KEY(tenant_id,character_id));INSERT INTO identity.users(tenant_id,user_id) VALUES('t','alice'),('t','bob'),('t','eve'),('other','bob');CREATE SCHEMA talks;CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);INSERT INTO talks.public_profiles VALUES('t','alice','alice','Alice'),('t','bob','bob','Bob'),('t','eve','eve','Eve');CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);CREATE TABLE talks.human_privacy(tenant_id text,user_id text,value jsonb);CREATE FUNCTION talks.human_contact_allowed(text,text,text,text) RETURNS boolean LANGUAGE sql AS 'SELECT false';CREATE SCHEMA events;CREATE TABLE events.outbox(outbox_event_id text,tenant_id text,event_id text,event_type text,schema_version integer,aggregate_type text,aggregate_id text,correlation_id text,destination text,payload jsonb,state text DEFAULT 'pending',attempt int DEFAULT 0,fence bigint DEFAULT 0,lease_owner text,lease_expires_at timestamptz,available_at timestamptz DEFAULT now(),created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),safe_error_code text);`);
- for(const n of ['0001_rooms_free','0002_room_subscriptions','0003_discussion_threads','0006_membership_invites','0007_community_rooms','0009_room_report_reviews'])await db.exec(await readFile(new URL('../../../../packages/rooms/migrations/'+n+'.sql',import.meta.url),'utf8'));
+ for(const n of ['0001_rooms_free','0002_room_subscriptions','0003_discussion_threads','0006_membership_invites','0007_community_rooms','0009_room_report_reviews','0010_ownership_transfer_consent'])await db.exec(await readFile(new URL('../../../../packages/rooms/migrations/'+n+'.sql',import.meta.url),'utf8'));
  const pool={query:(s:string,v?:unknown[])=>db.query(s,v),connect:async()=>({query:(s:string,v?:unknown[])=>db.query(s,v),release(){}})};
  service=createRoomCommunityService({pool:pool as any,authorize:async()=>a});
 },30000);
@@ -125,7 +125,9 @@ it('transfers ownership only to consenting active members, preserves history on 
  await expect(service.dispatch(a,'PATCH',path,{ownerId:'bob'})).rejects.toMatchObject({statusCode:409});
  await service.dispatch(b,'POST',path+'/join',{});
  await service.dispatch(a,'POST',path+'/timeline',{body:'Retained history',requestId:'history'});
- await service.dispatch(a,'PATCH',path,{ownerId:'bob'});
+ const offer=await service.dispatch(a,'POST',path+'/ownership-transfer',{targetUserId:'bob',requestId:'ownership-offer'});
+ expect((await service.dispatch(a,'GET',path)).isOwner).toBe(true);
+ await service.dispatch(b,'POST',path+'/ownership-transfer/'+offer.transfer.transferId+'/accept');
  expect((await service.dispatch(b,'GET',path)).isOwner).toBe(true);
  await expect(service.dispatch(a,'DELETE',path,{})).rejects.toMatchObject({statusCode:403});
  await service.dispatch(b,'DELETE',path,{});
