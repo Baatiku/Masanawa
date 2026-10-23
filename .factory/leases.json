@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "82a72e7c-15b1-4faf-80d0-123e5d9b690b",
-      "owner": "codex-p2p-moderation-oct23",
-      "scope": "P7-T02 report/review/removal with participant redaction; P2P documentation hunks; independent P7-T01/P27 trader profile + eligible offer pagination from fresh main",
+      "claim_id": "f7d105af-bf40-4108-857b-63774c79bd15",
+      "owner": "codex-p2p-trader-oct23",
+      "scope": "P7-T01/P27 actual public trader context and eligible offer pagination; two minor report validation/quota findings",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -25,14 +25,13 @@
         "apps/mobile/test/p2p_trader_page_test.dart",
         "services/gateway/src/p2p/read_journeys.pglite.test.ts"
       ],
-      "branch": "feat/p2p-message-moderation-oct23",
-      "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/309",
-      "claimed_at": "2026-10-23T05:18:23.254Z",
-      "heartbeat_at": "2026-10-23T05:47:45.539Z",
-      "expires_at": "2026-10-23T05:52:45.539Z",
-      "progress": "Final head f070431: P2P/Status CI PASS; independent read-only review no blocking findings. Minor Unicode reason validation/global quota race recorded for next connected source batch. Awaiting Foundation/Mobile.",
-      "next_branch": "feat/p2p-trader-context-oct23"
+      "branch": "feat/p2p-trader-context-oct23",
+      "base_sha": "f542ab802816df03bbe2232e223270444c8f7171",
+      "pr": "",
+      "claimed_at": "2026-10-23T05:50:23.133Z",
+      "heartbeat_at": "2026-10-23T05:50:23.133Z",
+      "expires_at": "2026-10-23T05:55:23.133Z",
+      "progress": "Final head f070431: P2P/Status CI PASS; independent read-only review no blocking findings. Minor Unicode reason validation/global quota race recorded for next connected source batch. Awaiting Foundation/Mobile."
     }
   ],
   "history": [
@@ -65,6 +64,41 @@
       "expires_at": "2026-10-23T05:10:26.371Z",
       "released_at": "2026-10-23T05:06:53.735Z",
       "release_reason": "Merged PR #304 at 1e2e964eadcaa45ed7f8507ae91438a5901038b9; final head df09324 four CI workflows PASS, PostgreSQL races PASS. P2P remaining gates and next steps in PR/handoff; no APK/device/provider acceptance."
+    },
+    {
+      "claim_id": "82a72e7c-15b1-4faf-80d0-123e5d9b690b",
+      "owner": "codex-p2p-moderation-oct23",
+      "scope": "P7-T02 report/review/removal with participant redaction; P2P documentation hunks; independent P7-T01/P27 trader profile + eligible offer pagination from fresh main",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/mobile/lib/src/finance/p2p_trader_page.dart",
+        "apps/mobile/test/p2p_trader_page_test.dart",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts"
+      ],
+      "branch": "feat/p2p-message-moderation-oct23",
+      "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/309",
+      "claimed_at": "2026-10-23T05:18:23.254Z",
+      "heartbeat_at": "2026-10-23T05:47:45.539Z",
+      "expires_at": "2026-10-23T05:52:45.539Z",
+      "progress": "Final head f070431: P2P/Status CI PASS; independent read-only review no blocking findings. Minor Unicode reason validation/global quota race recorded for next connected source batch. Awaiting Foundation/Mobile.",
+      "next_branch": "feat/p2p-trader-context-oct23",
+      "released_at": "2026-10-23T05:50:23.133Z",
+      "release_reason": "PR309 merged f542ab802816df03bbe2232e223270444c8f7171; final f070431 all4 CI PASS; read-only review no blockers; independent next P2P lane continues."
     }
   ]
 }
