@@ -24,11 +24,11 @@
       ],
       "branch": "feat/p2p-message-moderation-oct23",
       "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/309",
       "claimed_at": "2026-10-23T05:18:23.254Z",
-      "heartbeat_at": "2026-10-23T05:37:17.200Z",
-      "expires_at": "2026-10-23T05:42:17.200Z",
-      "progress": "Integrated main 3c7ba98; 30 consumer +3 admin cases pass (two shell startup crashes pass isolated); Gateway build and 64 backend cases pass. Publishing byte-verified 15-file tree."
+      "heartbeat_at": "2026-10-23T05:40:29.184Z",
+      "expires_at": "2026-10-23T05:45:29.184Z",
+      "progress": "PR309 head8ee050b: P2P qualification including full migrations and real PG competing reviews PASS; Status PASS. Merge candidate da4d663 includes Wallet301; typing, 14 SQL +18 Flutter tests PASS. Awaiting Foundation/Mobile."
     }
   ],
   "history": [
