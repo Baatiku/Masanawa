@@ -20,11 +20,11 @@ describe.skipIf(!connection)('PostgreSQL 18 authorized Rooms member roster pages
   roomId=(await service.dispatch(owner,'POST','',{name:'Large member Room',requestId:'pg-roster'})).id;
   await service.dispatch(viewer,'POST',roomId+'/community/join',{});
   await pool.query(`INSERT INTO identity.users(tenant_id,user_id)
-   SELECT 't','pgmember_'||lpad(n::text,3,'0') FROM generate_series(0,219) n;
-   INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+   SELECT 't','pgmember_'||lpad(n::text,3,'0') FROM generate_series(0,219) n`);
+  await pool.query(`INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
    SELECT 't','pgmember_'||lpad(n::text,3,'0'),'pgacct'||lpad(n::text,3,'0'),
-    CASE WHEN n=2 THEN 'literal%_! match' ELSE 'Member '||lpad(n::text,3,'0') END FROM generate_series(0,219) n;
-   INSERT INTO rooms.memberships(tenant_id,room_id,user_id,role)
+    CASE WHEN n=2 THEN 'literal%_! match' ELSE 'Member '||lpad(n::text,3,'0') END FROM generate_series(0,219) n`);
+  await pool.query(`INSERT INTO rooms.memberships(tenant_id,room_id,user_id,role)
    SELECT 't',$1,user_id,'member' FROM identity.users WHERE tenant_id='t' AND user_id LIKE 'pgmember_%'`,[roomId]);
  },30000);
  afterAll(async()=>{if(pool)await pool.end();if(admin){try{await admin.query(`DROP DATABASE IF EXISTS "${database}"`);}finally{await admin.end();}}});
