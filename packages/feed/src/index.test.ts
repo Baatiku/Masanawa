@@ -1,10 +1,32 @@
 import {describe,it,expect,vi} from "vitest";
-import {FeedService,type Repository,type Post} from "./index.js";
+import {FeedService,type Repository,type Post,type ReactionKind} from "./index.js";
 const post:Post={id:"381026c2-9d56-47b1-b73d-1784e24e41e2",tenantId:"tenant",authorMasanaId:"masana",kind:"text",body:"Hello",media:[],transcript:null,publishedAt:"2026-10-10T09:00:00Z",likeCount:0,commentCount:0,viewerLiked:false,viewerSaved:false};
 function mock(){
  return {list:vi.fn(async()=>[post]),find:vi.fn(async(t:string)=>t==="tenant"?post:null),publish:vi.fn(async()=>post),setLike:vi.fn(async()=>true),setSave:vi.fn(async()=>true),comment:vi.fn(async()=>({id:"comment",postId:post.id,body:"ok",state:"pending" as const,createdAt:"now"})),comments:vi.fn(async()=>[])} satisfies Repository;
 }
 const fan={kind:"fan" as const,tenantId:"tenant",id:"fan"};
+describe("ST2 server reaction contract",()=>{
+ it("sets one typed reaction from trusted fan identity, including remove",async()=>{
+  const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};
+  const service=new FeedService(db,async()=>true);
+  expect(await service.react(fan,post.id,"love")).toBe("love");
+  expect(await service.react(fan,post.id,null)).toBeNull();
+  expect(db.setReaction).toHaveBeenNthCalledWith(1,"tenant","fan",post.id,"love");
+  expect(db.setReaction).toHaveBeenNthCalledWith(2,"tenant","fan",post.id,null);
+ });
+ it("rejects invalid reactions, spoofed tenants and unauthorized principals",async()=>{
+  const db={...mock(),setReaction:vi.fn(async()=>null)};
+  const service=new FeedService(db,async()=>true);
+  await expect(service.react(fan,post.id,"exploit" as never)).rejects.toMatchObject({status:422,code:"invalid_reaction"});
+  await expect(service.react({...fan,tenantId:"other"},post.id,"care")).rejects.toMatchObject({status:404});
+  await expect(service.react({...fan,kind:"staff"} as never,post.id,"wow")).rejects.toMatchObject({status:403});
+  expect(db.setReaction).not.toHaveBeenCalled();
+ });
+ it("fails closed until the transactional reaction repository is qualified",async()=>{
+  const service=new FeedService(mock(),async()=>true);
+  await expect(service.react(fan,post.id,"haha")).rejects.toMatchObject({status:503,code:"reactions_unavailable"});
+ });
+});
 describe("J06 Masana-only Feed",()=>{
  it("does not relabel approved image references as audio",async()=>{
   const db=mock(),media=vi.fn(async(_t:string,_a:string,_m:string,kind:string)=>kind==="image");

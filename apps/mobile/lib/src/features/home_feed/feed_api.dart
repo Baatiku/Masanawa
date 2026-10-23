@@ -7,13 +7,36 @@ class FeedPost {
     this.authorName, this.authorType='masana', this.authorId, this.authorHandle,
     required this.body, required this.mediaIds, required this.publishedAt,
     required this.likeCount, required this.commentCount,
-    required this.liked, required this.saved});
+    required this.liked, required this.saved,
+    this.viewerReaction, this.reactionCounts=const {}});
   final String id,authorMasanaId,kind,body,authorType;
   final String? authorName,authorId,authorHandle;
   final List<String> mediaIds;
   final DateTime publishedAt;
   final int likeCount,commentCount;
   final bool liked,saved;
+  final String? viewerReaction;
+  final Map<String,int> reactionCounts;
+  static const reactionKinds=['like','love','care','haha','wow','sad','angry'];
+  static const reactionEmoji={
+    'like':'👍','love':'❤️','care':'🤗','haha':'😂','wow':'😮','sad':'😢','angry':'😠',
+  };
+  String? get currentReaction => viewerReaction??(liked?'like':null);
+  Map<String,int> get effectiveReactionCounts =>
+      reactionCounts.isNotEmpty?reactionCounts:{'like':likeCount};
+  int get totalReactions =>
+      effectiveReactionCounts.values.fold<int>(0,(sum,count)=>sum+count);
+  static Map<String,int> _parseReactionCounts(Object? raw,int likes) {
+    if(raw is! Map)return {'like':likes};
+    final result=<String,int>{};
+    for(final entry in raw.entries) {
+      if(entry.key is String && reactionKinds.contains(entry.key) &&
+          entry.value is int && (entry.value as int)>=0) {
+        result[entry.key as String]=entry.value as int;
+      }
+    }
+    return result;
+  }
   bool get isHuman => authorType=='human';
   String get displayAuthor => (authorName?.trim().isNotEmpty??false)
     ? authorName!.trim() : isHuman
@@ -49,14 +72,40 @@ class FeedPost {
       likeCount:json['likeCount'] as int? ?? 0,
       commentCount:json['commentCount'] as int? ?? 0,
       liked:json['viewerLiked'] as bool? ?? false,
-      saved:json['viewerSaved'] as bool? ?? false);
+      saved:json['viewerSaved'] as bool? ?? false,
+      viewerReaction: reactionKinds.contains(json['viewerReaction'])
+        ? json['viewerReaction'] as String : null,
+      reactionCounts:_parseReactionCounts(json['reactionCounts'],json['likeCount'] as int? ?? 0));
   }
-  FeedPost withAction({bool? liked,bool? saved})=>FeedPost(
-    id:id,authorMasanaId:authorMasanaId,kind:kind,authorName:authorName,
-    authorType:authorType,authorId:authorId,authorHandle:authorHandle,body:body,
-    mediaIds:mediaIds,publishedAt:publishedAt,
-    likeCount:likeCount+(liked==null||liked==this.liked?0:liked?1:-1),
-    commentCount:commentCount,liked:liked??this.liked,saved:saved??this.saved);
+  FeedPost withReaction(String? kind) {
+    if(kind!=null&&!reactionKinds.contains(kind)) {
+      throw ArgumentError.value(kind,'kind','Unsupported reaction');
+    }
+    final counts=Map<String,int>.from(effectiveReactionCounts);
+    final previous=currentReaction;
+    if(previous==kind)return this;
+    if(previous!=null && (counts[previous]??0)>0) {
+      counts[previous]=counts[previous]!-1;
+    }
+    if(kind!=null)counts[kind]=(counts[kind]??0)+1;
+    return FeedPost(id:id,authorMasanaId:authorMasanaId,kind:this.kind,
+      authorName:authorName,authorType:authorType,authorId:authorId,
+      authorHandle:authorHandle,body:body,mediaIds:mediaIds,
+      publishedAt:publishedAt,likeCount:counts['like']??0,
+      commentCount:commentCount,liked:kind=='like',saved:saved,
+      viewerReaction:kind,reactionCounts:counts);
+  }
+  FeedPost withAction({bool? liked,bool? saved}) {
+    final result=liked==null||liked==this.liked?this:
+        withReaction(liked?'like':null);
+    return FeedPost(id:result.id,authorMasanaId:result.authorMasanaId,
+      kind:result.kind,authorName:result.authorName,authorType:result.authorType,
+      authorId:result.authorId,authorHandle:result.authorHandle,
+      body:result.body,mediaIds:result.mediaIds,publishedAt:result.publishedAt,
+      likeCount:result.likeCount,commentCount:result.commentCount,
+      liked:result.liked,saved:saved??result.saved,
+      viewerReaction:result.viewerReaction,reactionCounts:result.reactionCounts);
+  }
 }
 class FeedPage {
   const FeedPage(this.items,this.nextCursor);
@@ -103,8 +152,12 @@ abstract class FeedApi {
   Future<void> comment(String postId,String body,String idempotencyKey);
   Future<List<FeedComment>> comments(String postId);
 }
+abstract class ReactionFeedApi {
+  /// One authoritative reaction per signed-in user and post; null clears it.
+  Future<void> react(String postId,String? kind);
+}
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
-class DioFeedApi implements FeedApi {
+class DioFeedApi implements FeedApi, ReactionFeedApi {
   DioFeedApi(this._dio,this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -124,6 +177,14 @@ class DioFeedApi implements FeedApi {
   Future<void> like(String id,bool enabled) async {
     await _dio.put<void>('/v1/posts/${Uri.encodeComponent(id)}/like',
       data:{'enabled':enabled},options:await _options(authRequired:true));
+  }
+  @override
+  Future<void> react(String id,String? kind) async {
+    if(kind!=null&&!FeedPost.reactionKinds.contains(kind)) {
+      throw ArgumentError.value(kind,'kind','Unsupported reaction');
+    }
+    await _dio.put<void>('/v1/posts/' + Uri.encodeComponent(id) + '/reaction',
+      data:{'kind':kind},options:await _options(authRequired:true));
   }
   @override
   Future<void> save(String id,bool enabled) async {

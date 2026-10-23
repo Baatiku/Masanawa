@@ -9,7 +9,9 @@ function item(r:Row){
   author:{type:"masana" as const,id:authorMasanaId,displayName:authorName},
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:new Date(String(r.published_at)).toISOString(),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
-  viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved)};
+  viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
+  viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
+  reactionCounts:(r.reaction_counts??{}) as Record<string,number>};
 }
 function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state) as "pending"|"visible",
  createdAt:new Date(String(r.created_at)).toISOString(),parentId:r.parent_comment_id==null?null:String(r.parent_comment_id),
@@ -22,9 +24,12 @@ const eligibleAuthor=`EXISTS (SELECT 1 FROM masana.character_revisions m
  JOIN identity.character_ownership o ON o.tenant_id=a.tenant_id AND o.character_id=a.character_id
  WHERE m.tenant_id=p.tenant_id AND m.character_id=p.author_masana_id
    AND m.state='approved' AND a.state='active' AND ${statusAuthorOwnership})`;
-const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1) AS author_name, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id) AS like_count,
+const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1) AS author_name, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like') AS like_count,
+ COALESCE((SELECT jsonb_object_agg(rc.reaction_kind,rc.n) FROM (SELECT l.reaction_kind,count(*)::int AS n
+  FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id GROUP BY l.reaction_kind) rc),'{}'::jsonb) AS reaction_counts,
+ (SELECT l.reaction_kind FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 LIMIT 1) AS viewer_reaction,
  (SELECT count(*)::int FROM feed.comments c WHERE c.tenant_id=p.tenant_id AND c.post_id=p.id AND c.state='visible') AS comment_count,
- EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2) AS viewer_liked,
+ EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 AND l.reaction_kind='like') AS viewer_liked,
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
 // Resolve comment authors only through tenant-matched active user public profiles.
 const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
@@ -77,13 +82,41 @@ export class PgHomeFeedRepository {
     SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
      AND p.state='published' AND ${eligibleAuthor}
    ), inserted AS (
-    INSERT INTO feed.likes(tenant_id,post_id,fan_id)
-    SELECT $1,id,$2 FROM eligible WHERE true ON CONFLICT DO NOTHING RETURNING post_id
+    INSERT INTO feed.likes(tenant_id,post_id,fan_id,reaction_kind)
+    SELECT $1,id,$2,'like' FROM eligible
+     ON CONFLICT (tenant_id,post_id,fan_id) DO UPDATE SET reaction_kind='like' RETURNING post_id
    ) SELECT EXISTS(SELECT 1 FROM eligible) AS admitted`,[tenant,fan,id]);
    if(result.rows[0]?.admitted!==true)throw Object.assign(new Error("post_not_found"),{status:404,code:"post_not_found"});
   }
-  else await this.pool.query("DELETE FROM feed.likes WHERE tenant_id=$1 AND fan_id=$2 AND post_id=$3::uuid",[tenant,fan,id]);
+  else await this.pool.query("DELETE FROM feed.likes WHERE tenant_id=$1 AND fan_id=$2 AND post_id=$3::uuid AND reaction_kind='like'",[tenant,fan,id]);
   return enabled;
+ }
+ async setReaction(tenant:string,fan:string,id:string,kind:"like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null){
+  // One row per account in feed.likes. Update/clear it atomically after a
+  // fresh visibility/author check: no copied counters or client-owned actor.
+  if(kind!==null){
+   const result=await this.pool.query(` WITH eligible AS (
+    SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
+     AND p.state='published' AND ${eligibleAuthor}
+   ), changed AS (
+    INSERT INTO feed.likes(tenant_id,post_id,fan_id,reaction_kind)
+    SELECT $1,id,$2,$4 FROM eligible
+    ON CONFLICT (tenant_id,post_id,fan_id)
+      DO UPDATE SET reaction_kind=EXCLUDED.reaction_kind RETURNING post_id
+   ) SELECT EXISTS(SELECT 1 FROM eligible) AS admitted `,[tenant,fan,id,kind]);
+   if(result.rows[0]?.admitted!==true)throw Object.assign(new Error("post_not_found"),{status:404,code:"post_not_found"});
+  }else{
+   const result=await this.pool.query(` WITH eligible AS (
+    SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
+     AND p.state='published' AND ${eligibleAuthor}
+   ), deleted AS (
+    DELETE FROM feed.likes l USING eligible e
+    WHERE l.tenant_id=$1 AND l.post_id=e.id AND l.fan_id=$2
+    RETURNING l.post_id
+   ) SELECT EXISTS(SELECT 1 FROM eligible) AS admitted `,[tenant,fan,id]);
+   if(result.rows[0]?.admitted!==true)throw Object.assign(new Error("post_not_found"),{status:404,code:"post_not_found"});
+  }
+  return kind;
  }
  async setSave(tenant:string,fan:string,id:string,enabled:boolean){
   if(enabled){
