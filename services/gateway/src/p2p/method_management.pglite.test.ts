@@ -13,7 +13,7 @@ async function fixture(enabled=true){
  await db.exec(`CREATE FUNCTION public.pg_advisory_xact_lock(integer) RETURNS void LANGUAGE sql AS 'SELECT';
  CREATE SCHEMA security;CREATE TABLE security.platform_user_profiles(tenant_id text,user_id text,display_name text);
  CREATE SCHEMA commerce;CREATE TABLE commerce.msnw_custody_accounts(tenant_id text,user_id text,available_micro bigint);`);
- for(const file of ['0123_msnw_p2p.sql','0140_msnw_p2p_buy_offers.sql','0141_msnw_p2p_offer_editing.sql'])await db.exec(readFileSync(new URL('../../../../packages/commerce/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['0123_msnw_p2p.sql','0140_msnw_p2p_buy_offers.sql','0141_msnw_p2p_offer_editing.sql','0142_msnw_p2p_method_preferences.sql'])await db.exec(readFileSync(new URL('../../../../packages/commerce/migrations/'+file,import.meta.url),'utf8'));
  await db.exec(`CREATE TABLE commerce.msnw_p2p_late_payment_cases(case_id uuid,tenant_id text,order_id uuid,state text,created_at timestamptz,updated_at timestamptz)`);
  for(const [actor,method,bank,number] of [[maker,methodA,'Maker Bank','1111111111'],[seller,methodB,'Seller Bank','2222222222'],[other,methodC,'Other Bank','3333333333']] as const){
   await db.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at)
@@ -78,4 +78,47 @@ describe('verified bank method retirement and privacy',{timeout:30_000},()=>{
   const r=await t.app.inject({url:'/v1/wallet/msnw/p2p/methods/manage',headers:{authorization:'seller'}});expect(r.statusCode).toBe(200);expect(r.headers['cache-control']).toBe('no-store');
   expect(r.body).not.toContain('2222222222');
  });
+ it('stores private nickname without changing verified identity or public trader disclosure',async()=>{
+  const t=await fixture(),ad=await t.offer();
+  await t.service.renameMethod(maker,methodA,'My private maker label');
+  expect((await t.service.managedMethods(maker)).items[0]).toMatchObject({bank_name:'Maker Bank',private_label:'My private maker label',account_last_four:'1111'});
+  expect(JSON.stringify(await t.service.traderProfile(seller,ad.offerId))).not.toContain('My private maker label');
+  expect((await t.db.query('SELECT account_name,account_number FROM commerce.msnw_p2p_payment_methods WHERE method_id=$1',[methodA])).rows[0]).toEqual({account_name:'Test User',account_number:'1111111111'});
+  await t.service.renameMethod(maker,methodA,null);expect((await t.service.managedMethods(maker)).items[0]?.private_label).toBeNull();
+  for(const label of ['', 'x'.repeat(41), 'bad\u202elabel',12])await expect(t.service.renameMethod(maker,methodA,label)).rejects.toMatchObject({status:422});
+  await expect(t.service.renameMethod(other,methodA,'Private label')).rejects.toMatchObject({status:404});
+ });
+ it('selects at most one owner default and retirement clears it without changing accepted terms',async()=>{
+  const t=await fixture(),second='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  await t.db.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at) SELECT $1,tenant_id,owner_id,method_type,'Second Bank',account_name,'4444444444','second-method-proof',verified_at FROM commerce.msnw_p2p_payment_methods WHERE method_id=$2`,[second,methodA]);
+  await t.service.preferMethod(maker,methodA);await t.service.preferMethod(maker,second);await t.service.preferMethod(maker,second);
+  expect((await t.service.methods(maker)).map(x=>({id:x.method_id,preferred:x.preferred}))).toEqual([{id:second,preferred:true},{id:methodA,preferred:false}]);
+  await t.service.disableMethod(maker,second);
+  expect((await t.service.methods(maker)).filter(x=>x.preferred)).toHaveLength(0);
+  await expect(t.service.preferMethod(maker,second)).rejects.toMatchObject({code:'p2p.active_method_required'});
+  await expect(t.service.preferMethod(other,methodA)).rejects.toMatchObject({status:409});
+ });
+ it('removes only unused methods and retains an idempotent archived record',async()=>{
+  const t=await fixture();await t.service.preferMethod(maker,methodA);
+  const archived=await t.service.archiveMethod(maker,methodA);expect(await t.service.archiveMethod(maker,methodA)).toEqual(archived);
+  expect((await t.service.managedMethods(maker)).items).toEqual([]);expect(await t.service.methods(maker)).toEqual([]);
+  expect((await t.db.query('SELECT preferred,disabled_at,archived_at,account_number FROM commerce.msnw_p2p_payment_methods WHERE method_id=$1',[methodA])).rows[0]).toMatchObject({preferred:false,account_number:'1111111111'});
+  await expect(t.service.renameMethod(maker,methodA,'Removed bank')).rejects.toMatchObject({status:404});
+  await expect(t.service.archiveMethod(other,methodA)).rejects.toMatchObject({status:404});
+  const used=await fixture(),ad=await used.offer();await used.order(ad.offerId);
+  await expect(used.service.archiveMethod(maker,methodA)).rejects.toMatchObject({code:'p2p.method_in_use'});
+  await expect(used.service.archiveMethod(seller,methodB)).rejects.toMatchObject({code:'p2p.method_in_use'});
+  expect((await used.service.managedMethods(maker)).items[0]?.can_archive).toBe(false);
+ });
+ it('strictly authorizes preference HTTP mutations and exposes no-store readback',async()=>{
+  const t=await fixture();
+  const url='/v1/wallet/msnw/p2p/methods/'+methodA;
+  for(const payload of [{label:'Safe label',ownerId:'maker'},{label:'x',preferred:true},{}])expect((await t.app.inject({method:'POST',url:url+'/label',headers:{authorization:'maker'},payload})).statusCode).toBe(422);
+  for(const [operation,payload] of [['label',{label:'My bank'}],['prefer',{}],['archive',{}]] as const){
+   const response=await t.app.inject({method:'POST',url:url+'/'+operation,headers:{authorization:'maker'},payload});expect(response.statusCode).toBe(200);expect(response.headers['cache-control']).toBe('no-store');
+  }
+  expect((await t.app.inject({method:'POST',url:url+'/prefer',payload:{}})).statusCode).toBe(401);
+  for(const fn of Object.values(t.escrow))expect(fn).not.toHaveBeenCalled();
+ });
+
 });

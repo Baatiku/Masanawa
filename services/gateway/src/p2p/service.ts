@@ -410,8 +410,10 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     },
     async methods(actor: P2pActor) {
       const rows = await pool.query(`SELECT method_id,method_type,bank_name,account_name,
-        ('••••'||right(account_number,4)) AS account_number,verified_at FROM commerce.msnw_p2p_payment_methods
-        WHERE tenant_id=$1 AND owner_id=$2 AND disabled_at IS NULL ORDER BY created_at DESC`,
+        ('••••'||right(account_number,4)) AS account_number,verified_at,
+        to_jsonb(m)->>'private_label' AS private_label,coalesce((to_jsonb(m)->>'preferred')::boolean,false) AS preferred
+        FROM commerce.msnw_p2p_payment_methods m
+        WHERE tenant_id=$1 AND owner_id=$2 AND disabled_at IS NULL ORDER BY preferred DESC,created_at DESC`,
         [actor.tenantId, actor.userId]);
       return rows.rows;
     },

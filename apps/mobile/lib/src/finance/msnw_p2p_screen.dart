@@ -788,6 +788,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
       load:()async{authorize();return _json(await _request('GET','/methods/manage'));},
       disable:(methodId)async{authorize();await _request('POST','/methods/$methodId/disable',<String,dynamic>{});},
+      rename:(methodId,label)async{authorize();await _request('POST','/methods/$methodId/label',{'label':label});},
+      prefer:(methodId)async{authorize();await _request('POST','/methods/$methodId/prefer',<String,dynamic>{});},
+      archive:(methodId)async{authorize();await _request('POST','/methods/$methodId/archive',<String,dynamic>{});},
     )));
     if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base){
       setState((){_cached.clear();_nextCursors.clear();_list=_load();});
@@ -1873,7 +1876,7 @@ class _MsnwP2pBuyAmountFormState extends State<MsnwP2pBuyAmountForm> {
                   DropdownMenuItem(
                     value: '${m['method_id']}',
                     child: Text(
-                      '${m['bank_name']} · ${_maskedP2pAccount(m['account_number'])}',
+                      '${m['bank_name']}${m['private_label'] is String ? ' · ${m['private_label']}' : ''} · ${_maskedP2pAccount(m['account_number'])}',
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -2129,6 +2132,8 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
     if(savedMethod!=null && widget.methods.any((bank)=>
       bank['method_id']=='$savedMethod')){
       _paymentMethodId=savedMethod;
+    } else if(widget.methods.any((bank)=>bank['preferred']==true)){
+      _paymentMethodId='${widget.methods.firstWhere((bank)=>bank['preferred']==true)['method_id']}';
     } else if (widget.methods.length==1) {
       _paymentMethodId='${widget.methods.first['method_id']}';
     }
@@ -2408,6 +2413,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
                   DropdownMenuItem(
                     value: '${bank['method_id']}',
                     child: Text('${bank['bank_name']} · '
+                        '${bank['private_label'] is String ? '${bank['private_label']} · ' : ''}'
                         '${bank['account_name'] ?? 'Verified account'} · '
                         '${_maskedP2pAccount(bank['account_number'])}',
                         overflow: TextOverflow.ellipsis,
