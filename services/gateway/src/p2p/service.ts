@@ -1,3 +1,4 @@
+import {createMethodManagement} from './method_management.js';
 import {createOfferEditing} from "./offer_editing.js";
 import { createHash, randomUUID } from "node:crypto";
 import {readBuyOfferAdmission,type BuyOfferAdmission} from "./buy_offer_admission.js";
@@ -312,6 +313,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }
   return Object.freeze({
+    ...createMethodManagement(pool),
     ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {
       const rights=await admission(actor);
@@ -408,7 +410,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     },
     async methods(actor: P2pActor) {
       const rows = await pool.query(`SELECT method_id,method_type,bank_name,account_name,
-        account_number,verified_at FROM commerce.msnw_p2p_payment_methods
+        ('••••'||right(account_number,4)) AS account_number,verified_at FROM commerce.msnw_p2p_payment_methods
         WHERE tenant_id=$1 AND owner_id=$2 AND disabled_at IS NULL ORDER BY created_at DESC`,
         [actor.tenantId, actor.userId]);
       return rows.rows;
