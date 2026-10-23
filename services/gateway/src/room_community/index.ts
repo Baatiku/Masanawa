@@ -2,6 +2,7 @@ import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 import type {Pool,PoolClient} from '@masanawa/postgres';
 import {incomingInvitationPage,managerInvitationPage,invitationMetadata} from './invitation_pagination.js';
+import {roomListPage} from './room_list_pages.js';
 import {roomContentModeration} from './content_moderation.js';
 import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
@@ -75,13 +76,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
    });
   }
   if(parts[0]==='invitations'&&method==='GET')return tx(async q=>{await active(q,a);return incomingInvitationPage(q,a,input);});
-  if(['mine','discover'].includes(parts[0]??'')&&method==='GET')return tx(async q=>{await active(q,a);
-   const r=await q.query(`SELECT r.*,m.role AS member_role,m.state AS member_state,m.muted,m.pinned FROM rooms.rooms r LEFT JOIN rooms.memberships m ON m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$2
-    WHERE r.tenant_id=$1 AND r.state='published' AND (($3='mine' AND m.state='active') OR ($3='discover' AND r.visibility='public' AND COALESCE(m.state,'')<>'banned'))
-    AND ($3='mine' OR NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=r.tenant_id AND b.blocked AND ((b.viewer_user_id=$2 AND b.subject_user_id=r.owner_user_id) OR (b.subject_user_id=$2 AND b.viewer_user_id=r.owner_user_id))))
-    AND ($4='' OR r.profession_title ILIKE '%'||$4||'%') ORDER BY COALESCE(m.pinned,false) DESC,r.updated_at DESC,r.room_id LIMIT 100`,[a.tenantId,a.userId,parts[0],text(input.search??'',100,true)]);
-   return {items:await Promise.all(r.rows.map(r=>project(q,a,r)))};
-  });
+  if(['mine','discover'].includes(parts[0]??'')&&method==='GET')return tx(async q=>{await active(q,a);return roomListPage(q,a,parts[0]!,input,r=>project(q,a,r));});
   const id=parts[0];if(!id||parts[1]!=='community')fail(404,'not_found');
   const operation=parts[2]??'';
   return tx(async q=>{await active(q,a);
@@ -230,7 +225,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
  return {dispatch,authorize:o.authorize};
 }
 export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnType<typeof createRoomCommunityService>){
- const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
+ const handler=async(request:any,reply:any)=>{reply.header('Cache-Control','no-store');try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
  for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reply-reports',['POST']],['reply-reports/summary',['GET']],['reply-reports/reviews',['GET']],['reply-reports/:replyId/review',['POST']],['moderation/cases',['GET']],['moderation/cases/:reviewId/appeal',['POST']],['moderation/appeals',['GET']],['moderation/appeals/:appealId/review',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/request',['GET']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});

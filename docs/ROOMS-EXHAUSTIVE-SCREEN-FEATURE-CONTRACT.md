@@ -50,7 +50,7 @@ IDs R0–R5 are children of P5-R01–R09 and P5-T01. Mark S/P when source exists
 |---|---|---|
 | R0-01 | S/P | Rooms root has Joined and Discover, consistent back path. |
 | R0-02 | S/P | Unread/pinned/muted preview reflects server-scoped state. |
-| R0-03 | P | Search by Room name/public description with debounced query. |
+| R0-03 | S/P | Search by Room name/public description with debounced query. |
 | R0-04 | P | Public discovery shows only active/eligible visible Rooms. |
 | R0-05 | P | Signed-out, loading, empty, offline, stale and Retry views. |
 | R0-06 | S/P | Create Room validates name, description and visibility. |
@@ -66,6 +66,16 @@ IDs R0–R5 are children of P5-R01–R09 and P5-T01. Mark S/P when source exists
 | R0-16 | P | Type/avatar/owner/member count readable on 320dp/200% text. |
 | R0-17 | N/P | Recommendation ranking honest; no fabricated popularity or ads. |
 | R0-18 | X | No resurrected lesson creation/class/course product. |
+
+### 23 October 2026 — Joined/Discover server search and Room pages (partial source)
+
+Base `main 7ce1329004bfa438c40a7234f89158629e6aaa3b`; source `17e0dd09ea52c8fc5e825107f45185e76a586483` plus navigation/test repair `f9bc0c6b`, [PR #327](https://github.com/Baatiku/Masanawa/pull/327), branch `feat/rooms-list-search-pagination-oct23`. P5-R01/R02/R08/R09; R0-01–05/14/15: Joined and Discover now page beyond the first 100 Rooms and search names/descriptions on the server with debouncing, literal wildcard escaping, full PostgreSQL microsecond ordering and personal pinned ordering. Every page rechecks current tenant/account/membership/visibility/ban/block scope; cursor scope includes collection and exact query. Migration 0013 adds indexes only. Existing canonical Room projection remains shared, preserving concurrent identity work.
+
+Mobile retains rows/cursors on transient failures, deduplicates pages, rejects repeated cursors and fences old query/account responses. Search and collection changes preserve independent invitation pages. Returning from an existing Room retains loaded pages and canonically refreshes that Room; known lost access removes its preview, transient failure retains recoverable data. Create/join refresh the collection after return. No false successful-empty state follows denied paging. Eighteen new Flutter/transport journeys cover search, paging, back navigation, account fences and 320dp/200%-text/RTL.
+
+**Executed:** 70 backend tests PASS, including 17 actual PostgreSQL 18 cases; Gateway strict typing/build PASS. After replacing concurrent client projections with sequential queries, all ten focused Room-list unit/PG cases PASS without the deprecated concurrent-client warning. Initial hosted backend checks PASS; hosted Flutter found an existing debounce timing assertion, now repaired. Final exact-head hosted checks remain required. Higgsfield tools are unavailable in this session; hosted Flutter is source evidence, not installed-device acceptance. No APK, production migration/deployment or provider action.
+
+**Remain OPEN:** all parent P5/P8 and 177-screen/820-requirement acceptance gates, timeline/member/moderation pagination, whole-Room platform review/staffing, durable offline/native cache/push revocation, physical-device/provider and deployed qualification. Other windows' Status/Wallet/P2P/Bills/Calls work and #300 identity projections remain separate.
 
 ### R1 Feed, post, comments, media, receipts
 | ID | State | Required small action / observable result |
