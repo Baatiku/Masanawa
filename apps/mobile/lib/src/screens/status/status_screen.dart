@@ -313,6 +313,19 @@ class StatusScreen extends ConsumerWidget {
       return result==true&&currentAccount()==account;
     }
 
+    // A pushed route does not rebuild when the Status root rebuilds.
+    // Watch the authenticated session inside the route itself instead.
+    Widget accountRouteGuard(Widget content) => Consumer(
+      builder: (routeContext, routeRef, _) {
+        final active = routeRef.watch(sessionProvider);
+        if (active is! SessionSignedIn || active.user.id != account) {
+          return const Scaffold(body: Center(
+            child: Text('Sign in to view this Status.')));
+        }
+        return content;
+      },
+    );
+
     return KeyedSubtree(
       key: ValueKey('status-account-$account'),
       child: MasanawaStatusTabs(
@@ -326,6 +339,7 @@ class StatusScreen extends ConsumerWidget {
               onHumanProfile: openHumanProfile,
               onCreateHumanStatus: openHumanCompose,
               onOpenSavedVideo: openApprovedVideo,
+              wrapAccountRoute: accountRouteGuard,
               audioPlaybackAvailable: true,
             ),
         videos: ExternalVideosScreen(
