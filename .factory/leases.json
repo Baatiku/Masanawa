@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
-  "active": [
+  "active": [],
+  "history": [
     {
       "claim_id": "6e88c21e-997b-49b0-a639-b9b380767f92",
       "owner": "codex-p2p-oct23",
@@ -27,8 +28,9 @@
       "pr": "https://github.com/Baatiku/Masanawa/pull/304",
       "claimed_at": "2026-10-23T04:29:54.693Z",
       "heartbeat_at": "2026-10-23T05:05:26.371Z",
-      "expires_at": "2026-10-23T05:10:26.371Z"
+      "expires_at": "2026-10-23T05:10:26.371Z",
+      "released_at": "2026-10-23T05:06:53.735Z",
+      "release_reason": "Merged PR #304 at 1e2e964eadcaa45ed7f8507ae91438a5901038b9; final head df09324 four CI workflows PASS, PostgreSQL races PASS. P2P remaining gates and next steps in PR/handoff; no APK/device/provider acceptance."
     }
-  ],
-  "history": []
+  ]
 }
