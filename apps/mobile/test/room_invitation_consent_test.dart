@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:masanawa/src/features/rooms/room_community_api.dart';
 import 'package:masanawa/src/features/rooms/rooms_screen.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
