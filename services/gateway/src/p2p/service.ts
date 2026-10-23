@@ -216,8 +216,11 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
   }
     /** Seek-paginated listings keep tenant visibility and reserve capacity rules. */
   async function offersPage(actor:P2pActor,input:{cursor?:string;amountMicro?:string;search?:string;
-      asset?:string;fiat?:string;method?:string;traderOfferId?:string;side?:string}={}) {
+      asset?:string;fiat?:string;method?:string;traderOfferId?:string;side?:string;sort?:string;fiatKobo?:string}={}) {
       const side=input.side??'sell';
+      const sort=input.sort??'newest';
+      if(!['newest','best_price'].includes(sort))throw new P2pError('p2p.invalid_sort',422);
+      const fiatBudget=input.fiatKobo===undefined?null:positive(input.fiatKobo,10n**18n,'p2p.invalid_fiat_amount').toString();
       if(!['sell','buy'].includes(side))throw new P2pError('p2p.invalid_offer_side',422);
       if(side==='buy')await requireBuyAdmission(actor,'taker');
       if((input.asset!==undefined&&input.asset!=='MSNW')||
@@ -226,6 +229,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         throw new P2pError('p2p.unsupported_method',422);
       const amount=input.amountMicro===undefined?null:
         positive(input.amountMicro,10n**18n,'p2p.invalid_amount').toString();
+      if(amount!==null&&fiatBudget!==null)throw new P2pError('p2p.conflicting_amount_filters',422);
       const search=input.search?.trim()??'';
       if(search.length>80||/[\u0000-\u001f\u007f]/.test(search))
         throw new P2pError('p2p.invalid_search',422);
@@ -235,19 +239,25 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       if(input.traderOfferId!==undefined)scope.push(input.traderOfferId);
       const effectiveSide=String(trader?.offer_side??side);
       if(effectiveSide!=='sell')scope.push(effectiveSide);
+      if(sort!=='newest'||fiatBudget!==null)scope.push(sort,fiatBudget);
       const context=createHash('sha256').update(JSON.stringify(scope)).digest('hex').slice(0,24);
+      let afterPrice:string|null=null;
       if(input.cursor){
         pageCursor(input.cursor);
         const raw=JSON.parse(Buffer.from(input.cursor,'base64url').toString('utf8'));
-        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''||input.traderOfferId!==undefined||effectiveSide!=='sell'))
+        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''||input.traderOfferId!==undefined||effectiveSide!=='sell'||sort!=='newest'||fiatBudget!==null))
           throw new P2pError('p2p.filter_cursor_changed',422);
+        if(sort==='best_price'){
+          const price=positive(raw.rate,10n**12n,'p2p.invalid_cursor');
+          afterPrice=(effectiveSide==='buy'?-price:price).toString();
+        }
       }
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
       const result=await pool.query(`SELECT o.offer_id,o.offer_side,
         o.rate_kobo_per_msnw::text,o.min_micro::text,
         LEAST(o.max_micro,capacity.amount)::text AS max_micro,
-        capacity.amount::text AS remaining_micro,o.fee_bps,
+        capacity.amount::text AS remaining_micro,budget.amount::text AS budget_amount_micro,o.fee_bps,
         p.bank_name,p.method_type,
         seller.display_name AS seller_display_name,
         (p.verified_at IS NOT NULL AND p.disabled_at IS NULL) AS bank_method_verified,
@@ -265,6 +275,11 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
         CROSS JOIN LATERAL (SELECT CASE WHEN o.offer_side='buy' THEN o.remaining_micro::numeric ELSE LEAST(o.remaining_micro::numeric,
           floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps))) END AS amount) capacity
+        CROSS JOIN LATERAL (SELECT CASE WHEN $10::numeric IS NULL THEN NULL ELSE
+          LEAST(o.max_micro::numeric,capacity.amount,floor($10::numeric*1000000/o.rate_kobo_per_msnw)) END AS amount) budget
+        CROSS JOIN LATERAL (SELECT CASE WHEN $11::text='best_price' THEN
+          CASE WHEN o.offer_side='buy' THEN -o.rate_kobo_per_msnw ELSE o.rate_kobo_per_msnw END
+          ELSE 0 END AS price) sort_terms
         LEFT JOIN LATERAL (
           SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
                  count(*)::integer AS closed_orders_30d
@@ -275,6 +290,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         ) history ON TRUE
         WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active' AND o.offer_side=$9
           AND capacity.amount>=o.min_micro AND capacity.amount>0
+          AND ($10::numeric IS NULL OR budget.amount>=o.min_micro)
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
           AND ($8::text IS NULL OR o.seller_id=$8::text)
           AND ($6::numeric IS NULL OR (o.min_micro<=$6::numeric
@@ -282,14 +298,16 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           AND ($7::text='' OR position(lower($7::text) in lower(COALESCE(seller.display_name,'')))>0
             OR o.offer_id::text=$7::text)
           AND ($3::timestamptz IS NULL OR
-            (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
-        ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search,trader?.seller_id??null,effectiveSide]);
+            ($11::text='newest' AND (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid)) OR
+            ($11::text='best_price' AND (sort_terms.price>$12::numeric OR
+              (sort_terms.price=$12::numeric AND (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid)))))
+        ORDER BY sort_terms.price ASC,o.created_at DESC,o.offer_id DESC LIMIT $5`,
+        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search,trader?.seller_id??null,effectiveSide,fiatBudget,sort,afterPrice]);
       const items=result.rows.slice(0,limit);
       const cursor=nextPageCursor(items,result.rows.length,limit);
-      const nextCursor=cursor?Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(cursor,'base64url').toString('utf8')),context})).toString('base64url'):null;
+      const nextCursor=cursor?Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(cursor,'base64url').toString('utf8')),context,...(sort==='best_price'?{rate:String(items.at(-1)!.rate_kobo_per_msnw)}:{})})).toString('base64url'):null;
       return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer',offerSide:effectiveSide},
-        filters:{amountMicro:amount,search},sort:'newest',
+        filters:{amountMicro:amount,search,...(fiatBudget!==null?{fiatKobo:fiatBudget}:{})},sort,
         ...(trader?{trader:{displayName:trader.display_name,completedOrders30d:trader.completed,
           closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }

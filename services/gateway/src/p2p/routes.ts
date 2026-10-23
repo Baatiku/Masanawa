@@ -61,7 +61,7 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       const a=await actor(req.headers.authorization);
       const query=req.query as Record<string,unknown>;
       const input:Record<string,string>={};
-      for(const field of ['cursor','amountMicro','search','asset','fiat','method','side']) {
+      for(const field of ['cursor','amountMicro','search','asset','fiat','method','side','sort','fiatKobo']) {
         if(query[field]!==undefined){
           if(typeof query[field]!=='string')throw new P2pError('p2p.invalid_filter',422);
           input[field]=query[field];

@@ -262,8 +262,8 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P0-05 | N/Q | Eligible asset filter based on *actual* multi-asset escrow support. |
 | P0-06 | N | Fiat currency filter with supported eligible payment methods and quote currency. |
 | P0-07 | P | Payment method filter excludes unavailable/unsupported method. |
-| P0-08 | P | Fiat/asset input amount filter with min/max and exact rate fitting. |
-| P0-09 | N | Sort best eligible price, trade availability, seller reliability with explained criteria. |
+| P0-08 | S/P | Exact MSNW amount or NGN bank-amount limit filters, server min/max/capacity fit, integer rounding and final quote cap are implemented in source; device/provider acceptance remains open. |
+| P0-09 | S/P | Newest and direction-aware best eligible price sort with bound keyset are implemented in source; verified-method/funded availability still applies. Reliability ranking and independently observed trade-time evidence remain open. |
 | P0-10 | P | Search by verified trader/merchant name and offer ID without sensitive PII. |
 | P0-11 | P | Offer cards show unit price, available volume, order min/max, payment method. |
 | P0-12 | S/P | Readable seller display with *verified bank-method* label, not invented KYC badge. |
@@ -678,6 +678,18 @@ Unedited legacy ads retain terms revision 1 compatibility. After terms change, a
 Higgsfield: 80 full P2P backend tests, Gateway typing and the focused 5 SQL/HTTP edit tests PASS; 18 native editor/marketplace/directional journey cases PASS, including 320dp/200% RTL. Rendered review inspected with real fonts. Final exact-head CI and the authored 11-test real PostgreSQL migration/escrow/edit-race qualification are recorded on the actual PR when run; do not infer their pass from this checkpoint. An unexpected Higgsfield volume replacement required source/SDK reconstruction; recovered backend proofs were rerun, and source has an independent recovery copy. No APK or live financial/provider operation.
 
 All parent gates remain OPEN. This implements fixed-price/bank/quantity editing only; public terms moderation, floating indices, merchant schedules/qualification, block/report-ad policy, protected media/retention, qualified multi-asset rails and staff/device/provider/production acceptance remain outstanding. Read order and canonical 177-screen/820-requirement inventory stay intact. Next: complete focused native/visual and exact-head hosted checks, review/merge this connected batch, then continue independent P2P requirements without enabling unqualified capabilities.
+
+## 23 October 2026 — P2P exact bank-amount discovery and price sorting (P0-08/P0-09 partial)
+
+PR #324 is merged as `0847c542311764bf35346cf4d0aead920cec1a37`; final head `f2ef379a8588e57e4c222dbe8205e9a3ab46678a` passed Foundation/Mobile/P2P/Status CI, including 84 backend/storage, 7 Worker and 11 real PostgreSQL tests. Own-ad editing and immutable accepted-order terms are integrated source, not device/provider/production acceptance.
+
+This connected P7-P01/T01 discovery batch adds exact NGN bank-amount limits alongside MSNW amount filters, newest or direction-aware best-price ordering (lowest seller price for Buy, highest buyer price for Sell), and price/time/UUID keyset pagination bound to account, direction, trader, amount, search and sort. Fiat and MSNW amount filters are mutually exclusive. Integer kobo arithmetic derives the maximum eligible micro-MSNW fitting the bank limit with ceiling-rounded final fiat; capacity and verified-method admission remain authoritative. Discovery has no custody writes and creates no fake reliability score. Price edits can change a live market; the original quote/revision checks still govern checkout.
+
+Native filters preserve separate unit drafts, show active sort/NGN limit, cap and prefill a budget-fitting amount, clear both directional caches together and keep Buy/Sell/Orders focused. Amount validation and refreshed quote both enforce the selected NGN limit. Captured account/base intent fences reject an old review after account replacement, including durable order recovery and bank verification callbacks. A regression proves that old-account approval cannot submit under the replacement account; no funds move from filter or sort actions.
+
+Higgsfield: final 87 backend/storage tests and Gateway typing PASS; eight new native cases PASS (exact precision/range, unit/clear, actual query/prefill, 320dp/200% RTL, account replacement, refreshed quote exceeding the limit, delayed-404 order/ad recovery after account replacement). Earlier nine marketplace and nineteen combined affected cases passed; intermittent Flutter test-shell startup segmentation faults are separate runtime failures, not assertion passes. Exact-head hosted Mobile/full suites and the authored twelfth real PostgreSQL no-custody-write discovery test are recorded on the actual PR when run. Independent read-only review found no remaining material blockers after fixing the recovery error-response fence; final delta evidence belongs to that PR. No new ledger, admission policy, production migration, APK, device/provider or live funds operation.
+
+P0-08/P0-09 remain partial; reliability/independent settlement timing, block/report-ad policy, merchant/risk/geography admission, protected media/retention, individually qualified assets/rails and all staff/device/provider/production gates remain open. No parent checkbox or 177-screen/820-requirement total is closed or changed. Next: verify exact published tree, hosted checks and review, merge the coherent source batch, then continue remaining independent P2P source while keeping external gates explicit.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

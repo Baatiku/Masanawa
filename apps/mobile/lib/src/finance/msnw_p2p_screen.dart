@@ -107,6 +107,15 @@ String p2pUserMessage(Object error) {
   return 'Request not confirmed. Check status before retrying.';
 }
 
+String p2pFiatLimitKobo(String text) {
+  final value=text.trim();
+  if(!RegExp(r'^[0-9]{1,17}(\.[0-9]{1,2})?$').hasMatch(value))throw const FormatException('Invalid NGN limit');
+  final parts=value.split('.');
+  final amount=BigInt.parse(parts.first)*BigInt.from(100)+BigInt.parse((parts.length==2?parts[1]:'').padRight(2,'0'));
+  if(amount<=BigInt.zero||amount>BigInt.from(10).pow(18))throw const FormatException('NGN limit out of range');
+  return amount.toString();
+}
+
 Map<String, dynamic> _json(dynamic data) =>
     Map<String, dynamic>.from(data as Map);
 
@@ -131,24 +140,29 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   final _nextCursors = <int,String?>{};
   bool _loadingMore = false;
   String _marketAmount = '';
+  String _marketFiat='',_marketSort='newest';
   String _marketSearch = '';
   int _marketRevision = 0;
-  bool get _hasMarketFilters => _marketAmount.isNotEmpty || _marketSearch.isNotEmpty;
+  bool get _hasMarketFilters => _marketAmount.isNotEmpty || _marketFiat.isNotEmpty || _marketSort!='newest' || _marketSearch.isNotEmpty;
   String get _offerQuery {
     final values = <String, String>{
       if (_marketAmount.isNotEmpty) 'amountMicro': _micro(_marketAmount),
       if (_marketSearch.isNotEmpty) 'search': _marketSearch,
+      if(_marketFiat.isNotEmpty)'fiatKobo':p2pFiatLimitKobo(_marketFiat),
+      if(_marketSort!='newest')'sort':_marketSort,
     };
     return values.isEmpty ? '' : '?${Uri(queryParameters: values).query}';
   }
   Future<void> _filterOffers() async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
     final result = await openWalletPage<Map<String, String>>(context: context,
       title: 'Filter offers', builder: (_) => MsnwP2pMarketFilters(
-        amount: _marketAmount, search: _marketSearch),
+        amount: _marketAmount, search: _marketSearch,fiat:_marketFiat,sort:_marketSort),
     );
-    if (!mounted || !_sameAccount || result == null) return;
+    if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base || result == null) return;
     setState(() {
       _marketAmount = result['amount'] ?? ''; _marketSearch = result['search'] ?? '';
+      _marketFiat=result['fiat']??'';_marketSort=result['sort']??'newest';
       _marketRevision++; _cached.remove(0);
       _cached.remove(4);
       _nextCursors.remove(0);
@@ -217,6 +231,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if (oldWidget.expectedUserId != widget.expectedUserId ||
         oldWidget.baseUrl != widget.baseUrl) {
       _cached.clear();
+      _marketAmount='';_marketSearch='';_marketFiat='';_marketSort='newest';_marketRevision++;
       _buyDrafts.clear();
       _sellDraft.clear();
       _editDrafts.clear();
@@ -336,6 +351,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       await _request('GET',editing?'/offer-edits/by-request/$key':'/offers/by-request/$key');
     } on DioException catch(e) {
       if(e.response?.statusCode!=404)rethrow;
+      if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||!_sameAccount)throw StateError('Account changed.');
       try {
         await _request('POST',editing?'/offers/${pending['offerId']}/edit':'/offers',_json(pending['payload']),key);
       } on DioException catch(error) {
@@ -360,20 +376,24 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     await _resumeOffer();
   }
 
-  Future<void> _savePending(Map<String, dynamic> pending) async {
-    await _secure.write(key: _pendingKey, value: jsonEncode(pending));
-    if (!mounted || !_sameAccount) throw StateError('Account changed.');
-    setState(() => _pendingOrder = pending);
+  Future<void> _savePending(Map<String,dynamic> pending) async {
+    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingKey;
+    await _secure.write(key:storageKey,value:jsonEncode(pending));
+    if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');
+    setState(()=>_pendingOrder=pending);
   }
 
   Future<void> _clearPending() async {
-    await _secure.delete(key: _pendingKey);
-    if (mounted) setState(() => _pendingOrder = null);
+    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingKey;
+    await _secure.delete(key:storageKey);
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base)setState(()=>_pendingOrder=null);
   }
 
   /// Never mint a second request identity while the first outcome is unknown.
   Future<void> _resumePending() async {
     if (_busy || _pendingOrder == null) return;
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
     await _act(() async {
       final pending = _pendingOrder!;
       final requestKey = '${pending['requestKey']}';
@@ -383,6 +403,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           '/orders/by-request/$requestKey'));
       } on DioException catch (error) {
         if (error.response?.statusCode != 404) rethrow;
+        if(!authorized())throw StateError('Account changed.');
         // A missing durable order may be safely retried only with its ORIGINAL
         // buyer-authorized payload and idempotency key.
         try {
@@ -400,6 +421,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           if (retryError.response?.statusCode == 409 &&
               retryError.response?.data is Map &&
               (retryError.response!.data as Map)['error'] == 'p2p.quote_changed') {
+            if(!authorized())throw StateError('Account changed.');
             await _clearPending();
             throw StateError('The price or fee has changed. Review a new quote before ordering.',
             );
@@ -411,8 +433,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       if (orderId is! String || orderId.isEmpty) {
         throw StateError('Order result was incomplete. Check again.');
       }
+      if(!authorized())throw StateError('Account changed.');
       await _clearPending();
-      if (mounted) await _orderDetail(orderId);
+      if (authorized()) await _orderDetail(orderId);
     });
   }
   bool get _sameAccount => widget.currentUserId() == widget.expectedUserId;
@@ -435,9 +458,15 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       if (stepUpToken != null) 'X-Masanawa-Step-Up': stepUpToken,
     },
     );
-    final r = await widget.dio.request<dynamic>('$_prefix$uri',
+    late final Response<dynamic> r;
+    try {
+      r = await widget.dio.request<dynamic>('$_prefix$uri',
       options: options.copyWith(method: method), data: data,
     );
+    } catch (_) {
+      if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||widget.currentUserId()!=owner)throw StateError('Account changed. Please reopen P2P.');
+      rethrow;
+    }
     if (!mounted ||
         widget.expectedUserId != owner ||
         widget.baseUrl != base ||
@@ -546,6 +575,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ) ?? false;
   }
   Future<void> _buy(Map<String,dynamic> offer) async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final fiatLimit=_marketFiat.isEmpty?null:p2pFiatLimitKobo(_marketFiat);
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+
     if (!_recoveryReady) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Check unfinished orders before starting a new purchase.',
@@ -562,7 +595,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     String? selectedMethod;
     if (selling) {
       await _readCapabilities();
-      if (!mounted || !_sameAccount) return;
+      if (!authorized()) return;
       if (!_canTakeBuy) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -584,7 +617,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           );
         return;
       }
-      if (!mounted || !_sameAccount) return;
+      if (!authorized()) return;
       if (receiving.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -602,18 +635,18 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       context: context,
       title: selling ? 'Sell MSNW' : 'Buy MSNW',
       builder: (_) => MsnwP2pBuyAmountForm(
-        offer: offer,
+        offer: offer,fiatLimitKobo:fiatLimit,
         receivingMethods: receiving,
         initialMethodId: selectedMethod,
         onMethodChanged: (id) {
           selectedMethod = id;
           if (id != null) _methodDrafts[offerId] = id;
         },
-        initialAmount: _buyDrafts[offerId],
+        initialAmount: _buyDrafts[offerId]??(_marketAmount.isNotEmpty?_marketAmount:offer['budget_amount_micro'] is String?_msnw(offer['budget_amount_micro']).replaceAll(' MSNW','').replaceAll(',',''):null),
         onChanged: (text) => _buyDrafts[offerId] = text,
       ),
     );
-    if (entered == null || !mounted) return;
+    if (entered == null || !authorized()) return;
     late final String micro;
     try { micro = _micro(entered); }
     catch (_) {
@@ -638,7 +671,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         );
       return;
     }
-    if (!mounted || !_sameAccount) return;
+    if (!authorized()) return;
     if (selling &&
         (quote['takerAction'] != 'sell' ||
             quote['offerSide'] != 'buy' ||
@@ -651,6 +684,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ),
       );
       return;
+    }
+    final quotedFiat=BigInt.tryParse('${quote['fiatKobo']}');
+    if(fiatLimit!=null&&(quotedFiat==null||quotedFiat>BigInt.parse(fiatLimit))){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('The bank amount exceeds your NGN limit. Update the amount or filters.')));return;
     }
     final seconds = quote['paymentWindowSeconds'];
     final feeBps = quote['feeBps'];
@@ -702,7 +739,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ],
       ),
     ) ?? false;
-    if (!approved || !mounted || !_sameAccount) return;
+    if (!approved || !authorized()) return;
     final rng = Random.secure();
     final bytes = List<int>.generate(18, (_) => rng.nextInt(256));
     final requestKey = 'p2p-${base64Url.encode(bytes).replaceAll('=', '')}';
@@ -744,6 +781,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   );
 
   Future<void> _verifySellerBank() async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+
     late final List<Map<String,dynamic>> banks;
     try {
       final payload = _json(await _request('GET', '/banks'));
@@ -756,31 +796,32 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         SnackBar(content:Text(p2pUserMessage(error))));
       return;
     }
-    if (!mounted) return;
+    if (!authorized()) return;
     final verified = await openWalletPage<bool>(
       context: context,
       title: 'Verify seller bank',
       builder: (_) => MsnwP2pBankVerificationForm(
         banks: banks,
         onSubmit: (bankCode, accountNumber) async {
-          if(!_sameAccount)throw StateError('Sign in again to continue.');
+          if(!authorized())throw StateError('Sign in again to continue.');
           final parameters={'bankCode':bankCode,'accountNumber':accountNumber,
           };
           await widget.dio.post<Map<String,dynamic>>(
             '${widget.baseUrl}/v1/auth/security/bank/start',
             data:parameters,options:_headers,
           );
-          if(!mounted || !_sameAccount)throw StateError('Account changed.');
+          if(!authorized())throw StateError('Account changed.');
           final code=await openWalletPage<String>(
             context:context,title:'Verify bank details',wrapScaffold:false,
             builder:(_)=>const WalletStepUpPage(bankDetails:true),
           );
           if(code==null)throw StateError('Bank verification cancelled.');
+          if(!authorized())throw StateError('Account changed.');
           final confirmation=await widget.dio.post<Map<String,dynamic>>(
             '${widget.baseUrl}/v1/auth/security/bank/confirm',
             data:{...parameters,'code':code},options:_headers,
           );
-          if(!_sameAccount)throw StateError('Account changed.');
+          if(!authorized())throw StateError('Account changed.');
           final stepUpToken=confirmation.data?['stepUpToken'];
           if(stepUpToken is! String || stepUpToken.isEmpty)
             throw StateError('Could not approve bank verification.');
@@ -793,7 +834,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         },
       ),
     );
-    if (mounted && verified == true && _sameAccount) {
+    if (authorized() && verified == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your seller bank was verified.')),
       );
@@ -833,6 +874,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _createAd(String side) async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+
     if (side == 'buy') {
       await _readCapabilities();
       if (!_canMakeBuy || !mounted || !_sameAccount) return;
@@ -857,7 +901,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         );
       return;
     }
-    if (!mounted || !_sameAccount) return;
+    if (!authorized()) return;
     if (methods.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Verify your bank account before creating an offer.'),
@@ -880,7 +924,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           );
       return;
     }
-    if (!mounted || !_sameAccount) return;
+    if (!authorized()) return;
     final completed = await openWalletPage<bool>(
       context: context,
       title: side == 'buy' ? 'Create buy ad' : 'Sell MSNW',
@@ -895,6 +939,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             ..addAll(draft);
         },
         onPublish: (payload) async {
+          if(!authorized())throw StateError('Account changed. Reopen the ad.');
           await _publishSellerOffer({
             ...payload,
             if (side == 'buy') 'offerSide': 'buy',
@@ -1152,6 +1197,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         Text(
                 '${item['offer_side'] == 'buy' ? 'Buyer demand' : 'Available'}  ${_msnw(item['remaining_micro'])}',
               ),
+        if(!own&&item['budget_amount_micro'] is String)Text('Up to ${_msnw(item['budget_amount_micro'])} within your NGN limit'),
         const SizedBox(height: 5),
         Text('Limit  ${_msnw(item['min_micro'])} – ${_msnw(item['max_micro'])}',
           style: Theme.of(context).textTheme.bodySmall,
@@ -1501,12 +1547,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         if (_tab == 0 || _tab == 4) Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
             const Text('MSNW / NGN · Bank transfer'),
+            if(_marketFiat.isNotEmpty)Text('NGN limit: ${_ngn(p2pFiatLimitKobo(_marketFiat))}'),
+            if(_marketSort=='best_price')Text(_tab==4?'Highest buyer price':'Lowest seller price'),
             TextButton.icon(onPressed: _filterOffers, icon: const Icon(Icons.tune),
               label: Text(_hasMarketFilters ? 'Filters applied' : 'Filter offers',
                           ),
                         ),
             if (_hasMarketFilters) TextButton(onPressed: () => setState(() {
-              _marketAmount = ''; _marketSearch = ''; _marketRevision++;
+              _marketAmount = ''; _marketSearch = '';_marketFiat='';_marketSort='newest'; _marketRevision++;
               _cached.remove(0);
                               _cached.remove(4);
                               _nextCursors.remove(0);
@@ -1682,7 +1730,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
 class MsnwP2pBuyAmountForm extends StatefulWidget {
   const MsnwP2pBuyAmountForm({
     super.key,
-    required this.offer,
+    required this.offer,this.fiatLimitKobo,
     this.initialAmount,
     this.onChanged,
     this.receivingMethods = const [],
@@ -1693,6 +1741,7 @@ class MsnwP2pBuyAmountForm extends StatefulWidget {
   final String? initialMethodId;
   final ValueChanged<String?>? onMethodChanged;
   final Map<String, dynamic> offer;
+  final String? fiatLimitKobo;
   final String? initialAmount;
   final ValueChanged<String>? onChanged;
 
@@ -1730,6 +1779,11 @@ class _MsnwP2pBuyAmountFormState extends State<MsnwP2pBuyAmountForm> {
       final available = BigInt.tryParse('${widget.offer['remaining_micro']}');
       if (min == null || max == null || available == null) {
         return 'Offer limits are unavailable. Refresh offers.';
+      }
+      if(widget.fiatLimitKobo!=null){
+        final rate=BigInt.tryParse('${widget.offer['rate_kobo_per_msnw']}');
+        if(rate==null)return 'Current bank price unavailable. Refresh the ad.';
+        if((amount*rate+BigInt.from(999999))~/BigInt.from(1000000)>BigInt.parse(widget.fiatLimitKobo!))return 'Amount exceeds your NGN limit. Update the amount or filters.';
       }
       if (amount < min) return 'Below the seller’s minimum amount.';
       if (amount > max || amount > available) {
@@ -3009,54 +3063,46 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
 }
 
 class MsnwP2pMarketFilters extends StatefulWidget {
-  const MsnwP2pMarketFilters({super.key, required this.amount, required this.search,
-  });
-  final String amount;
-  final String search;
-  @override State<MsnwP2pMarketFilters> createState() => _MsnwP2pMarketFiltersState();
+  const MsnwP2pMarketFilters({super.key,required this.amount,required this.search,this.fiat='',this.sort='newest'});
+  final String amount,search,fiat,sort;
+  @override State<MsnwP2pMarketFilters> createState()=>_MsnwP2pMarketFiltersState();
 }
-class _MsnwP2pMarketFiltersState extends State<MsnwP2pMarketFilters> {
-  final _form = GlobalKey<FormState>();
-  late final _amount = TextEditingController(text: widget.amount);
-  late final _search = TextEditingController(text: widget.search);
-  @override void dispose() { _amount.dispose(); _search.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.all(16), child: Form(key: _form, child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('MSNW / NGN'),
-        const Text('Verified bank transfer methods · Newest offers first'),
-        const SizedBox(height: 16),
-        TextFormField(controller: _amount,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Amount in MSNW', hintText: 'Optional', border: OutlineInputBorder(),
-            ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) return null;
-            try {
-              final amount = BigInt.parse(_micro(value));
-              if (amount > BigInt.from(1000000).pow(3)) return 'Amount is out of range.';
-              return null;
-            } catch (_) { return 'Enter a positive amount with up to 6 decimals.'; }
-          },
-          ),
-        const SizedBox(height: 16),
-        TextFormField(controller: _search, maxLength: 80,
-          decoration: const InputDecoration(labelText: 'Trader name or ad reference', hintText: 'Optional', border: OutlineInputBorder(),
-            ),
-          validator: (value) => value != null && RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)
-            ? 'Remove control characters.' : null,
-          ),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: () {
-          if (_form.currentState?.validate() != true) return;
-          Navigator.pop(context, {'amount': _amount.text.trim(), 'search': _search.text.trim(),
-              });
-        }, child: const Text('Apply filters'),
-          ),
-        TextButton(onPressed: () => Navigator.pop(context, <String, String>{}), child: const Text('Clear filters'),
-          ),
-      ],
-      ),
-    ),
-  );
+class _MsnwP2pMarketFiltersState extends State<MsnwP2pMarketFilters>{
+  final _form=GlobalKey<FormState>();
+  late final _amount=TextEditingController(text:widget.amount),_fiat=TextEditingController(text:widget.fiat),_search=TextEditingController(text:widget.search);
+  late bool _fiatMode=widget.fiat.isNotEmpty;
+  late String _sort=widget.sort;
+  @override void dispose(){_amount.dispose();_fiat.dispose();_search.dispose();super.dispose();}
+  @override Widget build(BuildContext context)=>SingleChildScrollView(padding:const EdgeInsets.all(16),child:Form(key:_form,child:Column(
+    crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      const Text('MSNW / NGN · Verified bank transfer'),
+      const SizedBox(height:16),
+      WalletSelectionField<String>(initialValue:_sort,decoration:const InputDecoration(labelText:'Sort ads'),
+        items:const[DropdownMenuItem(value:'newest',child:Text('Newest ads')),DropdownMenuItem(value:'best_price',child:Text('Best price'))],
+        onChanged:(v){if(v!=null)setState(()=>_sort=v);}),
+      const SizedBox(height:8),
+      const Text('Best price: lowest seller price for Buy, highest buyer price for Sell. The final quote is checked again.'),
+      const SizedBox(height:16),
+      Wrap(spacing:8,children:[
+        ChoiceChip(label:const Text('MSNW amount'),selected:!_fiatMode,onSelected:(_)=>setState(()=>_fiatMode=false)),
+        ChoiceChip(label:const Text('NGN limit'),selected:_fiatMode,onSelected:(_)=>setState(()=>_fiatMode=true)),
+      ]),
+      const SizedBox(height:12),
+      TextFormField(key:ValueKey(_fiatMode),controller:_fiatMode?_fiat:_amount,
+        keyboardType:const TextInputType.numberWithOptions(decimal:true),
+        decoration:InputDecoration(labelText:_fiatMode?'Bank amount limit in NGN':'Amount in MSNW',hintText:'Optional',border:const OutlineInputBorder()),
+        validator:(value){
+          if(value==null||value.trim().isEmpty)return null;
+          try{if(_fiatMode){p2pFiatLimitKobo(value);}else if(BigInt.parse(_micro(value))>BigInt.from(10).pow(18)){return 'Amount is out of range.';}return null;}
+          catch(_){return _fiatMode?'Enter a positive NGN limit with up to 2 decimals.':'Enter a positive amount with up to 6 decimals.';}
+        }),
+      if(_fiatMode)const Padding(padding:EdgeInsets.only(top:8),child:Text('Shows the maximum eligible MSNW within this bank amount. Your reviewed quote may use less.')),
+      const SizedBox(height:16),
+      TextFormField(controller:_search,maxLength:80,decoration:const InputDecoration(labelText:'Trader name or ad reference',hintText:'Optional',border:OutlineInputBorder()),
+        validator:(v)=>v!=null&&RegExp(r'[\x00-\x1f\x7f]').hasMatch(v)?'Remove control characters.':null),
+      const SizedBox(height:12),
+      FilledButton(onPressed:(){if(_form.currentState?.validate()!=true)return;Navigator.pop(context,<String,String>{
+        'amount':_fiatMode?'':_amount.text.trim(),'fiat':_fiatMode?_fiat.text.trim():'','search':_search.text.trim(),'sort':_sort});},child:const Text('Apply filters')),
+      TextButton(onPressed:()=>Navigator.pop(context,<String,String>{}),child:const Text('Clear filters')),
+    ])));
 }
