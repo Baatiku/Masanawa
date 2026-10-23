@@ -29,6 +29,31 @@ describe("ST1 human self-published public text",()=>{
     .rejects.toMatchObject({status:503,code:"human_publishing_unavailable"});
  });
 });
+describe("ST3 human edit/remove authority",()=>{
+ it("accepts only fan identity, exact old body and UUID",async()=>{
+  const editHumanText=vi.fn(async()=>post),removeHumanPost=vi.fn(async()=>({id:post.id,state:"removed" as const}));
+  const service=new FeedService({...mock(),editHumanText,removeHumanPost},async()=>true);
+  await service.editHumanText(fan,post.id,"  Hello  ","  Updated post  ");
+  expect(editHumanText).toHaveBeenCalledWith("tenant","fan",post.id,"Hello","Updated post");
+  expect(await service.removeHumanPost(fan,post.id)).toEqual({id:post.id,state:"removed"});
+  expect(removeHumanPost).toHaveBeenCalledWith("tenant","fan",post.id);
+  await expect(service.editHumanText({...fan,kind:"staff"} as never,post.id,"Hello","X"))
+   .rejects.toMatchObject({status:403});
+  await expect(service.removeHumanPost({...fan,kind:"masana"} as never,post.id))
+   .rejects.toMatchObject({status:403});
+  await expect(service.editHumanText(fan,post.id,"Hello","  "))
+   .rejects.toMatchObject({status:422});
+  await expect(service.removeHumanPost(fan,"not-uuid"))
+   .rejects.toMatchObject({status:422,code:"invalid_post_id"});
+  expect(removeHumanPost).toHaveBeenCalledTimes(1);
+ });
+ it("fails closed without qualified repository",async()=>{
+  const service=new FeedService(mock(),async()=>true);
+  await expect(service.removeHumanPost(fan,post.id)).rejects.toMatchObject({status:503});
+  await expect(service.editHumanText(fan,post.id,"Hello","Updated"))
+   .rejects.toMatchObject({status:503});
+ });
+});
 describe("ST2 server reaction contract",()=>{
  it("sets one typed reaction from trusted fan identity, including remove",async()=>{
   const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};
