@@ -37,15 +37,19 @@
         "services/gateway/src/p2p/offer_editing.ts",
         "services/gateway/src/p2p/offer_editing.pglite.test.ts",
         "apps/mobile/lib/src/finance/p2p_offer_editor.dart",
-        "apps/mobile/test/p2p_offer_editor_test.dart"
+        "apps/mobile/test/p2p_offer_editor_test.dart",
+        "services/gateway/src/p2p/market_filtering.pglite.test.ts",
+        "apps/mobile/test/p2p_market_filters_test.dart"
       ],
       "branch": "feat/p2p-versioned-ad-editing-oct23",
       "base_sha": "87d979a493dea1f21dde370ba808d765c02515bc",
       "pr": "https://github.com/Baatiku/Masanawa/pull/324",
       "claimed_at": "2026-10-23T08:50:56.304Z",
-      "heartbeat_at": "2026-10-23T09:13:57.947Z",
-      "expires_at": "2026-10-23T09:18:57.947Z",
-      "progress": "PR324 headf2ef379a exacttree3ff81ad7 published;80fullP2P+5focusedSQLHTTP+types,18native inclsmallRTL PASS on source before final base fence. Isolated last rerun shellsegfault, notassertfailure; hosted exacthead required. Review no blockers, minorbasefence repaired. Await realPG11 and allCI."
+      "heartbeat_at": "2026-10-23T09:15:32.964Z",
+      "expires_at": "2026-10-23T09:20:32.964Z",
+      "progress": "PR324 awaiting exact-headCI; immutable sourcepublishedsafe. Next independent discovery scope claimed, branch from324 with explicit rebase onto mergedmain before delivery.",
+      "next_branch": "feat/p2p-price-budget-discovery-oct23",
+      "next_scope": "P0-08/P0-09 exact NGN budget and direction-aware best-price eligible listing sort with bound keyset/native filters; no custody mutation or fake reliability ranking"
     }
   ],
   "history": [
