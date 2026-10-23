@@ -828,15 +828,18 @@ class _CommunityState extends State<RoomCommunityScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      toolbarHeight: MediaQuery.textScalerOf(context).scale(56).clamp(56,112).toDouble(),
       title: InkWell(
         onTap: room == null ? null : info,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(room?.name ?? 'Room'),
+            Text(room?.name ?? 'Room', maxLines:1, overflow:TextOverflow.ellipsis),
             if (room != null)
               Text(
                 '${room!.memberCount} members · Room info',
+                maxLines:1, overflow:TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12),
               ),
           ],

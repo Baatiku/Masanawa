@@ -173,6 +173,16 @@ Room Info → Moderation encrypts the exact reason/decision/request locally unde
 
 **Remain OPEN:** all P5/P8 parents and whole-product acceptance; timeline/thread/member pagination, author edit/delete and native media/cache/push catch-up, whole-Room platform review/appeals after lost access, staffing, handset/provider/deployed qualification. Status/Wallet/P2P/Calls and #300 identity paths are preserved; only additive route declarations touch the shared Room router.
 
+### 23 October 2026 — Searchable paged Room history and exact threads (partial source)
+
+Base `main f7398910f6c16f4389b771fcb797a076ad2b8e98`; source `bb070f05`, [PR #332](https://github.com/Baatiku/Masanawa/pull/332), `feat/rooms-timeline-search-threads-oct23`; latest Calls recording library #330 integrated without conflict. P5-R02/R04/R08/R09, R1-05/21/22 and R5/P8 recovery: one chronological keyset stream combines visible posts, human replies and active Masana approved answers, replacing separate truncating caps. Literal body search and parent-thread reads bind tenant/viewer/Room/query/parent; full PostgreSQL microseconds plus ID/kind ties avoid skipped rows. Every read rechecks membership, current visibility/schedule, parent visibility and Masana activation. Exact thread parent is independently read even outside the root cap. Migration 0015 adds read indexes only; no new financial/provider/write authority.
+
+Mobile uses explicit search, manual Load older/Retry, deduplication, exact parent thread routes and parent-bound replies. Closed threads cannot create a root post. Back/Info return revalidates the previously loaded page count; old query/Room/API completions are discarded. Query/thread caches and drafts are isolated; fallback requires fresh membership and cannot mask denial or malformed protocol. Long-history catch-up checks current membership without downloading every older page on each poll. Delayed send/upload/report activity is scope-fenced. Large-text Room header gains bounded height and one-line identity; canonical owner/member identity work in #300 remains separate.
+
+**Executed:** all 92 Room backend cases PASS locally, including 23 actual PG18 cases; Gateway strict typing/dependency production build PASS. Sixteen new Flutter/transport journeys authored for search/clear/stale queries, older pages/retry/repeated cursor/revoke, exact threads/closed comments/Back, account/Room fences, 320dp/200%-text/RTL and GET transport. Hosted exact-head Flutter/analysis/full checks remain merge gates. Parser/formatting is not Flutter validation. Higgsfield tools unavailable in this session; no APK, deployed migration, provider action or physical-device qualification.
+
+**Remain OPEN:** every parent P5/P8 and whole-product acceptance; versioned author edit/delete, member/shared-media pagination, platform moderation/appeals after lost access and staffing, native cache/push/media recovery, handset/provider/deployed qualification. Other windows' Status/Wallet/P2P/Calls and #300 identity projections are preserved. Shared timeline router now delegates reads through its existing projection callback; preserve that callback and canonical identities during future integrations.
+
 ### R4 Masana, notifications, scheduling and media recovery
 | ID | State | Required small action / observable result |
 |---|---|---|
