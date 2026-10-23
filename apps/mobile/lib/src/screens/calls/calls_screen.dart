@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
+import '../../calls/masana_voice_route.dart';
 import '../../calls/call_details_screen.dart';
 import '../../calls/call_recordings_screen.dart';
 import '../../calls/call_lifecycle_reporter.dart';
@@ -26,6 +27,7 @@ import '../../ui/components/masanawa_main_header.dart';
 import '../../ui/components/conversation_search_field.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import '../../agents/masana_portrait_avatar.dart';
+import '../chat/masana_list_screen.dart';
 
 class CallsScreen extends ConsumerWidget {
   const CallsScreen({super.key});
@@ -68,10 +70,10 @@ class CallsScreen extends ConsumerWidget {
                 : null,
           ),
           IconButton(
-            tooltip: 'Choose a contact',
+            tooltip: 'New call',
             icon: const Icon(Icons.add_call),
             onPressed: session is SessionSignedIn
-                ? () => context.push('/masana')
+                ? () => _chooseCallTarget(context, ref, session.user.id)
                 : null,
           ),
         ],
@@ -89,6 +91,46 @@ class CallsScreen extends ConsumerWidget {
               semanticLabel: 'Restoring call history session',
             )
           : const Center(child: Text('Sign in to see your calls.')),
+    );
+  }
+
+  static Future<void> _chooseCallTarget(
+    BuildContext context,
+    WidgetRef ref,
+    String accountId,
+  ) async {
+    final tab = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text('New voice call'),
+              subtitle: Text('Choose who you want to call.'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Call a person'),
+              subtitle: const Text('Find a human contact or creator'),
+              onTap: () => Navigator.pop(sheet, 1),
+            ),
+            ListTile(
+              leading: const Icon(Icons.smart_toy_outlined),
+              title: const Text('Call a Masana'),
+              subtitle: const Text('Choose an available AI character'),
+              onTap: () => Navigator.pop(sheet, 0),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted || tab == null) return;
+    final active = ref.read(sessionProvider);
+    if (active is! SessionSignedIn || active.user.id != accountId) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => MasanaListScreen(initialTab: tab, callPicker: true)),
     );
   }
 
@@ -484,7 +526,8 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                   const SizedBox(height: 16),
                   if (_query.isEmpty)
                     OutlinedButton.icon(
-                      onPressed: () => context.push('/masana'),
+                      onPressed: () => CallsScreen._chooseCallTarget(
+                        context, ref, widget.accountId),
                       icon: const Icon(Icons.people_outline),
                       label: const Text('Choose a contact'),
                     )
@@ -551,7 +594,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                     icon: Icon(Icons.call, color: u.brand),
                     tooltip: 'Call ${call.displayName}',
                     onPressed: () => context.push(
-                      '/chat/${Uri.encodeComponent(call.characterId)}?mode=liveVoice',
+                      masanaLiveVoiceRoute(call.characterId),
                     ),
                   ),
                   onTap: () => Navigator.push<void>(

@@ -1,4 +1,6 @@
 import 'human_contacts_list.dart';
+import '../../human_calls/human_calls.dart';
+import '../../calls/masana_voice_route.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,7 +23,11 @@ import '../../ui/components/conversation_search_field.dart';
 /// Server-driven Masana roster. No persona names, roles or capabilities are
 /// compiled into the app; admin configuration can change without a release.
 class MasanaListScreen extends ConsumerStatefulWidget {
-  const MasanaListScreen({super.key});
+  const MasanaListScreen({super.key, this.initialTab = 0, this.callPicker = false})
+      : assert(initialTab == 0 || initialTab == 1);
+
+  final int initialTab;
+  final bool callPicker;
 
   @override
   ConsumerState<MasanaListScreen> createState() => _MasanaListScreenState();
@@ -31,9 +37,16 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _filter = 'all';
-  int _tab = 0;
+  late int _tab;
   String _humanQuery = '';
-  bool _humansVisited = false;
+  late bool _humansVisited;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.initialTab;
+    _humansVisited = _tab == 1;
+  }
 
   @override
   void dispose() {
@@ -64,6 +77,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
 
     return DefaultTabController(
       length: 2,
+      initialIndex: widget.initialTab,
       child: Scaffold(
         backgroundColor: u.surfaceBg,
         appBar: AppBar(
@@ -71,15 +85,22 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.canPop()
-                ? context.pop()
-                : context.go('/home?tab=chats'),
+            tooltip: 'Back',
+            onPressed: () {
+              if (widget.callPicker) {
+                Navigator.of(context).pop();
+              } else if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home?tab=chats');
+              }
+            },
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Contacts',
+                widget.callPicker ? 'New call' : 'Contacts',
                 style: TextStyle(
                   color: u.textPrimary,
                   fontSize: 18,
@@ -158,6 +179,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                     HumanContactsList(
                       key: ValueKey('human-contacts-$accountId'),
                       query: _humanQuery,
+                      onCall: widget.callPicker
+                          ? (handle) => humanCallStart(context, ref, handle)
+                          : null,
                     )
                   else
                     const SizedBox.shrink(),
@@ -166,7 +190,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
             ),
           ],
         ),
-        floatingActionButton: session is! SessionSignedIn || _tab != 0
+        floatingActionButton: widget.callPicker || session is! SessionSignedIn || _tab != 0
             ? null
             : FloatingActionButton.extended(
                 tooltip: 'Create a new Masana',
@@ -405,6 +429,13 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                           ),
                         ),
                         onTap: () {
+                          if (widget.callPicker) {
+                            final active = ref.read(sessionProvider);
+                            if (active is! SessionSignedIn ||
+                                active.user.id != accountId) return;
+                            context.push(masanaLiveVoiceRoute(agent.characterId));
+                            return;
+                          }
                           ref
                               .read(aiChatProvider.notifier)
                               .seedGreeting(agent.characterId, agent.greeting);
