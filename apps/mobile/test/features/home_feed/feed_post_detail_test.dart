@@ -52,6 +52,28 @@ void main(){
    expect(find.text('Study tips for today'),findsNothing);
    expect(find.text('New account post'),findsOneWidget);
  });
+ testWidgets('identified comment opens its canonical human profile only when linked',(tester)async{
+   String? openedHuman;
+   final identified=FeedComment.fromJson({
+     'id':'9b8c8884-7a31-49d9-aee5-521364b54aef',
+     'body':'Verified comment',
+     'state':'visible',
+     'createdAt':'2026-10-22T09:00:00Z',
+     'author':{'type':'human','id':'fan_public','handle':'musa_verified',
+       'displayName':'Musa Verified'},
+   });
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:sample,accountKey:'fan_one',
+     loadPost:(_)async=>sample,loadThread:(_,__)async=>[identified],
+     sendComment:(_,__,___,____)async{},
+     onHumanProfile:(handle)=>openedHuman=handle,
+   )));
+   await tester.pumpAndSettle();
+   expect(find.text('Musa Verified'),findsOneWidget);
+   await tester.tap(find.text('Musa Verified'));
+   expect(openedHuman,'musa_verified');
+   expect(find.text('Verified comment'),findsOneWidget);
+ });
  testWidgets('C22 feature gate disables the post journey',(tester)async{
    await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
      initialPost:sample,accountKey:'fan',enabled:false,
