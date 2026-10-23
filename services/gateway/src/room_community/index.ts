@@ -1,6 +1,7 @@
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 import type {Pool,PoolClient} from '@masanawa/postgres';
+import {incomingInvitationPage,managerInvitationPage,invitationMetadata} from './invitation_pagination.js';
 import {roomContentModeration} from './content_moderation.js';
 import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
@@ -73,15 +74,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     return project(q,a,await room(q,a,id,true));
    });
   }
-  if(parts[0]==='invitations'&&method==='GET')return tx(async q=>{await active(q,a);const v=await q.query(`SELECT i.invite_id AS "inviteId",r.room_id AS "roomId",r.profession_title AS name,i.expires_at AS "expiresAt"
-   FROM rooms.membership_invites i JOIN rooms.rooms r ON r.tenant_id=i.tenant_id AND r.room_id=i.room_id
-   JOIN identity.users sender ON sender.tenant_id=i.tenant_id AND sender.user_id=i.created_by AND sender.state='active'
-   LEFT JOIN rooms.memberships m ON m.tenant_id=i.tenant_id AND m.room_id=i.room_id AND m.user_id=$2
-   WHERE i.tenant_id=$1 AND i.recipient_user_id=$2 AND i.revoked_at IS NULL AND i.accepted_by IS NULL AND i.expires_at>now() AND r.state='published'
-   AND COALESCE(m.state,'') NOT IN ('active','banned')
-   AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=i.tenant_id AND b.blocked
-    AND ((b.viewer_user_id=$2 AND b.subject_user_id IN (i.created_by,r.owner_user_id)) OR (b.subject_user_id=$2 AND b.viewer_user_id IN (i.created_by,r.owner_user_id))))
-   ORDER BY i.created_at DESC,i.invite_id DESC LIMIT 100`,[a.tenantId,a.userId]);return {items:v.rows.map(v=>({...v,expiresAt:iso(v.expiresAt)}))};});
+  if(parts[0]==='invitations'&&method==='GET')return tx(async q=>{await active(q,a);return incomingInvitationPage(q,a,input);});
   if(['mine','discover'].includes(parts[0]??'')&&method==='GET')return tx(async q=>{await active(q,a);
    const r=await q.query(`SELECT r.*,m.role AS member_role,m.state AS member_state,m.muted,m.pinned FROM rooms.rooms r LEFT JOIN rooms.memberships m ON m.tenant_id=r.tenant_id AND m.room_id=r.room_id AND m.user_id=$2
     WHERE r.tenant_id=$1 AND r.state='published' AND (($3='mine' AND m.state='active') OR ($3='discover' AND r.visibility='public' AND COALESCE(m.state,'')<>'banned'))
@@ -176,7 +169,10 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
    }
    if(operation==='invites'){
     await owned(q,a,id);
-    if(method==='GET'){const v=await q.query(`SELECT *,expires_at<=clock_timestamp() AS expired FROM rooms.membership_invites WHERE tenant_id=$1 AND room_id=$2 ORDER BY created_at DESC,invite_id DESC LIMIT 100`,[a.tenantId,id]);return {issuanceVersion:1,items:v.rows.map(v=>({...inviteView(v),kind:v.recipient_user_id?'targeted':'code',requestId:v.created_by===a.userId?v.request_id:null}))};}
+    if(method==='GET'){
+     if(parts[3]==='request'){const key=text(input.requestId,160);const row=(await q.query('SELECT *,expires_at<=clock_timestamp() AS expired FROM rooms.membership_invites WHERE tenant_id=$1 AND room_id=$2 AND created_by=$3 AND request_id=$4',[a.tenantId,id,a.userId,key])).rows[0];return {issuanceVersion:1,item:row?invitationMetadata(row,a):null};}
+     return managerInvitationPage(q,a,id,input);
+    }
     if(method==='DELETE'){const v=await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,now()) WHERE tenant_id=$1 AND room_id=$2 AND invite_id=$3 RETURNING invite_id',[a.tenantId,id,parts[3]]);if(!v.rows.length)fail(404,'invite_not_found');return {revoked:true};}
     if(method==='POST'){
      // Older clients without a key retain one-time issuance. Keyed retries never
@@ -237,5 +233,5 @@ export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnTy
  const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
- for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reply-reports',['POST']],['reply-reports/summary',['GET']],['reply-reports/reviews',['GET']],['reply-reports/:replyId/review',['POST']],['moderation/cases',['GET']],['moderation/cases/:reviewId/appeal',['POST']],['moderation/appeals',['GET']],['moderation/appeals/:appealId/review',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
+ for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reply-reports',['POST']],['reply-reports/summary',['GET']],['reply-reports/reviews',['GET']],['reply-reports/:replyId/review',['POST']],['moderation/cases',['GET']],['moderation/cases/:reviewId/appeal',['POST']],['moderation/appeals',['GET']],['moderation/appeals/:appealId/review',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/request',['GET']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
 }

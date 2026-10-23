@@ -37,7 +37,15 @@ abstract class RoomCommunityApi {
   Future<void> modify(String id, String resource, Map<String, dynamic> values);
   Future<void> remove(String id, String resource);
 }
-class HttpRoomCommunityApi implements RoomCommunityApi {
+class RoomInvitationPage {
+  const RoomInvitationPage(this.items, this.nextCursor);
+  final List<Map<String, dynamic>> items;
+  final String? nextCursor;
+}
+abstract interface class RoomInvitationPages {
+  Future<RoomInvitationPage> invitationPage({String? cursor});
+}
+class HttpRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages {
   const HttpRoomCommunityApi(this.http, {this.loadMasana});
   final Dio http;
   final Future<List<Map<String, dynamic>>> Function()? loadMasana;
@@ -46,7 +54,13 @@ class HttpRoomCommunityApi implements RoomCommunityApi {
     final r = await http.get<Map<String, dynamic>>(path);
     return (r.data!['items'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
-  @override Future<List<Map<String, dynamic>>> invitations() => _items('/v1/rooms/invitations');
+  @override Future<List<Map<String, dynamic>>> invitations() async => (await invitationPage()).items;
+  @override Future<RoomInvitationPage> invitationPage({String? cursor}) async {
+    final data = (await http.get<Map<String, dynamic>>('/v1/rooms/invitations', queryParameters: {if (cursor != null) 'cursor': cursor})).data!;
+    final next = data['nextCursor'];
+    if (data['items'] is! List || (data['paginationVersion'] != null && data['paginationVersion'] != 1) || (next != null && (data['paginationVersion'] != 1 || next is! String || next.isEmpty || next.length > 1200))) throw const FormatException('Invalid invitation page');
+    return RoomInvitationPage((data['items'] as List).map((v) => Map<String, dynamic>.from(v as Map)).toList(), next as String?);
+  }
   @override Future<List<CommunityRoom>> list(bool joined) async =>
     (await _items('/v1/rooms/${joined ? 'mine' : 'discover'}')).map(CommunityRoom.fromJson).toList();
   @override Future<CommunityRoom> room(String id) async => CommunityRoom.fromJson((await http.get<Map<String, dynamic>>(path(id))).data!);
@@ -56,7 +70,7 @@ class HttpRoomCommunityApi implements RoomCommunityApi {
   @override Future<void> action(String id, String action, [Map<String, dynamic>? values]) async { await http.post<void>('${path(id)}/$action', data: values); }
   @override Future<String> invite(String id, String requestId) async => (await http.post<Map<String, dynamic>>('${path(id)}/invites', data: {'requestId': requestId})).data!['token'] as String;
   @override Future<void> revoke(String id, String inviteId) async { await http.delete<void>('${path(id)}/invites/${Uri.encodeComponent(inviteId)}'); }
-  @override Future<Map<String, dynamic>> request(String id, String method, String resource, Map<String, dynamic> values) async => (await http.request<Map<String, dynamic>>('${path(id)}/$resource', data: method == 'GET' ? null : values, options: Options(method: method))).data!;
+  @override Future<Map<String, dynamic>> request(String id, String method, String resource, Map<String, dynamic> values) async => (await http.request<Map<String, dynamic>>('${path(id)}/$resource', data: method == 'GET' ? null : values, queryParameters: method == 'GET' ? values : null, options: Options(method: method))).data!;
   @override Future<List<Map<String, dynamic>>> candidates(String kind, String query) async {
     if (kind == 'masana') {
       if (loadMasana == null) throw StateError('directory_unavailable');
@@ -71,7 +85,7 @@ class HttpRoomCommunityApi implements RoomCommunityApi {
   @override Future<void> member(String id, String userId, Map<String, dynamic> values) async { await http.patch<void>('${path(id)}/members/${Uri.encodeComponent(userId)}', data: values); }
 }
 /// Captures an exact account/session identity, including on failed responses.
-class AccountBoundRoomCommunityApi implements RoomCommunityApi {
+class AccountBoundRoomCommunityApi implements RoomCommunityApi, RoomInvitationPages {
   const AccountBoundRoomCommunityApi({required this.delegate, required this.ownerAccount, required this.currentAccount});
   final RoomCommunityApi delegate;
   final String ownerAccount;
@@ -80,6 +94,12 @@ class AccountBoundRoomCommunityApi implements RoomCommunityApi {
   void _check() { if (ownerAccount.isEmpty || currentAccount() != ownerAccount) throw StateError('account_changed'); }
   Future<T> _guard<T>(Future<T> Function() work) async { _check(); try { final result = await work(); _check(); return result; } catch (_) { _check(); rethrow; } }
   @override Future<List<Map<String, dynamic>>> invitations() => _guard(delegate.invitations);
+  @override Future<RoomInvitationPage> invitationPage({String? cursor}) => _guard(() async {
+    final api = delegate;
+    if (api is RoomInvitationPages) return (api as RoomInvitationPages).invitationPage(cursor: cursor);
+    if (cursor != null) throw StateError('invitation_pagination_unavailable');
+    return RoomInvitationPage(await api.invitations(), null);
+  });
   @override Future<List<CommunityRoom>> list(bool joined) => _guard(() => delegate.list(joined));
   @override Future<CommunityRoom> room(String id) => _guard(() => delegate.room(id));
   @override Future<CommunityRoom> create(Map<String, dynamic> values) => _guard(() => delegate.create(values));
