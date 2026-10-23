@@ -37,7 +37,8 @@ async function fixture(){
  const send=(body:unknown='Payment sent; please check your bank.',requestKey='request_0001',actor=buyer,id=orderId)=>service.sendMessage(actor,id,{body,requestKey});
  return {db,service,app,send,escrow};
 }
-describe('P7-T02 actual SQL and HTTP participant discussion',()=>{
+// Cold PostgreSQL WASM startup shares CPU on hosted CI; retain all query/assertion gates.
+describe('P7-T02 actual SQL and HTTP participant discussion', {timeout:30_000},()=>{
  it('persists and reads both participant roles without disclosing IDs or changing finances',async()=>{
   const t=await fixture();await t.send();await t.send('I will check the account.','request_0002',seller);
   const page=await t.service.messagesPage(buyer,orderId);

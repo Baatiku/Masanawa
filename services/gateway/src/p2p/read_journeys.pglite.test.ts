@@ -78,7 +78,8 @@ async function offer(
     [uuid(number),tenant,seller,payment,createdAt]);
 }
 
-describe("P2P real-SQL read and pagination qualification", () => {
+// Cold PostgreSQL WASM startup shares CPU on hosted CI; retain all query/assertion gates.
+describe("P2P real-SQL read and pagination qualification", {timeout:30_000}, () => {
   it("quotes exact bank fiat and seller fee, never returning unfunded exposure",async()=>{
     const t=await fixture();
     try {
