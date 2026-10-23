@@ -7,14 +7,14 @@ import 'feed_api.dart';
 class FeedPostDetailScreen extends StatefulWidget {
   const FeedPostDetailScreen({super.key,required this.initialPost,
     required this.accountKey,required this.loadPost,required this.loadThread,
-    required this.sendComment,this.onMasanaProfile,this.onMedia,this.onReport,
+    required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,this.onReport,
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
   final Future<FeedPost> Function(String) loadPost;
   final Future<List<FeedComment>> Function(String,String) loadThread;
   final Future<void> Function(String,String,String,String?) sendComment;
-  final ValueChanged<String>? onMasanaProfile,onMedia,onReport;
+  final ValueChanged<String>? onMasanaProfile,onHumanProfile,onMedia,onReport;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
 }
@@ -89,7 +89,17 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     final reply=c.parentId!=null;
     return Padding(padding:EdgeInsetsDirectional.only(start:reply?24:0),child:
       ListTile(dense:true,leading:Icon(reply?Icons.subdirectory_arrow_right:Icons.chat_bubble_outline,size:18),
-        title:Text(c.body),subtitle:c.state=='pending'?Text(t('Awaiting review','Ana jiran dubawa')):null,
+        title:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          if(c.authorName?.trim().isNotEmpty==true)
+            TextButton(
+              onPressed:c.authorType=='human'&&c.authorHandle!=null&&widget.onHumanProfile!=null
+                ? ()=>widget.onHumanProfile!(c.authorHandle!)
+                : c.authorType=='masana'&&c.authorId!=null&&widget.onMasanaProfile!=null
+                  ? ()=>widget.onMasanaProfile!(c.authorId!) : null,
+              child:Text(c.authorName!),
+            ),
+          Text(c.body),
+        ]),subtitle:c.state=='pending'?Text(t('Awaiting review','Ana jiran dubawa')):null,
         trailing:!reply&&c.state=='visible'&&widget.canReply?
           TextButton(onPressed:()=>setState(()=>replyTo=c.id),
             child:Text(t('Reply','Amsa'))):null));
@@ -109,9 +119,13 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
           Expanded(child:Center(child:Text(t('Post not available','Babu labarin'))))
         else Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(children:[
           Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            TextButton.icon(onPressed:widget.onMasanaProfile==null?null:
-              ()=>widget.onMasanaProfile!(p.authorMasanaId),icon:const Icon(Icons.verified_outlined),
-              label:Text(p.authorName??p.authorMasanaId)),
+            TextButton.icon(onPressed:p.isHuman
+              ? (p.authorHandle==null||widget.onHumanProfile==null?null:
+                  ()=>widget.onHumanProfile!(p.authorHandle!))
+              : (widget.onMasanaProfile==null?null:
+                  ()=>widget.onMasanaProfile!(p.authorMasanaId)),
+              icon:Icon(p.isHuman?Icons.person_outline:Icons.smart_toy_outlined),
+              label:Text(p.displayAuthor)),
             Text(p.body,style:Theme.of(context).textTheme.bodyLarge),
             for(final media in p.mediaIds)ListTile(leading:Icon(p.kind=='audio'?
               Icons.play_circle_outline:Icons.image_outlined),

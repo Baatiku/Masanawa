@@ -1,26 +1,61 @@
 import 'package:dio/dio.dart';
 
+/// Typed Status authors preserve the legacy Masana projection without
+/// misrouting human posts to Masana profiles.
 class FeedPost {
-  const FeedPost({required this.id, required this.authorMasanaId, required this.kind, this.authorName,
+  const FeedPost({required this.id, required this.authorMasanaId, required this.kind,
+    this.authorName, this.authorType='masana', this.authorId, this.authorHandle,
     required this.body, required this.mediaIds, required this.publishedAt,
-    required this.likeCount, required this.commentCount, required this.liked, required this.saved});
-  final String id,authorMasanaId,kind,body;
-  final String? authorName;
+    required this.likeCount, required this.commentCount,
+    required this.liked, required this.saved});
+  final String id,authorMasanaId,kind,body,authorType;
+  final String? authorName,authorId,authorHandle;
   final List<String> mediaIds;
   final DateTime publishedAt;
   final int likeCount,commentCount;
   final bool liked,saved;
-  factory FeedPost.fromJson(Map<String,dynamic> json) => FeedPost(
-    id:json['id'] as String,authorMasanaId:json['authorMasanaId'] as String,
-    kind:json['kind'] as String,authorName:json['authorName'] as String?,body:json['body'] as String,
-    mediaIds:List<String>.from(json['media'] as List<dynamic>? ?? const []),
-    publishedAt:DateTime.parse(json['publishedAt'] as String),
-    likeCount:json['likeCount'] as int? ?? 0,
-    commentCount:json['commentCount'] as int? ?? 0,
-    liked:json['viewerLiked'] as bool? ?? false,saved:json['viewerSaved'] as bool? ?? false);
+  bool get isHuman => authorType=='human';
+  String get displayAuthor => (authorName?.trim().isNotEmpty??false)
+    ? authorName!.trim() : isHuman
+      ? (authorHandle==null?'Member':'@'+authorHandle!) : authorMasanaId;
+
+  factory FeedPost.fromJson(Map<String,dynamic> json) {
+    final raw=json['author'];
+    final author=raw is Map?Map<String,dynamic>.from(raw):<String,dynamic>{};
+    final type=author['type']??json['authorType']??'masana';
+    if(type!='masana'&&type!='human')throw const FormatException('Invalid Status author type');
+    final legacy=json['authorMasanaId'];
+    final typed=author['id']??json['authorId'];
+    if(legacy!=null&&legacy is! String||typed!=null&&typed is! String) {
+      throw const FormatException('Invalid Status identity');
+    }
+    final id=type=='masana'
+      ? ((typed??legacy) as String? ?? '') : (typed as String? ?? '');
+    if(id.isEmpty)throw const FormatException('Missing Status author');
+    final handle=author['handle']??json['authorHandle'];
+    if(handle!=null&&(handle is! String||
+        !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
+      throw const FormatException('Invalid Status handle');
+    }
+    final name=author['displayName']??json['authorName'];
+    if(name!=null&&name is! String)throw const FormatException('Invalid Status name');
+    return FeedPost(
+      id:json['id'] as String,authorMasanaId:type=='masana'?id:'',
+      authorType:type as String,authorId:id,authorHandle:handle as String?,
+      authorName:name as String?,kind:json['kind'] as String,
+      body:json['body'] as String,
+      mediaIds:List<String>.from(json['media'] as List<dynamic>? ?? const []),
+      publishedAt:DateTime.parse(json['publishedAt'] as String),
+      likeCount:json['likeCount'] as int? ?? 0,
+      commentCount:json['commentCount'] as int? ?? 0,
+      liked:json['viewerLiked'] as bool? ?? false,
+      saved:json['viewerSaved'] as bool? ?? false);
+  }
   FeedPost withAction({bool? liked,bool? saved})=>FeedPost(
-    id:id,authorMasanaId:authorMasanaId,kind:kind,authorName:authorName,body:body,
-    mediaIds:mediaIds,publishedAt:publishedAt,likeCount:likeCount+(liked==null||liked==this.liked?0:liked?1:-1),
+    id:id,authorMasanaId:authorMasanaId,kind:kind,authorName:authorName,
+    authorType:authorType,authorId:authorId,authorHandle:authorHandle,body:body,
+    mediaIds:mediaIds,publishedAt:publishedAt,
+    likeCount:likeCount+(liked==null||liked==this.liked?0:liked?1:-1),
     commentCount:commentCount,liked:liked??this.liked,saved:saved??this.saved);
 }
 class FeedPage {
@@ -32,13 +67,34 @@ class FeedPage {
     body['nextCursor'] as String?);
 }
 class FeedComment {
-  const FeedComment({required this.id,required this.body,required this.state,required this.createdAt,this.parentId});
+  const FeedComment({required this.id,required this.body,required this.state,
+    required this.createdAt,this.parentId,this.authorType,this.authorId,
+    this.authorName,this.authorHandle});
   final String id,body,state;
-  final String? parentId;
+  final String? parentId,authorType,authorId,authorName,authorHandle;
   final DateTime createdAt;
-  factory FeedComment.fromJson(Map<String,dynamic> json)=>FeedComment(
-    id:json['id'] as String,body:json['body'] as String,state:json['state'] as String,
-    createdAt:DateTime.parse(json['createdAt'] as String),parentId:json['parentId'] as String?);
+  factory FeedComment.fromJson(Map<String,dynamic> json) {
+    final raw=json['author'];
+    final author=raw is Map?Map<String,dynamic>.from(raw):<String,dynamic>{};
+    final type=author['type']??json['authorType'];
+    if(type!=null&&type!='human'&&type!='masana') {
+      throw const FormatException('Invalid comment author type');
+    }
+    final handle=author['handle']??json['authorHandle'];
+    if(handle!=null&&(handle is! String||
+        !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
+      throw const FormatException('Invalid comment author handle');
+    }
+    return FeedComment(
+      id:json['id'] as String,body:json['body'] as String,
+      state:json['state'] as String,
+      createdAt:DateTime.parse(json['createdAt'] as String),
+      parentId:json['parentId'] as String?,
+      authorType:type as String?,
+      authorId:(author['id']??json['authorId']) as String?,
+      authorName:(author['displayName']??json['authorName']) as String?,
+      authorHandle:handle as String?);
+  }
 }
 abstract class FeedApi {
   Future<FeedPage> list({required String mode,String? cursor});
