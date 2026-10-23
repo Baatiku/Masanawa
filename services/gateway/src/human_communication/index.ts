@@ -137,7 +137,7 @@ export function createHumanCommunicationService(o:HumanOptions){
     }
   }
   async function conversation(db:HumanSql,a:Actor,id:string){
-    const r=await db.query('SELECT * FROM talks.human_conversations WHERE tenant_id=$1 AND id=$2 AND (low_user=$3 OR high_user=$3)',[a.tenantId,id,a.userId]);
+    const r=await db.query('SELECT *, updated_at::text AS cursor_updated_at FROM talks.human_conversations WHERE tenant_id=$1 AND id=$2 AND (low_user=$3 OR high_user=$3)',[a.tenantId,id,a.userId]);
     if(!r.rows[0])fail(404,'Conversation unavailable');
     const c=r.rows[0] as Row;
     await peer(db,a,c.low_user===a.userId?c.high_user:c.low_user);
@@ -466,18 +466,41 @@ export function createHumanCommunicationService(o:HumanOptions){
           }
           )
         }
-        const query=typeof q.query==='string'?q.query.toLowerCase():'';
-        const r=await db.query(`SELECT c.* FROM talks.human_conversations c JOIN talks.human_viewers v ON v.tenant_id=c.tenant_id AND v.conversation_id=c.id AND v.user_id=$2 WHERE c.tenant_id=$1 AND (c.low_user=$2 OR c.high_user=$2) AND NOT v.hidden ${q.filter==='requests'?"AND c.state='pending' AND c.initiator<>$2":''} ORDER BY c.updated_at DESC,c.id DESC`,[a.tenantId,a.userId]);
+        if(q.query!==undefined&&(typeof q.query!=='string'||q.query.trim().length>80))fail(400,'Invalid conversation search');
+        const query=typeof q.query==='string'?q.query.trim().toLowerCase():'';
+        const values:unknown[]=[a.tenantId,a.userId];
+        let condition='';
+        if(q.after){
+          // Validate the anchor as this participant, then retain PostgreSQL
+          // microseconds. A JS Date would skip same-microsecond ID ties.
+          const anchor=await conversation(db,a,str(q.after));
+          values.push(anchor.cursor_updated_at,anchor.id);
+          condition+=' AND (c.updated_at,c.id)<($3,$4)';
+        }
+        if(query){
+          values.push(query);
+          const parameter=`$${values.length}`;
+          condition+=` AND (strpos(lower(p.handle),${parameter})>0 OR strpos(lower(p.display_name),${parameter})>0)`;
+        }
+        // Reject invisible conversations inside SQL before LIMIT 51, not after
+        // fetching an unbounded inbox. Privacy predicates mirror peer().
+        const r=await db.query(`SELECT c.* FROM talks.human_conversations c
+          JOIN talks.human_viewers v ON v.tenant_id=c.tenant_id AND v.conversation_id=c.id AND v.user_id=$2 AND NOT v.hidden
+          JOIN talks.public_profiles p ON p.tenant_id=c.tenant_id AND p.user_id=CASE WHEN c.low_user=$2 THEN c.high_user ELSE c.low_user END
+          JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active'
+          WHERE c.tenant_id=$1 AND (c.low_user=$2 OR c.high_user=$2)
+          AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences b WHERE b.tenant_id=$1 AND b.blocked
+            AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id) OR (b.viewer_user_id=p.user_id AND b.subject_user_id=$2)))
+          AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement s WHERE s.tenant_id=$1 AND s.target_kind='profile'
+            AND (s.target_id=p.handle OR s.target_id IN
+              (SELECT me.handle FROM talks.public_profiles me WHERE me.tenant_id=$1 AND me.user_id=$2)) AND s.visibility<>'public')
+          ${q.filter==='requests'?"AND c.state='pending' AND c.initiator<>$2":''} ${condition}
+          ORDER BY c.updated_at DESC,c.id DESC LIMIT 51`,values);
         const items=[];
-        let passed=!q.after;
         for(const c of r.rows){
-          if(!passed){
-            if(c.id===q.after)passed=true;
-            continue
-          }
           try{
             const view=await conversationView(db,a,c);
-            if(!query||JSON.stringify(view.peer).toLowerCase().includes(query))items.push(view);
+            items.push(view);
             if(items.length===51)break
           }
           catch(e){

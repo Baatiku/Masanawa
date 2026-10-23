@@ -81,4 +81,31 @@ describe.skipIf(!url)('human communication real PostgreSQL concurrency',()=>{
    await database.pool.query("DELETE FROM talks.human_calls WHERE tenant_id='t' AND id LIKE 'pg-tied-%'");
   }
  });
+ it('paginates privacy-qualified human inboxes with full PostgreSQL timestamp ties',async()=>{
+  await database.pool.query(`INSERT INTO identity.users
+    SELECT 't','pginboxpeer'||lpad(n::text,3,'0'),'active' FROM generate_series(0,79) n;
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    SELECT 't','pginboxpeer'||lpad(n::text,3,'0'),'pginbox'||lpad(n::text,3,'0'),
+      'PG Inbox '||lpad(n::text,3,'0') FROM generate_series(0,79) n;
+    INSERT INTO talks.human_conversations(tenant_id,id,low_user,high_user,initiator,state,updated_at)
+    SELECT 't','pg-inbox-tied-'||lpad(n::text,3,'0'),'alice',
+      'pginboxpeer'||lpad(n::text,3,'0'),'alice','accepted',
+      '2026-10-18 17:00:00.123456+00' FROM generate_series(0,79) n;
+    INSERT INTO talks.human_viewers(tenant_id,conversation_id,user_id)
+    SELECT 't','pg-inbox-tied-'||lpad(n::text,3,'0'),'alice' FROM generate_series(0,79) n;
+    INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    SELECT 't','alice','pginboxpeer'||lpad(n::text,3,'0'),true,now()
+    FROM generate_series(0,2) n;
+    UPDATE identity.users SET state='suspended' WHERE tenant_id='t' AND user_id IN
+      ('pginboxpeer003','pginboxpeer004');
+    INSERT INTO talks.safety_enforcement VALUES('t','profile','pginbox005',1,'restricted','moderated',now());`);
+  const one=await service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox'});
+  expect(one.items).toHaveLength(50);
+  const two=await service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox',after:one.nextCursor});
+  expect(two.items).toHaveLength(24);
+  expect(two.nextCursor).toBeNull();
+  const both=[...one.items,...two.items];
+  expect(new Set(both.map((r:any)=>r.id)).size).toBe(74);
+  expect(both.every((r:any)=>Number(r.peer.handle.slice(-3))>=6)).toBe(true);
+ });
 });

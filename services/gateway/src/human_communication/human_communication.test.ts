@@ -749,3 +749,42 @@ it('resolves Chat Pay only for accepted participants and rechecks blocking witho
  await db.query("INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at) VALUES('t','payee','alice',true,statement_timestamp()) ON CONFLICT(tenant_id,viewer_user_id,subject_user_id) DO UPDATE SET blocked=true");
  await expect(send(a,'GET',path)).rejects.toMatchObject({statusCode:404});
 });
+
+it('pages the entire visible human inbox with microsecond ties, literal search and request filtering',async()=>{
+  // Identical DB microseconds deliberately exceed one page. Hidden peers
+  // must not consume the first 50 eligible rows or leak into second-page IDs.
+  await db.exec(`INSERT INTO identity.users
+    SELECT 't','bulkpeer'||lpad(n::text,3,'0'),'active' FROM generate_series(0,71) n;
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    SELECT 't','bulkpeer'||lpad(n::text,3,'0'),'bulkinbox-'||lpad(n::text,3,'0'),'Bulk inbox '||lpad(n::text,3,'0')
+    FROM generate_series(0,71) n;
+    INSERT INTO talks.human_conversations(tenant_id,id,low_user,high_user,initiator,state,updated_at)
+    SELECT 't','inbox-tie-'||lpad(n::text,3,'0'),'alice','bulkpeer'||lpad(n::text,3,'0'),
+      CASE WHEN n>=60 THEN 'bulkpeer'||lpad(n::text,3,'0') ELSE 'alice' END,
+      CASE WHEN n>=60 THEN 'pending' ELSE 'accepted' END,'2026-10-18 17:00:00.123456+00'
+    FROM generate_series(0,71) n;
+    INSERT INTO talks.human_viewers(tenant_id,conversation_id,user_id)
+    SELECT 't','inbox-tie-'||lpad(n::text,3,'0'),'alice' FROM generate_series(0,71) n;
+    INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    SELECT 't','alice','bulkpeer'||lpad(n::text,3,'0'),true,now()
+    FROM generate_series(0,3) n;
+    UPDATE identity.users SET state='suspended' WHERE tenant_id='t' AND user_id IN
+      ('bulkpeer004','bulkpeer005','bulkpeer006');
+    INSERT INTO talks.safety_enforcement VALUES('t','profile','bulkinbox-007',1,'restricted','moderated',now());`);
+  const firstPage=await send(a,'GET','conversations',{}, {query:'Bulk inbox'});
+  expect(firstPage.items).toHaveLength(50);
+  expect(firstPage.nextCursor).toBeTruthy();
+  const older=await send(a,'GET','conversations',{}, {query:'Bulk inbox',after:firstPage.nextCursor});
+  expect(older.items).toHaveLength(14);
+  expect(older.nextCursor).toBeNull();
+  const all=[...firstPage.items,...older.items];
+  expect(new Set(all.map((x:{id:string})=>x.id)).size).toBe(64);
+  expect(all.every((x:{peer:{handle:string}})=>Number(x.peer.handle.slice(-3))>=8)).toBe(true);
+  const requests=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'requests'});
+  expect(requests.items).toHaveLength(12);
+  expect(requests.items.every((x:{state:string})=>x.state==='pending')).toBe(true);
+  expect((await send(a,'GET','conversations',{}, {query:'bulk%'})).items).toHaveLength(0);
+  expect((await send(a,'GET','conversations',{}, {query:'bulk_inbox'})).items).toHaveLength(0);
+  expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-071'})).items).toHaveLength(1);
+  await expect(send(eve,'GET','conversations',{}, {query:'Bulk inbox',after:firstPage.nextCursor})).rejects.toMatchObject({statusCode:404});
+});
