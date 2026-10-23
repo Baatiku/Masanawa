@@ -1,6 +1,7 @@
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 import type {Pool,PoolClient} from '@masanawa/postgres';
+import {roomContentModeration} from './content_moderation.js';
 import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
 type Row=Record<string,any>;
@@ -157,62 +158,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
      const m=(await q.query('INSERT INTO rooms.media(tenant_id,media_id,room_id,user_id,kind,mime_type,name,size_bytes,duration_ms,data_base64,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',[a.tenantId,'room-media_'+randomUUID(),id,a.userId,kind,mime,name,bytes.length,input.durationMs??null,data,key])).rows[0];return mediaView(m);
     }
    }
-   // Moderators review reported *posts*, not who reported them. Reporting a
-   // Room itself remains a separate platform moderation concern.
-   if(operation==='reports'&&method==='GET'&&parts[3]==='summary'){
-    await owned(q,a,id);
-    const results=await q.query(`SELECT p.lesson_id AS "postId",LEFT(p.body,180) AS excerpt,COUNT(DISTINCT reports.user_id)::int AS "reportCount"
-      FROM rooms.reports reports JOIN rooms.lessons p ON p.tenant_id=reports.tenant_id AND p.room_id=reports.room_id AND p.lesson_id=reports.target_id
-      WHERE reports.tenant_id=$1 AND reports.room_id=$2 AND p.state='published' AND (p.publish_at IS NULL OR p.publish_at<=now())
-      AND NOT EXISTS(SELECT 1 FROM rooms.report_reviews review WHERE review.tenant_id=reports.tenant_id AND review.room_id=reports.room_id AND review.target_id=reports.target_id AND review.reviewed_at>=reports.created_at)
-      GROUP BY p.lesson_id,p.body,p.created_at ORDER BY COUNT(DISTINCT reports.user_id) DESC,p.created_at DESC LIMIT 100`,[a.tenantId,id]);
-    return {items:results.rows};
-   }
-   if(operation==='reports'&&method==='GET'&&parts[3]==='reviews'){
-    await owned(q,a,id);
-    const reviews=await q.query(`SELECT target_id AS "postId",decision,report_count AS "reportCount",reviewed_at AS "reviewedAt"
-      FROM rooms.report_reviews WHERE tenant_id=$1 AND room_id=$2
-      ORDER BY reviewed_at DESC,review_id DESC LIMIT 30`,[a.tenantId,id]);
-    return {items:reviews.rows.map(v=>({...v,reviewedAt:iso(v.reviewedAt)}))};
-   }
-   if(operation==='reports'&&method==='POST'&&parts[4]==='review'){
-    await owned(q,a,id);
-    const target=text(parts[3],160),decision=text(input.decision,20),key=text(input.requestId,160);
-    if(!['dismissed','removed'].includes(decision))fail(422,'invalid_report_decision');
-    const old=(await q.query('SELECT target_id,decision,report_count FROM rooms.report_reviews WHERE tenant_id=$1 AND room_id=$2 AND reviewer_user_id=$3 AND request_id=$4',[a.tenantId,id,a.userId,key])).rows[0];
-    if(old){if(old.target_id!==target||old.decision!==decision)fail(409,'idempotency_conflict');return {reviewed:true,decision,reportCount:old.report_count};}
-    // Lock the post so two managers cannot silently resolve the same evidence
-    // or remove an already-retired post. No reporter identity or reason is read back.
-    const post=await q.query("SELECT lesson_id FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3 AND state='published' AND (publish_at IS NULL OR publish_at<=now()) FOR UPDATE",[a.tenantId,id,target]);
-    if(!post.rows.length)fail(404,'post_not_found');
-    const pending=await q.query(`SELECT COUNT(DISTINCT reports.user_id)::int AS count FROM rooms.reports reports
-      WHERE reports.tenant_id=$1 AND reports.room_id=$2 AND reports.target_id=$3
-      AND NOT EXISTS(SELECT 1 FROM rooms.report_reviews review WHERE review.tenant_id=reports.tenant_id AND review.room_id=reports.room_id AND review.target_id=reports.target_id AND review.reviewed_at>=reports.created_at)`,[a.tenantId,id,target]);
-    const count=Number(pending.rows[0]?.count??0);
-    if(!count)fail(409,'no_pending_reports');
-    if(decision==='removed'){
-      await q.query("UPDATE rooms.lessons SET state='retired' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,target]);
-      await q.query("UPDATE rooms.discussion_replies SET moderation_state='removed' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,target]);
-    }
-    await q.query(`INSERT INTO rooms.report_reviews(tenant_id,review_id,room_id,target_id,reviewer_user_id,request_id,decision,report_count,reviewed_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp())`,[a.tenantId,'room-review_'+randomUUID(),id,target,a.userId,key,decision,count]);
-    return {reviewed:true,decision,reportCount:count};
-   }
-   if(operation==='reports'&&method==='POST'){
-    const target=text(input.targetId??id,160),reason=text(input.reason,2000),key=text(input.requestId,160);
-    const old=(await q.query('SELECT target_id,reason FROM rooms.reports WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND request_id=$4',[a.tenantId,id,a.userId,key])).rows[0];
-    if(old){if(old.target_id!==target||old.reason!==reason)fail(409,'idempotency_conflict');return {reported:true};}
-    if(target!==id){
-     const post=await q.query("SELECT 1 FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3 AND state='published' AND (publish_at IS NULL OR publish_at<=now()) FOR UPDATE",[a.tenantId,id,target]);
-     if(!post.rows.length)fail(404,'post_not_found');
-    }
-    // A new request ID must not turn one person's report into unlimited votes.
-    const previous=await q.query(`SELECT 1 FROM rooms.reports reports WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND target_id=$4
-      AND NOT EXISTS(SELECT 1 FROM rooms.report_reviews review WHERE review.tenant_id=reports.tenant_id AND review.room_id=reports.room_id AND review.target_id=reports.target_id AND review.reviewed_at>=reports.created_at) LIMIT 1`,[a.tenantId,id,a.userId,target]);
-    if(previous.rows.length)return {reported:true};
-    await q.query('INSERT INTO rooms.reports(tenant_id,report_id,room_id,user_id,target_id,reason,request_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp())',[a.tenantId,'room-report_'+randomUUID(),id,a.userId,target,reason,key]);
-    return {reported:true};
-   }
+   if(['reports','reply-reports','moderation'].includes(operation))return roomContentModeration(q,a,r,method,parts,input,()=>owned(q,a,id));
    if(operation==='members'&&method==='GET'){const members=await q.query("SELECT user_id AS \"userId\",role,state FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND state='active' ORDER BY role,user_id LIMIT 200",[a.tenantId,id]);return {items:members.rows};}
    if(operation==='members'&&method==='PATCH'){
     await owned(q,a,id);const target=text(parts[3],160);if(target===r.owner_user_id)fail(403,'cannot_modify_owner');
@@ -259,12 +205,12 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
      if(!r.comments_enabled)fail(403,'comments_disabled');
      const p=(await q.query("SELECT * FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3 AND state='published' AND (publish_at IS NULL OR publish_at<=now())",[a.tenantId,id,text(parent,160)])).rows[0];if(!p)fail(404,'post_not_found');if(!p.comments_enabled)fail(403,'comments_disabled');if(body.length>2000)fail(422,'comment_too_long');
      const old=(await q.query('SELECT * FROM rooms.discussion_replies WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND idempotency_key=$4',[a.tenantId,id,a.userId,key])).rows[0];
-     if(old){if(old.body!==body||old.lesson_id!==parent||old.community_payload!==fingerprint)fail(409,'idempotency_conflict');return enrich(q,a,{...postView({...old,lesson_id:undefined}),parentId:parent});}
+     if(old){if(old.body!==body||old.lesson_id!==parent||old.community_payload!==fingerprint)fail(409,'idempotency_conflict');if(old.moderation_state!=='visible')return {id:old.reply_id,parentId:parent,removed:true,body:'',attachments:[],reactions:[]};return enrich(q,a,{...postView({...old,lesson_id:undefined}),parentId:parent});}
      const v=(await q.query("INSERT INTO rooms.discussion_replies(tenant_id,reply_id,room_id,user_id,lesson_id,body,idempotency_key,moderation_state) VALUES($1,$2,$3,$4,$5,$6,$7,'visible') RETURNING *",[a.tenantId,'room-reply_'+randomUUID(),id,a.userId,parent,body,key])).rows[0];await q.query('UPDATE rooms.discussion_replies SET community_payload=$3::jsonb WHERE tenant_id=$1 AND reply_id=$2',[a.tenantId,v.reply_id,JSON.stringify(fingerprint)]);await bindMedia(q,a,id,v.reply_id,input.attachments,true);if(input.mentions?.length)await mention(q,a,id,parent,body,input.mentions,v.reply_id);return enrich(q,a,{...postView({...v,lesson_id:undefined}),parentId:parent});
     }
     if(r.posting_policy==='admins'&&!manager(r))fail(403,'room_posting_restricted');
-    const old=(await q.query('SELECT * FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND author_user_id=$3 AND idempotency_key=$4',[a.tenantId,id,a.userId,key])).rows[0];
-    if(old){if(old.body!==body||old.community_payload!==fingerprint)fail(409,'idempotency_conflict');return enrich(q,a,postView(old));}
+    const old=(await q.query('SELECT *, (publish_at IS NULL OR publish_at<=statement_timestamp()) AS visible_now FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND author_user_id=$3 AND idempotency_key=$4',[a.tenantId,id,a.userId,key])).rows[0];
+    if(old){if(old.body!==body||old.community_payload!==fingerprint)fail(409,'idempotency_conflict');if(old.state!=='published'||old.visible_now!==true)return {id:old.lesson_id,parentId:null,removed:true,body:'',attachments:[],reactions:[]};return enrich(q,a,postView(old));}
     const v=(await q.query("INSERT INTO rooms.lessons(tenant_id,lesson_id,room_id,kind,body,state,author_user_id,idempotency_key,comments_enabled) VALUES($1,$2,$3,'announcement',$4,'published',$5,$6,$7) RETURNING *",[a.tenantId,'room-post_'+randomUUID(),id,body,a.userId,key,r.comments_enabled])).rows[0];
     await q.query('UPDATE rooms.rooms SET updated_at=now() WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id]);await q.query('UPDATE rooms.lessons SET community_payload=$3::jsonb WHERE tenant_id=$1 AND lesson_id=$2',[a.tenantId,v.lesson_id,JSON.stringify(fingerprint)]);await bindMedia(q,a,id,v.lesson_id,input.attachments);await mention(q,a,id,v.lesson_id,body,input.mentions);const recipients=await q.query("SELECT user_id FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id<>$3 AND state='active' AND NOT muted",[a.tenantId,id,a.userId]);for(const m of recipients.rows)await notice(q,a,id,'rooms.post.created',m.user_id,{postId:v.lesson_id});return enrich(q,a,postView(v));
    }
@@ -273,7 +219,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     await owned(q,a,id);if(input.pinned!==undefined&&typeof input.pinned!=='boolean'||input.commentsEnabled!==undefined&&typeof input.commentsEnabled!=='boolean')fail(422,'invalid_post');
     const v=await q.query("UPDATE rooms.lessons SET pinned=COALESCE($4,pinned),comments_enabled=COALESCE($5,comments_enabled) WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3 AND state='published' RETURNING *",[a.tenantId,id,parts[3],input.pinned??null,input.commentsEnabled??null]);if(!v.rows.length)fail(404,'post_not_found');return postView(v.rows[0]);
    }
-   if(operation==='posts'&&method==='DELETE'){await owned(q,a,id);await q.query("UPDATE rooms.lessons SET state='retired' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,parts[3]]);await q.query("UPDATE rooms.discussion_replies SET moderation_state='removed' WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,parts[3]]);return {removed:true};}
+   if(operation==='posts'&&method==='DELETE'){await owned(q,a,id);await q.query("UPDATE rooms.lessons SET state='retired',moderation_revision=moderation_revision+1,removed_by_review_id=NULL WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,parts[3]]);await q.query("UPDATE rooms.discussion_replies SET moderation_state='removed',moderation_revision=moderation_revision+1,removed_by_review_id=NULL WHERE tenant_id=$1 AND room_id=$2 AND lesson_id=$3",[a.tenantId,id,parts[3]]);return {removed:true};}
    if(operation==='masana'&&method==='GET'){return {items:(await q.query('SELECT character_id AS "characterId",instructions,active,reply_mode AS "replyMode" FROM rooms.masana_participants WHERE tenant_id=$1 AND room_id=$2 ORDER BY character_id',[a.tenantId,id])).rows};}
    if(operation==='masana'&&method==='POST'){
     await owned(q,a,id,true);const characterId=text(input.characterId,160);if(!o.isApprovedMasana||!await o.isApprovedMasana(a.tenantId,characterId))fail(403,'approved_masana_required');
@@ -291,5 +237,5 @@ export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnTy
  const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
- for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
+ for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reply-reports',['POST']],['reply-reports/summary',['GET']],['reply-reports/reviews',['GET']],['reply-reports/:replyId/review',['POST']],['moderation/cases',['GET']],['moderation/cases/:reviewId/appeal',['POST']],['moderation/appeals',['GET']],['moderation/appeals/:appealId/review',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
 }

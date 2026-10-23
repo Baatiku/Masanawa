@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'room_community_api.dart';
 import 'room_invitation_links.dart';
 import 'room_ownership_transfer.dart';
+import 'room_moderation_screen.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -276,12 +277,12 @@ class _CommunityState extends State<RoomCommunityScreen> {
       await SharePlus.instance.share(ShareParams(files: [XFile.fromData(bytes, mimeType: result['mimeType'] as String?, name: result['name'] as String? ?? 'Room attachment')]));
     }
   });
-  Future<void> reportPost(String postId) async {
+  Future<void> reportPost(String postId, {bool reply = false}) async {
     var reportReason = '';
     final selected = await showDialog<String>(context: context, builder: (dialogContext) =>
-      AlertDialog(title: const Text('Report post'), content: TextField(
+      AlertDialog(title: Text(reply ? 'Report reply' : 'Report post'), content: TextField(
         onChanged: (value) => reportReason = value, autofocus: true, maxLength: 2000, minLines: 2, maxLines: 4,
-        decoration: const InputDecoration(labelText: 'What is wrong with this post?'),
+        decoration: InputDecoration(labelText: reply ? 'What is wrong with this reply?' : 'What is wrong with this post?'),
       ), actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
         FilledButton(onPressed: () {
@@ -293,12 +294,12 @@ class _CommunityState extends State<RoomCommunityScreen> {
     final key = '$postId:$selected';
     reportRequestKeys[key] ??= communityRequestId();
     await run(() async {
-      await widget.api.action(widget.roomId, 'reports', {
+      await widget.api.action(widget.roomId, reply ? 'reply-reports' : 'reports', {
         'targetId': postId, 'reason': selected, 'requestId': reportRequestKeys[key],
       });
       reportRequestKeys.remove(key);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post reported for review')));
+        SnackBar(content: Text(reply ? 'Reply reported for review' : 'Post reported for review')));
     });
   }
   Future<void> info() async {
@@ -326,7 +327,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
           if (post['parentId'] == null) Wrap(children: [
             for (final emoji in ['👍', '❤️', '😂']) TextButton(onPressed: busy ? null : () => run(() async { final reactions = post['reactions'] as List? ?? []; final mine = reactions.any((e) => e['emoji'] == emoji && e['mine'] == true); await widget.api.request(widget.roomId, mine ? 'DELETE' : 'POST', 'posts/${post['id']}/reactions', {'emoji': emoji}); }), child: Text('$emoji ${(post['reactions'] as List? ?? []).where((e) => e['emoji'] == emoji).map((e) => e['count']).join()}')),
           ]),
-          if (room?.joined == true && post['parentId'] == null) TextButton.icon(onPressed: busy ? null : () => reportPost('${post['id']}'), icon: const Icon(Icons.flag_outlined), label: const Text('Report post')),
+          if (room?.joined == true && post['authorKind'] != 'masana') TextButton.icon(onPressed: busy ? null : () => reportPost('${post['id']}', reply: post['parentId'] != null), icon: const Icon(Icons.flag_outlined), label: Text(post['parentId'] != null ? 'Report reply' : 'Report post')),
           if (room?.manages == true && post['parentId'] == null) Wrap(children: [
             TextButton(onPressed: busy ? null : () => run(() => widget.api.modify(widget.roomId, 'posts/${post['id']}', {'pinned': post['pinned'] != true})), child: Text(post['pinned'] == true ? 'Unpin' : 'Pin')),
             TextButton(onPressed: busy ? null : () => run(() => widget.api.modify(widget.roomId, 'posts/${post['id']}', {'commentsEnabled': post['commentsEnabled'] == false})), child: Text(post['commentsEnabled'] == false ? 'Enable comments' : 'Close comments')),
@@ -422,6 +423,7 @@ class _InfoState extends State<_CommunityInfo> {
     : Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
     Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('Owner: ${room.ownerId}'), Text('${room.visibility} · ${room.memberCount} members'),
     if (room.joined) ...[
+      TextButton.icon(icon: const Icon(Icons.policy_outlined), label: const Text('Moderation and appeals'), onPressed: () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = RoomModerationScreen(api: widget.api, roomId: room.id); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }),
       RoomOwnershipTransferPanel(key: ValueKey('ownership-${room.ownerId}-$ownershipRefresh'), api: widget.api, roomId: room.id, onChanged: refresh),
       SwitchListTile(title: const Text('Mute notifications'), value: room.muted, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'muted': v}); room = await widget.api.room(room.id); })),
       SwitchListTile(title: const Text('Pin Room'), value: room.pinned, onChanged: busy ? null : (v) => run(() async { await widget.api.modify(room.id, 'preferences', {'pinned': v}); room = await widget.api.room(room.id); })),
