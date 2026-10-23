@@ -26,9 +26,9 @@
       "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
       "pr": "",
       "claimed_at": "2026-10-23T05:18:23.254Z",
-      "heartbeat_at": "2026-10-23T05:32:31.629Z",
-      "expires_at": "2026-10-23T05:37:31.629Z",
-      "progress": "Final SQL 14 PASS after immutable audit guard; Gateway build PASS. Rendered report dialog inspected and shortened clipped label. Consolidated Flutter suite running before integration with Calls main."
+      "heartbeat_at": "2026-10-23T05:37:17.200Z",
+      "expires_at": "2026-10-23T05:42:17.200Z",
+      "progress": "Integrated main 3c7ba98; 30 consumer +3 admin cases pass (two shell startup crashes pass isolated); Gateway build and 64 backend cases pass. Publishing byte-verified 15-file tree."
     }
   ],
   "history": [
