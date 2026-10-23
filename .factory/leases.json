@@ -49,9 +49,11 @@
       "base_sha": "9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786",
       "pr": "https://github.com/Baatiku/Masanawa/pull/334",
       "claimed_at": "2026-10-23T09:55:47.687Z",
-      "heartbeat_at": "2026-10-23T15:24:12.642Z",
-      "expires_at": "2026-10-23T15:29:12.642Z",
-      "progress": "Published334 head e1fd44bf tree d522880f onfreshmain9d6d; independentread-onlyreview no materialfindings.4SQLHTTP+typingPASS;6newnative and4editPASS,320scrollrepairrerunpendingcoldHiggsfield. Hosted4CIpending incl13realPG."
+      "heartbeat_at": "2026-10-23T15:29:32.455Z",
+      "expires_at": "2026-10-23T15:34:32.455Z",
+      "progress": "PR334 finale094473e pending4CI; previoushead91backend/storage+7Worker+build/typesPASS,12PGPASS,new13fixtureFKmissingprofile repaired. All7newnative pass acrossfocusedruns incl320RTL,4editorPASS;analyzerinfoonly. Read-onlyreviewclear. Realfontmanagementvisualrunning.",
+      "next_scope": "P1-05 private method nickname/default and unused retirement cleanup, retaining immutable accepted instructions",
+      "next_branch": "feat/p2p-method-preferences-oct23"
     }
   ],
   "history": [
