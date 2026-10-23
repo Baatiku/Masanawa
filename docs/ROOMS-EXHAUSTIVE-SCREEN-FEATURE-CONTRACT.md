@@ -153,6 +153,16 @@ Mobile retains rows/cursors on transient failures, deduplicates pages, rejects r
 | R3-19 | P | Moderation help/report feedback never claims appeal decision before review. |
 | R3-20 | X | No unmoderated AI auto-removal or owner-independent covert admin rights. |
 
+### 23 October 2026 — Moderation queue and author-history pages (partial source)
+
+Base `main 52e1c242dc3bd8366a60ea2f7601d026e253dc98`; source `1b7dac52`, [PR #328](https://github.com/Baatiku/Masanawa/pull/328), `feat/rooms-moderation-pagination-oct23`. P5-R06/R08/R09, R3/R5 and P8 recovery/account fences: post/reply report summaries, post/reply review histories, own removal cases and manager appeals now provide scoped keyset pages beyond the old 100/30 caps. Cursors bind tenant/viewer/Room/resource, retain full PostgreSQL microseconds and ID ties, and never grant access. Every page reapplies current membership/manager/visibility/pending predicates. Aggregate report counts/excerpts omit reporter identity and reasons. Appeals retain pending-first priority; these are live queues, so Refresh is required to see changed priorities or new arrivals. Migration 0014 adds read indexes only; decisions and authority are unchanged.
+
+Room Info → Moderation preserves Back/navigation and adds independent older-page/retry controls to removed content, reported replies, appeals and expanded reply history. Transient failures retain existing rows and original cursor; identities deduplicate, repeated cursors fail, and account/API/Room changes discard late replies. Current role is checked before paging; lost access clears details/actions, with no false successful-empty state. Actions remain disabled during paging and require existing canonical readback. Legacy first-page responses remain usable without invented pagination.
+
+**Validation:** Gateway strict typing and production dependency build PASS. Five new unit cases and two actual PostgreSQL 18 HTTP cases cover >100 reports/>30 histories and cases, microsecond ties, cursor scope, privacy and revocation; initial consolidated Room run: 75/77 PASS, with two test expectations incorrectly asking for 403 instead of the existing private-Room concealment 404. Assertions repaired; all seven affected paging cases PASS, including both actual PG18 HTTP cases. All 77 cases are covered by the consolidated pass and focused repair; 19 actual PG18 cases are included. Twelve Flutter journeys cover each section, retry, lost access, manager demotion, repeated/legacy pages, stale API/Room replies and 320dp/200%-text/RTL. Hosted exact-head checks remain merge gates; formatting is not Flutter validation. Higgsfield tools unavailable in this session; no APK, production migration/deployment, provider or installed-device acceptance.
+
+**Remain OPEN:** all P5/P8 parents and 177-screen/820-requirement acceptance; timeline/member pagination, whole-Room platform moderation/staffing, appeals after lost access, exact older-case outcome lookup after refresh, durable native cache/push, handset/accessibility/provider/deployed qualification. Concurrent Status/Wallet/P2P/Calls and #300 identity work remain separate.
+
 ### R4 Masana, notifications, scheduling and media recovery
 | ID | State | Required small action / observable result |
 |---|---|---|

@@ -26,6 +26,152 @@ class _ModerationState extends State<RoomModerationScreen> {
       appeals = [],
       history = [];
   final keys = <String, String>{};
+  final cursors = <String, String?>{};
+  final paging = <String>{};
+  final pageErrors = <String>{};
+  static const ownPath = 'moderation/cases',
+      reportPath = 'reply-reports/summary',
+      appealPath = 'moderation/appeals',
+      historyPath = 'reply-reports/reviews';
+
+  String? cursor(Map<String, dynamic> data) {
+    final value = data['nextCursor'];
+    if (value == null) return null;
+    if (data['pageVersion'] != 1 ||
+        value is! String ||
+        value.isEmpty ||
+        value.length > 1600) {
+      throw const FormatException('Unavailable moderation pagination');
+    }
+    return value;
+  }
+
+  List<Map<String, dynamic>> rows(String path) => switch (path) {
+    ownPath => cases,
+    reportPath => reports,
+    appealPath => appeals,
+    _ => history,
+  };
+  String identity(String path, Map<String, dynamic> row) {
+    final value =
+        row[path == ownPath || path == historyPath
+            ? 'reviewId'
+            : path == appealPath
+            ? 'appealId'
+            : 'replyId'];
+    if (value is! String || value.isEmpty)
+      throw const FormatException('Missing moderation identity');
+    return value;
+  }
+
+  void clearDetails() {
+    cases = [];
+    reports = [];
+    appeals = [];
+    history = [];
+    cursors.clear();
+    pageErrors.clear();
+    manager = false;
+    verified = false;
+  }
+
+  Future<void> more(String path) async {
+    final next = cursors[path];
+    if (next == null ||
+        paging.isNotEmpty ||
+        busy ||
+        loading ||
+        confirming ||
+        !verified ||
+        !authorized())
+      return;
+    final version = generation, api = widget.api, id = widget.roomId;
+    setState(() {
+      paging.add(path);
+      pageErrors.remove(path);
+    });
+    try {
+      final room = await api.room(id);
+      if (!current(version)) return;
+      if (!room.manages && manager) {
+        setState(() {
+          manager = false;
+          reports = [];
+          appeals = [];
+          history = [];
+          cursors.remove(reportPath);
+          cursors.remove(appealPath);
+          cursors.remove(historyPath);
+        });
+      }
+      if (path != ownPath && !room.manages)
+        throw StateError('manager_permission_changed');
+      final data = await api.request(id, 'GET', path, {'cursor': next});
+      final page = items(
+        data,
+        versioned: path == ownPath || path == appealPath,
+      );
+      final after = cursor(data);
+      if (!current(version)) return;
+      if (data['pageVersion'] != 1 || after == next)
+        throw const FormatException('Non-progressing moderation page');
+      final byId = <String, Map<String, dynamic>>{};
+      for (final row in [...rows(path), ...page]) {
+        byId[identity(path, row)] = row;
+      }
+      setState(() {
+        final combined = byId.values.toList();
+        switch (path) {
+          case ownPath:
+            cases = combined;
+          case reportPath:
+            reports = combined;
+          case appealPath:
+            appeals = combined;
+          default:
+            history = combined;
+        }
+        cursors[path] = after;
+      });
+    } catch (e) {
+      if (!current(version)) return;
+      setState(() {
+        pageErrors.add(path);
+        if (e is DioException &&
+                const [401, 403, 404].contains(e.response?.statusCode) ||
+            e is StateError && e.message == 'manager_permission_changed') {
+          clearDetails();
+          error = 'Moderation access changed. Refresh its current status.';
+        }
+      });
+    } finally {
+      if (current(version)) setState(() => paging.remove(path));
+    }
+  }
+
+  Widget pageControl(String path, String label) => Column(
+    children: [
+      if (pageErrors.contains(path))
+        const Text(
+          'Could not load more. Current items remain available; retry the same page.',
+        ),
+      if (cursors[path] != null)
+        TextButton(
+          onPressed:
+              busy || loading || confirming || paging.isNotEmpty || !verified
+              ? null
+              : () => more(path),
+          child: Text(
+            paging.contains(path)
+                ? 'Loading more…'
+                : pageErrors.contains(path)
+                ? 'Retry $label'
+                : 'Load more $label',
+          ),
+        ),
+    ],
+  );
+
   bool loading = true,
       busy = false,
       confirming = false,
@@ -62,6 +208,9 @@ class _ModerationState extends State<RoomModerationScreen> {
       appeals = [];
       history = [];
       keys.clear();
+      cursors.clear();
+      paging.clear();
+      pageErrors.clear();
       busy = false;
       confirming = false;
       load();
@@ -91,25 +240,32 @@ class _ModerationState extends State<RoomModerationScreen> {
       loading = true;
       verified = false;
       error = null;
+      cursors.clear();
+      paging.clear();
+      pageErrors.clear();
     });
     try {
       final room = await api.room(id);
-      final own = items(await api.request(id, 'GET', 'moderation/cases', {}));
-      final flagged = room.manages
-          ? items(
-              await api.request(id, 'GET', 'reply-reports/summary', {}),
-              versioned: false,
-            )
-          : <Map<String, dynamic>>[];
-      final queue = room.manages
-          ? items(await api.request(id, 'GET', 'moderation/appeals', {}))
-          : <Map<String, dynamic>>[];
-      final reviews = room.manages
-          ? items(
-              await api.request(id, 'GET', 'reply-reports/reviews', {}),
-              versioned: false,
-            )
-          : <Map<String, dynamic>>[];
+      final ownData = await api.request(id, 'GET', ownPath, {});
+      final reportData = room.manages
+          ? await api.request(id, 'GET', reportPath, {})
+          : <String, dynamic>{'items': []};
+      final appealData = room.manages
+          ? await api.request(id, 'GET', appealPath, {})
+          : <String, dynamic>{'moderationVersion': 1, 'items': []};
+      final historyData = room.manages
+          ? await api.request(id, 'GET', historyPath, {})
+          : <String, dynamic>{'items': []};
+      final own = items(ownData);
+      final flagged = items(reportData, versioned: false);
+      final queue = items(appealData);
+      final reviews = items(historyData, versioned: false);
+      final next = {
+        ownPath: cursor(ownData),
+        reportPath: cursor(reportData),
+        appealPath: cursor(appealData),
+        historyPath: cursor(historyData),
+      };
       if (!current(version)) return;
       setState(() {
         manager = room.manages;
@@ -117,6 +273,7 @@ class _ModerationState extends State<RoomModerationScreen> {
         reports = flagged;
         appeals = queue;
         history = reviews;
+        cursors.addAll(next);
         verified = true;
       });
     } catch (e) {
@@ -124,11 +281,7 @@ class _ModerationState extends State<RoomModerationScreen> {
       setState(() {
         if (e is DioException &&
             const [401, 403, 404].contains(e.response?.statusCode)) {
-          cases = [];
-          reports = [];
-          appeals = [];
-          history = [];
-          manager = false;
+          clearDetails();
         }
         error =
             'Could not verify moderation status. Refresh before taking action.';
@@ -145,7 +298,13 @@ class _ModerationState extends State<RoomModerationScreen> {
     Map<String, dynamic> values, {
     String reasonField = 'publicReason',
   }) async {
-    if (busy || loading || confirming || !verified || !authorized()) return;
+    if (busy ||
+        loading ||
+        confirming ||
+        paging.isNotEmpty ||
+        !verified ||
+        !authorized())
+      return;
     final version = generation,
         scope = scopeGeneration,
         api = widget.api,
@@ -210,11 +369,7 @@ class _ModerationState extends State<RoomModerationScreen> {
         verified = false;
         if (e is DioException &&
             const [401, 403, 404].contains(e.response?.statusCode)) {
-          cases = [];
-          reports = [];
-          appeals = [];
-          history = [];
-          manager = false;
+          clearDetails();
         }
         error = e is DioException && e.response?.statusCode == 409
             ? 'The content or decision changed. Refresh its current status.'
@@ -240,7 +395,8 @@ class _ModerationState extends State<RoomModerationScreen> {
         appBar: AppBar(title: const Text('Room moderation')),
         body: const Center(child: Text('Session changed. Return to Rooms.')),
       );
-    final enabled = verified && !busy && !loading && !confirming;
+    final enabled =
+        verified && !busy && !loading && !confirming && paging.isEmpty;
     String label(dynamic value) => value == 'restored'
         ? 'Content restored'
         : value == 'upheld'
@@ -249,14 +405,16 @@ class _ModerationState extends State<RoomModerationScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Room moderation')),
       body: RefreshIndicator(
-        onRefresh: busy || confirming ? () async {} : load,
+        onRefresh: busy || confirming || paging.isNotEmpty ? () async {} : load,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             if (loading || busy) const LinearProgressIndicator(),
             if (error != null) Text(error!),
             TextButton(
-              onPressed: busy || loading || confirming ? null : load,
+              onPressed: busy || loading || confirming || paging.isNotEmpty
+                  ? null
+                  : load,
               child: const Text('Refresh moderation status'),
             ),
             Text(
@@ -266,7 +424,7 @@ class _ModerationState extends State<RoomModerationScreen> {
             const Text(
               'An appeal requests review. Content stays removed until the server confirms restoration.',
             ),
-            if (!loading && cases.isEmpty)
+            if (!loading && verified && cases.isEmpty)
               const Text('No removal cases available.'),
             for (final item in cases)
               Card(
@@ -305,13 +463,14 @@ class _ModerationState extends State<RoomModerationScreen> {
                   ),
                 ),
               ),
+            pageControl(ownPath, 'removal cases'),
             if (manager) ...[
               const Divider(),
               Text(
                 'Reported replies',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              if (!loading && reports.isEmpty)
+              if (!loading && verified && reports.isEmpty)
                 const Text('No reported replies to review.'),
               for (final item in reports)
                 Card(
@@ -354,12 +513,13 @@ class _ModerationState extends State<RoomModerationScreen> {
                     ),
                   ),
                 ),
+              pageControl(reportPath, 'reported replies'),
               const Divider(),
               Text(
                 'Author appeals',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              if (!loading && appeals.isEmpty)
+              if (!loading && verified && appeals.isEmpty)
                 const Text('No author appeals available.'),
               for (final item in appeals)
                 Card(
@@ -411,6 +571,7 @@ class _ModerationState extends State<RoomModerationScreen> {
                     ),
                   ),
                 ),
+              pageControl(appealPath, 'author appeals'),
               if (history.isNotEmpty)
                 ExpansionTile(
                   title: const Text('Reply review history'),
@@ -424,6 +585,7 @@ class _ModerationState extends State<RoomModerationScreen> {
                         ),
                         subtitle: Text('${item['reviewedAt'] ?? ''}'),
                       ),
+                    pageControl(historyPath, 'review history'),
                   ],
                 ),
             ],
