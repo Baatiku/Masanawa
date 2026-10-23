@@ -135,6 +135,7 @@ void main() {
         220,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Manage member'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Offer ownership'));

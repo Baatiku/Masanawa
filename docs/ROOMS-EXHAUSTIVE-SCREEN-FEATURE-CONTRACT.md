@@ -111,7 +111,7 @@ IDs R0–R5 are children of P5-R01–R09 and P5-T01. Mark S/P when source exists
 | R2-11 | P | Membership changes invalidate cached private content/deep links. |
 | R2-12 | P | Blocking member across social graph respects public privacy rules. |
 | R2-13 | P | Owner cannot leave without verified transfer; no phantom ownership. |
-| R2-14 | N/P | Transfer offer, accepting new owner, documented recoverable failure. |
+| R2-14 | S/P | Explicit recipient ownership offer/accept/decline/cancel and original-offer recovery merged in #311; device/notification acceptance open. |
 | R2-15 | P | Room retirement prevents new joins/posts/invites and preserves audit policy. |
 | R2-16 | N/P | Anonymous display/role hiding only with reviewed privacy policy. |
 | R2-17 | P | Rate limit joins/invites/spam and informative throttling. |
@@ -130,11 +130,11 @@ IDs R0–R5 are children of P5-R01–R09 and P5-T01. Mark S/P when source exists
 | R3-06 | P | Decision includes timestamp, operator ID, reason and target revision. |
 | R3-07 | S/P | Immutable review log persists after dismissal and further reports. |
 | R3-08 | P | New report after dismissal reopens appropriately without rewriting old audit. |
-| R3-09 | N/P | Moderator response/appeal for affected author if backend authorized. |
+| R3-09 | S/P | In-Room author removal cases/appeals and independent manager Uphold/Restore with public feedback in #315; platform/access-lost and device acceptance remain open. |
 | R3-10 | P | Removed post cannot be retrieved via attachment, comments or search. |
 | R3-11 | P | Reports on scheduled/private/retired content honor legitimate visibility. |
 | R3-12 | P | Member ban/remove/invite revoke confirmed with consequences. |
-| R3-13 | N/P | Ownership transfer protects only owner, preserves active members and cases. |
+| R3-13 | S/P | #311 transfers only after recipient acceptance, retains members/history and fences leave/removal; deployed/device acceptance open. |
 | R3-14 | P | Delete/retire Room confirms irreversible exposure changes, not arbitrary history wipe. |
 | R3-15 | P | Access to moderation records limited to manager and operator roles. |
 | R3-16 | P | Concurrent moderator decisions are version-fenced, no contradictory audits. |
@@ -200,3 +200,5 @@ IDs R0–R5 are children of P5-R01–R09 and P5-T01. Mark S/P when source exists
 **Implementation waves:** P5-R01–R03 navigation, posting and original design hierarchy; P5-R04–R06 reactions/roles/reports and immutable moderation audit; P5-R07–R09 join/revoke/mute/visibility/AI mention and shared media; P5-T01 media status/process death/Status-adjacent retries; P8-U/X/APK low data, private push, accessibility, real DB and installed devices. Do not add a new tab, a lesson calendar or Telegram monetization just because their source is available. No unsolicited APK.
 
 **Public references:** [Telegram Channels FAQ](https://telegram.org/faq_channels?setln=en), [Telegram admin rights and discussion model](https://core.telegram.org/api/channel), [Telegram Communities and ephemeral bot replies (July 2026)](https://telegram.org/blog/communities-editor-invisible-messages?setln=en), [Telegram welcome messages (Aug 2026)](https://telegram.org/blog/welcome-messages-buttons-TG-13?setln=en), [WhatsApp Communities](https://faq.whatsapp.com/495856382464992) and [announcement controls](https://faq.whatsapp.com/582420703681043). Competitor limits/rules are evidence of design patterns, not Masanawa promises.
+
+**23 October 2026 source continuation — #315:** R3 reply reports and author appeals use additive removal revisions and canonical Room locking. Later deletion or a different removal cannot be reversed by an old appeal; parent restoration preserves independently removed replies. Author cases and manager summaries omit reporter identity/allegations. Local 52 Room tests plus the final 15-case current-removal rerun passed; hosted exact-head Flutter/CI gates and deployed/device/staffed-platform acceptance remain separate. No parent requirement is completed by this checkpoint.
