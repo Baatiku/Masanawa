@@ -81,7 +81,7 @@ Rooms R06 moderation checkpoint: [#328](https://github.com/Baatiku/Masanawa/pull
 
 Rooms R06 recovery checkpoint: [#329](https://github.com/Baatiku/Masanawa/pull/329), source `2864f6a8`, adds exact older-case/appeal and original actor-receipt lookup, encrypted pending request, read-only restart recovery, confirmed original retry and explicit local-only retry clearing with fresh readback required. Fifteen Flutter/storage cases authored; 84 backend cases covered after repairing the new HTTP route declarations, including 21 actual PG18 cases. Final hosted/device/provider gates remain separate.
 
-Rooms R04 thread/history checkpoint: [#332](https://github.com/Baatiku/Masanawa/pull/332), source `bb070f05`, adds scoped body search, chronological older pages, an exact parent plus paged thread replies, parent-bound composer/closed-thread state, revalidated loaded pages on Back and account/Room/query fences. 92 backend tests (23 PG18) PASS; sixteen Flutter/transport cases authored, hosted validation pending. No physical-device/provider or full roadmap acceptance implied.
+Rooms R04 thread/history checkpoint: [#332](https://github.com/Baatiku/Masanawa/pull/332), source `bb070f05`, adds scoped body search, chronological older pages, an exact parent plus paged thread replies, parent-bound composer/closed-thread state, revalidated loaded pages on Back and account/Room/query fences. 92 backend tests (23 PG18) PASS; seventeen Flutter/transport cases authored, hosted validation pending. No physical-device/provider or full roadmap acceptance implied.
 
 ### State contract applying to every H/R route
 - **Loading:** compact list/profile skeleton; retain permitted cached content during refresh. Don't block first paint on contacts/provider discovery.

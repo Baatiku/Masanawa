@@ -553,7 +553,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
   }
 
   Future<void> run(Future<void> Function() work) async {
-    if (busy || loading || loadingOlder) return;
+    if (!mounted || busy || loading || loadingOlder) return;
     final scope = scopeGeneration, api = widget.api;
     bool active() => mounted && scope == scopeGeneration && identical(api, widget.api);
     setState(() {
@@ -1128,6 +1128,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
                                   onPressed: busy || loading
                                       ? null
                                       : () async {
+                                          final scope = scopeGeneration, api = widget.api, id = widget.roomId;
                                           final confirmed =
                                               await showDialog<bool>(
                                                 context: context,
@@ -1163,10 +1164,10 @@ class _CommunityState extends State<RoomCommunityScreen> {
                                                       ],
                                                     ),
                                               );
-                                          if (confirmed == true)
+                                          if (confirmed == true && mounted && scope == scopeGeneration && identical(api,widget.api))
                                             await run(
-                                              () => widget.api.remove(
-                                                widget.roomId,
+                                              () => api.remove(
+                                                id,
                                                 'posts/${post['id']}',
                                               ),
                                             );

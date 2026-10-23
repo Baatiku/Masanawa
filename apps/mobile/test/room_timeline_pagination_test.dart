@@ -147,6 +147,22 @@ Future<void> search(WidgetTester tester, String text) async {
 
 void main() {
   testWidgets(
+    'a prior account deletion confirmation cannot mutate a replacement account',
+    (tester) async {
+      final first = _Pages()..role = 'owner';
+      await mount(tester, first);
+      await tap(tester, 'Remove post');
+      final next = _Pages(prefix: 'New ')..role = 'owner';
+      await mount(tester, next);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      expect(first.removed, isEmpty);
+      expect(next.removed, isEmpty);
+      expect(find.text('New Latest post'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'older root posts prepend without duplicate rows and exhaust the cursor',
     (tester) async {
       final api = _Pages();
