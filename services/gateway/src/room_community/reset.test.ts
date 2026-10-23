@@ -10,6 +10,8 @@ it('deletes retired Rooms and history, cancels old jobs and starts new Rooms emp
    CREATE TABLE identity.users(tenant_id text,user_id text,state text,PRIMARY KEY(tenant_id,user_id));
    CREATE TABLE identity.characters(tenant_id text,character_id text,PRIMARY KEY(tenant_id,character_id));
    INSERT INTO identity.users VALUES('t','alice','active');
+   CREATE SCHEMA talks;CREATE TABLE talks.public_profiles(tenant_id text,user_id text,display_name text,handle text);
+   INSERT INTO talks.public_profiles VALUES('t','alice','Alice','alice');
    CREATE SCHEMA events;CREATE TABLE events.outbox(destination text);
    INSERT INTO events.outbox VALUES('rooms.teacher'),('notifications.rooms'),('other');`);
   const dir=new URL('../../../../packages/rooms/migrations/',import.meta.url);
