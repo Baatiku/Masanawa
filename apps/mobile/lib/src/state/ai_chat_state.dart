@@ -2137,8 +2137,9 @@ class AiChatController extends Notifier<AiChatState> {
       },
     );
     _save();
-    // The recipient opened the thread: anything we sent has now arrived.
-    _markUserMessages(characterId, {'sending', 'sent'}, 'delivered');
+    // This is a LOCAL placeholder. Its creation is not proof that the
+    // Gateway accepted the request or that the Masana read anything.
+    // Delivery/read require correlated server acknowledgement or completion.
     return id;
   }
 
