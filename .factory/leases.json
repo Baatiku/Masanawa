@@ -1,6 +1,35 @@
 {
   "schema_version": 1,
-  "active": [],
+  "active": [
+    {
+      "claim_id": "82a72e7c-15b1-4faf-80d0-123e5d9b690b",
+      "owner": "codex-p2p-moderation-oct23",
+      "scope": "P7-T02 report/review/removal with participant redaction; P2P documentation hunks",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "packages/commerce/migrations/0139_msnw_p2p_message_moderation.sql",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+      ],
+      "branch": "feat/p2p-message-moderation-oct23",
+      "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
+      "pr": "",
+      "claimed_at": "2026-10-23T05:18:23.254Z",
+      "heartbeat_at": "2026-10-23T05:18:23.254Z",
+      "expires_at": "2026-10-23T05:23:23.254Z"
+    }
+  ],
   "history": [
     {
       "claim_id": "6e88c21e-997b-49b0-a639-b9b380767f92",
