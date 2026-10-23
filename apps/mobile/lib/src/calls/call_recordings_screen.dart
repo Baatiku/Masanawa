@@ -9,6 +9,41 @@ import '../core/call_recording.dart';
 import '../core/live_call_foreground.dart';
 import '../state/session_state.dart';
 
+/// All searches are local to the authenticated owner's on-device recordings.
+enum RecordingOrder { newest, oldest, longest }
+
+List<CallRecording> selectRecordings(
+  List<CallRecording> items, {
+  required String search,
+  required RecordingOrder order,
+}) {
+  final needle = search.trim().toLowerCase();
+  final found = items
+      .where(
+        (item) =>
+            needle.isEmpty || item.agentName.toLowerCase().contains(needle),
+      )
+      .toList();
+  // Deterministic ties avoid rows jumping on refresh or files with equal times.
+  int byNewest(CallRecording a, CallRecording b) {
+    final time = b.createdAt.compareTo(a.createdAt);
+    return time != 0 ? time : b.id.compareTo(a.id);
+  }
+
+  found.sort((a, b) {
+    switch (order) {
+      case RecordingOrder.newest:
+        return byNewest(a, b);
+      case RecordingOrder.oldest:
+        return -byNewest(a, b);
+      case RecordingOrder.longest:
+        final duration = b.durationMs.compareTo(a.durationMs);
+        return duration == 0 ? byNewest(a, b) : duration;
+    }
+  });
+  return found;
+}
+
 String _duration(int ms) =>
     '${(ms ~/ 60000).toString().padLeft(2, '0')}:${(ms ~/ 1000 % 60).toString().padLeft(2, '0')}';
 String _date(BuildContext context, DateTime value) {
@@ -36,7 +71,10 @@ class CallRecordingsScreen extends ConsumerStatefulWidget {
 }
 
 class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
-  late final store = widget.store ?? CallRecordingStore(widget.ownerId);
+  late CallRecordingStore store;
+  final searchController = TextEditingController();
+  RecordingOrder order = RecordingOrder.newest;
+  String search = '';
   List<CallRecording> rows = [];
   bool loading = true;
   String? error;
@@ -44,12 +82,33 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
   @override
   void initState() {
     super.initState();
+    store = widget.store ?? CallRecordingStore(widget.ownerId);
     load();
+  }
+
+  @override
+  void didUpdateWidget(covariant CallRecordingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ownerId != widget.ownerId ||
+        oldWidget.store != widget.store) {
+      // A State can be reused by Flutter when a parent changes owners. Never
+      // let the previous account's device-only list leak into the new one.
+      generation++;
+      store = widget.store ?? CallRecordingStore(widget.ownerId);
+      rows = [];
+      error = null;
+      loading = true;
+      order = RecordingOrder.newest;
+      search = '';
+      searchController.clear();
+      load();
+    }
   }
 
   @override
   void dispose() {
     generation++;
+    searchController.dispose();
     super.dispose();
   }
 
@@ -59,7 +118,10 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
       loading = true;
       error = null;
     });
-    if (!_active(ref, widget.ownerId)) return;
+    if (!_active(ref, widget.ownerId)) {
+      if (mounted && version == generation) setState(() => loading = false);
+      return;
+    }
     try {
       final result = await store.list();
       if (!mounted || version != generation || !_active(ref, widget.ownerId))
@@ -86,62 +148,168 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
         body: const Center(child: Text('Sign in to view your recordings.')),
       );
     }
+    final visible = selectRecordings(rows, search: search, order: order);
     return Scaffold(
-      appBar: AppBar(title: const Text('Call recordings')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : error != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(error!, textAlign: TextAlign.center),
-                  TextButton(onPressed: load, child: const Text('Retry')),
-                ],
-              ),
-            )
-          : rows.isEmpty
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No recordings yet. Use Record call during a one-to-one call. Recordings stay on this device.',
-                  textAlign: TextAlign.center,
+      appBar: AppBar(
+        title: const Text('Call recordings'),
+        actions: [
+          PopupMenuButton<RecordingOrder>(
+            tooltip: 'Sort recordings',
+            icon: const Icon(Icons.sort),
+            initialValue: order,
+            onSelected: (value) => setState(() => order = value),
+            itemBuilder: (_) => [
+              for (final choice in RecordingOrder.values)
+                CheckedPopupMenuItem<RecordingOrder>(
+                  value: choice,
+                  checked: order == choice,
+                  child: Text(switch (choice) {
+                    RecordingOrder.newest => 'Newest first',
+                    RecordingOrder.oldest => 'Oldest first',
+                    RecordingOrder.longest => 'Longest first',
+                  }),
                 ),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: load,
-              child: ListView.separated(
-                itemCount: rows.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final item = rows[index];
-                  return ListTile(
-                    leading: const Icon(Icons.graphic_eq),
-                    title: Text(item.agentName),
-                    subtitle: Text(
-                      '${_date(context, item.createdAt)} · ${_duration(item.durationMs)}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.push<void>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => _RecordingDetail(
-                            owner: widget.ownerId,
-                            store: store,
-                            item: item,
-                            createPlayer: widget.createPlayer,
-                          ),
-                        ),
-                      );
-                      if (mounted && _active(ref, widget.ownerId)) await load();
-                    },
-                  );
-                },
+            ],
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              controller: searchController,
+              onChanged: (value) => setState(() => search = value),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: 'Search recordings',
+                hintText: 'Search by name',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: search.isNotEmpty
+                    ? IconButton(
+                        tooltip: 'Clear recording search',
+                        onPressed: () {
+                          searchController.clear();
+                          setState(() => search = '');
+                        },
+                        icon: const Icon(Icons.close),
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
               ),
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                loading
+                    ? 'Loading recordings on this device'
+                    : error != null
+                    ? 'Recordings on this device'
+                    : '${visible.length} of ${rows.length} recordings on this device',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(error!, textAlign: TextAlign.center),
+                        TextButton(onPressed: load, child: const Text('Retry')),
+                      ],
+                    ),
+                  )
+                : rows.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'No recordings yet. Use Record call during a one-to-one call. Recordings stay on this device.',
+                            textAlign: TextAlign.center,
+                          ),
+                          TextButton.icon(
+                            onPressed: load,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh recordings'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : visible.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.search_off, size: 40),
+                          const Text(
+                            'No recordings match this search.',
+                            textAlign: TextAlign.center,
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              searchController.clear();
+                              setState(() => search = '');
+                            },
+                            child: const Text('Clear search'),
+                          ),
+                          TextButton.icon(
+                            onPressed: load,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh recordings'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: load,
+                    child: ListView.separated(
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = visible[index];
+                        return ListTile(
+                          leading: const Icon(Icons.graphic_eq),
+                          title: Text(item.agentName),
+                          subtitle: Text(
+                            '${_date(context, item.createdAt)} · ${_duration(item.durationMs)}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await Navigator.push<void>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => _RecordingDetail(
+                                  owner: widget.ownerId,
+                                  store: store,
+                                  item: item,
+                                  createPlayer: widget.createPlayer,
+                                ),
+                              ),
+                            );
+                            if (mounted && _active(ref, widget.ownerId))
+                              await load();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
