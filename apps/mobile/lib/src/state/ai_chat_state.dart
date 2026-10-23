@@ -1604,7 +1604,8 @@ class AiChatController extends Notifier<AiChatState> {
     );
     await _save();
     await onAccepted?.call();
-    _setDelivery(characterId, userMsg.id, 'sent');
+    // Local persistence is only queued/sending, never proof of a server
+    // receipt. Do not show a sent tick before the turn has been accepted.
     if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
       return;
     final audioOwner = _cacheOwnerId;
@@ -1632,11 +1633,17 @@ class AiChatController extends Notifier<AiChatState> {
         // A successful transport may deliver text chunks but an empty final
         // text field. Retain the chunks for the durable completion fallback.
         streamedText += delta;
+        if (threadOf(characterId).messages.any((m) => m.id == userMsg.id && m.deliveryStatus == 'sending')) {
+          _setDelivery(characterId, userMsg.id, 'sent');
+        }
         if (spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
         if (!currentAudioOwner()) return;
         spokenTranscript += delta;
+        if (delta.isNotEmpty && threadOf(characterId).messages.any((m) => m.id == userMsg.id && m.deliveryStatus == 'sending')) {
+          _setDelivery(characterId, userMsg.id, 'sent');
+        }
         _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
       }
       final result = !hasMedia
@@ -2256,8 +2263,13 @@ class AiChatController extends Notifier<AiChatState> {
       },
       sendingIn: {...state.sendingIn}..remove(characterId),
     );
-    // A delivered reply proves the recipient read our messages.
-    _markUserMessages(characterId, {'delivered'}, 'read');
+    // Only a correlated, confirmed reply (including recovered server turns)
+    // is acknowledgement of the original request. A locally synthesized
+    // error/greeting has no requestId and must never turn ticks blue.
+    if (requestId != null && requestId.isNotEmpty &&
+        !parts.any((p) => p.kind == AgentMessagePartKind.status && p.status == 'failed')) {
+      _markUserMessages(characterId, {'delivered'}, 'read');
+    }
     await _save();
   }
 
