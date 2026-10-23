@@ -43,15 +43,16 @@
         "services/gateway/src/p2p/method_management.ts",
         "services/gateway/src/p2p/method_management.pglite.test.ts",
         "apps/mobile/lib/src/finance/p2p_methods_page.dart",
-        "apps/mobile/test/p2p_methods_page_test.dart"
+        "apps/mobile/test/p2p_methods_page_test.dart",
+        "packages/commerce/migrations/0142_msnw_p2p_method_preferences.sql"
       ],
       "branch": "feat/p2p-bank-method-retirement-oct23",
       "base_sha": "9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786",
       "pr": "https://github.com/Baatiku/Masanawa/pull/334",
       "claimed_at": "2026-10-23T09:55:47.687Z",
-      "heartbeat_at": "2026-10-23T15:29:32.455Z",
-      "expires_at": "2026-10-23T15:34:32.455Z",
-      "progress": "PR334 finale094473e pending4CI; previoushead91backend/storage+7Worker+build/typesPASS,12PGPASS,new13fixtureFKmissingprofile repaired. All7newnative pass acrossfocusedruns incl320RTL,4editorPASS;analyzerinfoonly. Read-onlyreviewclear. Realfontmanagementvisualrunning.",
+      "heartbeat_at": "2026-10-23T15:36:28.204Z",
+      "expires_at": "2026-10-23T15:41:28.204Z",
+      "progress": "PR334 finald08b1193 P2P91backend/storage+7Worker+13realPG/build/types PASS; StatusPASS; Mobile/Foundationfinishing.7newnative+4editor pass, realfontvisualpassed/inspected, reviewclear. Next preferences source starts isolatedsparse worktree /home/user/masanawa-p2p-next-oct23.",
       "next_scope": "P1-05 private method nickname/default and unused retirement cleanup, retaining immutable accepted instructions",
       "next_branch": "feat/p2p-method-preferences-oct23"
     }
