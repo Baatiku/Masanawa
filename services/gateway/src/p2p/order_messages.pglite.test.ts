@@ -170,6 +170,10 @@ describe('P7-T02 actual SQL and HTTP participant discussion', {timeout:30_000},(
   }
   await expect(t.service.reviewMessageReport({tenantId:'tenant-b',userId:'staff'},String(r.report_id),{decision:'remove',reason:'private moderation reason',version:1})).rejects.toMatchObject({status:404});
   await expect(t.service.reviewMessageReport({tenantId:'tenant-a',userId:'staff'},String(r.report_id),{decision:'remove',reason:'private moderation reason',version:2})).rejects.toMatchObject({code:'p2p.stale_message_review'});
+  for(const decision of [['remove'],{decision:'remove'},null,1]) {
+    const invalid=await t.app.inject({method:'POST',url,headers:{authorization:'staff'},payload:{decision,reason:'private moderation reason',version:1}});
+    expect(invalid.statusCode).toBe(422);
+  }
   const done=await t.app.inject({method:'POST',url,headers:{authorization:'staff'},payload:{decision:'dismiss',reason:'No prohibited content is present.',version:1}});
   expect(done.statusCode).toBe(200);expect(done.headers['cache-control']).toBe('no-store');
   expect((await t.service.messagesPage(buyer,orderId)).items[0]!.body).not.toBe('');

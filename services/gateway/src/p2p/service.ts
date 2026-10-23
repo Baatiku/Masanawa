@@ -575,7 +575,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     },
     async reviewMessageReport(actor:P2pActor,reportId:string,input:{decision:unknown;reason:unknown;version:unknown}) {
       id(reportId);
-      if(!['dismiss','remove'].includes(String(input.decision))||!Number.isSafeInteger(input.version)||Number(input.version)<1)
+      if(typeof input.decision!=='string'||!['dismiss','remove'].includes(input.decision)||!Number.isSafeInteger(input.version)||Number(input.version)<1)
         throw new P2pError('p2p.invalid_message_review',422);
       const explanation=reason(input.reason);
       return transact(async tx=>{
