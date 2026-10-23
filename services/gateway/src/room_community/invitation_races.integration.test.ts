@@ -69,4 +69,37 @@ describe.skipIf(!connection)('PG18 Room invitation consent races',()=>{
    expect(privateRoom.json()).toEqual({error:'room_not_found'});
   }finally{await app.close();}
  });
+ it('issues a single one-time code for concurrent keyed HTTP requests and never recovers the secret',async()=>{
+  const r=await service.dispatch(owner,'POST','',{name:'Concurrent code recovery',visibility:'private',requestId:randomUUID()});
+  const app=Fastify(),issuer=createRoomCommunityService({pool,authorize:async()=>owner});
+  registerRoomCommunityRoutes(app,issuer);
+  const url='/v1/rooms/'+r.id+'/community/invites/issue';
+  try{
+   expect((await app.inject({method:'POST',url,payload:{}})).statusCode).toBe(422);
+   const responses=await Promise.all(Array.from({length:4},()=>app.inject({method:'POST',url,payload:{requestId:'one-original'}})));
+   expect(responses.map(v=>v.statusCode)).toEqual([200,200,200,200]);
+   const results=responses.map(v=>v.json());
+   expect(new Set(results.map(v=>v.inviteId)).size).toBe(1);
+   expect(results.filter(v=>typeof v.token==='string')).toHaveLength(1);
+   expect(results.filter(v=>v.replayed===true)).toHaveLength(3);
+   const stored=await pool.query('SELECT * FROM rooms.membership_invites WHERE room_id=$1',[r.id]);
+   expect(stored.rows).toHaveLength(1);
+   expect(JSON.stringify(stored.rows)).not.toContain(results.find(v=>v.token).token);
+   const listing=(await app.inject({method:'GET',url:'/v1/rooms/'+r.id+'/community/invites'})).json();
+   expect(listing.issuanceVersion).toBe(1);expect(listing.items[0].requestId).toBe('one-original');
+   expect(JSON.stringify(listing)).not.toMatch(/token|hash|created_by|recipient_user_id/);
+  }finally{await app.close();}
+ });
+ it('serializes issuer departure with code creation so a former admin leaves no active grants',async()=>{
+  const f=await invitation();
+  await service.dispatch(recipient,'POST',f.path+'/join',{inviteId:f.invite.inviteId});
+  await service.dispatch(owner,'PATCH',f.path+'/members/bob',{role:'admin'});
+  const results=await Promise.allSettled([
+   service.dispatch(recipient,'POST',f.path+'/invites/issue',{requestId:'racing-departure'}),
+   service.dispatch(recipient,'POST',f.path+'/leave'),
+  ]);
+  expect(results[1].status).toBe('fulfilled');
+  expect((await pool.query("SELECT * FROM rooms.membership_invites WHERE room_id=$1 AND created_by='bob' AND revoked_at IS NULL",[f.room.id])).rows).toHaveLength(0);
+  await expect(service.dispatch(recipient,'GET',f.path+'/timeline')).rejects.toMatchObject({statusCode:404});
+ });
 });

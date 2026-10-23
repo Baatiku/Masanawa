@@ -7,8 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'room_community_api.dart';
+import 'room_invitation_links.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -359,25 +359,22 @@ class _CommunityInfo extends StatefulWidget {
 class _InfoState extends State<_CommunityInfo> {
   late CommunityRoom room = widget.initial;
   late final name = TextEditingController(text: room.name), about = TextEditingController(text: room.description);
-  final inviteCode = TextEditingController();
-  List<Map<String, dynamic>> members = [], invites = [], masana = [], sharedMedia = [], reportedPosts = [], reportReviews = [];
+  List<Map<String, dynamic>> members = [], masana = [], sharedMedia = [], reportedPosts = [], reportReviews = [];
   final reviewRequestKeys = <String, String>{};
   final reportReason = TextEditingController();
   String? reportKey;
   String? error;
-  String? inviteKey;
   bool busy = false;
   @override void initState() { super.initState(); refresh(); }
-  @override void dispose() { name.dispose(); about.dispose(); inviteCode.dispose(); reportReason.dispose(); super.dispose(); }
+  @override void dispose() { name.dispose(); about.dispose(); reportReason.dispose(); super.dispose(); }
   Future<void> refresh() async {
     try {
       final media = room.joined ? await widget.api.items(room.id, 'media') : <Map<String, dynamic>>[];
       final people = room.joined ? await widget.api.items(room.id, 'members') : <Map<String, dynamic>>[];
       final agents = room.joined ? await widget.api.items(room.id, 'masana') : <Map<String, dynamic>>[];
-      final links = room.manages ? await widget.api.items(room.id, 'invites') : <Map<String, dynamic>>[];
       final flagged = room.manages ? await widget.api.items(room.id, 'reports/summary') : <Map<String, dynamic>>[];
       final reviews = room.manages ? await widget.api.items(room.id, 'reports/reviews') : <Map<String, dynamic>>[];
-      if (mounted) setState(() { members = people; invites = links; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
+      if (mounted) setState(() { members = people; masana = agents; sharedMedia = media; reportedPosts = flagged; reportReviews = reviews; });
     } catch (e) { if (mounted) setState(() => error = communityError(e)); }
   }
   Future<void> run(Future<void> Function() work) async {
@@ -417,9 +414,7 @@ class _InfoState extends State<_CommunityInfo> {
       DropdownButtonFormField<String>(value: room.postingPolicy, decoration: const InputDecoration(labelText: 'Who can post?'), items: const [DropdownMenuItem(value: 'admins', child: Text('Admins only')), DropdownMenuItem(value: 'members', child: Text('All members'))], onChanged: busy ? null : (v) => run(() async { room = await widget.api.update(room.id, {'postingPolicy': v}); })),
       DropdownButtonFormField<String>(value: room.visibility, decoration: const InputDecoration(labelText: 'Visibility'), items: const [DropdownMenuItem(value: 'public', child: Text('Public')), DropdownMenuItem(value: 'private', child: Text('Private'))], onChanged: busy ? null : (v) => run(() async { room = await widget.api.update(room.id, {'visibility': v}); })),
       SwitchListTile(title: const Text('Allow comments'), value: room.commentsEnabled, onChanged: busy ? null : (v) => run(() async { room = await widget.api.update(room.id, {'commentsEnabled': v}); })),
-      TextButton.icon(onPressed: busy ? null : () => run(() async { inviteKey ??= communityRequestId(); final value = await widget.api.invite(room.id, inviteKey!); if (mounted) setState(() => inviteCode.text = value); }), icon: const Icon(Icons.link), label: const Text('Create invitation code')),
-      if (inviteCode.text.isNotEmpty) ...[SelectableText(inviteCode.text), TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: inviteCode.text)), child: const Text('Copy invitation code'))],
-      for (final invite in invites) ListTile(title: const Text('Invitation'), subtitle: Text('Expires ${invite['expiresAt']} · ${invite['revoked'] == true ? 'Revoked' : 'Active'}'), trailing: invite['revoked'] == true ? null : TextButton(onPressed: busy ? null : () => run(() async { await widget.api.revoke(room.id, '${invite['inviteId']}'); if (mounted) { inviteCode.clear(); inviteKey = null; } }), child: const Text('Revoke'))),
+      RoomInvitationLinks(api: widget.api, roomId: room.id, newRequestId: communityRequestId),
     ]),
     if (room.manages) ExpansionTile(
       key: const PageStorageKey('room-reported-posts'),

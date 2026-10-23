@@ -1,10 +1,18 @@
 # Continue Masanawa — 23 October 2026
 
+
+## Room invitation-code issuance recovery — 23 October 2026
+
+Base `main 2e86bfd3`; source `a95051b3ec463219d6adac10ee92e537fb7e7a16`, `feat/rooms-invitation-issuance-recovery-oct23`. P5-R03/R06/R08 and R2-07/08/10 partial: one grant per keyed issuance, raw code only once/hash-only persistence, secure request-ID-only recovery, canonical status/revocation readback, no duplicate grant on timeout or restart, and issuer-role/departure revocation. Scope: Room community invite/leave/member branches, new `room_invitation_links.dart`, minimal Info/API wiring, distinct SQL/Flutter tests and scoped Rooms CI. No identity/timeline edits from open #300, no Wallet/P2P changes. Merge-tree compatibility with #300 checked clean. Local 27 tests PASS (five actual PG18), Gateway typing/build PASS. All six hosted checks, including thirteen panel widgets and the transport regression, passed on [#307](https://github.com/Baatiku/Masanawa/pull/307) initial head `fc4fbbb5de1aeb1b4f0cb5ff1ccbb805d758cfbd`; integration with Calls #305 is being rechecked on the same PR. No APK, live provider, deployed schema or physical-device acceptance. Keep all parent gates open. Safe merge target: fresh main after CI/review; next independent implementation is explicit recipient acceptance of Room ownership transfer, then remaining moderation/recovery/permission and actual-device gates.
+
+**Completed predecessor:** Calls [#306](https://github.com/Baatiku/Masanawa/pull/306) merged as `2e86bfd38080bd2ea22c74beb96ee651b927f1aa`. Exact source head `dcc56e7d95c7f44993b88edfa62a0bc70da0b009` passed Foundation, full Mobile analysis/tests and focused backend/Flutter communication checks, including all ten new recording lifecycle cases. APK job skipped; Higgsfield/physical Android/provider acceptance stays open.
+
 ## Calls contact-to-voice entry continuation — 23 October 2026
 
 Follow-up source correction: the Flutter `/chat/:id` router recognizes `entry=live-voice`, not `mode=liveVoice`. A single typed-purpose route helper now connects new-call Masana selection, Calls history redial, call-details redial and public Masana profile Audio Call to the real live-voice entry; regression checks cover encoded identity and chooser navigation. Keep exact-head hosted Flutter/CI as merge gate and actual handset/provider audio as OPEN acceptance.
 
 Predecessor Calls history/search [#303](https://github.com/Baatiku/Masanawa/pull/303) **MERGED** into main `16a83b4447434c75c8199b4a8f572b3f59dc01f5`, exact PR head `4c30c930ad08f91d885f740867e72900b9f36a13`; all four GitHub hosted workflows PASS (Mobile Build, Foundation, Status, Chat Voice/Calls), no APK. Local source checks include PGlite 19/19, architecture 85/85, root/workspace typecheck and complete build PASS. A separate `feat/calls-contact-chooser-oct23` branch starts from that fresh main for P4-09/CL00/L0-09: explicit Human or Masana New Call choice, direct Contacts tab selection, existing human call controller and Masana live voice route, account-switch fence and focused Flutter widget tests. Other windows' Status, Rooms, Wallet, P2P and pending #300 chat/billing paths are untouched. This is partial Calls navigation source, **NOT** actual human/Masana audio, locked-device notification, provider, full accessibility or production verification. No APK requested/generated. Check latest PR/head and hosted test evidence before merge.
+
 
 ## Independent call-recording focus/lifecycle continuation — 23 October 2026
 
