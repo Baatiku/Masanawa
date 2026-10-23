@@ -76,9 +76,15 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
     Text('${item.isGroupCall?'Group call · ':''}${item.incoming?'Incoming':'Outgoing'} audio call',textAlign:TextAlign.center),
     const SizedBox(height:20),Text(item.outcomeLabel,textAlign:TextAlign.center,style:Theme.of(context).textTheme.titleMedium),
     const SizedBox(height:20),Wrap(alignment:WrapAlignment.center,spacing:12,runSpacing:8,children:[
-     OutlinedButton.icon(onPressed:LiveCallForeground.active?null:()=>context.push(masanaLiveVoiceRoute(item.characterId)),icon:const Icon(Icons.call_outlined),label:const Text('Call again')),
-     OutlinedButton.icon(onPressed:()=>profile(item.characterId),icon:const Icon(Icons.person_outline),label:const Text('View profile')),
-    ]),const SizedBox(height:24),
+     if(!item.isGroupCall)...[
+       OutlinedButton.icon(onPressed:LiveCallForeground.active?null:(){if(current)context.push(masanaLiveVoiceRoute(item.characterId));},icon:const Icon(Icons.call_outlined),label:const Text('Call again')),
+       OutlinedButton.icon(onPressed:(){if(current)context.push('/chat/${Uri.encodeComponent(item.characterId)}');},icon:const Icon(Icons.chat_outlined),label:const Text('Message')),
+       OutlinedButton.icon(onPressed:()=>profile(item.characterId),icon:const Icon(Icons.person_outline),label:const Text('View profile')),
+     ]else
+       OutlinedButton.icon(onPressed:()=>context.go('/home?tab=calls'),icon:const Icon(Icons.groups_outlined),label:const Text('Back to Calls')),
+    ]),
+    if(item.isGroupCall)const Padding(padding:EdgeInsets.only(top:12),child:Text('To start a new group call, choose Call multiple Masana from Calls. An old group call cannot be redialled as one Masana.',textAlign:TextAlign.center)),
+    const SizedBox(height:24),
     ListTile(contentPadding:EdgeInsets.zero,title:const Text('Started'),subtitle:Text(date(item.createdAt))),
     if(item.connectedAt!=null)ListTile(contentPadding:EdgeInsets.zero,title:const Text('Connected'),subtitle:Text(date(item.connectedAt!))),
     if(item.endedAt!=null)ListTile(contentPadding:EdgeInsets.zero,title:const Text('Ended'),subtitle:Text(date(item.endedAt!))),
