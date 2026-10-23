@@ -4,6 +4,7 @@ import type {Pool,PoolClient} from '@masanawa/postgres';
 import {incomingInvitationPage,managerInvitationPage,invitationMetadata} from './invitation_pagination.js';
 import {roomListPage} from './room_list_pages.js';
 import {roomTimelinePage} from './timeline_pages.js';
+import {roomMediaPage} from './media_pages.js';
 import {roomContentModeration} from './content_moderation.js';
 import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
@@ -136,7 +137,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
    if(operation==='media'){
     if(method==='GET'){
      if(parts[3]){const m=(await q.query(`SELECT m.* FROM rooms.media m LEFT JOIN rooms.lessons l ON l.tenant_id=m.tenant_id AND l.lesson_id=m.lesson_id LEFT JOIN rooms.discussion_replies d ON d.tenant_id=m.tenant_id AND d.reply_id=m.reply_id LEFT JOIN rooms.lessons parent ON parent.tenant_id=d.tenant_id AND parent.room_id=d.room_id AND parent.lesson_id=d.lesson_id WHERE m.tenant_id=$1 AND m.room_id=$2 AND m.media_id=$3 AND ((m.user_id=$4 AND m.lesson_id IS NULL AND m.reply_id IS NULL) OR (l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now())) OR (d.moderation_state='visible' AND parent.state='published' AND (parent.publish_at IS NULL OR parent.publish_at<=now())))`,[a.tenantId,id,parts[3],a.userId])).rows[0];if(!m)fail(404,'media_not_found');return {...mediaView(m),dataBase64:m.data_base64};}
-     const media=await q.query("SELECT m.* FROM rooms.media m LEFT JOIN rooms.lessons l ON l.tenant_id=m.tenant_id AND l.lesson_id=m.lesson_id LEFT JOIN rooms.discussion_replies d ON d.tenant_id=m.tenant_id AND d.reply_id=m.reply_id LEFT JOIN rooms.lessons parent ON parent.tenant_id=d.tenant_id AND parent.room_id=d.room_id AND parent.lesson_id=d.lesson_id WHERE m.tenant_id=$1 AND m.room_id=$2 AND ((l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now())) OR (d.moderation_state='visible' AND parent.state='published' AND (parent.publish_at IS NULL OR parent.publish_at<=now()))) ORDER BY m.created_at DESC LIMIT 100",[a.tenantId,id]);return {items:media.rows.map(mediaView)};
+     return roomMediaPage(q,a,id,input,mediaView);
     }
     if(method==='POST'){
      const key=text(input.requestId,160),kind=text(input.kind,20),mime=text(input.mimeType,100),name=text(input.name,180),data=text(input.dataBase64,11000000);if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))fail(422,'invalid_base64');const bytes=Buffer.from(data,'base64'),sig=bytes.subarray(0,16);if(!bytes.length||bytes.length>8000000)fail(422,'media_too_large');
