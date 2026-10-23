@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/rooms/room_community_api.dart';
 import 'package:masanawa/src/features/rooms/room_media_library.dart';
+import 'package:masanawa/src/features/rooms/room_community_screen.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
 
@@ -85,6 +86,39 @@ Future<void> show(
 }
 
 void main() {
+  testWidgets(
+    'Room Info opens the library and exact source thread, then Back restores both routes',
+    (t) async {
+      final api = _Journey();
+      await t.pumpWidget(
+        MaterialApp(
+          home: RoomCommunityScreen(api: api, roomId: 'room_1'),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.tap(find.text('Garden'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('Shared media'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.tap(find.text('Shared media'));
+      await t.pumpAndSettle();
+      expect(find.byType(RoomMediaLibrary), findsOneWidget);
+      await t.tap(find.text('Recent notes.pdf'));
+      await t.pumpAndSettle();
+      expect(find.text('Exact old source post'), findsOneWidget);
+      expect(api.parents, contains('post_old'));
+      await t.pageBack();
+      await t.pumpAndSettle();
+      expect(find.text('Recent notes.pdf'), findsOneWidget);
+      await t.pageBack();
+      await t.pumpAndSettle();
+      expect(find.text('Room info'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'membership catch-up invalidates an older page already in flight',
     (t) async {
@@ -406,4 +440,30 @@ class _Response extends FakeCommunityApi {
     String resource,
     Map<String, dynamic> values,
   ) async => data;
+}
+
+class _Journey extends _Media implements RoomTimelinePages {
+  final parents = <String?>[];
+  @override
+  Future<RoomTimelinePage> timelinePage(
+    String id, {
+    String search = '',
+    String? parentId,
+    String? cursor,
+  }) async {
+    parents.add(parentId);
+    final parent = <String, dynamic>{
+      'id': 'post_old',
+      'body': 'Exact old source post',
+      'authorId': 'bob',
+      'parentId': null,
+      'attachments': [],
+      'reactions': [],
+    };
+    return RoomTimelinePage(
+      parentId == null ? [parent] : [],
+      null,
+      parent: parentId == null ? null : parent,
+    );
+  }
 }
