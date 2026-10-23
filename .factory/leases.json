@@ -43,9 +43,9 @@
       "base_sha": "d012c73e3c487f3e0efe6b1575a2e76cf1e04078",
       "pr": "",
       "claimed_at": "2026-10-23T08:50:56.304Z",
-      "heartbeat_at": "2026-10-23T08:58:00.513Z",
-      "expires_at": "2026-10-23T09:03:00.513Z",
-      "progress": "Recovered complete editor backend/native source into unique original checkout at d012c73e; 80P2Pbackend tests and Gatewaytyping PASS. SDK/deps restored; fresh Flutter pub downloads in progress. Independent review requested; realPG edit/quote/immutable audit race test authored. External recovery copy saved."
+      "heartbeat_at": "2026-10-23T09:08:17.493Z",
+      "expires_at": "2026-10-23T09:13:17.493Z",
+      "progress": "Recovered editor batch:80fullP2P backend+5focusedSQLHTTP+types PASS;18native PASS incl320dp200%RTL; rendered summary inspected. Review no blockers, final delta requested. Preparing exact-tree PR, then hosted11realPG edit/custody races. Source backed up separately."
     }
   ],
   "history": [
