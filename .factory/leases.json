@@ -40,12 +40,12 @@
         "apps/mobile/test/p2p_offer_editor_test.dart"
       ],
       "branch": "feat/p2p-versioned-ad-editing-oct23",
-      "base_sha": "d012c73e3c487f3e0efe6b1575a2e76cf1e04078",
-      "pr": "",
+      "base_sha": "87d979a493dea1f21dde370ba808d765c02515bc",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/324",
       "claimed_at": "2026-10-23T08:50:56.304Z",
-      "heartbeat_at": "2026-10-23T09:08:17.493Z",
-      "expires_at": "2026-10-23T09:13:17.493Z",
-      "progress": "Recovered editor batch:80fullP2P backend+5focusedSQLHTTP+types PASS;18native PASS incl320dp200%RTL; rendered summary inspected. Review no blockers, final delta requested. Preparing exact-tree PR, then hosted11realPG edit/custody races. Source backed up separately."
+      "heartbeat_at": "2026-10-23T09:13:57.947Z",
+      "expires_at": "2026-10-23T09:18:57.947Z",
+      "progress": "PR324 headf2ef379a exacttree3ff81ad7 published;80fullP2P+5focusedSQLHTTP+types,18native inclsmallRTL PASS on source before final base fence. Isolated last rerun shellsegfault, notassertfailure; hosted exacthead required. Review no blockers, minorbasefence repaired. Await realPG11 and allCI."
     }
   ],
   "history": [
