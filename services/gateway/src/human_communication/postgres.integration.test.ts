@@ -108,4 +108,25 @@ describe.skipIf(!url)('human communication real PostgreSQL concurrency',()=>{
   expect(new Set(both.map((r:any)=>r.id)).size).toBe(74);
   expect(both.every((r:any)=>Number(r.peer.handle.slice(-3))>=6)).toBe(true);
  });
+ it('preserves microsecond message-page anchors and excludes deleted plaintext from search',async()=>{
+  await database.pool.query(`INSERT INTO identity.users VALUES('t','pgchatpeer','active');
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    VALUES('t','pgchatpeer','pgchatpeer','PG Chat Peer');
+    INSERT INTO talks.human_conversations(tenant_id,id,low_user,high_user,initiator,state,updated_at)
+    VALUES('t','pg-chat-tied-thread','alice','pgchatpeer','alice','accepted','2026-10-18 19:00:00+00');
+    INSERT INTO talks.human_viewers(tenant_id,conversation_id,user_id)
+    VALUES('t','pg-chat-tied-thread','alice'),('t','pg-chat-tied-thread','pgchatpeer');
+    INSERT INTO talks.human_messages(tenant_id,id,conversation_id,user_id,request_id,text,created_at,deleted)
+    SELECT 't','pg-message-tie-'||lpad(n::text,3,'0'),'pg-chat-tied-thread','pgchatpeer',
+      'pg-message-tie-'||lpad(n::text,3,'0'),'secret pg microtext '||n,
+      '2026-10-18 17:00:00.123456+00',n%9=0 FROM generate_series(0,89) n;`);
+  const first=await service.dispatch(a,'GET','conversations/pg-chat-tied-thread/messages',{}, {query:'microtext'});
+  expect(first.items).toHaveLength(50);
+  const second=await service.dispatch(a,'GET','conversations/pg-chat-tied-thread/messages',{}, {query:'microtext',before:first.nextCursor});
+  expect(second.items).toHaveLength(30);
+  expect(second.nextCursor).toBeNull();
+  const both=[...first.items,...second.items];
+  expect(new Set(both.map((r:any)=>r.id)).size).toBe(80);
+  expect(both.every((r:any)=>!r.deleted&&Number(r.id.slice(-3))%9!==0)).toBe(true);
+ });
 });

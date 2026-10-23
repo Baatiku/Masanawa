@@ -1,5 +1,11 @@
 # Continue Masanawa — 23 October 2026
 
+## Chats: lossless human message-history cursor and deleted-text search fence — 23 October 2026 (partial source)
+
+Next independently stacked P4-05/07, CM-14/19/21 and P8-X02 batch after the privacy-qualified inbox PR: message-history search now ignores the original plaintext of `deleted` human messages while ordinary unfiltered history still displays honest tombstones. The existing authorized per-thread `before` anchor uses `created_at::text` from PostgreSQL, not a JavaScript Date that loses microseconds at a tied page boundary; thread/tenant participant authorization and original `(created_at,id)` order stay unchanged. No new deletion semantics, delivery confirmation, stored media handling, replay, payment or provider power.
+
+**Local evidence:** focused PGlite Human communication suite **23/23 PASS**, including 80 identical-microsecond messages, eight deleted matching tombstones, search first 50/next 22, intact unfiltered tombstones and rejected foreign/missing cursors. An independent real PostgreSQL 90-row/80-visible regression is authored but **NOT_RUN locally**. Full TypeScript/architecture/exact-head hosted workflows must validate this next branch separately. All parent Phases 4/8, physical-device/offline/privacy-retention and 177/820 total gates remain **OPEN**; no APK, provider action or deployment.
+
 ## Chats: privacy-qualified, bounded human inbox/search paging — 23 October 2026 (partial source)
 
 Next isolated P4-02/05, CI-13/15/17/21 and P8-X02 source increment (distinct from the Calls stale-admission PR): the human conversations GET applies current public/active peer, bidirectional block, profile moderation, viewer-hidden and literal handle/display-name search **inside SQL before `LIMIT 51`**, instead of fetching all conversations and searching fully populated peer/last-message views in memory. The original `(updated_at,id)` cursor now uses the PostgreSQL microsecond timestamp, preventing same-instant ties from disappearing across pages. Request-only filtering and the original public per-peer last-message/unread projection remain intact. Search rejects oversized/invalid input; arbitrary avatar URLs are not searchable identity. No mobile #300, Rooms/Status/Wallet/P2P or call-admission changes in this Chats slice.
