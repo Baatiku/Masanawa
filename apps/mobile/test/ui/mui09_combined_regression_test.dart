@@ -100,7 +100,7 @@ void main() {
     for (final locale in ['en', 'ha', 'ar']) {
       for (final scale in [1.0, 2.0]) {
         testWidgets(
-          'combined shell $width $locale ${scale}x search/tab/crypto Back',
+          'combined shell $width $locale ${scale}x search/tab/wallet authorization',
           (tester) async {
             tester.view.physicalSize = Size(width, 900);
             tester.view.devicePixelRatio = 1;
@@ -242,7 +242,10 @@ void main() {
             session.signOut();
             await tester.pumpAndSettle();
             expect(find.byType(TextField), findsNothing);
-            expect(find.text('Sign in to see your conversations.'), findsOneWidget);
+            expect(
+              find.text('Sign in to see your conversations.'),
+              findsOneWidget,
+            );
             session.change('fixture-return');
             await tester.pumpAndSettle();
             await tester.enterText(field, 'no authorized match');
@@ -273,23 +276,30 @@ void main() {
             await tester.pumpAndSettle();
             await tab(2);
             await tester.scrollUntilVisible(
-              find.text('Sign in to view your balance'), 120,
+              find.text('Sign in to view your balance'),
+              120,
               scrollable: find.byType(Scrollable).first,
             );
             await save('wallet-outage');
-            expect(
-              find.text('Sign in to view your balance'),
-              findsOneWidget,
+            expect(find.text('Sign in to view your balance'), findsOneWidget);
+            // Owner-approved Wallet is a single ten-card list. Never route a
+            // signed-out visitor through an obsolete second crypto home.
+            expect(find.text('All crypto assets'), findsNothing);
+            await tester.scrollUntilVisible(
+              find.text('P2P'),
+              150,
+              scrollable: find.byType(Scrollable).first,
             );
-            await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
-            await tester.pumpAndSettle();
-            await tester.tap(find.text('All crypto assets'));
-            await tester.pumpAndSettle();
-            expect(find.byType(CryptoWalletScreen), findsOneWidget);
-            expect(find.byType(NavigationBar), findsNothing);
-            await save('crypto');
-            await tester.tap(find.byType(BackButton));
-            await tester.pumpAndSettle();
+            final p2pAction = tester.widget<InkWell>(
+              find
+                  .ancestor(
+                    of: find.text('P2P'),
+                    matching: find.byType(InkWell),
+                  )
+                  .first,
+            );
+            expect(p2pAction.onTap, isNull);
+            expect(find.byType(CryptoWalletScreen), findsNothing);
             expect(
               tester
                   .widget<NavigationBar>(find.byType(NavigationBar))
@@ -301,17 +311,20 @@ void main() {
             expect(find.text('Sign in to see your calls.'), findsOneWidget);
             await tab(4);
             await save('rooms-unavailable');
+            expect(find.text('Sign in to view Rooms.'), findsOneWidget);
+            await tab(1);
             expect(
-              find.text('Sign in to view Rooms.'),
+              find.text('Sign in to view Status updates.'),
               findsOneWidget,
             );
-            await tab(1);
-            expect(find.text('Sign in to view Status updates.'), findsOneWidget);
             await save('status-unavailable');
             // Signed-out Status and Rooms deny private content before requesting it.
             await tab(0);
             expect(find.byType(TextField), findsNothing);
-            expect(find.text('Sign in to see your conversations.'), findsOneWidget);
+            expect(
+              find.text('Sign in to see your conversations.'),
+              findsOneWidget,
+            );
             await save('chats');
             expect(tester.takeException(), isNull);
             await tester.pumpWidget(const SizedBox.shrink());

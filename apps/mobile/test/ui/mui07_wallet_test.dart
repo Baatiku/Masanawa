@@ -44,7 +44,8 @@ WalletView _view({
 );
 
 class _SignedOut extends SessionController {
-  @override SessionState build() => const SessionSignedOut();
+  @override
+  SessionState build() => const SessionSignedOut();
 }
 
 class _Wallet extends WalletController {
@@ -140,18 +141,29 @@ void main() {
           expect(find.textContaining('MSNW'), findsWidgets);
           // Pricing policy copy may mention ₦1, but a signed-out portfolio
           // must not invent an NGN valuation.
-          expect(find.text('Unavailable'), findsOneWidget);
-          await tester.scrollUntilVisible(find.text('Available balance'), 100,
-              scrollable: find.byType(Scrollable).first);
+          expect(find.text('— MSNW'), findsOneWidget);
+          expect(find.text('Unavailable'), findsNothing);
+          await tester.scrollUntilVisible(
+            find.text('Available balance'),
+            100,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text('Available balance'), findsOneWidget);
           expect(find.text('Sign in to view your balance'), findsOneWidget);
           expect(find.text('9007199254740991'), findsNothing);
           expect(find.text('Credits'), findsNothing);
-          await tester.scrollUntilVisible(find.text('Send'), 100,
-              scrollable: find.byType(Scrollable).first);
+          await tester.scrollUntilVisible(
+            find.text('Send'),
+            100,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text('Send'), findsOneWidget);
           expect(find.text('Withdraw'), findsOneWidget);
-          await tester.scrollUntilVisible(find.text('Data bundles'), 180, scrollable: find.byType(Scrollable).first);
+          await tester.scrollUntilVisible(
+            find.text('Data'),
+            180,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text('+9007199254740991 Credits'), findsNothing);
           expect(tester.takeException(), isNull);
         });
@@ -176,10 +188,15 @@ void main() {
       await mount(tester, controller: () => loading, onBilling: intents.add);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.text('0'), findsNothing);
-      await tester.scrollUntilVisible(find.text('Airtime'), 180,
-          scrollable: find.byType(Scrollable).first);
-      await tester.tap(find.text('Airtime'));
-      expect(intents, ['airtime']);
+      await tester.scrollUntilVisible(
+        find.text('Airtime'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      final airtime = tester.widget<InkWell>(find.ancestor(
+        of: find.text('Airtime'), matching: find.byType(InkWell)).first);
+      expect(airtime.onTap, isNull);
+      expect(intents, isEmpty);
     },
   );
 
@@ -195,7 +212,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('existing qualified Crypto and Billing destinations still open', (
+  testWidgets('signed-out Wallet cannot open removed crypto home or billing routes', (
     tester,
   ) async {
     late GoRouter router;
@@ -242,16 +259,23 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('All crypto assets'), 180, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('All crypto assets'));
-    await tester.pumpAndSettle();
-    expect(find.text('Crypto route'), findsOneWidget);
-    router.pop();
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Data bundles'));
-    await tester.tap(find.text('Data bundles'));
-    await tester.pumpAndSettle();
-    expect(find.text('Billing data'), findsOneWidget);
+    // Signed-out Wallet never exposes a separate crypto home, or opens a
+    // financial route without an authorized account. Billing remains visible
+    // but disabled until sign-in.
+    expect(find.text('All crypto assets'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Data'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final data = tester.widget<InkWell>(
+      find
+          .ancestor(of: find.text('Data'), matching: find.byType(InkWell))
+          .first,
+    );
+    expect(data.onTap, isNull);
+    expect(find.text('Crypto route'), findsNothing);
+    expect(find.text('Billing data'), findsNothing);
   });
   testWidgets(
     'legacy Send callback cannot authorize MSNW in a signed-out wallet',
@@ -264,13 +288,19 @@ void main() {
         value: _view(amount: 12, empty: true),
         onSend: () => sent++,
       );
-      await tester.scrollUntilVisible(find.text('Send'), 100,
-          scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(
+        find.text('Send'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Withdraw'), findsOneWidget);
       await tester.tap(find.text('Send'));
       expect(sent, 0);
-      final send = tester.widget<InkWell>(find.ancestor(
-        of: find.text('Send'), matching: find.byType(InkWell)).first);
+      final send = tester.widget<InkWell>(
+        find
+            .ancestor(of: find.text('Send'), matching: find.byType(InkWell))
+            .first,
+      );
       expect(send.onTap, isNull);
       expect(tester.takeException(), isNull);
     },
@@ -279,14 +309,17 @@ void main() {
   testWidgets('MSNW Send stays disabled without an authenticated account', (
     tester,
   ) async {
-    await mount(
-      tester,
-      value: _view(amount: 1000, empty: true),
+    await mount(tester, value: _view(amount: 1000, empty: true));
+    await tester.scrollUntilVisible(
+      find.text('Send'),
+      100,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.scrollUntilVisible(find.text('Send'), 100,
-        scrollable: find.byType(Scrollable).first);
-    final sendButton = tester.widget<InkWell>(find.ancestor(
-      of: find.text('Send'), matching: find.byType(InkWell)).first);
+    final sendButton = tester.widget<InkWell>(
+      find
+          .ancestor(of: find.text('Send'), matching: find.byType(InkWell))
+          .first,
+    );
     expect(sendButton.onTap, isNull);
     expect(find.byTooltip('Send Credits'), findsNothing);
     expect(find.text('Credits'), findsNothing);

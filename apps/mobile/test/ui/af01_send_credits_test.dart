@@ -8,6 +8,8 @@ import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/wallet/send_credits_sheet.dart';
 import 'package:masanawa/src/screens/wallet/wallet_screen.dart';
 import 'package:masanawa/src/finance/msnw_custody_send.dart';
+import 'package:masanawa/src/finance/crypto_state.dart';
+import 'mui08_crypto_test.dart' as crypto;
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/state/wallet_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
@@ -178,6 +180,9 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         walletProvider.overrideWith(() => wallet),
+        cryptoWalletProvider.overrideWith(
+          () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
+        ),
         sessionProvider.overrideWith(_Session.new),
       ],
       child: MaterialApp(
@@ -188,7 +193,8 @@ void main() {
     // The live Wallet keeps a balance loader active without a fixture API.
     // A bounded pump tests the entry action without waiting for that loader.
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.ensureVisible(find.byTooltip('Send'));
+    await tester.scrollUntilVisible(find.text('Send'), 100,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.ancestor(
       of: find.text('Send'), matching: find.byType(InkWell),
     ).first);
@@ -205,6 +211,9 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         walletProvider.overrideWith(() => _Wallet()),
+        cryptoWalletProvider.overrideWith(
+          () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
+        ),
         sessionProvider.overrideWith(_Session.new),
       ],
       child: MaterialApp(
@@ -213,13 +222,16 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byTooltip('Send'), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-action-send')), findsOneWidget);
 
     // Different provider container: signed-out account, enabled build flag.
     await tester.pumpWidget(ProviderScope(
       key: UniqueKey(),
       overrides: [
         walletProvider.overrideWith(() => _Wallet()),
+        cryptoWalletProvider.overrideWith(
+          () => crypto.FixtureWallet(crypto.snapshot(enabled: false)),
+        ),
         sessionProvider.overrideWith(_SignedOutSession.new),
       ],
       child: MaterialApp(
@@ -228,6 +240,6 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byTooltip('Send'), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-action-send')), findsOneWidget);
   });
 }

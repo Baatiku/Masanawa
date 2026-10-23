@@ -83,8 +83,7 @@ void main() {
     // MSNW is the only wallet credit/token; legacy Credits and historical
     // bank metadata must not be silently presented as MSNW funding.
     expect(find.text('Available balance'), findsOneWidget);
-    expect(find.text('MSNW'), findsWidgets);
-    expect(find.text('My assets'), findsOneWidget);
+    expect(find.textContaining('MSNW'), findsWidgets);
     expect(find.text('2500'), findsNothing);
     expect(find.text('Credits'), findsNothing);
     expect(find.text('Dedicated Bank Account'), findsNothing);
@@ -93,13 +92,19 @@ void main() {
     expect(find.text('Masanawa / Test User'), findsNothing);
     expect(find.text('Sign in to view your balance'), findsOneWidget);
 
-    // Verify navigating to the same crypto wallet within the Wallet screen.
-    await tester.scrollUntilVisible(find.text('All crypto assets'), 150, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('All crypto assets'));
-    await tester.pumpAndSettle();
-
-    // Verify Crypto tab loaded
-    expect(find.textContaining('USDT'), findsWidgets);
-    expect(find.text('150.00'), findsWidgets);
+    // Owner-approved WLT01: no standalone crypto wallet/card on the home,
+    // and a signed-out viewer cannot use financial actions.
+    expect(find.text('All crypto assets'),findsNothing);
+    expect(find.text('Bills & services'),findsNothing);
+    expect(find.byType(IndexedStack),findsNothing);
+    final scroll=find.descendant(of:find.byType(WalletScreen),
+      matching:find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('P2P'),150,scrollable:scroll);
+    expect(tester.widget<InkWell>(find.ancestor(
+      of:find.text('P2P'),matching:find.byType(InkWell)).first).onTap,isNull);
+    await tester.scrollUntilVisible(find.text('My assets'),150,scrollable:scroll);
+    expect(find.text('My assets'),findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Transaction history'),150,scrollable:scroll);
+    expect(find.text('Transaction history'),findsOneWidget);
   });
 }

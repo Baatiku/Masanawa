@@ -19,19 +19,29 @@ String walletAssetBalanceLabel(CryptoWalletSnapshot wallet, String providerCode,
 }
 
 class WalletAssetOverview extends ConsumerWidget {
-  const WalletAssetOverview({super.key,this.hideBalances=false});
+  const WalletAssetOverview({super.key,this.hideBalances=false,this.ownedOnly=false});
   final bool hideBalances;
+  /// WLT01 composite card shows only verified held quantities, not deposit
+  /// route suggestions or provider-reported informational balances.
+  final bool ownedOnly;
+  static bool _positive(String? value) {
+    if(value==null||value.trim().isEmpty)return false;
+    final quantity=value.trim();
+    if(!RegExp(r'^[0-9]+(?:\.[0-9]+)?$').hasMatch(quantity)){return false;}
+    return quantity.replaceAll(RegExp(r'[0.]'),'').isNotEmpty;
+  }
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(sessionProvider) is! SessionSignedIn)
+    if (ref.watch(sessionProvider) is! SessionSignedIn) {
       return const SizedBox.shrink();
+    }
     final snapshot = ref.watch(cryptoWalletProvider);
     return snapshot.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(20),
         child: LinearProgressIndicator(),
       ),
-      error: (_, __) => ListTile(
+      error: (_, _) => ListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('Crypto assets unavailable'),
         trailing: TextButton(
@@ -39,8 +49,12 @@ class WalletAssetOverview extends ConsumerWidget {
           child: const Text('Retry'),
         ),
       ),
-      data: (wallet) => Column(
-        children: [
+      data: (wallet) {
+        final ownedRoutes=wallet.assetRoutes.where((route)=>
+          !ownedOnly || (wallet.verifiedCustodyFor(route.providerCode) &&
+           (_positive(wallet.balances[route.providerCode]) ||
+            _positive(wallet.reservedBalances[route.providerCode])))).toList();
+        return Column(children: [
           if (!wallet.holdingsVerified && wallet.assetRoutes.isNotEmpty)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -54,7 +68,13 @@ class WalletAssetOverview extends ConsumerWidget {
                 child: const Text('Retry'),
               ),
             ),
-          for (final route in wallet.assetRoutes) ...[
+          if(ownedOnly && ownedRoutes.isEmpty)
+            ListTile(contentPadding:EdgeInsets.zero,
+              title:Text(wallet.holdingsVerified
+                ? 'No verified crypto holdings yet'
+                : 'Crypto holdings verification unavailable'),
+              subtitle:const Text('Balances are shown only after custody verification.')),
+          for (final route in ownedRoutes) ...[
             Divider(height: 1, color: context.masanawa.structuralBorder),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -92,8 +112,8 @@ class WalletAssetOverview extends ConsumerWidget {
               ),
             ),
           ],
-        ],
-      ),
+        ]);
+      },
     );
   }
 }

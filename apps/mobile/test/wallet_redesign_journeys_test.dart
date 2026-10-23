@@ -61,15 +61,29 @@ void main(){
   final context=t.element(find.byKey(const ValueKey('wallet-balance-card')));
   expect((card.decoration as BoxDecoration).color,context.masanawa.brand);
   expect(find.text('0 MSNW'),findsOneWidget);expect(find.text('2 MSNW reserved'),findsOneWidget);
-  await t.scrollUntilVisible(find.text('USDT'), 140, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pump(const Duration(milliseconds: 200));
-  expect(find.text('USDT'),findsOneWidget);expect(find.text('Provider-reported: 12.5 (custody unverified)'),findsOneWidget);expect(find.text('Tron'),findsOneWidget);
-  await t.scrollUntilVisible(find.text('USDC'), 110, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
-  expect(find.text('USDC'),findsOneWidget);expect(find.text('Provider-reported: 0 (custody unverified)'),findsOneWidget);expect(find.text('Polygon'),findsOneWidget);
-  await t.scrollUntilVisible(find.text('Data bundles'),200,scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);await t.pumpAndSettle();
-  expect(find.text('Data bundles'),findsOneWidget);
-  await t.scrollUntilVisible(find.text('Transactions'), -140, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
-  expect(find.text('Transactions'),findsOneWidget);expect(t.takeException(),isNull);
-  await t.scrollUntilVisible(find.byTooltip('Hide balance'), -160, scrollable:find.descendant(of:find.byType(WalletScreen),matching:find.byType(Scrollable)).first);
-  await t.pump(const Duration(milliseconds: 100));await t.tap(find.byTooltip('Hide balance'));await t.pump();expect(find.text('12.5'),findsNothing);expect(find.text('0 MSNW'),findsNothing);expect(find.text('••••'),findsNWidgets(3));
+  await t.tap(find.byTooltip('Hide balance'));await t.pump();
+  expect(find.text('0 MSNW'),findsNothing);
+  expect(find.textContaining('••••'),findsWidgets);
+
+  // Provider-reported routes are not verified holdings and must not
+  // masquerade as money owned inside the My assets composite card.
+  await t.scrollUntilVisible(find.text('My assets'),160,
+    scrollable:find.descendant(of:find.byType(WalletScreen),
+      matching:find.byType(Scrollable)).first);
+  await t.pump(const Duration(milliseconds:200));
+  expect(find.text('USDT'),findsNothing);
+  expect(find.text('USDC'),findsNothing);
+  expect(find.text('Crypto holdings verification unavailable'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('Data'),-180,
+    scrollable:find.descendant(of:find.byType(WalletScreen),
+      matching:find.byType(Scrollable)).first);
+  expect(find.text('Data'),findsOneWidget);
+  await t.scrollUntilVisible(find.text('Transaction history'),200,
+    scrollable:find.descendant(of:find.byType(WalletScreen),
+      matching:find.byType(Scrollable)).first);
+  expect(find.text('Transaction history'),findsOneWidget);
+  await t.pumpAndSettle(); // flush the real async recent-activity projection
+  expect(t.takeException(),isNull);
+  expect(find.text('12.5'),findsNothing);
  });
 }

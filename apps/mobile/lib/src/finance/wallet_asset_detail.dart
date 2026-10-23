@@ -4,9 +4,11 @@ import 'msnw_wallet_home.dart';
 /// Shared custody detail presentation, never a second balance store.
 class MsnwAssetDetail extends StatelessWidget {
   const MsnwAssetDetail({super.key, required this.balance, required this.onSend,
-    required this.onDeposit, required this.onActivity});
+    required this.onDeposit, required this.onActivity,
+    this.onReceiveMsnw,this.onConvertWithdraw});
   final MsnwCustodyBalance? balance;
   final VoidCallback onSend, onDeposit, onActivity;
+  final VoidCallback? onReceiveMsnw,onConvertWithdraw;
   @override
   Widget build(BuildContext context) => ListView(padding:const EdgeInsets.all(20),children:[
     Text('MSNW',style:Theme.of(context).textTheme.headlineMedium),
@@ -20,6 +22,14 @@ class MsnwAssetDetail extends StatelessWidget {
     const SizedBox(height:20),
     FilledButton.icon(onPressed:onDeposit,icon:const Icon(Icons.south_west),label:const Text('Deposit')),
     OutlinedButton.icon(onPressed:onSend,icon:const Icon(Icons.north_east),label:const Text('Send within Masanawa')),
+    if(onReceiveMsnw!=null) TextButton.icon(
+      onPressed:onReceiveMsnw,
+      icon:const Icon(Icons.qr_code),
+      label:const Text('Receive MSNW on-chain')),
+    if(onConvertWithdraw!=null) TextButton.icon(
+      onPressed:onConvertWithdraw,
+      icon:const Icon(Icons.currency_exchange),
+      label:const Text('Convert MSNW & withdraw externally')),
     TextButton(onPressed:onActivity,child:const Text('View activity')),
   ]);
 }

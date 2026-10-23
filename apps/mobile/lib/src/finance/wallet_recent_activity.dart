@@ -18,6 +18,8 @@ class WalletRecentActivity extends StatefulWidget {
     required this.onViewAll,
     this.refreshKey = 0,
     this.hideAmounts = false,
+    this.compact = false,
+    this.onOpenReceipt,
   });
 
   final Dio dio;
@@ -28,6 +30,8 @@ class WalletRecentActivity extends StatefulWidget {
   final VoidCallback onViewAll;
   final int refreshKey;
   final bool hideAmounts;
+  final bool compact;
+  final ValueChanged<String>? onOpenReceipt;
 
   @override
   State<WalletRecentActivity> createState() => _WalletRecentActivityState();
@@ -135,24 +139,16 @@ class _WalletRecentActivityState extends State<WalletRecentActivity> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Recent activity',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            TextButton(
-              onPressed: permitted ? widget.onViewAll : null,
-              child: const Text('View all'),
-            ),
-          ],
-        ),
-        const Text(
-          'Latest recorded Wallet activity. See Transactions for filters and full details.',
-          style: TextStyle(fontSize: 12),
-        ),
+        if(!widget.compact) ...[
+          Row(children:[
+            Expanded(child:Text('Recent activity',
+              style:Theme.of(context).textTheme.titleMedium)),
+            TextButton(onPressed:permitted?widget.onViewAll:null,
+              child:const Text('View all')),
+          ]),
+          const Text('Latest recorded Wallet activity. See Transactions for filters and full details.',
+            style:TextStyle(fontSize:12)),
+        ],
         if (!permitted)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -211,7 +207,10 @@ class _WalletRecentActivityState extends State<WalletRecentActivity> {
                   ),
                 ),
               ),
-              onTap: widget.onViewAll,
+              onTap: permitted?(){
+                if(widget.onOpenReceipt!=null){widget.onOpenReceipt!(item.id);}
+                else{widget.onViewAll();}
+              }:null,
             ),
       ],
     );
