@@ -31,7 +31,7 @@ async function fixture() {
     CREATE TABLE commerce.msnw_p2p_offers (
       offer_id uuid, tenant_id text, seller_id text, payment_method_id uuid,
       rate_kobo_per_msnw bigint, min_micro bigint, max_micro bigint,
-      remaining_micro bigint, fee_bps integer, state text, offer_side text DEFAULT 'sell',
+      remaining_micro bigint, fee_bps integer, state text, offer_side text DEFAULT 'sell',terms_revision integer NOT NULL DEFAULT 1,
       created_at timestamptz
     );
     CREATE TABLE commerce.msnw_p2p_orders (

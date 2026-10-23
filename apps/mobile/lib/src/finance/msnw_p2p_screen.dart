@@ -180,6 +180,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _buyDrafts = <String, String>{};
   final _sellDraft = <String, String>{};
+  final _editDrafts=<String,Map<String,String>>{};
   final _buyAdDraft = <String, String>{};
   final _methodDrafts = <String,String>{};
   final _secure = const FlutterSecureStorage();
@@ -218,6 +219,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       _cached.clear();
       _buyDrafts.clear();
       _sellDraft.clear();
+      _editDrafts.clear();
       _buyAdDraft.clear();
       _methodDrafts.clear();
       _capKnown = false;
@@ -244,9 +246,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _restorePending() async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
     try {
       final encoded = await _secure.read(key: _pendingKey);
-      if (!_sameAccount || !mounted) return;
+      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base) return;
       Map<String,dynamic>? recovered;
       if (encoded != null) {
         final decoded = _json(jsonDecode(encoded));
@@ -265,7 +268,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         _recoveryReady = true;
       });
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Secure order recovery unavailable. New purchases are paused.',
             ),
           ),
@@ -274,13 +277,17 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _restorePendingOffer() async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
     try {
       final encoded=await _secure.read(key:_pendingOfferKey);
-      if (!mounted || !_sameAccount) return;
+      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base) return;
       Map<String,dynamic>? pending;
       if(encoded!=null){
         final decoded=_json(jsonDecode(encoded));
-        if(decoded['requestKey'] is! String||decoded['payload'] is! Map){
+        if(decoded['requestKey'] is! String||decoded['payload'] is! Map ||
+          (decoded['kind']!=null&&decoded['kind']!='edit') ||
+          (decoded['kind']=='edit'&&(decoded['offerId'] is! String||
+            (decoded['payload'] as Map)['expectedRevision'] is! int))){
           throw const FormatException('Invalid sell-offer recovery');
         }
         pending=decoded;
@@ -290,7 +297,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         _offerRecoveryReady=true;
       });
     } catch (_) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
           'Secure sell-offer recovery is unavailable. Publishing is paused.',
             ),
@@ -300,14 +307,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _savePendingOffer(Map<String,dynamic> pending) async {
-    await _secure.write(key:_pendingOfferKey,value:jsonEncode(pending));
-    if(!mounted || !_sameAccount)throw StateError('Account changed.');
+    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingOfferKey;
+    await _secure.write(key:storageKey,value:jsonEncode(pending));
+    if(!mounted || widget.expectedUserId!=owner || widget.baseUrl!=base || !_sameAccount)throw StateError('Account changed.');
     setState(() => _pendingOffer=pending);
   }
 
   Future<void> _clearPendingOffer() async {
-    await _secure.delete(key:_pendingOfferKey);
-    if(mounted)setState(()=>_pendingOffer=null);
+    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingOfferKey;
+    await _secure.delete(key:storageKey);
+    if(mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount)setState(()=>_pendingOffer=null);
   }
 
   String _requestId() {
@@ -321,13 +330,21 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   Future<void> _resumeOffer() async {
     final pending=_pendingOffer;
     if(pending==null||!_sameAccount)throw StateError('No offer to recover.');
-    final key='${pending['requestKey']}';
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final key='${pending['requestKey']}',editing=pending['kind']=='edit';
     try {
-      await _request('GET','/offers/by-request/$key');
+      await _request('GET',editing?'/offer-edits/by-request/$key':'/offers/by-request/$key');
     } on DioException catch(e) {
       if(e.response?.statusCode!=404)rethrow;
-      await _request('POST','/offers',_json(pending['payload']),key);
+      try {
+        await _request('POST',editing?'/offers/${pending['offerId']}/edit':'/offers',_json(pending['payload']),key);
+      } on DioException catch(error) {
+        final code=error.response?.data is Map?(error.response!.data as Map)['error']:null;
+        if(editing&&['p2p.offer_edit_stale','p2p.offer_capacity_exceeded','p2p.verified_method_required','p2p.offer_not_editable','p2p.buy_offer_ineligible'].contains(code))await _clearPendingOffer();
+        rethrow;
+      }
     }
+    if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||!_sameAccount)throw StateError('Account changed');
     await _clearPendingOffer();
     if(mounted&&_sameAccount)_reload(1);
   }
@@ -374,6 +391,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             'amountMicro': pending['amountMicro'],
             'expectedRateKoboPerMsnw': pending['expectedRateKoboPerMsnw'],
             'expectedFeeBps': pending['expectedFeeBps'],
+              if(pending['expectedTermsRevision'] is int)'expectedTermsRevision':pending['expectedTermsRevision'],
               if (pending['paymentMethodId'] is String)
                 'paymentMethodId': pending['paymentMethodId'],
             }, requestKey),
@@ -696,6 +714,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         'amountMicro': quote['amountMicro'],
         'expectedRateKoboPerMsnw': quote['rateKoboPerMsnw'],
         'expectedFeeBps': feeBps,
+        if(quote['termsRevision'] is int)'expectedTermsRevision':quote['termsRevision'],
         if (selling) 'paymentMethodId': selectedMethod,
         if (selling) 'offerSide': 'buy',
       });
@@ -1239,6 +1258,47 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     ), _busy ? null : () => _orderDetail('${item['order_id']}'),
   );
 
+  Future<void> _editAd(String offerId) async {
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    if(!_offerRecoveryReady||_pendingOffer!=null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Recover the unfinished ad request first.')));return;
+    }
+    try {
+      final ad=_json(await _request('GET','/offers/$offerId/edit'));
+      if(!authorized())return;
+      final methods=(_json(await _request('GET','/methods'))['items'] as List).map(_json).toList();
+      if(!authorized())return;
+      if(ad['revision'] is! int||ad['offer_id']!=offerId||!['sell','buy'].contains(ad['offer_side'])||!['active','paused'].contains(ad['state']))throw const FormatException('Ad unavailable');
+      final side='${ad['offer_side']}';
+      String? available;
+      if(side=='sell') {
+        final capacity=_json(await _request('GET','/seller-capacity'));
+        available=(BigInt.parse('${capacity['availableMicro']}')*BigInt.from(10000)~/BigInt.from(10000+(ad['fee_bps'] as int))).toString();
+      }else {
+        await _readCapabilities();if(!_canMakeBuy)throw StateError('Buy-ad admission unavailable');
+      }
+      if(!authorized())return;
+      String decimal(dynamic micro)=>_msnw(micro).replaceAll(' MSNW','').replaceAll(',','');
+      final draftKey='$offerId:${ad['revision']}';
+      final draft=_editDrafts[draftKey]??<String,String>{'methodId':'${ad['payment_method_id']}',
+        'rate':_ngn(ad['rate_kobo_per_msnw']).replaceAll('₦','').replaceAll(',',''),
+        'minimum':decimal(ad['min_micro']),'maximum':decimal(ad['max_micro']),'inventory':decimal(ad['remaining_micro'])};
+      final done=await openWalletPage<bool>(context:context,title:'Edit ad',builder:(_)=>MsnwP2pSellerOfferForm(
+        methods:methods,offerSide:side,editing:true,availableMicro:available,initialDraft:draft,
+        onDraftChanged:(value){if(authorized())_editDrafts[draftKey]=Map.from(value);},
+        onPublish:(value)async{
+          if(!authorized())throw StateError('Account changed');
+          if(_pendingOffer!=null)throw StateError('Recover original ad changes first');
+          final payload={...value,'remainingMicro':value['inventoryMicro'],'expectedRevision':ad['revision']}..remove('inventoryMicro');
+          await _savePendingOffer({'kind':'edit','offerId':offerId,'requestKey':_requestId(),'payload':payload});
+          if(!authorized())throw StateError('Account changed');
+          await _resumeOffer();_editDrafts.remove(draftKey);
+        }));
+      if(authorized()&&done!=null)_reload(1);
+    }catch(error){if(authorized())ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(p2pUserMessage(error))));}
+  }
+
   Future<void> _manageOffer(Map<String,dynamic> offer) async {
     final offerId='${offer['offer_id'] ?? ''}';
     if(!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(offerId))return;
@@ -1296,6 +1356,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ],
         ),
         actions:[
+          if(offer['state']=='active'||offer['state']=='paused')
+            OutlinedButton.icon(icon:const Icon(Icons.edit_outlined),label:const Text('Edit ad'),
+              onPressed:()async{Navigator.pop(route);await _editAd('${offer['offer_id']}');}),
           TextButton(onPressed:()=>Navigator.pop(route),
             child:const Text('Back'),
           ),
@@ -1475,7 +1538,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ),
         if (_pendingOffer != null) ListTile(
           leading: const Icon(Icons.sync_outlined),
-          title: const Text('Check unfinished sell offer'),
+          title: const Text('Check unfinished ad'),
           subtitle: const Text('Check or retry the original request before creating another.',
                     ),
           trailing: const Icon(Icons.chevron_right),
@@ -1951,13 +2014,14 @@ class MsnwP2pSellerOfferForm extends StatefulWidget {
     required this.methods,
     required this.onPublish,
     this.availableMicro,
-    this.offerSide = 'sell',
+    this.offerSide = 'sell',this.editing=false,
     this.initialDraft,
     this.onDraftChanged,
   });
 
   final List<Map<String, dynamic>> methods;
   final String offerSide;
+  final bool editing;
   final String? availableMicro;
   final Map<String,String>? initialDraft;
   final ValueChanged<Map<String,String>>? onDraftChanged;
@@ -1969,6 +2033,7 @@ class MsnwP2pSellerOfferForm extends StatefulWidget {
 
 class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
   final _form = GlobalKey<FormState>();
+  final _scroll=ScrollController();
   late final TextEditingController _rate;
   late final TextEditingController _minimum;
   late final TextEditingController _maximum;
@@ -2013,6 +2078,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
     for(final field in [_rate,_minimum,_maximum,_inventory]){
       field.removeListener(_rememberDraft);
     }
+    _scroll.dispose();
     _rate.dispose();
     _minimum.dispose();
     _maximum.dispose();
@@ -2078,6 +2144,9 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
         'inventoryMicro': inventoryMicro,
       };
     });
+    WidgetsBinding.instance.addPostFrameCallback((_){
+      if(mounted&&_scroll.hasClients)_scroll.jumpTo(0);
+    });
   }
 
   Future<void> _publish() async {
@@ -2095,8 +2164,9 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
           (error.response?.statusCode ?? 0) >= 500;
       setState(() {
         _saving = false;
-        _uncertain = unknown;
-        _error = unknown
+        final stale=widget.editing&&error.response?.statusCode==409;
+        _uncertain = unknown||stale;
+        _error = stale?'The ad changed. Return to My ads and reopen it before editing.':unknown
             ? 'Offer outcome is unconfirmed. Check My Offers before creating '
                 'another offer. Your inputs are retained.'
             : 'Offer could not be published. Review your details and try again.';
@@ -2159,10 +2229,11 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
       (item) => '${item['method_id']}' == _paymentMethodId).toList(growable: false);
     return SafeArea(
       child: Form(key: _form, child: ListView(
+          controller:_scroll,
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
         children: [
-          Text(_reviewing ? 'Review ${widget.offerSide} offer'
-                  : 'Create a ${widget.offerSide} offer',
+          Text(_reviewing ? (widget.editing?'Review ad changes':'Review ${widget.offerSide} offer')
+                  : (widget.editing?'Edit ${widget.offerSide} ad':'Create a ${widget.offerSide} offer'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
           const SizedBox(height: 10),
@@ -2219,7 +2290,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
                 _reviewRow('Price', '${_rate.text.trim()} NGN / MSNW'),
                 _reviewRow('Minimum', '${_minimum.text.trim()} MSNW'),
                 _reviewRow('Maximum', '${_maximum.text.trim()} MSNW'),
-                _reviewRow('Inventory', '${_inventory.text.trim()} MSNW'),
+                _reviewRow(widget.editing?'Remaining for new orders':'Inventory', '${_inventory.text.trim()} MSNW'),
               ],
                 ),
             ),
@@ -2244,7 +2315,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
                 key: const ValueKey('p2p-publish-offer'),
                 onPressed: _saving ? null : _publish,
                 icon: const Icon(Icons.check_circle_outline),
-                label: Text(_saving ? 'Publishing…' : 'Publish ${widget.offerSide} offer',
+                label: Text(_saving ? 'Publishing…' : (widget.editing?'Save changes':'Publish ${widget.offerSide} offer'),
                   ),
               ),
             ],
