@@ -31,9 +31,9 @@ class CallHistoryItem {
   Duration? get duration {
     final start=connectedAt,end=endedAt;
     if(start==null||end==null)return null;
-    final elapsed=end.difference(start);return elapsed.isNegative?Duration.zero:elapsed;
+    final elapsed=end.difference(start);return elapsed.isNegative?null:elapsed;
   }
-  String get outcomeLabel=>endReason?.label??(missed?'Not answered':state=='declined'?'Declined':state=='cancelled'?'Cancelled':state=='expired'?'No confirmed connection before expiry':endedAt!=null&&connectedAt==null?'Ended before a connection was confirmed':state=='ended'?'Call ended':state=='active'?'Connected':'Connecting');
+  String get outcomeLabel=>endReason?.label??(missed?'Missed call':state=='missed'?'Not answered':state=='declined'?'Declined':state=='cancelled'?'Cancelled':state=='expired'?'No confirmed connection before expiry':endedAt!=null&&connectedAt==null?'Ended before a connection was confirmed':state=='ended'?'Call ended':state=='active'?'Connected':state=='ringing'?'Ringing':state=='accepted'?'Answering':'Connecting');
 
   factory CallHistoryItem.fromJson(Map<String, dynamic> json) {
     final callId = json['callId'];
