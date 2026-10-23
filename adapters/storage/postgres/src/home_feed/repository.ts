@@ -4,13 +4,17 @@ import type {Pool} from "pg";
 type Row=Record<string,unknown>;
 type Cursor={at:string;id:string}|null;
 function item(r:Row){
- return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId:String(r.author_masana_id),authorName:String(r.author_name??r.author_masana_id),
+ const authorMasanaId=String(r.author_masana_id),authorName=String(r.author_name??r.author_masana_id);
+ return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,
+  author:{type:"masana" as const,id:authorMasanaId,displayName:authorName},
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:new Date(String(r.published_at)).toISOString(),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved)};
 }
-function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state),
- createdAt:new Date(String(r.created_at)).toISOString(),parentId:r.parent_comment_id==null?null:String(r.parent_comment_id)};}
+function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state) as "pending"|"visible",
+ createdAt:new Date(String(r.created_at)).toISOString(),parentId:r.parent_comment_id==null?null:String(r.parent_comment_id),
+ author:r.author && typeof r.author==="object" && !Array.isArray(r.author)
+  ? r.author as {type:"human";id:string;handle:string;displayName:string} : null};}
 // Approval alone survives character deactivation/ownership transfer. Recheck
 // the canonical identity on every fan-facing read and insert.
 const eligibleAuthor=`EXISTS (SELECT 1 FROM masana.character_revisions m
@@ -22,6 +26,12 @@ const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_r
  (SELECT count(*)::int FROM feed.comments c WHERE c.tenant_id=p.tenant_id AND c.post_id=p.id AND c.state='visible') AS comment_count,
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2) AS viewer_liked,
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
+// Resolve comment authors only through tenant-matched active user public profiles.
+const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
+ AND person.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
+ THEN jsonb_build_object('type','human','id',person.user_id,
+   'handle',person.handle,'displayName',person.display_name)
+ ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
  async list(tenant:string,viewer:string|null,mode:"for_you"|"following",before:Cursor,limit:number,authorMasanaId?:string) {
@@ -96,7 +106,7 @@ export class PgHomeFeedRepository {
    ON CONFLICT(tenant_id,fan_id,idempotency_key) DO UPDATE
    SET idempotency_key=EXCLUDED.idempotency_key
    WHERE feed.comments.post_id=EXCLUDED.post_id AND feed.comments.body=EXCLUDED.body AND feed.comments.parent_comment_id IS NOT DISTINCT FROM EXCLUDED.parent_comment_id
-   RETURNING id,post_id,body,state,created_at,parent_comment_id
+   RETURNING id,post_id,fan_id,body,state,created_at,parent_comment_id
   ), queued AS (
    INSERT INTO events.outbox(outbox_event_id,tenant_id,event_id,event_type,schema_version,
      aggregate_type,aggregate_id,correlation_id,destination,payload)
@@ -109,20 +119,29 @@ export class PgHomeFeedRepository {
    FROM inserted i WHERE i.state='pending'
    ON CONFLICT DO NOTHING RETURNING outbox_event_id
   )
-  SELECT * FROM inserted`,[tenant,fan,post,body,pending?"pending":"visible",key,parentId]);
+  SELECT i.*, ${resolvedCommentAuthor} FROM inserted i
+   LEFT JOIN identity.users actor ON actor.tenant_id=$1
+    AND actor.user_id=i.fan_id AND actor.state='active'
+   LEFT JOIN talks.public_profiles person ON person.tenant_id=$1
+    AND person.user_id=actor.user_id`,[tenant,fan,post,body,pending?"pending":"visible",key,parentId]);
   const row=rows.rows[0] as Row|undefined;
   if(!row)throw Object.assign(new Error("idempotency_conflict_or_post_unavailable"),{status:409,code:"idempotency_conflict"});
   if(row.post_id!==post||row.body!==body||(row.parent_comment_id??null)!==(parentId??null))throw Object.assign(new Error("idempotency_conflict"),{status:409,code:"idempotency_conflict"});
-  return comment(row) as {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId:string|null};
+  return comment(row);
  }
  async comments(tenant:string,post:string,viewer:string|null,before:string|null,limit:number,sort:"newest"|"oldest"="newest"){
-  const rows=await this.pool.query(`SELECT c.id,c.post_id,c.body,c.state,c.created_at,c.parent_comment_id FROM feed.comments c
+  const rows=await this.pool.query(`SELECT c.id,c.post_id,c.body,c.state,c.created_at,c.parent_comment_id,
+   ${resolvedCommentAuthor} FROM feed.comments c
+   LEFT JOIN identity.users actor ON actor.tenant_id=c.tenant_id
+     AND actor.user_id=c.fan_id AND actor.state='active'
+   LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
+     AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
    AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${eligibleAuthor})
    AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3))
    AND ($4::uuid IS NULL OR (CASE WHEN $6::text='newest' THEN (c.created_at,c.id)<(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) ELSE (c.created_at,c.id)>(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) END))
    ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,[tenant,post,viewer,before,limit,sort]);
-  return rows.rows.map(r=>comment(r) as {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId:string|null});
+  return rows.rows.map(comment);
  }
 }
 

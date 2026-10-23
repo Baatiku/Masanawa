@@ -20,6 +20,10 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text,owner_user_id text,PRIMARY KEY(tenant_id,character_id));
    INSERT INTO identity.characters VALUES('tenant_test','masana_one','active'),('tenant_thread','masana_one','active');
    INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES('tenant_test','masana_one','platform'),('tenant_thread','masana_one','platform');`);
+  await pool.query("CREATE SCHEMA talks");
+  await pool.query(readFileSync(new URL("../../../../../packages/talks/migrations/0003_talk_profiles.sql",import.meta.url),"utf8"));
+  await pool.query("INSERT INTO identity.users(tenant_id,user_id,state) VALUES('tenant_test','fan_one','active')");
+  await pool.query("INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('tenant_test','fan_one','musa_verified','Musa Verified')");
   await pool.query("CREATE SCHEMA masana; CREATE TABLE masana.character_media(tenant_id text, character_id text, media_id text, rights_note text, approved_by text, object_key text, kind text); CREATE TABLE masana.follows(tenant_id text NOT NULL,fan_user_id text NOT NULL,character_id text NOT NULL,PRIMARY KEY(tenant_id,fan_user_id,character_id)); CREATE TABLE masana.character_revisions(tenant_id text NOT NULL,character_id text NOT NULL,state text NOT NULL,profile jsonb NOT NULL); INSERT INTO masana.character_revisions VALUES ('tenant_test','masana_one','approved','{\"displayName\":\"Teacher\"}'::jsonb)");
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0001_feed.sql",import.meta.url),"utf8"));
   // Simulate the forward-only upgrade with existing historic comments, before C22.
@@ -60,7 +64,15 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   const second=await repo.comment("tenant_test","fan_one",id,"My question","request-comment-001",true);
   expect(second.id).toBe(c.id);
   await expect(repo.comment("tenant_test","fan_one",id,"different","request-comment-001",true)).rejects.toMatchObject({code:"idempotency_conflict"});
-  expect((await repo.comments("tenant_test",id,"fan_one",null,30))).toHaveLength(1);
+  const visible=await repo.comments("tenant_test",id,"fan_one",null,30);
+  expect(visible).toHaveLength(1);
+  expect(visible[0]?.author).toEqual({type:"human",id:"fan_one",handle:"musa_verified",displayName:"Musa Verified"});
+  expect((await repo.find("tenant_test","fan_one",id))?.author)
+   .toEqual({type:"masana",id:"masana_one",displayName:"Teacher"});
+  await isolated.pool.query("UPDATE identity.users SET state='disabled' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
+  expect((await repo.comments("tenant_test",id,"fan_one",null,30))[0]?.author).toBeNull();
+  await isolated.pool.query("UPDATE identity.users SET state='active' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
+
   expect((await repo.comments("tenant_test",id,"fan_other",null,30))).toHaveLength(0);
   const tasks=await isolated.pool.query("SELECT * FROM events.outbox WHERE tenant_id=$1 AND event_type=$2",["tenant_test","feed.comment.pending"]);
   expect(tasks.rows).toHaveLength(1);

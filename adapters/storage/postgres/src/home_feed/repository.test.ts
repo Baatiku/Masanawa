@@ -39,6 +39,34 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
   expect(query.mock.calls[0]?.[1]).toEqual(["tenantA","381026c2-9d56-47b1-b73d-1784e24e41e2","fanA",null,30,"oldest"]);
  });
 
+ it("public comment identity is server-derived, tenant scoped and gated on active users",async()=>{
+  const query=vi.fn(async(_sql:string,_binds:unknown[])=>({rows:[{
+   id:"c1",post_id:"p1",body:"Hello",state:"visible",
+   created_at:"2026-10-22T09:01:00Z",parent_comment_id:null,
+   author:{type:"human",id:"fan1",handle:"musa",displayName:"Musa"},
+  }]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  const result=await repo.comments("tenant1","381026c2-9d56-47b1-b73d-1784e24e41e2","fan1",null,30);
+  expect(result[0]?.author).toEqual({type:"human",id:"fan1",handle:"musa",displayName:"Musa"});
+  const sql=String(query.mock.calls[0]?.[0]);
+  expect(sql).toContain("actor.state='active'");
+  expect(sql).toContain("actor.tenant_id=c.tenant_id");
+  expect(sql).toContain("person.tenant_id=c.tenant_id");
+  expect(sql).toContain("person.user_id=actor.user_id");
+ });
+ it("legacy Masana projection remains readable with typed author",async()=>{
+  const query=vi.fn(async()=>({rows:[{
+   id:"381026c2-9d56-47b1-b73d-1784e24e41e2",
+   tenant_id:"tenant1",author_masana_id:"agent1",author_name:"Amina",
+   kind:"text",body:"Hi",media_ids:[],transcript:null,
+   published_at:"2026-10-22T09:00:00Z",like_count:0,comment_count:0,
+   viewer_liked:false,viewer_saved:false,
+  }]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  const result=await repo.find("tenant1","fan1","381026c2-9d56-47b1-b73d-1784e24e41e2");
+  expect(result?.author).toEqual({type:"masana",id:"agent1",displayName:"Amina"});
+  expect(result?.authorMasanaId).toBe("agent1");
+ });
  it("Status fails closed if author is revoked between read and reaction insert",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[{admitted:false}]}));
   const repo=new PgHomeFeedRepository({query} as unknown as Pool);
