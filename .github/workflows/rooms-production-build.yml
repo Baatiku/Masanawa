@@ -6,6 +6,7 @@ on:
       - "services/gateway/src/room_community/**"
       - "tests/support/room-community-database.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
+      - "apps/mobile/test/room_invitation_links_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -25,6 +26,7 @@ on:
       - "services/gateway/src/room_community/**"
       - "tests/support/room-community-database.ts"
       - "apps/mobile/test/room_invitation_consent_test.dart"
+      - "apps/mobile/test/room_invitation_links_test.dart"
       - "services/gateway/src/main.ts"
       - "apps/mobile/lib/src/screens/rooms/**"
       - "apps/mobile/test/features/rooms/**"
@@ -109,6 +111,7 @@ jobs:
           flutter test --no-pub --reporter expanded
           test/rooms_redesign_root_test.dart
           test/room_invitation_consent_test.dart
+          test/room_invitation_links_test.dart
           test/rooms_partial_refresh_test.dart
           test/room_community_screen_test.dart
           test/features/rooms/room_discussion_screen_test.dart
@@ -119,6 +122,8 @@ jobs:
         run: >-
           dart analyze lib/src/features/rooms/rooms_screen.dart
           test/room_invitation_consent_test.dart
+          lib/src/features/rooms/room_invitation_links.dart
+          test/room_invitation_links_test.dart
           lib/src/features/rooms/room_membership_client.dart
           lib/src/features/rooms/room_membership_screen.dart
           lib/src/screens/rooms/rooms_screen.dart

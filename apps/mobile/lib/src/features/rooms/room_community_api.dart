@@ -56,7 +56,7 @@ class HttpRoomCommunityApi implements RoomCommunityApi {
   @override Future<void> action(String id, String action, [Map<String, dynamic>? values]) async { await http.post<void>('${path(id)}/$action', data: values); }
   @override Future<String> invite(String id, String requestId) async => (await http.post<Map<String, dynamic>>('${path(id)}/invites', data: {'requestId': requestId})).data!['token'] as String;
   @override Future<void> revoke(String id, String inviteId) async { await http.delete<void>('${path(id)}/invites/${Uri.encodeComponent(inviteId)}'); }
-  @override Future<Map<String, dynamic>> request(String id, String method, String resource, Map<String, dynamic> values) async => (await http.request<Map<String, dynamic>>('${path(id)}/$resource', data: values, options: Options(method: method))).data!;
+  @override Future<Map<String, dynamic>> request(String id, String method, String resource, Map<String, dynamic> values) async => (await http.request<Map<String, dynamic>>('${path(id)}/$resource', data: method == 'GET' ? null : values, options: Options(method: method))).data!;
   @override Future<List<Map<String, dynamic>>> candidates(String kind, String query) async {
     if (kind == 'masana') {
       if (loadMasana == null) throw StateError('directory_unavailable');

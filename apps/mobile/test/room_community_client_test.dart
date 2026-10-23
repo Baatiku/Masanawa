@@ -4,6 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/rooms/room_community_api.dart';
 
 void main() {
+  test('invitation recovery GET has no body and keyed issuance uses its distinct endpoint', () async {
+    final calls=<RequestOptions>[];
+    final dio=Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest:(request,handler){
+      calls.add(request);handler.resolve(Response(requestOptions:request,data:<String,dynamic>{}));
+    }));
+    final api=HttpRoomCommunityApi(dio);
+    await api.request('room_one','GET','invites',{});
+    await api.request('room_one','POST','invites/issue',{'requestId':'original'});
+    expect(calls.first.method,'GET');expect(calls.first.data,isNull);
+    expect(calls.last.path,'/v1/rooms/room_one/community/invites/issue');
+    expect(calls.last.data,{'requestId':'original'});
+  });
   test('community transport keeps invite secrets in body and request replay stable', () async {
     final calls = <RequestOptions>[];
     final dio = Dio();
