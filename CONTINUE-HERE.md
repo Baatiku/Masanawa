@@ -1,5 +1,11 @@
 # Continue Masanawa — 23 October 2026
 
+## Chats: privacy-qualified, bounded human inbox/search paging — 23 October 2026 (partial source)
+
+Next isolated P4-02/05, CI-13/15/17/21 and P8-X02 source increment (distinct from the Calls stale-admission PR): the human conversations GET applies current public/active peer, bidirectional block, profile moderation, viewer-hidden and literal handle/display-name search **inside SQL before `LIMIT 51`**, instead of fetching all conversations and searching fully populated peer/last-message views in memory. The original `(updated_at,id)` cursor now uses the PostgreSQL microsecond timestamp, preventing same-instant ties from disappearing across pages. Request-only filtering and the original public per-peer last-message/unread projection remain intact. Search rejects oversized/invalid input; arbitrary avatar URLs are not searchable identity. No mobile #300, Rooms/Status/Wallet/P2P or call-admission changes in this Chats slice.
+
+**Local evidence:** Human PGlite 22/22 PASS (72 tied conversations, 64 currently visible, exact second page, pending-only requests, literal `%`/`_`, cross-account anchor denial); all-workspace TypeScript typechecks PASS and architecture 85/85 PASS on this combined local source. A real PostgreSQL 80-inbox/74-visible microsecond and privacy regression is authored, locally **NOT_RUN**, awaiting hosted checks. Existing 177 screens and 820 atomic requirements, all P4/P8 parent gates and handset/live-service acceptance remain **OPEN**; no APK, deployment or provider action.
+
 ## Calls: recover expired participant sessions during new-call admission — 23 October 2026 (partial source)
 
 The preceding bounded/privacy-qualified history fix [PR #339](https://github.com/Baatiku/Masanawa/pull/339) merged to `main ed2aff3fe9c43b4d4d901fa9985c22961285329e` after hosted **Foundation CI, Chat Voice and Calls Regression (with real PostgreSQL), and Status Video Integration all PASS** on exact source `4a3fc9b1`. The first source checkpoint below was written before that CI/merge and should be read with this result.
