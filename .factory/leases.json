@@ -26,9 +26,9 @@
       "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
       "pr": "https://github.com/Baatiku/Masanawa/pull/309",
       "claimed_at": "2026-10-23T05:18:23.254Z",
-      "heartbeat_at": "2026-10-23T05:40:29.184Z",
-      "expires_at": "2026-10-23T05:45:29.184Z",
-      "progress": "PR309 head8ee050b: P2P qualification including full migrations and real PG competing reviews PASS; Status PASS. Merge candidate da4d663 includes Wallet301; typing, 14 SQL +18 Flutter tests PASS. Awaiting Foundation/Mobile."
+      "heartbeat_at": "2026-10-23T05:46:49.682Z",
+      "expires_at": "2026-10-23T05:51:49.683Z",
+      "progress": "Final head f070431: P2P/Status CI PASS; independent read-only review no blocking findings. Minor Unicode reason validation/global quota race recorded for next connected source batch. Awaiting Foundation/Mobile."
     }
   ],
   "history": [
