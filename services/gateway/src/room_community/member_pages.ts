@@ -21,7 +21,7 @@ export async function roomMemberPage(q:Sql,a:RoomCommunityActor,roomId:string,in
  if(typeof raw!=='string'||raw.length>100)invalid();
  const query=raw.trim(),scope=createHash('sha256').update(JSON.stringify([a.tenantId,a.userId,roomId,query])).digest('hex');
  const size=input.limit??50;
- if(typeof size!=='number'&&(typeof size!=='string'||!/^\\d{1,3}$/.test(size)))invalid();
+ if(typeof size!=='number'&&(typeof size!=='string'||!/^\d{1,3}$/.test(size)))invalid();
  const limit=Number(size);if(!Number.isInteger(limit)||limit<1||limit>100)invalid();
  const cursor=decode(input.cursor,scope);
  // Wildcards are literal in both handle and public display-name search.
