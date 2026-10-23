@@ -138,7 +138,8 @@ void main() {
       await tester.tap(find.byTooltip('Manage member'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Offer ownership'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       expect(api.offers, isEmpty);
       expect(find.textContaining('You stay owner until then.'), findsOneWidget);
       await tester.tap(find.text('Confirm'));
@@ -162,7 +163,8 @@ void main() {
       );
       expect(find.text('Awaiting acceptance'), findsOneWidget);
       await tester.tap(find.text('Accept ownership'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       expect(api.writes, isEmpty);
       expect(find.text('Accept Room ownership?'), findsOneWidget);
       await tester.tap(find.text('Confirm'));
@@ -179,7 +181,8 @@ void main() {
     final api = _Api();
     await mount(tester, api);
     await tester.tap(find.text('Accept ownership'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.text('Back'));
     await tester.pumpAndSettle();
     expect(api.writes, isEmpty);
@@ -198,7 +201,8 @@ void main() {
           findsNothing,
         );
         await tester.tap(find.text(owner ? 'Cancel offer' : 'Decline offer'));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
         await tester.tap(find.text('Confirm'));
         await tester.pumpAndSettle();
         expect(api.status, owner ? 'cancelled' : 'declined');
@@ -212,7 +216,8 @@ void main() {
       final api = _Api()..loseResponse = true;
       await mount(tester, api);
       await tester.tap(find.text('Accept ownership'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
       expect(find.textContaining('outcome is unconfirmed'), findsOneWidget);
@@ -248,7 +253,8 @@ void main() {
       final first = _Api(), second = _Api(owner: true);
       await mount(tester, first);
       await tester.tap(find.text('Accept ownership'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       await mount(tester, second);
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
@@ -263,7 +269,8 @@ void main() {
           second = _Api(owner: true);
       await mount(tester, first);
       await tester.tap(find.text('Accept ownership'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.tap(find.text('Confirm'));
       await tester.pump();
       await mount(tester, second);
@@ -286,7 +293,8 @@ void main() {
     await tester.ensureVisible(find.text('Decline offer'));
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Decline offer'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('Decline ownership offer?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

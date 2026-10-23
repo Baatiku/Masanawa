@@ -109,6 +109,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Redesigned Rooms create, timeline and account-isolation journeys
+        shell: bash
         run: >-
           flutter test --no-pub --reporter expanded
           test/rooms_redesign_root_test.dart
