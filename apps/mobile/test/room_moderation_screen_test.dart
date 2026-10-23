@@ -107,6 +107,7 @@ Future<void> open(WidgetTester tester, String label) async {
     180,
     scrollable: find.byType(Scrollable).first,
   );
+  await tester.pumpAndSettle();
   await tester.tap(find.text(label));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
