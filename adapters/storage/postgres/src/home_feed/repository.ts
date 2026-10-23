@@ -68,13 +68,17 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following",before:Cursor,limit:number,authorMasanaId?:string) {
+ async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
    AND ($3::text='for_you'
-    OR (p.author_type='masana' AND EXISTS (
-      SELECT 1 FROM masana.follows f WHERE f.tenant_id=p.tenant_id AND f.fan_user_id=$2 AND f.character_id=p.author_masana_id))
-    OR (p.author_type='human' AND EXISTS (
-      SELECT 1 FROM talks.follows f WHERE f.tenant_id=p.tenant_id AND f.follower_user_id=$2 AND f.followed_user_id=p.author_user_id)))
+    OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
+    OR ($3::text='following' AND (
+      (p.author_type='masana' AND EXISTS (
+        SELECT 1 FROM masana.follows f WHERE f.tenant_id=p.tenant_id
+          AND f.fan_user_id=$2 AND f.character_id=p.author_masana_id))
+      OR (p.author_type='human' AND EXISTS (
+        SELECT 1 FROM talks.follows f WHERE f.tenant_id=p.tenant_id
+          AND f.follower_user_id=$2 AND f.followed_user_id=p.author_user_id)))))
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
    AND ($7::text IS NULL OR p.author_masana_id=$7)
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,

@@ -13,6 +13,7 @@ class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
     this.onMasanaProfile,this.onHumanProfile,this.onOpenMedia,this.onReport,this.enabled=true,
     this.audioPlaybackAvailable=false,this.authorScoped=false,
+    this.ownPostsOnly=false,
     this.mediaApi,this.inlineMediaRenderer,this.onCreateHumanStatus,
     this.onOpenSavedVideo,this.wrapAccountRoute});
   final FeedApi api;
@@ -29,6 +30,8 @@ class MasanaFeedScreen extends StatefulWidget {
   final bool audioPlaybackAvailable;
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
+  /// A secondary owner-only public post route, never a new root/feed ledger.
+  final bool ownPostsOnly;
   /// Optional per-account signed media projection, never persisted to disk.
   final FeedMediaApi? mediaApi;
   final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
@@ -53,15 +56,25 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       (data is Map&&data['code']=='feature_disabled');
   }
   String t(String en,String ha)=>Localizations.localeOf(context).languageCode=='ha'?ha:en;
-  @override void initState(){super.initState();WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)refresh();});}
+  @override void initState(){
+    super.initState();mode=widget.ownPostsOnly?'mine':'for_you';
+    WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)refresh();});
+  }
   @override void didUpdateWidget(covariant MasanaFeedScreen old) {
     super.didUpdateWidget(old);
     // A refreshed auth token recreates the Status API wrapper but keeps the
     // same authorized account. Do not erase visible posts or refetch then.
     if(old.accountKey!=widget.accountKey||old.enabled!=widget.enabled||
+       old.ownPostsOnly!=widget.ownPostsOnly||
        (widget.accountKey.isEmpty&&old.api!=widget.api)){
-      clearProjection();
+      clearProjection();mode=widget.ownPostsOnly?'mine':'for_you';
       if(widget.enabled)refresh();
+    }
+  }
+  void verifyOwnerProjection(FeedPage page){
+    if(widget.ownPostsOnly&&page.items.any(
+      (post)=>!post.isHuman||post.authorId!=widget.accountKey)) {
+      throw const FormatException('Unexpected author in own Status');
     }
   }
   Future<void> refresh() async {
@@ -70,6 +83,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     setState((){loading=true;fetchingMore=false;error=null;pageError=null;pendingActions.clear();});
     try{
       final page=await widget.api.list(mode:mode);
+      verifyOwnerProjection(page);
       if(!mounted||ticket!=generation)return;
       setState((){items=page.items;cursor=page.nextCursor;offline=false;loading=false;});
     }catch(e){
@@ -83,6 +97,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     setState((){fetchingMore=true;pageError=null;});
     try{
       final page=await widget.api.list(mode:mode,cursor:after);
+      verifyOwnerProjection(page);
       if(!mounted||ticket!=generation)return;
       setState((){
         final seen=items.map((p)=>p.id).toSet();
@@ -234,6 +249,24 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       return guard?.call(detail)??detail;
     }));
   }
+  void openMine() {
+    if(!widget.enabled||widget.accountKey.isEmpty)return;
+    final account=widget.accountKey;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder:(_){
+      final child=Scaffold(
+        appBar:AppBar(title:Text(t('My posts','Labaraina'))),
+        body:MasanaFeedScreen(
+          api:widget.api,accountKey:account,authorScoped:true,ownPostsOnly:true,
+          onMasanaProfile:widget.onMasanaProfile,onHumanProfile:widget.onHumanProfile,
+          onOpenMedia:widget.onOpenMedia,onReport:widget.onReport,
+          enabled:widget.enabled,audioPlaybackAvailable:widget.audioPlaybackAvailable,
+          mediaApi:widget.mediaApi,inlineMediaRenderer:widget.inlineMediaRenderer,
+          onOpenSavedVideo:widget.onOpenSavedVideo,wrapAccountRoute:widget.wrapAccountRoute,
+        ),
+      );
+      return widget.wrapAccountRoute?.call(child)??child;
+    }));
+  }
   void openSaved() {
     if(widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty) return;
     final account = widget.accountKey;
@@ -278,13 +311,19 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             icon:const Icon(Icons.edit_outlined),
             label:Text(t('Write a Status','Rubuta labari')),
           )),
-      if(!widget.authorScoped && widget.api is SavedStatusLibraryApi)
+      if(!widget.authorScoped)
         Align(alignment:AlignmentDirectional.centerEnd,
-          child:TextButton.icon(
-            onPressed:widget.accountKey.isNotEmpty?openSaved:null,
-            icon:const Icon(Icons.bookmarks_outlined),
-            label:Text(t('Saved','Ajiye')),
-          )),
+          child:Wrap(spacing:8,runSpacing:4,alignment:WrapAlignment.end,children:[
+            TextButton.icon(
+              onPressed:widget.accountKey.isNotEmpty?openMine:null,
+              icon:const Icon(Icons.person_outline),
+              label:Text(t('My posts','Labaraina'))),
+            if(widget.api is SavedStatusLibraryApi)
+              TextButton.icon(
+                onPressed:widget.accountKey.isNotEmpty?openSaved:null,
+                icon:const Icon(Icons.bookmarks_outlined),
+                label:Text(t('Saved','Ajiye'))),
+          ])),
       if(!widget.authorScoped) Row(children:[
         Expanded(child:ChoiceChip(label:Text(t('For You','Domin Kai')),selected:mode=='for_you',onSelected:(_){setState((){mode='for_you';items=[];cursor=null;});refresh();})),
         const SizedBox(width:8),
@@ -297,7 +336,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         ?const MasanawaListSkeleton(semanticLabel: 'Loading Status updates')
         :items.isEmpty?Center(child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
           const Icon(Icons.article_outlined,size:48),
-          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('No updates from people or Masana you follow yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
+          Text(error!=null?t('Status is unavailable. Retry.','Ba a samun labarai yanzu. Sake gwadawa.'):mode=='following'?t('No updates from people or Masana you follow yet.','Har yanzu babu sabuntawa daga wadanda kake bi.'):widget.ownPostsOnly?t('No public posts yet','Babu labarana tukuna'):t('No Status updates yet','Babu labarai tukuna'),textAlign:TextAlign.center),
           if(mode=='following'&&error==null)
             TextButton(onPressed:(){setState((){mode='for_you';items=[];cursor=null;});refresh();},child:Text(t('Explore For You','Duba Domin Kai')))
           else TextButton(onPressed:refresh,child:Text(t('Retry','Sake gwadawa')))])))

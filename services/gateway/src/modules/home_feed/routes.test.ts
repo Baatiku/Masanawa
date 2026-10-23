@@ -60,6 +60,17 @@ describe("ST3 human own-post routes",()=>{
   }
  });
 });
+describe("ST4 own posts query transport",()=>{
+ it("passes the signed-in viewer, never the claimed user",async()=>{
+  const app=Fastify(),list=vi.fn(async()=>({items:[],nextCursor:null}));
+  await registerHomeFeedRoutes(app,{service:{list} as never,
+   principal:async()=>({kind:"fan",tenantId:"tenant",id:"trusted"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  expect((await app.inject({method:"GET",url:"/v1/feed?mode=mine&userId=forged"})).statusCode).toBe(200);
+  expect(list).toHaveBeenCalledWith("tenant","trusted","mine",undefined,undefined);
+  await app.close();
+ });
+});
 describe("ST2 strict reaction transport",()=>{
  it("uses authenticated fan and exact reaction, never body actor",async()=>{
   const app=Fastify(),react=vi.fn(async()=>({kind:"love"}));

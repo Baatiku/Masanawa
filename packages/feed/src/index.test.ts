@@ -54,6 +54,18 @@ describe("ST3 human edit/remove authority",()=>{
    .rejects.toMatchObject({status:503});
  });
 });
+describe("ST4 owner-scoped My posts mode",()=>{
+ it("requires viewer identity and refuses a conflicting Masana filter",async()=>{
+  const repo=mock(),service=new FeedService(repo,async()=>true);
+  await expect(service.list("tenant",null,"mine")).rejects.toMatchObject({
+   status:401,code:"authentication_required"});
+  await expect(service.list("tenant","fan","mine",undefined,"other_masana")).rejects.toMatchObject({
+   status:422,code:"unsupported_author_filter"});
+  const data=await service.list("tenant","fan","mine");
+  expect(data.items).toHaveLength(1);
+  expect(repo.list).toHaveBeenCalledWith("tenant","fan","mine",null,21,undefined);
+ });
+});
 describe("ST2 server reaction contract",()=>{
  it("sets one typed reaction from trusted fan identity, including remove",async()=>{
   const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};
