@@ -50,6 +50,8 @@ export type FlutterwaveBillReceipt = Readonly<{
   /** Only populated when provider independently returns an explicit item_code. */
   itemCode?: string | null;
   productName: string | null;
+  /** Verified receipt can expose a provider-issued recharge code/token. */
+  rechargeToken?: string | null;
   extra: unknown;
 }>;
 
@@ -358,10 +360,19 @@ export class FlutterwaveBillsClient {
   }
 
   #receipt(row: JsonRecord, fallbackReference: string): FlutterwaveBillReceipt {
-    const reference = optionalText(row.customer_reference ?? row.reference, "receipt reference", 128) ?? fallbackReference;
+    // The v3 POST bills response uses "reference" for Flutterwave's BPUSSD
+    // provider reference, not necessarily our immutable customer reference.
+    // Only customer_reference is an explicit binding to the original request.
+    const reference =
+      optionalText(row.customer_reference, "receipt customer reference", 128) ??
+      fallbackReference;
     return Object.freeze({
       reference,
-      providerReference: optionalText(row.flw_ref ?? row.tx_ref, "provider reference", 200),
+      providerReference: optionalText(
+        row.flw_ref ?? row.reference ?? row.tx_ref,
+        "provider reference",
+        200,
+      ),
       status: mapStatus(row.status),
       amount: optionalDecimal(row.amount, "receipt amount"),
       currency: row.currency === undefined || row.currency === null ? null : textValue(row.currency, "receipt currency", 3) === "NGN" ? "NGN" : null,
@@ -369,6 +380,7 @@ export class FlutterwaveBillsClient {
       product: optionalText(row.product, "receipt product", 200),
       itemCode: optionalText(row.item_code, "receipt item code", 128),
       productName: optionalText(row.product_name, "receipt product name", 300),
+      rechargeToken: optionalText(row.recharge_token, "receipt recharge token", 1000),
       extra: row.extra ?? null,
     });
   }
