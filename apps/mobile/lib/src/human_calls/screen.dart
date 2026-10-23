@@ -102,7 +102,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
     final call = c.call?.id == widget.callId ? c.call : null;
     final thisCallActive = call != null && c.active;
     final incoming =
-        call?.incoming == true && call?.state == 'ringing' && thisCallActive;
+        call?.incoming == true && call.state == 'ringing' && thisCallActive;
     final since = c.connectedAt;
     final seconds = since == null
         ? 0
@@ -164,7 +164,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                   if (call != null && c.error != null) ...[
                     const SizedBox(height: 16),
                     Text(c.error!, textAlign: TextAlign.center),
-                    if (thisCallActive && call?.state == 'accepted')
+                    if (thisCallActive && call.state == 'accepted')
                       TextButton(
                         onPressed: c.retryAudio,
                         child: const Text('Retry audio'),
@@ -188,7 +188,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           icon: const Icon(Icons.call),
                           label: const Text('Answer'),
                         ),
-                      if (thisCallActive && call?.state == 'accepted') ...[
+                      if (thisCallActive && call.state == 'accepted') ...[
                         _CallControl(
                           label: c.muted ? 'Unmute' : 'Mute',
                           icon: c.muted ? Icons.mic_off : Icons.mic,
@@ -214,7 +214,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           label: Text(
                             incoming
                                 ? 'Decline'
-                                : call?.state == 'ringing'
+                                : call.state == 'ringing'
                                 ? 'Cancel'
                                 : 'End call',
                           ),
