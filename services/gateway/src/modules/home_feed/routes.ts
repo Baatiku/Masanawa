@@ -1,7 +1,7 @@
 import type {FastifyInstance,FastifyRequest} from "fastify";
 type Actor={kind:"fan"|"staff"|"masana";tenantId:string;id:string;permissions?:readonly string[];approved?:boolean};
 type FeedPort={
- list(t:string,v:string|null,m:"for_you"|"following",c?:string,authorMasanaId?:string):Promise<unknown>;
+ list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  publishHumanText?(a:Actor,p:{body:string;idempotencyKey:string;audience:"public"}):Promise<unknown>;
@@ -34,7 +34,7 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
  const member=(actor:Actor|null)=>{if(!actor)throw Object.assign(new Error("authentication_required"),{status:401,code:"authentication_required"});return actor};
  app.get("/v1/feed",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),mode=q.mode===undefined?"for_you":str(q.mode);
-  if(mode!=="for_you"&&mode!=="following")throw Object.assign(new Error("invalid_mode"),{status:422,code:"invalid_mode"});
+  if(mode!=="for_you"&&mode!=="following"&&mode!=="mine")throw Object.assign(new Error("invalid_mode"),{status:422,code:"invalid_mode"});
   // The server checks author ownership and published visibility in the same
   // tenant-scoped read. A client query never authorizes unpublished content.
   const author=q.authorMasanaId;

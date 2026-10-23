@@ -1,6 +1,6 @@
 
 export type PostKind = "text"|"image"|"audio";
-export type FeedMode = "for_you"|"following";
+export type FeedMode = "for_you"|"following"|"mine";
 export type ReactionKind = "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry";
 export const reactionKinds:readonly ReactionKind[] = ["like","love","care","haha","wow","sad","angry"];
 
@@ -44,8 +44,9 @@ export class FeedService {
   private readonly approvedMedia:(tenant:string,masana:string,mediaId:string,kind:PostKind)=>Promise<boolean> = async () => false){}
  async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string,authorMasanaId?:string){
   requireId(tenant);if(viewer)requireId(viewer);
-  if(mode!=="for_you"&&mode!=="following")throw new FeedError(422,"invalid_mode");
-  if(mode==="following"&&!viewer)throw new FeedError(401,"authentication_required");
+  if(mode!=="for_you"&&mode!=="following"&&mode!=="mine")throw new FeedError(422,"invalid_mode");
+  if((mode==="following"||mode==="mine")&&!viewer)throw new FeedError(401,"authentication_required");
+  if(mode==="mine"&&authorMasanaId!==undefined)throw new FeedError(422,"unsupported_author_filter");
   if(authorMasanaId!==undefined)requireId(authorMasanaId);
   const rows=await this.repo.list(tenant,viewer,mode,decodeCursor(cursor),21,authorMasanaId);
   const items=rows.slice(0,20);

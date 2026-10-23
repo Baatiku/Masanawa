@@ -68,6 +68,9 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    await expect(repo.publishHumanText("foreign","fanA",{...args,idempotencyKey:"human-foreign001"}))
     .rejects.toMatchObject({status:403,code:"human_profile_unavailable"});
    expect((await repo.list("tenant","fanB","for_you",null,21)).map(p=>p.id)).toContain(created.id);
+   expect((await repo.list("tenant","fanA","mine",null,21)).map(p=>p.id))
+    .toEqual([created.id]);
+   expect(await repo.list("tenant","fanB","mine",null,21)).toHaveLength(0);
    // In comment queries $2 is post UUID and $3 is the viewer.
    expect(await repo.comments("tenant",created.id,"fanB",null,20)).toEqual([]);
    await repo.setSave("tenant","fanB",created.id,true);
@@ -91,6 +94,7 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    await db.query("DELETE FROM talks.safety_enforcement");
    await db.query("INSERT INTO talks.follows VALUES('tenant','fanB','fanA')");
    expect((await repo.list("tenant","fanB","following",null,21)).map(p=>p.id)).toContain(created.id);
+   expect(await repo.list("tenant","fanB","mine",null,21)).toHaveLength(0);
    expect((await repo.list("tenant","fanA","following",null,21))).toHaveLength(0);
    await db.query("UPDATE identity.users SET state='disabled' WHERE tenant_id='tenant' AND user_id='fanA'");
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();
@@ -118,6 +122,7 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
     .toEqual({id:created.id,state:"removed"});
    expect(await repo.find("tenant","fanA",created.id)).toBeNull();
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();
+   expect(await repo.list("tenant","fanA","mine",null,21)).toHaveLength(0);
    expect((await repo.list("tenant","fanB","for_you",null,21)).map(p=>p.id))
     .not.toContain(created.id);
    expect(await savedRepo.list("tenant","fanB",null,20)).toHaveLength(0);
