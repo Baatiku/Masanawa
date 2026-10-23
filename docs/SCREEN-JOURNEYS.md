@@ -77,6 +77,8 @@
 
 Rooms R01/R02 implementation checkpoint: [#327](https://github.com/Baatiku/Masanawa/pull/327) adds server-wide debounced name/description search, Joined/Discover keyset pages, retained loaded pages on detail Back with canonical target refresh, independent invitation paging, retry/permission/account fences and accessible manual paging. Source `17e0dd09` + `f9bc0c6b`; 70 backend tests (17 PG18) PASS, final hosted Flutter pending. Device, offline cache/push and whole-product gates stay open.
 
+Rooms R06 moderation checkpoint: [#328](https://github.com/Baatiku/Masanawa/pull/328), source `1b7dac52`, adds independently paged author removal cases, reported replies, appeals and review history, with retained transient-error pages, current role/read checks, account/Room fences and no optimistic restoration. Six backend read endpoints are paged; current scoped actions remain canonical. Local typing/build PASS; consolidated database and exact-head hosted Flutter pending. Device/platform-safety acceptance remains open.
+
 ### State contract applying to every H/R route
 - **Loading:** compact list/profile skeleton; retain permitted cached content during refresh. Don't block first paint on contacts/provider discovery.
 - **Empty:** Humans “Find someone to start a conversation”, joined Rooms “Create or discover a Room”, search “No matches”; one useful action. Empty creator sections are omitted.
