@@ -34,6 +34,7 @@ export function registerBillingRoutes(
       if (
         message.includes("payment_not_successful") ||
         message.includes("quote_revision_conflict") ||
+        message.includes("wallet_confirm_not_allowed") ||
         message.includes("quote_expired") ||
         message.includes("checkout_not_created") ||
         message.includes("checkout_creation_in_progress")
