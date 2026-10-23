@@ -11,13 +11,14 @@ class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
     this.onMasanaProfile,this.onHumanProfile,this.onOpenMedia,this.onReport,this.enabled=true,
     this.audioPlaybackAvailable=false,this.authorScoped=false,
-    this.mediaApi,this.inlineMediaRenderer});
+    this.mediaApi,this.inlineMediaRenderer,this.onCreateHumanStatus});
   final FeedApi api;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile;
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final ValueChanged<String>? onReport;
   final bool enabled;
+  final Future<bool> Function()? onCreateHumanStatus;
   final bool audioPlaybackAvailable;
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
@@ -163,6 +164,19 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override Widget build(BuildContext context){
     if(!widget.enabled)return Center(child:Text(t('Status is currently unavailable','Ba a samun labarai a yanzu')));
     return Column(children:[
+      if(!widget.authorScoped&&widget.onCreateHumanStatus!=null)
+        Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:8),
+          child:OutlinedButton.icon(
+            onPressed:() async {
+              final changed=await widget.onCreateHumanStatus!();
+              if(changed&&mounted){
+                setState(() {mode='for_you';items=[];cursor=null;});
+                await refresh();
+              }
+            },
+            icon:const Icon(Icons.edit_outlined),
+            label:Text(t('Write a Status','Rubuta labari')),
+          )),
       if(!widget.authorScoped) Row(children:[
         Expanded(child:ChoiceChip(label:Text(t('For You','Domin Kai')),selected:mode=='for_you',onSelected:(_){setState((){mode='for_you';items=[];cursor=null;});refresh();})),
         const SizedBox(width:8),

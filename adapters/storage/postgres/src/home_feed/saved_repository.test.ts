@@ -13,6 +13,10 @@ describe("C25 PG query fences",()=>{
     expect(sql).toContain("'reactionCounts'");
     expect(sql).toContain("'viewerReaction'");
     expect(sql).toContain("l.reaction_kind='like'");
+    expect(sql).toContain("'author',CASE WHEN p.author_type='human'");
+    expect(sql).toContain("hp.user_id=p.author_user_id AND hu.state='active'");
+    expect(sql).toContain("a.state='active'");
+
 
     expect(values).toEqual(["tenant-one","fan-one",null,null,null,21]);
   });

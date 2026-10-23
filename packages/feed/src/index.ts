@@ -6,15 +6,19 @@ export const reactionKinds:readonly ReactionKind[] = ["like","love","care","haha
 
 export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; permissions?:readonly string[]; approved?:boolean};
 export interface Post {id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean;
- viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>}
+ viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>;
+ author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId?:string|null;
  author?:{type:"human";id:string;handle:string;displayName:string}|null}
 export interface Publish {authorMasanaId:string;kind:PostKind;body:string;media?:readonly string[];transcript?:string|null;idempotencyKey:string}
 export class FeedError extends Error {constructor(readonly status:number,readonly code:string){super(code)}}
+export interface HumanTextPublish {body:string;idempotencyKey:string;audience:"public"}
+
 export interface Repository {
  list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string):Promise<readonly Post[]>;
  find(tenant:string,viewer:string|null,id:string):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
+ publishHumanText?(tenant:string,userId:string,value:HumanTextPublish):Promise<Post>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
  setReaction?(tenant:string,fan:string,post:string,kind:ReactionKind|null):Promise<ReactionKind|null>;
  setSave(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
@@ -63,6 +67,16 @@ export class FeedService {
   if(value.kind==="audio"&&!value.transcript?.trim())throw new FeedError(422,"audio_transcript_required");
   for(const mediaId of media){if(!await this.approvedMedia(actor.tenantId,value.authorMasanaId,mediaId,value.kind))throw new FeedError(403,"media_not_approved");}
   return this.repo.publish(actor.tenantId,actor.id,{...value,body:value.body.trim(),media,transcript:value.transcript??null});
+ }
+ async publishHumanText(actor:Actor,value:HumanTextPublish) {
+  const user=this.fan(actor);
+  if(!value||value.audience!=="public")throw new FeedError(422,"unsupported_audience");
+  if(!key.test(value.idempotencyKey))throw new FeedError(422,"invalid_idempotency_key");
+  if(typeof value.body!=="string"||!value.body.trim()||value.body.trim().length>2000)
+   throw new FeedError(422,"invalid_post_text");
+  if(!this.repo.publishHumanText)throw new FeedError(503,"human_publishing_unavailable");
+  return this.repo.publishHumanText(actor.tenantId,user,{
+   body:value.body.trim(),audience:"public",idempotencyKey:value.idempotencyKey});
  }
  private fan(actor:Actor){if(actor.kind!=="fan")throw new FeedError(403,"fan_only_action");requireId(actor.tenantId);requireId(actor.id);return actor.id}
  async like(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);

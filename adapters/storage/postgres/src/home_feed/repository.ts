@@ -4,9 +4,15 @@ import type {Pool} from "pg";
 type Row=Record<string,unknown>;
 type Cursor={at:string;id:string}|null;
 function item(r:Row){
- const authorMasanaId=String(r.author_masana_id),authorName=String(r.author_name??r.author_masana_id);
- return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,
-  author:{type:"masana" as const,id:authorMasanaId,displayName:authorName},
+ const human=r.author_type==='human';
+ const authorMasanaId=r.author_masana_id==null?'':String(r.author_masana_id);
+ const authorName=String(r.author_name??(human?'Member':authorMasanaId));
+ const author=human?{
+  type:'human' as const,id:String(r.author_user_id),
+  displayName:authorName,handle:String(r.author_handle??''),
+  avatarUrl:r.author_avatar==null?null:String(r.author_avatar),
+ }:{type:'masana' as const,id:authorMasanaId,displayName:authorName};
+ return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:new Date(String(r.published_at)).toISOString(),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
@@ -19,12 +25,32 @@ function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:St
   ? r.author as {type:"human";id:string;handle:string;displayName:string} : null};}
 // Approval alone survives character deactivation/ownership transfer. Recheck
 // the canonical identity on every fan-facing read and insert.
-const eligibleAuthor=`EXISTS (SELECT 1 FROM masana.character_revisions m
+const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.character_revisions m
  JOIN identity.characters a ON a.tenant_id=m.tenant_id AND a.character_id=m.character_id
  JOIN identity.character_ownership o ON o.tenant_id=a.tenant_id AND o.character_id=a.character_id
  WHERE m.tenant_id=p.tenant_id AND m.character_id=p.author_masana_id
-   AND m.state='approved' AND a.state='active' AND ${statusAuthorOwnership})`;
-const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1) AS author_name, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like') AS like_count,
+   AND m.state='approved' AND a.state='active' AND ${statusAuthorOwnership}))
+ OR (p.author_type='human' AND EXISTS (
+  SELECT 1 FROM identity.users hu JOIN talks.public_profiles hp
+    ON hp.tenant_id=hu.tenant_id AND hp.user_id=hu.user_id
+  WHERE hu.tenant_id=p.tenant_id AND hu.user_id=p.author_user_id
+    AND hu.state='active'
+    AND hp.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
+    AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement enforcement
+      WHERE enforcement.tenant_id=p.tenant_id AND enforcement.target_kind='profile'
+        AND enforcement.target_id=hp.handle AND enforcement.visibility<>'public')
+    AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences block
+      WHERE block.tenant_id=p.tenant_id AND block.blocked AND
+        ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
+        OR (block.viewer_user_id=p.author_user_id AND block.subject_user_id=$2)))
+ )))`;
+const projection=`p.*,
+ CASE WHEN p.author_type='human'
+  THEN (SELECT hp.display_name FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id)
+  ELSE (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1)
+ END AS author_name,
+ (SELECT hp.handle FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id) AS author_handle,
+ (SELECT hp.avatar_url FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id) AS author_avatar, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like') AS like_count,
  COALESCE((SELECT jsonb_object_agg(rc.reaction_kind,rc.n) FROM (SELECT l.reaction_kind,count(*)::int AS n
   FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id GROUP BY l.reaction_kind) rc),'{}'::jsonb) AS reaction_counts,
  (SELECT l.reaction_kind FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 LIMIT 1) AS viewer_reaction,
@@ -32,6 +58,9 @@ const projection=`p.*, (SELECT r.profile->>'displayName' FROM masana.character_r
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 AND l.reaction_kind='like') AS viewer_liked,
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
 // Resolve comment authors only through tenant-matched active user public profiles.
+// Comments bind $2 as the post UUID; the signed-in viewer is $3, unlike
+// list/detail/reaction endpoints. Never compare a UUID slot with a human ID.
+const commentEligibleAuthor=eligibleAuthor.replace(/\$2\b/g,"$3");
 const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  AND person.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
  THEN jsonb_build_object('type','human','id',person.user_id,
@@ -41,8 +70,11 @@ export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
  async list(tenant:string,viewer:string|null,mode:"for_you"|"following",before:Cursor,limit:number,authorMasanaId?:string) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
-   AND ($3::text='for_you' OR EXISTS (
-     SELECT 1 FROM masana.follows f WHERE f.tenant_id=p.tenant_id AND f.fan_user_id=$2 AND f.character_id=p.author_masana_id))
+   AND ($3::text='for_you'
+    OR (p.author_type='masana' AND EXISTS (
+      SELECT 1 FROM masana.follows f WHERE f.tenant_id=p.tenant_id AND f.fan_user_id=$2 AND f.character_id=p.author_masana_id))
+    OR (p.author_type='human' AND EXISTS (
+      SELECT 1 FROM talks.follows f WHERE f.tenant_id=p.tenant_id AND f.follower_user_id=$2 AND f.followed_user_id=p.author_user_id)))
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
    AND ($7::text IS NULL OR p.author_masana_id=$7)
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,
@@ -52,6 +84,36 @@ export class PgHomeFeedRepository {
  async find(tenant:string,viewer:string|null,id:string){
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}`,[tenant,viewer,id]);
   return rows.rows[0]?item(rows.rows[0]):null;
+ }
+ async publishHumanText(tenant:string,userId:string,v:{body:string;audience:'public';idempotencyKey:string}){
+  // Only active tenant-owned accounts with canonical public profiles may
+  // publish. Stable request keys never overwrite differently worded posts.
+  await this.pool.query(`INSERT INTO feed.posts
+    (tenant_id,author_type,author_user_id,author_masana_id,audience,kind,
+     body,media_ids,transcript,idempotency_key,published_by)
+    SELECT $1,'human',$2,NULL,'public','text',$3,ARRAY[]::text[],NULL,$4,$2
+    FROM identity.users u JOIN talks.public_profiles profile
+      ON profile.tenant_id=u.tenant_id AND profile.user_id=u.user_id
+    WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active'
+      AND profile.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
+      AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement enforcement
+        WHERE enforcement.tenant_id=u.tenant_id AND enforcement.target_kind='profile'
+          AND enforcement.target_id=profile.handle AND enforcement.visibility<>'public')
+    ON CONFLICT(tenant_id,published_by,idempotency_key) DO NOTHING`,
+    [tenant,userId,v.body,v.idempotencyKey]);
+  const saved=await this.pool.query(`SELECT id,author_type,author_user_id,
+    author_masana_id,audience,kind,body,media_ids,transcript FROM feed.posts
+    WHERE tenant_id=$1 AND published_by=$2 AND idempotency_key=$3`,
+    [tenant,userId,v.idempotencyKey]);
+  const row=saved.rows[0] as Row|undefined;
+  if(!row)throw Object.assign(new Error('human_profile_unavailable'),{status:403,code:'human_profile_unavailable'});
+  if(row.author_type!=='human'||row.author_user_id!==userId||
+    row.author_masana_id!==null||row.audience!=='public'||row.kind!=='text'||
+    row.body!==v.body||(row.media_ids as unknown[]).length!==0||row.transcript!==null)
+    throw Object.assign(new Error('idempotency_conflict'),{status:409,code:'idempotency_conflict'});
+  const projected=await this.find(tenant,userId,String(row.id));
+  if(!projected)throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
+  return projected;
  }
  async publish(tenant:string,publisher:string,v:{authorMasanaId:string;kind:string;body:string;media:readonly string[];transcript:string|null;idempotencyKey:string}){
   const added=await this.pool.query(`INSERT INTO feed.posts
@@ -170,7 +232,7 @@ export class PgHomeFeedRepository {
    LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
      AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
-   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${eligibleAuthor})
+   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${commentEligibleAuthor})
    AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3))
    AND ($4::uuid IS NULL OR (CASE WHEN $6::text='newest' THEN (c.created_at,c.id)<(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) ELSE (c.created_at,c.id)>(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) END))
    ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,[tenant,post,viewer,before,limit,sort]);

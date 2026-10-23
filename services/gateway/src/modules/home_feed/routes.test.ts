@@ -1,6 +1,34 @@
 import {describe,it,expect,vi} from "vitest";
 import Fastify from "fastify";
 import {registerHomeFeedRoutes} from "./routes.js";
+describe("ST1 human publishing route",()=>{
+ it("derives own identity from the signed principal and forbids role spoofing",async()=>{
+  const app=Fastify(),publishHumanText=vi.fn(async()=>({id:"one"}));
+  await registerHomeFeedRoutes(app,{service:{publishHumanText} as never,
+   principal:async()=>({kind:"fan",id:"own_user",tenantId:"tenant"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const url="/v1/posts/human",headers={"idempotency-key":"human-post-001"};
+  const res=await app.inject({method:"POST",url,headers,payload:{body:"Hello",audience:"public"}});
+  expect(res.statusCode).toBe(200);
+  expect(publishHumanText).toHaveBeenCalledWith({kind:"fan",id:"own_user",tenantId:"tenant"},
+    {body:"Hello",audience:"public",idempotencyKey:"human-post-001"});
+  for(const payload of [
+   {body:"Hello",audience:"followers"},
+   {body:"Hello",audience:"public",authorId:"other"},
+   {body:"Hello",audience:"public",media:["media_x"]},
+  ])expect((await app.inject({method:"POST",url,headers,payload})).statusCode).toBe(422);
+  expect(publishHumanText).toHaveBeenCalledTimes(1);
+  await app.close();
+ });
+ it("denies unauthenticated customer; editor cannot bypass Masana editorial role",async()=>{
+  const app=Fastify(),publishHumanText=vi.fn();
+  await registerHomeFeedRoutes(app,{service:{publishHumanText} as never,
+   principal:async()=>null,tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const response=await app.inject({method:"POST",url:"/v1/posts/human",payload:{body:"Hello",audience:"public"}});
+  expect(response.statusCode).toBe(401);
+  expect(publishHumanText).not.toHaveBeenCalled();await app.close();
+ });
+});
 describe("ST2 strict reaction transport",()=>{
  it("uses authenticated fan and exact reaction, never body actor",async()=>{
   const app=Fastify(),react=vi.fn(async()=>({kind:"love"}));

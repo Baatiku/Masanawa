@@ -1,6 +1,40 @@
 import {describe,it,expect,vi} from "vitest";
 import type {Pool} from "pg";
 import {PgHomeFeedRepository} from "./repository.js";
+describe("ST1 canonical human publish guards",()=>{
+ it("inserts only when active canonical account and public handle match tenant",async()=>{
+  const query=vi.fn(async(sql:string,_binds:unknown[])=>{
+   if(sql.includes("SELECT id,author_type"))return {rows:[{
+    id:"381026c2-9d56-47b1-b73d-1784e24e41e2",
+    author_type:"human",author_user_id:"fan",author_masana_id:null,
+    audience:"public",kind:"text",body:"Hello",media_ids:[],transcript:null}]};
+   return {rows:[]};
+  });
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  // Stub the following projection; the SQL source still must reauthorize it.
+  repo.find=async()=>({id:"a",author:{type:"human",id:"fan",handle:"musa"}} as never);
+  await repo.publishHumanText("tenant","fan",{
+    body:"Hello",audience:"public",idempotencyKey:"human-post-001"});
+  const sql=String(query.mock.calls[0]?.[0]);
+  expect(sql).toContain("FROM identity.users u JOIN talks.public_profiles profile");
+  expect(sql).toContain("u.state='active'");
+  expect(sql).toContain("profile.tenant_id=u.tenant_id");
+  expect(sql).toContain("ON CONFLICT(tenant_id,published_by,idempotency_key) DO NOTHING");
+ });
+ it("reused idempotency key with changed content is a hard conflict",async()=>{
+  const query=vi.fn(async(sql:string)=>{
+    if(sql.includes("SELECT id,author_type"))return {rows:[{
+     id:"381026c2-9d56-47b1-b73d-1784e24e41e2",
+     author_type:"human",author_user_id:"fan",author_masana_id:null,
+     audience:"public",kind:"text",body:"Original",media_ids:[],transcript:null,
+    }]};
+    return {rows:[]};
+  });
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  await expect(repo.publishHumanText("tenant","fan",{body:"Changed",audience:"public",
+    idempotencyKey:"human-post-001"})).rejects.toMatchObject({status:409,code:"idempotency_conflict"});
+ });
+});
 describe("ST2 canonical one-actor reaction row",()=>{
  it("upserts the same tenant/post/fan row rather than appending reactions",async()=>{
   const query=vi.fn(async(_sql:string,_binds:unknown[])=>({rows:[{admitted:true}]}));
