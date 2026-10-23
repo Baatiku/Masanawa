@@ -142,7 +142,7 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Updates'), findsNothing);
     final before = adapter.calls.length;
     await t.tap(find.widgetWithText(ChoiceChip, 'Sell')); await t.pumpAndSettle();
-    expect(find.text('Buyer ads are not available yet'), findsOneWidget);
+    expect(find.text('Sell ads are not enabled for this account'), findsOneWidget);
     expect(adapter.calls.length, before);
     await t.tap(find.text('My ads')); await t.pumpAndSettle();
     expect(adapter.calls.any((r) => r.path.contains('/my-offers/page')), isTrue);
@@ -203,7 +203,7 @@ void main() {
     expect(t.takeException(), isNull);
     await t.tap(find.text('Sell'));
     await t.pumpAndSettle();
-    expect(find.text('Buyer ads are not available yet'), findsOneWidget);
+    expect(find.text('Sell ads are not enabled for this account'), findsOneWidget);
     expect(find.text('Create sell ad'), findsOneWidget);
     await t.ensureVisible(find.text('Create sell ad'));
     await t.pumpAndSettle();

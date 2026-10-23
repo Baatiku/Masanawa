@@ -280,4 +280,63 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
    await service().action(actor,one.orderId,'cancel');await service().action(actor,two.orderId,'cancel');
  });
 
+ it("settles maker-buy ads from actual taker custody, with replay, refund and independent seller keys",async()=>{
+   // Synthetic admission and bank proof are restricted to this test database.
+   const rights={canMakeBuyOffer:true,canTakeBuyOffer:true,policyReference:"test-only-qualified-buy-policy"};
+   const admitted=()=>createP2pService(pool,createMsnwP2pCustodyEscrow(),{buyOfferAdmission:{read:async()=>rights}});
+   const makerMethod=randomUUID();
+   await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods
+     (method_id,tenant_id,owner_id,method_type,bank_name,bank_code,account_name,account_number,verification_reference,verified_at)
+     VALUES($1,$2,$3,'ng_bank_transfer','Maker Bank','058','Escrow Buyer','1111111111','test-only-maker-proof',now())`,[makerMethod,tenant,buyer]);
+   const maker={tenantId:tenant,userId:buyer},taker={tenantId:tenant,userId:seller};
+   const beforeSeller=await account(seller),beforeBuyer=await account(buyer);
+   const ad=await admitted().createOffer(maker,{offerSide:'buy',paymentMethodId:makerMethod,rateKoboPerMsnw:price,minMicro:'100000',maxMicro:'1000000',inventoryMicro:'2000000'});
+   expect(await account(seller)).toEqual(beforeSeller);expect(await account(buyer)).toEqual(beforeBuyer);
+   const key=randomUUID(),input={offerId:ad.offerId,paymentMethodId:methodId,amountMicro:'100000',idempotencyKey:key};
+   const duplicate=await Promise.all([admitted().createOrder(taker,input),admitted().createOrder(taker,input)]);
+   expect(duplicate[0].orderId).toBe(duplicate[1].orderId);
+   expect(duplicate.filter(x=>!x.replay)).toHaveLength(1);
+   const id=duplicate[0].orderId;
+   expect(await account(seller)).toMatchObject({available_micro:String(BigInt(beforeSeller.available_micro)-100500n),reserved_micro:'100500'});
+   expect(await account(buyer)).toEqual(beforeBuyer);
+   const roles=await pool.query(`SELECT seller_id,buyer_id,payment_method_id,request_actor_id FROM commerce.msnw_p2p_orders WHERE order_id=$1`,[id]);
+   expect(roles.rows[0]).toMatchObject({seller_id:seller,buyer_id:buyer,payment_method_id:methodId,request_actor_id:seller});
+   await expect(admitted().action(maker,id,'confirm',{releaseAuthorized:true})).rejects.toMatchObject({code:'p2p.seller_confirmation_required'});
+   await admitted().action(maker,id,'claim');
+   await admitted().action(taker,id,'confirm',{releaseAuthorized:true});
+   expect(await account(buyer)).toMatchObject({available_micro:String(BigInt(beforeBuyer.available_micro)+100000n)});
+   expect(await admitted().receipt(taker,id)).toMatchObject({direction:'sell',stage:'release',feeMicro:'500'});
+   const balanced=await pool.query(`SELECT sum(p.delta_micro)::text AS net FROM commerce.msnw_p2p_custody_postings p JOIN commerce.msnw_p2p_custody_journal j USING(operation_id) WHERE j.order_id=$1`,[id]);
+   expect(balanced.rows[0].net).toBe('0');
+   rights.canTakeBuyOffer=false;rights.canMakeBuyOffer=false;
+   expect(await admitted().createOrder(taker,input)).toMatchObject({orderId:id,replay:true});
+   await expect(admitted().createOrder(taker,{...input,idempotencyKey:randomUUID()})).rejects.toMatchObject({code:'p2p.buy_offer_ineligible'});
+   rights.canTakeBuyOffer=true;rights.canMakeBuyOffer=true;
+   const next=await admitted().createOrder(taker,{...input,idempotencyKey:randomUUID()});
+   const reservedBeforeCancel=await account(seller);
+   await admitted().action(maker,next.orderId,'cancel');
+   expect(await account(seller)).toMatchObject({available_micro:String(BigInt(reservedBeforeCancel.available_micro)+100500n),reserved_micro:'0'});
+   expect((await pool.query(`SELECT remaining_micro::text AS remaining FROM commerce.msnw_p2p_offers WHERE offer_id=$1`,[ad.offerId])).rows[0].remaining).toBe('1900000');
+   // A second seller can take this buy ad with the SAME original key.
+   // A distinct taker bank and custody account keeps request identity per initiator.
+   const third='user_'+randomUUID(),thirdMethod=randomUUID();
+   await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Third Seller',$3,'en',now(),now())`,[tenant,third,third+'@example.com']);
+   await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,201000)`,[tenant,third]);
+   await pool.query(`INSERT INTO commerce.msnw_p2p_payment_methods(method_id,tenant_id,owner_id,method_type,bank_name,account_name,account_number,verification_reference,verified_at) VALUES($1,$2,$3,'ng_bank_transfer','Third Bank','Third Seller','3333333333','test-only-third-proof',now())`,[thirdMethod,tenant,third]);
+   const thirdActor={tenantId:tenant,userId:third};
+   const independent=await admitted().createOrder(thirdActor,{...input,paymentMethodId:thirdMethod});
+   expect(independent.orderId).not.toBe(id);
+   expect(await admitted().orderByRequest(thirdActor,key)).toMatchObject({orderId:independent.orderId});
+   expect(await admitted().orderByRequest(taker,key)).toMatchObject({orderId:id});
+   await expect(admitted().orderByRequest(maker,key)).rejects.toMatchObject({status:404});
+   await admitted().action(maker,independent.orderId,'cancel');
+   const thirdBefore=await account(third),demandBefore=(await pool.query('SELECT remaining_micro::text FROM commerce.msnw_p2p_offers WHERE offer_id=$1',[ad.offerId])).rows[0];
+   await expect(admitted().createOrder(thirdActor,{...input,amountMicro:'1000000',paymentMethodId:thirdMethod,idempotencyKey:randomUUID()})).rejects.toThrow();
+   expect(await account(third)).toEqual(thirdBefore);
+   expect((await pool.query('SELECT remaining_micro::text FROM commerce.msnw_p2p_offers WHERE offer_id=$1',[ad.offerId])).rows[0]).toEqual(demandBefore);
+   await pool.query('UPDATE commerce.msnw_p2p_payment_methods SET disabled_at=now() WHERE method_id=$1',[thirdMethod]);
+   await expect(admitted().createOrder(thirdActor,{...input,paymentMethodId:thirdMethod,idempotencyKey:randomUUID()})).rejects.toMatchObject({code:'p2p.verified_method_required'});
+   expect(await admitted().createOrder(thirdActor,{...input,paymentMethodId:thirdMethod})).toMatchObject({orderId:independent.orderId,replay:true});
+ });
+
 });

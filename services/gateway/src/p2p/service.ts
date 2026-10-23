@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import {readBuyOfferAdmission,type BuyOfferAdmission} from "./buy_offer_admission.js";
 
 export class P2pError extends Error {
   constructor(readonly code: string, readonly status = 409) { super(code); }
@@ -120,7 +121,19 @@ function take<T>(result: { rows: Record<string, unknown>[] }, code = "p2p.not_fo
   return result.rows[0] as T;
 }
 
-export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
+export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
+  options:{buyOfferAdmission?:BuyOfferAdmission}={}) {
+  async function admission(actor:P2pActor) {
+    try {return await readBuyOfferAdmission(options.buyOfferAdmission,actor);}
+    catch {throw new P2pError('p2p.buy_offer_admission_unavailable',503);}
+  }
+  async function requireBuyAdmission(actor:P2pActor,kind:'maker'|'taker') {
+    if(!options.buyOfferAdmission)throw new P2pError('p2p.buy_offer_admission_unavailable',503);
+    const allowed=await admission(actor);
+    if(!(kind==='maker'?allowed.canMakeBuyOffer:allowed.canTakeBuyOffer))
+      throw new P2pError('p2p.buy_offer_ineligible',403);
+    return allowed;
+  }
   async function transact<T>(fn: (tx: P2pQuery) => Promise<T>): Promise<T> {
     const tx = await pool.connect();
     try {
@@ -182,27 +195,30 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
   // Public trader context is discoverable only through a currently eligible ad.
   // No raw user ID, receiving account, email, KYC record or invented badge is returned.
   async function traderReference(actor:P2pActor,offerId:string) {
-    return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,seller.display_name,
+    return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,o.offer_side,seller.display_name,
       statement_timestamp() AS as_of,
       (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
-        AND past.seller_id=o.seller_id AND past.created_at>=statement_timestamp()-interval '30 days'
+        AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id) AND past.created_at>=statement_timestamp()-interval '30 days'
         AND past.state='completed') AS completed,
       (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
-        AND past.seller_id=o.seller_id AND past.created_at>=statement_timestamp()-interval '30 days'
+        AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id) AND past.created_at>=statement_timestamp()-interval '30 days'
         AND past.state IN ('completed','cancelled','expired')) AS closed
       FROM commerce.msnw_p2p_offers o
       JOIN commerce.msnw_p2p_payment_methods p ON p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
         AND p.owner_id=o.seller_id
-      JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+      LEFT JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
       LEFT JOIN security.platform_user_profiles seller ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
       WHERE o.tenant_id=$1 AND o.offer_id=$2 AND o.seller_id<>$3 AND o.state='active'
         AND p.verified_at IS NOT NULL AND p.disabled_at IS NULL
-        AND LEAST(o.remaining_micro::numeric,floor(c.available_micro::numeric*10000/(10000+o.fee_bps)))>=o.min_micro
+        AND (o.offer_side='buy' OR LEAST(o.remaining_micro::numeric,floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)))>=o.min_micro)
         AND o.remaining_micro>0`,[actor.tenantId,offerId,actor.userId]),'p2p.trader_unavailable');
   }
     /** Seek-paginated listings keep tenant visibility and reserve capacity rules. */
   async function offersPage(actor:P2pActor,input:{cursor?:string;amountMicro?:string;search?:string;
-      asset?:string;fiat?:string;method?:string;traderOfferId?:string}={}) {
+      asset?:string;fiat?:string;method?:string;traderOfferId?:string;side?:string}={}) {
+      const side=input.side??'sell';
+      if(!['sell','buy'].includes(side))throw new P2pError('p2p.invalid_offer_side',422);
+      if(side==='buy')await requireBuyAdmission(actor,'taker');
       if((input.asset!==undefined&&input.asset!=='MSNW')||
         (input.fiat!==undefined&&input.fiat!=='NGN'))throw new P2pError('p2p.unsupported_market',422);
       if(input.method!==undefined&&input.method!=='ng_bank_transfer')
@@ -213,18 +229,21 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       if(search.length>80||/[\u0000-\u001f\u007f]/.test(search))
         throw new P2pError('p2p.invalid_search',422);
       const trader=input.traderOfferId===undefined?null:await traderReference(actor,id(input.traderOfferId));
+      if(trader?.offer_side==='buy')await requireBuyAdmission(actor,'taker');
       const scope:unknown[]=[actor.tenantId,actor.userId,amount,search];
       if(input.traderOfferId!==undefined)scope.push(input.traderOfferId);
+      const effectiveSide=String(trader?.offer_side??side);
+      if(effectiveSide!=='sell')scope.push(effectiveSide);
       const context=createHash('sha256').update(JSON.stringify(scope)).digest('hex').slice(0,24);
       if(input.cursor){
         pageCursor(input.cursor);
         const raw=JSON.parse(Buffer.from(input.cursor,'base64url').toString('utf8'));
-        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''||input.traderOfferId!==undefined))
+        if(raw.context!==context&&(raw.context!==undefined||amount!==null||search!==''||input.traderOfferId!==undefined||effectiveSide!=='sell'))
           throw new P2pError('p2p.filter_cursor_changed',422);
       }
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
-      const result=await pool.query(`SELECT o.offer_id,
+      const result=await pool.query(`SELECT o.offer_id,o.offer_side,
         o.rate_kobo_per_msnw::text,o.min_micro::text,
         LEAST(o.max_micro,capacity.amount)::text AS max_micro,
         capacity.amount::text AS remaining_micro,o.fee_bps,
@@ -241,19 +260,19 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           AND p.owner_id=o.seller_id
         LEFT JOIN security.platform_user_profiles seller
           ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
-        JOIN commerce.msnw_custody_accounts c
+        LEFT JOIN commerce.msnw_custody_accounts c
           ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
-        CROSS JOIN LATERAL (SELECT LEAST(o.remaining_micro::numeric,
-          floor(c.available_micro::numeric*10000/(10000+o.fee_bps))) AS amount) capacity
+        CROSS JOIN LATERAL (SELECT CASE WHEN o.offer_side='buy' THEN o.remaining_micro::numeric ELSE LEAST(o.remaining_micro::numeric,
+          floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps))) END AS amount) capacity
         LEFT JOIN LATERAL (
           SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
                  count(*)::integer AS closed_orders_30d
           FROM commerce.msnw_p2p_orders past
-          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
+          WHERE past.tenant_id=o.tenant_id AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id)
             AND past.created_at>=statement_timestamp()-interval '30 days'
             AND past.state IN ('completed','cancelled','expired')
         ) history ON TRUE
-        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
+        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active' AND o.offer_side=$9
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
           AND ($8::text IS NULL OR o.seller_id=$8::text)
@@ -264,16 +283,22 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           AND ($3::timestamptz IS NULL OR
             (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
         ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search,trader?.seller_id??null]);
+        [actor.tenantId,actor.userId,time,afterId,limit+1,amount,search,trader?.seller_id??null,effectiveSide]);
       const items=result.rows.slice(0,limit);
       const cursor=nextPageCursor(items,result.rows.length,limit);
       const nextCursor=cursor?Buffer.from(JSON.stringify({...JSON.parse(Buffer.from(cursor,'base64url').toString('utf8')),context})).toString('base64url'):null;
-      return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'},
+      return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer',offerSide:effectiveSide},
         filters:{amountMicro:amount,search},sort:'newest',
         ...(trader?{trader:{displayName:trader.display_name,completedOrders30d:trader.completed,
-          closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId}}:{})};
+          closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }
   return Object.freeze({
+    async capabilities(actor:P2pActor) {
+      const rights=await admission(actor);
+      return {makerBuy: rights.canMakeBuyOffer,takerSell:rights.canTakeBuyOffer,
+        admissionState:rights.policyReference?'available':'unavailable',policyReference:rights.policyReference,
+        asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer'};
+    },
     async offers(actor: P2pActor) {
       // Display only presently funded capacity. The existing per-order locked
       // reservation remains the sole escrow authority; discovery never moves funds.
@@ -295,11 +320,11 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
           SELECT count(*) FILTER (WHERE past.state='completed')::integer AS completed_orders_30d,
                  count(*)::integer AS closed_orders_30d
           FROM commerce.msnw_p2p_orders past
-          WHERE past.tenant_id=o.tenant_id AND past.seller_id=o.seller_id
+          WHERE past.tenant_id=o.tenant_id AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id)
             AND past.created_at>=statement_timestamp()-interval '30 days'
             AND past.state IN ('completed','cancelled','expired')
         ) history ON TRUE
-        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active'
+        WHERE o.tenant_id=$1 AND o.seller_id<>$2 AND o.state='active' AND o.offer_side='sell'
           AND capacity.amount>=o.min_micro AND capacity.amount>0
           AND p.disabled_at IS NULL AND p.verified_at IS NOT NULL
         ORDER BY o.created_at DESC LIMIT 100`, [actor.tenantId,actor.userId]);
@@ -312,7 +337,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async myOffersPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
       const limit=20;
-      const result=await pool.query(`SELECT o.offer_id,o.rate_kobo_per_msnw::text,
+      const result=await pool.query(`SELECT o.offer_id,o.offer_side,o.rate_kobo_per_msnw::text,
         o.min_micro::text,o.max_micro::text,o.remaining_micro::text,
         o.state,o.created_at,o.payment_method_id,o.fee_bps,p.bank_name,
         to_char(o.created_at AT TIME ZONE 'UTC',
@@ -347,7 +372,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         limit,"created_at","event_id")};
     },
     async myOffers(actor: P2pActor) {
-      return (await pool.query(`SELECT offer_id,rate_kobo_per_msnw::text,
+      return (await pool.query(`SELECT offer_id,offer_side,rate_kobo_per_msnw::text,
         min_micro::text,max_micro::text,remaining_micro::text,state,created_at,
         payment_method_id,fee_bps
         FROM commerce.msnw_p2p_offers WHERE tenant_id=$1 AND seller_id=$2
@@ -401,26 +426,19 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       return {offerId,state:"paused" as const};
     },
     async resumeOffer(actor:P2pActor,offerId:string) {
-      // Refuse resuming an unfunded or no-longer-verified bank offer.
-      // Capacity is checked again when any buyer obtains a new quote and
-      // inside the order's locked custody reservation.
-      const updated=await pool.query(`UPDATE commerce.msnw_p2p_offers o
-        SET state='active',updated_at=statement_timestamp()
-        FROM commerce.msnw_p2p_payment_methods p,
-             commerce.msnw_custody_accounts c
+      const rights=await admission(actor).catch(()=>({canMakeBuyOffer:false}));
+      const updated=await pool.query(`UPDATE commerce.msnw_p2p_offers o SET state='active',updated_at=statement_timestamp()
+        FROM commerce.msnw_p2p_payment_methods p
         WHERE o.tenant_id=$1 AND o.seller_id=$2 AND o.offer_id=$3
           AND o.state='paused' AND o.remaining_micro>=o.min_micro
-          AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
-          AND p.method_id=o.payment_method_id
+          AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id AND p.method_id=o.payment_method_id
           AND p.verified_at IS NOT NULL AND p.disabled_at IS NULL
-          AND c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
-          AND floor(c.available_micro::numeric*10000/(10000+o.fee_bps))
-              >= o.min_micro
-        RETURNING o.offer_id`,
-        [actor.tenantId,actor.userId,id(offerId)]);
-      if(updated.rowCount!==1)
-        throw new P2pError("p2p.offer_resume_unavailable",409);
-      return {offerId,state:"active" as const};
+          AND ((o.offer_side='buy' AND $4::boolean) OR (o.offer_side='sell' AND EXISTS(
+            SELECT 1 FROM commerce.msnw_custody_accounts c WHERE c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
+              AND floor(c.available_micro::numeric*10000/(10000+o.fee_bps))>=o.min_micro)))
+        RETURNING o.offer_id`,[actor.tenantId,actor.userId,id(offerId),rights.canMakeBuyOffer]);
+      if(updated.rowCount!==1)throw new P2pError('p2p.offer_resume_unavailable',409);
+      return {offerId,state:'active' as const};
     },
     async closeOffer(actor: P2pActor, offerId: string) {
       // No existing order or its reserved funds are affected; only future
@@ -444,8 +462,10 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
     async createOffer(actor: P2pActor, input: {
       paymentMethodId: string; rateKoboPerMsnw: string;
       minMicro: string; maxMicro: string; inventoryMicro: string;
-      idempotencyKey?: string;
+      idempotencyKey?: string;offerSide?:string;
     }) {
+      const side=input.offerSide??'sell';
+      if(!['sell','buy'].includes(side))throw new P2pError('p2p.invalid_offer_side',422);
       const rate=positive(input.rateKoboPerMsnw,10n**12n,"p2p.invalid_rate");
       const min=positive(input.minMicro,10n**18n,"p2p.invalid_limit");
       const max=positive(input.maxMicro,10n**18n,"p2p.invalid_limit");
@@ -459,14 +479,14 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         if(requestKey!==undefined){
           await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))",
             ["msnw-offer:"+actor.tenantId+":"+actor.userId+":"+requestKey]);
-          const existing=await tx.query(`SELECT offer_id,payment_method_id,
+          const existing=await tx.query(`SELECT offer_id,payment_method_id,offer_side,
               rate_kobo_per_msnw::text,min_micro::text,max_micro::text,state
             FROM commerce.msnw_p2p_offers
             WHERE tenant_id=$1 AND seller_id=$2 AND offer_id=$3 FOR UPDATE`,
             [actor.tenantId,actor.userId,offerId]);
           if(existing.rows[0]){
             const prior=existing.rows[0]!;
-            if(prior.payment_method_id!==paymentMethodId ||
+            if(String(prior.offer_side??'sell')!==side || prior.payment_method_id!==paymentMethodId ||
                String(prior.rate_kobo_per_msnw)!==rate.toString() ||
                String(prior.min_micro)!==min.toString() ||
                String(prior.max_micro)!==max.toString())
@@ -476,6 +496,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
             return {offerId,replay:true,state:String(prior.state)};
           }
         }
+        if(side==='buy')await requireBuyAdmission(actor,'maker');
         const method=await tx.query(`SELECT method_id
           FROM commerce.msnw_p2p_payment_methods
           WHERE tenant_id=$1 AND owner_id=$2 AND method_id=$3
@@ -484,9 +505,9 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         if(!method.rowCount)throw new P2pError("p2p.verified_method_required",403);
         await tx.query(`INSERT INTO commerce.msnw_p2p_offers
           (offer_id,tenant_id,seller_id,payment_method_id,rate_kobo_per_msnw,
-            min_micro,max_micro,remaining_micro) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            min_micro,max_micro,remaining_micro,offer_side) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [offerId,actor.tenantId,actor.userId,paymentMethodId,
-            rate.toString(),min.toString(),max.toString(),inventory.toString()]);
+            rate.toString(),min.toString(),max.toString(),inventory.toString(),side]);
         return {offerId,replay:false,state:"active"};
       });
     },
@@ -747,68 +768,74 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
       };
     },
     /** Read-only preview; the final reservation rechecks every term under lock. */
-    async quote(actor: P2pActor, input: { offerId: string; amountMicro: string }) {
+    async quote(actor:P2pActor,input:{offerId:string;amountMicro:string;paymentMethodId?:string}) {
       const offerId=id(input.offerId);
-      const rows=await pool.query(`SELECT o.offer_id,o.seller_id,
-        o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
-        o.remaining_micro::text,o.fee_bps,o.state,p.bank_name,
-        p.verified_at,p.disabled_at,
-        LEAST(o.remaining_micro::numeric,
-          floor(c.available_micro::numeric * 10000 / (10000+o.fee_bps)))::text AS funded_micro
+      const offer=take<Record<string,unknown>>(await pool.query(`SELECT o.offer_id,o.seller_id,o.offer_side,
+        o.payment_method_id,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
+        o.remaining_micro::text,o.fee_bps,o.state,p.bank_name,p.verified_at,p.disabled_at,
+        LEAST(o.remaining_micro::numeric,floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)))::text AS funded_micro
         FROM commerce.msnw_p2p_offers o
-        JOIN commerce.msnw_p2p_payment_methods p ON p.method_id=o.payment_method_id
-          AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
-        JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id
-          AND c.user_id=o.seller_id
-        WHERE o.tenant_id=$1 AND o.offer_id=$2`,[actor.tenantId,offerId]);
-      const offer=take<Record<string,unknown>>(rows,"p2p.offer_not_found");
-      if(offer.seller_id===actor.userId)throw new P2pError("p2p.self_trade_forbidden",422);
-      if(offer.state!=="active"||!offer.verified_at||offer.disabled_at)
-        throw new P2pError("p2p.offer_unavailable",409);
+        JOIN commerce.msnw_p2p_payment_methods p ON p.method_id=o.payment_method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+        LEFT JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=CASE WHEN o.offer_side='buy' THEN $3 ELSE o.seller_id END
+        WHERE o.tenant_id=$1 AND o.offer_id=$2`,[actor.tenantId,offerId,actor.userId]),'p2p.offer_not_found');
+      const side=String(offer.offer_side??'sell');
+      if(offer.seller_id===actor.userId)throw new P2pError('p2p.self_trade_forbidden',422);
+      if(offer.state!=='active'||!offer.verified_at||offer.disabled_at)throw new P2pError('p2p.offer_unavailable',409);
+      let bankName=String(offer.bank_name),receivingMethodId=String(offer.payment_method_id);
+      if(side==='buy') {
+        await requireBuyAdmission(actor,'taker');
+        await requireBuyAdmission({tenantId:actor.tenantId,userId:String(offer.seller_id)},'maker');
+        receivingMethodId=id(input.paymentMethodId);
+        const method=take<Record<string,unknown>>(await pool.query(`SELECT bank_name FROM commerce.msnw_p2p_payment_methods
+          WHERE tenant_id=$1 AND owner_id=$2 AND method_id=$3 AND verified_at IS NOT NULL AND disabled_at IS NULL`,
+          [actor.tenantId,actor.userId,receivingMethodId]),'p2p.verified_method_required');
+        bankName=String(method.bank_name);
+      }else if(input.paymentMethodId!==undefined)throw new P2pError('p2p.receiving_method_not_applicable',422);
       const amounts=orderAmounts(input.amountMicro,String(offer.rate_kobo_per_msnw),Number(offer.fee_bps));
       const amount=BigInt(amounts.amountMicro);
-      if(amount<BigInt(String(offer.min_micro))||amount>BigInt(String(offer.max_micro))||
-        amount>BigInt(String(offer.funded_micro)))throw new P2pError("p2p.offer_limit",422);
-      return {
-        offerId,amountMicro:amounts.amountMicro,fiatKobo:amounts.fiatKobo,
-        feeMicro:amounts.feeMicro,rateKoboPerMsnw:String(offer.rate_kobo_per_msnw),
-        feeBps:Number(offer.fee_bps),minMicro:String(offer.min_micro),
-        maxMicro:String(offer.max_micro),availableMicro:String(offer.funded_micro),
-        bankName:String(offer.bank_name),
-        paymentWindowSeconds:P2P_PAYMENT_WINDOW_SECONDS,
-      };
+      if(amount<BigInt(String(offer.min_micro))||amount>BigInt(String(offer.max_micro))||amount>BigInt(String(offer.funded_micro)))
+        throw new P2pError('p2p.offer_limit',422);
+      return {offerId,offerSide:side,takerAction:side==='buy'?'sell':'buy',
+        ...(side==='buy'?{receivingMethodId}:{}),
+        amountMicro:amounts.amountMicro,fiatKobo:amounts.fiatKobo,feeMicro:amounts.feeMicro,
+        rateKoboPerMsnw:String(offer.rate_kobo_per_msnw),feeBps:Number(offer.fee_bps),
+        minMicro:String(offer.min_micro),maxMicro:String(offer.max_micro),availableMicro:String(offer.funded_micro),
+        bankName,paymentWindowSeconds:P2P_PAYMENT_WINDOW_SECONDS};
     },
     /** Exact buyer+tenant request lookup for interrupted POST recovery. */
     async orderByRequest(actor:P2pActor, requestKey:string) {
       const request=key(requestKey);
       const row=take<Record<string,unknown>>(await pool.query(`SELECT order_id,state
         FROM commerce.msnw_p2p_orders
-        WHERE tenant_id=$1 AND buyer_id=$2 AND idempotency_key=$3`,
+        WHERE tenant_id=$1 AND ((request_actor_id=$2 AND request_key=$3)
+          OR (request_actor_id IS NULL AND buyer_id=$2 AND idempotency_key=$3))`,
         [actor.tenantId,actor.userId,request]),"p2p.order_not_found");
       return {orderId:String(row.order_id),state:String(row.state)};
     },
     async createOrder(actor: P2pActor, input: { offerId: string; amountMicro: string;
-      idempotencyKey: string; expectedRateKoboPerMsnw?: string; expectedFeeBps?: number }) {
+      idempotencyKey: string; expectedRateKoboPerMsnw?: string; expectedFeeBps?: number;paymentMethodId?:string }) {
       const orderKey = key(input.idempotencyKey), offerId = id(input.offerId);
       return transact(async tx => {
         // Serialization covers *both* duplicate requests and concurrent offers.
         await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))",
           ["msnw-p2p:" + actor.tenantId + ":" + actor.userId + ":" + orderKey]);
-        const existing = await tx.query(`SELECT order_id,offer_id,amount_micro::text
-          FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND buyer_id=$2 AND idempotency_key=$3`,
+        const existing = await tx.query(`SELECT order_id,offer_id,payment_method_id,seller_id,amount_micro::text
+          FROM commerce.msnw_p2p_orders WHERE tenant_id=$1 AND ((request_actor_id=$2 AND request_key=$3)
+            OR (request_actor_id IS NULL AND buyer_id=$2 AND idempotency_key=$3))`,
           [actor.tenantId,actor.userId,orderKey]);
         if (existing.rowCount) {
           const prior=existing.rows[0]!;
-          if (prior.offer_id!==offerId || prior.amount_micro!==input.amountMicro)
+          if (prior.offer_id!==offerId || prior.amount_micro!==input.amountMicro ||
+              (input.paymentMethodId!==undefined && prior.payment_method_id!==input.paymentMethodId))
             throw new P2pError("p2p.idempotency_conflict",409);
           return {orderId: String(prior.order_id), replay: true};
         }
-        const offer=take<Record<string,unknown>>(await tx.query(`SELECT o.offer_id,o.seller_id,
+        const offer=take<Record<string,unknown>>(await tx.query(`SELECT o.offer_id,o.seller_id,o.offer_side,
           o.payment_method_id,o.rate_kobo_per_msnw::text,o.min_micro::text,o.max_micro::text,
           o.remaining_micro::text,o.fee_bps,o.state,p.verified_at,p.disabled_at
           FROM commerce.msnw_p2p_offers o JOIN commerce.msnw_p2p_payment_methods p
-          ON o.payment_method_id=p.method_id
-          WHERE o.tenant_id=$1 AND o.offer_id=$2 FOR UPDATE OF o`,
+          ON o.payment_method_id=p.method_id AND p.tenant_id=o.tenant_id AND p.owner_id=o.seller_id
+          WHERE o.tenant_id=$1 AND o.offer_id=$2 FOR UPDATE OF o FOR SHARE OF p`,
           [actor.tenantId,offerId]));
         if (offer.seller_id===actor.userId) throw new P2pError("p2p.self_trade_forbidden",422);
         if (offer.state!=="active" || offer.disabled_at || !offer.verified_at)
@@ -819,6 +846,18 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
             input.expectedFeeBps !== Number(offer.fee_bps))) {
           throw new P2pError("p2p.quote_changed",409);
         }
+        const side=String(offer.offer_side??'sell');
+        const sellerId=side==='buy'?actor.userId:String(offer.seller_id);
+        const buyerId=side==='buy'?String(offer.seller_id):actor.userId;
+        const receivingMethodId=side==='buy'?id(input.paymentMethodId):String(offer.payment_method_id);
+        if(side==='buy') {
+          await requireBuyAdmission(actor,'taker');
+          await requireBuyAdmission({tenantId:actor.tenantId,userId:buyerId},'maker');
+        }else if(input.paymentMethodId!==undefined)throw new P2pError('p2p.receiving_method_not_applicable',422);
+        const destination=await tx.query(`SELECT method_id FROM commerce.msnw_p2p_payment_methods
+          WHERE tenant_id=$1 AND owner_id=$2 AND method_id=$3 AND verified_at IS NOT NULL AND disabled_at IS NULL FOR SHARE`,
+          [actor.tenantId,sellerId,receivingMethodId]);
+        if(!destination.rowCount)throw new P2pError('p2p.verified_method_required',403);
         const amounts=orderAmounts(input.amountMicro,String(offer.rate_kobo_per_msnw),Number(offer.fee_bps));
         const a=BigInt(amounts.amountMicro);
         if(a<BigInt(String(offer.min_micro)) || a>BigInt(String(offer.max_micro)) ||
@@ -826,15 +865,15 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority) {
         const orderId=randomUUID();
         // The wallet authority MUST reserve confirmed MSNW in this transaction.
         // If absent, throw; no order or fabricated escrow survives.
-        await escrow.reserve(tx,{tenantId:actor.tenantId,sellerId:String(offer.seller_id),
-          buyerId:actor.userId,orderId,amountMicro:amounts.amountMicro,feeMicro:amounts.feeMicro});
+        await escrow.reserve(tx,{tenantId:actor.tenantId,sellerId,
+          buyerId,orderId,amountMicro:amounts.amountMicro,feeMicro:amounts.feeMicro});
         await tx.query(`INSERT INTO commerce.msnw_p2p_orders
           (order_id,tenant_id,offer_id,seller_id,buyer_id,payment_method_id,
-            amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,statement_timestamp()+($12::integer*interval '1 second'),$11)`,
-          [orderId,actor.tenantId,offerId,offer.seller_id,actor.userId,
-            offer.payment_method_id,amounts.amountMicro,amounts.feeMicro,
-            amounts.fiatKobo,offer.rate_kobo_per_msnw,orderKey,P2P_PAYMENT_WINDOW_SECONDS]);
+            amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key,request_actor_id,request_key)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,statement_timestamp()+($12::integer*interval '1 second'),$11,$13,$14)`,
+          [orderId,actor.tenantId,offerId,sellerId,buyerId,
+            receivingMethodId,amounts.amountMicro,amounts.feeMicro,
+            amounts.fiatKobo,offer.rate_kobo_per_msnw,side==='buy'?randomUUID():orderKey,P2P_PAYMENT_WINDOW_SECONDS,actor.userId,orderKey]);
         await tx.query(`UPDATE commerce.msnw_p2p_offers SET
           remaining_micro=remaining_micro-$3,updated_at=statement_timestamp()
           WHERE tenant_id=$1 AND offer_id=$2`,[actor.tenantId,offerId,amounts.amountMicro]);

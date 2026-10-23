@@ -41,7 +41,7 @@ describe("seller P2P offer pause/resume without escrow mutation",()=>{
     expect(await f.service.resumeOffer(seller,offerId)).toEqual({
       offerId,state:"active",
     });
-    expect(f.params).toEqual([[seller.tenantId,seller.userId,offerId]]);
+    expect(f.params).toEqual([[seller.tenantId,seller.userId,offerId,false]]);
     expect(f.statements[0]).toContain("state='paused'");
     expect(f.statements[0]).toContain("p.verified_at IS NOT NULL");
     expect(f.statements[0]).toContain("p.disabled_at IS NULL");

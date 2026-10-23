@@ -211,7 +211,7 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           Text(
-                            'Available ${widget.formatMsnw(offer['remaining_micro'])}',
+                            '${offer['offer_side']=='buy'?'Buyer demand':'Available'} ${widget.formatMsnw(offer['remaining_micro'])}',
                           ),
                           Text(
                             'Limit ${widget.formatMsnw(offer['min_micro'])} – ${widget.formatMsnw(offer['max_micro'])}',
@@ -225,7 +225,7 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
                                 : () {
                                     if (_same) Navigator.pop(context, offer);
                                   },
-                            child: const Text('Review buy quote'),
+                            child: Text(offer['offer_side']=='buy'?'Review sell quote':'Review buy quote'),
                           ),
                         ],
                       ),
