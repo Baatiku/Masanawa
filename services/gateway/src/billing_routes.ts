@@ -262,9 +262,12 @@ export function registerBillingRoutes(
           reply.code(
             message === "financial.auth.unauthorized" || message === "UNAUTHORIZED"
               ? 401
-              : message.includes("amount") || message.includes("virtual_account")
-                ? 400
-                : 503,
+              : message.includes("financial.wallet.funding_intent_mismatch") ||
+                  message.includes("virtual_account_")
+                ? 503
+                : message.includes("amount")
+                  ? 400
+                  : 503,
           );
           return { error: message || "wallet_funding_unavailable" };
         }
@@ -303,10 +306,13 @@ export function registerBillingRoutes(
                 ? 404
                 : message.includes("catalog_") ||
                     message.includes("recipient_") ||
-                    message.includes("amount_") ||
                     message.includes("phone_invalid")
                   ? 400
-                  : 409,
+                  : message.includes("quote_revision_conflict") ||
+                      message.includes("quote_expired") ||
+                      message.includes("wallet_confirm_not_allowed")
+                    ? 409
+                    : 503,
           );
           return { error: message || "billing_wallet_purchase_unavailable" };
         }
