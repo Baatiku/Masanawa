@@ -12,12 +12,14 @@ class P2pTraderPage extends StatefulWidget {
     required this.load,
     required this.formatMsnw,
     required this.formatNgn,
+    this.report,
   });
   final String expectedUserId;
   final String? Function() currentUserId;
   final Future<Map<String, dynamic>> Function(String? cursor) load;
   final String Function(Object?) formatMsnw;
   final String Function(Object?) formatNgn;
+  final Future<void> Function(String offerId)? report;
   @override
   State<P2pTraderPage> createState() => _P2pTraderPageState();
 }
@@ -26,7 +28,7 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
   final _offers = <String, Map<String, dynamic>>{};
   Map<String, dynamic>? _trader;
   String? _cursor, _error;
-  bool _loading = false, _restricted = false, _gone = false;
+  bool _loading = false, _restricted = false, _gone = false, _reporting = false;
   int _generation = 0;
   Timer? _fence;
   bool get _same => !_gone && widget.currentUserId() == widget.expectedUserId;
@@ -135,6 +137,21 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
     return name.length > 80 ? '${name.substring(0, 80)}…' : name;
   }
 
+  Future<void> _report(String id) async {
+    if (!_same || _reporting || widget.report == null) return;
+    setState(() => _reporting = true);
+    try {
+      await widget.report!(id);
+    } catch (_) {
+      if (mounted && _same)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report could not be opened. Retry.')),
+        );
+    } finally {
+      if (mounted && _same) setState(() => _reporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -211,12 +228,19 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           Text(
-                            '${offer['offer_side']=='buy'?'Buyer demand':'Available'} ${widget.formatMsnw(offer['remaining_micro'])}',
+                            '${offer['offer_side'] == 'buy' ? 'Buyer demand' : 'Available'} ${widget.formatMsnw(offer['remaining_micro'])}',
                           ),
                           Text(
                             'Limit ${widget.formatMsnw(offer['min_micro'])} – ${widget.formatMsnw(offer['max_micro'])}',
                           ),
                           Text('${offer['bank_name'] ?? 'Bank transfer'}'),
+                          if (widget.report != null)
+                            TextButton(
+                              onPressed: _loading || _reporting
+                                  ? null
+                                  : () => _report('${offer['offer_id']}'),
+                              child: const Text('Report this ad'),
+                            ),
                           if (offer['bank_method_verified'] == true)
                             const Text('Bank method verified'),
                           FilledButton(
@@ -225,7 +249,11 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
                                 : () {
                                     if (_same) Navigator.pop(context, offer);
                                   },
-                            child: Text(offer['offer_side']=='buy'?'Review sell quote':'Review buy quote'),
+                            child: Text(
+                              offer['offer_side'] == 'buy'
+                                  ? 'Review sell quote'
+                                  : 'Review buy quote',
+                            ),
                           ),
                         ],
                       ),

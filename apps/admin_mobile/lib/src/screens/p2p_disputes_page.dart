@@ -1,3 +1,4 @@
+import 'p2p_ad_reports_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -115,7 +116,7 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
                     'Reason: ${entry['reason'] ?? '—'}')),
             ]);
           }))),
-      ));
+      );
   }
 
   Future<void> _showReconciliation() async {
@@ -324,20 +325,31 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       if(mounted)setState(()=>_submitting=false);
     }
   }
+  Future<void> _openAdReports()async{
+    final session=widget.api.currentAccessToken,base=_base;
+    void authorize(){if(!mounted||widget.api.currentAccessToken!=session||_base!=base)throw StateError('Admin session changed.');}
+    final options=Options(headers:{'Authorization':'Bearer $session'});
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pAdReportsPage(
+      currentSession:()=>_base==base?widget.api.currentAccessToken:null,
+      load:(cursor,filter)async{authorize();final r=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/ad-reports',options:options,queryParameters:{'filter':filter,if(cursor!=null)'cursor':cursor});authorize();return Map<String,dynamic>.from(r.data as Map);},
+      review:(id,decision,reason,version)async{authorize();await _dio.post<dynamic>('$base/v1/admin/msnw/p2p/ad-reports/$id/review',options:options,data:{'decision':decision,'reason':reason,'version':version});authorize();},
+    )));
+  }
   @override Widget build(BuildContext context)=>Column(children:[
     ListTile(title:const Text('MSNW P2P disputes'),
       subtitle:const Text('Authorized resolutions only. Bank claims and screenshots '
         'do not automatically release escrow.'),
       trailing:Wrap(spacing:4,children:[
-        IconButton(tooltip:'Review reported order messages',
-          onPressed:()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>
+        PopupMenuButton<String>(tooltip:'Review P2P reports',
+          itemBuilder:(_)=>const [PopupMenuItem(value:'messages',child:Text('Order message reports')),PopupMenuItem(value:'ads',child:Text('Ad reports'))],
+          onSelected:(value){if(value=='ads'){_openAdReports();return;}Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>
             P2pMessageReportsPage(currentSession:()=>widget.api.currentAccessToken,load:() async {
               final r=await _dio.get<dynamic>('$_base/v1/admin/msnw/p2p/message-reports',options:_auth);
               return Map<String,dynamic>.from(r.data as Map);
             },review:(id,decision,reason,version)async {
               await _dio.post<dynamic>('$_base/v1/admin/msnw/p2p/message-reports/$id/review',
                 options:_auth,data:{'decision':decision,'reason':reason,'version':version});
-            }))),icon:const Icon(Icons.flag_outlined)),
+            })));},icon:const Icon(Icons.flag_outlined)),
         IconButton(tooltip:'Review P2P financial reconciliation',
           onPressed:_submitting?null:_showReconciliation,
           icon:const Icon(Icons.monitor_heart_outlined)),
