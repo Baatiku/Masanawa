@@ -51,9 +51,9 @@
       "base_sha": "9d6d5a9e5188ffc683a0f25d846f0c6fdd2bb786",
       "pr": "https://github.com/Baatiku/Masanawa/pull/334",
       "claimed_at": "2026-10-23T09:55:47.687Z",
-      "heartbeat_at": "2026-10-23T15:43:38.079Z",
-      "expires_at": "2026-10-23T15:48:38.079Z",
-      "progress": "334 finald08P2P91+7+13PG/Mobile/StatusPASS; Foundation2630assertionsPASS butunhandled57P01 Callhistorytestcleanup. Claimedtest-onlyrepair waitforactualclosedPGbackendsbeforenon-forceDROP. Preferences sourcebatchstarted sparsecheckout, validationrepairingpnpm symlinkrunner.",
+      "heartbeat_at": "2026-10-23T15:47:27.485Z",
+      "expires_at": "2026-10-23T15:52:27.485Z",
+      "progress": "PR334416d0a5f Calls/P2P/StatusPASS, Mobile/Rooms/Foundationrunning aftertestcleanuprepair. Nextpreferences0142+module/native/14PGimplemented,30focusedbackendPASS,typingdoneemptylog,11of12nativePASS lasttestfinderchangedtoactualvisiblebank rerun. Read-onlyreviewclearonboth. Nextscopein sameleasedpaths.",
       "next_scope": "P1-05 private method nickname/default and unused retirement cleanup, retaining immutable accepted instructions",
       "next_branch": "feat/p2p-method-preferences-oct23"
     }
