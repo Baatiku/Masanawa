@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../videos/video_models.dart';
 
 /// Typed Status authors preserve the legacy Masana projection without
 /// misrouting human posts to Masana profiles.
@@ -161,7 +162,7 @@ abstract class ReactionFeedApi {
   Future<void> react(String postId,String? kind);
 }
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
-class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher {
+class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher, SavedStatusLibraryApi {
   DioFeedApi(this._dio,this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -214,6 +215,31 @@ class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher {
     return (result.data??const []).map((v)=>FeedComment.fromJson(Map<String,dynamic>.from(v as Map))).toList();
   }
 
+  @override
+  Future<SavedStatusPage> saved({String? cursor}) async {
+    final result = await _dio.get<Map<String, dynamic>>(
+      '/v1/saved',
+      queryParameters: {if (cursor != null) 'cursor': cursor},
+      options: await _options(authRequired: true),
+    );
+    return SavedStatusPage.fromJson(result.data ?? const {});
+  }
+
+  @override
+  Future<void> removeSaved(SavedStatusItem item) async {
+    if (item.isPost) {
+      await save(item.id, false);
+    } else if (item.video != null) {
+      await _dio.put<void>(
+        '/v1/videos/${Uri.encodeComponent(item.id)}/save',
+        data: {'enabled': false},
+        options: await _options(authRequired: true),
+      );
+    } else {
+      throw const FormatException('Unsupported saved item');
+    }
+  }
+
   /// Reuse J06's authenticated Dio; never construct a second transport or session.
   Future<FeedPost> detail(String id) async {
     final r=await _dio.get<Map<String,dynamic>>('/v1/posts/${Uri.encodeComponent(id)}',
@@ -231,4 +257,74 @@ class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher {
       options:await _options(key:key,authRequired:true));
   }
 
+}
+/// The existing /v1/saved library combines tenant-authorized Status posts
+/// and currently approved provider videos. A missing/invalid projection fails
+/// closed instead of displaying fabricated or stale media.
+class SavedStatusItem {
+  const SavedStatusItem({
+    required this.id,
+    required this.savedAt,
+    this.post,
+    this.video,
+  });
+  final String id;
+  final DateTime savedAt;
+  final FeedPost? post;
+  final ExternalVideo? video;
+  bool get isPost => post != null;
+
+  factory SavedStatusItem.fromJson(Map<String, dynamic> data) {
+    final kind = data['kind'];
+    final id = data['id'];
+    final savedAt = data['savedAt'];
+    if (id is! String || id.isEmpty || savedAt is! String) {
+      throw const FormatException('Invalid saved item');
+    }
+    final at = DateTime.tryParse(savedAt);
+    if (at == null) throw const FormatException('Invalid saved timestamp');
+    if (kind == 'post' && data['post'] is Map) {
+      final post = FeedPost.fromJson(
+        Map<String, dynamic>.from(data['post'] as Map),
+      );
+      if (post.id != id) throw const FormatException('Mismatched saved post');
+      return SavedStatusItem(id: id, savedAt: at, post: post);
+    }
+    if (kind == 'video' && data['video'] is Map) {
+      final video = ExternalVideo.fromJson(
+        Map<String, dynamic>.from(data['video'] as Map),
+      );
+      if (video.id != id) throw const FormatException('Mismatched saved video');
+      return SavedStatusItem(id: id, savedAt: at, video: video);
+    }
+    throw const FormatException('Unsupported saved item');
+  }
+}
+
+class SavedStatusPage {
+  const SavedStatusPage(this.items, this.nextCursor);
+  final List<SavedStatusItem> items;
+  final String? nextCursor;
+  factory SavedStatusPage.fromJson(Map<String, dynamic> data) {
+    final raw = data['items'];
+    final next = data['nextCursor'];
+    if (raw is! List || (next != null && (next is! String || next.isEmpty))) {
+      throw const FormatException('Invalid saved collection');
+    }
+    return SavedStatusPage(
+      raw
+          .map(
+            (item) => SavedStatusItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false),
+      next as String?,
+    );
+  }
+}
+
+abstract class SavedStatusLibraryApi {
+  Future<SavedStatusPage> saved({String? cursor});
+  Future<void> removeSaved(SavedStatusItem item);
 }

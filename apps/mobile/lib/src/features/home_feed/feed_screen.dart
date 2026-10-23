@@ -5,13 +5,16 @@ import 'feed_media_api.dart';
 import 'feed_inline_media_card.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
+import 'saved_status_library_screen.dart';
+import '../videos/video_models.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
   const MasanaFeedScreen({super.key,required this.api,required this.accountKey,
     this.onMasanaProfile,this.onHumanProfile,this.onOpenMedia,this.onReport,this.enabled=true,
     this.audioPlaybackAvailable=false,this.authorScoped=false,
-    this.mediaApi,this.inlineMediaRenderer,this.onCreateHumanStatus});
+    this.mediaApi,this.inlineMediaRenderer,this.onCreateHumanStatus,
+    this.onOpenSavedVideo});
   final FeedApi api;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile;
@@ -19,6 +22,7 @@ class MasanaFeedScreen extends StatefulWidget {
   final ValueChanged<String>? onReport;
   final bool enabled;
   final Future<bool> Function()? onCreateHumanStatus;
+  final Future<void> Function(ExternalVideo)? onOpenSavedVideo;
   final bool audioPlaybackAvailable;
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
@@ -140,9 +144,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       }
     }
   }
-  void openPost(FeedPost post) {
+  Future<void> openPost(FeedPost post) async {
     final feed=widget.api,account=widget.accountKey;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>FeedPostDetailScreen(
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>FeedPostDetailScreen(
       initialPost:post,accountKey:account,
       loadPost:(id)=>feed is DioFeedApi?feed.detail(id):Future.value(post),
       loadThread:(id,sort)=>feed is DioFeedApi?feed.thread(id,sort):feed.comments(id),
@@ -155,6 +159,26 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       onMasanaProfile:widget.onMasanaProfile,onHumanProfile:widget.onHumanProfile,onMedia:widget.onOpenMedia==null?null:(id)=>widget.onOpenMedia!(post,id),onReport:widget.onReport,
       enabled:widget.enabled,
     )));
+  }
+  void openSaved() {
+    if(widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty) return;
+    final account = widget.accountKey;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+      SavedStatusLibraryScreen(
+        api: widget.api as SavedStatusLibraryApi,
+        accountKey: account,
+        isAccountCurrent: () => mounted && widget.enabled && widget.accountKey == account,
+        openPost: (post) async {
+          // A saved post may have lost visibility since the list read.
+          // Re-authorize the original before opening the content page.
+          final api = widget.api;
+          final currentPost = api is DioFeedApi
+              ? await api.detail(post.id) : post;
+          if (!mounted || widget.accountKey != account) return;
+          await openPost(currentPost);
+        },
+        openVideo: widget.onOpenSavedVideo,
+      )));
   }
   void openComments(FeedPost post) {
     // Use the complete thread page so typing, scrolling and keyboard focus
@@ -176,6 +200,13 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             },
             icon:const Icon(Icons.edit_outlined),
             label:Text(t('Write a Status','Rubuta labari')),
+          )),
+      if(!widget.authorScoped && widget.api is SavedStatusLibraryApi)
+        Align(alignment:AlignmentDirectional.centerEnd,
+          child:TextButton.icon(
+            onPressed:widget.accountKey.isNotEmpty?openSaved:null,
+            icon:const Icon(Icons.bookmarks_outlined),
+            label:Text(t('Saved','Ajiye')),
           )),
       if(!widget.authorScoped) Row(children:[
         Expanded(child:ChoiceChip(label:Text(t('For You','Domin Kai')),selected:mode=='for_you',onSelected:(_){setState((){mode='for_you';items=[];cursor=null;});refresh();})),
