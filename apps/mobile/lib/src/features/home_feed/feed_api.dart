@@ -246,11 +246,15 @@ class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher, Save
       options:await _options());
     return FeedPost.fromJson(r.data??const <String,dynamic>{});
   }
-  Future<List<FeedComment>> thread(String id,String sort) async {
+  /// Server pages are ordered by the requested sort, with the last comment ID
+  /// as the continuation token. Never use post IDs, timestamps or local offsets.
+  Future<List<FeedComment>> threadPage(String id,String sort,{String? before}) async {
+    if(sort!='newest'&&sort!='oldest')throw ArgumentError.value(sort,'sort');
     final r=await _dio.get<List<dynamic>>('/v1/posts/${Uri.encodeComponent(id)}/comments',
-      queryParameters:{'sort':sort},options:await _options());
+      queryParameters:{'sort':sort,if(before!=null)'before':before},options:await _options());
     return (r.data??const []).map((v)=>FeedComment.fromJson(Map<String,dynamic>.from(v as Map))).toList();
   }
+  Future<List<FeedComment>> thread(String id,String sort) => threadPage(id,sort);
   Future<void> sendThreadComment(String id,String body,String key,String? parentId) async {
     await _dio.post<void>('/v1/posts/${Uri.encodeComponent(id)}/comments',
       data:{'body':body,if(parentId!=null)'parentId':parentId},

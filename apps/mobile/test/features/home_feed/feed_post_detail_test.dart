@@ -74,6 +74,60 @@ void main(){
    expect(openedHuman,'musa_verified');
    expect(find.text('Verified comment'),findsOneWidget);
  });
+
+ testWidgets('Status comments continue in canonical 30-row pages without duplicates',(tester)async{
+   final rows=List<FeedComment>.generate(35,(index)=>FeedComment(
+     id:'comment-${index.toString().padLeft(2,'0')}',body:'Page item $index',
+     state:'visible',createdAt:DateTime.utc(2026)));
+   final requests=<String>[];
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:sample,accountKey:'fan_one',
+     loadPost:(_)async=>sample,
+     loadThread:(_,__)async=>rows.take(30).toList(),
+     loadMoreThread:(_,sort,before)async{
+       requests.add('$sort:$before');
+       return [rows[29],...rows.skip(30)];
+     },
+     sendComment:(_,__,___,____)async{},
+   )));
+   await tester.pumpAndSettle();
+   await tester.ensureVisible(find.text('Load older comments'));
+   await tester.pumpAndSettle();
+   await tester.tap(find.text('Load older comments'));
+   await tester.pumpAndSettle();
+   expect(requests,['newest:comment-29']);
+   expect(find.text('Page item 34'),findsOneWidget);
+   expect(find.text('Load older comments'),findsNothing);
+   final state=tester.state(find.byType(FeedPostDetailScreen)) as dynamic;
+   expect(state.comments.length,35);
+ });
+ testWidgets('Status older comments retry preserves the first page and exact cursor',(tester)async{
+   final rows=List<FeedComment>.generate(30,(i)=>FeedComment(
+     id:'row-$i',body:'Comment $i',state:'visible',createdAt:DateTime.utc(2026)));
+   var attempts=0;
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:sample,accountKey:'fan_one',
+     loadPost:(_)async=>sample,loadThread:(_,__)async=>rows,
+     loadMoreThread:(_,sort,before)async{
+       expect(sort,'newest');expect(before,'row-29');
+       if(++attempts==1)throw StateError('offline');
+       return [FeedComment(id:'row-30',body:'Recovered row',state:'visible',
+         createdAt:DateTime.utc(2026))];
+     },sendComment:(_,__,___,____)async{},
+   )));
+   await tester.pumpAndSettle();
+   await tester.ensureVisible(find.text('Load older comments'));
+   await tester.pumpAndSettle();
+   await tester.tap(find.text('Load older comments'));
+   await tester.pumpAndSettle();
+   expect(find.textContaining('Could not load older comments'),findsOneWidget);
+   expect(find.text('Load older comments'),findsOneWidget);
+   await tester.tap(find.text('Load older comments'));
+   await tester.pumpAndSettle();
+   expect(attempts,2);
+   expect(find.text('Recovered row'),findsOneWidget);
+ });
+
  testWidgets('C22 feature gate disables the post journey',(tester)async{
    await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
      initialPost:sample,accountKey:'fan',enabled:false,

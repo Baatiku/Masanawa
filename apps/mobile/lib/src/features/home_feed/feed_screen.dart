@@ -150,6 +150,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       initialPost:post,accountKey:account,
       loadPost:(id)=>feed is DioFeedApi?feed.detail(id):Future.value(post),
       loadThread:(id,sort)=>feed is DioFeedApi?feed.thread(id,sort):feed.comments(id),
+      loadMoreThread:feed is DioFeedApi
+        ?(id,sort,before)=>feed.threadPage(id,sort,before:before):null,
       sendComment:(id,body,key,parent) async {
         if(feed is DioFeedApi){await feed.sendThreadComment(id,body,key,parent);}
         else if(parent==null){await feed.comment(id,body,key);}

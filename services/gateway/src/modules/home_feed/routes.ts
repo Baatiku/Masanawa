@@ -59,7 +59,12 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
  app.get("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),sort=q.sort===undefined?"newest":str(q.sort);
   if(sort!=="newest"&&sort!=="oldest")return rep.code(422).send({code:"invalid_sort"});
-  return o.service.comments(tenant,str(object(req.params).id),viewer,str(q.before)||undefined,sort);
+  if(Object.keys(q).some(k=>k.startsWith("before[")||k.startsWith("before."))||
+    q.before!==undefined&&(typeof q.before!=="string"||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.before)))
+   return rep.code(422).send({code:"invalid_cursor"});
+  return o.service.comments(tenant,str(object(req.params).id),viewer,
+    typeof q.before==="string"?q.before:undefined,sort);
  }));
  // Direct staff publishing must never bypass A05/A06 editorial review.
  app.post("/v1/admin/feed/posts",async(req,rep)=>run(req,rep,async({actor})=>{
