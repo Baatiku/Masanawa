@@ -42,12 +42,12 @@
         "apps/mobile/test/p2p_market_filters_test.dart"
       ],
       "branch": "feat/p2p-price-budget-discovery-oct23",
-      "base_sha": "0847c542311764bf35346cf4d0aead920cec1a37",
-      "pr": "",
+      "base_sha": "7ce1329004bfa438c40a7234f89158629e6aaa3b",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/326",
       "claimed_at": "2026-10-23T09:22:01.005Z",
-      "heartbeat_at": "2026-10-23T09:43:36.502Z",
-      "expires_at": "2026-10-23T09:48:36.502Z",
-      "progress": "87 backend/storage PASS; 8 new native tests PASS including delayed404 account-switch order/ad recovery after review fix. Re-review pending; preparing exact-head PR and hosted12realPG qualification."
+      "heartbeat_at": "2026-10-23T09:49:53.381Z",
+      "expires_at": "2026-10-23T09:54:53.381Z",
+      "progress": "PR326 exact head8838d231: P2P87backend+7Worker+12realPG and Status CI PASS; Foundation/Mobile running. Re-review clear after404 fence fix;8native PASS. Next independent scope: P1-03/P1-05 verified-method masking and safe retirement preserving immutable accepted-order instructions."
     }
   ],
   "history": [
