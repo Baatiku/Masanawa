@@ -47,7 +47,8 @@ function receipt(overrides: Partial<FlutterwaveBillReceipt> = {}): FlutterwaveBi
     amount: bill.amount,
     currency: "NGN",
     customerId: bill.customerId,
-    product: bill.itemCode,
+    product: "UTILITYBILLS",
+    itemCode: bill.itemCode,
     productName: bill.itemName,
     extra: "TOKEN-TEST-1",
     ...overrides,
@@ -122,10 +123,10 @@ describe("Flutterwave Bills durable receipt integrity and read recovery", () => 
   });
 
   it.each(["successful", "failed", "reversed"] as const)(
-    "requires provider product identity for a %s receipt",
+    "requires explicitly returned item_code identity for a %s receipt",
     async (status) => {
       const t = fixture({
-        dispatchReceipt: receipt({ status, product: "DIFFERENT-ITEM" }),
+        dispatchReceipt: receipt({ status, itemCode: "DIFFERENT-ITEM" }),
       });
       await t.orchestrator.prepare(bill);
       const result = await t.orchestrator.dispatch(bill.fulfillmentReference);
@@ -135,8 +136,12 @@ describe("Flutterwave Bills durable receipt integrity and read recovery", () => 
     },
   );
 
-  it("allows an omitted optional product when exact reference/amount/customer/currency match", async () => {
-    const t = fixture({ dispatchReceipt: receipt({ product: null }) });
+  it("allows a broad service product when optional item_code is omitted", async () => {
+    // Flutterwave's documented status product can be AIRTIME even if the
+    // selected item_code is a different SKU such as CB141 or AT099.
+    const t = fixture({
+      dispatchReceipt: receipt({ product: "AIRTIME", itemCode: null }),
+    });
     await t.orchestrator.prepare(bill);
     const result = await t.orchestrator.dispatch(bill.fulfillmentReference);
     expect(result.state).toBe("succeeded");
@@ -145,7 +150,7 @@ describe("Flutterwave Bills durable receipt integrity and read recovery", () => 
 
   it("recovers mismatched initial product only after exact later provider evidence", async () => {
     const t = fixture({
-      dispatchReceipt: receipt({ product: "WRONG-PRODUCT", extra: "UNTRUSTED-CODE" }),
+      dispatchReceipt: receipt({ itemCode: "WRONG-ITEM", extra: "UNTRUSTED-CODE" }),
       statusReceipt: receipt({ extra: "VERIFIED-TOKEN" }),
     });
     await t.orchestrator.prepare(bill);
@@ -173,11 +178,11 @@ describe("Flutterwave Bills durable receipt integrity and read recovery", () => 
     expect(t.createPayment).toHaveBeenCalledOnce();
   });
 
-  it("clears prior delivery code when a subsequent successful response names a different item", async () => {
+  it("clears prior delivery code when a subsequent success returns a different item_code", async () => {
     const t = fixture();
     await t.orchestrator.prepare(bill);
     await t.orchestrator.dispatch(bill.fulfillmentReference);
-    t.setStatus(receipt({ product: "OTHER", extra: "FAKE-TOKEN" }));
+    t.setStatus(receipt({ itemCode: "OTHER", extra: "FAKE-TOKEN" }));
 
     const checked = await t.orchestrator.reconcile(bill.fulfillmentReference);
     expect(checked.state).toBe("manual_review");
