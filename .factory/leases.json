@@ -52,15 +52,22 @@
         "apps/mobile/lib/src/finance/p2p_ad_reports.dart",
         "apps/mobile/test/p2p_ad_reports_test.dart",
         "apps/admin_mobile/lib/src/screens/p2p_ad_reports_page.dart",
-        "apps/admin_mobile/test/p2p_ad_reports_test.dart"
+        "apps/admin_mobile/test/p2p_ad_reports_test.dart",
+        "packages/commerce/migrations/0144_msnw_p2p_bulk_pause.sql",
+        "services/gateway/src/p2p/bulk_pause.ts",
+        "services/gateway/src/p2p/bulk_pause.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_pause_all.dart",
+        "apps/mobile/test/p2p_pause_all_test.dart"
       ],
       "branch": "feat/p2p-ad-reporting-oct23",
       "base_sha": "29efd85eaf82e3932c1850fdc014a269f51acf82",
       "pr": "https://github.com/Baatiku/Masanawa/pull/337",
       "claimed_at": "2026-10-23T20:30:07.428Z",
-      "heartbeat_at": "2026-10-23T20:41:05.440Z",
-      "expires_at": "2026-10-23T20:46:05.440Z",
-      "progress": "PR3374bb1f544 exacttreef1d80919. 98fullP2Pbackend+typing+8newcustomer+5newadmin+8trader+3existingadminPASS; realfontvisualinspected. Independentreviewclear. AwaitexactheadCI including15realPG quota/reviewrace; noAPK/device/provideracceptance."
+      "heartbeat_at": "2026-10-23T20:41:47.518Z",
+      "expires_at": "2026-10-23T20:46:47.518Z",
+      "progress": "PR3374bb1f544 exacttreef1d80919. 98fullP2Pbackend+typing+8newcustomer+5newadmin+8trader+3existingadminPASS; realfontvisualinspected. Independentreviewclear. AwaitexactheadCI including15realPG quota/reviewrace; noAPK/device/provideracceptance.",
+      "next_branch": "feat/p2p-merchant-controls-oct23",
+      "next_scope": "P6-07/P2-19 pause-all current ads with immutable original-request receipts; P1-13/P6-06 same-cohort trader activity counts, no invented reputation"
     }
   ],
   "history": [
