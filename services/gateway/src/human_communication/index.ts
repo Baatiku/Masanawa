@@ -674,12 +674,17 @@ export function createHumanCommunicationService(o:HumanOptions){
       const params:unknown[]=[a.tenantId,id,query];
       let cursor='';
       if(q.before){
-        const before=(await db.query('SELECT created_at,id FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND id=$3',[a.tenantId,id,str(q.before)])).rows[0];
+        // Keysets must use the database's full timestamp, not the millisecond
+        // precision of a JavaScript Date. Several messages can share a single
+        // PostgreSQL microsecond (imports, replays or fast multi-device sends).
+        const before=(await db.query('SELECT created_at::text AS cursor_created_at,id FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND id=$3',[a.tenantId,id,str(q.before)])).rows[0];
         if(!before)fail(400,'Invalid cursor');
-        params.push(before.created_at,before.id);
+        params.push(before.cursor_created_at,before.id);
         cursor='AND (created_at,id)<($4,$5)'
       }
-      const r=await db.query(`SELECT * FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND ($3='' OR position(lower($3) in lower(text))>0) ${cursor} ORDER BY created_at DESC,id DESC LIMIT 51`,params);
+      // Tombstones remain in ordinary history, but searching a deleted
+      // message's former plaintext would leak whether it contained a phrase.
+      const r=await db.query(`SELECT * FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND ($3='' OR (NOT deleted AND position(lower($3) in lower(text))>0)) ${cursor} ORDER BY created_at DESC,id DESC LIMIT 51`,params);
       const page=r.rows.slice(0,50);
       if(page.length){
         const delivered=await db.query('UPDATE talks.human_messages SET delivered_at=$4 WHERE tenant_id=$1 AND conversation_id=$2 AND user_id<>$3 AND delivered_at IS NULL AND id=ANY($5::text[]) RETURNING id',[a.tenantId,id,a.userId,now(),page.map(m=>m.id)]);

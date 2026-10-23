@@ -788,3 +788,30 @@ it('pages the entire visible human inbox with microsecond ties, literal search a
   expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-071'})).items).toHaveLength(1);
   await expect(send(eve,'GET','conversations',{}, {query:'Bulk inbox',after:firstPage.nextCursor})).rejects.toMatchObject({statusCode:404});
 });
+
+it('preserves microsecond-tied message history without searching deleted plaintext',async()=>{
+  await db.exec(`INSERT INTO identity.users VALUES('t','messagepeer','active');
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    VALUES('t','messagepeer','messagepeer','Message Peer');
+    INSERT INTO talks.human_conversations(tenant_id,id,low_user,high_user,initiator,state,updated_at)
+    VALUES('t','chat-tie-thread','alice','messagepeer','alice','accepted','2026-10-18 19:00:00+00');
+    INSERT INTO talks.human_viewers(tenant_id,conversation_id,user_id)
+    VALUES('t','chat-tie-thread','alice'),('t','chat-tie-thread','messagepeer');
+    INSERT INTO talks.human_messages(tenant_id,id,conversation_id,user_id,request_id,text,created_at,deleted)
+    SELECT 't','chat-micro-'||lpad(n::text,3,'0'),'chat-tie-thread','messagepeer',
+      'chat-micro-'||lpad(n::text,3,'0'),'private microhit '||n,
+      '2026-10-18 17:00:00.123456+00',n%10=0 FROM generate_series(0,79) n;`);
+  const first=await send(a,'GET','conversations/chat-tie-thread/messages',{}, {query:'microhit'});
+  expect(first.items).toHaveLength(50);
+  expect(first.nextCursor).toBeTruthy();
+  const older=await send(a,'GET','conversations/chat-tie-thread/messages',{}, {query:'microhit',before:first.nextCursor});
+  expect(older.items).toHaveLength(22);
+  expect(older.nextCursor).toBeNull();
+  const all=[...first.items,...older.items];
+  expect(new Set(all.map((x:{id:string})=>x.id)).size).toBe(72);
+  expect(all.every((x:{deleted:boolean,id:string})=>!x.deleted&&Number(x.id.slice(-3))%10!==0)).toBe(true);
+  const plainHistory=await send(a,'GET','conversations/chat-tie-thread/messages');
+  expect(plainHistory.items.some((x:{deleted:boolean})=>x.deleted)).toBe(true);
+  await expect(send(eve,'GET','conversations/chat-tie-thread/messages',{}, {query:'microhit'})).rejects.toMatchObject({statusCode:404});
+  await expect(send(a,'GET','conversations/chat-tie-thread/messages',{}, {query:'microhit',before:'foreign-or-missing'})).rejects.toMatchObject({statusCode:400});
+});
