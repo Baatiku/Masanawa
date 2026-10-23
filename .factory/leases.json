@@ -30,15 +30,17 @@
         "services/gateway/src/p2p/service.test.ts",
         "services/gateway/src/p2p/buy_offer_admission.test.ts",
         "apps/mobile/test/p2p_buy_offer_journeys_test.dart",
-        "services/gateway/src/p2p/offer_management.test.ts"
+        "services/gateway/src/p2p/offer_management.test.ts",
+        "services/gateway/src/p2p/order_read_clock.test.ts",
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart"
       ],
       "branch": "feat/p2p-maker-buy-source-oct23",
       "base_sha": "0d9803629393b52e42d82a5cd6b1294215f43772",
       "pr": "",
       "claimed_at": "2026-10-23T06:21:29.591Z",
-      "heartbeat_at": "2026-10-23T06:32:38.379Z",
-      "expires_at": "2026-10-23T06:37:38.379Z",
-      "progress": "Direction-aware backend, additive0140 actor-request identity, actual-seller method/reserve and closed-by-default trusted admission interface implemented; typing PASS. Updating real-SQL fixtures for new columns and adding two-direction proofs before native flows."
+      "heartbeat_at": "2026-10-23T08:19:21.604Z",
+      "expires_at": "2026-10-23T08:24:21.604Z",
+      "progress": "Recovered preserved maker-buy work; 74/75 backend tests PASS, one expected market shape assertion to update; typing PASS. Native direction flows implemented, analyzer has lint info only; adding custody and native journey proofs."
     }
   ],
   "history": [
