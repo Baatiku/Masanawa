@@ -43,7 +43,9 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
  }
  async function project(q:Sql,a:RoomCommunityActor,r:Row){
   const n=(await q.query("SELECT count(*)::int AS n FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND state='active'",[a.tenantId,r.room_id])).rows[0]?.n??0;
-  return {id:r.room_id,roomId:r.room_id,name:r.profession_title,title:r.profession_title,description:r.description,photoUrl:r.photo_url,visibility:r.visibility,postingPolicy:r.posting_policy,commentsEnabled:r.comments_enabled,joinApproval:r.join_approval,ownerId:r.owner_user_id,ownerUserId:r.owner_user_id,memberCount:Number(n),role:r.member_state==='active'?r.member_role:null,isMember:r.member_state==='active',isOwner:r.owner_user_id===a.userId,muted:!!r.muted,pinned:!!r.pinned,planMode:r.plan_mode};
+  const ownerProfile=await q.query("SELECT p.display_name FROM talks.public_profiles p JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active' WHERE p.tenant_id=$1 AND p.user_id=$2 LIMIT 1",[a.tenantId,r.owner_user_id]);
+  const ownerDisplayName=typeof ownerProfile.rows[0]?.display_name==='string'&&ownerProfile.rows[0].display_name.trim()?ownerProfile.rows[0].display_name.trim():null;
+  return {ownerDisplayName,id:r.room_id,roomId:r.room_id,name:r.profession_title,title:r.profession_title,description:r.description,photoUrl:r.photo_url,visibility:r.visibility,postingPolicy:r.posting_policy,commentsEnabled:r.comments_enabled,joinApproval:r.join_approval,ownerId:r.owner_user_id,ownerUserId:r.owner_user_id,memberCount:Number(n),role:r.member_state==='active'?r.member_role:null,isMember:r.member_state==='active',isOwner:r.owner_user_id===a.userId,muted:!!r.muted,pinned:!!r.pinned,planMode:r.plan_mode};
  }
  async function owned(q:Sql,a:RoomCommunityActor,id:string,owner=false){const r=await room(q,a,id,true,true);if(owner?r.owner_user_id!==a.userId:!manager(r))fail(403,'room_owner_or_admin_required');return r;}
  const postView=(r:Row)=>({id:r.lesson_id??r.reply_id,body:r.body,authorId:r.author_user_id??r.user_id,parentId:r.parent_reply_id??(r.reply_id?r.lesson_id:null),createdAt:iso(r.created_at),pinned:!!r.pinned,commentsEnabled:r.comments_enabled??true});
@@ -187,7 +189,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     await q.query('INSERT INTO rooms.reports(tenant_id,report_id,room_id,user_id,target_id,reason,request_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp())',[a.tenantId,'room-report_'+randomUUID(),id,a.userId,target,reason,key]);
     return {reported:true};
    }
-   if(operation==='members'&&method==='GET'){const members=await q.query("SELECT user_id AS \"userId\",role,state FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND state='active' ORDER BY role,user_id LIMIT 200",[a.tenantId,id]);return {items:members.rows};}
+   if(operation==='members'&&method==='GET'){const members=await q.query("SELECT m.user_id AS \"userId\",m.role,m.state,p.display_name AS \"displayName\",p.handle FROM rooms.memberships m LEFT JOIN talks.public_profiles p ON p.tenant_id=m.tenant_id AND p.user_id=m.user_id LEFT JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active' WHERE m.tenant_id=$1 AND m.room_id=$2 AND m.state='active' ORDER BY m.role,LOWER(COALESCE(p.display_name,'')),m.user_id LIMIT 200",[a.tenantId,id]);return {items:members.rows.map(v=>({...v,displayName:v.displayName?.trim()||null,handle:v.handle??null}))};}
    if(operation==='members'&&method==='PATCH'){
     await owned(q,a,id);const target=text(parts[3],160);if(target===r.owner_user_id)fail(403,'cannot_modify_owner');
     const old=(await q.query('SELECT * FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target])).rows[0];if(!old)fail(404,'member_not_found');
@@ -208,7 +210,16 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     const posts=await q.query("SELECT * FROM rooms.lessons WHERE tenant_id=$1 AND room_id=$2 AND state='published' AND (publish_at IS NULL OR publish_at<=now()) ORDER BY created_at DESC,lesson_id DESC LIMIT 100",[a.tenantId,id]);
     const comments=await q.query("SELECT d.* FROM rooms.discussion_replies d JOIN rooms.lessons l ON l.tenant_id=d.tenant_id AND l.room_id=d.room_id AND l.lesson_id=d.lesson_id WHERE d.tenant_id=$1 AND d.room_id=$2 AND d.moderation_state='visible' AND l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now()) ORDER BY d.created_at DESC,d.reply_id DESC LIMIT 200",[a.tenantId,id]);
     const answers=await q.query("SELECT a.*,q.source_lesson_id FROM rooms.answers a JOIN rooms.questions q ON q.tenant_id=a.tenant_id AND q.question_id=a.question_id JOIN rooms.masana_participants p ON p.tenant_id=q.tenant_id AND p.room_id=q.room_id AND p.character_id=q.target_character_id AND p.active WHERE q.tenant_id=$1 AND q.room_id=$2 AND q.source_lesson_id IS NOT NULL AND EXISTS(SELECT 1 FROM rooms.lessons l WHERE l.tenant_id=q.tenant_id AND l.room_id=q.room_id AND l.lesson_id=q.source_lesson_id AND l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now())) AND q.state='answered' AND a.state='approved' ORDER BY a.created_at DESC LIMIT 100",[a.tenantId,id]);
-    return {items:await Promise.all([...answers.rows.map(v=>({id:v.answer_id,body:v.body,authorId:v.teacher_character_id,parentId:v.source_lesson_id,createdAt:iso(v.created_at),pinned:false,commentsEnabled:false,authorKind:'masana'})),...posts.rows.map(postView),...comments.rows.map(v=>({...postView({...v,lesson_id:undefined}),parentId:v.parent_reply_id??v.lesson_id}))].sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt))).map(p=>enrich(q,a,p)))};
+    // Resolve visible human author identities in one scoped query. Raw IDs are
+    // transport identifiers, not a member-facing label or proof of a profile.
+    const ordered=[...answers.rows.map(v=>({id:v.answer_id,body:v.body,authorId:v.teacher_character_id,parentId:v.source_lesson_id,createdAt:iso(v.created_at),pinned:false,commentsEnabled:false,authorKind:'masana'})),...posts.rows.map(postView),...comments.rows.map(v=>({...postView({...v,lesson_id:undefined}),parentId:v.parent_reply_id??v.lesson_id}))].sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt)));
+    const ids=[...new Set(ordered.filter(v=>v.authorKind!=='masana').map(v=>v.authorId).filter(Boolean))];
+    const names=ids.length ? await q.query("SELECT p.user_id,p.display_name,p.handle FROM talks.public_profiles p JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active' WHERE p.tenant_id=$1 AND p.user_id=ANY($2::text[])",[a.tenantId,ids]) : {rows:[]};
+    const byId=new Map(names.rows.map(v=>[v.user_id,{displayName:typeof v.display_name==='string'&&v.display_name.trim()?v.display_name.trim():null,handle:v.handle??null}]));
+    return {items:await Promise.all(ordered.map(p=>enrich(q,a,{...p,
+      authorDisplayName:p.authorKind==='masana'?'Masana':(byId.get(p.authorId)?.displayName??'Room member'),
+      authorHandle:p.authorKind==='masana'?null:(byId.get(p.authorId)?.handle??null),
+    })))};
    }
    if(operation==='timeline'&&method==='POST'){
     const hasMedia=Array.isArray(input.attachments)&&input.attachments.length>0;const body=text(input.body??'',6000,hasMedia),key=text(input.requestId,160),parent=input.parentId??null;const fingerprint=JSON.stringify([body,parent,input.attachments??[],input.mentions??[]]);
