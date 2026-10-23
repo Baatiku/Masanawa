@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
@@ -25,6 +27,17 @@ class _RoomsState extends State<RoomsScreen> {
   Object? olderInvitationsError;
   int generation = 0, invitationOperation = 0;
   Object? invitationActionError;
+  Timer? searchTimer;
+  String? roomCursor;
+  bool loadingOlderRooms = false, invitationLoading = false;
+  Object? olderRoomsError;
+  int roomRead = 0, invitationRead = 0;
+  bool scoped(int version, RoomCommunityApi api) =>
+      mounted && version == generation && identical(api, widget.api);
+  bool accessLost(Object e) =>
+      e is StateError && e.message == 'account_changed' ||
+      e is DioException &&
+          const [401, 403, 404].contains(e.response?.statusCode);
   @override
   void initState() {
     super.initState();
@@ -38,6 +51,12 @@ class _RoomsState extends State<RoomsScreen> {
       // A new account-scoped API must never display the previous identity's
       // private rooms or invitations while its authorized refresh is pending.
       generation++;
+      roomRead++;
+      invitationRead++;
+      searchTimer?.cancel();
+      roomCursor = null;
+      loadingOlderRooms = false;
+      olderRoomsError = null;
       invitationOperation++;
       invitationActionError = null;
       rooms = [];
@@ -57,66 +76,167 @@ class _RoomsState extends State<RoomsScreen> {
   @override
   void dispose() {
     generation++;
+    roomRead++;
+    invitationRead++;
+    searchTimer?.cancel();
     invitationOperation++;
     search.dispose();
     super.dispose();
   }
 
   Future<void> load() async {
-    final version = ++generation;
+    searchTimer?.cancel();
+    await Future.wait([loadRooms(), loadInvitations()]);
+  }
+
+  Future<void> loadRooms() async {
+    final version = generation,
+        read = ++roomRead,
+        api = widget.api,
+        selected = joined,
+        query = search.text.trim();
     setState(() {
       loading = true;
       error = null;
+      roomCursor = null;
+      loadingOlderRooms = false;
+      olderRoomsError = null;
+    });
+    try {
+      final page = api is RoomListPages
+          ? await (api as RoomListPages).roomPage(selected, search: query)
+          : RoomListPage(await api.list(selected), null);
+      if (!scoped(version, api) || read != roomRead) return;
+      setState(() {
+        rooms = page.items;
+        roomCursor = page.nextCursor;
+      });
+    } catch (e) {
+      if (scoped(version, api) && read == roomRead)
+        setState(() {
+          rooms = [];
+          roomCursor = null;
+          error = e;
+          if (accessLost(e)) {
+            invitations = [];
+            invitationCursor = null;
+          }
+        });
+    } finally {
+      if (scoped(version, api) && read == roomRead)
+        setState(() => loading = false);
+    }
+  }
+
+  Future<void> loadInvitations() async {
+    final version = generation, read = ++invitationRead, api = widget.api;
+    setState(() {
+      invitationLoading = true;
       invitationCursor = null;
       loadingOlderInvitations = false;
       olderInvitationsError = null;
+      invitationsError = null;
     });
     try {
-      final result = await widget.api.list(joined);
-      if (!mounted || version != generation) return;
-      // Rooms remain usable even when the independent invitations endpoint
-      // fails; invitation failure is not a zero-room result.
-      setState(() {
-        rooms = result;
-        loading = false;
-      });
-    } catch (e) {
-      if (mounted && version == generation) {
-        setState(() {
-          rooms = [];
-          error = e;
-          loading = false;
-        });
-      }
-    }
-    if (!mounted || version != generation) return;
-    try {
-      final api = widget.api;
       final page = api is RoomInvitationPages
           ? await (api as RoomInvitationPages).invitationPage()
           : RoomInvitationPage(await api.invitations(), null);
-      if (!mounted || version != generation) return;
+      if (!scoped(version, api) || read != invitationRead) return;
       setState(() {
         invitations = page.items;
         invitationCursor = page.nextCursor;
-        invitationsError = null;
       });
     } catch (e) {
-      if (mounted && version == generation) {
+      if (scoped(version, api) && read == invitationRead)
         setState(() {
           invitations = [];
+          invitationCursor = null;
           invitationsError = e;
+          if (accessLost(e)) {
+            rooms = [];
+            roomCursor = null;
+            error = e;
+            invitations = [];
+            invitationCursor = null;
+          }
         });
-      }
+    } finally {
+      if (scoped(version, api) && read == invitationRead)
+        setState(() => invitationLoading = false);
+    }
+  }
+
+  void searchRooms(String value) {
+    searchTimer?.cancel();
+    roomRead++;
+    setState(() {
+      loading = true;
+      roomCursor = null;
+      loadingOlderRooms = false;
+      olderRoomsError = null;
+      error = null;
+    });
+    searchTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) loadRooms();
+    });
+  }
+
+  Future<void> moreRooms() async {
+    final version = generation,
+        read = roomRead,
+        api = widget.api,
+        cursor = roomCursor,
+        selected = joined,
+        query = search.text.trim();
+    if (api is! RoomListPages || cursor == null || loading || loadingOlderRooms)
+      return;
+    setState(() {
+      loadingOlderRooms = true;
+      olderRoomsError = null;
+    });
+    try {
+      final page = await (api as RoomListPages).roomPage(
+        selected,
+        search: query,
+        cursor: cursor,
+      );
+      if (!scoped(version, api) || read != roomRead) return;
+      if (page.nextCursor == cursor)
+        throw const FormatException('Repeated Room cursor');
+      final byId = <String, CommunityRoom>{
+        for (final room in [...rooms, ...page.items]) room.id: room,
+      };
+      setState(() {
+        rooms = byId.values.toList();
+        roomCursor = page.nextCursor;
+      });
+    } catch (e) {
+      if (scoped(version, api) && read == roomRead)
+        setState(() {
+          olderRoomsError = e;
+          if (accessLost(e)) {
+            rooms = [];
+            roomCursor = null;
+            error = e;
+            invitations = [];
+            invitationCursor = null;
+          }
+        });
+    } finally {
+      if (scoped(version, api) && read == roomRead)
+        setState(() => loadingOlderRooms = false);
     }
   }
 
   Future<void> olderInvitations() async {
-    final api = widget.api, cursor = invitationCursor, version = generation;
+    final api = widget.api,
+        cursor = invitationCursor,
+        version = generation,
+        read = invitationRead;
     if (api is! RoomInvitationPages ||
         cursor == null ||
         loadingOlderInvitations ||
-        loading ||
+        invitationLoading ||
         accepting)
       return;
     setState(() {
@@ -124,8 +244,13 @@ class _RoomsState extends State<RoomsScreen> {
       olderInvitationsError = null;
     });
     try {
-      final page = await (api as RoomInvitationPages).invitationPage(cursor: cursor);
-      if (!mounted || version != generation || !identical(api, widget.api))
+      final page = await (api as RoomInvitationPages).invitationPage(
+        cursor: cursor,
+      );
+      if (!mounted ||
+          version != generation ||
+          read != invitationRead ||
+          !identical(api, widget.api))
         return;
       if (page.nextCursor == cursor)
         throw const FormatException('Repeated invitation cursor');
@@ -138,7 +263,7 @@ class _RoomsState extends State<RoomsScreen> {
         invitationCursor = page.nextCursor;
       });
     } catch (e) {
-      if (mounted && version == generation)
+      if (mounted && version == generation && read == invitationRead)
         setState(() {
           olderInvitationsError = e;
           if (e is StateError && e.message == 'account_changed' ||
@@ -149,7 +274,7 @@ class _RoomsState extends State<RoomsScreen> {
           }
         });
     } finally {
-      if (mounted && version == generation)
+      if (mounted && version == generation && read == invitationRead)
         setState(() => loadingOlderInvitations = false);
     }
   }
@@ -261,7 +386,7 @@ class _RoomsState extends State<RoomsScreen> {
     } catch (e) {
       if (current()) setState(() => invitationActionError = e);
     } finally {
-      // List refresh/navigation increments generation; it must not leave all
+      // List refresh/navigation must not leave all
       // invitation actions permanently disabled after returning from a Room.
       if (current()) setState(() => accepting = false);
     }
@@ -329,11 +454,23 @@ class _RoomsState extends State<RoomsScreen> {
                     padding: const EdgeInsets.all(12),
                     child: TextField(
                       controller: search,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
                         hintText: 'Search Rooms',
+                        counterText: '',
+                        suffixIcon: search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear Room search',
+                                onPressed: () {
+                                  search.clear();
+                                  searchRooms('');
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
                       ),
-                      onChanged: (_) => setState(() {}),
+                      maxLength: 100,
+                      onChanged: searchRooms,
                     ),
                   ),
                   Padding(
@@ -347,7 +484,8 @@ class _RoomsState extends State<RoomsScreen> {
                           selected: joined,
                           onSelected: (_) {
                             setState(() => joined = true);
-                            load();
+                            searchTimer?.cancel();
+                            loadRooms();
                           },
                         ),
                         ChoiceChip(
@@ -355,7 +493,8 @@ class _RoomsState extends State<RoomsScreen> {
                           selected: !joined,
                           onSelected: (_) {
                             setState(() => joined = false);
-                            load();
+                            searchTimer?.cancel();
+                            loadRooms();
                           },
                         ),
                       ],
@@ -375,7 +514,10 @@ class _RoomsState extends State<RoomsScreen> {
                 children: [
                   if (invitationCursor != null)
                     TextButton(
-                      onPressed: loadingOlderInvitations || accepting || loading
+                      onPressed:
+                          loadingOlderInvitations ||
+                              accepting ||
+                              invitationLoading
                           ? null
                           : olderInvitations,
                       child: Text(
@@ -391,6 +533,8 @@ class _RoomsState extends State<RoomsScreen> {
                         'Could not load older invitations. Your current invitations are still available. Retry the same page.',
                       ),
                     ),
+                  if (invitationLoading && invitations.isEmpty)
+                    const Text('Loading invitations…'),
                   if (accepting) const LinearProgressIndicator(),
                   if (invitationActionError != null)
                     Padding(
@@ -429,14 +573,14 @@ class _RoomsState extends State<RoomsScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               )
-            else if (visible.isEmpty)
+            else if (visible.isEmpty && error == null)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
                       Text(
-                        joined
+                        joined && query.isEmpty
                             ? 'Create or discover a Room'
                             : 'No Rooms match this search',
                       ),
@@ -473,6 +617,26 @@ class _RoomsState extends State<RoomsScreen> {
                     onTap: () => enter(r.id),
                   );
                 }, childCount: visible.length),
+              ),
+            if (roomCursor != null)
+              SliverToBoxAdapter(
+                child: TextButton(
+                  onPressed: loading || loadingOlderRooms ? null : moreRooms,
+                  child: Text(
+                    loadingOlderRooms
+                        ? 'Loading more Rooms…'
+                        : 'Load more Rooms',
+                  ),
+                ),
+              ),
+            if (olderRoomsError != null)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Could not load more Rooms. Retry this page or refresh.',
+                  ),
+                ),
               ),
           ],
         ),

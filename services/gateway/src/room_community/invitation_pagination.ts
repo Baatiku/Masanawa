@@ -18,7 +18,7 @@ function page(a:RoomCommunityActor,roomId:string,input:Row){
    if(Buffer.from(raw,'base64url').toString('base64url')!==raw)fail();
    const value=JSON.parse(Buffer.from(raw,'base64url').toString('utf8'));
    if(value.v!==1||value.scope!==scope||typeof value.time!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(value.time)||typeof value.id!=='string'||!value.id.length||value.id.length>160)fail();
-   if(new Date(value.time).toISOString().slice(0,19)!==value.time.slice(0,19))fail();
+   if(value.time.startsWith('0000')||new Date(value.time).toISOString().slice(0,19)!==value.time.slice(0,19))fail();
    time=value.time;id=value.id;
   }catch{fail();}
  }
