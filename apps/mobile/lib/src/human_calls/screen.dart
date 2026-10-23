@@ -25,12 +25,15 @@ Future<void> humanCallStart(
   final session = ref.read(sessionProvider);
   if (session is! SessionSignedIn) return;
   final owner = session.user.id;
+  final authorizationEpoch =
+      ref.read(sessionProvider.notifier).authorizationEpoch;
   final controller = ref.read(humanCallControllerProvider);
   final id = await controller.start(handle);
   final current = ref.read(sessionProvider);
   if (!context.mounted ||
       current is! SessionSignedIn ||
-      current.user.id != owner)
+      current.user.id != owner ||
+      ref.read(sessionProvider.notifier).authorizationEpoch != authorizationEpoch)
     return;
   if (id != null) {
     await context.push('/human/call/${Uri.encodeComponent(id)}');
@@ -68,10 +71,11 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
     super.dispose();
   }
 
-  String _status(HumanCallController c) {
-    final call = c.call;
+  String _status(HumanCallController c, HumanCallRecord? call) {
     if (call == null)
-      return c.error == null ? 'Loading call…' : 'Call unavailable';
+      return c.active
+          ? 'Another call is already active.'
+          : c.error == null ? 'Loading call…' : 'Call unavailable';
     if (!c.active)
       return switch (call.state) {
         'missed' => 'Missed call',
@@ -95,8 +99,9 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
   Widget build(BuildContext context) {
     final c = ref.watch(humanCallControllerProvider), u = context.masanawa;
     final call = c.call?.id == widget.callId ? c.call : null;
+    final thisCallActive = call != null && c.active;
     final incoming =
-        call?.incoming == true && call?.state == 'ringing' && c.active;
+        call?.incoming == true && call?.state == 'ringing' && thisCallActive;
     final since = c.connectedAt;
     final seconds = since == null
         ? 0
@@ -145,9 +150,9 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                   const SizedBox(height: 8),
                   Semantics(
                     liveRegion: true,
-                    child: Text(_status(c), textAlign: TextAlign.center),
+                    child: Text(_status(c, call), textAlign: TextAlign.center),
                   ),
-                  if (c.mediaState == 'connected' && c.active && since != null)
+                  if (c.mediaState == 'connected' && thisCallActive && since != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: Text(
@@ -155,10 +160,10 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ),
-                  if (c.error != null) ...[
+                  if (call != null && c.error != null) ...[
                     const SizedBox(height: 16),
                     Text(c.error!, textAlign: TextAlign.center),
-                    if (c.active && call?.state == 'accepted')
+                    if (thisCallActive && call?.state == 'accepted')
                       TextButton(
                         onPressed: c.retryAudio,
                         child: const Text('Retry audio'),
@@ -182,7 +187,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           icon: const Icon(Icons.call),
                           label: const Text('Answer'),
                         ),
-                      if (c.active && call?.state == 'accepted') ...[
+                      if (thisCallActive && call?.state == 'accepted') ...[
                         _CallControl(
                           label: c.muted ? 'Unmute' : 'Mute',
                           icon: c.muted ? Icons.mic_off : Icons.mic,
@@ -196,7 +201,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           selected: c.speaker,
                         ),
                       ],
-                      if (c.active)
+                      if (thisCallActive)
                         FilledButton.icon(
                           key: const ValueKey('human-call-end'),
                           style: FilledButton.styleFrom(
@@ -213,7 +218,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                                 : 'End call',
                           ),
                         ),
-                      if (call == null)
+                      if (call == null && !c.active)
                         TextButton(
                           onPressed: () => c.open(widget.callId),
                           child: const Text('Try again'),

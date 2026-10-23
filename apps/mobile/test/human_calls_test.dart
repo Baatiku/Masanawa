@@ -76,6 +76,78 @@ class _Audio implements HumanCallAudio {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('expired unanswered ring is verified as missed, never auto-cancelled', () async {
+    final api = _Api()
+      ..current = {
+        ...record(),
+        'expiresAt': '2020-10-19T10:01:00Z',
+      };
+    final c = HumanCallController(
+      api: api, audioFactory: _Audio.new, ownerId: 'a',
+      currentOwner: () => 'a', requestMicrophone: () async => true,
+      startForeground: () async {}, stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    expect(c.active, isFalse);
+    await c.refresh();
+    expect(api.actions.where((s) => s.endsWith('/transition')), isEmpty);
+    // Even tapping End after a stale ring only rechecks the authoritative state.
+    await c.end();
+    expect(api.actions.where((s) => s.endsWith('/transition')), isEmpty);
+    api.current = {...record('missed'), 'expiresAt': '2020-10-19T10:01:00Z'};
+    await c.refresh();
+    expect(c.call?.state, 'missed');
+    expect(api.actions.where((s) => s.endsWith('/transition')), isEmpty);
+    await c.close();
+  });
+
+  test('duplicate End taps send only one transition', () async {
+    final api = _Api()..current = record('accepted');
+    final held = Completer<void>();
+    api.before = (_, path) async {
+      if (path.endsWith('/transition')) await held.future;
+    };
+    final c = HumanCallController(
+      api: api, audioFactory: _Audio.new, ownerId: 'a',
+      currentOwner: () => 'a', requestMicrophone: () async => true,
+      startForeground: () async {}, stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    final first = c.end();
+    final second = c.end();
+    held.complete();
+    await Future.wait([first, second]);
+    expect(api.actions.where((s) => s.endsWith('/transition')), hasLength(1));
+    await c.close();
+  });
+
+  test('same-user re-login invalidates old controller and late server results', () async {
+    var epoch = 4;
+    final api = _Api()..current = record('accepted');
+    final waiting = Completer<void>();
+    api.before = (method, path) async {
+      if (method == 'GET' && path == '/calls/call-one') await waiting.future;
+    };
+    final c = HumanCallController(
+      api: api, audioFactory: _Audio.new, ownerId: 'a',
+      currentOwner: () => 'a',
+      authorizationEpoch: 4, currentAuthorizationEpoch: () => epoch,
+      requestMicrophone: () async => true,
+      startForeground: () async {}, stopForeground: () async {},
+      autoPoll: false,
+    );
+    final opening = c.open('call-one');
+    epoch = 5;
+    waiting.complete();
+    await opening;
+    expect(c.call, isNull);
+    expect(c.active, isFalse);
+    await c.close();
+  });
+
+
   test(
     'permission denial does not create a ringing call or start media',
     () async {
