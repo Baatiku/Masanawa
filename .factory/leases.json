@@ -26,9 +26,9 @@
       "base_sha": "1e2e964eadcaa45ed7f8507ae91438a5901038b9",
       "pr": "",
       "claimed_at": "2026-10-23T05:18:23.254Z",
-      "heartbeat_at": "2026-10-23T05:21:41.034Z",
-      "expires_at": "2026-10-23T05:26:41.034Z",
-      "progress": "Backend report/review/removal and native UIs implemented; 14 SQL/HTTP discussion tests passed; preparing Flutter and real PostgreSQL races."
+      "heartbeat_at": "2026-10-23T05:25:25.811Z",
+      "expires_at": "2026-10-23T05:30:25.811Z",
+      "progress": "14 SQL/HTTP cases, 10 Flutter participant cases; fixing admin refresh behavior found by tests. Full regression and PostgreSQL race ready."
     }
   ],
   "history": [
