@@ -1,6 +1,7 @@
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 import type {Pool,PoolClient} from '@masanawa/postgres';
+import {roomOwnershipTransfer,cancelRoomOwnershipTransfers} from './ownership_transfer.js';
 export type RoomCommunityActor={tenantId:string;userId:string};
 type Row=Record<string,any>;
 type Sql=Pick<PoolClient,'query'>;
@@ -117,10 +118,11 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
    }
    const management=['members','invites','participants','masana'].includes(operation)||(!operation&&method!=='GET');
    const r=await room(q,a,id,operation!==''||method!=='GET',management);
+   if(operation==='ownership-transfer')return roomOwnershipTransfer(q,a,r,method,parts,input,unblocked);
    if(!operation&&method==='GET')return project(q,a,r);
    if(!operation&&method==='PATCH'){
     await owned(q,a,id);
-    if(input.ownerId!==undefined){await owned(q,a,id,true);const target=text(input.ownerId,160);await unblocked(q,a,target);const m=await q.query("SELECT 1 FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3 AND state='active'",[a.tenantId,id,target]);if(!m.rows.length)fail(409,'active_member_required');await q.query("UPDATE rooms.memberships SET role=CASE WHEN user_id=$3 THEN 'owner' WHEN role='owner' THEN 'admin' ELSE role END WHERE tenant_id=$1 AND room_id=$2",[a.tenantId,id,target]);await q.query('UPDATE rooms.rooms SET owner_user_id=$3 WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id,target]);}
+    if(input.ownerId!==undefined){await owned(q,a,id,true);fail(409,'ownership_acceptance_required');}
     const name=input.name??input.title??r.profession_title,description=input.description??r.description,photo=input.photoUrl===undefined?r.photo_url:input.photoUrl;
     const visibility=input.visibility??r.visibility,posting=input.postingPolicy??r.posting_policy;
     if(!['public','private'].includes(visibility)||!['admins','members'].includes(posting)||text(name,140).length<3)fail(422,'invalid_room_policy');
@@ -129,8 +131,8 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     await q.query('UPDATE rooms.rooms SET profession_title=$3,description=$4,photo_url=$5,visibility=$6,posting_policy=$7,comments_enabled=$8,join_approval=$9,updated_at=now() WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id,text(name,140),text(description,2000,true),photo,visibility,posting,input.commentsEnabled??r.comments_enabled,input.joinApproval??r.join_approval]);
     return project(q,a,await room(q,a,id,true));
    }
-   if(!operation&&method==='DELETE'){await owned(q,a,id,true);await q.query("UPDATE rooms.rooms SET state='retired',updated_at=now() WHERE tenant_id=$1 AND room_id=$2",[a.tenantId,id]);await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,now()) WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id]);await q.query('UPDATE rooms.masana_participants SET active=false,updated_at=now() WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id]);return {deleted:true};}
-   if(operation==='leave'&&method==='POST'){if(r.owner_user_id===a.userId)fail(409,'transfer_ownership_before_leaving');await q.query("UPDATE rooms.memberships SET state='left',role='member',updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3",[a.tenantId,id,a.userId]);await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND created_by=$3',[a.tenantId,id,a.userId]);return {left:true};}
+   if(!operation&&method==='DELETE'){await owned(q,a,id,true);await q.query("UPDATE rooms.rooms SET state='retired',updated_at=now() WHERE tenant_id=$1 AND room_id=$2",[a.tenantId,id]);await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,now()) WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id]);await q.query('UPDATE rooms.masana_participants SET active=false,updated_at=now() WHERE tenant_id=$1 AND room_id=$2',[a.tenantId,id]);await cancelRoomOwnershipTransfers(q,a,id,null,'room_retired');return {deleted:true};}
+   if(operation==='leave'&&method==='POST'){if(r.owner_user_id===a.userId)fail(409,'transfer_ownership_before_leaving');await q.query("UPDATE rooms.memberships SET state='left',role='member',updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3",[a.tenantId,id,a.userId]);await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND created_by=$3',[a.tenantId,id,a.userId]);await cancelRoomOwnershipTransfers(q,a,id,a.userId,'participant_left');return {left:true};}
    if(operation==='preferences'&&method==='PATCH'){if(input.muted!==undefined&&typeof input.muted!=='boolean'||input.pinned!==undefined&&typeof input.pinned!=='boolean')fail(422,'invalid_preferences');await q.query('UPDATE rooms.memberships SET muted=$4,pinned=$5 WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,a.userId,input.muted??r.muted,input.pinned??r.pinned]);return project(q,a,await room(q,a,id,true));}
    if(operation==='read'&&method==='POST'){await q.query('UPDATE rooms.memberships SET read_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,a.userId]);return {read:true};}
    if(operation==='participants'&&method==='POST'){
@@ -222,6 +224,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     if(state==='active'&&old.state!=='active')fail(409,'member_must_rejoin');
     await q.query('UPDATE rooms.memberships SET role=$4,state=$5,updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target,state==='active'?role:'member',state]);
     if(state!=='active')await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND recipient_user_id=$3',[a.tenantId,id,target]);
+    if(state!=='active')await cancelRoomOwnershipTransfers(q,a,id,target,'participant_removed');
     if(state!=='active'||!['admin','moderator'].includes(role))await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND created_by=$3',[a.tenantId,id,target]);
     return {updated:true};
    }
@@ -288,5 +291,5 @@ export function registerRoomCommunityRoutes(app:FastifyInstance,service:ReturnTy
  const handler=async(request:any,reply:any)=>{try{const a=await service.authorize({authorizationHeader:request.headers.authorization});const path=request.url.split('?')[0].replace(/^\/v1\/rooms\/?/,'');return await service.dispatch(a,request.method,path,request.method==='GET'?request.query??{}:request.body??{});}catch(e){const err=e as any;return reply.code(err.statusCode??500).send({error:err.statusCode?err.message:'room_request_failed'});}};
  app.post('/v1/rooms',handler);app.get('/v1/rooms/mine',handler);app.get('/v1/rooms/invitations',handler);app.get('/v1/rooms/discover',handler);
  for(const method of ['GET','PATCH','DELETE'] as const)app.route({method,url:'/v1/rooms/:roomId/community',handler});
- for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
+ for(const [suffix,methods] of [['timeline',['GET','POST']],['media',['GET','POST']],['media/:mediaId',['GET']],['participants',['POST']],['reports',['POST']],['reports/summary',['GET']],['reports/reviews',['GET']],['reports/:postId/review',['POST']],['read',['POST']],['posts/:postId/reactions',['POST','DELETE']],['members',['GET']],['members/:userId',['PATCH']],['invites',['GET','POST']],['invites/issue',['POST']],['invites/:inviteId',['DELETE']],['invitations/:inviteId/decline',['POST']],['join',['POST']],['leave',['POST']],['preferences',['PATCH']],['ownership-transfer',['GET','POST']],['ownership-transfer/:transferId/accept',['POST']],['ownership-transfer/:transferId/decline',['POST']],['ownership-transfer/:transferId/cancel',['POST']],['posts/:postId',['PATCH','DELETE']],['masana',['GET','POST']],['masana/:characterId',['DELETE']]] as const)for(const method of methods)app.route({method,url:'/v1/rooms/:roomId/community/'+suffix,handler,...(suffix==='media'?{bodyLimit:12000000}:{})});
 }
