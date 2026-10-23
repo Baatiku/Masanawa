@@ -45,6 +45,12 @@ class AccountBoundFeedApi extends DioFeedApi {
   }
 
   @override
+  Future<SavedStatusPage> saved({String? cursor}) =>
+      _checked(() => super.saved(cursor: cursor));
+  @override
+  Future<void> removeSaved(SavedStatusItem item) =>
+      _checked(() => super.removeSaved(item));
+  @override
   Future<FeedPage> list({required String mode, String? cursor}) =>
       _checked(() => super.list(mode: mode, cursor: cursor));
   @override
@@ -264,9 +270,9 @@ class StatusScreen extends ConsumerWidget {
       api.dio, ownerAccount: account, currentAccount: currentAccount,
     );
 
-    void openApprovedVideo(ExternalVideo video) {
+    Future<void> openApprovedVideo(ExternalVideo video) async {
       if (currentAccount() != account) return;
-      Navigator.of(context).push(MaterialPageRoute<void>(
+      await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => Consumer(builder: (context, ref, _) {
           final active = ref.watch(sessionProvider);
           if (active is! SessionSignedIn || active.user.id != account) {
@@ -316,6 +322,7 @@ class StatusScreen extends ConsumerWidget {
               onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
               onHumanProfile: openHumanProfile,
               onCreateHumanStatus: openHumanCompose,
+              onOpenSavedVideo: openApprovedVideo,
               audioPlaybackAvailable: true,
             ),
         videos: ExternalVideosScreen(
@@ -325,7 +332,7 @@ class StatusScreen extends ConsumerWidget {
                 provider: provider, before: before,
               ),
               checkAvailability: videos.isApproved,
-              onOpenVideo: openApprovedVideo,
+              onOpenVideo: (video) => unawaited(openApprovedVideo(video)),
               languageCode: Localizations.localeOf(context).languageCode,
             ),
       ),
