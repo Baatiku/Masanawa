@@ -27,11 +27,11 @@
       ],
       "branch": "feat/p2p-trader-context-oct23",
       "base_sha": "f542ab802816df03bbe2232e223270444c8f7171",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/313",
       "claimed_at": "2026-10-23T05:50:23.133Z",
-      "heartbeat_at": "2026-10-23T06:08:24.406Z",
-      "expires_at": "2026-10-23T06:13:24.406Z",
-      "progress": "13-file trader batch reviewed no blockers; integrated Calls308.69 backend,17 profile/market+13 report/admin Flutter PASS; Unicode min aligned native forms too. Publishing consolidated17-file patch; new profile analyze clean."
+      "heartbeat_at": "2026-10-23T06:14:36.008Z",
+      "expires_at": "2026-10-23T06:19:36.008Z",
+      "progress": "PR313 head32262018: hosted P2P qualification PASS69backend+7worker+9realPG incl cross-order quota; Status PASS. Independent final review no blockers. Exact-head typing+8 Flutter pass after startup segfault retry. Await Foundation/Mobile."
     }
   ],
   "history": [
