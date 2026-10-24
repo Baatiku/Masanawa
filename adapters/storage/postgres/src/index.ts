@@ -55,3 +55,4 @@ export {ensureMasanaCatalogProfiles,withCatalogProvisionLock} from "./masana/cat
 export {createMasanaPostgresStore} from './masana/repository.js';
 
 export * from "./gb_wallet/repository.js";
+export * from "./gb_wallet/reservations.js";
