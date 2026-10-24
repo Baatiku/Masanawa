@@ -289,10 +289,17 @@ void main() {
             await save('data-unavailable');
             expect(find.text('No verified GB bundles available'), findsOneWidget);
             expect(find.text('Redeem mobile data'), findsOneWidget);
-            // Data never offers a purchase when the provider's structured
-            // whole-GB allowance has not been verified.
+            // At 200% text the disabled action can be below the fold.
+            // Scroll before querying the widget; visibility is not authority.
+            await tester.scrollUntilVisible(
+              find.text('Choose a bundle'),
+              130,
+              scrollable: find.byType(Scrollable).last,
+            );
             expect(
-              tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+              tester.widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Choose a bundle'),
+              ).onPressed,
               isNull,
             );
             await tab(1);
