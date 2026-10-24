@@ -291,11 +291,14 @@ void main() {
             expect(find.text('Redeem mobile data'), findsOneWidget);
             // At 200% text the disabled action can be below the fold.
             // Scroll before querying the widget; visibility is not authority.
-            await tester.scrollUntilVisible(
-              find.text('Choose a bundle'),
-              130,
-              scrollable: find.byType(Scrollable).last,
+            // Drive the active Data list itself. IndexedStack preserves
+            // previously visited Chats/Wallet scrollables, so picking the
+            // last global Scrollable is not a reliable active target.
+            await tester.drag(
+              find.byKey(const PageStorageKey<String>('gb-data-redemption')),
+              const Offset(0, -500),
             );
+            await tester.pumpAndSettle();
             expect(
               tester.widget<FilledButton>(
                 find.widgetWithText(FilledButton, 'Choose a bundle'),
