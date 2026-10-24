@@ -8,6 +8,11 @@ Base `main 3be75f9e6382d8288e189af2ff8e0562d539eb70`; branch `fix/status-feed-lo
 
 Next: merge the scoped PR after hosted checks, record actual head/merge SHA, then continue unfinished Rooms administration source without overlapping the other window's Calls/Wallet/P2P work. #348/#300 are now merged by the other window as `8529b7ca7ca6ee09180761388aa5eb4d2ca7b39d`, including the streamed-playback session fixture isolation. Our later equivalent `005d87c9` on the already-merged branch is superseded; do not reapply it.
 
+## Calls visual-coherence source batch — 24 October 2026 (CL00–03/07, partial)
+
+Scoped branch `feat/calls-visual-polish-oct24` from `main 3be75f9e6382d8288e189af2ff8e0562d539eb70`. Calls root uses a single prominent New call action with Recordings, global find and group Masana in a compact overflow menu. Real server-backed people/Masana histories now share dated recent-call cards, avatars, truthful missed/direction/outcome labels, time and explicit redial while retaining paged search, stale-response fencing and original detail navigation. Masana call details receive a coherent portrait/outcome/action/timeline layout; no absent duration is fabricated, and old group sessions still cannot redial an arbitrary member. Human active call gains readable portrait, status, timer only after confirmed connected media, 64dp Mute/Speaker targets, and a clear pending End confirmation retry; OS Bluetooth routing remains descriptive, not a fake toggle. No backend, balance, provider, status, wallet or Rooms changes.
+
+Focused Flutter widget regressions for date grouping, call quick-actions and 320dp/200%-text layout accompany existing detail/privacy/controller cases. Local Flutter/Dart SDK and physical device unavailable: Flutter test/analyzer, Android OS, two-device audio, lock-screen, Bluetooth/microphone, live provider, production, screenshots and APK are **NOT_RUN** locally; hosted exact-head workflow results are a merge gate, not handset acceptance. Visual audit CA-01/02/03 gains partial source coverage only; CA-04/05/06 and all 177-screen/820-requirement P4/P8 acceptance stay **OPEN**. Preserve concurrent Status/Wallet visual changes in another window.
 
 ## 24 October 2026 — Calls post-permission Gateway admission recheck (P4-08/09, L1-07/08, P8-X02; partial)
 
