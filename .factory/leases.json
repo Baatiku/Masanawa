@@ -63,9 +63,9 @@
       "base_sha": "060b61ce4c576ea797d0cb28b15e72c2df10c98d",
       "pr": "",
       "claimed_at": "2026-10-24T02:56:52.517Z",
-      "heartbeat_at": "2026-10-24T02:56:52.517Z",
-      "expires_at": "2026-10-24T03:01:52.517Z",
-      "progress": "Pausealloriginalreceipts+immutableaudit+nativepersist/recovery+samecohortactivitycountsimplemented.13backend+14nativePASS; typing/analyzeandindependentreviewrunning; adding16threalPG race."
+      "heartbeat_at": "2026-10-24T03:00:23.683Z",
+      "expires_at": "2026-10-24T03:05:23.683Z",
+      "progress": "Final5newSQL/HTTP+9readjourney and15Flutter PASS; gatewaytypingPASS; affectedanalyzeinfosonly; independentreviewclear.16threalPGbulkpause/reservation/replayraceauthored. Rebasedonto337merge060b61ce, exportingtestedsourcebeforePR."
     }
   ],
   "history": [
