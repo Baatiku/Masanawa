@@ -25,15 +25,26 @@
         "services/gateway/src/p2p/support_timeline.pglite.test.ts",
         "services/gateway/src/p2p/dispute_context.ts",
         "apps/mobile/lib/src/finance/p2p_order_support.dart",
-        "apps/mobile/test/p2p_order_support_test.dart"
+        "apps/mobile/test/p2p_order_support_test.dart",
+        "services/gateway/src/p2p/support_requests.ts",
+        "services/gateway/src/p2p/support_requests.pglite.test.ts",
+        "packages/commerce/migrations/0147_msnw_p2p_support_requests.sql",
+        "apps/mobile/lib/src/finance/p2p_support_requests.dart",
+        "apps/mobile/test/p2p_support_requests_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_support_requests.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_support_requests_test.dart"
       ],
       "branch": "feat/p2p-evidence-recovery-oct24",
       "base_sha": "3be75f9e6382d8288e189af2ff8e0562d539eb70",
       "pr": "https://github.com/Baatiku/Masanawa/pull/363",
       "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T08:34:32.955Z",
-      "expires_at": "2026-10-24T08:39:32.955Z",
-      "progress": "Connected PR363 final755e6c34 exacttree301b3019 combines evidence+completepublictimeline.18finalFlutterPASS; reviewclear. All4newexactheadCI running. Localcheckout3bce71b6 treeidentical, sourcebackups+GitHubcommitdurable. NoAPK/device/provider/productionacceptance."
+      "heartbeat_at": "2026-10-24T08:38:25.961Z",
+      "expires_at": "2026-10-24T08:43:25.961Z",
+      "progress": "Connected PR363 final755e6c34 exacttree301b3019 combines evidence+completepublictimeline.18finalFlutterPASS; reviewclear. All4newexactheadCI running. Localcheckout3bce71b6 treeidentical, sourcebackups+GitHubcommitdurable. NoAPK/device/provider/productionacceptance.",
+      "next_branch": "feat/p2p-evidence-requests-oct24",
+      "next_scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority"
     }
   ],
   "history": [
