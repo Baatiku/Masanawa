@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -157,9 +158,29 @@ class HumanThreadController extends ChangeNotifier {
       error = null;
     } catch (e) {
       if (current && epoch == _loadEpoch) {
-        error = 'Conversation unavailable. Check your connection or return to Chats.';
-        messages = [];
-        conversation = null;
+        final code = e is DioException ? e.response?.statusCode : null;
+        if (code == 401 || code == 403 || code == 404 || code == 410) {
+          // A definitive authorization or visibility rejection revokes every
+          // loaded private row and cursor; never show a stale blocked thread.
+          messages = [];
+          conversation = null;
+          before = null;
+          _loadedSearch = '';
+          error = 'Conversation access is no longer available. Return to Chats.';
+        } else if (query != _loadedSearch) {
+          // A failed new search must not present old, unrelated results as
+          // matches. Preserve the thread identity, not the previous hits.
+          messages = [];
+          before = null;
+          _loadedSearch = query;
+          error = 'Could not load search results. Check your connection and retry.';
+        } else if (conversation != null) {
+          // A transient outage does not mean the loaded conversation vanished.
+          // Keep current-account rows visible but explicitly mark them stale.
+          error = 'Could not refresh messages. Previously loaded messages may be out of date.';
+        } else {
+          error = 'Could not load conversation. Check your connection or return to Chats.';
+        }
       }
     } finally {
       changed();
@@ -193,13 +214,22 @@ class HumanThreadController extends ChangeNotifier {
     }
   }
 
+  // Duplicate or out-of-order push/reconnect snapshots must never rewind the
+  // event cursor and redeliver (or inadvertently skip) unread updates.
+  void _advanceCursor(Object? raw) {
+    if (raw is! num || !raw.isFinite) return;
+    final next = raw.toInt();
+    if (next > cursor && raw == next) cursor = next;
+  }
+
   void _connect() {
     if (!current) return;
     _events = transport
         .stream(cursor)
         .listen(
           (event) {
-            cursor = (event['sequence'] as num?)?.toInt() ?? cursor;
+            if (!current) return;
+            _advanceCursor(event['sequence']);
             if (event['conversationId'] == id) unawaited(refresh());
           },
           onError: (Object _) => _reconnect(),
@@ -219,7 +249,7 @@ class HumanThreadController extends ChangeNotifier {
           query: {'after': cursor},
         );
         if (!current) return;
-        cursor = (catchup['cursor'] as num?)?.toInt() ?? cursor;
+        _advanceCursor(catchup['cursor']);
         await refresh();
       } catch (_) {}
       if (current) _connect();
