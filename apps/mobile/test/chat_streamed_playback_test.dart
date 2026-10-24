@@ -7,7 +7,11 @@ import 'package:masanawa/src/agents/agent_session.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/live_call_foreground.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
+import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/voice/voice_reply_playback_preference.dart';
+class _Session extends SessionController {
+ @override SessionState build() => const SessionSignedOut();
+}
 class _Controller extends AiChatController{@override AiChatState build()=>const AiChatState();}
 class _Autoplay extends VoiceReplyAutoplay{_Autoplay(this.enabled);final bool enabled;@override Future<bool> build()async=>enabled;}
 class _Transport implements AgentTransport{
@@ -24,6 +28,7 @@ void main(){
  test('completed stream retains actual text chunks when final text is empty', () async {
   final transport = _Transport();
   final container = ProviderContainer(overrides: [
+    sessionProvider.overrideWith(_Session.new),
     aiChatProvider.overrideWith(_Controller.new),
     agentTransportProvider.overrideWithValue(transport),
     voiceReplyAutoplayProvider.overrideWith(() => _Autoplay(false)),
@@ -49,7 +54,8 @@ void main(){
   final calls=<String>[];
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel,(call)async{calls.add(call.method);return true;});
   final transport=_Transport();
-  final container=ProviderContainer(overrides:[aiChatProvider.overrideWith(_Controller.new),agentTransportProvider.overrideWithValue(transport),voiceReplyAutoplayProvider.overrideWith(()=>_Autoplay(mode!='off'))]);
+  final container=ProviderContainer(overrides:[sessionProvider.overrideWith(_Session.new),
+    aiChatProvider.overrideWith(_Controller.new),agentTransportProvider.overrideWithValue(transport),voiceReplyAutoplayProvider.overrideWith(()=>_Autoplay(mode!='off'))]);
   if(mode=='call')await LiveCallForeground.startOrThrow(android:false);
   try{
    final sending=container.read(aiChatProvider.notifier).sendText('agent','Hello');
