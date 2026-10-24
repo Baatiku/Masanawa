@@ -469,6 +469,12 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
   app.post('/v1/wallet/msnw/p2p/orders/:orderId/support/requests/:requestId/respond',{bodyLimit:12288},async(req,reply)=>{
     reply.header('Cache-Control','no-store');try{const body=req.body as Record<string,unknown>;if(!body||Object.keys(body).join(',')!=='details')throw new P2pError('p2p.invalid_support_request',422);const p=req.params as {orderId:string;requestId:string};return await deps.service.respondSupportEvidence(await actor(req.headers.authorization),p.orderId,p.requestId,body.details);}catch(error){return respond(error,reply);}
   });
+  app.get('/v1/admin/msnw/p2p/disputes/:orderId/notes',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');try{if(Object.keys(req.query as object).length)throw new P2pError('p2p.invalid_filter',422);return await deps.service.caseNotes(await operator(req.headers.authorization),(req.params as {orderId:string}).orderId);}catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/admin/msnw/p2p/disputes/:orderId/notes',{bodyLimit:12288},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');try{const body=req.body as Record<string,unknown>;if(!body||Object.keys(body).join(',')!=='details')throw new P2pError('p2p.invalid_case_note',422);return await deps.service.addCaseNote(await operator(req.headers.authorization),(req.params as {orderId:string}).orderId,body.details);}catch(error){return respond(error,reply);}
+  });
   app.get('/v1/admin/msnw/p2p/disputes/:orderId/support/requests',async(req,reply)=>{
     reply.header('Cache-Control','no-store');try{return await deps.service.supportRequests(await operator(req.headers.authorization),(req.params as {orderId:string}).orderId,true);}catch(error){return respond(error,reply);}
   });

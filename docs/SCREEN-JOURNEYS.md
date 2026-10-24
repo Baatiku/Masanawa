@@ -463,6 +463,16 @@ Focused source verification passed five session scenarios, the boundary latch, 1
 
 This is source qualification. Phone/account changes on installed devices, process kill, deployed revocation behavior and production acceptance remain open; legacy original-request storage is preserved rather than silently migrated or discarded. Parent gates and 177-screen/820-requirement inventory remain unchanged. No APK generated.
 
+## 24 October 2026 — P2P immutable private staff case notes (partial P5-15)
+
+Authorized P2P dispute staff can append private investigation notes from the existing case context. Notes are never returned through participant support history, request responses or public order timelines. The canonical order/tenant and operator authorization remain the boundary; notes never change order state, custody, escrow or payment verification. Investigation context remains readable after settlement without reopening the order.
+
+Migration 0148 adds immutable note records with actor/order/content original identity. Locked appends serialize retries, and original recovery precedes the 50-note per-order source bound. The existing admin case route adds Private staff notes, a bounded explicit form, original receipt checks, loading/empty/retry/limit states and memory-only drafts. Session/access loss scrubs private content; uncertain results check the original note before retrying. No edit/delete or participant notification controls are added.
+
+Local three backend tests, gateway/adapter types and 15 staff widget checks passed, including source authorization, tenant isolation, immutable original/cap handling, lost response, stale session, revoked access and 320dp RTL/enlarged text. Independent read-only review found no material issues. Exact-head CI and the 22nd real PostgreSQL duplicate-note test are recorded in the delivery PR.
+
+Request cancellation/extension/delivery policy, lawful retention/erasure tooling, deployed operator permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
+
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
 A native trader profile opens from a presently funded, verified-bank sell ad, shows the existing public profile display name, completed/closed cohort denominator, server sampling date and the precise 30-day opened-order window. Eligible ads paginate within that trader/reference/account scope and return to the original authoritative buy quote/review flow; no order is created from profile viewing. Paused, unverified, unfunded, self or foreign-tenant source references are unavailable, and private user/bank/KYC IDs are not projected. Flutter covers stale references, offline retry, pagination, account replacement and compact large-text RTL.

@@ -1,3 +1,4 @@
+import {createCaseNotes} from './case_notes.js';
 import {createSupportRequests} from './support_requests.js';
 import {supportTimeline} from './support_timeline.js';
 import {createDisputeContext,disputeInput,originalDispute,recordDispute} from './dispute_context.js';
@@ -1022,6 +1023,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         readOnly:true,
       };
     },
+    ...createCaseNotes(pool),
     ...createSupportRequests(pool),
     supportEvents:(actor:P2pActor,orderId:string,cursor?:string)=>supportTimeline(pool,actor,orderId,cursor),
     async caseFile(actor: P2pActor, orderId: string) {
