@@ -75,14 +75,16 @@ export class PgSavedLibraryRepository {
       WHERE v.tenant_id=$1 AND v.fan_id=$2 AND i.review_state='approved'
         AND i.verified_at IS NOT NULL AND i.verification_reference IS NOT NULL
     )
-    SELECT kind,id,saved_at,payload FROM saved_items
+    SELECT kind,id,saved_at,
+      to_char(saved_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS saved_at_exact,
+      payload FROM saved_items
     WHERE ($3::timestamptz IS NULL OR (saved_at,kind,id)<($3::timestamptz,$4::text,$5::uuid))
     ORDER BY saved_at DESC,kind DESC,id DESC LIMIT $6`;
     const result=await this.pool.query<{
-      kind:"post"|"video";id:string;saved_at:Date|string;payload:Record<string,unknown>;
+      kind:"post"|"video";id:string;saved_at:Date|string;saved_at_exact?:string;payload:Record<string,unknown>;
     }>(sql,[tenant,fan,before?.at??null,before?.kind??null,before?.id??null,limit]);
     return result.rows.map(r=>({
-      kind:r.kind,id:String(r.id),savedAt:new Date(r.saved_at).toISOString(),
+      kind:r.kind,id:String(r.id),savedAt:r.saved_at_exact??new Date(r.saved_at).toISOString(),
       ...(r.kind==="post"?{post:r.payload}:{video:r.payload})
     }));
   }
