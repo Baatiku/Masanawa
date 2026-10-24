@@ -91,7 +91,7 @@ void main(){
       HumanEditRecovery.confirmed);
     expect(transport.posts,1);
     expect(transport.bodies.single, {
-      'requestId':'edit-fixed-id','text':'Corrected','expectedEditedAt':null,
+      'requestId':'edit-fixed-id','text':'Corrected','expectedVersion':0,
     });
     expect(transport.reads,2);
     expect(await journal.read(),isNull);
