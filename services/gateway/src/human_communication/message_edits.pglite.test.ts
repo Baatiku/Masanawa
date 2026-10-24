@@ -54,47 +54,48 @@ describe('authorized human message edits and genuine message details',()=>{
   afterAll(async()=>{await svc.close();await db.close()});
 
   it('persists edit time, preserves creation/receipt state and replays exact edit ID once',async()=>{
-    const created=await edit('original',{requestId:'edit-one',text:'Corrected text',expectedEditedAt:null});
-    expect(created).toMatchObject({id:'original',mine:true,text:'Corrected text',editedAt:'2026-10-24T09:00:00.000Z'});
-    const replay=await edit('original',{requestId:'edit-one',text:'Corrected text',expectedEditedAt:null});
+    const created=await edit('original',{requestId:'edit-one',text:'Corrected text',expectedVersion:0});
+    expect(created).toMatchObject({id:'original',mine:true,text:'Corrected text',editVersion:1,editedAt:'2026-10-24T09:00:00.000Z'});
+    const replay=await edit('original',{requestId:'edit-one',text:'Corrected text',expectedVersion:0});
     expect(replay).toEqual(created);
     expect((await info('original')).createdAt).toBe('2026-10-24T08:55:00.000Z');
-    expect(await info('original')).toMatchObject({text:'Corrected text',deliveryStatus:'sent',readAt:null,deliveredAt:null,editedAt:'2026-10-24T09:00:00.000Z'});
+    expect(await info('original')).toMatchObject({text:'Corrected text',deliveryStatus:'sent',editVersion:1,readAt:null,deliveredAt:null,editedAt:'2026-10-24T09:00:00.000Z'});
     expect((await query("SELECT count(*)::int AS n FROM talks.human_events WHERE type='message.edited'")).rows[0]?.n).toBe(2);
     expect((await svc.dispatch(bob,'GET',`${path}`)).items.some((m:{id:string;text:string;editedAt:string})=>m.id==='original'&&m.text==='Corrected text'&&!!m.editedAt)).toBe(true);
   });
   it('rejects foreign author/tenant, unsafe methods and stale version without changing message',async()=>{
     for(const actor of [bob,eve,other]){
-      await expect(edit('original',{requestId:'foreign-edit',text:'Tampered',expectedEditedAt:null},actor)).rejects.toMatchObject({statusCode:actor===bob?403:404});
+      await expect(edit('original',{requestId:'foreign-edit',text:'Tampered',expectedVersion:0},actor)).rejects.toMatchObject({statusCode:actor===bob?403:404});
       await expect(info('original',actor)).rejects.toMatchObject({statusCode:actor===bob?403:404});
     }
-    await expect(edit('original',{requestId:'edit-one',text:'Different',expectedEditedAt:null})).rejects.toMatchObject({statusCode:409});
-    await expect(edit('original',{requestId:'stale',text:'Tampered',expectedEditedAt:null})).rejects.toMatchObject({statusCode:409});
+    await expect(edit('original',{requestId:'edit-one',text:'Different',expectedVersion:0})).rejects.toMatchObject({statusCode:409});
+    await expect(edit('original',{requestId:'stale',text:'Tampered',expectedVersion:0})).rejects.toMatchObject({statusCode:409});
     await expect(svc.dispatch(alice,'POST',`${path}/original/info`)).rejects.toMatchObject({statusCode:405});
     expect((await info('original')).text).toBe('Corrected text');
   });
   it('enforces 15-minute edit window, nonempty text, sender and deleted tombstone protection',async()=>{
-    await expect(edit('too-old',{requestId:'late',text:'Changed',expectedEditedAt:null})).rejects.toMatchObject({statusCode:409});
-    await expect(edit('deleted',{requestId:'undelete',text:'restored',expectedEditedAt:null})).rejects.toMatchObject({statusCode:409});
-    await expect(edit('received',{requestId:'wrong-sender',text:'Changed',expectedEditedAt:null})).rejects.toMatchObject({statusCode:403});
-    await expect(edit('original',{requestId:'blank',text:' ',expectedEditedAt:'2026-10-24T09:00:00.000Z'})).rejects.toMatchObject({statusCode:400});
-    await expect(edit('original',{requestId:'oversize',text:'x'.repeat(10001),expectedEditedAt:'2026-10-24T09:00:00.000Z'})).rejects.toMatchObject({statusCode:400});
+    await expect(edit('too-old',{requestId:'late',text:'Changed',expectedVersion:0})).rejects.toMatchObject({statusCode:409});
+    await expect(edit('deleted',{requestId:'undelete',text:'restored',expectedVersion:0})).rejects.toMatchObject({statusCode:409});
+    await expect(edit('received',{requestId:'wrong-sender',text:'Changed',expectedVersion:0})).rejects.toMatchObject({statusCode:403});
+    await expect(edit('original',{requestId:'blank',text:' ',expectedVersion:1})).rejects.toMatchObject({statusCode:400});
+    await expect(edit('original',{requestId:'oversize',text:'x'.repeat(10001),expectedVersion:1})).rejects.toMatchObject({statusCode:400});
     await expect(info('deleted')).rejects.toMatchObject({statusCode:404});
   });
   it('later independent authorized edit requires previous edit version and preserves delivery proof',async()=>{
     await query("UPDATE talks.human_messages SET delivered_at=$2,read_at=$2 WHERE tenant_id=$1 AND id='original'",['t','2026-10-24T09:00:05Z']);
     now=new Date('2026-10-24T09:00:20Z');
-    const result=await edit('original',{requestId:'edit-two',text:'Corrected again',expectedEditedAt:'2026-10-24T09:00:00.000Z'});
-    expect(result).toMatchObject({deliveryStatus:'read',editedAt:'2026-10-24T09:00:20.000Z'});
+    const result=await edit('original',{requestId:'edit-two',text:'Corrected again',expectedVersion:1});
+    expect(result).toMatchObject({deliveryStatus:'read',editVersion:2,editedAt:'2026-10-24T09:00:20.000Z'});
     expect(await info('original')).toMatchObject({readAt:'2026-10-24T09:00:05.000Z',deliveredAt:'2026-10-24T09:00:05.000Z'});
     expect((await query("SELECT count(*)::int AS n FROM talks.human_requests WHERE operation='message_edit'")).rows[0]?.n).toBe(2);
   });
   it('original message idempotency response cache follows authorized edits',async()=>{
     const sent=await svc.dispatch(alice,'POST','conversations/edit-thread/messages',{requestId:'new-message',text:'Initial text'});
     now=new Date('2026-10-24T09:00:30Z');
-    await edit(sent.id,{requestId:'new-edit',text:'Better text',expectedEditedAt:null});
+    await edit(sent.id,{requestId:'new-edit',text:'Better text',expectedVersion:0});
     const replay=await svc.dispatch(alice,'POST','conversations/edit-thread/messages',{requestId:'new-message',text:'Initial text'});
     expect(replay.text).toBe('Better text');
     expect(replay.editedAt).toBe('2026-10-24T09:00:30.000Z');
+    expect(replay.editVersion).toBe(1);
   });
 });
