@@ -220,6 +220,71 @@ void main() {
     expect(find.textContaining('Connecting'), findsOneWidget);
   });
 
+  testWidgets('groups server-backed call cards by local day without inventing connected duration', (tester) async {
+    final today = DateTime.now();
+    final yesterday = today.subtract(const Duration(days: 1));
+    await _mount(tester, _Session(), _Transport((_) async => CallHistoryPage(calls: [
+      CallHistoryItem(callId: 'today', characterId: 'masana-a', displayName: 'Today Amina', state: 'missed', direction: 'incoming', createdAt: today),
+      CallHistoryItem(callId: 'yesterday', characterId: 'masana-b', displayName: 'Yesterday Bello', state: 'connecting', direction: 'outgoing', createdAt: yesterday),
+    ])), human: _HumanHistory((_) async => {'items': [], 'nextCursor': null}));
+    await tester.pumpAndSettle();
+    expect(find.text('Recent calls'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget);
+    expect(find.text('Today Amina'), findsOneWidget);
+    expect(find.text('Yesterday Bello'), findsOneWidget);
+    expect(find.byTooltip('Call Today Amina'), findsOneWidget);
+    expect(find.byTooltip('Call Yesterday Bello'), findsOneWidget);
+    expect(find.textContaining('00:00'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact Calls header and history fit at 320dp with 200% text', (tester) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      callHistoryTransportProvider.overrideWithValue(_Transport((_) async => page('Amina'))),
+      humanCallsTransportProvider.overrideWithValue(_HumanHistory((_) async => {'items': [], 'nextCursor': null})),
+    ], child: MaterialApp(
+      theme: buildMasanawaTheme(brightness: Brightness.light),
+      home: const MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: CallsScreen(),
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Amina'), findsOneWidget);
+    // The shared wordmark header collapses actions on narrow, high-scale screens.
+    // Both callbacks must remain reachable from its overflow.
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('New call'), findsOneWidget);
+    await tester.tap(find.text('More call options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find Masana and people'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('group history quick action opens details instead of calling one member', (tester) async {
+    final group = CallHistoryItem(
+      callId: 'group-history', characterId: 'one-member',
+      displayName: 'Team Masana', groupId: 'group-1',
+      state: 'ended', direction: 'outgoing',
+      createdAt: DateTime.utc(2026, 10, 15),
+    );
+    await _mount(tester, _Session(), _Transport((_) async => CallHistoryPage(calls: [group])),
+      human: _HumanHistory((_) async => {'items': [], 'nextCursor': null}));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('View Team Masana group call details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Call details'), findsOneWidget);
+    expect(find.text('Back to Calls'), findsOneWidget);
+    expect(find.text('Call again'), findsNothing);
+  });
+
   testWidgets('shows persisted history and loads the next page', (
     tester,
   ) async {
@@ -324,8 +389,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('First page'), findsOneWidget);
     expect(queries, contains('/null'));
-    expect(find.byTooltip('Call multiple Masana'), findsOneWidget);
+    expect(find.byTooltip('More call options'), findsOneWidget);
     expect(find.byTooltip('New call'), findsOneWidget);
+    await tester.tap(find.byTooltip('More call options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find Masana and people'), findsOneWidget);
+    expect(find.text('Call recordings'), findsOneWidget);
+    expect(find.text('Call multiple Masana'), findsOneWidget);
   });
 
   testWidgets('stale query A result is fenced as soon as B is typed', (tester) async {
@@ -452,7 +522,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('After'), findsOneWidget);
       expect(requests, 2);
-      expect(find.byTooltip('Call multiple Masana'), findsOneWidget);
+      expect(find.byTooltip('More call options'), findsOneWidget);
     },
   );
 }
