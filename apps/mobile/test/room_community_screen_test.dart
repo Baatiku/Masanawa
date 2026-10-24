@@ -136,7 +136,12 @@ void main() {
     expect(api.sent.last['requestId'], first);
     expect(api.actions.where((v) => v == 'reports/post_1/review'), hasLength(2));
     await tester.scrollUntilVisible(find.text('Moderation history (1)'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Moderation history (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Moderation history (1)').hitTestable(), findsOneWidget);
     await tester.tap(find.text('Moderation history (1)'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reports dismissed'), 100, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('Reports dismissed'), findsOneWidget);
     expect(find.textContaining('reporter'), findsNothing);
