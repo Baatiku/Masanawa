@@ -682,12 +682,13 @@ export function createHumanCommunicationService(o:HumanOptions){
             if(!Number.isFinite(age)||age<0||age>15*60*1000)fail(409,'Edit window expired');
             if(m.text===text)return messageView(db,a,m);
             const timestamp=now();
-            const updated=await db.query('UPDATE talks.human_messages SET text=$4,edited_at=$5 WHERE tenant_id=$1 AND id=$2 AND user_id=$3 AND NOT deleted AND edited_at IS NOT DISTINCT FROM $6::timestamptz RETURNING *',[a.tenantId,m.id,a.userId,text,timestamp,expected]);
+            const updated=await db.query("UPDATE talks.human_messages SET text=$4,edited_at=GREATEST($5::timestamptz,COALESCE(edited_at,$5::timestamptz - interval '1 microsecond') + interval '1 microsecond') WHERE tenant_id=$1 AND id=$2 AND user_id=$3 AND NOT deleted AND edited_at IS NOT DISTINCT FROM $6::timestamptz RETURNING *",[a.tenantId,m.id,a.userId,text,timestamp,expected]);
             if(!updated.rows.length)fail(409,'Message changed. Refresh before editing');
+            const revision=iso(updated.rows[0]!.edited_at)!;
             // Cached original send/readback snapshots must never re-expose the
             // pre-edit text on idempotent retries or recipient inbox previews.
-            await db.query("UPDATE talks.human_requests SET result=jsonb_set(jsonb_set(result,'{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text)) WHERE tenant_id=$1 AND operation='message' AND result->>'id'=$2",[a.tenantId,m.id,text,timestamp]);
-            await db.query("UPDATE talks.human_requests SET result=jsonb_set(result,'{lastMessage}',jsonb_set(jsonb_set(result->'lastMessage','{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text))) WHERE tenant_id=$1 AND result->'lastMessage'->>'id'=$2",[a.tenantId,m.id,text,timestamp]);
+            await db.query("UPDATE talks.human_requests SET result=jsonb_set(jsonb_set(result,'{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text)) WHERE tenant_id=$1 AND operation='message' AND result->>'id'=$2",[a.tenantId,m.id,text,revision]);
+            await db.query("UPDATE talks.human_requests SET result=jsonb_set(result,'{lastMessage}',jsonb_set(jsonb_set(result->'lastMessage','{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text))) WHERE tenant_id=$1 AND result->'lastMessage'->>'id'=$2",[a.tenantId,m.id,text,revision]);
             await event(db,a,[a.userId,target],'message.edited',id,null);
             return messageView(db,a,updated.rows[0]!);
           });
