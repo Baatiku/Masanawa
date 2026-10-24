@@ -15,6 +15,7 @@ import 'src/core/startup_metrics.dart';
 import 'src/core/mobile_diagnostics.dart';
 import 'src/core/pending_deep_link.dart';
 import 'src/core/shell_deep_link.dart';
+import 'src/features/share_intake/incoming_share.dart';
 import 'src/router/app_router.dart';
 import 'src/state/session_state.dart';
 import 'src/theme/masanawa_theme.dart';
@@ -39,7 +40,9 @@ class MasanawaApp extends ConsumerStatefulWidget {
 class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   StreamSubscription<Uri>? _links;
   final _pendingLink = PendingDeepLink();
+  final _incomingShare = IncomingShareService.instance;
   bool _linkDrainScheduled = false;
+  bool _shareDrainScheduled = false;
   late int _linkAuthorizationEpoch;
   late final GoRouter _router;
   late final LocalePreferenceController _localePreference;
@@ -48,6 +51,12 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   void initState() {
     super.initState();
     _linkAuthorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    final initialSession = ref.read(sessionProvider);
+    _incomingShare.updateAuthorization(
+      initialSession is SessionSignedIn ? initialSession.user.id : null,
+      _linkAuthorizationEpoch,
+    );
+    _incomingShare.addListener(_scheduleShareDrain);
     _localePreference = LocalePreferenceController(
       SecureLocalePreferenceStore(),
     );
@@ -57,6 +66,7 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     if (initial != null) _pendingLink.offer(initial);
     _router = ref.read(appRouterProvider);
     _router.routeInformationProvider.addListener(_scheduleLinkDrain);
+    _router.routeInformationProvider.addListener(_scheduleShareDrain);
     _scheduleLinkDrain();
 
     // Push/Firebase/native-link setup is useful but not required to paint the
@@ -65,6 +75,7 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(MobilePushService.instance.initialize().catchError((_) {}));
+      unawaited(_incomingShare.initialize().catchError((_) {}));
     });
   }
 
@@ -102,11 +113,34 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
+  void _scheduleShareDrain() {
+    if (!mounted || _shareDrainScheduled) return;
+    _shareDrainScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _shareDrainScheduled = false;
+      if (!mounted) return;
+      final session = ref.read(sessionProvider);
+      final draft = _incomingShare.pending;
+      if (session is! SessionSignedIn || session.user.isNewUser || draft == null ||
+          LiveCallForeground.active ||
+          ref.read(humanCallControllerProvider).active) return;
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      if (!_incomingShare.authorized(session.user.id, epoch, draft.token)) return;
+      final router = ref.read(appRouterProvider);
+      if (router.routeInformationProvider.value.uri.path != '/share') {
+        router.go('/share');
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   @override
   void dispose() {
     _links?.cancel();
+    _incomingShare.removeListener(_scheduleShareDrain);
     _localePreference.dispose();
     _router.routeInformationProvider.removeListener(_scheduleLinkDrain);
+    _router.routeInformationProvider.removeListener(_scheduleShareDrain);
     super.dispose();
   }
 
@@ -121,7 +155,11 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
         _pendingLink.clear();
       }
       _linkAuthorizationEpoch = nextEpoch;
+      _incomingShare.updateAuthorization(
+        next is SessionSignedIn ? next.user.id : null, nextEpoch,
+      );
       _scheduleLinkDrain();
+      _scheduleShareDrain();
     });
     final router = ref.watch(appRouterProvider);
     return ListenableBuilder(
