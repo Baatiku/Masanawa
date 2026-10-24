@@ -178,7 +178,7 @@ export function createHumanCommunicationService(o:HumanOptions){
   }
   async function messageView(db:HumanSql,a:Actor,m:Row){
     return {
-      id:m.id,requestId:m.request_id,conversationId:m.conversation_id,mine:m.user_id===a.userId,text:m.deleted?'':m.text,createdAt:iso(m.created_at),deleted:m.deleted,deliveryStatus:m.read_at?'read':m.delivered_at?'delivered':'sent',replyToId:m.deleted?null:m.reply_to_id,attachments:m.deleted?[]:await attachments(db,a,m.id)
+      id:m.id,requestId:m.request_id,conversationId:m.conversation_id,mine:m.user_id===a.userId,text:m.deleted?'':m.text,createdAt:iso(m.created_at),editedAt:m.deleted?null:iso(m.edited_at),editVersion:m.edit_version??0,deleted:m.deleted,deliveryStatus:m.read_at?'read':m.delivered_at?'delivered':'sent',replyToId:m.deleted?null:m.reply_to_id,attachments:m.deleted?[]:await attachments(db,a,m.id)
     }
   }
   async function conversationView(db:HumanSql,a:Actor,c:Row){
@@ -652,6 +652,50 @@ export function createHumanCommunicationService(o:HumanOptions){
       if(parts[3]){
         const m=(await db.query('SELECT * FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND id=$3',[a.tenantId,id,parts[3]])).rows[0];
         if(!m)fail(404,'Message unavailable');
+        // Actor-only message information; status comes from persisted server
+        // acknowledgements, never a push, receipt animation or local clock.
+        if(parts[4]==='info'){
+          if(method!=='GET')fail(405,'Method not allowed');
+          if(m.user_id!==a.userId)fail(403,'Sender only');
+          if(m.deleted)fail(404,'Message unavailable');
+          return {
+            id:m.id,conversationId:id,createdAt:iso(m.created_at),
+            editedAt:iso(m.edited_at),editVersion:m.edit_version??0,deliveredAt:iso(m.delivered_at),
+            readAt:iso(m.read_at),deliveryStatus:m.read_at?'read':m.delivered_at?'delivered':'sent',
+            text:m.text
+          };
+        }
+        // Text-only edits preserve attachments/replies and original send ID.
+        // The edit window and sender authority are checked inside the same
+        // transaction as the write. An unchanged payload is replay safe.
+        if(parts.length===4&&method==='PATCH'){
+          if(m.user_id!==a.userId)fail(403,'Sender only');
+          if(m.deleted)fail(409,'Message deleted');
+          const text=str(b.text,10000);
+          const expected=b.expectedVersion;
+          if(!Number.isSafeInteger(expected)||expected<0)fail(400,'Invalid edit version');
+          return idem(db,a,b.requestId,'message_edit',{
+            id,messageId:m.id,text,expectedVersion:expected
+          },async()=>{
+            if((m.edit_version??0)!==expected)fail(409,'Message changed. Refresh before editing');
+            const age=Date.parse(now())-Date.parse(iso(m.created_at)!);
+            if(!Number.isFinite(age)||age<0||age>15*60*1000)fail(409,'Edit window expired');
+            // A confirmed edit attempt advances its revision even if another
+            // UI already displayed the same characters; recovery must not
+            // leave a completed request permanently unconfirmed.
+            const timestamp=now();
+            const updated=await db.query('UPDATE talks.human_messages SET text=$4,edited_at=$5,edit_version=edit_version+1 WHERE tenant_id=$1 AND id=$2 AND user_id=$3 AND NOT deleted AND edit_version=$6 RETURNING *',[a.tenantId,m.id,a.userId,text,timestamp,expected]);
+            if(!updated.rows.length)fail(409,'Message changed. Refresh before editing');
+            const revision=iso(updated.rows[0]!.edited_at)!;
+            const version=Number(updated.rows[0]!.edit_version);
+            // Cached original send/readback snapshots must never re-expose the
+            // pre-edit text on idempotent retries or recipient inbox previews.
+            await db.query("UPDATE talks.human_requests SET result=jsonb_set(jsonb_set(jsonb_set(result,'{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text)),'{editVersion}',to_jsonb($5::integer)) WHERE tenant_id=$1 AND operation='message' AND result->>'id'=$2",[a.tenantId,m.id,text,revision,version]);
+            await db.query("UPDATE talks.human_requests SET result=jsonb_set(result,'{lastMessage}',jsonb_set(jsonb_set(jsonb_set(result->'lastMessage','{text}',to_jsonb($3::text)),'{editedAt}',to_jsonb($4::text)),'{editVersion}',to_jsonb($5::integer))) WHERE tenant_id=$1 AND result->'lastMessage'->>'id'=$2",[a.tenantId,m.id,text,revision,version]);
+            await event(db,a,[a.userId,target],'message.edited',id,null);
+            return messageView(db,a,updated.rows[0]!);
+          });
+        }
         if(parts[4]==='report'){
           if(method!=='POST')fail(404,'Not found');
           if(m.user_id===a.userId)fail(403,'Cannot report your own message');
