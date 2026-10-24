@@ -1,236 +1,413 @@
 import 'package:dio/dio.dart';
+
 import '../videos/video_models.dart';
 
 /// Typed Status authors preserve the legacy Masana projection without
 /// misrouting human posts to Masana profiles.
 class FeedPost {
-  const FeedPost({required this.id, required this.authorMasanaId, required this.kind,
-    this.authorName, this.authorType='masana', this.authorId, this.authorHandle,
-    required this.body, required this.mediaIds, required this.publishedAt,
-    required this.likeCount, required this.commentCount,
-    required this.liked, required this.saved,
-    this.viewerReaction, this.reactionCounts=const {}});
-  final String id,authorMasanaId,kind,body,authorType;
-  final String? authorName,authorId,authorHandle;
+  const FeedPost({
+    required this.id,
+    required this.authorMasanaId,
+    required this.kind,
+    this.authorName,
+    this.authorType = 'masana',
+    this.authorId,
+    this.authorHandle,
+    required this.body,
+    required this.mediaIds,
+    required this.publishedAt,
+    required this.likeCount,
+    required this.commentCount,
+    required this.liked,
+    required this.saved,
+    this.viewerReaction,
+    this.reactionCounts = const {},
+  });
+  final String id, authorMasanaId, kind, body, authorType;
+  final String? authorName, authorId, authorHandle;
   final List<String> mediaIds;
   final DateTime publishedAt;
-  final int likeCount,commentCount;
-  final bool liked,saved;
+  final int likeCount, commentCount;
+  final bool liked, saved;
   final String? viewerReaction;
-  final Map<String,int> reactionCounts;
-  static const reactionKinds=['like','love','care','haha','wow','sad','angry'];
-  static const reactionEmoji={
-    'like':'👍','love':'❤️','care':'🤗','haha':'😂','wow':'😮','sad':'😢','angry':'😠',
+  final Map<String, int> reactionCounts;
+  static const reactionKinds = [
+    'like',
+    'love',
+    'care',
+    'haha',
+    'wow',
+    'sad',
+    'angry',
+  ];
+  static const reactionEmoji = {
+    'like': '👍',
+    'love': '❤️',
+    'care': '🤗',
+    'haha': '😂',
+    'wow': '😮',
+    'sad': '😢',
+    'angry': '😠',
   };
-  String? get currentReaction => viewerReaction??(liked?'like':null);
-  Map<String,int> get effectiveReactionCounts =>
-      reactionCounts.isNotEmpty?reactionCounts:{'like':likeCount};
+  String? get currentReaction => viewerReaction ?? (liked ? 'like' : null);
+  Map<String, int> get effectiveReactionCounts =>
+      reactionCounts.isNotEmpty ? reactionCounts : {'like': likeCount};
   int get totalReactions =>
-      effectiveReactionCounts.values.fold<int>(0,(sum,count)=>sum+count);
-  static Map<String,int> _parseReactionCounts(Object? raw,int likes) {
-    if(raw is! Map)return {'like':likes};
-    final result=<String,int>{};
-    for(final entry in raw.entries) {
-      if(entry.key is String && reactionKinds.contains(entry.key) &&
-          entry.value is int && (entry.value as int)>=0) {
-        result[entry.key as String]=entry.value as int;
+      effectiveReactionCounts.values.fold<int>(0, (sum, count) => sum + count);
+  static Map<String, int> _parseReactionCounts(Object? raw, int likes) {
+    if (raw is! Map) return {'like': likes};
+    final result = <String, int>{};
+    for (final entry in raw.entries) {
+      if (entry.key is String &&
+          reactionKinds.contains(entry.key) &&
+          entry.value is int &&
+          (entry.value as int) >= 0) {
+        result[entry.key as String] = entry.value as int;
       }
     }
     return result;
   }
-  bool get isHuman => authorType=='human';
-  String get displayAuthor => (authorName?.trim().isNotEmpty??false)
-    ? authorName!.trim() : isHuman
-      ? (authorHandle==null?'Member':'@'+authorHandle!) : authorMasanaId;
 
-  factory FeedPost.fromJson(Map<String,dynamic> json) {
-    final raw=json['author'];
-    final author=raw is Map?Map<String,dynamic>.from(raw):<String,dynamic>{};
-    final type=author['type']??json['authorType']??'masana';
-    if(type!='masana'&&type!='human')throw const FormatException('Invalid Status author type');
-    final legacy=json['authorMasanaId'];
-    final typed=author['id']??json['authorId'];
-    if(legacy!=null&&legacy is! String||typed!=null&&typed is! String) {
+  bool get isHuman => authorType == 'human';
+  String get displayAuthor => (authorName?.trim().isNotEmpty ?? false)
+      ? authorName!.trim()
+      : isHuman
+      ? (authorHandle == null ? 'Member' : '@' + authorHandle!)
+      : authorMasanaId;
+
+  factory FeedPost.fromJson(Map<String, dynamic> json) {
+    final raw = json['author'];
+    final author = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
+    final type = author['type'] ?? json['authorType'] ?? 'masana';
+    if (type != 'masana' && type != 'human')
+      throw const FormatException('Invalid Status author type');
+    final legacy = json['authorMasanaId'];
+    final typed = author['id'] ?? json['authorId'];
+    if (legacy != null && legacy is! String ||
+        typed != null && typed is! String) {
       throw const FormatException('Invalid Status identity');
     }
-    final id=type=='masana'
-      ? ((typed??legacy) as String? ?? '') : (typed as String? ?? '');
-    if(id.isEmpty)throw const FormatException('Missing Status author');
-    final handle=author['handle']??json['authorHandle'];
-    if(handle!=null&&(handle is! String||
-        !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
+    final id = type == 'masana'
+        ? ((typed ?? legacy) as String? ?? '')
+        : (typed as String? ?? '');
+    if (id.isEmpty) throw const FormatException('Missing Status author');
+    final handle = author['handle'] ?? json['authorHandle'];
+    if (handle != null &&
+        (handle is! String ||
+            !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
       throw const FormatException('Invalid Status handle');
     }
-    final name=author['displayName']??json['authorName'];
-    if(name!=null&&name is! String)throw const FormatException('Invalid Status name');
+    final name = author['displayName'] ?? json['authorName'];
+    if (name != null && name is! String)
+      throw const FormatException('Invalid Status name');
     return FeedPost(
-      id:json['id'] as String,authorMasanaId:type=='masana'?id:'',
-      authorType:type as String,authorId:id,authorHandle:handle as String?,
-      authorName:name as String?,kind:json['kind'] as String,
-      body:json['body'] as String,
-      mediaIds:List<String>.from(json['media'] as List<dynamic>? ?? const []),
-      publishedAt:DateTime.parse(json['publishedAt'] as String),
-      likeCount:json['likeCount'] as int? ?? 0,
-      commentCount:json['commentCount'] as int? ?? 0,
-      liked:json['viewerLiked'] as bool? ?? false,
-      saved:json['viewerSaved'] as bool? ?? false,
+      id: json['id'] as String,
+      authorMasanaId: type == 'masana' ? id : '',
+      authorType: type as String,
+      authorId: id,
+      authorHandle: handle as String?,
+      authorName: name as String?,
+      kind: json['kind'] as String,
+      body: json['body'] as String,
+      mediaIds: List<String>.from(json['media'] as List<dynamic>? ?? const []),
+      publishedAt: DateTime.parse(json['publishedAt'] as String),
+      likeCount: json['likeCount'] as int? ?? 0,
+      commentCount: json['commentCount'] as int? ?? 0,
+      liked: json['viewerLiked'] as bool? ?? false,
+      saved: json['viewerSaved'] as bool? ?? false,
       viewerReaction: reactionKinds.contains(json['viewerReaction'])
-        ? json['viewerReaction'] as String : null,
-      reactionCounts:_parseReactionCounts(json['reactionCounts'],json['likeCount'] as int? ?? 0));
+          ? json['viewerReaction'] as String
+          : null,
+      reactionCounts: _parseReactionCounts(
+        json['reactionCounts'],
+        json['likeCount'] as int? ?? 0,
+      ),
+    );
   }
   FeedPost withReaction(String? kind) {
-    if(kind!=null&&!reactionKinds.contains(kind)) {
-      throw ArgumentError.value(kind,'kind','Unsupported reaction');
+    if (kind != null && !reactionKinds.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind', 'Unsupported reaction');
     }
-    final counts=Map<String,int>.from(effectiveReactionCounts);
-    final previous=currentReaction;
-    if(previous==kind)return this;
-    if(previous!=null && (counts[previous]??0)>0) {
-      counts[previous]=counts[previous]!-1;
+    final counts = Map<String, int>.from(effectiveReactionCounts);
+    final previous = currentReaction;
+    if (previous == kind) return this;
+    if (previous != null && (counts[previous] ?? 0) > 0) {
+      counts[previous] = counts[previous]! - 1;
     }
-    if(kind!=null)counts[kind]=(counts[kind]??0)+1;
-    return FeedPost(id:id,authorMasanaId:authorMasanaId,kind:this.kind,
-      authorName:authorName,authorType:authorType,authorId:authorId,
-      authorHandle:authorHandle,body:body,mediaIds:mediaIds,
-      publishedAt:publishedAt,likeCount:counts['like']??0,
-      commentCount:commentCount,liked:kind=='like',saved:saved,
-      viewerReaction:kind,reactionCounts:counts);
+    if (kind != null) counts[kind] = (counts[kind] ?? 0) + 1;
+    return FeedPost(
+      id: id,
+      authorMasanaId: authorMasanaId,
+      kind: this.kind,
+      authorName: authorName,
+      authorType: authorType,
+      authorId: authorId,
+      authorHandle: authorHandle,
+      body: body,
+      mediaIds: mediaIds,
+      publishedAt: publishedAt,
+      likeCount: counts['like'] ?? 0,
+      commentCount: commentCount,
+      liked: kind == 'like',
+      saved: saved,
+      viewerReaction: kind,
+      reactionCounts: counts,
+    );
   }
-  FeedPost withAction({bool? liked,bool? saved}) {
-    final result=liked==null||liked==this.liked?this:
-        withReaction(liked?'like':null);
-    return FeedPost(id:result.id,authorMasanaId:result.authorMasanaId,
-      kind:result.kind,authorName:result.authorName,authorType:result.authorType,
-      authorId:result.authorId,authorHandle:result.authorHandle,
-      body:result.body,mediaIds:result.mediaIds,publishedAt:result.publishedAt,
-      likeCount:result.likeCount,commentCount:result.commentCount,
-      liked:result.liked,saved:saved??result.saved,
-      viewerReaction:result.viewerReaction,reactionCounts:result.reactionCounts);
+
+  FeedPost withAction({bool? liked, bool? saved}) {
+    final result = liked == null || liked == this.liked
+        ? this
+        : withReaction(liked ? 'like' : null);
+    return FeedPost(
+      id: result.id,
+      authorMasanaId: result.authorMasanaId,
+      kind: result.kind,
+      authorName: result.authorName,
+      authorType: result.authorType,
+      authorId: result.authorId,
+      authorHandle: result.authorHandle,
+      body: result.body,
+      mediaIds: result.mediaIds,
+      publishedAt: result.publishedAt,
+      likeCount: result.likeCount,
+      commentCount: result.commentCount,
+      liked: result.liked,
+      saved: saved ?? result.saved,
+      viewerReaction: result.viewerReaction,
+      reactionCounts: result.reactionCounts,
+    );
   }
 }
+
 class FeedPage {
-  const FeedPage(this.items,this.nextCursor);
+  const FeedPage(this.items, this.nextCursor);
   final List<FeedPost> items;
   final String? nextCursor;
-  factory FeedPage.fromJson(Map<String,dynamic> body)=>FeedPage(
-    (body['items'] as List<dynamic>? ?? const []).map((p)=>FeedPost.fromJson(Map<String,dynamic>.from(p as Map))).toList(),
-    body['nextCursor'] as String?);
+  factory FeedPage.fromJson(Map<String, dynamic> body) => FeedPage(
+    (body['items'] as List<dynamic>? ?? const [])
+        .map((p) => FeedPost.fromJson(Map<String, dynamic>.from(p as Map)))
+        .toList(),
+    body['nextCursor'] as String?,
+  );
 }
+
 class FeedComment {
-  const FeedComment({required this.id,required this.body,required this.state,
-    required this.createdAt,this.parentId,this.authorType,this.authorId,
-    this.authorName,this.authorHandle});
-  final String id,body,state;
-  final String? parentId,authorType,authorId,authorName,authorHandle;
+  const FeedComment({
+    required this.id,
+    required this.body,
+    required this.state,
+    required this.createdAt,
+    this.parentId,
+    this.authorType,
+    this.authorId,
+    this.authorName,
+    this.authorHandle,
+  });
+  final String id, body, state;
+  final String? parentId, authorType, authorId, authorName, authorHandle;
   final DateTime createdAt;
-  factory FeedComment.fromJson(Map<String,dynamic> json) {
-    final raw=json['author'];
-    final author=raw is Map?Map<String,dynamic>.from(raw):<String,dynamic>{};
-    final type=author['type']??json['authorType'];
-    if(type!=null&&type!='human'&&type!='masana') {
+  factory FeedComment.fromJson(Map<String, dynamic> json) {
+    final raw = json['author'];
+    final author = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
+    final type = author['type'] ?? json['authorType'];
+    if (type != null && type != 'human' && type != 'masana') {
       throw const FormatException('Invalid comment author type');
     }
-    final handle=author['handle']??json['authorHandle'];
-    if(handle!=null&&(handle is! String||
-        !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
+    final handle = author['handle'] ?? json['authorHandle'];
+    if (handle != null &&
+        (handle is! String ||
+            !RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$').hasMatch(handle))) {
       throw const FormatException('Invalid comment author handle');
     }
     return FeedComment(
-      id:json['id'] as String,body:json['body'] as String,
-      state:json['state'] as String,
-      createdAt:DateTime.parse(json['createdAt'] as String),
-      parentId:json['parentId'] as String?,
-      authorType:type as String?,
-      authorId:(author['id']??json['authorId']) as String?,
-      authorName:(author['displayName']??json['authorName']) as String?,
-      authorHandle:handle as String?);
+      id: json['id'] as String,
+      body: json['body'] as String,
+      state: json['state'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      parentId: json['parentId'] as String?,
+      authorType: type as String?,
+      authorId: (author['id'] ?? json['authorId']) as String?,
+      authorName: (author['displayName'] ?? json['authorName']) as String?,
+      authorHandle: handle as String?,
+    );
   }
 }
+
 abstract class FeedApi {
-  Future<FeedPage> list({required String mode,String? cursor});
-  Future<void> like(String postId,bool enabled);
-  Future<void> save(String postId,bool enabled);
-  Future<void> comment(String postId,String body,String idempotencyKey);
+  Future<FeedPage> list({required String mode, String? cursor});
+  Future<void> like(String postId, bool enabled);
+  Future<void> save(String postId, bool enabled);
+  Future<void> comment(String postId, String body, String idempotencyKey);
   Future<List<FeedComment>> comments(String postId);
 }
+
 abstract class HumanStatusPublisher {
   /// Public text only; the Gateway derives human owner from the current session.
-  Future<FeedPost> publishHumanText(String body,String idempotencyKey);
+  Future<FeedPost> publishHumanText(String body, String idempotencyKey);
 }
+
 /// Own human posts only; Gateway independently verifies ownership and visibility.
 abstract class HumanPostManager {
-  Future<FeedPost> editHumanText(String postId,String expectedBody,String body);
+  Future<FeedPost> editHumanText(
+    String postId,
+    String expectedBody,
+    String body,
+  );
   Future<void> removeHumanPost(String postId);
 }
+
 abstract class ReactionFeedApi {
   /// One authoritative reaction per signed-in user and post; null clears it.
-  Future<void> react(String postId,String? kind);
+  Future<void> react(String postId, String? kind);
 }
+
+/// Search is an opt-in transport extension. Existing stubbed/author feeds keep
+/// their unmodified list behavior; the server searches ALL visible older posts.
+abstract class SearchFeedApi {
+  Future<FeedPage> searchPosts({
+    required String mode,
+    required String query,
+    String? cursor,
+  });
+}
+
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
-class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher, SavedStatusLibraryApi, HumanPostManager {
-  DioFeedApi(this._dio,this._getAccessToken);
+class DioFeedApi
+    implements
+        FeedApi,
+        SearchFeedApi,
+        ReactionFeedApi,
+        HumanStatusPublisher,
+        SavedStatusLibraryApi,
+        HumanPostManager {
+  DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
-  Future<Options> _options({String? key,bool authRequired=false}) async {
-    final token=await _getAccessToken();
-    if(authRequired&&(token==null||token.isEmpty))throw StateError('Sign in required');
-    return Options(headers:{if(token!=null&&token.isNotEmpty)'Authorization':'Bearer $token',
-      if(key!=null)'Idempotency-Key':key});
+  Future<Options> _options({String? key, bool authRequired = false}) async {
+    final token = await _getAccessToken();
+    if (authRequired && (token == null || token.isEmpty))
+      throw StateError('Sign in required');
+    return Options(
+      headers: {
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        if (key != null) 'Idempotency-Key': key,
+      },
+    );
   }
+
   @override
-  Future<FeedPage> list({required String mode,String? cursor}) async {
-    final result=await _dio.get<Map<String,dynamic>>('/v1/feed',
-      queryParameters:{'mode':mode,if(cursor!=null)'cursor':cursor},options:await _options());
-    return FeedPage.fromJson(result.data??const {});
+  Future<FeedPage> list({required String mode, String? cursor}) async {
+    final result = await _dio.get<Map<String, dynamic>>(
+      '/v1/feed',
+      queryParameters: {'mode': mode, if (cursor != null) 'cursor': cursor},
+      options: await _options(),
+    );
+    return FeedPage.fromJson(result.data ?? const {});
   }
+
   @override
-  Future<void> like(String id,bool enabled) async {
-    await _dio.put<void>('/v1/posts/${Uri.encodeComponent(id)}/like',
-      data:{'enabled':enabled},options:await _options(authRequired:true));
+  Future<FeedPage> searchPosts({
+    required String mode,
+    required String query,
+    String? cursor,
+  }) async {
+    final result = await _dio.get<Map<String, dynamic>>(
+      '/v1/feed',
+      queryParameters: {
+        'mode': mode,
+        'search': query,
+        if (cursor != null) 'cursor': cursor,
+      },
+      options: await _options(authRequired: true),
+    );
+    return FeedPage.fromJson(result.data ?? const {});
   }
+
   @override
-  Future<void> react(String id,String? kind) async {
-    if(kind!=null&&!FeedPost.reactionKinds.contains(kind)) {
-      throw ArgumentError.value(kind,'kind','Unsupported reaction');
+  Future<void> like(String id, bool enabled) async {
+    await _dio.put<void>(
+      '/v1/posts/${Uri.encodeComponent(id)}/like',
+      data: {'enabled': enabled},
+      options: await _options(authRequired: true),
+    );
+  }
+
+  @override
+  Future<void> react(String id, String? kind) async {
+    if (kind != null && !FeedPost.reactionKinds.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind', 'Unsupported reaction');
     }
-    await _dio.put<void>('/v1/posts/' + Uri.encodeComponent(id) + '/reaction',
-      data:{'kind':kind},options:await _options(authRequired:true));
+    await _dio.put<void>(
+      '/v1/posts/' + Uri.encodeComponent(id) + '/reaction',
+      data: {'kind': kind},
+      options: await _options(authRequired: true),
+    );
   }
+
   @override
-  Future<FeedPost> publishHumanText(String body,String idempotencyKey) async {
-    final r=await _dio.post<Map<String,dynamic>>('/v1/posts/human',
-      data:{'body':body,'audience':'public'},
-      options:await _options(key:idempotencyKey,authRequired:true));
-    return FeedPost.fromJson(r.data??const <String,dynamic>{});
+  Future<FeedPost> publishHumanText(String body, String idempotencyKey) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/v1/posts/human',
+      data: {'body': body, 'audience': 'public'},
+      options: await _options(key: idempotencyKey, authRequired: true),
+    );
+    return FeedPost.fromJson(r.data ?? const <String, dynamic>{});
   }
+
   @override
-  Future<FeedPost> editHumanText(String id,String expectedBody,String body) async {
-    final result=await _dio.patch<Map<String,dynamic>>(
+  Future<FeedPost> editHumanText(
+    String id,
+    String expectedBody,
+    String body,
+  ) async {
+    final result = await _dio.patch<Map<String, dynamic>>(
       '/v1/posts/' + Uri.encodeComponent(id) + '/human',
-      data:{'expectedBody':expectedBody,'body':body},
-      options:await _options(authRequired:true));
-    return FeedPost.fromJson(result.data??const <String,dynamic>{});
+      data: {'expectedBody': expectedBody, 'body': body},
+      options: await _options(authRequired: true),
+    );
+    return FeedPost.fromJson(result.data ?? const <String, dynamic>{});
   }
+
   @override
   Future<void> removeHumanPost(String id) async {
-    await _dio.delete<void>('/v1/posts/' + Uri.encodeComponent(id) + '/human',
-      options:await _options(authRequired:true));
+    await _dio.delete<void>(
+      '/v1/posts/' + Uri.encodeComponent(id) + '/human',
+      options: await _options(authRequired: true),
+    );
   }
+
   @override
-  Future<void> save(String id,bool enabled) async {
-    await _dio.put<void>('/v1/posts/${Uri.encodeComponent(id)}/save',
-      data:{'enabled':enabled},options:await _options(authRequired:true));
+  Future<void> save(String id, bool enabled) async {
+    await _dio.put<void>(
+      '/v1/posts/${Uri.encodeComponent(id)}/save',
+      data: {'enabled': enabled},
+      options: await _options(authRequired: true),
+    );
   }
+
   @override
-  Future<void> comment(String id,String body,String key) async {
-    await _dio.post<void>('/v1/posts/${Uri.encodeComponent(id)}/comments',
-      data:{'body':body},options:await _options(key:key,authRequired:true));
+  Future<void> comment(String id, String body, String key) async {
+    await _dio.post<void>(
+      '/v1/posts/${Uri.encodeComponent(id)}/comments',
+      data: {'body': body},
+      options: await _options(key: key, authRequired: true),
+    );
   }
+
   @override
   Future<List<FeedComment>> comments(String id) async {
-    final result=await _dio.get<List<dynamic>>('/v1/posts/${Uri.encodeComponent(id)}/comments',
-      options:await _options());
-    return (result.data??const []).map((v)=>FeedComment.fromJson(Map<String,dynamic>.from(v as Map))).toList();
+    final result = await _dio.get<List<dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(id)}/comments',
+      options: await _options(),
+    );
+    return (result.data ?? const [])
+        .map((v) => FeedComment.fromJson(Map<String, dynamic>.from(v as Map)))
+        .toList();
   }
 
   @override
@@ -260,26 +437,48 @@ class DioFeedApi implements FeedApi, ReactionFeedApi, HumanStatusPublisher, Save
 
   /// Reuse J06's authenticated Dio; never construct a second transport or session.
   Future<FeedPost> detail(String id) async {
-    final r=await _dio.get<Map<String,dynamic>>('/v1/posts/${Uri.encodeComponent(id)}',
-      options:await _options());
-    return FeedPost.fromJson(r.data??const <String,dynamic>{});
-  }
-  /// Server pages are ordered by the requested sort, with the last comment ID
-  /// as the continuation token. Never use post IDs, timestamps or local offsets.
-  Future<List<FeedComment>> threadPage(String id,String sort,{String? before}) async {
-    if(sort!='newest'&&sort!='oldest')throw ArgumentError.value(sort,'sort');
-    final r=await _dio.get<List<dynamic>>('/v1/posts/${Uri.encodeComponent(id)}/comments',
-      queryParameters:{'sort':sort,if(before!=null)'before':before},options:await _options());
-    return (r.data??const []).map((v)=>FeedComment.fromJson(Map<String,dynamic>.from(v as Map))).toList();
-  }
-  Future<List<FeedComment>> thread(String id,String sort) => threadPage(id,sort);
-  Future<void> sendThreadComment(String id,String body,String key,String? parentId) async {
-    await _dio.post<void>('/v1/posts/${Uri.encodeComponent(id)}/comments',
-      data:{'body':body,if(parentId!=null)'parentId':parentId},
-      options:await _options(key:key,authRequired:true));
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(id)}',
+      options: await _options(),
+    );
+    return FeedPost.fromJson(r.data ?? const <String, dynamic>{});
   }
 
+  /// Server pages are ordered by the requested sort, with the last comment ID
+  /// as the continuation token. Never use post IDs, timestamps or local offsets.
+  Future<List<FeedComment>> threadPage(
+    String id,
+    String sort, {
+    String? before,
+  }) async {
+    if (sort != 'newest' && sort != 'oldest')
+      throw ArgumentError.value(sort, 'sort');
+    final r = await _dio.get<List<dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(id)}/comments',
+      queryParameters: {'sort': sort, if (before != null) 'before': before},
+      options: await _options(),
+    );
+    return (r.data ?? const [])
+        .map((v) => FeedComment.fromJson(Map<String, dynamic>.from(v as Map)))
+        .toList();
+  }
+
+  Future<List<FeedComment>> thread(String id, String sort) =>
+      threadPage(id, sort);
+  Future<void> sendThreadComment(
+    String id,
+    String body,
+    String key,
+    String? parentId,
+  ) async {
+    await _dio.post<void>(
+      '/v1/posts/${Uri.encodeComponent(id)}/comments',
+      data: {'body': body, if (parentId != null) 'parentId': parentId},
+      options: await _options(key: key, authRequired: true),
+    );
+  }
 }
+
 /// The existing /v1/saved library combines tenant-authorized Status posts
 /// and currently approved provider videos. A missing/invalid projection fails
 /// closed instead of displaying fabricated or stale media.

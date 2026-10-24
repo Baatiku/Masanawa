@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -54,6 +55,14 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<FeedPage> list({required String mode, String? cursor}) =>
       _checked(() => super.list(mode: mode, cursor: cursor));
   @override
+  Future<FeedPage> searchPosts({
+    required String mode,
+    required String query,
+    String? cursor,
+  }) => _checked(
+    () => super.searchPosts(mode: mode, query: query, cursor: cursor),
+  );
+  @override
   Future<void> like(String id, bool enabled) =>
       _checked(() => super.like(id, enabled));
   @override
@@ -63,14 +72,14 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<void> react(String id, String? kind) =>
       _checked(() => super.react(id, kind));
   @override
-  Future<FeedPost> publishHumanText(String body,String idempotencyKey) =>
-      _checked(() => super.publishHumanText(body,idempotencyKey));
+  Future<FeedPost> publishHumanText(String body, String idempotencyKey) =>
+      _checked(() => super.publishHumanText(body, idempotencyKey));
   @override
-  Future<FeedPost> editHumanText(String id,String expectedBody,String body) =>
-    _checked(() => super.editHumanText(id,expectedBody,body));
+  Future<FeedPost> editHumanText(String id, String expectedBody, String body) =>
+      _checked(() => super.editHumanText(id, expectedBody, body));
   @override
   Future<void> removeHumanPost(String id) =>
-    _checked(() => super.removeHumanPost(id));
+      _checked(() => super.removeHumanPost(id));
   @override
   Future<void> comment(String id, String body, String key) =>
       _checked(() => super.comment(id, body, key));
@@ -78,17 +87,22 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<List<FeedComment>> comments(String id) =>
       _checked(() => super.comments(id));
   @override
-  Future<FeedPost> detail(String id) =>
-      _checked(() => super.detail(id));
+  Future<FeedPost> detail(String id) => _checked(() => super.detail(id));
   @override
   Future<List<FeedComment>> thread(String id, String sort) =>
       _checked(() => super.thread(id, sort));
   @override
-  Future<List<FeedComment>> threadPage(String id, String sort, {String? before}) =>
-      _checked(() => super.threadPage(id, sort, before: before));
+  Future<List<FeedComment>> threadPage(
+    String id,
+    String sort, {
+    String? before,
+  }) => _checked(() => super.threadPage(id, sort, before: before));
   @override
   Future<void> sendThreadComment(
-    String id, String body, String key, String? parentId,
+    String id,
+    String body,
+    String key,
+    String? parentId,
   ) => _checked(() => super.sendThreadComment(id, body, key, parentId));
 }
 
@@ -140,7 +154,8 @@ final statusFeedApiProvider = Provider<FeedApi>((ref) {
 
 /// The video catalogue uses the *same* ApiClient auth interceptor as Status.
 class AccountBoundVideoRepository extends VideoRepository {
-  AccountBoundVideoRepository(Dio dio, {
+  AccountBoundVideoRepository(
+    Dio dio, {
     required this.ownerAccount,
     required this.currentAccount,
   }) : super(dio);
@@ -164,8 +179,7 @@ class AccountBoundVideoRepository extends VideoRepository {
       _checked(() => super.page(provider: provider, before: before));
 
   @override
-  Future<bool> isApproved(String id) =>
-      _checked(() => super.isApproved(id));
+  Future<bool> isApproved(String id) => _checked(() => super.isApproved(id));
 }
 
 /// The Status root is for Masana-authored approved updates only. The former
@@ -177,10 +191,12 @@ class StatusScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session is! SessionSignedIn) {
-      return Center(child: Text(
-        'Sign in to view Status updates.',
-        style: TextStyle(color: context.masanawa.textPrimary),
-      ));
+      return Center(
+        child: Text(
+          'Sign in to view Status updates.',
+          style: TextStyle(color: context.masanawa.textPrimary),
+        ),
+      );
     }
     final account = session.user.id;
     final feed = ref.watch(statusFeedApiProvider);
@@ -204,35 +220,47 @@ class StatusScreen extends ConsumerWidget {
       }
       final profileAgent = agent;
       if (profileAgent == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('This Masana profile is currently unavailable.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This Masana profile is currently unavailable.'),
+          ),
+        );
         return;
       }
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => Consumer(builder: (context, ref, _) {
-          final active = ref.watch(sessionProvider);
-          if (active is! SessionSignedIn || active.user.id != account) {
-            return const Scaffold(body: Center(
-              child: Text('Sign in to view this profile.')));
-          }
-          return MasanaProfileScreen(agent: profileAgent);
-        }),
-      ));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Consumer(
+            builder: (context, ref, _) {
+              final active = ref.watch(sessionProvider);
+              if (active is! SessionSignedIn || active.user.id != account) {
+                return const Scaffold(
+                  body: Center(child: Text('Sign in to view this profile.')),
+                );
+              }
+              return MasanaProfileScreen(agent: profileAgent);
+            },
+          ),
+        ),
+      );
     }
 
     void openHumanProfile(String handle) {
       if (currentAccount() != account) return;
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => Consumer(builder: (context, ref, _) {
-          final active = ref.watch(sessionProvider);
-          if (active is! SessionSignedIn || active.user.id != account) {
-            return const Scaffold(body: Center(
-              child: Text('Sign in to view this profile.')));
-          }
-          return PersonProfileScreen(handle: handle);
-        }),
-      ));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Consumer(
+            builder: (context, ref, _) {
+              final active = ref.watch(sessionProvider);
+              if (active is! SessionSignedIn || active.user.id != account) {
+                return const Scaffold(
+                  body: Center(child: Text('Sign in to view this profile.')),
+                );
+              }
+              return PersonProfileScreen(handle: handle);
+            },
+          ),
+        ),
+      );
     }
 
     // Only the current signed-in account may obtain an original-media grant.
@@ -244,79 +272,96 @@ class StatusScreen extends ConsumerWidget {
 
     void openMedia(FeedPost post, String mediaId) {
       if (!const {'image', 'audio'}.contains(post.kind) ||
-          currentAccount() != account) return;
+          currentAccount() != account)
+        return;
       final media = AccountBoundFeedMediaApi(
         delegate: DioFeedMediaApi(api.dio, () async => api.accessToken),
         ownerAccount: account,
         currentAccount: currentAccount,
       );
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => Consumer(builder: (context, ref, _) {
-          final active = ref.watch(sessionProvider);
-          if (active is! SessionSignedIn || active.user.id != account) {
-            return const Scaffold(
-              body: Center(child: Text('Sign in to view this update.')),
-            );
-          }
-          return FeedMediaScreen(
-            key: ValueKey('status-${post.kind}-$account-${post.id}-$mediaId'),
-            api: media,
-            accountKey: account,
-            postId: post.id,
-            mediaIds: post.mediaIds,
-            initialMediaId: mediaId,
-            kind: post.kind,
-            onBeforeAudio: post.kind == 'audio'
-                ? () => StatusAudioFocus.prepare(
-                    isAccountCurrent: () => currentAccount() == account)
-                : null,
-          );
-        }),
-      ));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Consumer(
+            builder: (context, ref, _) {
+              final active = ref.watch(sessionProvider);
+              if (active is! SessionSignedIn || active.user.id != account) {
+                return const Scaffold(
+                  body: Center(child: Text('Sign in to view this update.')),
+                );
+              }
+              return FeedMediaScreen(
+                key: ValueKey(
+                  'status-${post.kind}-$account-${post.id}-$mediaId',
+                ),
+                api: media,
+                accountKey: account,
+                postId: post.id,
+                mediaIds: post.mediaIds,
+                initialMediaId: mediaId,
+                kind: post.kind,
+                onBeforeAudio: post.kind == 'audio'
+                    ? () => StatusAudioFocus.prepare(
+                        isAccountCurrent: () => currentAccount() == account,
+                      )
+                    : null,
+              );
+            },
+          ),
+        ),
+      );
     }
 
     final videos = AccountBoundVideoRepository(
-      api.dio, ownerAccount: account, currentAccount: currentAccount,
+      api.dio,
+      ownerAccount: account,
+      currentAccount: currentAccount,
     );
 
     Future<void> openApprovedVideo(ExternalVideo video) async {
       if (currentAccount() != account) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => Consumer(builder: (context, ref, _) {
-          final active = ref.watch(sessionProvider);
-          if (active is! SessionSignedIn || active.user.id != account) {
-            return const Scaffold(
-              body: Center(child: Text('Sign in to watch videos.')),
-            );
-          }
-          return OfficialVideoPlayerScreen(
-            key: ValueKey('status-video-$account-${video.id}'),
-            video: video,
-            checkAvailability: videos.isApproved,
-          );
-        }),
-      ));
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Consumer(
+            builder: (context, ref, _) {
+              final active = ref.watch(sessionProvider);
+              if (active is! SessionSignedIn || active.user.id != account) {
+                return const Scaffold(
+                  body: Center(child: Text('Sign in to watch videos.')),
+                );
+              }
+              return OfficialVideoPlayerScreen(
+                key: ValueKey('status-video-$account-${video.id}'),
+                video: video,
+                checkAvailability: videos.isApproved,
+              );
+            },
+          ),
+        ),
+      );
     }
 
     Future<bool> openHumanCompose() async {
-      if(currentAccount()!=account)return false;
-      final result=await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(builder: (_) => Consumer(
-          builder: (routeContext, ref, __) {
-            final active=ref.watch(sessionProvider);
-            if(active is! SessionSignedIn||active.user.id!=account) {
-              return const Scaffold(body:Center(
-                child:Text('Sign in to create a Status.')));
-            }
-            return StatusHumanComposeScreen(
-              accountKey:account,
-              publisher:feed as HumanStatusPublisher,
-              isAccountCurrent:()=>currentAccount()==account,
-            );
-          },
-        )),
+      if (currentAccount() != account) return false;
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => Consumer(
+            builder: (routeContext, ref, __) {
+              final active = ref.watch(sessionProvider);
+              if (active is! SessionSignedIn || active.user.id != account) {
+                return const Scaffold(
+                  body: Center(child: Text('Sign in to create a Status.')),
+                );
+              }
+              return StatusHumanComposeScreen(
+                accountKey: account,
+                publisher: feed as HumanStatusPublisher,
+                isAccountCurrent: () => currentAccount() == account,
+              );
+            },
+          ),
+        ),
       );
-      return result==true&&currentAccount()==account;
+      return result == true && currentAccount() == account;
     }
 
     // A pushed route does not rebuild when the Status root rebuilds.
@@ -325,8 +370,9 @@ class StatusScreen extends ConsumerWidget {
       builder: (routeContext, routeRef, _) {
         final active = routeRef.watch(sessionProvider);
         if (active is! SessionSignedIn || active.user.id != account) {
-          return const Scaffold(body: Center(
-            child: Text('Sign in to view this Status.')));
+          return const Scaffold(
+            body: Center(child: Text('Sign in to view this Status.')),
+          );
         }
         return content;
       },
@@ -337,27 +383,26 @@ class StatusScreen extends ConsumerWidget {
       child: MasanawaStatusTabs(
         accountKey: account,
         updates: MasanaFeedScreen(
-              api: feed,
-              accountKey: account,
-              mediaApi: inlineMedia,
-              onOpenMedia: openMedia,
-              onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
-              onHumanProfile: openHumanProfile,
-              onCreateHumanStatus: openHumanCompose,
-              onOpenSavedVideo: openApprovedVideo,
-              wrapAccountRoute: accountRouteGuard,
-              audioPlaybackAvailable: true,
-            ),
+          api: feed,
+          accountKey: account,
+          mediaApi: inlineMedia,
+          onOpenMedia: openMedia,
+          onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
+          onHumanProfile: openHumanProfile,
+          onCreateHumanStatus: openHumanCompose,
+          onOpenSavedVideo: openApprovedVideo,
+          wrapAccountRoute: accountRouteGuard,
+          audioPlaybackAvailable: true,
+        ),
         videos: ExternalVideosScreen(
-              accountKey: account,
-              load: ({provider}) => videos.list(provider: provider),
-              loadPage: ({provider, before}) => videos.page(
-                provider: provider, before: before,
-              ),
-              checkAvailability: videos.isApproved,
-              onOpenVideo: (video) => unawaited(openApprovedVideo(video)),
-              languageCode: Localizations.localeOf(context).languageCode,
-            ),
+          accountKey: account,
+          load: ({provider}) => videos.list(provider: provider),
+          loadPage: ({provider, before}) =>
+              videos.page(provider: provider, before: before),
+          checkAvailability: videos.isApproved,
+          onOpenVideo: (video) => unawaited(openApprovedVideo(video)),
+          languageCode: Localizations.localeOf(context).languageCode,
+        ),
       ),
     );
   }
@@ -391,7 +436,11 @@ class _MasanawaStatusTabsState extends State<MasanawaStatusTabs>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this, animationDuration: Duration.zero);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      animationDuration: Duration.zero,
+    );
     _tabController.addListener(_recordSelection);
   }
 

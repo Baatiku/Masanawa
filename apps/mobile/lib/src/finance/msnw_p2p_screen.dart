@@ -1,3 +1,5 @@
+import 'p2p_order_support.dart';
+import 'p2p_history_filters.dart';
 import 'p2p_pause_all.dart';
 import 'p2p_ad_reports.dart';
 import 'p2p_methods_page.dart';
@@ -140,6 +142,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   static final _filterMemory = <String,String>{};
   late int _tab;
   late String _orderFilter;
+  final _historyFilters=<int,P2pHistoryFilters>{};
+  int _historyRevision=0;
   final _nextCursors = <int,String?>{};
   bool _loadingMore = false;
   String _marketAmount = '';
@@ -233,6 +237,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     super.didUpdateWidget(oldWidget);
     if (oldWidget.expectedUserId != widget.expectedUserId ||
         oldWidget.baseUrl != widget.baseUrl) {
+      _historyFilters.clear();_historyRevision++;
       _cached.clear();
       _marketAmount='';_marketSearch='';_marketFiat='';_marketSort='newest';_marketRevision++;
       _buyDrafts.clear();
@@ -476,11 +481,24 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         widget.currentUserId() != owner) throw StateError('Account changed. Please reopen P2P.');
     return r.data;
   }
+  String _historyQuery(int tab,{bool append=false}){
+    final query=(_historyFilters[tab]??const P2pHistoryFilters()).query;
+    return query.isEmpty?'':'${append?'&':'?'}${Uri(queryParameters:query).query}';
+  }
+  Future<void> _filterHistory()async{
+    final owner=widget.expectedUserId,base=widget.baseUrl,tab=_tab;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    if(!authorized()||![1,2].contains(tab))return;
+    final result=await Navigator.of(context).push<P2pHistoryFilters>(MaterialPageRoute(builder:(_)=>P2pHistoryFilterPage(ads:tab==1,initial:_historyFilters[tab]??const P2pHistoryFilters(),expectedUserId:owner,currentUserId:()=>authorized()?owner:null)));
+    if(result==null||!authorized()||_tab!=tab)return;
+    setState((){if(tab==2){_orderFilter='all';_filterMemory[owner]='all';}_historyFilters[tab]=result;_historyRevision++;_cached.remove(tab);_nextCursors.remove(tab);_list=_load();});
+  }
+
   String _listEndpoint(int tab,String filter) => switch(tab) {
     0 => '/offers/page$_offerQuery',
-    1 => '/my-offers/page',
+    1 => '/my-offers/page${_historyQuery(1)}',
     4 => '/offers/page${_offerQuery.isEmpty ? '?' : '$_offerQuery&'}side=buy',
-    2 => '/orders/page?filter=$filter',
+    2 => '/orders/page?filter=$filter${_historyQuery(2,append:true)}',
     _ => '/notifications/page',
   };
 
@@ -490,10 +508,11 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if (tab == 4 && !_canTakeBuy) return <Map<String, dynamic>>[];
     final filter = _orderFilter;
     final revision = _marketRevision;
+    final historyRevision = _historyRevision;
     final json = _json(await _request('GET',_listEndpoint(tab,filter)));
     final items = (json['items'] as List<dynamic>? ?? [])
         .map((item) => _json(item)).toList();
-    if (_sameAccount && ((tab != 0 && tab != 4) || revision == _marketRevision) && (tab != 2 || filter == _orderFilter)) {
+    if (_sameAccount && (![1,2].contains(tab)||historyRevision==_historyRevision) && ((tab != 0 && tab != 4) || revision == _marketRevision) && (tab != 2 || filter == _orderFilter)) {
       _cached[tab] = items;
       _nextCursors[tab] = json['nextCursor'] as String?;
     }
@@ -506,6 +525,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         _tab = tab;
         _tabMemory[widget.expectedUserId] = tab;
       }
+      if([1,2].contains(_tab))_historyRevision++;
       _nextCursors.remove(_tab);
       _list = _load();
     });
@@ -517,6 +537,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if (_loadingMore || cursor == null || !_sameAccount) return;
     final filter = _orderFilter;
     final revision = _marketRevision;
+    final historyRevision = _historyRevision;
     setState(() => _loadingMore = true);
     try {
       final base = _listEndpoint(tab,filter);
@@ -527,6 +548,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       );
       final next = (json['items'] as List<dynamic>? ?? []).map(_json).toList();
       if (!mounted || !_sameAccount || _tab != tab ||
+        ([1,2].contains(tab)&&historyRevision!=_historyRevision) ||
         ((tab == 0 || tab == 4) && revision != _marketRevision) ||
         (tab == 2 && filter != _orderFilter)) return;
       final existing = _cached[tab] ?? <Map<String, dynamic>>[];
@@ -978,7 +1000,17 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     await openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>_orderView(id),
     );
   }
+  Future<void> _orderSupport(BuildContext route,String id)async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    if(!authorized()||!route.mounted)return;
+    await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pOrderSupportPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
+      load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support'));},
+      submit:(category,details)async{if(!authorized())throw StateError('Account changed');return _json(await _request('POST','/orders/$id/dispute',{'category':category,'reason':details}));},
+    )));
+  }
   Widget _orderView(String id)=>_P2pOrderDetail(
+        openSupport:(route)=>_orderSupport(route,id),
         load: () async => _json(await _request('GET','/orders/$id')),
         act: (action, [reason]) async {
           await _request('POST','/orders/$id/$action',
@@ -1490,14 +1522,15 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Widget _empty() {
-    final title = (_tab == 0 || _tab == 4) && _hasMarketFilters ? 'No offers match your filters' : ['No offers available',
+    final historyFiltered=[1,2].contains(_tab)&&((_historyFilters[_tab]??const P2pHistoryFilters()).active||(_tab==2&&_orderFilter!='all'));
+    final title = historyFiltered?(_tab==1?'No ads match your filters':'No orders match your filters'): (_tab == 0 || _tab == 4) && _hasMarketFilters ? 'No offers match your filters' : ['No offers available',
             'No ads yet',
       'No P2P orders yet', 'No updates yet',
             (_canTakeBuy
                 ? 'No buyer ads available'
                 : 'Sell ads are not enabled for this account'),
           ][_tab];
-    final description = (_tab == 0 || _tab == 4) && _hasMarketFilters ? 'Change or clear the filters to see other eligible offers.' : ['Sellers with funded capacity appear here.',
+    final description = historyFiltered?'Change or reset history filters to see other records.':(_tab == 0 || _tab == 4) && _hasMarketFilters ? 'Change or clear the filters to see other eligible offers.' : ['Sellers with funded capacity appear here.',
       'Create an offer to sell MSNW using your verified bank.',
       'Your purchases and sales appear here.', 'Order activity appears here.',
             (_canTakeBuy
@@ -1513,6 +1546,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         Text(title, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
         Text(description, textAlign: TextAlign.center),
+        if(historyFiltered) TextButton(onPressed:_filterHistory,child:const Text('Change history filters')),
         if (_tab == 4) ...[
           const SizedBox(height: 12),
           FilledButton.icon(onPressed: _busy ? null : _sell,
@@ -1560,6 +1594,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       return _orderView(initial);
     }
     if (!_sameAccount) {
+      _historyFilters.clear();_historyRevision++;
       _cached.clear();
       _buyDrafts.clear();
       _sellDraft.clear();
@@ -1689,6 +1724,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           },
                     ),
         ),
+        if ([1,2].contains(_tab)) Padding(padding:const EdgeInsets.fromLTRB(12,0,12,6),child:OutlinedButton.icon(onPressed:_filterHistory,icon:const Icon(Icons.filter_list),label:Text((_historyFilters[_tab]??const P2pHistoryFilters()).active?'Edit history filters':'Filter history'))),
         if (_tab == 2) Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
           child: Align(alignment: Alignment.centerLeft,
@@ -1701,6 +1737,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
                     if (_orderFilter == filter) return;
                     setState(() {
                       _orderFilter = filter;
+                      final selected=_historyFilters[2];
+                      if(selected!=null)_historyFilters[2]=P2pHistoryFilters(direction:selected.direction,fromDate:selected.fromDate,toDate:selected.toDate);
+                      _historyRevision++;
                       _filterMemory[widget.expectedUserId] = filter;
                       _cached.remove(2);
                       _nextCursors.remove(2);
@@ -2522,12 +2561,13 @@ class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
     required this.uploadEvidence,required this.openEvidence,
-    required this.loadReceipt,required this.userId,required this.openMessages,
+    required this.loadReceipt,required this.userId,required this.openMessages,required this.openSupport,
   });
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
   final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
   final Future<void> Function(BuildContext) openMessages;
+  final Future<void> Function(BuildContext) openSupport;
   final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(Map<String,dynamic>) uploadEvidence;
@@ -2697,6 +2737,12 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
+  }
+
+  Future<void> _support()async{
+    if(_working)return;setState(()=>_working=true);
+    try{await widget.openSupport(context);if(mounted)_refresh();}
+    finally{if(mounted)setState(()=>_working=false);}
   }
 
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
@@ -2977,7 +3023,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               ),
         ],
         if(state=='awaiting_payment'||state=='payment_claimed') ...[
-          OutlinedButton(onPressed:_working?null:()=>_perform('dispute',reasonRequired:true),
+          OutlinedButton(onPressed:_working?null:()=>_support(),
             child:const Text('Open dispute'),
               ),
         ],
@@ -3105,6 +3151,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
             },
               ),
         ],
+        OutlinedButton.icon(onPressed:_working?null:_support,icon:const Icon(Icons.support_agent),label:const Text('Support context and events')),
         if(state=='disputed')const ListTile(
           title:Text('Escrow frozen'),
           subtitle:Text('An authorized operator must resolve this dispute.',

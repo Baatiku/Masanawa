@@ -37,6 +37,15 @@ function respond(error: unknown, reply: { code(n: number): any }) {
   }
   return reply.code(503).send({ error: "p2p.unavailable" });
 }
+function historyQuery(raw:unknown){
+ const q=raw as Record<string,unknown>,input:Record<string,string|number>={};
+ const fields=['cursor','filter','status','direction','fromDate','toDate','asset','fiat','method','limit'];
+ for(const [key,value] of Object.entries(q)){
+  if(!fields.includes(key)||typeof value!=='string')throw new P2pError('p2p.invalid_filter',422);
+  if(key==='limit'){if(!/^[0-9]{1,2}$/.test(value))throw new P2pError('p2p.invalid_limit',422);input.limit=Number(value);}else input[key]=value;
+ }
+ return input;
+}
 export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependencies): void {
   const actor = async (header?: string): Promise<P2pActor> => {
     if (!header) throw new P2pError("p2p.authentication_required",401);
@@ -113,12 +122,9 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
         typeof q.cursor==='string'?{cursor:q.cursor}:{});
     }catch(error){return respond(error,reply);}
   });
-  app.get("/v1/wallet/msnw/p2p/my-offers/page",async(req,reply)=>{
-    try {
-      const query=req.query as {cursor?:unknown};
-      return await deps.service.myOffersPage(await actor(req.headers.authorization),{
-        ...(typeof query.cursor==="string"?{cursor:query.cursor}:{})});
-    }catch(error){return respond(error,reply);}
+  app.get('/v1/wallet/msnw/p2p/my-offers/page',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.myOffersPage(await actor(req.headers.authorization),historyQuery(req.query));}catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/notifications/page",async(req,reply)=>{
     try {
@@ -345,18 +351,9 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       (req.params as {requestKey:string}).requestKey);}
     catch(error){return respond(error,reply);}
   });
-  app.get("/v1/wallet/msnw/p2p/orders/page",async(req,reply)=>{
-    try {
-      const a=await actor(req.headers.authorization);
-      const q=req.query as {filter?:unknown;cursor?:unknown;limit?:unknown};
-      const requestedLimit=typeof q.limit==="string"&&/^[0-9]{1,2}$/.test(q.limit)
-        ?Number(q.limit):undefined;
-      return await deps.service.ordersPage(a,{
-        ...(typeof q.filter==="string"?{filter:q.filter}:{}),
-        ...(typeof q.cursor==="string"?{cursor:q.cursor}:{}),
-        ...(requestedLimit!==undefined?{limit:requestedLimit}:{}),
-      });
-    }catch(error){return respond(error,reply);}
+  app.get('/v1/wallet/msnw/p2p/orders/page',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.ordersPage(await actor(req.headers.authorization),historyQuery(req.query));}catch(error){return respond(error,reply);}
   });
   app.get("/v1/wallet/msnw/p2p/orders",async(req,reply)=>{
     try { return {items:await deps.service.orders(await actor(req.headers.authorization))};}
@@ -432,12 +429,16 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.action(a,(req.params as {orderId:string}).orderId,"claim");
     }catch(error){return respond(error,reply);}
   });
-  app.post("/v1/wallet/msnw/p2p/orders/:orderId/dispute",async(req,reply)=>{
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/support',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.orderSupport(await actor(req.headers.authorization),(req.params as {orderId:string}).orderId);}catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/orders/:orderId/dispute',{bodyLimit:12288},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
     try{
-      const a=await actor(req.headers.authorization);
-      const body=req.body as {reason?:unknown}|null;
-      return await deps.service.action(a,(req.params as {orderId:string}).orderId,"dispute",
-        {explanation:typeof body?.reason==="string"?body.reason:""});
+      const a=await actor(req.headers.authorization),body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['reason','category'].includes(k))||typeof body.reason!=='string'||(body.category!==undefined&&typeof body.category!=='string'))throw new P2pError('p2p.invalid_dispute',422);
+      return await deps.service.action(a,(req.params as {orderId:string}).orderId,'dispute',{explanation:body.reason,...(typeof body.category==='string'?{disputeCategory:body.category}:{})});
     }catch(error){return respond(error,reply);}
   });
   app.post("/v1/wallet/msnw/p2p/orders/:orderId/cancel",async(req,reply)=>{

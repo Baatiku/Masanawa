@@ -108,6 +108,7 @@ void main(){
     FlutterSecureStorage.setMockInitialValues({});final a=_P2pAdapter();
     await t.pumpWidget(_app(a,textScale:2,rtl:true));await t.pumpAndSettle();
     await t.tap(find.byTooltip('P2P options'));await t.pumpAndSettle();await t.tap(find.text('My ads').last);await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.textContaining('₦1500.00 / MSNW').first.hitTestable(),200,scrollable:find.byType(Scrollable).last);await t.pumpAndSettle();
     await t.tap(find.textContaining('₦1500.00 / MSNW').first);await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('Edit ad').hitTestable(),200,scrollable:find.byType(Scrollable).last);await t.tap(find.text('Edit ad'));await t.pumpAndSettle();
     await review(t);

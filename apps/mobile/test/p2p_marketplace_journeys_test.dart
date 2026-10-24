@@ -24,12 +24,21 @@ class _Session extends SessionController {
 
 class _P2pAdapter implements HttpClientAdapter {
   final calls = <RequestOptions>[];
+  bool showOrder=false,supportReported=false;
+  String supportCategory='other',supportDetails='';
+  Map<String,dynamic> get order=>{'order_id':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','seller_id':'seller','buyer_id':'buyer','amount_micro':'1000000','fee_micro':'5000','fiat_kobo':'150000','rate_kobo_per_msnw':'150000','state':supportReported?'disputed':'awaiting_payment','version':1,'server_now':'2026-10-24T01:00:00Z','payment_deadline':'2027-01-01T01:00:00Z','payment':{'bank_name':'Verified Bank','account_name':'Synthetic Seller','account_number':'0123456789'},'latePayment':null};
+  Map<String,dynamic> get supportReport=>{'submission_id':'original-support-report','category':supportCategory,'details':supportDetails,'is_own':true,'created_at':'2026-10-24T01:00:00Z'};
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? stream,
       Future<void>? cancelFuture) async {
     calls.add(options);
     final path = options.path;
-    final body = path.contains('/my-offers/page')
+    if(options.method=='POST'&&path.endsWith('/dispute')){supportReported=true;supportCategory='${(options.data as Map)['category']}';supportDetails='${(options.data as Map)['reason']}';}
+    final body = showOrder&&path.contains('/orders/page')?{'items':[order]}
+      :showOrder&&path.endsWith('/orders/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')?order
+      :showOrder&&path.endsWith('/support')?{'orderId':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','state':supportReported?'disputed':'awaiting_payment','canOpenDispute':!supportReported,'submission':supportReported?supportReport:null,'events':[]}
+      :showOrder&&path.endsWith('/dispute')?{'state':'disputed','submission':supportReport}
+      : path.contains('/my-offers/page')
       ? <String, dynamic>{'items': [{
           'offer_id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           'rate_kobo_per_msnw': '150000',
@@ -273,6 +282,36 @@ void main() {
     expect(adapter.calls.any((r)=>r.path.contains('/quote?')),isTrue);
     expect(adapter.calls.where((r)=>r.method=='POST'),isEmpty);
     await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('order filters apply to server reads and activity chips clear contradictory exact status',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter();await t.pumpWidget(_app(adapter));await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(ChoiceChip,'Orders'));await t.pumpAndSettle();await t.tap(find.text('Filter history'));await t.pumpAndSettle();
+    await t.tap(find.text('All statuses'));await t.pumpAndSettle();await t.tap(find.text('Completed').last);await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField,'From date'),'2026-10-01');t.testTextInput.hide();
+    await t.scrollUntilVisible(find.text('Apply filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Apply filters'));await t.pumpAndSettle();
+    var call=adapter.calls.lastWhere((x)=>x.path.contains('/orders/page'));
+    expect(call.uri.queryParameters,containsPair('status','completed'));expect(call.uri.queryParameters,containsPair('filter','all'));expect(call.uri.queryParameters,containsPair('fromDate','2026-10-01'));
+    expect(find.text('No orders match your filters'),findsOneWidget);
+    await t.tap(find.widgetWithText(ChoiceChip,'Active'));await t.pumpAndSettle();call=adapter.calls.lastWhere((x)=>x.path.contains('/orders/page'));
+    expect(call.uri.queryParameters,containsPair('filter','active'));expect(call.uri.queryParameters.containsKey('status'),isFalse);expect(call.uri.queryParameters,containsPair('fromDate','2026-10-01'));expect(adapter.calls.where((x)=>x.method=='POST'),isEmpty);
+    await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('own-ad status filter resets without modifying availability',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter();await t.pumpWidget(_app(adapter));await t.pumpAndSettle();await t.tap(find.byTooltip('P2P options'));await t.pumpAndSettle();await t.tap(find.text('My ads'));await t.pumpAndSettle();
+    await t.tap(find.text('Filter history'));await t.pumpAndSettle();await t.tap(find.text('All statuses'));await t.pumpAndSettle();await t.tap(find.text('Paused').last);await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('Apply filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Apply filters'));await t.pumpAndSettle();
+    expect(adapter.calls.lastWhere((x)=>x.path.contains('/my-offers/page')).uri.queryParameters,containsPair('status','paused'));
+    await t.tap(find.text('Edit history filters'));await t.pumpAndSettle();await t.scrollUntilVisible(find.text('Reset filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Reset filters'));await t.pumpAndSettle();
+    expect(adapter.calls.lastWhere((x)=>x.path.contains('/my-offers/page')).uri.queryParameters.containsKey('status'),isFalse);expect(adapter.calls.where((x)=>x.method=='POST'),isEmpty);await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('original order opens typed support context and only posts the explicitly confirmed dispute',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter()..showOrder=true;await t.pumpWidget(_app(adapter));await t.pumpAndSettle();await t.tap(find.widgetWithText(ChoiceChip,'Orders'));await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('Buy MSNW').hitTestable(),150,scrollable:find.byType(Scrollable).last);await t.pumpAndSettle();await t.tap(find.text('Buy MSNW'));await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('Open dispute').hitTestable(),150,scrollable:find.byType(Scrollable).last);await t.pumpAndSettle();await t.tap(find.text('Open dispute'));await t.pumpAndSettle();expect(find.text('Order support'),findsOneWidget);expect(adapter.calls.where((x)=>x.method=='POST'),isEmpty);
+    await t.enterText(find.widgetWithText(TextFormField,'What happened?'),'Synthetic exact amount was not received.');t.testTextInput.hide();await t.scrollUntilVisible(find.text('Confirm dispute report').hitTestable(),150,scrollable:find.byType(Scrollable).last);await t.pumpAndSettle();await t.tap(find.text('Confirm dispute report'));await t.pumpAndSettle();
+    final writes=adapter.calls.where((x)=>x.method=='POST').toList();expect(writes,hasLength(1));expect(writes.single.path.endsWith('/dispute'),isTrue);expect(writes.single.data,{'category':'other','reason':'Synthetic exact amount was not received.'});expect(find.text('original-support-report'),findsOneWidget);await t.pumpWidget(const SizedBox());
   });
 
 }

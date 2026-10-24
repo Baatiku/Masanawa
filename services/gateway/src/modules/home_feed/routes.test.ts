@@ -225,3 +225,23 @@ describe("C22 Status comment pagination cursor contract",()=>{
   await app.close();
  });
 });
+
+
+describe("ST4 status text search transport",()=>{
+ it("accepts bounded literal text with server actor, rejects malformed query structures",async()=>{
+  const app=Fastify(),list=vi.fn(async()=>({items:[],nextCursor:null}));
+  await registerHomeFeedRoutes(app,{service:{list} as never,
+   principal:async()=>({kind:"fan",id:"trusted",tenantId:"tenant"}),
+   tenant:()=>"tenant",isNewAccount:async()=>false,enabled:()=>true});
+  const ok=await app.inject({method:"GET",url:"/v1/feed?mode=following&search=river%25"});
+  expect(ok.statusCode).toBe(200);
+  expect(list).toHaveBeenCalledWith("tenant","trusted","following",undefined,undefined,"river%");
+  for(const query of ["search=a","search=%20a","search=%20%20", "search="+
+    "x".repeat(81),"search%5Bbad%5D=river","search%5B%5D=river",
+    "search=river&search=river","cursor%5Bbad%5D=value","cursor=", "cursor=a&cursor=b"]){
+   expect((await app.inject({method:"GET",url:"/v1/feed?"+query})).statusCode).toBe(422);
+  }
+  expect(list).toHaveBeenCalledTimes(1);
+  await app.close();
+ });
+});
