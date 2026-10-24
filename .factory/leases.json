@@ -34,9 +34,9 @@
       "base_sha": "d83290f24a46c1beeab4f71c9bf247a7f7e263d5",
       "pr": "https://github.com/Baatiku/Masanawa/pull/352",
       "claimed_at": "2026-10-24T04:22:56.130Z",
-      "heartbeat_at": "2026-10-24T04:43:03.084Z",
-      "expires_at": "2026-10-24T04:48:03.084Z",
-      "progress": "PR352P2P+StatusPASS; Mobileonlyfailureold320RTLeditrowoffscreen afternewhistoryheader. Fixscroll-before-tap andrerun4edit tests; nextsupportsourceuncommittedseparate.",
+      "heartbeat_at": "2026-10-24T04:53:36.668Z",
+      "expires_at": "2026-10-24T04:58:36.668Z",
+      "progress": "PR352final4e382abf P2P+Mobile+StatusPASS; Foundationpending. Nextsupport4SQL+typing+6customer+5admin+5existingadminPASS; adminhandlersrestoredexact,analyzersinfosonly. Added18thPGtest androottypeddisputejourney; fulllegacyP2Pregressionnext.",
       "next_branch": "feat/p2p-dispute-context-oct24",
       "next_scope": "P5-12/P5-13 typed original dispute submissions and participant-safe recent support timeline using existing dispute state transition; no new settlement authority"
     }
