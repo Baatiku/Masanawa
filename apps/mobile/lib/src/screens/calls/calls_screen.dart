@@ -49,56 +49,12 @@ class CallsScreen extends ConsumerWidget {
                 ? () => _chooseCallTarget(context, ref, session.user.id)
                 : null,
           ),
-          PopupMenuButton<String>(
+          IconButton(
             tooltip: 'More call options',
-            enabled: session is SessionSignedIn,
             icon: const Icon(Icons.more_vert),
-            onSelected: (action) {
-              if (session is! SessionSignedIn) return;
-              switch (action) {
-                case 'search':
-                  context.push('/search');
-                  break;
-                case 'recordings':
-                  Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          CallRecordingsScreen(ownerId: session.user.id),
-                    ),
-                  );
-                  break;
-                case 'group':
-                  unawaited(_openGroup(context, ref, session));
-                  break;
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'search',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.search),
-                  title: Text('Find Masana and people'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'recordings',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.graphic_eq),
-                  title: Text('Call recordings'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'group',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.groups_outlined),
-                  title: Text('Call multiple Masana'),
-                ),
-              ),
-            ],
+            onPressed: session is SessionSignedIn
+                ? () => _showCallOptions(context, ref, session)
+                : null,
           ),
         ],
       ),
@@ -115,6 +71,65 @@ class CallsScreen extends ConsumerWidget {
               semanticLabel: 'Restoring call history session',
             )
           : const Center(child: Text('Sign in to see your calls.')),
+    );
+  }
+
+  static void _showCallOptions(
+    BuildContext context,
+    WidgetRef ref,
+    SessionSignedIn session,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.search),
+              title: const Text('Find Masana and people'),
+              onTap: () {
+                Navigator.pop(sheet);
+                final current = ref.read(sessionProvider);
+                if (current is SessionSignedIn &&
+                    current.user.id == session.user.id) {
+                  context.push('/search');
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.graphic_eq),
+              title: const Text('Call recordings'),
+              onTap: () {
+                Navigator.pop(sheet);
+                final current = ref.read(sessionProvider);
+                if (current is SessionSignedIn &&
+                    current.user.id == session.user.id) {
+                  Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CallRecordingsScreen(ownerId: current.user.id),
+                    ),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.groups_outlined),
+              title: const Text('Call multiple Masana'),
+              onTap: () {
+                Navigator.pop(sheet);
+                final current = ref.read(sessionProvider);
+                if (current is SessionSignedIn &&
+                    current.user.id == session.user.id) {
+                  unawaited(_openGroup(context, ref, current));
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -504,15 +519,17 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 3),
-            child: Row(
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 2,
               children: [
-                Expanded(
-                  child: Text(
-                    'Recent calls',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: u.textPrimary,
-                    ),
+                Text(
+                  'Recent calls',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: u.textPrimary,
                   ),
                 ),
                 Text(

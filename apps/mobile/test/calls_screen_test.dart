@@ -257,8 +257,14 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(find.text('Amina'), findsOneWidget);
-    expect(find.byTooltip('New call'), findsOneWidget);
-    expect(find.byTooltip('More call options'), findsOneWidget);
+    // The shared wordmark header collapses actions on narrow, high-scale screens.
+    // Both callbacks must remain reachable from its overflow.
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('New call'), findsOneWidget);
+    await tester.tap(find.text('More call options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find Masana and people'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
