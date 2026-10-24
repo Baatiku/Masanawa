@@ -136,6 +136,7 @@ jobs:
           test/human_chat_controller_test.dart
           test/human_chat_transport_test.dart
           test/human_chat_privacy_test.dart
+          test/human_chat_inbox_paging_test.dart
           test/human_contacts_test.dart
       - name: Strict analysis of affected Flutter customer journeys
         run: >-
@@ -151,6 +152,8 @@ jobs:
           lib/src/ui/components/voice_note_composer.dart
           lib/src/screens/chat/ai_chat_screen.dart
           lib/src/state/ai_chat_state.dart
+          lib/src/human_chat/screens.dart
+          test/human_chat_inbox_paging_test.dart
           lib/src/agents/masanawa_transport.dart
           test/voice_note_composer_test.dart
           test/voice_note_recorder_test.dart

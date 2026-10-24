@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -85,6 +86,10 @@ class HumanInboxSection extends ConsumerStatefulWidget {
 class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
   Timer? timer;
   List<HumanConversation> older = [];
+  List<HumanConversation>? refreshedFirst;
+  int pageEpoch = 0, olderPages = 0;
+  bool validating = false, refreshFailed = false;
+  final pageCursors = <String>{};
   String? pageCursor, pageError, boundOwner;
   HumanCommunicationTransport? boundTransport;
   bool pageCursorKnown = false, pageLoading = false;
@@ -92,6 +97,12 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
   String get key => jsonEncode([widget.filter, widget.query]);
 
   void _clearOlder() {
+    pageEpoch++;
+    pageCursors.clear();
+    refreshedFirst = null;
+    olderPages = 0;
+    validating = false;
+    refreshFailed = false;
     older = [];
     pageCursor = null;
     pageCursorKnown = false;
@@ -109,10 +120,7 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
   void initState() {
     super.initState();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
-      // Preserve a user's place when they deliberately navigate older pages.
-      if (mounted && older.isEmpty && !pageLoading) {
-        ref.invalidate(humanInboxProvider(key));
-      }
+      if (mounted) unawaited(_catchUp());
     });
   }
 
@@ -131,6 +139,9 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
   }
 
   Future<void> _options(HumanConversation c) async {
+    final t = ref.read(humanCommunicationTransportProvider);
+    final owner = ref.read(humanAccountProvider);
+    final selected = key;
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
@@ -150,10 +161,9 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
         ),
       ),
     );
-    if (action == null || !mounted) return;
-    final t = ref.read(humanCommunicationTransportProvider);
-    final owner = ref.read(humanAccountProvider);
-    final selected = key;
+    if (action == null || !mounted || !t.active ||
+        !identical(t, ref.read(humanCommunicationTransportProvider)) ||
+        owner != ref.read(humanAccountProvider) || selected != key) return;
     try {
       await t.request(
         'PATCH',
@@ -170,6 +180,7 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
     } catch (e) {
       if (mounted &&
           t.active &&
+          identical(t, ref.read(humanCommunicationTransportProvider)) &&
           owner == ref.read(humanAccountProvider) &&
           selected == key) {
         _notice(context, e);
@@ -177,23 +188,80 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
     }
   }
 
+  String get serverFilter => switch (widget.filter) {
+    'archived' => 'archived', 'requests' => 'requests', _ => 'active',
+  };
+  Future<void> _catchUp() async {
+    if (!mounted || pageLoading || validating) return;
+    final cached = ref.read(humanInboxProvider(key));
+    if (cached.asData == null) {
+      if (!cached.isLoading) ref.invalidate(humanInboxProvider(key));
+      return;
+    }
+    final t = ref.read(humanCommunicationTransportProvider), owner = ref.read(humanAccountProvider);
+    final selected = key, epoch = pageEpoch, count = olderPages + 1;
+    bool current() => mounted && t.active && epoch == pageEpoch && selected == key &&
+      identical(t, ref.read(humanCommunicationTransportProvider)) && owner == ref.read(humanAccountProvider);
+    setState(() => validating = true);
+    try {
+      List<HumanConversation>? first;
+      final rest = <HumanConversation>[], seen = <String>{}, cursors = <String>{};
+      String? after;
+      var fetched = 0;
+      do {
+        final result = await t.request('GET', '/conversations', query: {
+          'filter': serverFilter, 'query': widget.query, if (after != null) 'after': after,
+        });
+        if (!current()) return;
+        final incoming = (result['items'] as List).map((v) => HumanConversation(Map<String,dynamic>.from(v as Map))).where((c) => seen.add(c.id)).toList();
+        final next = result['nextCursor'] as String?;
+        if (next != null && !cursors.add(next)) throw const FormatException('Invalid inbox cursor');
+        if (first == null) { first = incoming; } else { rest.addAll(incoming); }
+        fetched++; after = next;
+      } while (after != null && fetched < count);
+      setState(() {
+        refreshedFirst = first ?? [];
+        older = rest;
+        olderPages = fetched - 1;
+        pageCursor = after; pageCursorKnown = true;
+        pageError = null; refreshFailed = false;
+        pageCursors..clear()..addAll(cursors);
+      });
+    } catch (e) {
+      if (!current()) return;
+      if (e is DioException && const [401,403,404].contains(e.response?.statusCode)) {
+        // An anchor may have been hidden/blocked/archived mid-refresh. Never
+        // retain that private prefix as a successful read; reauthorize page one.
+        setState(_clearOlder);
+        ref.invalidate(humanInboxProvider(key));
+      } else {
+        setState(() { refreshFailed = true; pageError = 'Could not refresh conversations. Check your connection and retry.'; });
+      }
+    } finally {
+      if (current()) setState(() => validating = false);
+    }
+  }
+
   Future<void> _loadOlder(List<HumanConversation> firstPage) async {
-    if (pageLoading || firstPage.isEmpty) return;
+    if (pageLoading || validating || firstPage.isEmpty) return;
     final anchor = pageCursorKnown
         ? pageCursor
         : firstPage.length == 50
         ? firstPage.last.id
         : null;
     if (anchor == null) return;
+    pageCursors.add(anchor);
     final t = ref.read(humanCommunicationTransportProvider);
     final owner = ref.read(humanAccountProvider);
-    final selected = key;
+    final selected = key, epoch = pageEpoch;
     setState(() {
       pageLoading = true;
+      refreshFailed = false;
       pageError = null;
     });
     bool stillCurrent() =>
         mounted &&
+        epoch == pageEpoch &&
         t.active &&
         identical(t, ref.read(humanCommunicationTransportProvider)) &&
         owner == ref.read(humanAccountProvider) &&
@@ -217,13 +285,14 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
           .map((e) => HumanConversation(Map<String, dynamic>.from(e as Map)))
           .toList();
       final next = response['nextCursor'] as String?;
-      if (next == anchor) throw const FormatException('Invalid inbox cursor');
+      if (next != null && !pageCursors.add(next)) throw const FormatException('Invalid inbox cursor');
       final seen = <String>{
         ...firstPage.map((c) => c.id),
         ...older.map((c) => c.id),
       };
       setState(() {
         older = [...older, ...incoming.where((c) => seen.add(c.id))];
+        olderPages++;
         pageCursor = next;
         pageCursorKnown = true;
         pageError = null;
@@ -246,6 +315,8 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
     }
     final result = ref.watch(humanInboxProvider(key));
     return result.when(
+      skipLoadingOnRefresh: false,
+      skipLoadingOnReload: false,
       loading: () => const Padding(
         padding: EdgeInsets.all(16),
         child: Center(child: CircularProgressIndicator()),
@@ -258,7 +329,8 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
           onPressed: _refresh,
         ),
       ),
-      data: (firstPage) {
+      data: (initialPage) {
+        final firstPage = refreshedFirst ?? initialPage;
         final seen = <String>{};
         final items = [
           ...firstPage,
@@ -332,11 +404,11 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
               ),
             if (pageError != null)
               ListTile(
-                title: const Text('Older conversations unavailable'),
+                title: Text(refreshFailed ? 'Conversations need refresh' : 'Older conversations unavailable'),
                 subtitle: Text(pageError!),
                 trailing: TextButton(
-                  onPressed: pageLoading ? null : () => _loadOlder(firstPage),
-                  child: const Text('Retry older chats'),
+                  onPressed: pageLoading || validating ? null : () => refreshFailed ? _catchUp() : _loadOlder(firstPage),
+                  child: Text(refreshFailed ? 'Retry refresh' : 'Retry older chats'),
                 ),
               ),
             if (pageLoading)
@@ -346,7 +418,7 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
               ),
             if (canLoadMore && !pageLoading)
               TextButton(
-                onPressed: () => _loadOlder(firstPage),
+                onPressed: validating ? null : () => _loadOlder(firstPage),
                 child: const Text('Load older chats'),
               ),
           ],
