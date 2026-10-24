@@ -43,38 +43,62 @@ class CallsScreen extends ConsumerWidget {
         context,
         actions: [
           IconButton(
-            tooltip: 'Search Masana and Rooms',
-            icon: const Icon(Icons.search),
-            onPressed: session is SessionSignedIn
-                ? () => context.push('/search')
-                : null,
-          ),
-          IconButton(
-            tooltip: 'Call recordings',
-            icon: const Icon(Icons.graphic_eq),
-            onPressed: session is SessionSignedIn
-                ? () => Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          CallRecordingsScreen(ownerId: session.user.id),
-                    ),
-                  )
-                : null,
-          ),
-          IconButton(
-            tooltip: 'Call multiple Masana',
-            icon: const Icon(Icons.groups_outlined),
-            onPressed: session is SessionSignedIn
-                ? () => _openGroup(context, ref, session)
-                : null,
-          ),
-          IconButton(
             tooltip: 'New call',
             icon: const Icon(Icons.add_call),
             onPressed: session is SessionSignedIn
                 ? () => _chooseCallTarget(context, ref, session.user.id)
                 : null,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'More call options',
+            enabled: session is SessionSignedIn,
+            icon: const Icon(Icons.more_vert),
+            onSelected: (action) {
+              if (session is! SessionSignedIn) return;
+              switch (action) {
+                case 'search':
+                  context.push('/search');
+                  break;
+                case 'recordings':
+                  Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CallRecordingsScreen(ownerId: session.user.id),
+                    ),
+                  );
+                  break;
+                case 'group':
+                  unawaited(_openGroup(context, ref, session));
+                  break;
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'search',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.search),
+                  title: Text('Find Masana and people'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'recordings',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.graphic_eq),
+                  title: Text('Call recordings'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'group',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.groups_outlined),
+                  title: Text('Call multiple Masana'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -478,6 +502,28 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
         key: PageStorageKey<String>('calls-history-${widget.accountId}'),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Recent calls',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: u.textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  'People & Masana',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: u.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
           ConversationSearchField(
             controller: _search,
             hintText: 'Search calls',
@@ -551,62 +597,7 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
                 child: const Text('Retry'),
               ),
             ),
-          for (final item in _timeline)
-            if (item is HumanCallRecord)
-              _humanRow(item)
-            else
-              for (final call in [item as CallHistoryItem])
-                ListTile(
-                  leading: MasanaPortraitAvatar(
-                    characterId: call.characterId,
-                    agent: ref
-                        .watch(agentDirectoryProvider)
-                        .find(call.characterId),
-                    displayName: call.displayName,
-                    size: 44,
-                  ),
-                  title: Text(
-                    call.displayName,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Row(
-                    children: [
-                      Icon(
-                        call.missed
-                            ? Icons.call_missed
-                            : call.incoming
-                            ? Icons.call_received
-                            : Icons.call_made,
-                        size: 16,
-                        color: call.missed ? u.emergency : u.brand,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '${call.isGroupCall ? 'Group · ' : ''}${call.outcomeLabel}${call.duration == null ? '' : ' · ${callDurationLabel(call.duration!)}'} · ${_date(context, call.createdAt)}',
-                          style: TextStyle(color: u.textMuted, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(Icons.call, color: u.brand),
-                    tooltip: 'Call ${call.displayName}',
-                    onPressed: () => context.push(
-                      masanaLiveVoiceRoute(call.characterId),
-                    ),
-                  ),
-                  onTap: () => Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CallDetailsScreen(
-                        ownerId: widget.accountId,
-                        initial: call,
-                      ),
-                    ),
-                  ),
-                ),
+          ..._historyRows(context),
           if (_failed && !_invalidQuery)
             Padding(
               padding: const EdgeInsets.all(24),
@@ -634,52 +625,183 @@ class _CallHistoryListState extends ConsumerState<_CallHistoryList> {
     );
   }
 
+  List<Widget> _historyRows(BuildContext context) {
+    final result = <Widget>[];
+    String? priorDay;
+    for (final item in _timeline) {
+      final created = item is HumanCallRecord
+          ? item.createdAt
+          : (item as CallHistoryItem).createdAt;
+      final local = created.toLocal();
+      final day = '${local.year}-${local.month}-${local.day}';
+      if (day != priorDay) {
+        priorDay = day;
+        result.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 6),
+            child: Text(
+              _dayHeading(context, local),
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: context.masanawa.textMuted,
+              ),
+            ),
+          ),
+        );
+      }
+      result.add(item is HumanCallRecord
+          ? _humanRow(item)
+          : _masanaRow(item as CallHistoryItem));
+    }
+    return result;
+  }
+
+  String _dayHeading(BuildContext context, DateTime local) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    if (DateUtils.isSameDay(local, today)) return 'Today';
+    if (DateUtils.isSameDay(local, today.subtract(const Duration(days: 1)))) {
+      return 'Yesterday';
+    }
+    return MaterialLocalizations.of(context).formatMediumDate(local);
+  }
+
+  String _time(BuildContext context, DateTime timestamp) =>
+      MaterialLocalizations.of(context).formatTimeOfDay(
+        TimeOfDay.fromDateTime(timestamp.toLocal()),
+      );
+
+  Widget _historyCard({
+    required Widget avatar,
+    required String name,
+    required String detail,
+    required String time,
+    required bool incoming,
+    required bool missed,
+    required VoidCallback onOpen,
+    required VoidCallback onCall,
+    String? callLabel,
+    IconData callIcon = Icons.call_outlined,
+  }) {
+    final u = context.masanawa;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Material(
+        color: u.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(17),
+          side: BorderSide(color: u.structuralBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          minVerticalPadding: 8,
+          contentPadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+          leading: avatar,
+          title: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w700, color: u.textPrimary),
+          ),
+          subtitle: Row(
+            children: [
+              Icon(
+                missed
+                    ? Icons.call_missed
+                    : incoming
+                    ? Icons.call_received
+                    : Icons.call_made,
+                size: 16,
+                color: missed ? u.emergency : u.brand,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  '$detail · $time',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: u.textMuted, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          trailing: IconButton(
+            tooltip: callLabel ?? 'Call $name',
+            onPressed: onCall,
+            style: IconButton.styleFrom(
+              foregroundColor: u.brand,
+              backgroundColor: u.surfaceMuted,
+              minimumSize: const Size(48, 48),
+            ),
+            icon: Icon(callIcon),
+          ),
+          onTap: onOpen,
+        ),
+      ),
+    );
+  }
+
+  void _openMasanaDetails(CallHistoryItem call) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CallDetailsScreen(
+          ownerId: widget.accountId,
+          initial: call,
+        ),
+      ),
+    );
+  }
+
+  Widget _masanaRow(CallHistoryItem call) => _historyCard(
+    avatar: MasanaPortraitAvatar(
+      characterId: call.characterId,
+      agent: ref.watch(agentDirectoryProvider).find(call.characterId),
+      displayName: call.displayName,
+      size: 46,
+    ),
+    name: call.displayName,
+    detail: '${call.isGroupCall ? 'Group · ' : ''}${call.outcomeLabel}'
+        '${call.duration == null ? '' : ' · ${callDurationLabel(call.duration!)}'}',
+    time: _time(context, call.createdAt),
+    incoming: call.incoming,
+    missed: call.missed,
+    callLabel: call.isGroupCall
+        ? 'View ${call.displayName} group call details'
+        : null,
+    callIcon: call.isGroupCall ? Icons.groups_outlined : Icons.call_outlined,
+    onCall: call.isGroupCall
+        ? () => _openMasanaDetails(call)
+        : () => context.push(masanaLiveVoiceRoute(call.characterId)),
+    onOpen: () => _openMasanaDetails(call),
+  );
+
   Widget _humanRow(HumanCallRecord call) {
     final missed = call.incoming && call.state == 'missed';
     final avatar = call.avatarUrl;
-    return ListTile(
-      leading: GestureDetector(
-        onTap: () => context.push('/u/${Uri.encodeComponent(call.handle)}'),
-        child: CircleAvatar(
-          foregroundImage: avatar?.isNotEmpty == true
-              ? NetworkImage(avatar!)
-              : null,
-          onForegroundImageError: avatar?.isNotEmpty == true
-              ? (_, __) {}
-              : null,
-          child: Text(call.name.isEmpty ? '?' : call.name.characters.first),
+    return _historyCard(
+      avatar: Tooltip(
+        message: 'View ${call.name} profile',
+        child: GestureDetector(
+          onTap: () => context.push('/u/${Uri.encodeComponent(call.handle)}'),
+          child: CircleAvatar(
+            radius: 23,
+            foregroundImage: avatar?.isNotEmpty == true
+                ? NetworkImage(avatar!)
+                : null,
+            onForegroundImageError: avatar?.isNotEmpty == true
+                ? (_, __) {}
+                : null,
+            child: Text(call.name.isEmpty ? '?' : call.name.characters.first),
+          ),
         ),
       ),
-      title: Text(call.name),
-      subtitle: Row(
-        children: [
-          Icon(
-            missed
-                ? Icons.call_missed
-                : call.incoming
-                ? Icons.call_received
-                : Icons.call_made,
-            size: 16,
-            color: missed
-                ? Theme.of(context).colorScheme.error
-                : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              '${_humanLabel(call)} · ${_date(context, call.createdAt)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-      trailing: IconButton(
-        tooltip: 'Call ${call.name}',
-        icon: const Icon(Icons.call),
-        onPressed: () => humanCallStart(context, ref, call.handle),
-      ),
-      onTap: () => showModalBottomSheet<void>(
+      name: call.name,
+      detail: _humanLabel(call),
+      time: _time(context, call.createdAt),
+      incoming: call.incoming,
+      missed: missed,
+      onCall: () => humanCallStart(context, ref, call.handle),
+      onOpen: () => showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
         builder: (sheet) => SafeArea(

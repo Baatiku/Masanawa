@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -146,44 +147,89 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircleAvatar(
-                    radius: 56,
-                    foregroundImage: call?.avatarUrl?.isNotEmpty == true
-                        ? NetworkImage(call!.avatarUrl!)
-                        : null,
-                    onForegroundImageError: call?.avatarUrl?.isNotEmpty == true
-                        ? (_, __) {}
-                        : null,
-                    child: const Icon(Icons.person_outline, size: 52),
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: u.structuralBorder, width: 2),
+                    ),
+                    child: CircleAvatar(
+                      radius: 60,
+                      backgroundColor: u.surfaceMuted,
+                      foregroundImage: call?.avatarUrl?.isNotEmpty == true
+                          ? NetworkImage(call!.avatarUrl!)
+                          : null,
+                      onForegroundImageError: call?.avatarUrl?.isNotEmpty == true
+                          ? (_, __) {}
+                          : null,
+                      child: Text(
+                        call?.name.isNotEmpty == true
+                            ? call!.name.characters.first.toUpperCase()
+                            : '?',
+                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          color: u.brand, fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     call?.name ?? 'Voice call',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: u.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 14),
                   Semantics(
                     liveRegion: true,
-                    child: Text(_status(c, call), textAlign: TextAlign.center),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: u.surfaceMuted,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Text(
+                        _status(c, call),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: u.textPrimary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   ),
                   if (c.mediaState == 'connected' && thisCallActive && since != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: Text(
                         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
-                        style: Theme.of(context).textTheme.titleLarge,
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: u.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
                   if (call != null && c.endConfirmationPending) ...[
                     const SizedBox(height: 16),
-                    const Text(
-                      'Audio is off on this phone. Waiting for the call to end on the server.',
-                      textAlign: TextAlign.center,
-                    ),
-                    TextButton(
-                      onPressed: c.retryEndConfirmation,
-                      child: const Text('Retry end confirmation'),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: u.surfaceCard,
+                        border: Border.all(color: u.structuralBorder),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(children: [
+                        const Text(
+                          'Audio is off on this phone. Waiting for the call to end on the server.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 6),
+                        OutlinedButton.icon(
+                          onPressed: c.retryEndConfirmation,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry end confirmation'),
+                        ),
+                      ]),
                     ),
                   ],
                   if (call != null && c.error != null) ...[
@@ -200,11 +246,12 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                         child: const Text('Microphone settings'),
                       ),
                   ],
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 36),
                   Wrap(
                     alignment: WrapAlignment.center,
-                    spacing: 18,
-                    runSpacing: 14,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 20,
+                    runSpacing: 18,
                     children: [
                       if (incoming)
                         FilledButton.icon(
@@ -233,6 +280,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           style: FilledButton.styleFrom(
                             backgroundColor: u.emergency,
                             foregroundColor: Colors.white,
+                            minimumSize: const Size(144, 56),
                           ),
                           onPressed: c.end,
                           icon: const Icon(Icons.call_end),
@@ -258,11 +306,11 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 28),
                   Text(
-                    'Wired and Bluetooth headsets follow your phone’s audio routing.',
+                    'Wired and Bluetooth headsets follow your phone’s audio routing. Check your device audio output to switch.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: u.textMuted),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: u.textMuted),
                   ),
                 ],
               ),
@@ -286,16 +334,26 @@ class _CallControl extends StatelessWidget {
   final VoidCallback onTap;
   final bool selected;
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final u = context.masanawa;
+    return Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      IconButton.filledTonal(
+      IconButton(
         tooltip: label,
         isSelected: selected,
         onPressed: onTap,
+        style: IconButton.styleFrom(
+          backgroundColor: selected ? u.brand : u.surfaceCard,
+          foregroundColor: selected ? Colors.white : u.textPrimary,
+          side: BorderSide(color: selected ? u.brand : u.structuralBorder),
+          minimumSize: const Size(64, 64),
+        ),
         icon: Icon(icon),
       ),
-      Text(label),
+      const SizedBox(height: 5),
+      Text(label, style: TextStyle(color: u.textPrimary, fontWeight: FontWeight.w600)),
     ],
   );
+  }
 }
