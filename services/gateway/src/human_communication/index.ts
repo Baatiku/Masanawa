@@ -266,11 +266,31 @@ export function createHumanCommunicationService(o:HumanOptions){
       if(parts[0]==='privacy'){
         if(parts[1]==='blocked'){
           if(method==='GET'){
-            const r=await db.query('SELECT p.* FROM talks.safety_preferences b JOIN talks.public_profiles p ON p.tenant_id=b.tenant_id AND p.user_id=b.subject_user_id WHERE b.tenant_id=$1 AND b.viewer_user_id=$2 AND b.blocked',[a.tenantId,a.userId]);
+            // Cursor and search must be resolved inside the same viewer-owned
+            // blocked set before LIMIT; this list must never load every contact.
+            if(q.query!==undefined&&(typeof q.query!=='string'||q.query.trim().length>80))fail(400,'Invalid blocked search');
+            const search=typeof q.query==='string'?q.query.trim().toLowerCase():'';
+            const values:unknown[]=[a.tenantId,a.userId];
+            let condition='';
+            if(q.after!==undefined){
+              const handle=str(q.after,200).replace(/^@/,'');
+              const anchor=await db.query('SELECT p.handle,p.display_name FROM talks.safety_preferences b JOIN talks.public_profiles p ON p.tenant_id=b.tenant_id AND p.user_id=b.subject_user_id WHERE b.tenant_id=$1 AND b.viewer_user_id=$2 AND b.blocked AND p.handle=$3',[a.tenantId,a.userId,handle]);
+              const match=anchor.rows[0];
+              if(!match||(search&&!String(match.handle).toLowerCase().includes(search)&&!String(match.display_name).toLowerCase().includes(search)))fail(404,'Blocked cursor unavailable');
+              values.push(handle);
+              condition+=` AND p.handle>$${values.length}`;
+            }
+            if(search){
+              values.push(search);
+              const param=`$${values.length}`;
+              condition+=` AND (strpos(lower(p.handle),${param})>0 OR strpos(lower(p.display_name),${param})>0)`;
+            }
+            const r=await db.query(`SELECT p.* FROM talks.safety_preferences b JOIN talks.public_profiles p ON p.tenant_id=b.tenant_id AND p.user_id=b.subject_user_id WHERE b.tenant_id=$1 AND b.viewer_user_id=$2 AND b.blocked ${condition} ORDER BY p.handle ASC LIMIT 51`,values);
             return {
-              items:r.rows.map(publicPeer)
+              items:r.rows.slice(0,50).map(publicPeer),nextCursor:r.rows.length>50?String(r.rows[49]!.handle):null
             }
           }
+          if(method!=='PUT')fail(404,'Not found');
           if(typeof b.blocked!=='boolean')fail(400,'Invalid blocked value');
           const target=(await db.query('SELECT user_id FROM talks.public_profiles WHERE tenant_id=$1 AND handle=$2',[a.tenantId,str(parts[2])])).rows[0]?.user_id;
           if(!target||target===a.userId)fail(404,'Person unavailable');
