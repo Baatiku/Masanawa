@@ -429,12 +429,16 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.action(a,(req.params as {orderId:string}).orderId,"claim");
     }catch(error){return respond(error,reply);}
   });
-  app.post("/v1/wallet/msnw/p2p/orders/:orderId/dispute",async(req,reply)=>{
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/support',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.orderSupport(await actor(req.headers.authorization),(req.params as {orderId:string}).orderId);}catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/orders/:orderId/dispute',{bodyLimit:12288},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
     try{
-      const a=await actor(req.headers.authorization);
-      const body=req.body as {reason?:unknown}|null;
-      return await deps.service.action(a,(req.params as {orderId:string}).orderId,"dispute",
-        {explanation:typeof body?.reason==="string"?body.reason:""});
+      const a=await actor(req.headers.authorization),body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['reason','category'].includes(k))||typeof body.reason!=='string'||(body.category!==undefined&&typeof body.category!=='string'))throw new P2pError('p2p.invalid_dispute',422);
+      return await deps.service.action(a,(req.params as {orderId:string}).orderId,'dispute',{explanation:body.reason,...(typeof body.category==='string'?{disputeCategory:body.category}:{})});
     }catch(error){return respond(error,reply);}
   });
   app.post("/v1/wallet/msnw/p2p/orders/:orderId/cancel",async(req,reply)=>{

@@ -1,3 +1,4 @@
+import {createDisputeContext,disputeInput,originalDispute,recordDispute} from './dispute_context.js';
 import {createHistoryReading} from './history_reading.js';
 import {createBulkPause} from './bulk_pause.js';
 import {createAdReports} from './ad_reports.js';
@@ -335,6 +336,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     ...createMethodManagement(pool),
     ...createBulkPause(pool),
     ...createHistoryReading(pool),
+    ...createDisputeContext(pool),
     ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {
       const rights=await admission(actor);
@@ -865,11 +867,17 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       });
     },
     async action(actor: P2pActor, orderId: string, action: P2pAction,
-      options: { isOperator?: boolean; explanation?: string; releaseAuthorized?: boolean } = {}) {
+      options: { isOperator?: boolean; explanation?: string; releaseAuthorized?: boolean; disputeCategory?:string } = {}) {
+      const typed=action==='dispute'&&options.disputeCategory!==undefined?disputeInput(options.disputeCategory,options.explanation):null;
       return transact(async tx => {
         const order=await orderForUpdate(tx,actor,orderId);
         const member=owns(order,actor);
         if (!member && !options.isOperator) throw new P2pError("p2p.forbidden",403);
+        if(typed){
+          if(!member)throw new P2pError('p2p.dispute_denied',403);
+          const original=await originalDispute(tx,actor,order.order_id);
+          if(original)return{orderId:order.order_id,state:order.state,submission:original,replay:true};
+        }
         if (["completed","cancelled","expired"].includes(order.state))
           throw new P2pError("p2p.already_terminal",409);
         switch(action) {
@@ -886,7 +894,8 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           case "dispute":
             if (!member || !["awaiting_payment","payment_claimed","release_pending"].includes(order.state))
               throw new P2pError("p2p.dispute_denied",403);
-            await setState(tx,actor,order,"disputed","dispute_opened",reason(options.explanation));
+            await setState(tx,actor,order,"disputed","dispute_opened",typed?.details??reason(options.explanation));
+            if(typed){const submission=await recordDispute(tx,actor,order.order_id,typed);return{orderId:order.order_id,state:'disputed',submission,replay:false};}
             break;
           case "cancel":
             // A seller must not unilaterally cancel an order while the buyer
@@ -1033,7 +1042,8 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         FROM commerce.msnw_p2p_late_payment_case_events
         WHERE case_id=$1 ORDER BY created_at`,[caseEntry.case_id]) : null;
       // Supporting evidence references are NEVER treated as confirmed fiat.
-      return {order,events:events.rows,evidence:evidence.rows,
+      const opening=await pool.query('SELECT submission_id,category,details,opened_by,created_at FROM commerce.msnw_p2p_dispute_submissions WHERE tenant_id=$1 AND order_id=$2',[actor.tenantId,orderId]);
+      return {order,events:events.rows,evidence:evidence.rows,disputeSubmission:opening.rows[0]??null,
         latePayment:caseEntry?{...caseEntry,events:caseEvents?.rows??[]}:null,
         paymentVerified:false};
     },

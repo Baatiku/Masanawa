@@ -511,4 +511,29 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:'2000000',reserved_micro:'0'});
  });
 
+ it('serializes typed dispute opening while retaining escrow and original recovery after canonical refund',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),staff='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker,staff])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic Support Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'Support Test Bank',bankCode:'058',accountName:'Synthetic Support Test',accountNumber:'0123456789',verificationReference:'test-support-proof'});
+  const ad=await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  const order=await api.createOrder(buyer,{offerId:ad.offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+  const before=(await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0];
+  const choices=[{actor:maker,category:'no_payment'},{actor:buyer,category:'asset_not_received'}] as const;
+  const race=await Promise.allSettled(choices.map(x=>api.action(x.actor,order.orderId,'dispute',{disputeCategory:x.category,explanation:'Synthetic private opening evidence'})));
+  expect(race.filter(x=>x.status==='fulfilled')).toHaveLength(1);expect((race.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'p2p.dispute_denied'});
+  const index=race.findIndex(x=>x.status==='fulfilled'),winner=choices[index]!;
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual(before);
+  expect(before).toEqual({available_micro:'1899500',reserved_micro:'100500'});
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_dispute_submissions WHERE tenant_id=$1',[scope])).rows[0].n).toBe(1);
+  const peer=winner.actor.userId===owner?buyer:maker;
+  expect((await api.orderSupport(peer,order.orderId)).submission).toMatchObject({details:null,is_own:false});
+  await api.action({tenantId:scope,userId:staff},order.orderId,'refund',{isOperator:true,explanation:'Independent synthetic unpaid-order refund'});
+  const count=(await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n;
+  expect(await api.action(winner.actor,order.orderId,'dispute',{disputeCategory:winner.category,explanation:'Synthetic private opening evidence'})).toMatchObject({state:'cancelled',replay:true});
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n).toBe(count);
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:'2000000',reserved_micro:'0'});
+ });
+
 });
