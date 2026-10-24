@@ -21,15 +21,18 @@
         "CONTINUE-HERE.md",
         "docs/PRODUCT-ROADMAP-20261019.md",
         "docs/SCREEN-JOURNEYS.md",
-        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/admin_mobile/lib/src/screens/p2p_message_reports_page.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_message_reports_test.dart"
       ],
       "branch": "feat/p2p-discussion-attachments-oct24",
       "base_sha": "f3db876d52b148cecb26fe5a66d366dae49e8064",
       "pr": "",
       "claimed_at": "2026-10-24T09:40:28.791Z",
-      "heartbeat_at": "2026-10-24T09:40:28.791Z",
-      "expires_at": "2026-10-24T09:45:28.791Z",
-      "progress": "Messageattachment backend149/helper/service/routesimplemented uncommitted;GatewaytypesPASS. LegacycustomSQLfixture lackedcanonical evidencetable; fixedandrerunning15legacytests. Nativepicker/messageintegrationnext; originaluploadsreused,noassetmutation."
+      "heartbeat_at": "2026-10-24T09:48:45.159Z",
+      "expires_at": "2026-10-24T09:53:45.159Z",
+      "progress": "P5-05 backend149+nativepicker/messageoriginalrecovery implementeduncommitted;19SQLtests+GatewaytypesPASS,Flutteranalyzerinfosonly. Addingstaffattachmentreportcontext+preview andnativewidgettests;23rdPGfixtureplanned. Existingprivateuploadsstore/authorityreused;nosignedURLpersistence."
     }
   ],
   "history": [
