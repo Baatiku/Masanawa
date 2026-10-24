@@ -55,29 +55,24 @@ void _notice(BuildContext context, Object value) =>
 final humanInboxProvider = FutureProvider.autoDispose
     .family<List<HumanConversation>, String>((ref, key) async {
       final parts = jsonDecode(key) as List;
+      // Account changes must evict the first page even in transports reused by tests.
+      ref.watch(humanAccountProvider);
       final t = ref.watch(humanCommunicationTransportProvider);
-      final items = <HumanConversation>[];
-      String? after;
-      final seen = <String>{};
-      do {
-        final response = await t.request(
-          'GET',
-          '/conversations',
-          query: {
-            'filter': parts[0] == 'requests' ? 'requests' : 'all',
-            'query': parts[1],
-            if (after != null) 'after': after,
+      final response = await t.request(
+        'GET',
+        '/conversations',
+        query: {
+          'filter': switch (parts[0]) {
+            'archived' => 'archived',
+            'requests' => 'requests',
+            _ => 'active',
           },
-        );
-        items.addAll(
-          (response['items'] as List).map(
-            (e) => HumanConversation(Map<String, dynamic>.from(e as Map)),
-          ),
-        );
-        after = response['nextCursor'] as String?;
-        if (after != null && !seen.add(after)) break;
-      } while (after != null && t.active);
-      return items;
+          'query': parts[1],
+        },
+      );
+      return (response['items'] as List)
+          .map((e) => HumanConversation(Map<String, dynamic>.from(e as Map)))
+          .toList();
     });
 
 class HumanInboxSection extends ConsumerStatefulWidget {
@@ -88,21 +83,50 @@ class HumanInboxSection extends ConsumerStatefulWidget {
 }
 
 class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
-  StreamSubscription<HumanJson>? subscription;
   Timer? timer;
+  List<HumanConversation> older = [];
+  String? pageCursor, pageError, boundOwner;
+  HumanCommunicationTransport? boundTransport;
+  bool pageCursorKnown = false, pageLoading = false;
+
   String get key => jsonEncode([widget.filter, widget.query]);
+
+  void _clearOlder() {
+    older = [];
+    pageCursor = null;
+    pageCursorKnown = false;
+    pageError = null;
+    pageLoading = false;
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    setState(_clearOlder);
+    ref.invalidate(humanInboxProvider(key));
+  }
+
   @override
   void initState() {
     super.initState();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted) ref.invalidate(humanInboxProvider(key));
+      // Preserve a user's place when they deliberately navigate older pages.
+      if (mounted && older.isEmpty && !pageLoading) {
+        ref.invalidate(humanInboxProvider(key));
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant HumanInboxSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filter != widget.filter || oldWidget.query != widget.query) {
+      _clearOlder();
+    }
   }
 
   @override
   void dispose() {
     timer?.cancel();
-    subscription?.cancel();
     super.dispose();
   }
 
@@ -114,9 +138,9 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final entry in {
-              'pinned': c.json['pinned'] == true ? 'Unpin' : 'Pin',
-              'muted': c.json['muted'] == true ? 'Unmute' : 'Mute',
-              'archived': c.json['archived'] == true ? 'Unarchive' : 'Archive',
+              'pinned': c.pinned ? 'Unpin' : 'Pin',
+              'muted': c.muted ? 'Unmute' : 'Mute',
+              'archived': c.archived ? 'Unarchive' : 'Archive',
             }.entries)
               ListTile(
                 title: Text(entry.value),
@@ -128,20 +152,98 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
     );
     if (action == null || !mounted) return;
     final t = ref.read(humanCommunicationTransportProvider);
+    final owner = ref.read(humanAccountProvider);
+    final selected = key;
     try {
       await t.request(
         'PATCH',
         '/conversations/${c.id}',
         data: {action: c.json[action] != true},
       );
-      if (mounted && t.active) ref.invalidate(humanInboxProvider(key));
+      if (mounted &&
+          t.active &&
+          identical(t, ref.read(humanCommunicationTransportProvider)) &&
+          owner == ref.read(humanAccountProvider) &&
+          selected == key) {
+        _refresh();
+      }
     } catch (e) {
-      if (mounted && t.active) _notice(context, e);
+      if (mounted &&
+          t.active &&
+          owner == ref.read(humanAccountProvider) &&
+          selected == key) {
+        _notice(context, e);
+      }
+    }
+  }
+
+  Future<void> _loadOlder(List<HumanConversation> firstPage) async {
+    if (pageLoading || firstPage.isEmpty) return;
+    final anchor = pageCursorKnown
+        ? pageCursor
+        : firstPage.length == 50
+        ? firstPage.last.id
+        : null;
+    if (anchor == null) return;
+    final t = ref.read(humanCommunicationTransportProvider);
+    final owner = ref.read(humanAccountProvider);
+    final selected = key;
+    setState(() {
+      pageLoading = true;
+      pageError = null;
+    });
+    bool stillCurrent() =>
+        mounted &&
+        t.active &&
+        identical(t, ref.read(humanCommunicationTransportProvider)) &&
+        owner == ref.read(humanAccountProvider) &&
+        selected == key;
+    try {
+      final response = await t.request(
+        'GET',
+        '/conversations',
+        query: {
+          'filter': switch (widget.filter) {
+            'archived' => 'archived',
+            'requests' => 'requests',
+            _ => 'active',
+          },
+          'query': widget.query,
+          'after': anchor,
+        },
+      );
+      if (!stillCurrent()) return;
+      final incoming = (response['items'] as List)
+          .map((e) => HumanConversation(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      final next = response['nextCursor'] as String?;
+      if (next == anchor) throw const FormatException('Invalid inbox cursor');
+      final seen = <String>{
+        ...firstPage.map((c) => c.id),
+        ...older.map((c) => c.id),
+      };
+      setState(() {
+        older = [...older, ...incoming.where((c) => seen.add(c.id))];
+        pageCursor = next;
+        pageCursorKnown = true;
+        pageError = null;
+      });
+    } catch (e) {
+      if (stillCurrent()) setState(() => pageError = '$e');
+    } finally {
+      if (stillCurrent()) setState(() => pageLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final owner = ref.watch(humanAccountProvider);
+    final transport = ref.watch(humanCommunicationTransportProvider);
+    if (boundOwner != owner || !identical(boundTransport, transport)) {
+      boundOwner = owner;
+      boundTransport = transport;
+      _clearOlder(); // Remove old-session rows before building the new account.
+    }
     final result = ref.watch(humanInboxProvider(key));
     return result.when(
       loading: () => const Padding(
@@ -153,36 +255,54 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
         subtitle: Text('$e'),
         trailing: IconButton(
           icon: const Icon(Icons.refresh),
-          onPressed: () => ref.invalidate(humanInboxProvider(key)),
+          onPressed: _refresh,
         ),
       ),
-      data: (items) => Column(
-        children: [
-          if (widget.filter == 'all' &&
-              items.any((c) => c.state == 'pending' && !c.initiator))
-            ListTile(
-              leading: const Icon(Icons.mark_chat_unread_outlined),
-              title: const Text('Message requests'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const HumanInboxScreen(filter: 'requests'),
+      data: (firstPage) {
+        final seen = <String>{};
+        final items = [
+          ...firstPage,
+          ...older,
+        ].where((c) => seen.add(c.id)).toList();
+        final canLoadMore = pageCursorKnown
+            ? pageCursor != null
+            : firstPage.length == 50;
+        return Column(
+          children: [
+            if (widget.filter == 'all')
+              ListTile(
+                leading: const Icon(Icons.mark_chat_unread_outlined),
+                title: const Text('Message requests'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HumanInboxScreen(filter: 'requests'),
+                  ),
                 ),
               ),
-            ),
-          if (widget.filter == 'all' && items.any((c) => c.archived))
-            ListTile(
-              leading: const Icon(Icons.archive_outlined),
-              title: const Text('Archived chats'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const HumanInboxScreen(filter: 'archived'),
+            if (widget.filter == 'all')
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: const Text('Archived chats'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HumanInboxScreen(filter: 'archived'),
+                  ),
                 ),
               ),
-            ),
-          for (final c in items)
-            if (widget.filter == 'archived' ? c.archived : !c.archived)
+            if (items.isEmpty && !pageLoading)
+              ListTile(
+                title: Text(switch (widget.filter) {
+                  'archived' => 'No archived chats',
+                  'requests' => 'No message requests',
+                  _ =>
+                    widget.query.isEmpty
+                        ? 'No people chats'
+                        : 'No matching people',
+                }),
+              ),
+            for (final c in items)
               ListTile(
                 leading: GestureDetector(
                   onTap: () =>
@@ -202,16 +322,36 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: (c.json['unreadCount'] as num? ?? 0) > 0
-                    ? Badge(label: Text('${c.json['unreadCount']}'))
-                    : c.json['pinned'] == true
+                trailing: c.unreadCount > 0
+                    ? Badge(label: Text('${c.unreadCount}'))
+                    : c.pinned
                     ? const Icon(Icons.push_pin, size: 16)
                     : null,
                 onLongPress: () => _options(c),
                 onTap: () => context.push('/human/chat/${c.id}'),
               ),
-        ],
-      ),
+            if (pageError != null)
+              ListTile(
+                title: const Text('Older conversations unavailable'),
+                subtitle: Text(pageError!),
+                trailing: TextButton(
+                  onPressed: pageLoading ? null : () => _loadOlder(firstPage),
+                  child: const Text('Retry older chats'),
+                ),
+              ),
+            if (pageLoading)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(),
+              ),
+            if (canLoadMore && !pageLoading)
+              TextButton(
+                onPressed: () => _loadOlder(firstPage),
+                child: const Text('Load older chats'),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -243,7 +383,7 @@ class _HumanInboxScreenState extends ConsumerState<HumanInboxScreen> {
           child: TextField(
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
-              hintText: 'Search people and messages',
+              hintText: 'Search people',
             ),
             onChanged: (v) => setState(() => query = v),
           ),

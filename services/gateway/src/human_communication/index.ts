@@ -498,13 +498,31 @@ export function createHumanCommunicationService(o:HumanOptions){
           )
         }
         if(q.query!==undefined&&(typeof q.query!=='string'||q.query.trim().length>80))fail(400,'Invalid conversation search');
+        if(q.filter!==undefined&&!['all','active','archived','requests'].includes(q.filter))fail(400,'Invalid inbox filter');
         const query=typeof q.query==='string'?q.query.trim().toLowerCase():'';
+        const filter=q.filter??'all';
         const values:unknown[]=[a.tenantId,a.userId];
         let condition='';
-        if(q.after){
-          // Validate the anchor as this participant, then retain PostgreSQL
-          // microseconds. A JS Date would skip same-microsecond ID ties.
+        // Server scope applies before LIMIT 51. The archive is per viewer,
+        // never a shared thread deletion or a property of the other user.
+        if(filter==='active')condition+=' AND NOT v.archived';
+        if(filter==='archived')condition+=' AND v.archived';
+        if(filter==='requests')condition+=" AND c.state='pending' AND c.initiator<>$2";
+        if(q.after!==undefined){
+          // Both the actor and the selected filter/search own this anchor.
+          // A changed archive/request or a cursor from another tab cannot
+          // silently skip a page or leak the other tab's conversation list.
           const anchor=await conversation(db,a,str(q.after));
+          const viewer=(await db.query(`SELECT v.archived,v.hidden,c.state,c.initiator,p.handle,p.display_name
+            FROM talks.human_conversations c
+            JOIN talks.human_viewers v ON v.tenant_id=c.tenant_id AND v.conversation_id=c.id AND v.user_id=$2
+            JOIN talks.public_profiles p ON p.tenant_id=c.tenant_id AND p.user_id=CASE WHEN c.low_user=$2 THEN c.high_user ELSE c.low_user END
+            WHERE c.tenant_id=$1 AND c.id=$3`,[a.tenantId,a.userId,anchor.id])).rows[0];
+          if(!viewer||viewer.hidden||
+            (filter==='active'&&viewer.archived)||
+            (filter==='archived'&&!viewer.archived)||
+            (filter==='requests'&&(viewer.state!=='pending'||viewer.initiator===a.userId))||
+            (query&&!String(viewer.handle).toLowerCase().includes(query)&&!String(viewer.display_name).toLowerCase().includes(query)))fail(404,'Inbox cursor unavailable');
           values.push(anchor.cursor_updated_at,anchor.id);
           condition+=' AND (c.updated_at,c.id)<($3,$4)';
         }
@@ -525,7 +543,7 @@ export function createHumanCommunicationService(o:HumanOptions){
           AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement s WHERE s.tenant_id=$1 AND s.target_kind='profile'
             AND (s.target_id=p.handle OR s.target_id IN
               (SELECT me.handle FROM talks.public_profiles me WHERE me.tenant_id=$1 AND me.user_id=$2)) AND s.visibility<>'public')
-          ${q.filter==='requests'?"AND c.state='pending' AND c.initiator<>$2":''} ${condition}
+          ${condition}
           ORDER BY c.updated_at DESC,c.id DESC LIMIT 51`,values);
         const items=[];
         for(const c of r.rows){

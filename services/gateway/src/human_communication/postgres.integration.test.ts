@@ -107,6 +107,18 @@ describe.skipIf(!url)('human communication real PostgreSQL concurrency',()=>{
   const both=[...one.items,...two.items];
   expect(new Set(both.map((r:any)=>r.id)).size).toBe(74);
   expect(both.every((r:any)=>Number(r.peer.handle.slice(-3))>=6)).toBe(true);
+  await database.pool.query(`UPDATE talks.human_viewers SET archived=true
+    WHERE tenant_id='t' AND user_id='alice'
+      AND conversation_id BETWEEN 'pg-inbox-tied-006' AND 'pg-inbox-tied-069'`);
+  const archived=await service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox',filter:'archived'});
+  expect(archived.items).toHaveLength(50);
+  const olderArchived=await service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox',filter:'archived',after:archived.nextCursor});
+  expect(olderArchived.items).toHaveLength(14);
+  expect(olderArchived.nextCursor).toBeNull();
+  expect(new Set([...archived.items,...olderArchived.items].map((r:any)=>r.id)).size).toBe(64);
+  const active=await service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox',filter:'active'});
+  expect(active.items).toHaveLength(10);
+  await expect(service.dispatch(a,'GET','conversations',{}, {query:'PG Inbox',filter:'active',after:archived.nextCursor})).rejects.toMatchObject({statusCode:404});
  });
  it('preserves microsecond message-page anchors and excludes deleted plaintext from search',async()=>{
   await database.pool.query(`INSERT INTO identity.users VALUES('t','pgchatpeer','active');
