@@ -2,23 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 
 import '../../core/providers.dart';
 import '../../features/home_feed/feed_api.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
 import '../../features/home_feed/feed_screen.dart';
-import '../../features/videos/video_models.dart';
-import '../../features/videos/video_repository.dart';
-import '../../features/videos/videos_screen.dart';
-import '../../features/videos/official_video_player_screen.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../profile/masana_profile_screen.dart';
 import '../profile/person_profile_screen.dart';
-import '../../features/home_feed/status_human_compose_screen.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Scope every Status operation to the signed-in fan who opened the tab.
@@ -152,36 +146,6 @@ final statusFeedApiProvider = Provider<FeedApi>((ref) {
   );
 });
 
-/// The video catalogue uses the *same* ApiClient auth interceptor as Status.
-class AccountBoundVideoRepository extends VideoRepository {
-  AccountBoundVideoRepository(
-    Dio dio, {
-    required this.ownerAccount,
-    required this.currentAccount,
-  }) : super(dio);
-
-  final String ownerAccount;
-  final String? Function() currentAccount;
-
-  Future<T> _checked<T>(Future<T> Function() work) async {
-    if (ownerAccount.isEmpty || currentAccount() != ownerAccount) {
-      throw StateError('account_changed');
-    }
-    final value = await work();
-    if (currentAccount() != ownerAccount) {
-      throw StateError('account_changed');
-    }
-    return value;
-  }
-
-  @override
-  Future<VideoCatalogPage> page({String? provider, String? before}) =>
-      _checked(() => super.page(provider: provider, before: before));
-
-  @override
-  Future<bool> isApproved(String id) => _checked(() => super.isApproved(id));
-}
-
 /// The Status root is for Masana-authored approved updates only. The former
 /// Talk creation route is not a Status action and is deliberately absent.
 class StatusScreen extends ConsumerWidget {
@@ -311,59 +275,6 @@ class StatusScreen extends ConsumerWidget {
       );
     }
 
-    final videos = AccountBoundVideoRepository(
-      api.dio,
-      ownerAccount: account,
-      currentAccount: currentAccount,
-    );
-
-    Future<void> openApprovedVideo(ExternalVideo video) async {
-      if (currentAccount() != account) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => Consumer(
-            builder: (context, ref, _) {
-              final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account) {
-                return const Scaffold(
-                  body: Center(child: Text('Sign in to watch videos.')),
-                );
-              }
-              return OfficialVideoPlayerScreen(
-                key: ValueKey('status-video-$account-${video.id}'),
-                video: video,
-                checkAvailability: videos.isApproved,
-              );
-            },
-          ),
-        ),
-      );
-    }
-
-    Future<bool> openHumanCompose() async {
-      if (currentAccount() != account) return false;
-      final result = await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(
-          builder: (_) => Consumer(
-            builder: (routeContext, ref, __) {
-              final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account) {
-                return const Scaffold(
-                  body: Center(child: Text('Sign in to create a Status.')),
-                );
-              }
-              return StatusHumanComposeScreen(
-                accountKey: account,
-                publisher: feed as HumanStatusPublisher,
-                isAccountCurrent: () => currentAccount() == account,
-              );
-            },
-          ),
-        ),
-      );
-      return result == true && currentAccount() == account;
-    }
-
     // A pushed route does not rebuild when the Status root rebuilds.
     // Watch the authenticated session inside the route itself instead.
     Widget accountRouteGuard(Widget content) => Consumer(
@@ -380,109 +291,17 @@ class StatusScreen extends ConsumerWidget {
 
     return KeyedSubtree(
       key: ValueKey('status-account-$account'),
-      child: MasanawaStatusTabs(
+      child: MasanaFeedScreen(
+        api: feed,
         accountKey: account,
-        updates: MasanaFeedScreen(
-          api: feed,
-          accountKey: account,
-          mediaApi: inlineMedia,
-          onOpenMedia: openMedia,
-          onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
-          onHumanProfile: openHumanProfile,
-          onCreateHumanStatus: openHumanCompose,
-          onOpenSavedVideo: openApprovedVideo,
-          wrapAccountRoute: accountRouteGuard,
-          audioPlaybackAvailable: true,
-        ),
-        videos: ExternalVideosScreen(
-          accountKey: account,
-          load: ({provider}) => videos.list(provider: provider),
-          loadPage: ({provider, before}) =>
-              videos.page(provider: provider, before: before),
-          checkAvailability: videos.isApproved,
-          onOpenVideo: (video) => unawaited(openApprovedVideo(video)),
-          languageCode: Localizations.localeOf(context).languageCode,
-        ),
+        mediaApi: inlineMedia,
+        onOpenMedia: openMedia,
+        onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
+        onHumanProfile: openHumanProfile,
+        wrapAccountRoute: accountRouteGuard,
+        audioPlaybackAvailable: true,
       ),
     );
   }
 }
 
-/// Restores the selected Status category after Android kills the process.
-/// Each account owns a different restoration bucket; no private feed content
-/// or search term is saved in the Flutter restoration manager.
-class MasanawaStatusTabs extends StatefulWidget {
-  const MasanawaStatusTabs({
-    super.key,
-    required this.accountKey,
-    required this.updates,
-    required this.videos,
-  });
-  final String accountKey;
-  final Widget updates;
-  final Widget videos;
-
-  @override
-  State<MasanawaStatusTabs> createState() => _MasanawaStatusTabsState();
-}
-
-class _MasanawaStatusTabsState extends State<MasanawaStatusTabs>
-    with SingleTickerProviderStateMixin, RestorationMixin {
-  final RestorableInt _selected = RestorableInt(0);
-  late final TabController _tabController;
-  @override
-  String? get restorationId => 'status-tabs-${widget.accountKey}';
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      animationDuration: Duration.zero,
-    );
-    _tabController.addListener(_recordSelection);
-  }
-
-  void _recordSelection() {
-    if (!_tabController.indexIsChanging) {
-      _selected.value = _tabController.index;
-    }
-  }
-
-  @override
-  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
-    registerForRestoration(_selected, 'selected');
-    _tabController.index = _selected.value.clamp(0, 1);
-  }
-
-  @override
-  void dispose() {
-    _tabController.removeListener(_recordSelection);
-    _tabController.dispose();
-    _selected.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      TabBar(
-        controller: _tabController,
-        tabs: const [
-          Tab(text: 'Updates', icon: Icon(Icons.article_outlined)),
-          Tab(text: 'Videos', icon: Icon(Icons.ondemand_video_outlined)),
-        ],
-      ),
-      Expanded(
-        child: TabBarView(
-          controller: _tabController,
-          physics: MediaQuery.disableAnimationsOf(context)
-              ? const NeverScrollableScrollPhysics()
-              : null,
-          children: [widget.updates, widget.videos],
-        ),
-      ),
-    ],
-  );
-}
