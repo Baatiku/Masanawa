@@ -278,15 +278,31 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     scroll.addListener(_read);
   }
 
-  Future<void> _pay()async{
-    final c=controller;if(c==null||!c.current||c.conversation?.state!='accepted')return;
-    try{
-      final row=await c.transport.request('GET','/conversations/${widget.conversationId}/payment-recipient');
-      if(!mounted||controller!=c||!c.current)return;
-      final uri=Uri.https('masanawa.com','/pay',{'v':'1','asset':'MSNW','account':row['accountNumber'] is String?row['accountNumber'] as String:'','recipient':row['userId'] is String?row['userId'] as String:'','expires':row['expiresAt'] is String?row['expiresAt'] as String:''});
-      final request=parseWalletPaymentRequest(uri);if(request==null)throw const FormatException('Payment recipient unavailable');
+  Future<void> _pay() async {
+    final c = controller;
+    if (c == null || !c.current || c.conversation?.state != 'accepted') return;
+    try {
+      final row = await c.transport.request(
+        'GET',
+        '/conversations/${widget.conversationId}/payment-recipient',
+      );
+      if (!mounted || controller != c || !c.current) return;
+      final uri = Uri.https('masanawa.com', '/pay', {
+        'v': '1',
+        'asset': 'MSNW',
+        'account': row['accountNumber'] is String
+            ? row['accountNumber'] as String
+            : '',
+        'recipient': row['userId'] is String ? row['userId'] as String : '',
+        'expires': row['expiresAt'] is String ? row['expiresAt'] as String : '',
+      });
+      final request = parseWalletPaymentRequest(uri);
+      if (request == null)
+        throw const FormatException('Payment recipient unavailable');
       await context.push(request.route);
-    }catch(e){if(mounted&&c.current)_notice(context,e);}
+    } catch (e) {
+      if (mounted && c.current) _notice(context, e);
+    }
   }
 
   void _redraw() {
@@ -690,7 +706,12 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                   await humanCallStart(context, ref, conversation.handle);
               },
             ),
-          if(conversation?.state=='accepted')IconButton(tooltip:'Pay',icon:const Icon(Icons.payments_outlined),onPressed:c?.current==true?_pay:null),
+          if (conversation?.state == 'accepted')
+            IconButton(
+              tooltip: 'Pay',
+              icon: const Icon(Icons.payments_outlined),
+              onPressed: c?.current == true ? _pay : null,
+            ),
           IconButton(
             tooltip: 'Search conversation',
             icon: const Icon(Icons.search),
@@ -909,7 +930,10 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                               recorder.state == VoiceNoteState.stopping
                           ? null
                           : _send,
-                      icon: Icon(Icons.send, color: context.masanawa.brandStrong),
+                      icon: Icon(
+                        Icons.send,
+                        color: context.masanawa.brandStrong,
+                      ),
                     ),
                   ],
                 ),
@@ -1314,37 +1338,141 @@ class HumanPrivacyScreen extends ConsumerStatefulWidget {
 class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
   HumanJson? privacy;
   List<HumanJson> blocked = [];
-  String? owner, error;
-  bool busy = false;
+  String? owner, error, blockedCursor, blockedPageError;
+  String blockedSearch = '';
+  final blockedSearchInput = TextEditingController();
+  bool busy = false, blockedLoading = false;
+  int blockedEpoch = 0;
   HumanCommunicationTransport? transport;
+
+  @override
+  void dispose() {
+    blockedEpoch++;
+    blockedSearchInput.dispose();
+    super.dispose();
+  }
+
   void _bind() {
     final account = ref.watch(humanAccountProvider);
     final t = ref.watch(humanCommunicationTransportProvider);
     if (owner == account && identical(transport, t)) return;
+    blockedEpoch++;
     owner = account;
     transport = t;
     privacy = null;
     blocked = [];
+    blockedCursor = null;
+    blockedPageError = null;
+    blockedSearch = '';
+    blockedSearchInput.clear();
+    blockedLoading = false;
     error = null;
     if (account != null) unawaited(_load(t));
   }
 
+  Map<String, dynamic> get _blockedQuery => {
+    if (blockedSearch.isNotEmpty) 'query': blockedSearch,
+  };
+
+  List<HumanJson> _parseBlocked(HumanJson response) =>
+      (response['items'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
   Future<void> _load(HumanCommunicationTransport t) async {
+    final epoch = ++blockedEpoch;
     try {
       final values = await Future.wait([
         t.request('GET', '/privacy'),
-        t.request('GET', '/privacy/blocked'),
+        t.request('GET', '/privacy/blocked', query: _blockedQuery),
       ]);
-      if (!mounted || !t.active || transport != t) return;
+      if (!mounted || !t.active || transport != t || epoch != blockedEpoch)
+        return;
       setState(() {
         privacy = values[0];
-        blocked = (values[1]['items'] as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        blocked = _parseBlocked(values[1]);
+        blockedCursor = values[1]['nextCursor'] as String?;
+        blockedPageError = null;
+        blockedLoading = false;
         error = null;
       });
     } catch (e) {
-      if (mounted && t.active && transport == t) setState(() => error = '$e');
+      if (mounted && t.active && transport == t && epoch == blockedEpoch) {
+        setState(() => error = '$e');
+      }
+    }
+  }
+
+  Future<void> _searchBlocked() async {
+    final t = transport;
+    if (t == null || !t.active) return;
+    blockedSearch = blockedSearchInput.text.trim();
+    final epoch = ++blockedEpoch;
+    setState(() {
+      blockedLoading = true;
+      blockedPageError = null;
+      blockedCursor = null;
+      blocked = [];
+    });
+    try {
+      final result = await t.request(
+        'GET',
+        '/privacy/blocked',
+        query: _blockedQuery,
+      );
+      if (!mounted || !t.active || transport != t || epoch != blockedEpoch)
+        return;
+      setState(() {
+        blocked = _parseBlocked(result);
+        blockedCursor = result['nextCursor'] as String?;
+        blockedPageError = null;
+      });
+    } catch (e) {
+      if (mounted && t.active && transport == t && epoch == blockedEpoch) {
+        setState(() => blockedPageError = '$e');
+      }
+    } finally {
+      if (mounted && transport == t && epoch == blockedEpoch) {
+        setState(() => blockedLoading = false);
+      }
+    }
+  }
+
+  Future<void> _moreBlocked() async {
+    final t = transport;
+    final after = blockedCursor;
+    if (t == null || !t.active || blockedLoading || after == null) return;
+    final epoch = blockedEpoch;
+    setState(() {
+      blockedLoading = true;
+      blockedPageError = null;
+    });
+    try {
+      final result = await t.request(
+        'GET',
+        '/privacy/blocked',
+        query: {..._blockedQuery, 'after': after},
+      );
+      if (!mounted || !t.active || transport != t || epoch != blockedEpoch)
+        return;
+      final seen = blocked.map((p) => p['handle']).toSet();
+      final fresh = _parseBlocked(result)
+          .where((p) => seen.add(p['handle']))
+          .toList();
+      final next = result['nextCursor'] as String?;
+      setState(() {
+        blocked = [...blocked, ...fresh];
+        blockedCursor = next == after ? null : next;
+        if (next == after) blockedPageError = 'Cannot continue blocked list.';
+      });
+    } catch (e) {
+      if (mounted && t.active && transport == t && epoch == blockedEpoch) {
+        setState(() => blockedPageError = '$e');
+      }
+    } finally {
+      if (mounted && transport == t && epoch == blockedEpoch) {
+        setState(() => blockedLoading = false);
+      }
     }
   }
 
@@ -1430,7 +1558,9 @@ class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
                   key: const Key('human-open-report-history'),
                   leading: const Icon(Icons.flag_outlined),
                   title: const Text('My message reports'),
-                  subtitle: const Text('View submitted reports and their receipts'),
+                  subtitle: const Text(
+                    'View submitted reports and their receipts',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -1439,8 +1569,50 @@ class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
                   ),
                 ),
                 const ListTile(title: Text('Blocked people')),
-                if (blocked.isEmpty)
-                  const ListTile(title: Text('No blocked people')),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: blockedSearchInput,
+                    maxLength: 80,
+                    decoration: const InputDecoration(
+                      labelText: 'Search blocked people',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => unawaited(_searchBlocked()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: blockedLoading ? null : _searchBlocked,
+                        child: const Text('Search blocked people'),
+                      ),
+                      if (blockedSearch.isNotEmpty)
+                        TextButton(
+                          onPressed: blockedLoading
+                              ? null
+                              : () {
+                                  blockedSearchInput.clear();
+                                  unawaited(_searchBlocked());
+                                },
+                          child: const Text('Clear search'),
+                        ),
+                    ],
+                  ),
+                ),
+                if (blocked.isEmpty &&
+                    !blockedLoading &&
+                    blockedPageError == null)
+                  ListTile(
+                    title: Text(
+                      blockedSearch.isEmpty
+                          ? 'No blocked people'
+                          : 'No matching blocked people',
+                    ),
+                  ),
                 for (final peer in blocked)
                   ListTile(
                     title: Text(peer['displayName'] as String),
@@ -1466,6 +1638,31 @@ class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
                               }
                             },
                       child: const Text('Unblock'),
+                    ),
+                  ),
+                if (blockedLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (blockedPageError != null)
+                  ListTile(
+                    title: const Text('Blocked contacts could not be loaded'),
+                    subtitle: Text(blockedPageError!),
+                    trailing: TextButton(
+                      onPressed: blockedLoading
+                          ? null
+                          : blocked.isEmpty
+                          ? _searchBlocked
+                          : _moreBlocked,
+                      child: const Text('Retry blocked list'),
+                    ),
+                  ),
+                if (blockedCursor != null && !blockedLoading)
+                  Center(
+                    child: TextButton(
+                      onPressed: _moreBlocked,
+                      child: const Text('Load more blocked people'),
                     ),
                   ),
               ],
