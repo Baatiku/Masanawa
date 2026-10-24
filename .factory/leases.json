@@ -33,6 +33,34 @@
       "heartbeat_at": "2026-10-24T09:48:45.159Z",
       "expires_at": "2026-10-24T09:53:45.159Z",
       "progress": "P5-05 backend149+nativepicker/messageoriginalrecovery implementeduncommitted;19SQLtests+GatewaytypesPASS,Flutteranalyzerinfosonly. Addingstaffattachmentreportcontext+preview andnativewidgettests;23rdPGfixtureplanned. Existingprivateuploadsstore/authorityreused;nosignedURLpersistence."
+    },
+    {
+      "claim_id": "lightweight-five-agent-oct24",
+      "owner": "codex-lightweight-five-agent",
+      "scope": "Owner attached lightweight scope; five isolated agents plus root integration",
+      "paths": [
+        "services/gateway/src/gb_wallet/**",
+        "services/gateway/src/gb_redemption/**",
+        "services/gateway/src/gb_usage/**",
+        "packages/commerce/migrations/0151_gb_wallet.sql",
+        "packages/commerce/migrations/0152_gb_redemption.sql",
+        "apps/mobile/lib/src/gb_wallet/**",
+        "apps/web/**",
+        "apps/mobile/lib/src/router/app_router.dart",
+        "apps/mobile/lib/src/shell/five_tab_shell.dart",
+        "apps/mobile/lib/src/screens/twin/shell_tab.dart",
+        "apps/mobile/lib/main.dart",
+        "services/gateway/src/app.ts",
+        "services/gateway/src/main.ts",
+        "docs/LIGHTWEIGHT-PRODUCT-CONTRACT.md"
+      ],
+      "branch": "refactor/lightweight-integration-oct24",
+      "base_sha": "4ed12ca4",
+      "pr": "",
+      "claimed_at": "2026-10-24T22:50:30.034Z",
+      "heartbeat_at": "2026-10-24T22:50:30.034Z",
+      "expires_at": "2026-10-24T22:55:30.034Z",
+      "progress": "Five agents dispatched with exact-path ownership; fresh main recovered, reset SHA missing. Root integrates."
     }
   ],
   "history": [
