@@ -56,6 +56,20 @@ function bigintMb(value: string): number {
   return Number(n);
 }
 
+/** Concurrent serializable transactions may abort. Retry a bounded number
+ * of entire transactions, preserving the same original idempotency key. */
+async function retrySerialization<T>(work: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await work();
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if ((code !== "40001" && code !== "40P01") || attempt === 3) throw error;
+    }
+  }
+  throw new Error("gb.wallet.serialization_retry_exhausted");
+}
+
 function snapshot(row: WalletRow): GbWalletSnapshot {
   return {
     purchasedMb: bigintMb(row.purchased_mb),
@@ -164,7 +178,7 @@ export function createPostgresGbWalletRepository(pool: Pool) {
       const fingerprint = createHash("sha256")
         .update(JSON.stringify([input.userId, input.recipientId, amount]))
         .digest("hex");
-      return withTransaction(pool, async client => {
+      return retrySerialization(() => withTransaction(pool, async client => {
         await ensureAccount(client,input.tenantId,"human",input.userId);
         await ensureAccount(client,input.tenantId,"human",input.recipientId);
         // Acquire locks in canonical account order across concurrent sends.
@@ -233,7 +247,7 @@ export function createPostgresGbWalletRepository(pool: Pool) {
           [input.tenantId,input.operationId,input.userId,input.recipientId,amount],
         );
         return { operationId:input.operationId, amountMb:amount, state:"completed" as const };
-      }, { isolation:"serializable" });
+      }, { isolation:"serializable" }));
     },
   };
 }
