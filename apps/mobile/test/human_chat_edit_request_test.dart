@@ -25,6 +25,7 @@ class EditTransport extends HumanCommunicationTransport {
   EditTransport() : super(ApiClient(dio:Dio()));
   String text = 'Original';
   String? editedAt;
+  int editVersion=0;
   int posts=0, reads=0;
   bool failAfterPatch=false, offlineInfo=false, staleEdit=false;
   final bodies=<HumanJson>[];
@@ -37,7 +38,7 @@ class EditTransport extends HumanCommunicationTransport {
       if(offlineInfo) throw DioException(requestOptions:RequestOptions(path:path),type:DioExceptionType.connectionError);
       return {
         'id':'msg','conversationId':'thread','text':text,
-        'editedAt':editedAt,
+        'editedAt':editedAt,'editVersion':editVersion,
       };
     }
     if(method=='PATCH' && path.endsWith('/messages/msg')){
@@ -49,6 +50,7 @@ class EditTransport extends HumanCommunicationTransport {
         type:DioExceptionType.badResponse);
       text=body['text'] as String;
       editedAt='2026-10-24T09:10:00.000Z';
+      editVersion++;
       if(failAfterPatch){
         throw DioException(requestOptions:RequestOptions(path:path),
           type:DioExceptionType.connectionError);
@@ -63,7 +65,7 @@ class EditTransport extends HumanCommunicationTransport {
 
 PendingHumanEdit request({String text='Corrected'})=>PendingHumanEdit(
   conversationId:'thread',messageId:'msg',text:text,
-  expectedEditedAt:null,requestId:'edit-fixed-id',
+  expectedVersion:0,requestId:'edit-fixed-id',
 );
 
 void main(){
@@ -111,7 +113,8 @@ void main(){
     final store=LocalEditStore();
     final transport=EditTransport()
       ..text='Another fresh edit'
-      ..editedAt='2026-10-24T09:11:00.000Z';
+      ..editedAt='2026-10-24T09:11:00.000Z'
+      ..editVersion=1;
     final journal=HumanEditRequestJournal('alice','thread',store:store);
     await journal.stage(request());
     expect(await journal.recover(transport,retryOriginal:true),
@@ -137,9 +140,9 @@ void main(){
   test('malformed, cross-thread and inaccessible saved intent fails closed',()async{
     final store=LocalEditStore();
     final journal=HumanEditRequestJournal('alice','thread',store:store);
-    store.value='{"conversationId":"elsewhere","messageId":"msg","text":"private","requestId":"original","expectedEditedAt":null}';
+    store.value='{"conversationId":"elsewhere","messageId":"msg","text":"private","requestId":"original","expectedVersion":0}';
     await expectLater(journal.read(),throwsFormatException);
-    store.value='{"conversationId":"thread","messageId":"msg","text":"","requestId":"original","expectedEditedAt":null}';
+    store.value='{"conversationId":"thread","messageId":"msg","text":"","requestId":"original","expectedVersion":0}';
     await expectLater(journal.read(),throwsFormatException);
     store.value=null;
     final transport=EditTransport();
