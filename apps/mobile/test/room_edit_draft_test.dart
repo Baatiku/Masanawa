@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/rooms/room_community_api.dart';
@@ -5,10 +7,43 @@ import 'package:masanawa/src/features/rooms/room_edit_draft.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
 
+class _CountingStore extends SecureRoomEditDraftStore {
+  _CountingStore(super.api, super.roomId, super.kind, super.target);
+  final hold = Completer<void>();
+  int count = 0;
+  @override
+  Future<void> write(String value, String? expected) async {
+    count++;
+    if (count == 1) await hold.future;
+    await super.write(value, expected);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const base = RoomEditDraft('post', 'p', 0, 'Original', '');
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  test(
+    'a burst coalesces pending writes while preserving the final text',
+    () async {
+      final api = AccountBoundRoomCommunityApi(
+        delegate: FakeCommunityApi(),
+        ownerAccount: 'a',
+        currentAccount: () => 'a',
+      );
+      final store = _CountingStore(api, 'room', 'post', 'p');
+      final session = RoomEditDraftSession(store, base);
+      await session.load();
+      final first = session.update('First');
+      await Future<void>.delayed(Duration.zero);
+      expect(store.count, 1);
+      final burst = [for (var i = 0; i < 50; i++) session.update('Edit $i')];
+      store.hold.complete();
+      await Future.wait([first, ...burst]);
+      expect(store.count, lessThanOrEqualTo(2));
+      expect(RoomEditDraft.decode((await store.read())!).text, 'Edit 49');
+    },
+  );
   test('queued draft saves survive the editor and cannot clear or overwrite a newer editor', () async {
     final api = AccountBoundRoomCommunityApi(
       delegate: FakeCommunityApi(),

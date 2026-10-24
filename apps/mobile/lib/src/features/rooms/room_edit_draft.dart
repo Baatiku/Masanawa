@@ -147,6 +147,7 @@ class RoomEditDraftSession {
   final RoomEditDraftStore store;
   final RoomEditDraft base;
   String? raw;
+  int latestWrite = 0;
   Future<void> writes = Future<void>.value();
   Future<RoomEditDraft?> load() async {
     raw = await store.read();
@@ -166,7 +167,9 @@ class RoomEditDraftSession {
       text,
     ).encode();
     RoomEditDraft.decode(value);
+    final ticket = ++latestWrite;
     final next = writes.catchError((Object _) {}).then((_) async {
+      if (ticket != latestWrite) return;
       await store.write(value, raw);
       raw = value;
     });

@@ -63,6 +63,7 @@ class _Store implements RoomContentRequestStore {
 class _Draft implements RoomEditDraftStore {
   String? value;
   bool failWrite = false;
+  Completer<void>? delayedClear;
   @override
   Future<String?> read() async => value;
   @override
@@ -74,6 +75,7 @@ class _Draft implements RoomEditDraftStore {
 
   @override
   Future<bool> clear(String expected) async {
+    if (delayedClear != null) await delayedClear!.future;
     if (value != expected) return false;
     value = null;
     return true;
@@ -195,6 +197,35 @@ void main() {
       expect(find.textContaining('draft restored'), findsOneWidget);
       expect(api.mutations, isEmpty);
       expect(requests.value, isNull);
+    },
+  );
+  testWidgets(
+    'confirmed discard disables typing until its exact local clear completes',
+    (t) async {
+      final api = _Api(),
+          draft = _Draft()
+            ..value = const RoomEditDraft(
+              'post',
+              'post_1',
+              0,
+              'Original text',
+              'Unsent text',
+            ).encode()
+            ..delayedClear = Completer<void>();
+      await mount(t, api, _Store(), draft: draft);
+      await t.tap(find.text('Discard unsent draft'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Confirm'));
+      await t.pump();
+      expect(t.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+      draft.delayedClear!.complete();
+      await t.pumpAndSettle();
+      expect(draft.value, isNull);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Original text',
+      );
+      expect(api.mutations, isEmpty);
     },
   );
   testWidgets(

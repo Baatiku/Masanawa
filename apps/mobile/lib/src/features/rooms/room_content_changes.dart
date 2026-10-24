@@ -398,6 +398,7 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     );
     if (!current(read, api) || approved != true) return;
     draftFeedback++;
+    setState(() => busy = true);
     try {
       await session.clear();
       if (!current(read, api)) return;
@@ -412,6 +413,8 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
         setState(
           () => draftError = 'The local draft could not be cleared or changed elsewhere. Reopen the editor before discarding it.',
         );
+    } finally {
+      if (current(read, api)) setState(() => busy = false);
     }
   }
 
