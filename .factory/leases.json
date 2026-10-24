@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "b7471180-04bf-4d01-a957-27767cfa1119",
-      "owner": "codex-p2p-support-requests-oct24",
-      "scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority",
+      "claim_id": "c8471180-04c0-4d01-a957-27767cfa1120",
+      "owner": "codex-p2p-session-boundary-oct24",
+      "scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -40,15 +40,13 @@
         "apps/mobile/test/p2p_session_fencing_test.dart",
         "apps/admin_mobile/test/p2p_case_context_test.dart"
       ],
-      "branch": "feat/p2p-evidence-requests-oct24",
-      "base_sha": "dfbfcdb5de6f9d093d19441660e1ef07f99b06d2",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/367",
-      "claimed_at": "2026-10-24T08:44:48.530Z",
-      "heartbeat_at": "2026-10-24T08:56:06.133Z",
-      "expires_at": "2026-10-24T09:01:06.133Z",
-      "progress": "PR367 head65af3f46 exacttree9aae74f9 sourcepublished.3SQL+gateway/adaptertypes+27customer/support/root+9staff/caseFlutterPASS;reviewclear. AwaitexactheadCI/21realPGrace. Base363mergeddfbfcdb5. NoAPK/handset/provider/productionacceptance.",
-      "next_branch": "feat/p2p-session-boundaries-oct24",
-      "next_scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged"
+      "branch": "feat/p2p-session-boundaries-oct24",
+      "base_sha": "52be919c4f2a91eb35e56709eaccba37866288e7",
+      "pr": "",
+      "claimed_at": "2026-10-24T09:06:01.830Z",
+      "heartbeat_at": "2026-10-24T09:06:01.830Z",
+      "expires_at": "2026-10-24T09:11:01.830Z",
+      "progress": "P6-16 session boundary sourceimplemented;18root/buy+1boundary+6adminPASS; final5sessiontestsrepair401refreshfuturelistener race andsameaccountreauthrecovery. NoHTTPfinancialauthoritychanges;rebaseontomerged367beforepublishing."
     }
   ],
   "history": [
@@ -694,6 +692,57 @@
       "next_scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority",
       "released_at": "2026-10-24T08:44:48.530Z",
       "release_reason": "PR363 merged dfbfcdb5; final755e6c34 all4CI PASS incl119backend7Worker20realPG;18finalFlutter/reviewclear; sourceonly gatesretained."
+    },
+    {
+      "claim_id": "b7471180-04bf-4d01-a957-27767cfa1119",
+      "owner": "codex-p2p-support-requests-oct24",
+      "scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/evidence_storage.ts",
+        "services/gateway/src/p2p/evidence_storage.test.ts",
+        "services/gateway/src/p2p/evidence_recovery.pglite.test.ts",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/lib/src/finance/p2p_evidence_upload.dart",
+        "apps/mobile/test/p2p_evidence_upload_test.dart",
+        "apps/mobile/test/p2p_evidence_journeys_test.dart",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "packages/commerce/migrations/0146_msnw_p2p_evidence_original_index.sql",
+        "services/gateway/src/p2p/support_timeline.ts",
+        "services/gateway/src/p2p/support_timeline.pglite.test.ts",
+        "services/gateway/src/p2p/dispute_context.ts",
+        "apps/mobile/lib/src/finance/p2p_order_support.dart",
+        "apps/mobile/test/p2p_order_support_test.dart",
+        "services/gateway/src/p2p/support_requests.ts",
+        "services/gateway/src/p2p/support_requests.pglite.test.ts",
+        "packages/commerce/migrations/0147_msnw_p2p_support_requests.sql",
+        "apps/mobile/lib/src/finance/p2p_support_requests.dart",
+        "apps/mobile/test/p2p_support_requests_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_support_requests.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_support_requests_test.dart",
+        "apps/mobile/lib/src/finance/p2p_access_boundary.dart",
+        "apps/mobile/test/p2p_access_boundary_test.dart",
+        "apps/mobile/test/p2p_session_fencing_test.dart",
+        "apps/admin_mobile/test/p2p_case_context_test.dart"
+      ],
+      "branch": "feat/p2p-evidence-requests-oct24",
+      "base_sha": "dfbfcdb5de6f9d093d19441660e1ef07f99b06d2",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/367",
+      "claimed_at": "2026-10-24T08:44:48.530Z",
+      "heartbeat_at": "2026-10-24T08:56:06.133Z",
+      "expires_at": "2026-10-24T09:01:06.133Z",
+      "progress": "PR367 head65af3f46 exacttree9aae74f9 sourcepublished.3SQL+gateway/adaptertypes+27customer/support/root+9staff/caseFlutterPASS;reviewclear. AwaitexactheadCI/21realPGrace. Base363mergeddfbfcdb5. NoAPK/handset/provider/productionacceptance.",
+      "next_branch": "feat/p2p-session-boundaries-oct24",
+      "next_scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged",
+      "released_at": "2026-10-24T09:06:01.830Z",
+      "release_reason": "PR367 merged52be919c; final65af3f46 all4CI PASS incl122backend7Worker21realPG;36Flutter+types/reviewclear;sourcegatesremain."
     }
   ]
 }
