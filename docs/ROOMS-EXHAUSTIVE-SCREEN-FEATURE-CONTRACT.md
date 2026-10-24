@@ -301,6 +301,8 @@ Safe next action: qualified scoped PR → hosted production/Flutter checks → r
 
 ## 24 October 2026 — Global pinned-post history and private unsent edit drafts (partial source)
 
+**Delivered:** #374 merged `4e00d709fd8687e1629a521a529c90e9b576a0ea` at exact head `be25f85c`: Foundation PASS 7m19s, Mobile PASS 6m35s, production Rooms/PG PASS 3m44s, Rooms Flutter PASS 1m37s (all 16 new cases), focused PASS 1m31s and Status/Rooms PASS 1m13s. All device/provider/production gates remain OPEN.
+
 Base `main 165307d7` (includes the other window's merged Human Chat edit/receipt work); branch `feat/rooms-pins-edit-drafts-oct24`. P5-R04/R06/R08/R09, R1-04/20, R5-12 and P8-X02. Paths: Gateway `room_community/timeline_pages*`; native `room_pinned_posts.dart`, `room_edit_draft.dart`, content editor and Info; focused native workflow and tests. No overlap with open Human Chats inbox #373, Wallet/P2P or Calls source.
 
 Room Info → Pinned posts → literal text search/manual older pages/Retry → exact original thread → Back reloads the loaded prefix. The canonical timeline's explicit pinned-only mode selects all currently pinned, published, non-scheduled roots, excluding replies/answers/removed roots. Cursor scope includes the collection without changing legacy ordinary cursors. PostgreSQL microsecond anchors remain intact; a new response qualifier makes older Gateways fail closed instead of silently returning a partial loaded subset. No new endpoint/migration/authority, media-byte download or persistent pin cache. Membership, query/Room/account replacement and delayed responses follow the existing shared-media list's fencing; 20s access loss clears private content. A globally selected root pinned banner remains OPEN separately.
