@@ -80,7 +80,8 @@ void main(){
   expect(network.requests,isEmpty);
   expect((jsonDecode(store.value!) as Map)['reason'],'Abusive message');
   expect(await j.recover(network,retryOriginal:true),HumanReportRecovery.submitted);
-  expect(network.posts,singleElement({'requestId':'request-one','reason':'Abusive message'}));
+  expect(network.posts,hasLength(1));
+  expect(network.posts.single,{'requestId':'request-one','reason':'Abusive message'});
   expect(network.requests,['GET /reports/request-one',
     'POST /conversations/thread-1/messages/message-1/report','GET /reports/request-one']);
   expect(store.value,isNull);
