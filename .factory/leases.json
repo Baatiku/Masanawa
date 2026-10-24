@@ -38,11 +38,11 @@
       ],
       "branch": "feat/p2p-evidence-requests-oct24",
       "base_sha": "dfbfcdb5de6f9d093d19441660e1ef07f99b06d2",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/367",
       "claimed_at": "2026-10-24T08:44:48.530Z",
-      "heartbeat_at": "2026-10-24T08:48:20.390Z",
-      "expires_at": "2026-10-24T08:53:20.390Z",
-      "progress": "Backend+customer/adminP5-15sourceimplemented;2SQL+gateway/adaptertypes+13mobile+2staffPASS,analyzersinfosonly. Reviewarrayrecipientbugfixedwith422/noinsertregression;latewindow/cap/320RTLtests running.21strealPGfixtureadded. Sourceuncommittedpersistentcheckout; rebaseonto363 next."
+      "heartbeat_at": "2026-10-24T08:52:17.514Z",
+      "expires_at": "2026-10-24T08:57:17.514Z",
+      "progress": "PR367 head65af3f46 exacttree9aae74f9 sourcepublished.3SQL+gateway/adaptertypes+27customer/support/root+9staff/caseFlutterPASS;reviewclear. AwaitexactheadCI/21realPGrace. Base363mergeddfbfcdb5. NoAPK/handset/provider/productionacceptance."
     }
   ],
   "history": [
