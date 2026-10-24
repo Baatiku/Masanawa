@@ -2,9 +2,9 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "a6471180-04be-4d01-a957-27767cfa1118",
-      "owner": "codex-p2p-evidence-recovery-oct24",
-      "scope": "P5-09/P5-03/P6-04 connected original evidence recovery, safe private blob lifetime and complete participant-safe public support timeline; no financial writes",
+      "claim_id": "b7471180-04bf-4d01-a957-27767cfa1119",
+      "owner": "codex-p2p-support-requests-oct24",
+      "scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -36,15 +36,13 @@
         "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
         "apps/admin_mobile/test/p2p_support_requests_test.dart"
       ],
-      "branch": "feat/p2p-evidence-recovery-oct24",
-      "base_sha": "3be75f9e6382d8288e189af2ff8e0562d539eb70",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/363",
-      "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T08:38:25.961Z",
-      "expires_at": "2026-10-24T08:43:25.961Z",
-      "progress": "Connected PR363 final755e6c34 exacttree301b3019 combines evidence+completepublictimeline.18finalFlutterPASS; reviewclear. All4newexactheadCI running. Localcheckout3bce71b6 treeidentical, sourcebackups+GitHubcommitdurable. NoAPK/device/provider/productionacceptance.",
-      "next_branch": "feat/p2p-evidence-requests-oct24",
-      "next_scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority"
+      "branch": "feat/p2p-evidence-requests-oct24",
+      "base_sha": "dfbfcdb5de6f9d093d19441660e1ef07f99b06d2",
+      "pr": "",
+      "claimed_at": "2026-10-24T08:44:48.530Z",
+      "heartbeat_at": "2026-10-24T08:44:48.530Z",
+      "expires_at": "2026-10-24T08:49:48.530Z",
+      "progress": "Private supportrequest/reply backend and customer/admin UI implemented;2backendtests+gatewaytypesPASS, nativechecks/21stPGfixture running. Rebaseonto merged363 beforepublishing."
     }
   ],
   "history": [
@@ -643,6 +641,53 @@
       "progress": "PR3531fd1056a P2P114backend7Worker18realPG+StatusPASS;Mobile/Foundationrunning.111localP2P+29Flutter+typing/reviewclear. RealfontgoldenPASSafterstartupsegfaultretry; imageinspectioninprogress. NoAPK/device/provider/productionacceptance.",
       "released_at": "2026-10-24T05:17:00.252Z",
       "release_reason": "PR353 merged93114930; exact1fd1056a all4CI PASS incl114backend7Worker18realPG,29Flutter,types/reviewclear. Sourcepolicy/provider/devicegatesretained."
+    },
+    {
+      "claim_id": "a6471180-04be-4d01-a957-27767cfa1118",
+      "owner": "codex-p2p-evidence-recovery-oct24",
+      "scope": "P5-09/P5-03/P6-04 connected original evidence recovery, safe private blob lifetime and complete participant-safe public support timeline; no financial writes",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/evidence_storage.ts",
+        "services/gateway/src/p2p/evidence_storage.test.ts",
+        "services/gateway/src/p2p/evidence_recovery.pglite.test.ts",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/lib/src/finance/p2p_evidence_upload.dart",
+        "apps/mobile/test/p2p_evidence_upload_test.dart",
+        "apps/mobile/test/p2p_evidence_journeys_test.dart",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "packages/commerce/migrations/0146_msnw_p2p_evidence_original_index.sql",
+        "services/gateway/src/p2p/support_timeline.ts",
+        "services/gateway/src/p2p/support_timeline.pglite.test.ts",
+        "services/gateway/src/p2p/dispute_context.ts",
+        "apps/mobile/lib/src/finance/p2p_order_support.dart",
+        "apps/mobile/test/p2p_order_support_test.dart",
+        "services/gateway/src/p2p/support_requests.ts",
+        "services/gateway/src/p2p/support_requests.pglite.test.ts",
+        "packages/commerce/migrations/0147_msnw_p2p_support_requests.sql",
+        "apps/mobile/lib/src/finance/p2p_support_requests.dart",
+        "apps/mobile/test/p2p_support_requests_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_support_requests.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_support_requests_test.dart"
+      ],
+      "branch": "feat/p2p-evidence-recovery-oct24",
+      "base_sha": "3be75f9e6382d8288e189af2ff8e0562d539eb70",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/363",
+      "claimed_at": "2026-10-24T05:17:00.252Z",
+      "heartbeat_at": "2026-10-24T08:38:25.961Z",
+      "expires_at": "2026-10-24T08:43:25.961Z",
+      "progress": "Connected PR363 final755e6c34 exacttree301b3019 combines evidence+completepublictimeline.18finalFlutterPASS; reviewclear. All4newexactheadCI running. Localcheckout3bce71b6 treeidentical, sourcebackups+GitHubcommitdurable. NoAPK/device/provider/productionacceptance.",
+      "next_branch": "feat/p2p-evidence-requests-oct24",
+      "next_scope": "P5-15 staff evidence requests with private assigned-participant immutable response; informational response windows, no timer/settlement authority",
+      "released_at": "2026-10-24T08:44:48.530Z",
+      "release_reason": "PR363 merged dfbfcdb5; final755e6c34 all4CI PASS incl119backend7Worker20realPG;18finalFlutter/reviewclear; sourceonly gatesretained."
     }
   ]
 }
