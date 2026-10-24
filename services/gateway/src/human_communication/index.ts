@@ -680,7 +680,9 @@ export function createHumanCommunicationService(o:HumanOptions){
             if((m.edit_version??0)!==expected)fail(409,'Message changed. Refresh before editing');
             const age=Date.parse(now())-Date.parse(iso(m.created_at)!);
             if(!Number.isFinite(age)||age<0||age>15*60*1000)fail(409,'Edit window expired');
-            if(m.text===text)return messageView(db,a,m);
+            // A confirmed edit attempt advances its revision even if another
+            // UI already displayed the same characters; recovery must not
+            // leave a completed request permanently unconfirmed.
             const timestamp=now();
             const updated=await db.query('UPDATE talks.human_messages SET text=$4,edited_at=$5,edit_version=edit_version+1 WHERE tenant_id=$1 AND id=$2 AND user_id=$3 AND NOT deleted AND edit_version=$6 RETURNING *',[a.tenantId,m.id,a.userId,text,timestamp,expected]);
             if(!updated.rows.length)fail(409,'Message changed. Refresh before editing');
