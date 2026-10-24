@@ -1,3 +1,4 @@
+import {createHistoryReading} from './history_reading.js';
 import {createBulkPause} from './bulk_pause.js';
 import {createAdReports} from './ad_reports.js';
 import {createMethodManagement} from './method_management.js';
@@ -333,6 +334,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     }),
     ...createMethodManagement(pool),
     ...createBulkPause(pool),
+    ...createHistoryReading(pool),
     ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {
       const rights=await admission(actor);
@@ -374,26 +376,6 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     offersPage,
     async traderProfile(actor:P2pActor,offerId:string,input:{cursor?:string}={}) {
       return offersPage(actor,{...input,traderOfferId:id(offerId)});
-    },
-    async myOffersPage(actor:P2pActor,input:{cursor?:string}={}) {
-      const {time,id:afterId}=pageCursor(input.cursor);
-      const limit=20;
-      const result=await pool.query(`SELECT o.offer_id,o.offer_side,o.rate_kobo_per_msnw::text,
-        o.min_micro::text,o.max_micro::text,o.remaining_micro::text,
-        o.state,o.created_at,o.payment_method_id,o.fee_bps,p.bank_name,
-        to_char(o.created_at AT TIME ZONE 'UTC',
-          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
-        FROM commerce.msnw_p2p_offers o
-        JOIN commerce.msnw_p2p_payment_methods p ON
-          p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
-          AND p.owner_id=o.seller_id
-        WHERE o.tenant_id=$1 AND o.seller_id=$2
-          AND ($3::timestamptz IS NULL OR
-            (o.created_at,o.offer_id)<($3::timestamptz,$4::uuid))
-        ORDER BY o.created_at DESC,o.offer_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,time,afterId,limit+1]);
-      const items=result.rows.slice(0,limit);
-      return {items,nextCursor:nextPageCursor(items,result.rows.length,limit)};
     },
     async notificationsPage(actor:P2pActor,input:{cursor?:string}={}) {
       const {time,id:afterId}=pageCursor(input.cursor);
@@ -714,51 +696,6 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       return result.rows;
     },
     /** Seek-paginated, tenant/participant-scoped order history. */
-    async ordersPage(actor:P2pActor, input:{
-      filter?:string;cursor?:string;limit?:number;
-    }={}) {
-      const filter=input.filter??"all";
-      if(!["all","active","finished"].includes(filter))
-        throw new P2pError("p2p.invalid_filter",422);
-      const limit=Math.min(50,Math.max(1,input.limit??20));
-      if(!Number.isInteger(limit))throw new P2pError("p2p.invalid_limit",422);
-      let beforeTime:string|null=null,beforeId:string|null=null;
-      if(input.cursor!==undefined){
-        try {
-          if(input.cursor.length>256)throw Error("large");
-          const parsed=JSON.parse(Buffer.from(input.cursor,"base64url").toString("utf8")) as
-            {time?:unknown;id?:unknown};
-          if(typeof parsed.time!=="string"||typeof parsed.id!=="string"||
-            !uuid.test(parsed.id) || !Number.isFinite(Date.parse(parsed.time)))
-            throw Error("malformed");
-          beforeTime=parsed.time;beforeId=parsed.id;
-        }catch{throw new P2pError("p2p.invalid_cursor",422);}
-      }
-      const stateCondition=filter==="finished"
-        ? "AND state IN ('completed','cancelled','expired')"
-        : filter==="active"
-          ? "AND state NOT IN ('completed','cancelled','expired')" : "";
-      const rows=await pool.query(`SELECT order_id,offer_id,seller_id,buyer_id,
-        amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,
-        payment_deadline,state,version,receipt_reference,created_at,
-        to_char(created_at AT TIME ZONE 'UTC',
-          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
-        FROM commerce.msnw_p2p_orders WHERE tenant_id=$1
-          AND (seller_id=$2 OR buyer_id=$2)
-          ${stateCondition}
-          AND ($3::timestamptz IS NULL OR
-            (created_at,order_id)<($3::timestamptz,$4::uuid))
-        ORDER BY created_at DESC,order_id DESC LIMIT $5`,
-        [actor.tenantId,actor.userId,beforeTime,beforeId,limit+1]);
-      const items=rows.rows.slice(0,limit);
-      const last=items[items.length-1];
-      const nextCursor=rows.rows.length>limit && last
-        ? Buffer.from(JSON.stringify({
-            time:cursorTime(last),
-            id:String(last.order_id),
-          })).toString("base64url") : null;
-      return {items,nextCursor};
-    },
     async orders(actor: P2pActor) {
       const r = await pool.query(`SELECT order_id,offer_id,seller_id,buyer_id,
         amount_micro::text,fee_micro::text,fiat_kobo::text,rate_kobo_per_msnw::text,

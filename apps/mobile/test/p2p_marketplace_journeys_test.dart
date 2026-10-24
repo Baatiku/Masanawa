@@ -275,4 +275,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('order filters apply to server reads and activity chips clear contradictory exact status',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter();await t.pumpWidget(_app(adapter));await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(ChoiceChip,'Orders'));await t.pumpAndSettle();await t.tap(find.text('Filter history'));await t.pumpAndSettle();
+    await t.tap(find.text('All statuses'));await t.pumpAndSettle();await t.tap(find.text('Completed').last);await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField,'From date'),'2026-10-01');t.testTextInput.hide();
+    await t.scrollUntilVisible(find.text('Apply filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Apply filters'));await t.pumpAndSettle();
+    var call=adapter.calls.lastWhere((x)=>x.path.contains('/orders/page'));
+    expect(call.uri.queryParameters,containsPair('status','completed'));expect(call.uri.queryParameters,containsPair('filter','all'));expect(call.uri.queryParameters,containsPair('fromDate','2026-10-01'));
+    expect(find.text('No orders match your filters'),findsOneWidget);
+    await t.tap(find.widgetWithText(ChoiceChip,'Active'));await t.pumpAndSettle();call=adapter.calls.lastWhere((x)=>x.path.contains('/orders/page'));
+    expect(call.uri.queryParameters,containsPair('filter','active'));expect(call.uri.queryParameters.containsKey('status'),isFalse);expect(call.uri.queryParameters,containsPair('fromDate','2026-10-01'));expect(adapter.calls.where((x)=>x.method=='POST'),isEmpty);
+    await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('own-ad status filter resets without modifying availability',(t)async{
+    _mockSecureRecovery();final adapter=_P2pAdapter();await t.pumpWidget(_app(adapter));await t.pumpAndSettle();await t.tap(find.byTooltip('P2P options'));await t.pumpAndSettle();await t.tap(find.text('My ads'));await t.pumpAndSettle();
+    await t.tap(find.text('Filter history'));await t.pumpAndSettle();await t.tap(find.text('All statuses'));await t.pumpAndSettle();await t.tap(find.text('Paused').last);await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('Apply filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Apply filters'));await t.pumpAndSettle();
+    expect(adapter.calls.lastWhere((x)=>x.path.contains('/my-offers/page')).uri.queryParameters,containsPair('status','paused'));
+    await t.tap(find.text('Edit history filters'));await t.pumpAndSettle();await t.scrollUntilVisible(find.text('Reset filters').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.pumpAndSettle();await t.tap(find.text('Reset filters'));await t.pumpAndSettle();
+    expect(adapter.calls.lastWhere((x)=>x.path.contains('/my-offers/page')).uri.queryParameters.containsKey('status'),isFalse);expect(adapter.calls.where((x)=>x.method=='POST'),isEmpty);await t.pumpWidget(const SizedBox());
+  });
+
 }
