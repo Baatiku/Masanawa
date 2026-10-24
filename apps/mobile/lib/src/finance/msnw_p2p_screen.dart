@@ -1,3 +1,4 @@
+import 'p2p_pause_all.dart';
 import 'p2p_ad_reports.dart';
 import 'p2p_methods_page.dart';
 import 'p2p_order_messages.dart';
@@ -1142,6 +1143,28 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       submit:(category,details)async{authorize();return _json(await _request('POST','/offers/$offerId/report',{'category':category,'details':details}));},
     )));
   }
+  Future<void> _pauseAllAds()async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final storageKey='masanawa.p2p.pause.$owner.${Uri.encodeComponent(base)}';
+    Future<Map<String,dynamic>> request(String method,String path,[String? key])async{
+      if(!authorized())throw StateError('Account changed');
+      final value=await _request(method,path,method=='POST'?{}:null,key);
+      if(!authorized())throw StateError('Account changed');
+      return value;
+    }
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pPauseAllPage(
+      expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
+      load:()=>request('GET','/ad-availability'),
+      restore:()async{if(!authorized())throw StateError('Account changed');return _secure.read(key:storageKey);},
+      persist:(key)async{if(!authorized())throw StateError('Account changed');if(key==null){await _secure.delete(key:storageKey);}else{await _secure.write(key:storageKey,value:key);}},
+      newKey:_requestId,
+      recover:(key)=>request('GET','/pause-requests/${Uri.encodeComponent(key)}'),
+      pause:(key)=>request('POST','/pause-all',key),
+    )));
+    if(authorized())_reload(_tab);
+  }
+
   Future<void> _myAdReports()async{
     final owner=widget.expectedUserId,base=widget.baseUrl;
     await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMyAdReportsPage(expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
@@ -1553,12 +1576,13 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       appBar: AppBar(title: Text(switch (_tab) {
         1 => 'My ads', 3 => 'Order updates', _ => 'MSNW P2P',
       }), actions: [PopupMenuButton<int>(tooltip: 'P2P options',
-        onSelected: (value) {if(value==5){_manageMethods();}else if(value==6){_myAdReports();}else{_reload(value);}},
+        onSelected: (value) {if(value==5){_manageMethods();}else if(value==6){_myAdReports();}else if(value==7){_pauseAllAds();}else{_reload(value);}},
         itemBuilder: (_) => const [
           PopupMenuItem(value: 1, child: Text('My ads')),
           PopupMenuItem(value: 3, child: Text('Order updates')),
           PopupMenuItem(value: 5, child: Text('Manage bank methods')),
           PopupMenuItem(value: 6, child: Text('My ad reports')),
+          PopupMenuItem(value: 7, child: Text('Ad availability')),
         ],
           ),
         ],

@@ -1001,6 +1001,16 @@ Higgsfield evidence: six new SQL/HTTP cases, gateway TypeScript, eight customer 
 
 Previous connected delivery: PR #335 merged at `29efd85eaf82e3932c1850fdc014a269f51acf82` with all four exact-head CI workflows passing, including 95 backend/storage, 7 Worker and 14 real PostgreSQL cases.
 
+## 24 October 2026 — P2P current-ad bulk pause and trader outcome context (partial P6-07/P2-19/P1-13)
+
+P2P options → Ad availability shows owner-scoped active/paused/closed counts and explicitly confirms pausing the ads active when the operation runs. The original request key is saved in account/base-scoped secure storage before POST; reopening recovers the original receipt before same-key retry. Migration 0144 retains immutable owner-bound pause receipts. UUID-ordered row locks serialize against reservations; no order, inventory, custody or receiving-bank field is changed. Retrying never repauses resumed ads or ads published afterward. Operations above 1000 active ads fail atomically rather than partially pausing. Each ad is resumed individually under existing eligibility checks; schedules and a persistent merchant-offline mode remain unimplemented.
+
+Trader profiles now expose completed/cancelled/expired/currently-disputed/total outcomes from the same last-30-day opening-date cohort. These are current order outcomes, not lifetime dispute counts, a reputation score, merchant verification, sanctions or wash-trading policy. Public eligibility and private identity/bank boundaries remain unchanged.
+
+Higgsfield: five new SQL/HTTP cases and the existing nine read-journey cases pass; gateway TypeScript passes; fifteen Flutter cases pass (six pause and nine trader), including durable-save failure, reopening/lost-result recovery, late 404 after account replacement, outcome display and 320dp/200% RTL. Exact-head hosted CI evidence belongs in the PR. Affected analyzer has informational lints only. Independent read-only review found no material findings. A sixteenth real PostgreSQL test covers duplicate bulk pause/reservation races, accepted bank instructions and replay after resume/new ads; hosted qualification pending. No APK, physical-device, provider or production acceptance claimed. Parent Phase 7/8 and risk/provider gates stay open; 177 screens/820 requirements retained.
+
+Previous delivery: PR #337 merged at `060b61ce4c576ea797d0cb28b15e72c2df10c98d`; exact `4bb1f544` passed Foundation, Mobile, P2P and Status CI, including 101 backend/storage + 7 Worker + 15 real PostgreSQL cases. Ad report policy/retention, enforcement and production/device gates remain open.
+
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
 A native trader profile opens from a presently funded, verified-bank sell ad, shows the existing public profile display name, completed/closed cohort denominator, server sampling date and the precise 30-day opened-order window. Eligible ads paginate within that trader/reference/account scope and return to the original authoritative buy quote/review flow; no order is created from profile viewing. Paused, unverified, unfunded, self or foreign-tenant source references are unavailable, and private user/bank/KYC IDs are not projected. Flutter covers stale references, offline retry, pagination, account replacement and compact large-text RTL.
