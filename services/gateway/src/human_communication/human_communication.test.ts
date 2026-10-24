@@ -272,6 +272,38 @@ it('validates and binds private media, prevents theft, and revokes after deletio
   )
 }
 );
+it('returns only viewer-owned blocked peers in bounded searchable pages with validated cursors',async()=>{
+  await db.exec(`INSERT INTO identity.users(tenant_id,user_id,state)
+    SELECT 't','blkpeer'||lpad(n::text,3,'0'),'active' FROM generate_series(0,72) n;
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    SELECT 't','blkpeer'||lpad(n::text,3,'0'),'blocked'||lpad(n::text,3,'0'),
+      'Blocked '||lpad(n::text,3,'0') FROM generate_series(0,72) n;
+    INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    SELECT 't','alice','blkpeer'||lpad(n::text,3,'0'),true,'2026-10-19T00:00:00Z'::timestamptz
+    FROM generate_series(0,72) n;`);
+  await db.query("UPDATE talks.public_profiles SET display_name='Literal 50% _ marker' WHERE tenant_id='t' AND handle='blocked050'");
+  const page1=await send(a,'GET','privacy/blocked');
+  expect(page1.items).toHaveLength(50);
+  expect(page1.items[0].handle).toBe('blocked000');
+  expect(page1.nextCursor).toBe('blocked049');
+  const page2=await send(a,'GET','privacy/blocked',{}, {after:page1.nextCursor});
+  expect(page2.items).toHaveLength(23);
+  expect(page2.items.at(-1).handle).toBe('blocked072');
+  expect(page2.nextCursor).toBeNull();
+  expect(new Set([...page1.items,...page2.items].map((item:any)=>item.handle)).size).toBe(73);
+  const search=await send(a,'GET','privacy/blocked',{}, {query:'blocked06'});
+  expect(search.items.map((item:any)=>item.handle)).toEqual(Array.from({length:10},(_,i)=>`blocked06${i}`));
+  expect((await send(a,'GET','privacy/blocked',{}, {query:'%'})).items.map((item:any)=>item.handle)).toEqual(['blocked050']);
+  expect((await send(a,'GET','privacy/blocked',{}, {query:'_'})).items.map((item:any)=>item.handle)).toEqual(['blocked050']);
+  expect((await send(b,'GET','privacy/blocked')).items).toEqual([]);
+  await expect(send(a,'POST','privacy/blocked/blocked050',{blocked:false})).rejects.toMatchObject({statusCode:404});
+  expect((await send(a,'GET','privacy/blocked',{}, {query:'%'})).items).toHaveLength(1);
+  await expect(send(b,'GET','privacy/blocked',{}, {after:page1.nextCursor})).rejects.toMatchObject({statusCode:404});
+  await expect(send(a,'GET','privacy/blocked',{}, {query:'blocked06',after:page1.nextCursor})).rejects.toMatchObject({statusCode:404});
+  await expect(send(a,'GET','privacy/blocked',{}, {query:'x'.repeat(81)})).rejects.toMatchObject({statusCode:400});
+  await send(a,'PUT','privacy/blocked/blocked049',{blocked:false});
+  await expect(send(a,'GET','privacy/blocked',{}, {after:page1.nextCursor})).rejects.toMatchObject({statusCode:404});
+});
 it('persists reports and rejects unknown privacy controls',async()=>{
   await send(b,'POST',`conversations/${cid}/messages/${first}/report`,{
     requestId:'report',reason:'spam'
@@ -282,6 +314,8 @@ it('persists reports and rejects unknown privacy controls',async()=>{
   }
   );
   expect((await db.query('SELECT * FROM talks.human_reports')).rows).toHaveLength(1);
+  await expect(send(a,'POST',`conversations/${cid}/messages/${first}/report`,{requestId:'own-report',reason:'spam'})).rejects.toMatchObject({statusCode:403});
+  await expect(send(b,'GET',`conversations/${cid}/messages/${first}/report`,{requestId:'get-report',reason:'spam'})).rejects.toMatchObject({statusCode:404});
   await expect(send(a,'PATCH','privacy',{
     unknown:true
   }
