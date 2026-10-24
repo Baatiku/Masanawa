@@ -12,6 +12,7 @@ class EditJourneyTransport extends HumanCommunicationTransport {
   EditJourneyTransport() : super(ApiClient(dio:Dio()));
   String text = 'Initial human message';
   String? editedAt;
+  int editVersion=0;
   bool failInfo = false;
   int patches = 0;
   final posted = <HumanJson>[];
@@ -35,7 +36,7 @@ class EditJourneyTransport extends HumanCommunicationTransport {
       return {
         'items':[
           {'id':'msg','text':text,'mine':true,'deleted':false,
-            'createdAt':'2026-10-24T09:00:00Z','editedAt':editedAt,
+            'createdAt':'2026-10-24T09:00:00Z','editedAt':editedAt,'editVersion':editVersion,
             'deliveryStatus':'sent'},
         ],
         'nextCursor':null,
@@ -59,6 +60,7 @@ class EditJourneyTransport extends HumanCommunicationTransport {
       patches++;
       text=body['text'] as String;
       editedAt='2026-10-24T09:01:00.000Z';
+      editVersion++;
       return {
         'id':'msg','text':text,'editedAt':editedAt,
         'conversationId':'thread',
