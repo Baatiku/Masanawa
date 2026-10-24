@@ -243,7 +243,8 @@ void main() {
   testWidgets('signed-out and denied owner cannot render case or submit support', (tester) async {
     final fake = SupportFake();
     var signedIn = true;
-    fake.responder = (_) async => fake.receipt('operation-A');
+    var caseId = 'case-one';
+    fake.responder = (_) async => fake.receipt('operation-A', caseId: caseId);
     await tester.pumpWidget(page(fake, authorized: () => signedIn));
     await tester.pumpAndSettle();
     expect(find.text('Case: case-one'), findsOneWidget);
@@ -252,6 +253,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Case: case-one'), findsNothing);
     expect(find.text('Sign in to view this operation'), findsOneWidget);
+    expect(fake.posts, 0);
+    // A new authorization lease might reuse a test token; no stale case may
+    // reappear before another server-scoped GET confirms this owner/operation.
+    signedIn = true;
+    caseId = 'new-session-case';
+    await tester.pumpWidget(page(fake, authorized: () => signedIn));
+    await tester.pumpAndSettle();
+    expect(find.text('Case: case-one'), findsNothing);
+    expect(find.text('Case: new-session-case'), findsOneWidget);
+    expect(fake.gets, 2);
+  });
+
+  testWidgets('explicit server 401 revokes a previously rendered case', (tester) async {
+    final fake = SupportFake();
+    var deny = false;
+    fake.responder = (request) async {
+      if (deny) throw fake.reject(request, 401, 'msnw.auth_required');
+      return fake.receipt('operation-A');
+    };
+    await tester.pumpWidget(page(fake));
+    await tester.pumpAndSettle();
+    expect(find.text('Case: case-one'), findsOneWidget);
+    deny = true;
+    await tester.tap(find.text('Refresh case'));
+    await tester.pumpAndSettle();
+    expect(find.text('Case: case-one'), findsNothing);
+    expect(find.byKey(const Key('wallet-support-open')), findsNothing);
+    expect(find.textContaining('Case status unavailable'), findsOneWidget);
     expect(fake.posts, 0);
   });
 }
