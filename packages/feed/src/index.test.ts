@@ -181,3 +181,32 @@ describe("J06 Masana-only Feed",()=>{
 
 });
 
+
+
+describe("ST4 scoped full-feed text search",()=>{
+ it("binds cursor to mode and exact literal text, keeps legacy list cursor compatible",async()=>{
+  const rows=Array.from({length:22},(_,i)=>({...post,
+    id:`381026c2-9d56-47b1-b73d-${String(1784+i).padStart(12,"0")}`,
+    publishedAt:new Date(Date.parse(post.publishedAt)-i*1000).toISOString()}));
+  const repo={...mock(),list:vi.fn(async()=>rows)};
+  const service=new FeedService(repo,async()=>true);
+  const one=await service.list("tenant","fan","for_you",undefined,undefined,"river");
+  expect(one.items).toHaveLength(20);
+  expect(one.nextCursor).toBeTruthy();
+  await service.list("tenant","fan","for_you",one.nextCursor!,undefined,"river");
+  expect(repo.list).toHaveBeenLastCalledWith("tenant","fan","for_you",
+    {at:rows[19]!.publishedAt,id:rows[19]!.id},21,undefined,"river");
+  for(const [term,mode] of [["rivers","for_you"],["river","following"]] as const) {
+   await expect(service.list("tenant","fan",mode,one.nextCursor!,undefined,term))
+     .rejects.toMatchObject({status:422,code:"invalid_cursor"});
+  }
+  await expect(service.list("tenant","fan","for_you",one.nextCursor!))
+   .rejects.toMatchObject({status:422,code:"invalid_cursor"});
+  await expect(service.list("tenant","fan","for_you",undefined,undefined," "))
+   .rejects.toMatchObject({status:422,code:"invalid_search"});
+  await expect(service.list("tenant","fan","for_you",undefined,undefined,"x"))
+   .rejects.toMatchObject({status:422,code:"invalid_search"});
+  await expect(service.list("tenant","fan","for_you",undefined,undefined,"x".repeat(81)))
+   .rejects.toMatchObject({status:422,code:"invalid_search"});
+ });
+});
