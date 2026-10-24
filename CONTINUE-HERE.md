@@ -1,4 +1,12 @@
-# Continue Masanawa — 23 October 2026
+# Continue Masanawa — 24 October 2026
+
+## Human Chats read/unread and tombstone source batch — 24 October 2026
+
+Base: GitHub `main 060b61ce4c576ea797d0cb28b15e72c2df10c98d` (fresh 24 October). Scoped ownership: `services/gateway/src/human_communication/{index,human_communication.test}.ts`, `apps/mobile/lib/src/human_chat/{controller,screens}.dart`, `apps/mobile/test/human_chat_controller_test.dart` and the existing Phase 4/Chats contract/handoff documentation. This intentionally avoids open #338 Calls-mobile, #344 Status and #300 mixed Flutter/Rooms/Bills implementation paths, all Wallet/P2P, shared ledgers, migrations and deployment.
+
+Source: read acknowledgement requires an incoming nondeleted same-thread message; Flutter chooses that last incoming anchor rather than the most recent outgoing bubble, and only considers the request acknowledged after POST success. A transient failure can be retried on a later refresh/resume. Repeated sender deletion keeps the existing tombstone without another revocation event; deleted history tombstones cannot acquire new delivered acknowledgements. History search query is literal and bounded to 80 characters. No added payment, provider, room, status, recording, retention or push authority.
+
+Local evidence at authoring: full PGlite Human communication suite **24/24 PASS** with permitted 127.0.0.1 SSE listener; architecture **85/85 PASS**; Gateway TS strict typecheck **PASS**. Without loopback permission, the same suite was **23/24** solely because the SSE listener returned `EPERM`, not because a contract assertion failed. Mobile widget test added; local Flutter SDK, Android physical/device, provider, production PostgreSQL/deployment, accessibility and APK checks are **NOT_RUN** here. Exact head/PR/hosted checks and merge SHA must be recorded on delivery. Parent P4/P8 and all **177 screens / 820 atomic requirements** remain open; original backend recipient/privacy fences remain required. Source cannot be called VERIFIED_E2E or DEPLOYED_VERIFIED.
 
 ## Confirmed integrated Calls and Chats source — 23 October 2026 (latest main `7892c756`)
 

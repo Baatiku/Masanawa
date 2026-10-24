@@ -223,6 +223,57 @@ it('accepts independently of follows; literal search, replies, delivery and priv
   )
 }
 );
+it('accepts read anchors only from incoming visible messages, preserves unread progress and bounds history search',async()=>{
+  const carol={tenantId:'t',userId:'carol'};
+  const thread='read-receipt-contract';
+  await db.exec(`INSERT INTO identity.users VALUES('t','carol','active');
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    VALUES('t','carol','carol','Carol');
+    INSERT INTO talks.human_conversations(tenant_id,id,low_user,high_user,initiator,state,updated_at)
+    VALUES('t','read-receipt-contract','alice','carol','alice','accepted','2026-10-19T00:00:00Z');
+    INSERT INTO talks.human_viewers(tenant_id,conversation_id,user_id)
+    VALUES('t','read-receipt-contract','alice'),('t','read-receipt-contract','carol');`);
+  const originalClock=clock;
+  try{
+    clock=new Date('2026-10-19T06:00:00Z');
+    const firstIncoming=await send(a,'POST',`conversations/${thread}/messages`,{requestId:'read-first',text:'First message'});
+    clock=new Date('2026-10-19T06:00:01Z');
+    const nextIncoming=await send(a,'POST',`conversations/${thread}/messages`,{requestId:'read-second',text:'Second message'});
+    clock=new Date('2026-10-19T06:00:02Z');
+    const outgoing=await send(carol,'POST',`conversations/${thread}/messages`,{requestId:'read-own',text:'My outgoing reply'});
+
+    expect((await send(carol,'GET',`conversations/${thread}`)).unreadCount).toBe(2);
+    await expect(send(carol,'GET',`conversations/${thread}/read`,{messageId:firstIncoming.id})).rejects.toMatchObject({statusCode:405});
+    await expect(send(carol,'POST',`conversations/${thread}/read`,{messageId:outgoing.id})).rejects.toMatchObject({statusCode:400});
+    expect((await send(carol,'GET',`conversations/${thread}`)).unreadCount).toBe(2);
+    await expect(send(eve,'POST',`conversations/${thread}/read`,{messageId:firstIncoming.id})).rejects.toMatchObject({statusCode:404});
+    await expect(send(carol,'POST',`conversations/${thread}/read`,{messageId:'not-in-thread'})).rejects.toMatchObject({statusCode:404});
+    await send(carol,'POST',`conversations/${thread}/read`,{messageId:firstIncoming.id});
+    expect((await send(carol,'GET',`conversations/${thread}`)).unreadCount).toBe(1);
+    await send(carol,'POST',`conversations/${thread}/read`,{messageId:nextIncoming.id});
+    expect((await send(carol,'GET',`conversations/${thread}`)).unreadCount).toBe(0);
+    await send(carol,'POST',`conversations/${thread}/read`,{messageId:firstIncoming.id});
+    expect((await send(carol,'GET',`conversations/${thread}`)).unreadCount).toBe(0);
+
+    for(const invalid of [5,'x'.repeat(81)])await expect(send(carol,'GET',`conversations/${thread}/messages`,{}, {query:invalid})).rejects.toMatchObject({statusCode:400});
+    expect((await send(carol,'GET',`conversations/${thread}/messages`,{}, {query:' SECOND '})).items.map((m:any)=>m.id)).toEqual([nextIncoming.id]);
+
+    // Deleted tombstones remain in normal history but do not become fresh
+    // delivery acknowledgements or searchable copies of former text.
+    await send(a,'DELETE',`conversations/${thread}/messages/${nextIncoming.id}`);
+    const deletions=await db.query<{n:number}>("SELECT count(*)::int AS n FROM talks.human_events WHERE conversation_id=$1 AND type='message.deleted'",[thread]);
+    await send(a,'DELETE',`conversations/${thread}/messages/${nextIncoming.id}`);
+    expect((await db.query<{n:number}>("SELECT count(*)::int AS n FROM talks.human_events WHERE conversation_id=$1 AND type='message.deleted'",[thread])).rows[0]!.n).toBe(deletions.rows[0]!.n);
+    await db.query('UPDATE talks.human_messages SET delivered_at=NULL WHERE tenant_id=$1 AND id=$2',['t',nextIncoming.id]);
+    await send(carol,'GET',`conversations/${thread}/messages`);
+    const deleted=(await db.query<{delivered_at:string|null}>('SELECT delivered_at FROM talks.human_messages WHERE tenant_id=$1 AND id=$2',['t',nextIncoming.id])).rows[0]!;
+    expect(deleted.delivered_at).toBeNull();
+    expect((await send(carol,'GET',`conversations/${thread}/messages`,{}, {query:'Second'})).items).toEqual([]);
+    await expect(send(carol,'POST',`conversations/${thread}/read`,{messageId:nextIncoming.id})).rejects.toMatchObject({statusCode:404});
+  } finally {
+    clock=originalClock;
+  }
+});
 it('validates and binds private media, prevents theft, and revokes after deletion',async()=>{
   await expect(send(a,'POST',`conversations/${cid}/media`,{
     requestId:'invalid-media',kind:'image',mimeType:'image/png',name:'x.png',dataBase64:'aGVsbG8='

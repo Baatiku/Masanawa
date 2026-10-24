@@ -269,6 +269,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
   bool initialScroll = true;
   bool bound = false;
   String? lastRead;
+  String? readInFlight;
   @override
   void initState() {
     super.initState();
@@ -309,6 +310,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     owner = next;
     initialScroll = true;
     lastRead = null;
+    readInFlight = null;
     attachments.clear();
     reply = null;
     text.clear();
@@ -341,13 +343,25 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
         initialScroll = false;
         scroll.jumpTo(scroll.position.maxScrollExtent);
       }
+      final anchor = c.lastIncomingMessageId;
       if (scroll.position.maxScrollExtent - scroll.position.pixels < 64 &&
-          c.messages.isNotEmpty &&
-          lastRead != c.messages.last.id &&
+          c.search.isEmpty &&
+          anchor != null &&
+          lastRead != anchor &&
+          readInFlight == null &&
           ModalRoute.of(context)?.isCurrent == true &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-        lastRead = c.messages.last.id;
-        unawaited(c.visibleRead());
+        readInFlight = anchor;
+        unawaited(c.visibleRead().then((confirmed) {
+          if (!mounted || controller != c) return;
+          readInFlight = null;
+          if (confirmed == anchor) {
+            lastRead = anchor;
+            // A newer incoming message may have arrived during this read.
+            if (c.lastIncomingMessageId != anchor) _read();
+          }
+          // Failure is left unacknowledged. A later refresh/resume retries it.
+        }));
       }
     });
   }
