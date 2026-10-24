@@ -4,9 +4,9 @@ import 'package:dio/dio.dart';
 class CommunityRoom {
   const CommunityRoom({required this.id, required this.name, this.description = '',
     this.photoUrl = '', required this.visibility, required this.postingPolicy,
-    required this.ownerId, this.role, this.memberCount = 0, this.muted = false, this.pinned = false, this.commentsEnabled = true, this.unreadCount = 0});
+    required this.ownerId, this.ownerDisplayName, this.role, this.memberCount = 0, this.muted = false, this.pinned = false, this.commentsEnabled = true, this.unreadCount = 0});
   final String id, name, description, photoUrl, visibility, postingPolicy, ownerId;
-  final String? role;
+  final String? role, ownerDisplayName;
   final int memberCount, unreadCount;
   final bool muted, pinned, commentsEnabled;
   bool get joined => role != null;
@@ -16,7 +16,7 @@ class CommunityRoom {
     id: j['roomId'] as String, name: j['name'] as String,
     description: j['description'] as String? ?? '', photoUrl: j['photoUrl'] as String? ?? '',
     visibility: j['visibility'] as String, postingPolicy: j['postingPolicy'] as String,
-    ownerId: j['ownerUserId'] as String? ?? '', role: j['isMember'] == false ? null : j['role'] as String?,
+    ownerId: j['ownerUserId'] as String? ?? '', ownerDisplayName: j['ownerDisplayName'] as String?, role: j['isMember'] == false ? null : j['role'] as String?,
     unreadCount: (j['unreadCount'] as num?)?.toInt() ?? 0,
     muted: j['muted'] == true, pinned: j['pinned'] == true, commentsEnabled: j['commentsEnabled'] != false,
     memberCount: (j['memberCount'] as num?)?.toInt() ?? 0);
