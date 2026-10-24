@@ -486,4 +486,29 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_bulk_pauses WHERE tenant_id=$1',[scope])).rows[0].n).toBe(1);
  });
 
+ it('filters participant order and owner ad history before lossless keyset paging without moving custody',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic History Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'History Test Bank',bankCode:'058',accountName:'Synthetic History Test',accountNumber:'0123456789',verificationReference:'test-history-proof'});
+  const ad=await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  // Synthetic read fixtures only; no financial settlement is represented.
+  for(let n=0;n<45;n++)await pool.query(`INSERT INTO commerce.msnw_p2p_orders(order_id,tenant_id,offer_id,seller_id,buyer_id,payment_method_id,amount_micro,fee_micro,fiat_kobo,rate_kobo_per_msnw,payment_deadline,idempotency_key,state,created_at)
+   VALUES($1,$2,$3,$4,$5,$6,100000,500,10,100,now()+interval '1 hour',$7,$8,$9::timestamptz)`,[randomUUID(),scope,ad.offerId,owner,taker,method,randomUUID(),n%2?'cancelled':'disputed',n<40?'2026-10-01T23:59:59.123456Z':'2026-10-02T00:00:00.000000Z']);
+  const filters={direction:'buy',fromDate:'2026-10-01',toDate:'2026-10-01'};
+  const first=await api.ordersPage(buyer,filters),second=await api.ordersPage(buyer,{...filters,cursor:first.nextCursor!});
+  expect(first.items).toHaveLength(20);expect(second.items).toHaveLength(20);expect(second.nextCursor).toBeNull();expect(new Set([...first.items,...second.items].map(x=>x.order_id)).size).toBe(40);
+  expect((await api.ordersPage(buyer,{...filters,status:'disputed'})).items).toHaveLength(20);
+  await expect(api.ordersPage(maker,{...filters,cursor:first.nextCursor!})).rejects.toMatchObject({status:422});
+  await expect(api.ordersPage(buyer,{...filters,status:'disputed',cursor:first.nextCursor!})).rejects.toMatchObject({status:422});
+  expect((await api.ordersPage(buyer,{fromDate:'2026-10-02',toDate:'2026-10-02'})).items).toHaveLength(5);
+  for(let n=0;n<24;n++)await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  await pool.query(`UPDATE commerce.msnw_p2p_offers SET state='paused',created_at='2026-10-03T12:00:00.999999Z' WHERE tenant_id=$1`,[scope]);
+  const ads=await api.myOffersPage(maker,{status:'paused',direction:'sell',toDate:'2026-10-03'}),older=await api.myOffersPage(maker,{status:'paused',direction:'sell',toDate:'2026-10-03',cursor:ads.nextCursor!});
+  expect(ads.items).toHaveLength(20);expect(older.items).toHaveLength(5);
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n).toBe(0);
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:'2000000',reserved_micro:'0'});
+ });
+
 });
