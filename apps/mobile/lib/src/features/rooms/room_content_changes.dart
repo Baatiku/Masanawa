@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'room_community_api.dart';
 import 'room_content_request.dart';
+import 'room_edit_draft.dart';
 import 'room_request_id.dart';
 
 /// One pending original edit/removal per account and Room. Embedded mode is a
@@ -17,6 +18,7 @@ class RoomContentChanges extends StatefulWidget {
     this.initialItem,
     this.embedded = false,
     this.store,
+    this.editDraftStore,
     this.onCommitted,
     this.protectDetail,
   });
@@ -25,6 +27,7 @@ class RoomContentChanges extends StatefulWidget {
   final Map<String, dynamic>? initialItem;
   final bool embedded;
   final RoomContentRequestStore? store;
+  final RoomEditDraftStore? editDraftStore;
   final Future<void> Function()? onCommitted;
   final Widget Function(BuildContext, Widget)? protectDetail;
   @override
@@ -41,8 +44,10 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
       completed = false,
       committed = false,
       confirming = false;
-  String? error, status;
-  int generation = 0;
+  String? error, status, draftError;
+  RoomEditDraftSession? editDraft;
+  RoomEditDraft? earlierDraft;
+  int generation = 0, draftFeedback = 0;
   bool current(int read, RoomCommunityApi api) =>
       mounted && generation == read && identical(widget.api, api);
   @override
@@ -54,6 +59,35 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
   void reset() {
     generation++;
     pending = null;
+    draftError = null;
+    earlierDraft = null;
+    editDraft = null;
+    final item = widget.initialItem;
+    if (!widget.embedded &&
+        item != null &&
+        item['canEdit'] == true &&
+        item['contentKind'] is String &&
+        item['id'] is String &&
+        item['contentRevision'] is int &&
+        item['body'] is String) {
+      final base = RoomEditDraft(
+        item['contentKind'] as String,
+        item['id'] as String,
+        item['contentRevision'] as int,
+        item['body'] as String,
+        '',
+      );
+      editDraft = RoomEditDraftSession(
+        widget.editDraftStore ??
+            SecureRoomEditDraftStore(
+              widget.api,
+              widget.roomId,
+              base.kind,
+              base.target,
+            ),
+        base,
+      );
+    }
     error = null;
     status = null;
     completed = false;
@@ -79,7 +113,13 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     if (!identical(oldWidget.api, widget.api) ||
         oldWidget.roomId != widget.roomId ||
         oldWidget.initialItem?['id'] != widget.initialItem?['id'] ||
-        !identical(oldWidget.store, widget.store))
+        oldWidget.initialItem?['contentKind'] !=
+            widget.initialItem?['contentKind'] ||
+        oldWidget.initialItem?['contentRevision'] !=
+            widget.initialItem?['contentRevision'] ||
+        oldWidget.initialItem?['body'] != widget.initialItem?['body'] ||
+        !identical(oldWidget.store, widget.store) ||
+        !identical(oldWidget.editDraftStore, widget.editDraftStore))
       reset();
   }
 
@@ -150,12 +190,29 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     try {
       await membership(api, widget.roomId);
       if (!current(read, api)) return;
+      RoomEditDraft? draft;
+      try {
+        draft = await editDraft?.load();
+      } catch (_) {
+        if (current(read, api)) draftError = 'Your local draft could not be restored. Your current text is kept here.';
+      }
+      if (!current(read, api)) return;
       final raw = await saved.read();
       if (!current(read, api)) return;
       if (raw == null) {
         pending = null;
         committed = false;
         body.text = widget.initialItem?['body'] as String? ?? '';
+        if (draft != null) {
+          final base = editDraft!.base;
+          if (draft.revision == base.revision &&
+              draft.original == base.original) {
+            body.text = draft.text;
+            status = 'Unsent edit draft restored. Review it before saving.';
+          } else {
+            earlierDraft = draft;
+          }
+        }
       } else {
         pending = PendingRoomContentChange.decode(raw);
         body.text = pending!.payload['body'] as String? ?? '';
@@ -184,6 +241,16 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     committed = true;
     await saved.clear(change.encode());
     if (!current(read, api)) return;
+    if (widget.initialItem?['id'] == change.targetId &&
+        widget.initialItem?['contentKind'] == change.kind) {
+      try {
+        await editDraft?.clear();
+        if (current(read, api)) draftError = null;
+      } catch (_) {
+        if (current(read, api)) draftError = 'The change was confirmed, but the local draft could not be cleared.';
+      }
+      if (!current(read, api)) return;
+    }
     pending = null;
     body.clear();
     completed = true;
@@ -293,6 +360,61 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
     await finish(change, saved, read, api);
   }
 
+  void changed() {
+    final session = editDraft, read = generation, api = widget.api;
+    final feedback = ++draftFeedback;
+    setState(() {});
+    if (session == null || earlierDraft != null) return;
+    session
+        .update(body.text)
+        .then((_) {
+          if (current(read, api) &&
+              feedback == draftFeedback &&
+              pending == null &&
+              !completed)
+            setState(() {
+              draftError = null;
+              status = 'Unsent draft saved on this device.';
+            });
+        })
+        .catchError((Object _) {
+          if (current(read, api) &&
+              feedback == draftFeedback &&
+              pending == null &&
+              !completed)
+            setState(
+              () => draftError = 'Your local draft could not be saved or changed in another editor. Your current text is kept here.',
+            );
+        });
+  }
+
+  Future<void> discardDraft() async {
+    final session = editDraft, read = generation, api = widget.api;
+    if (session == null || busy || pending != null) return;
+    final approved = await confirm(
+      'Discard unsent draft?',
+      'This clears only the saved local edit. It does not cancel a submitted request or change the post.',
+      true,
+    );
+    if (!current(read, api) || approved != true) return;
+    draftFeedback++;
+    try {
+      await session.clear();
+      if (!current(read, api)) return;
+      setState(() {
+        earlierDraft = null;
+        draftError = null;
+        body.text = widget.initialItem?['body'] as String? ?? '';
+        status = 'Unsent draft discarded.';
+      });
+    } catch (_) {
+      if (current(read, api))
+        setState(
+          () => draftError = 'The local draft could not be cleared or changed elsewhere. Reopen the editor before discarding it.',
+        );
+    }
+  }
+
   Future<void> begin(String action) => run((read, api, saved) async {
     if (pending != null || completed) return;
     final item = widget.initialItem;
@@ -329,6 +451,11 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
           ? (item['body'] as String).substring(0, 240)
           : item['body'] as String? ?? '',
     );
+    draftFeedback++;
+    try {
+      await editDraft?.writes;
+    } catch (_) {}
+    if (!current(read, api)) return;
     pending = change;
     await send(change, read, api, saved);
   });
@@ -448,6 +575,29 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
           if (loading) const Center(child: CircularProgressIndicator()),
           if (error != null) Text(error!),
           if (status != null) Text(status!),
+          if (draftError != null) Text(draftError!),
+          if (!loading &&
+              pending == null &&
+              !completed &&
+              editDraft != null) ...[
+            if (earlierDraft != null)
+              ExpansionTile(
+                title: const Text('Draft from an earlier post version'),
+                children: [
+                  const Text(
+                    'The post changed after this draft. It has not replaced the current text. Copy any text you still need and review the current post.',
+                  ),
+                  SelectableText(earlierDraft!.text),
+                  const Text(
+                    'New edits stay here until you discard the earlier draft or save the post.',
+                  ),
+                ],
+              ),
+            TextButton(
+              onPressed: busy || confirming ? null : discardDraft,
+              child: const Text('Discard unsent draft'),
+            ),
+          ],
           if (!loading && error != null && change == null && !completed)
             TextButton(
               onPressed: busy ? null : restore,
@@ -508,7 +658,7 @@ class _RoomContentChangesState extends State<RoomContentChanges> {
                 minLines: 3,
                 enabled: !busy,
                 decoration: const InputDecoration(labelText: 'Post text'),
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) => changed(),
               ),
               FilledButton(
                 onPressed: busy || body.text.trim() == item['body']

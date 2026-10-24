@@ -41,3 +41,25 @@ it('rejects malformed page controls and dates without turning them into a broad 
  const first=await service.dispatch(member,'GET',path,{limit:1}),base=JSON.parse(Buffer.from(first.nextCursor,'base64url').toString());
  for(const change of [{at:'0000-01-01T00:00:00.000000Z'},{at:'2026-02-30T00:00:00.000000Z'},{kind:'private'},{id:''}])await expect(service.dispatch(member,'GET',path,{cursor:Buffer.from(JSON.stringify({...base,...change})).toString('base64url')})).rejects.toMatchObject({statusCode:422});
 });
+it('pinned history traverses all visible roots beyond loaded timeline and binds cursor collection',async()=>{
+ await db.exec("UPDATE rooms.lessons SET pinned=true");
+ const rows=await all({pinnedOnly:true});
+ expect(rows).toHaveLength(110);expect(new Set(rows.map(v=>v.id)).size).toBe(110);
+ expect(rows.every(v=>v.pinned&&v.contentKind==='post'&&v.parentId===null)).toBe(true);
+ const first=await service.dispatch(member,'GET',path,{pinnedOnly:'true',limit:2});
+ expect(first.pinnedOnly).toBe(true);
+ await expect(service.dispatch(member,'GET',path,{cursor:first.nextCursor})).rejects.toMatchObject({statusCode:422});
+ await expect(service.dispatch(member,'GET',path,{pinnedOnly:true,parentId:'post_000'})).rejects.toMatchObject({statusCode:422});
+ for(const pinnedOnly of [null,[],{},'yes',1])await expect(service.dispatch(member,'GET',path,{pinnedOnly})).rejects.toMatchObject({statusCode:422});
+ const found=await service.dispatch(member,'GET',path,{pinnedOnly:true,search:'100%_#'});
+ expect(found.items.map((v:any)=>v.id)).toEqual(['post_005']);
+});
+it('pinned continuation rechecks unpin, hidden/scheduled posts and lost membership',async()=>{
+ await db.exec("UPDATE rooms.lessons SET pinned=true; UPDATE rooms.lessons SET publish_at='2099-01-01' WHERE lesson_id='post_005'");
+ const first=await service.dispatch(member,'GET',path,{pinnedOnly:true,limit:2});
+ await db.exec("UPDATE rooms.lessons SET pinned=false WHERE lesson_id='post_004'; UPDATE rooms.lessons SET state='retired' WHERE lesson_id='post_003'");
+ const remaining=await all({pinnedOnly:true,cursor:first.nextCursor});
+ for(const id of ['post_003','post_004','post_005'])expect(remaining.map(v=>v.id)).not.toContain(id);
+ await db.exec("UPDATE rooms.memberships SET state='left' WHERE tenant_id='t' AND room_id='room_mod_pages' AND user_id='bob'");
+ await expect(service.dispatch(member,'GET',path,{pinnedOnly:true,cursor:first.nextCursor})).rejects.toMatchObject({statusCode:404});
+});

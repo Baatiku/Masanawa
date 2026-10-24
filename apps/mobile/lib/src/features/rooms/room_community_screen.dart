@@ -12,6 +12,7 @@ import 'room_ownership_transfer.dart';
 import 'room_moderation_screen.dart';
 import 'room_request_id.dart';
 import 'room_media_library.dart';
+import 'room_pinned_posts.dart';
 import 'room_content_changes.dart';
 import 'room_identity.dart';
 import 'room_roster_screen.dart';
@@ -1536,6 +1537,20 @@ class _InfoState extends State<_CommunityInfo> {
       ],
     ),
     if (room.joined) ExpansionTile(title: const Text('Report Room'), children: [TextField(controller: reportReason, maxLength: 2000, decoration: const InputDecoration(labelText: 'Reason')), TextButton(onPressed: busy ? null : () => run(() async { if (reportReason.text.trim().isEmpty) throw const FormatException('Enter a report reason'); reportKey ??= communityRequestId(); await widget.api.action(room.id, 'reports', {'reason': reportReason.text.trim(), 'requestId': reportKey}); if (mounted) { reportReason.clear(); reportKey = null; ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent for review'))); } }), child: const Text('Send report'))]),
+    if (room.joined) ListTile(leading: const Icon(Icons.push_pin_outlined), title: const Text('Pinned posts'), subtitle: const Text('Search and browse pinned posts from this Room'), trailing: const Icon(Icons.chevron_right), onTap: busy ? null : () async {
+      final api = widget.api, id = room.id, protect = widget.protectDetail;
+      await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+        final detail = RoomPinnedPosts(api: api, roomId: id, openPost: (postId) async {
+          if (!mounted || !identical(api, widget.api) || id != room.id) throw StateError('account_changed');
+          await Navigator.push<void>(routeContext, MaterialPageRoute(builder: (threadContext) {
+            final thread = RoomCommunityScreen(api: api, roomId: id, threadPostId: postId, protectDetail: protect);
+            return protect?.call(threadContext, thread) ?? thread;
+          }));
+        });
+        return protect?.call(routeContext, detail) ?? detail;
+      }));
+      if (mounted && identical(api, widget.api) && id == room.id) await refresh();
+    }),
     if (room.joined) ListTile(leading: const Icon(Icons.perm_media_outlined), title: const Text('Shared media'), subtitle: const Text('Photos, videos, audio and files'), trailing: const Icon(Icons.chevron_right), onTap: busy ? null : () async {
       final api = widget.api, id = room.id, protect = widget.protectDetail;
       await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
