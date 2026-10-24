@@ -2,21 +2,10 @@
   "schema_version": 1,
   "active": [
     {
-      "claim_id": "c8471180-04c0-4d01-a957-27767cfa1120",
-      "owner": "codex-p2p-session-boundary-oct24",
-      "scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged",
+      "claim_id": "d9471180-04c1-4d01-a957-27767cfa1121",
+      "owner": "codex-p2p-private-case-notes-oct24",
+      "scope": "P5-15 immutable staff-only case notes with actor/content original recovery; private authorized operator context, no customer/public timeline or financial mutation",
       "paths": [
-        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
-        "apps/mobile/lib/src/finance/p2p_access_boundary.dart",
-        "apps/mobile/test/p2p_access_boundary_test.dart",
-        "apps/mobile/test/p2p_session_fencing_test.dart",
-        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
-        "apps/admin_mobile/test/p2p_case_context_test.dart",
-        "CONTINUE-HERE.md",
-        "docs/PRODUCT-ROADMAP-20261019.md",
-        "docs/SCREEN-JOURNEYS.md",
-        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
-        "apps/mobile/test/p2p_market_filters_test.dart",
         "services/gateway/src/p2p/case_notes.ts",
         "services/gateway/src/p2p/case_notes.pglite.test.ts",
         "services/gateway/src/p2p/service.ts",
@@ -24,18 +13,21 @@
         "packages/commerce/migrations/0148_msnw_p2p_case_notes.sql",
         "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
         "apps/admin_mobile/lib/src/screens/p2p_case_notes.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
         "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
-        "apps/admin_mobile/test/p2p_case_notes_test.dart"
+        "apps/admin_mobile/test/p2p_case_notes_test.dart",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
       ],
-      "branch": "feat/p2p-session-boundaries-oct24",
-      "base_sha": "52be919c4f2a91eb35e56709eaccba37866288e7",
-      "pr": "https://github.com/Baatiku/Masanawa/pull/368",
-      "claimed_at": "2026-10-24T09:06:01.830Z",
-      "heartbeat_at": "2026-10-24T09:25:05.183Z",
-      "expires_at": "2026-10-24T09:30:05.183Z",
-      "progress": "PR368f23b2ac4 P2P122backend7Worker21realPG+MobilePASS;Foundationpending. Nextstaffnotes271d1d99 committed14files incldocs;3SQL+gateway/adaptertypes+15staffFlutterPASS,reviewclear,22ndPGfixtureadded. Await368merge thenrebasesource; noAPK/device/productionacceptance.",
-      "next_branch": "feat/p2p-private-case-notes-oct24",
-      "next_scope": "P5-15 immutable staff-only case notes with actor/content original recovery; private authorized operator context, no customer/public timeline or financial mutation"
+      "branch": "feat/p2p-private-case-notes-oct24",
+      "base_sha": "ef55d8108a80d51a8b55bf08549216f8c314fd62",
+      "pr": "",
+      "claimed_at": "2026-10-24T09:26:37.069Z",
+      "heartbeat_at": "2026-10-24T09:26:37.069Z",
+      "expires_at": "2026-10-24T09:31:37.069Z",
+      "progress": "Privatecase-note source a42462fe rebasedonto368;3SQL+gateway/adaptertypes+15adminFlutterPASS;reviewclear. ExportedbackuplocalandHiggsfield;publishingexacttree4df01851;22ndPGfixturependinghostedCI."
     }
   ],
   "history": [
@@ -732,6 +724,44 @@
       "next_scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged",
       "released_at": "2026-10-24T09:06:01.830Z",
       "release_reason": "PR367 merged52be919c; final65af3f46 all4CI PASS incl122backend7Worker21realPG;36Flutter+types/reviewclear;sourcegatesremain."
+    },
+    {
+      "claim_id": "c8471180-04c0-4d01-a957-27767cfa1120",
+      "owner": "codex-p2p-session-boundary-oct24",
+      "scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged",
+      "paths": [
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/lib/src/finance/p2p_access_boundary.dart",
+        "apps/mobile/test/p2p_access_boundary_test.dart",
+        "apps/mobile/test/p2p_session_fencing_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
+        "apps/admin_mobile/test/p2p_case_context_test.dart",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "apps/mobile/test/p2p_market_filters_test.dart",
+        "services/gateway/src/p2p/case_notes.ts",
+        "services/gateway/src/p2p/case_notes.pglite.test.ts",
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "packages/commerce/migrations/0148_msnw_p2p_case_notes.sql",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "apps/admin_mobile/lib/src/screens/p2p_case_notes.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_case_notes_test.dart"
+      ],
+      "branch": "feat/p2p-session-boundaries-oct24",
+      "base_sha": "52be919c4f2a91eb35e56709eaccba37866288e7",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/368",
+      "claimed_at": "2026-10-24T09:06:01.830Z",
+      "heartbeat_at": "2026-10-24T09:25:05.183Z",
+      "expires_at": "2026-10-24T09:30:05.183Z",
+      "progress": "PR368f23b2ac4 P2P122backend7Worker21realPG+MobilePASS;Foundationpending. Nextstaffnotes271d1d99 committed14files incldocs;3SQL+gateway/adaptertypes+15staffFlutterPASS,reviewclear,22ndPGfixtureadded. Await368merge thenrebasesource; noAPK/device/productionacceptance.",
+      "next_branch": "feat/p2p-private-case-notes-oct24",
+      "next_scope": "P5-15 immutable staff-only case notes with actor/content original recovery; private authorized operator context, no customer/public timeline or financial mutation",
+      "released_at": "2026-10-24T09:26:37.069Z",
+      "release_reason": "PR368 mergedef55d810; exactf23b2ac4 all3applicableCI PASS incl122backend7Worker21realPG and122distinctlocalFlutter+6staff;reviewclear."
     }
   ]
 }
