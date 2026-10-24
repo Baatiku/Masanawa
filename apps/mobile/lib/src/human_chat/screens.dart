@@ -783,7 +783,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     await journal.stage(PendingHumanEdit(
       conversationId:c.id,messageId:m.id,
       text:proposed,requestId:createRequestId(),
-      expectedEditedAt:m.json['editedAt'] as String?,
+      expectedVersion:m.json['editVersion'] as int? ?? 0,
     ));
     if (!mounted || controller != c || !c.current) return;
     final outcome = await journal.recover(c.transport,retryOriginal:true);
