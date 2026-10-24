@@ -1,3 +1,4 @@
+import 'p2p_support_requests.dart';
 import 'p2p_case_context.dart';
 import 'p2p_ad_reports_page.dart';
 import 'package:dio/dio.dart';
@@ -47,6 +48,7 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
         final response=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id',options:auth);
         if(!same())throw StateError('Admin session changed');return Map<String,dynamic>.from(response.data as Map);
       },
+      openSupportRequests:(page)async{if(!same()||!page.mounted)return;await Navigator.of(page).push(MaterialPageRoute<void>(builder:(_)=>P2pStaffSupportRequests(currentSession:()=>same()?session:null,load:()async{if(!same())throw StateError('Admin session changed');final r=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id/support/requests',options:auth);if(!same())throw StateError('Admin session changed');return Map<String,dynamic>.from(r.data as Map);},request:(recipient,instruction,hours)async{if(!same())throw StateError('Admin session changed');await _dio.post<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id/support/requests',options:auth,data:{'recipient':recipient,'instruction':instruction,'windowHours':hours});if(!same())throw StateError('Admin session changed');})));},
       copyEvidence:(evidenceId)async{
         if(!same())throw StateError('Admin session changed');
         final response=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id/evidence/$evidenceId',options:auth);

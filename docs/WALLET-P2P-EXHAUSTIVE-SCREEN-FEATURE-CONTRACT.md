@@ -405,7 +405,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P5-12 | S/P | Typed reason picker, immutable original opening and order-bound recovery implemented through canonical dispute transition; device/operational acceptance remains open. |
 | P5-13 | P | Participant support context shows current order status, own opening and recent public transitions without private staff/counterparty notes; formal responses/staff thread/appeal remain open. |
 | P5-14 | P | Frozen escrow clearly marked while dispute unresolved. |
-| P5-15 | N | Support intervention with staff notes, request for additional evidence, response window. |
+| P5-15 | S/P | Private assigned-party evidence requests, informational response windows and immutable original responses implemented; separate staff notes, extension/cancellation/delivery policy and deployed acceptance remain open. |
 | P5-16 | N | Withdraw/reopen dispute only under safe and authorized rules, no timer hacks. |
 | P5-17 | P | Report late payment on already refunded/expired order as separate case. |
 | P5-18 | P/Q | Operator case listing, evidence read rights and audited authorized decision. |
@@ -778,6 +778,16 @@ Participant support history now pages older public order transitions through an 
 The existing support page adds Load older events, retry without discarding current content, overlap removal and a refresh generation fence. Account/access loss clears private cached context; older pages cannot overwrite a refreshed order. Loading, empty, transient failure and revoked-access states remain on the original order route. Local five backend checks, gateway/adapter types and 21 Flutter regression checks passed; the final 18 attachment/support tests also passed after authorization-loss repairs. Hosted tied-microsecond PostgreSQL paging acceptance is recorded in the delivery PR. Independent review clear after correcting authorization-loss cache handling.
 
 Complete public history source is distinct from formal staff responses, complete private investigation records, deployed retention, handset and production acceptance, which remain open. Parent P2P gates and 177 screens/820 requirements unchanged. No APK generated.
+
+## 24 October 2026 — P2P private evidence requests and original responses (partial P5-15)
+
+Authorized dispute staff can request supporting evidence from the original buyer or seller, with a clearly informational 24/48/72-hour response window. Instructions and replies remain private to the assigned participant and authorized staff. One unanswered request per participant and a 20-request order bound prevent uncontrolled threads. New requests/responses require an open dispute; immutable original receipts still recover after order closure. Late responses remain available for manual review and never release, refund, expire or reopen escrow.
+
+Migration 0147 adds immutable order-bound requests/responses. Actor/content/recipient/window identity deduplicates original staff submissions; a unique original response per request survives retries. Strict recipient types prevent coerced values from routing private instructions to another party. Existing operator authorization, P2P orders and custody authority remain canonical.
+
+Customer Order support → Support requests shows assigned instructions, due times, response state and original receipts; documents use the existing order attachment action. Staff case context → Evidence requests and responses selects buyer/seller and the response window. Both pages read before writes, recover uncertain originals, keep drafts in memory and scrub private context after session/account/access loss. Definitive rejections permit correction. Loading, empty, offline/retry, terminal, large-text/RTL and Back navigation remain within the original order/case.
+
+Local three backend checks, gateway/adapter types, customer/staff widget checks and informational-deadline/cap/immutable-original regressions passed. Independent review clear after strict-recipient correction; exact-head CI and the 21st real PostgreSQL duplicate request/response race are recorded in the delivery PR. Additional staff-only notes, request cancellation/extension policy, delivery notifications, retention, deployed support permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

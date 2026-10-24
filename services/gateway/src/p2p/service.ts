@@ -1,3 +1,4 @@
+import {createSupportRequests} from './support_requests.js';
 import {supportTimeline} from './support_timeline.js';
 import {createDisputeContext,disputeInput,originalDispute,recordDispute} from './dispute_context.js';
 import {createHistoryReading} from './history_reading.js';
@@ -1021,6 +1022,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         readOnly:true,
       };
     },
+    ...createSupportRequests(pool),
     supportEvents:(actor:P2pActor,orderId:string,cursor?:string)=>supportTimeline(pool,actor,orderId,cursor),
     async caseFile(actor: P2pActor, orderId: string) {
       // Gateway must authorize this caller as a finance/dispute operator.

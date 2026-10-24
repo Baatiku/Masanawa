@@ -17,7 +17,9 @@ class P2pCaseContext extends StatefulWidget {
     required this.currentSession,
     required this.load,
     required this.copyEvidence,
+    this.openSupportRequests,
   });
+  final Future<void> Function(BuildContext)? openSupportRequests;
   final String orderId;
   final String? Function() currentSession;
   final Future<Map<String, dynamic>> Function() load;
@@ -155,6 +157,7 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
         if (_error != null) Text(_error!),
         if (file != null) ...[
           Text('State: ${(file['order'] as Map)['state']}'),
+          if(widget.openSupportRequests!=null)OutlinedButton(onPressed:_loading||_copying?null:()=>widget.openSupportRequests!(context),child:const Text('Evidence requests and responses')),
           const Text(
             'Payment is not provider-verified. A screenshot or buyer claim alone must never authorize a release.',
           ),
