@@ -27,15 +27,16 @@
         "apps/mobile/test/p2p_order_support_test.dart",
         "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
         "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
-        "apps/admin_mobile/test/p2p_case_context_test.dart"
+        "apps/admin_mobile/test/p2p_case_context_test.dart",
+        "apps/mobile/test/p2p_offer_editor_test.dart"
       ],
       "branch": "feat/p2p-history-filters-oct24",
       "base_sha": "d83290f24a46c1beeab4f71c9bf247a7f7e263d5",
       "pr": "https://github.com/Baatiku/Masanawa/pull/352",
       "claimed_at": "2026-10-24T04:22:56.130Z",
-      "heartbeat_at": "2026-10-24T04:41:55.641Z",
-      "expires_at": "2026-10-24T04:46:55.641Z",
-      "progress": "PR352P2P+StatusPASS,Mobile/Foundationpending. Nextdisputecontext0145+typedcanonicalaction+participantpublictimeline+customerpagerecoveryimplemented,typesPASS;staffcaseviewfencingandtestsnext. Noadditionalsettlementauthority.",
+      "heartbeat_at": "2026-10-24T04:43:03.084Z",
+      "expires_at": "2026-10-24T04:48:03.084Z",
+      "progress": "PR352P2P+StatusPASS; Mobileonlyfailureold320RTLeditrowoffscreen afternewhistoryheader. Fixscroll-before-tap andrerun4edit tests; nextsupportsourceuncommittedseparate.",
       "next_branch": "feat/p2p-dispute-context-oct24",
       "next_scope": "P5-12/P5-13 typed original dispute submissions and participant-safe recent support timeline using existing dispute state transition; no new settlement authority"
     }
