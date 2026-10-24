@@ -26,6 +26,7 @@ import 'models.dart';
 import 'transport.dart';
 import 'report_history.dart';
 import 'report_request.dart';
+import 'search_highlight.dart';
 
 Future<void> humanConversationStart(
   BuildContext context,
@@ -263,6 +264,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
   HumanThreadController? controller;
   VoiceNoteRecorder recorder = VoiceNoteRecorder();
   final text = TextEditingController();
+  final searchText = TextEditingController();
   final scroll = ScrollController();
   final List<HumanAttachment> attachments = [];
   HumanMessage? reply;
@@ -318,6 +320,8 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     attachments.clear();
     reply = null;
     text.clear();
+    searchText.clear();
+    searching = false;
     _reportWorking = false;
     if (next == null) return;
     final c = HumanThreadController(
@@ -386,6 +390,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     controller?.dispose();
     unawaited(recorder.close());
     text.dispose();
+    searchText.dispose();
     scroll.dispose();
     super.dispose();
   }
@@ -536,6 +541,33 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
         if (c.current) await c.refresh();
       }
     });
+  }
+
+  void _searchSubmit(String raw) {
+    final c = controller;
+    if (c == null || !c.current || !searching) return;
+    final query = raw.trim();
+    if (query.length > 80 || query == c.search) return;
+    c.search = query;
+    unawaited(c.refresh().then((_) {
+      if (mounted && controller == c && c.current && scroll.hasClients) {
+        scroll.jumpTo(0);
+      }
+    }));
+  }
+
+  void _searchToggle() {
+    final c = controller;
+    if (c == null || !c.current) return;
+    final closing = searching;
+    setState(() {
+      searching = !searching;
+      if (closing) searchText.clear();
+    });
+    if (closing && c.search.isNotEmpty) {
+      c.search = '';
+      unawaited(c.refresh());
+    }
   }
 
   Future<void> _send() async {
@@ -804,9 +836,10 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
             ),
           if(conversation?.state=='accepted')IconButton(tooltip:'Pay',icon:const Icon(Icons.payments_outlined),onPressed:c?.current==true?_pay:null),
           IconButton(
-            tooltip: 'Search conversation',
-            icon: const Icon(Icons.search),
-            onPressed: () => setState(() => searching = !searching),
+            key: const Key('human-conversation-search-toggle'),
+            tooltip: searching ? 'Close conversation search' : 'Search conversation',
+            icon: Icon(searching ? Icons.close : Icons.search),
+            onPressed: c?.current == true ? _searchToggle : null,
           ),
           if (conversation != null)
             PopupMenuButton<String>(
@@ -828,15 +861,50 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
       body: Column(
         children: [
           if (searching)
-            TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search messages',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(children: [
+                Expanded(child: TextField(
+                  key: const Key('human-message-search-input'),
+                  controller: searchText,
+                  maxLength: 80,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search messages',
+                    suffixIcon: searchText.text.isEmpty ? null : IconButton(
+                      key: const Key('human-message-search-clear'),
+                      tooltip: 'Clear message search',
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        searchText.clear();
+                        setState(() {});
+                        _searchSubmit('');
+                      },
+                    ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: _searchSubmit,
+                )),
+                TextButton(
+                  key: const Key('human-message-search-run'),
+                  onPressed: c?.current == true
+                      ? () => _searchSubmit(searchText.text)
+                      : null,
+                  child: const Text('Search'),
+                ),
+              ]),
+            ),
+          if (searching && c != null && c.search.isNotEmpty && c.error == null)
+            Padding(
+              key: const Key('human-search-result-count'),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(c.before == null
+                    ? '${c.messages.length} matching messages'
+                    : '${c.messages.length} matching messages loaded. More matches available.'),
               ),
-              onSubmitted: (v) {
-                c!.search = v;
-                unawaited(c.refresh());
-              },
             ),
           if (c?.error != null)
             MaterialBanner(
@@ -890,10 +958,14 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                           child: const Text('Load earlier messages'),
                         ),
                       if (c.messages.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
+                        Padding(
+                          padding: const EdgeInsets.all(24),
                           child: Center(
-                            child: Text('Your conversation starts here.'),
+                            child: Text(c.search.isNotEmpty && c.error == null
+                                ? 'No matching messages. Try another search.'
+                                : c.error == null
+                                    ? 'Your conversation starts here.'
+                                    : 'Messages unavailable. Refresh to try again.'),
                           ),
                         ),
                       for (var i = 0; i < c.messages.length; i++) ...[
@@ -1069,7 +1141,12 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                   maxLines: 2,
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
-              Text(m.deleted ? 'Message deleted' : m.text),
+              m.deleted
+                  ? const Text('Message deleted')
+                  : HumanSearchHighlight(
+                      text: m.text,
+                      query: searching ? controller?.search ?? '' : '',
+                    ),
               if (!m.deleted)
                 for (final a in m.attachments)
                   HumanMediaTile(
