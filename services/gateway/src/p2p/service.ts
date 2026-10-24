@@ -1081,6 +1081,19 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       }
       return {expired};
     },
+    async evidenceByDigest(actor:P2pActor,orderId:string,sha256:string){
+      if(!/^[a-f0-9]{64}$/.test(sha256))throw new P2pError('p2p.evidence_invalid_digest',422);
+      const rows=await pool.query(`SELECT e.evidence_id,e.sha256,e.object_ref,e.created_at,o.state
+        FROM commerce.msnw_p2p_evidence e JOIN commerce.msnw_p2p_orders o ON o.tenant_id=e.tenant_id AND o.order_id=e.order_id
+        WHERE e.tenant_id=$1 AND e.order_id=$2 AND e.submitted_by=$3 AND e.sha256=$4 AND(o.seller_id=$3 OR o.buyer_id=$3)
+        ORDER BY e.created_at,e.evidence_id LIMIT 1`,[actor.tenantId,id(orderId),actor.userId,sha256]);
+      const row=take<Record<string,unknown>>(rows,'p2p.evidence_original_not_found');
+      const ref=String(row.object_ref??'');if(!ref.startsWith('p2p/'))throw new P2pError('p2p.evidence_unavailable',503);
+      const metadata=ref.match(/_([1-9][0-9]{0,6})_(pdf|png|jpg|webp)$/);
+      const mime:Record<string,string>={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',webp:'image/webp'};
+      return{evidenceId:String(row.evidence_id),sha256:String(row.sha256),state:String(row.state),createdAt:row.created_at,
+        bytes:metadata?Number(metadata[1]):null,contentType:metadata?mime[metadata[2]!]:null};
+    },
     async assertEvidenceAllowed(actor:P2pActor, orderId:string) {
       const result=await pool.query(`SELECT 1 FROM commerce.msnw_p2p_orders o
         WHERE o.tenant_id=$1 AND o.order_id=$2
@@ -1138,6 +1151,13 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         throw new P2pError("p2p.evidence_not_verified",403);
       return transact(async tx => {
         const order=await orderForUpdate(tx,actor,orderId);
+        if(!owns(order,actor))throw new P2pError('p2p.evidence_forbidden',403);
+        // The original content belongs to this actor/order, not another
+        // participant with the same bytes. Recovery survives later closure.
+        const original=await tx.query(`SELECT evidence_id FROM commerce.msnw_p2p_evidence
+          WHERE tenant_id=$1 AND order_id=$2 AND submitted_by=$3 AND sha256=$4
+          ORDER BY created_at,evidence_id LIMIT 1`,[actor.tenantId,order.order_id,actor.userId,evidence.sha256]);
+        if(original.rows[0])return{evidenceId:String(original.rows[0].evidence_id),state:order.state,replay:true};
         let lateEvidenceAllowed=false;
         if(actor.userId===order.buyer_id &&
            ["expired","cancelled"].includes(order.state)){
@@ -1157,7 +1177,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           VALUES($1,$2,$3,$4,$5,$6)`,[evidenceId,actor.tenantId,orderId,actor.userId,
           evidence.objectRef,evidence.sha256]);
         await event(tx,actor,orderId,"evidence_recorded",order.state,order.state);
-        return {evidenceId,state:order.state};
+        return {evidenceId,state:order.state,replay:false};
       });
     },
   });

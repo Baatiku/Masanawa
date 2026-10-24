@@ -536,4 +536,27 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:'2000000',reserved_micro:'0'});
  });
 
+ it('serializes same-content evidence retries and preserves original recovery after refund',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),staff='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker,staff])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic Support Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'Support Test Bank',bankCode:'058',accountName:'Synthetic Support Test',accountNumber:'0123456789',verificationReference:'test-support-proof'});
+  const ad=await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  const order=await api.createOrder(buyer,{offerId:ad.offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+  await api.action(buyer,order.orderId,'dispute',{explanation:'Synthetic attachment dispute'});
+  const input={objectRef:'p2p/private/original_100_pdf',sha256:'a'.repeat(64),verifiedOwnerId:taker};
+  const race=await Promise.all([api.recordEvidence(buyer,order.orderId,input),api.recordEvidence(buyer,order.orderId,input)]);
+  expect(new Set(race.map(x=>x.evidenceId)).size).toBe(1);expect(race.filter(x=>!x.replay)).toHaveLength(1);
+  const peer=await api.recordEvidence(maker,order.orderId,{...input,verifiedOwnerId:owner});expect(peer.evidenceId).not.toBe(race[0]!.evidenceId);
+  expect((await pool.query("SELECT count(*)::int AS n FROM commerce.msnw_p2p_events WHERE tenant_id=$1 AND action='evidence_recorded'",[scope])).rows[0].n).toBe(2);
+  await api.action({tenantId:scope,userId:staff},order.orderId,'refund',{isOperator:true,explanation:'Synthetic attachment qualification refund'});
+  const before=(await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n;
+  expect(await api.recordEvidence(buyer,order.orderId,input)).toMatchObject({evidenceId:race[0]!.evidenceId,replay:true,state:'cancelled'});
+  expect(await api.evidenceByDigest(buyer,order.orderId,input.sha256)).toMatchObject({evidenceId:race[0]!.evidenceId,state:'cancelled'});
+  await expect(api.evidenceByDigest({tenantId:'foreign',userId:taker},order.orderId,input.sha256)).rejects.toMatchObject({status:404});
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n).toBe(before);
+ });
+
+
 });

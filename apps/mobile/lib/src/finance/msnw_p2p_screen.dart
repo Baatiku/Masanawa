@@ -1,3 +1,4 @@
+import 'p2p_evidence_upload.dart';
 import 'p2p_order_support.dart';
 import 'p2p_history_filters.dart';
 import 'p2p_pause_all.dart';
@@ -1009,6 +1010,27 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       submit:(category,details)async{if(!authorized())throw StateError('Account changed');return _json(await _request('POST','/orders/$id/dispute',{'category':category,'reason':details}));},
     )));
   }
+  Future<void> _evidenceUpload(BuildContext route,String id)async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final key='p2p-evidence-v1:${Uri.encodeComponent(base)}:${Uri.encodeComponent(owner)}:$id';
+    if(!authorized()||!route.mounted)return;
+    await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pEvidenceUploadPage(
+      expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
+      restore:()async{if(!authorized())throw StateError('Account changed');final value=await _secure.read(key:key);return value==null?null:_json(jsonDecode(value));},
+      persist:(value)async{if(!authorized())throw StateError('Account changed');if(value==null){await _secure.delete(key:key);}else{await _secure.write(key:key,value:jsonEncode(value));}},
+      original:(digest)async{if(!authorized())throw StateError('Account changed');try{return _json(await _request('POST','/orders/$id/evidence/original',{'sha256':digest}));}on DioException catch(error){if(error.response?.statusCode==404)return null;rethrow;}},
+      upload:(file)async{if(!authorized())throw StateError('Account changed');try{await _request('POST','/orders/$id/evidence/upload',{'contentType':file.contentType,'contentBase64':base64Encode(file.bytes)});}on DioException catch(error){if(error.response?.statusCode==422)throw const P2pEvidenceRejected();rethrow;}},
+      pick:()async{
+        final file=await FilePicker.pickFile(type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf']);
+        if(!authorized()||file==null)return null;
+        final length=await file.length();if(length==null||length<=0||length>2*1024*1024)throw StateError('File must be at most 2 MB');
+        final bytes=await file.readAsBytes();if(!authorized())return null;
+        final type=switch((file.extension??'').toLowerCase()){'png'=>'image/png','jpg'||'jpeg'=>'image/jpeg','webp'=>'image/webp','pdf'=>'application/pdf',_=>throw StateError('Unsupported type')};
+        return P2pEvidenceFile(bytes,type);
+      },
+    )));
+  }
   Widget _orderView(String id)=>_P2pOrderDetail(
         openSupport:(route)=>_orderSupport(route,id),
         load: () async => _json(await _request('GET','/orders/$id')),
@@ -1048,9 +1070,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           final data=_json(await _request('GET','/orders/$id/evidence'));
           return (data['items'] as List<dynamic>? ?? []).map(_json).toList();
         },
-        uploadEvidence: (data) async {
-          await _request('POST','/orders/$id/evidence/upload',data);
-        },
+        openEvidenceUpload:(route)=>_evidenceUpload(route,id),
         openEvidence: (pageContext, evidenceId, fileType) async {
           // A fresh owner-scoped signed URL is requested for every open.
           // Never cache or store that URL, and never forward account bearer
@@ -2560,7 +2580,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
 class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
-    required this.uploadEvidence,required this.openEvidence,
+    required this.openEvidenceUpload,required this.openEvidence,
     required this.loadReceipt,required this.userId,required this.openMessages,required this.openSupport,
   });
   final Future<Map<String,dynamic>> Function() load;
@@ -2570,7 +2590,7 @@ class _P2pOrderDetail extends StatefulWidget {
   final Future<void> Function(BuildContext) openSupport;
   final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
-  final Future<void> Function(Map<String,dynamic>) uploadEvidence;
+  final Future<void> Function(BuildContext) openEvidenceUpload;
   final Future<void> Function(BuildContext,String,String) openEvidence;
   final String userId;
   @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
@@ -2705,38 +2725,9 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     }
   }
   Future<void> _uploadEvidence() async {
-    if (_uploading) return;
-    setState(() => _uploading = true);
-    try {
-      final file=await FilePicker.pickFile(
-        type:FileType.custom,allowedExtensions:const ['png','jpg','jpeg','webp','pdf'],
-      );
-      if(file==null)return;
-      final length=await file.length();
-      if(length==null||length<=0||length>2*1024*1024)
-        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
-      final bytes=await file.readAsBytes();
-      if(bytes.isEmpty||bytes.length>2*1024*1024)
-        throw StateError('Choose a PNG, JPG, WEBP or PDF no larger than 2 MB.');
-      final extension=(file.extension??'').toLowerCase();
-      final contentType=switch(extension){
-        'png'=>'image/png','jpg'||'jpeg'=>'image/jpeg',
-        'webp'=>'image/webp','pdf'=>'application/pdf',
-        _=>throw StateError('Unsupported evidence type'),
-      };
-      await widget.uploadEvidence({
-        'contentType':contentType,'contentBase64':base64Encode(bytes),
-      });
-      if(mounted)_refresh();
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Attachment failed. Check file permissions, connection and the 2 MB limit.',
-            ),
-          ),
-        );
-    } finally {
-      if (mounted) setState(() => _uploading = false);
-    }
+    if(_uploading)return;setState(()=>_uploading=true);
+    try{await widget.openEvidenceUpload(context);if(mounted)_refresh();}
+    finally{if(mounted)setState(()=>_uploading=false);}
   }
 
   Future<void> _support()async{

@@ -399,7 +399,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P5-06 | P | Receipt/evidence upload to participant-only order storage, 2MB cap in source. |
 | P5-07 | S/P | Evidence list includes creator, date, file type, authorized preview/download. |
 | P5-08 | P | Evidence links short-lived, authenticated, non-guessable, no public bank records. |
-| P5-09 | N | Evidence metadata hashes and linked original request/file on uncertain upload. |
+| P5-09 | S/P | Actor/order/hash original receipt recovery, stable private object retries and secure native metadata implemented; retention cleanup, deployed storage and handset acceptance remain open. |
 | P5-10 | N | Report/deletion/retention policy preserving investigation evidence legally. |
 | P5-11 | P | Open dispute against original order with typed reason and text. |
 | P5-12 | S/P | Typed reason picker, immutable original opening and order-bound recovery implemented through canonical dispute transition; device/operational acceptance remains open. |
@@ -762,6 +762,14 @@ Staff case context now displays original typed evidence and retains existing aud
 Higgsfield: 111 full P2P backend cases PASS, including four new typed-context SQL/HTTP/privacy/rollback cases; Gateway and storage-adapter TypeScript PASS. Twenty-nine focused Flutter cases PASS (seven customer support, twelve marketplace/order integration, five new staff context and five existing staff report cases); affected analyzers have informational lints only. Independent read-only review found no material findings. An eighteenth real PostgreSQL test covers competing participant openings, unchanged escrow hold and original recovery after canonical refund; hosted exact-head qualification remains a merge gate and is recorded in the PR. No APK, physical handset, live provider, production migration or live-funds acceptance. All 177 screens / 820 requirements and parent Phase 7/8 gates remain open.
 
 Previous delivery: PR #352 merged `487fbabd5012b82506f12c3467be47617f4e1a72`; exact `4e382abf` passed Foundation/Mobile/P2P/Status, including 110 backend/storage + 7 Worker + 17 real PostgreSQL cases. Current source is isolated on `feat/p2p-dispute-context-oct24`, with Gateway P2P service/routes/context module, migration 0145, customer order/support pages, staff case view and scoped tests. Safe next action: hosted source/migration/native checks → repair material failures → merge fresh main; operational dispute policy/staffing, formal responses and real-device/provider acceptance remain explicit follow-up.
+
+## 24 October 2026 — P2P original attachment recovery (partial P5-09)
+
+Order evidence now recovers the submitting account’s original receipt by order and SHA-256 through an authenticated no-store POST read. Locked recording deduplicates retries, preserves legacy duplicate records and selects the earliest original; another participant or tenant cannot recover that receipt. Private content-addressed upload paths remain intact after uncertain writes rather than risking deletion after an accepted database commit. No evidence operation releases or refunds assets.
+
+The attachment page supports file selection, explicit submission, original receipt checks, same-file retry, loading/error/rejected-file recovery and account/base-change fencing. Only hash, MIME type and byte count are retained in account/order/base-scoped secure storage; file bytes remain in memory. Definitive validation rejection permits replacement; uncertain outcomes keep the original identity. Back navigation preserves recovery metadata. PNG/JPG/WEBP/PDF remain limited to 2 MB.
+
+Source checks: 115 local P2P tests, gateway and PostgreSQL adapter types passed; 17 native regression tests plus the final seven evidence tests passed, including 320dp RTL/200% text and late account-change fencing. One Flutter startup segfault was retried; a lazy-list test scroll was corrected. Exact-head hosted qualification and the new PostgreSQL duplicate-record race are recorded in the delivery PR. Independent read-only review clear after fixing rejected-file replacement. This is source qualification, not handset/provider/production acceptance. Private unreferenced-object retention cleanup, deployed storage/retention policy, actual handset file-picker behavior and complete P5-09 acceptance remain open. Parent gates and the 177-screen/820-requirement inventory remain unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
