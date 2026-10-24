@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../screens/calls/calls_screen.dart';
+import '../screens/calls/masana_only_calls_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
 import '../gb_wallet/data_redemption_screen.dart';
 import '../screens/status/status_screen.dart';
@@ -61,7 +61,7 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     0 => const ChatListScreen(),
     1 => const StatusScreen(),
     2 => const GbWalletScreen(),
-    3 => const CallsScreen(),
+    3 => const MasanaOnlyCallsScreen(),
     _ => const DataRedemptionScreen(),
   };
 
