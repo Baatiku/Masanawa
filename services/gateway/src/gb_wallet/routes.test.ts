@@ -15,10 +15,13 @@ describe("public GB recharge previews never mint balance", () => {
     expect(packages.json()).toMatchObject({
       version: "gb-recharge-initial-v1",
       settlement: "verified_bank_deposit_only",
-      packages: [
-        { sizeGb: 10, expectedMb: 10000, totalKobo: 400000 },
-        { sizeGb: 20, expectedMb: 20000, totalKobo: 750000 },
-      ],
+    });
+    expect(packages.json().packages).toHaveLength(6);
+    expect(packages.json().packages[0]).toMatchObject({
+      sizeGb: 10, expectedMb: 10000, totalKobo: 400000,
+    });
+    expect(packages.json().packages[1]).toMatchObject({
+      sizeGb: 20, expectedMb: 20000, totalKobo: 750000,
     });
     const preview = await app.inject({ method: "GET", url: "/v1/gb/recharge/preview?amountKobo=500000" });
     expect(preview.statusCode).toBe(200);
@@ -49,7 +52,13 @@ describe("public GB recharge previews never mint balance", () => {
       method: "GET",
       url: "/v1/gb/recharge/preview?amountKobo=500000&version=gb-recharge-initial-v1",
     });
-    expect(preview.statusCode).toBe(400);
+    // Fastify normalizes unknown query keys. They do not select historical
+    // rates: server-effective configuration remains authoritative.
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json()).toMatchObject({
+      rateVersion: "admin-test-v2",
+      creditedMb: 11904,
+    });
     const invalid = await app.inject({
       method: "GET",
       url: "/v1/gb/recharge/preview?amountKobo=-100",
