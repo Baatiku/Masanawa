@@ -168,6 +168,12 @@ class _P2pPauseAllPageState extends State<P2pPauseAllPage> {
     }
   }
 
+  String _checkedAt(BuildContext context) {
+    final at = DateTime.parse('${_summary!['as_of']}').toLocal();
+    final local = MaterialLocalizations.of(context);
+    return '${local.formatCompactDate(at)} · ${local.formatTimeOfDay(TimeOfDay.fromDateTime(at))}';
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Ad availability')),
@@ -182,18 +188,18 @@ class _P2pPauseAllPageState extends State<P2pPauseAllPage> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Stop new trades on every ad active when this operation runs. Existing orders and their escrow continue normally. Ads created afterward are outside this request.',
+                'Stop new trades on your current ads. Existing orders continue normally.',
               ),
               const SizedBox(height: 12),
               const Text(
-                'This is not a schedule or a permanent offline setting. Resume each ad from My ads after checking its bank method and available funds.',
+                'Ads you create later stay active. Resume paused ads individually from My ads.',
               ),
               if (_loading || _busy) const LinearProgressIndicator(),
               if (_summary != null) ...[
                 Text(
                   '${_summary!['active']} active · ${_summary!['paused']} paused · ${_summary!['closed']} closed',
                 ),
-                Text('Checked ${_summary!['as_of']}'),
+                Text('Checked ${_checkedAt(context)}'),
               ],
               if (_error != null)
                 Semantics(liveRegion: true, child: Text(_error!)),
@@ -208,7 +214,7 @@ class _P2pPauseAllPageState extends State<P2pPauseAllPage> {
               ],
               if (_pending != null)
                 const Text(
-                  'An original pause request needs recovery. Its key is saved for this account.',
+                  'Check the saved pause request before starting another.',
                 ),
               const SizedBox(height: 16),
               FilledButton(

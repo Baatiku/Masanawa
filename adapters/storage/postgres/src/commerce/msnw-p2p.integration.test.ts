@@ -475,13 +475,13 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   const race=await Promise.allSettled([api.pauseAllAds(maker,key),api.pauseAllAds(maker,key),api.createOrder(buyer,{offerId:one.offerId,amountMicro:'100000',idempotencyKey:randomUUID()})]);
   expect(race[0].status).toBe('fulfilled');expect(race[1].status).toBe('fulfilled');
   const receipts=race.slice(0,2).map(x=>(x as PromiseFulfilledResult<Record<string,unknown>>).value);
-  expect(receipts[0]).toMatchObject({paused_count:2});expect(receipts[1]).toMatchObject({paused_count:2,operation_id:receipts[0].operation_id});expect(receipts.filter(x=>!x.replay)).toHaveLength(1);
+  expect(receipts[0]).toMatchObject({paused_count:2});expect(receipts[1]).toMatchObject({paused_count:2,operation_id:receipts[0]!.operation_id});expect(receipts.filter(x=>!x.replay)).toHaveLength(1);
   if(race[2].status==='rejected')expect(race[2].reason).toMatchObject({code:'p2p.offer_unavailable'});
   const orders=race[2].status==='fulfilled'?2:1;
   expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:String(2000000-orders*100500),reserved_micro:String(orders*100500)});
   expect((await api.order(buyer,accepted.orderId)).payment).toEqual(payment);
   await api.resumeOffer(maker,one.offerId);const later=await api.createOffer(maker,input);
-  expect(await api.pauseAllAds(maker,key)).toMatchObject({paused_count:2,replay:true,operation_id:receipts[0].operation_id});
+  expect(await api.pauseAllAds(maker,key)).toMatchObject({paused_count:2,replay:true,operation_id:receipts[0]!.operation_id});
   expect((await pool.query('SELECT state FROM commerce.msnw_p2p_offers WHERE offer_id=ANY($1::uuid[])',[[one.offerId,later.offerId]])).rows).toEqual([{state:'active'},{state:'active'}]);
   expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_bulk_pauses WHERE tenant_id=$1',[scope])).rows[0].n).toBe(1);
  });
