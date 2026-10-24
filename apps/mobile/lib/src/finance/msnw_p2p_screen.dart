@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'p2p_access_boundary.dart';
 import 'p2p_support_requests.dart';
 import 'p2p_evidence_upload.dart';
 import 'p2p_order_support.dart';
@@ -163,19 +165,19 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     return values.isEmpty ? '' : '?${Uri(queryParameters: values).query}';
   }
   Future<void> _filterOffers() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    final result = await openWalletPage<Map<String, String>>(context: context,
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    final result = await _protectedPage<Map<String, String>>(context: context,
       title: 'Filter offers', builder: (_) => MsnwP2pMarketFilters(
         amount: _marketAmount, search: _marketSearch,fiat:_marketFiat,sort:_marketSort),
     );
-    if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base || result == null) return;
+    if (!mounted || !_sameAccount || widget.expectedUserId!=owner || (widget.baseUrl!=base||widget.accessToken()!=session) || result == null) return;
     setState(() {
       _marketAmount = result['amount'] ?? ''; _marketSearch = result['search'] ?? '';
       _marketFiat=result['fiat']??'';_marketSort=result['sort']??'newest';
       _marketRevision++; _cached.remove(0);
       _cached.remove(4);
       _nextCursors.remove(0);
-      _nextCursors.remove(4); _list = _load();
+      _nextCursors.remove(4); _list = _watchedLoad();
     });
   }
 
@@ -199,6 +201,34 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         });
     }
   }
+  late String? _sessionToken=widget.accessToken();
+  int _sessionEpoch=0;
+  bool _accountGone=false,_accountSwitched=false;
+  Timer? _sessionFence;
+  void _wipePrivateState(){
+    _historyFilters.clear();_historyRevision++;_marketRevision++;
+    _marketAmount='';_marketSearch='';_marketFiat='';_marketSort='newest';
+    _cached.clear();_buyDrafts.clear();_sellDraft.clear();_editDrafts.clear();_buyAdDraft.clear();_methodDrafts.clear();_nextCursors.clear();
+    _pendingOrder=null;_pendingOffer=null;_recoveryReady=false;_offerRecoveryReady=false;
+    _capKnown=false;_canMakeBuy=false;_canTakeBuy=false;
+  }
+  void _observeSession(){
+    if(!mounted)return;
+    if(widget.currentUserId()!=widget.expectedUserId){
+      if(_accountSwitched)return;setState((){_accountSwitched=true;_accountGone=true;_sessionEpoch++;_wipePrivateState();_list=Future.value([]);});return;
+    }
+    final token=widget.accessToken();if(_accountSwitched||token==_sessionToken)return;
+    setState((){_accountGone=false;_sessionToken=token;_sessionEpoch++;_wipePrivateState();_list=token?.isNotEmpty==true&&widget.initialOrderId==null?_watchedLoad():Future.value([]);});
+    if(token?.isNotEmpty==true){_restorePending();_restorePendingOffer();_readCapabilities();}
+  }
+  Future<T?> _protectedPage<T>({required BuildContext context,required WidgetBuilder builder,String title='Wallet',bool wrapScaffold=true})async{
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),epoch=_sessionEpoch;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base&&widget.accessToken()==session&&_sessionEpoch==epoch;
+    if(!authorized())return null;
+    final result=await openWalletPage<T>(context:context,title:title,wrapScaffold:wrapScaffold,builder:(ctx)=>P2pAccessBoundary(authorized:authorized,builder:builder));
+    return authorized()?result:null;
+  }
+  Future<List<Map<String,dynamic>>> _watchedLoad(){final future=_load();future.ignore();return future;}
   bool _busy = false;
   final _cached = <int, List<Map<String, dynamic>>>{};
   final _buyDrafts = <String, String>{};
@@ -213,7 +243,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   bool _offerRecoveryReady = false;
   String get _pendingKey => 'masanawa.p2p.order.${widget.expectedUserId}';
   String get _pendingOfferKey => 'masanawa.p2p.offer.${widget.expectedUserId}';
-  late Future<List<Map<String, dynamic>>> _list = _load();
+  late Future<List<Map<String, dynamic>>> _list = _watchedLoad();
 
   @override
   void initState() {
@@ -221,6 +251,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     _tab=_tabMemory[widget.expectedUserId]??0;
     _orderFilter=_filterMemory[widget.expectedUserId]??'all';
     WidgetsBinding.instance.addObserver(this);
+    _sessionFence=Timer.periodic(const Duration(milliseconds:250),(_)=>_observeSession());
     _restorePending();
     _restorePendingOffer();
     _readCapabilities();
@@ -239,6 +270,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     super.didUpdateWidget(oldWidget);
     if (oldWidget.expectedUserId != widget.expectedUserId ||
         oldWidget.baseUrl != widget.baseUrl) {
+      _sessionToken=widget.accessToken();_sessionEpoch++;_accountGone=false;_accountSwitched=false;
       _historyFilters.clear();_historyRevision++;
       _cached.clear();
       _marketAmount='';_marketSearch='';_marketFiat='';_marketSort='newest';_marketRevision++;
@@ -266,15 +298,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    _sessionFence?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   Future<void> _restorePending() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
     try {
       final encoded = await _secure.read(key: _pendingKey);
-      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base) return;
+      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || (widget.baseUrl!=base||widget.accessToken()!=session)) return;
       Map<String,dynamic>? recovered;
       if (encoded != null) {
         final decoded = _json(jsonDecode(encoded));
@@ -293,7 +326,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         _recoveryReady = true;
       });
     } catch (_) {
-      if (mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session)&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Secure order recovery unavailable. New purchases are paused.',
             ),
           ),
@@ -302,10 +335,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _restorePendingOffer() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
     try {
       final encoded=await _secure.read(key:_pendingOfferKey);
-      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || widget.baseUrl!=base) return;
+      if (!mounted || !_sameAccount || widget.expectedUserId!=owner || (widget.baseUrl!=base||widget.accessToken()!=session)) return;
       Map<String,dynamic>? pending;
       if(encoded!=null){
         final decoded=_json(jsonDecode(encoded));
@@ -322,7 +355,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         _offerRecoveryReady=true;
       });
     } catch (_) {
-      if(mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session)&&_sameAccount) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
           'Secure sell-offer recovery is unavailable. Publishing is paused.',
             ),
@@ -332,16 +365,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _savePendingOffer(Map<String,dynamic> pending) async {
-    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingOfferKey;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),storageKey=_pendingOfferKey;
     await _secure.write(key:storageKey,value:jsonEncode(pending));
-    if(!mounted || widget.expectedUserId!=owner || widget.baseUrl!=base || !_sameAccount)throw StateError('Account changed.');
+    if(!mounted || widget.expectedUserId!=owner || (widget.baseUrl!=base||widget.accessToken()!=session) || !_sameAccount)throw StateError('Account changed.');
     setState(() => _pendingOffer=pending);
   }
 
   Future<void> _clearPendingOffer() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingOfferKey;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),storageKey=_pendingOfferKey;
     await _secure.delete(key:storageKey);
-    if(mounted&&widget.expectedUserId==owner&&widget.baseUrl==base&&_sameAccount)setState(()=>_pendingOffer=null);
+    if(mounted&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session)&&_sameAccount)setState(()=>_pendingOffer=null);
   }
 
   String _requestId() {
@@ -355,13 +388,13 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   Future<void> _resumeOffer() async {
     final pending=_pendingOffer;
     if(pending==null||!_sameAccount)throw StateError('No offer to recover.');
-    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
     final key='${pending['requestKey']}',editing=pending['kind']=='edit';
     try {
       await _request('GET',editing?'/offer-edits/by-request/$key':'/offers/by-request/$key');
     } on DioException catch(e) {
       if(e.response?.statusCode!=404)rethrow;
-      if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||!_sameAccount)throw StateError('Account changed.');
+      if(!mounted||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session)||!_sameAccount)throw StateError('Account changed.');
       try {
         await _request('POST',editing?'/offers/${pending['offerId']}/edit':'/offers',_json(pending['payload']),key);
       } on DioException catch(error) {
@@ -370,7 +403,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         rethrow;
       }
     }
-    if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||!_sameAccount)throw StateError('Account changed');
+    if(!mounted||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session)||!_sameAccount)throw StateError('Account changed');
     await _clearPendingOffer();
     if(mounted&&_sameAccount)_reload(1);
   }
@@ -387,23 +420,23 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _savePending(Map<String,dynamic> pending) async {
-    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingKey;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),storageKey=_pendingKey;
     await _secure.write(key:storageKey,value:jsonEncode(pending));
-    if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');
+    if(!mounted||!_sameAccount||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session))throw StateError('Account changed.');
     setState(()=>_pendingOrder=pending);
   }
 
   Future<void> _clearPending() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl,storageKey=_pendingKey;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),storageKey=_pendingKey;
     await _secure.delete(key:storageKey);
-    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base)setState(()=>_pendingOrder=null);
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session))setState(()=>_pendingOrder=null);
   }
 
   /// Never mint a second request identity while the first outcome is unknown.
   Future<void> _resumePending() async {
     if (_busy || _pendingOrder == null) return;
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     await _act(() async {
       final pending = _pendingOrder!;
       final requestKey = '${pending['requestKey']}';
@@ -448,7 +481,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       if (authorized()) await _orderDetail(orderId);
     });
   }
-  bool get _sameAccount => widget.currentUserId() == widget.expectedUserId;
+  bool get _sameAccount => !_accountGone&&_sessionToken?.isNotEmpty==true&&widget.currentUserId()==widget.expectedUserId&&widget.accessToken()==_sessionToken;
   String get _prefix => '${widget.baseUrl}/v1/wallet/msnw/p2p';
   Options get _headers => Options(headers: {
     'Authorization': 'Bearer ${widget.accessToken() ?? ''}',
@@ -461,7 +494,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if (!_sameAccount || widget.accessToken()?.isNotEmpty != true) {
       throw StateError('Sign in again to access P2P.');
     }
-    final owner = widget.expectedUserId, base = widget.baseUrl;
+    final owner = widget.expectedUserId, base = widget.baseUrl, session = widget.accessToken();
     final options = _headers.copyWith(headers: {
       ...?_headers.headers,
       if (idempotency != null) 'Idempotency-Key': idempotency,
@@ -473,13 +506,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       r = await widget.dio.request<dynamic>('$_prefix$uri',
       options: options.copyWith(method: method), data: data,
     );
-    } catch (_) {
-      if(!mounted||widget.expectedUserId!=owner||widget.baseUrl!=base||widget.currentUserId()!=owner)throw StateError('Account changed. Please reopen P2P.');
+    } catch (error) {
+      if(!mounted||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session)||widget.currentUserId()!=owner)throw StateError('Account changed. Please reopen P2P.');
+      if(error is DioException&&error.response?.statusCode==401){setState((){_accountGone=true;_sessionEpoch++;_wipePrivateState();_list=Future.value([]);});}
       rethrow;
     }
     if (!mounted ||
         widget.expectedUserId != owner ||
-        widget.baseUrl != base ||
+        (widget.baseUrl!=base||widget.accessToken()!=session) ||
         widget.currentUserId() != owner) throw StateError('Account changed. Please reopen P2P.');
     return r.data;
   }
@@ -488,12 +522,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     return query.isEmpty?'':'${append?'&':'?'}${Uri(queryParameters:query).query}';
   }
   Future<void> _filterHistory()async{
-    final owner=widget.expectedUserId,base=widget.baseUrl,tab=_tab;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),tab=_tab;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     if(!authorized()||![1,2].contains(tab))return;
     final result=await Navigator.of(context).push<P2pHistoryFilters>(MaterialPageRoute(builder:(_)=>P2pHistoryFilterPage(ads:tab==1,initial:_historyFilters[tab]??const P2pHistoryFilters(),expectedUserId:owner,currentUserId:()=>authorized()?owner:null)));
     if(result==null||!authorized()||_tab!=tab)return;
-    setState((){if(tab==2){_orderFilter='all';_filterMemory[owner]='all';}_historyFilters[tab]=result;_historyRevision++;_cached.remove(tab);_nextCursors.remove(tab);_list=_load();});
+    setState((){if(tab==2){_orderFilter='all';_filterMemory[owner]='all';}_historyFilters[tab]=result;_historyRevision++;_cached.remove(tab);_nextCursors.remove(tab);_list=_watchedLoad();});
   }
 
   String _listEndpoint(int tab,String filter) => switch(tab) {
@@ -529,7 +563,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       }
       if([1,2].contains(_tab))_historyRevision++;
       _nextCursors.remove(_tab);
-      _list = _load();
+      _list = _watchedLoad();
     });
   }
 
@@ -589,7 +623,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     }
   }
   Future<bool> _confirm(String title, String details) async {
-    return await openWalletPage<bool>(context: context,
+    return await _protectedPage<bool>(context: context,
       builder: (ctx) => WalletReviewContent(title: Text(title), content: Text(details),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx,false),
           child: const Text('Cancel'),
@@ -602,9 +636,9 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         ) ?? false;
   }
   Future<void> _buy(Map<String,dynamic> offer) async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
     final fiatLimit=_marketFiat.isEmpty?null:p2pFiatLimitKobo(_marketFiat);
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
 
     if (!_recoveryReady) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -658,7 +692,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           ? _methodDrafts[offerId]
           : '${receiving.first['method_id']}';
     }
-    final entered = await openWalletPage<String>(
+    final entered = await _protectedPage<String>(
       context: context,
       title: selling ? 'Sell MSNW' : 'Buy MSNW',
       builder: (_) => MsnwP2pBuyAmountForm(
@@ -727,7 +761,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       );
       return;
     }
-    final approved = await openWalletPage<bool>(
+    final approved = await _protectedPage<bool>(
       context: context,
       builder: (ctx) => WalletReviewContent(
         title: const Text('Review P2P order'),
@@ -808,24 +842,24 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   );
 
   Future<void> _manageMethods()async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');}
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session))throw StateError('Account changed.');}
     await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMethodsPage(
-      expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
+      expectedUserId:owner,currentUserId:()=>(widget.baseUrl==base&&widget.accessToken()==session)?widget.currentUserId():null,
       load:()async{authorize();return _json(await _request('GET','/methods/manage'));},
       disable:(methodId)async{authorize();await _request('POST','/methods/$methodId/disable',<String,dynamic>{});},
       rename:(methodId,label)async{authorize();await _request('POST','/methods/$methodId/label',{'label':label});},
       prefer:(methodId)async{authorize();await _request('POST','/methods/$methodId/prefer',<String,dynamic>{});},
       archive:(methodId)async{authorize();await _request('POST','/methods/$methodId/archive',<String,dynamic>{});},
     )));
-    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base){
-      setState((){_cached.clear();_nextCursors.clear();_list=_load();});
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session)){
+      setState((){_cached.clear();_nextCursors.clear();_list=_watchedLoad();});
     }
   }
 
   Future<void> _verifySellerBank() async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
 
     late final List<Map<String,dynamic>> banks;
     try {
@@ -840,7 +874,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       return;
     }
     if (!authorized()) return;
-    final verified = await openWalletPage<bool>(
+    final verified = await _protectedPage<bool>(
       context: context,
       title: 'Verify seller bank',
       builder: (_) => MsnwP2pBankVerificationForm(
@@ -854,7 +888,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             data:parameters,options:_headers,
           );
           if(!authorized())throw StateError('Account changed.');
-          final code=await openWalletPage<String>(
+          final code=await _protectedPage<String>(
             context:context,title:'Verify bank details',wrapScaffold:false,
             builder:(_)=>const WalletStepUpPage(bankDetails:true),
           );
@@ -889,7 +923,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   Future<void> _chooseAdSide() async {
     await _readCapabilities();
     if (!mounted || !_sameAccount) return;
-    final side = await openWalletPage<String>(
+    final side = await _protectedPage<String>(
       context: context,
       title: 'Create P2P ad',
       builder: (ctx) => WalletChoiceContent(
@@ -917,8 +951,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _createAd(String side) async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
 
     if (side == 'buy') {
       await _readCapabilities();
@@ -968,7 +1002,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       return;
     }
     if (!authorized()) return;
-    final completed = await openWalletPage<bool>(
+    final completed = await _protectedPage<bool>(
       context: context,
       title: side == 'buy' ? 'Create buy ad' : 'Sell MSNW',
       builder: (_) => MsnwP2pSellerOfferForm(
@@ -999,12 +1033,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
 
   Future<void> _orderDetail(String id) async {
     if(!mounted)return;
-    await openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>_orderView(id),
+    await _protectedPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>_orderView(id),
     );
   }
   Future<void> _orderSupport(BuildContext route,String id)async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     if(!authorized()||!route.mounted)return;
     await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pOrderSupportPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
       load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support'));},
@@ -1014,8 +1048,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     )));
   }
   Future<void> _evidenceUpload(BuildContext route,String id)async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     final key='p2p-evidence-v1:${Uri.encodeComponent(base)}:${Uri.encodeComponent(owner)}:$id';
     if(!authorized()||!route.mounted)return;
     await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pEvidenceUploadPage(
@@ -1034,20 +1068,25 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       },
     )));
   }
-  Widget _orderView(String id)=>_P2pOrderDetail(
+  Widget _orderView(String id){
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken(),epoch=_sessionEpoch;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base&&widget.accessToken()==session&&_sessionEpoch==epoch;
+    return P2pAccessBoundary(key:ValueKey('p2p-order-$id-$epoch'),authorized:authorized,builder:(_)=>_P2pOrderDetail(
+        authorized:authorized,
         openSupport:(route)=>_orderSupport(route,id),
         load: () async => _json(await _request('GET','/orders/$id')),
         act: (action, [reason]) async {
+          if(!authorized())throw StateError('Session changed');
           await _request('POST','/orders/$id/$action',
             reason == null ? {} : {'reason': reason},
       );
         },
         openMessages: (pageContext) async {
-          if (!_sameAccount || !pageContext.mounted) return;
-          await openWalletPage<void>(context: pageContext, title: 'Order messages',
+          if (!authorized() || !pageContext.mounted) return;
+          await _protectedPage<void>(context: pageContext, title: 'Order messages',
             wrapScaffold: false, builder: (_) => P2pOrderMessagesPage(
               orderId: id, expectedUserId: widget.expectedUserId,
-              currentUserId: widget.currentUserId,
+              currentUserId: ()=>authorized()?owner:null,
               loadPage: (cursor) async => _json(await _request('GET',
                 '/orders/$id/messages${cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'}',
             ),
@@ -1075,13 +1114,14 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         },
         openEvidenceUpload:(route)=>_evidenceUpload(route,id),
         openEvidence: (pageContext, evidenceId, fileType) async {
+          if(!authorized())throw StateError('Session changed');
           // A fresh owner-scoped signed URL is requested for every open.
           // Never cache or store that URL, and never forward account bearer
           // headers to its storage origin.
           final link=_json(await _request('GET',
             '/orders/$id/evidence/$evidenceId'),
       );
-          if(!mounted || !_sameAccount || !pageContext.mounted)return;
+          if(!authorized() || !pageContext.mounted)return;
           final uri=Uri.tryParse('${link['url'] ?? ''}');
           if(uri==null||uri.scheme!='https'||uri.host.isEmpty||
              uri.userInfo.isNotEmpty||uri.hasFragment) {
@@ -1107,7 +1147,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
                 receiveTimeout:const Duration(seconds:20),
           ),
         );
-            if(!mounted||!_sameAccount||!pageContext.mounted)return;
+            if(!authorized()||!pageContext.mounted)return;
             final bytes=response.data;
             if(bytes==null||bytes.isEmpty||bytes.length>2*1024*1024) {
               throw StateError('Evidence image unavailable or exceeds 2 MB');
@@ -1121,10 +1161,10 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             }
             imageBytes=Uint8List.fromList(bytes);
           } finally { client.close(force:true); }
-          if(!pageContext.mounted || !_sameAccount)return;
+          if(!pageContext.mounted || !authorized())return;
           final provider=MemoryImage(imageBytes);
           try {
-            await openWalletPage<void>(context:pageContext,
+            await _protectedPage<void>(context:pageContext,
               title:'Evidence preview',
               builder:(ctx)=>WalletReviewContent(
                 title:const Text('Bank receipt preview'),
@@ -1157,6 +1197,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
           }
         },
         confirmReceipt: (order) async {
+          if(!authorized())throw StateError('Session changed');
           await _request('POST','/orders/$id/confirm-receipt',{
             'confirmation':{
               'orderId':id,
@@ -1165,7 +1206,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
             },
           });
         },
-      );
+      ));
+  }
   String _time(Object? value) {
     final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
     if (date == null) return '';
@@ -1191,16 +1233,16 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   );
 
   Future<void> _reportAd(String offerId)async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');}
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pAdReportPage(expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session))throw StateError('Account changed.');}
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pAdReportPage(expectedUserId:owner,currentUserId:()=>(widget.baseUrl==base&&widget.accessToken()==session)?widget.currentUserId():null,
       recover:()async{authorize();return _json(await _request('GET','/offers/$offerId/report'));},
       submit:(category,details)async{authorize();return _json(await _request('POST','/offers/$offerId/report',{'category':category,'details':details}));},
     )));
   }
   Future<void> _pauseAllAds()async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     final storageKey='masanawa.p2p.pause.$owner.${Uri.encodeComponent(base)}';
     Future<Map<String,dynamic>> request(String method,String path,[String? key])async{
       if(!authorized())throw StateError('Account changed');
@@ -1221,29 +1263,29 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   }
 
   Future<void> _myAdReports()async{
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMyAdReportsPage(expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
-      load:(cursor)async{if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMyAdReportsPage(expectedUserId:owner,currentUserId:()=>(widget.baseUrl==base&&widget.accessToken()==session)?widget.currentUserId():null,
+      load:(cursor)async{if(!mounted||!_sameAccount||widget.expectedUserId!=owner||(widget.baseUrl!=base||widget.accessToken()!=session))throw StateError('Account changed.');
         return _json(await _request('GET','/ad-reports/page${cursor==null?'':'?cursor=${Uri.encodeQueryComponent(cursor)}'}'));},
     )));
   }
   Future<void> _viewTrader(Map<String,dynamic> ad) async {
     if(!_sameAccount||_busy)return;
-    final owner=widget.expectedUserId,base=widget.baseUrl;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
     final offerId=ad['offer_id'];
     if(offerId is! String)return;
-    final selected=await openWalletPage<Map<String,dynamic>>(
+    final selected=await _protectedPage<Map<String,dynamic>>(
       context:context,title:'Trader profile',wrapScaffold:false,
       builder:(_)=>P2pTraderPage(expectedUserId:owner,
-        currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,formatMsnw:_msnw,formatNgn:_ngn,
-        report:(id)async{if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base)await _reportAd(id);},
+        currentUserId:()=>(widget.baseUrl==base&&widget.accessToken()==session)?widget.currentUserId():null,formatMsnw:_msnw,formatNgn:_ngn,
+        report:(id)async{if(mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session))await _reportAd(id);},
         load:(cursor)async=>_json(await _request('GET',
             '/offers/$offerId/trader${cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'}',
           ),
         ),
       ),
     );
-    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base&&selected!=null)await _buy(selected);
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session)&&selected!=null)await _buy(selected);
   }
 
   Widget _offerTile(Map<String, dynamic> item, bool own) => _tile(
@@ -1418,8 +1460,8 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   );
 
   Future<void> _editAd(String offerId) async {
-    final owner=widget.expectedUserId,base=widget.baseUrl;
-    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    final owner=widget.expectedUserId,base=widget.baseUrl,session=widget.accessToken();
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&(widget.baseUrl==base&&widget.accessToken()==session);
     if(!_offerRecoveryReady||_pendingOffer!=null){
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Recover the unfinished ad request first.')));return;
     }
@@ -1443,7 +1485,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       final draft=_editDrafts[draftKey]??<String,String>{'methodId':'${ad['payment_method_id']}',
         'rate':_ngn(ad['rate_kobo_per_msnw']).replaceAll('₦','').replaceAll(',',''),
         'minimum':decimal(ad['min_micro']),'maximum':decimal(ad['max_micro']),'inventory':decimal(ad['remaining_micro'])};
-      final done=await openWalletPage<bool>(context:context,title:'Edit ad',builder:(_)=>MsnwP2pSellerOfferForm(
+      final done=await _protectedPage<bool>(context:context,title:'Edit ad',builder:(_)=>MsnwP2pSellerOfferForm(
         methods:methods,offerSide:side,editing:true,availableMicro:available,initialDraft:draft,
         onDraftChanged:(value){if(authorized())_editDrafts[draftKey]=Map.from(value);},
         onPublish:(value)async{
@@ -1497,7 +1539,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         if(mounted)setState(()=>_busy=false);
       }
     }
-    await openWalletPage<void>(context:context,title: offer['offer_side']=='buy'?'My buy offer':'My sell offer',
+    await _protectedPage<void>(context:context,title: offer['offer_side']=='buy'?'My buy offer':'My sell offer',
       builder:(route)=>WalletReviewContent(
         title:const Text('Offer details'),
         content:Column(mainAxisSize:MainAxisSize.min,
@@ -1609,6 +1651,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
   );
 
   @override Widget build(BuildContext context) {
+    if(!_sameAccount)return const Scaffold(body:Center(child:Text('Sign in again to continue')));
     final initial = widget.initialOrderId;
     if (initial != null) {
       if (!RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(initial)) {
@@ -1630,7 +1673,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
         child: Text('Sign in again to continue')),
       );
     }
-    return Scaffold(
+    return Scaffold(key:ValueKey('p2p-session-$_sessionEpoch'),
       appBar: AppBar(title: Text(switch (_tab) {
         1 => 'My ads', 3 => 'Order updates', _ => 'MSNW P2P',
       }), actions: [PopupMenuButton<int>(tooltip: 'P2P options',
@@ -1677,7 +1720,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
               _cached.remove(0);
                               _cached.remove(4);
                               _nextCursors.remove(0);
-                              _nextCursors.remove(4); _list = _load();
+                              _nextCursors.remove(4); _list = _watchedLoad();
             }), child: const Text('Clear filters'),
                           ),
           ],
@@ -1766,7 +1809,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
                       _filterMemory[widget.expectedUserId] = filter;
                       _cached.remove(2);
                       _nextCursors.remove(2);
-                      _list = _load();
+                      _list = _watchedLoad();
                     });
                   },
                             ),
@@ -2581,7 +2624,7 @@ class _MsnwP2pSellerOfferFormState extends State<MsnwP2pSellerOfferForm> {
 
 
 class _P2pOrderDetail extends StatefulWidget {
-  const _P2pOrderDetail({required this.load,required this.act,
+  const _P2pOrderDetail({required this.authorized,required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
     required this.openEvidenceUpload,required this.openEvidence,
     required this.loadReceipt,required this.userId,required this.openMessages,required this.openSupport,
@@ -2595,6 +2638,7 @@ class _P2pOrderDetail extends StatefulWidget {
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(BuildContext) openEvidenceUpload;
   final Future<void> Function(BuildContext,String,String) openEvidence;
+  final bool Function() authorized;
   final String userId;
   @override State<_P2pOrderDetail> createState()=>_P2pOrderDetailState();
 }
@@ -2604,10 +2648,15 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   bool _uploading = false;
   bool _working = false;
   String _reasonDraft = '';
-  void _refresh()=>setState((){
-    _future=widget.load();
-    _evidence=widget.listEvidence();
-  });
+  void _refresh(){if(!widget.authorized())return;setState((){
+    _future=widget.load();_future.ignore();
+    _evidence=widget.listEvidence();_evidence.ignore();
+  });}
+  Future<T?> _protectedPage<T>({required BuildContext context,required WidgetBuilder builder,String title='Wallet',bool wrapScaffold=true})async{
+    if(!widget.authorized())return null;
+    final result=await openWalletPage<T>(context:context,title:title,wrapScaffold:wrapScaffold,builder:(ctx)=>P2pAccessBoundary(authorized:widget.authorized,builder:builder));
+    return widget.authorized()?result:null;
+  }
   String _attachmentLabel(Map<String,dynamic> item) {
     final format = item['fileType'];
     if (format == 'pdf') return 'Bank receipt · PDF';
@@ -2644,9 +2693,10 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     ),
   );
   Future<void> _showReceipt() async {
+    if(!widget.authorized())return;
     try {
       final receipt = await widget.loadReceipt();
-      if (!mounted) return;
+      if (!mounted||!widget.authorized()) return;
       final reference = '${receipt['receiptReference'] ?? ''}';
       final result = receipt['stage'] == 'refund'
         ? 'Escrow returned to seller' : receipt['stage'] == 'release'
@@ -2659,7 +2709,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
         'Reference: $reference\nResult: $result\n'
         'MSNW: $amount\nEscrow fee: $fee\n'
         'Bank payment: $fiat\nDate: $time';
-      await openWalletPage<void>(
+      await _protectedPage<void>(
         context: context,
         title: 'P2P receipt',
         builder: (page) => WalletReviewContent(
@@ -2694,6 +2744,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           actions: [
             FilledButton.icon(
               onPressed: reference.isEmpty ? null : () async {
+                if(!widget.authorized())return;
                 await Clipboard.setData(ClipboardData(text: reference));
                 if (page.mounted) ScaffoldMessenger.of(page).showSnackBar(
                   const SnackBar(content: Text('Receipt reference copied'),
@@ -2705,6 +2756,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
             ),
             OutlinedButton.icon(
               onPressed: reference.isEmpty ? null : () async {
+                if(!widget.authorized())return;
                 await SharePlus.instance.share(ShareParams(
                   title: 'Masanawa P2P receipt', text: shareText,
                         ),
@@ -2728,24 +2780,24 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     }
   }
   Future<void> _uploadEvidence() async {
-    if(_uploading)return;setState(()=>_uploading=true);
+    if(_uploading||!widget.authorized())return;setState(()=>_uploading=true);
     try{await widget.openEvidenceUpload(context);if(mounted)_refresh();}
     finally{if(mounted)setState(()=>_uploading=false);}
   }
 
   Future<void> _support()async{
-    if(_working)return;setState(()=>_working=true);
+    if(_working||!widget.authorized())return;setState(()=>_working=true);
     try{await widget.openSupport(context);if(mounted)_refresh();}
     finally{if(mounted)setState(()=>_working=false);}
   }
 
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
-    if (_working) return;
+    if (_working||!widget.authorized()) return;
     String? reason;
     if(reasonRequired) {
       final input = TextEditingController(text: _reasonDraft);
       try {
-        reason = await openWalletPage<String>(context: context,
+        reason = await _protectedPage<String>(context: context,
           builder: (ctx) => StatefulBuilder(
             builder: (ctx, update) => WalletReviewContent(
               title: Text(action == 'late-payment'
@@ -2786,7 +2838,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
       } finally { input.dispose(); }
       if (reason == null) return;
     } else {
-      final yes=await openWalletPage<bool>(context:context,builder:(ctx)=>WalletReviewContent(
+      final yes=await _protectedPage<bool>(context:context,builder:(ctx)=>WalletReviewContent(
         title:const Text('Confirm this action'),
         content:Text(action=='claim'
           ? 'Mark payment sent? A claim is not bank settlement proof.'
@@ -2824,10 +2876,10 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     }
   }
   Future<void> _sellerConfirm(Map<String,dynamic> order) async {
-    if (_working) return;
+    if (_working||!widget.authorized()) return;
     final typed = TextEditingController();
     try {
-      final accepted = await openWalletPage<bool>(
+      final accepted = await _protectedPage<bool>(
         context: context,
         title: 'Confirm bank receipt',
         builder: (page) => StatefulBuilder(
@@ -2929,7 +2981,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
   }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('P2P order'),actions:[
-      IconButton(onPressed:()=>widget.openMessages(context),tooltip:'Order messages',icon:const Icon(Icons.forum_outlined),
+      IconButton(onPressed:()=>widget.authorized()?widget.openMessages(context):null,tooltip:'Order messages',icon:const Icon(Icons.forum_outlined),
         ),
       IconButton(onPressed:_refresh,tooltip:'Refresh order',icon:const Icon(Icons.refresh),
         ),
@@ -3002,7 +3054,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
           trailing:IconButton(tooltip:'Copy order reference',
             icon:const Icon(Icons.copy_outlined),
             onPressed:()async {
-              await Clipboard.setData(ClipboardData(text:'${o['order_id']}'),
+              if(!widget.authorized())return;
+                await Clipboard.setData(ClipboardData(text:'${o['order_id']}'),
                     );
               if(mounted)ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content:Text('Order reference copied')),
@@ -3064,7 +3117,8 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
                   tooltip:'Copy support case reference',
                   icon:const Icon(Icons.copy_outlined),
                   onPressed:()async{
-                    await Clipboard.setData(ClipboardData(
+                    if(!widget.authorized())return;
+                await Clipboard.setData(ClipboardData(
                       text:'${late['case_id']}'),
                             );
                     if(mounted)ScaffoldMessenger.of(context).showSnackBar(
