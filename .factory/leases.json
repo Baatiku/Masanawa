@@ -1,6 +1,35 @@
 {
   "schema_version": 1,
-  "active": [],
+  "active": [
+    {
+      "claim_id": "ad0dc199-04bc-4b01-a957-27767cfa1116",
+      "owner": "codex-p2p-history-oct24",
+      "scope": "P6-02 order and own-ad status/date/direction filters with tenant/actor/filter-bound keysets and native recovery",
+      "paths": [
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "services/gateway/src/p2p/history_reading.ts",
+        "services/gateway/src/p2p/history_filtering.pglite.test.ts",
+        "services/gateway/src/p2p/read_journeys.pglite.test.ts",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/lib/src/finance/p2p_history_filters.dart",
+        "apps/mobile/test/p2p_history_filters_test.dart",
+        "apps/mobile/test/p2p_marketplace_journeys_test.dart",
+        "CONTINUE-HERE.md",
+        "docs/PRODUCT-ROADMAP-20261019.md",
+        "docs/SCREEN-JOURNEYS.md",
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+      ],
+      "branch": "feat/p2p-history-filters-oct24",
+      "base_sha": "d83290f24a46c1beeab4f71c9bf247a7f7e263d5",
+      "pr": "",
+      "claimed_at": "2026-10-24T04:22:56.130Z",
+      "heartbeat_at": "2026-10-24T04:22:56.130Z",
+      "expires_at": "2026-10-24T04:27:56.130Z",
+      "progress": "Freshmainandclaimsread; P2P history filter batch, no custody/schema/provider mutation."
+    }
+  ],
   "history": [
     {
       "claim_id": "6e88c21e-997b-49b0-a639-b9b380767f92",
