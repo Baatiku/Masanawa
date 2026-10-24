@@ -362,6 +362,24 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
     try { return {items:await deps.service.orders(await actor(req.headers.authorization))};}
     catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/ad-availability',async(req,reply)=>{
+    reply.header('cache-control','no-store');
+    try{return await deps.service.adAvailability(await actor(req.headers.authorization));}catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/wallet/msnw/p2p/pause-requests/:requestKey',async(req,reply)=>{
+    reply.header('cache-control','no-store');
+    try{return await deps.service.bulkPauseByRequest(await actor(req.headers.authorization),(req.params as {requestKey:string}).requestKey);}catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/pause-all',async(req,reply)=>{
+    reply.header('cache-control','no-store');
+    try{
+      const a=await actor(req.headers.authorization),body=req.body;
+      if(body!==undefined&&(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length))throw new P2pError('p2p.invalid_pause_request',422);
+      const request=req.headers['idempotency-key'];
+      const value=await deps.service.pauseAllAds(a,typeof request==='string'?request:'');
+      return reply.code(value.replay?200:201).send(value);
+    }catch(error){return respond(error,reply);}
+  });
   app.post("/v1/wallet/msnw/p2p/orders",async(req,reply)=>{
     try{
       const a=await actor(req.headers.authorization);

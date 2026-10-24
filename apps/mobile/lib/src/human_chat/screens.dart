@@ -24,6 +24,8 @@ import '../core/voice_note_recorder.dart';
 import 'controller.dart';
 import 'models.dart';
 import 'transport.dart';
+import 'report_history.dart';
+import 'report_request.dart';
 
 Future<void> humanConversationStart(
   BuildContext context,
@@ -265,7 +267,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
   final List<HumanAttachment> attachments = [];
   HumanMessage? reply;
   String? owner;
-  bool picking = false, searching = false;
+  bool picking = false, searching = false, _reportWorking = false;
   bool initialScroll = true;
   bool bound = false;
   String? lastRead;
@@ -314,6 +316,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     attachments.clear();
     reply = null;
     text.clear();
+    _reportWorking = false;
     if (next == null) return;
     final c = HumanThreadController(
       ref.read(humanCommunicationTransportProvider),
@@ -513,6 +516,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     final c = controller;
     final thread = c?.conversation;
     if (c == null || thread == null) return;
+    if (action == 'report-recovery') { await _handleReport(c); return; }
     await _run(() async {
       if (action == 'block') {
         await c.transport.request(
@@ -608,15 +612,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
           await c.refresh();
           break;
         case 'Report':
-          final reason = await _reason();
-          if (reason != null && c.current) {
-            await c.transport.request(
-              'POST',
-              '/conversations/${c.id}/messages/${m.id}/report',
-              data: {'reason': reason, 'requestId': createRequestId()},
-            );
-            if (mounted && c.current) _notice(context, 'Report submitted');
-          }
+          await _handleReport(c, target: m);
           break;
       }
     });
@@ -632,6 +628,107 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
       name: a.name,
       mimeType: a.mimeType,
     );
+  }
+
+  /// Never create a second report when an earlier POST might have succeeded.
+  /// Each original request is encrypted before sending; restart recovers by
+  /// actor-bound GET and retry uses only the same frozen message/reason/key.
+  Future<void> _handleReport(HumanThreadController c, {HumanMessage? target}) async {
+    if (_reportWorking || owner == null || controller != c || !c.current) return;
+    setState(() => _reportWorking = true);
+    try {
+      final journal = HumanReportRequestJournal(owner!, c.id);
+      final saved = await journal.read();
+      if (!mounted || controller != c || !c.current) return;
+
+      if (saved != null) {
+        final choice = await showModalBottomSheet<String>(
+          context: context,
+          builder: (sheet) => SafeArea(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const ListTile(
+                title: Text('Saved message report'),
+                subtitle: Text('A previous submission may have reached the server. Checking does not send it again.'),
+              ),
+              ListTile(
+                key: const Key('human-report-check-original'),
+                leading: const Icon(Icons.fact_check_outlined),
+                title: const Text('Check submission'),
+                onTap: () => Navigator.pop(sheet, 'check'),
+              ),
+              ListTile(
+                key: const Key('human-report-retry-original'),
+                leading: const Icon(Icons.refresh),
+                title: const Text('Retry the original report'),
+                onTap: () => Navigator.pop(sheet, 'retry'),
+              ),
+              ListTile(
+                key: const Key('human-report-discard-original'),
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Discard the saved request'),
+                subtitle: const Text('Does not cancel a report on the server'),
+                onTap: () => Navigator.pop(sheet, 'discard'),
+              ),
+              ListTile(
+                title: const Text('Cancel'),
+                onTap: () => Navigator.pop(sheet),
+              ),
+            ]),
+          ),
+        );
+        if (!mounted || controller != c || !c.current || choice == null) return;
+        if (choice == 'discard') {
+          final yes = await showDialog<bool>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+              title: const Text('Discard saved request?'),
+              content: const Text('This only clears the encrypted copy on this device. An accepted server report is not cancelled.'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Keep')),
+                FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Discard')),
+              ],
+            ),
+          );
+          if (yes != true || !c.current || !mounted || controller != c) return;
+          await journal.discard(saved.requestId);
+          if (mounted && controller == c && c.current) _notice(context, 'Local retry cleared. Existing server reports are unchanged.');
+          return;
+        }
+        final result = await journal.recover(c.transport, retryOriginal: choice == 'retry');
+        if (mounted && controller == c && c.current) {
+          _notice(context, result == HumanReportRecovery.submitted
+              ? 'Report submitted'
+              : 'Submission unconfirmed. Check or retry the same saved report.');
+        }
+        return;
+      }
+
+      if (target == null) {
+        if (mounted && c.current) _notice(context, 'No saved report needs recovery.');
+        return;
+      }
+      final reason = await _reason();
+      if (reason == null || !mounted || controller != c || !c.current) return;
+      await journal.stage(PendingHumanReport(
+        conversationId: c.id,
+        messageId: target.id,
+        reason: reason,
+        requestId: createRequestId(),
+      ));
+      if (!mounted || controller != c || !c.current) return;
+      final result = await journal.recover(c.transport, retryOriginal: true);
+      if (mounted && controller == c && c.current) {
+        _notice(context, result == HumanReportRecovery.submitted
+            ? 'Report submitted'
+            : 'Submission unconfirmed. Open conversation options to check saved report.');
+      }
+    } catch (_) {
+      if (mounted && controller == c && c.current) {
+        _notice(context, 'Could not confirm report submission. The saved request is kept for recovery.');
+      }
+    } finally {
+      if (mounted && controller == c) setState(() => _reportWorking = false);
+    }
   }
 
   Future<String?> _reason() async {
@@ -719,6 +816,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                   'muted': conversation.muted ? 'Unmute' : 'Mute',
                   'archived': conversation.archived ? 'Unarchive' : 'Archive',
                   'block': 'Block person',
+                  'report-recovery': 'Check saved report',
                 }.entries)
                   PopupMenuItem(value: e.key, child: Text(e.value)),
               ],
@@ -1439,6 +1537,18 @@ class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
                     onChanged: busy ? null : (v) => _save(entry.key, v),
                   ),
                 const Divider(),
+                ListTile(
+                  key: const Key('human-open-report-history'),
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('My message reports'),
+                  subtitle: const Text('View submitted reports and their receipts'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const HumanReportHistoryScreen(),
+                    ),
+                  ),
+                ),
                 const ListTile(title: Text('Blocked people')),
                 if (blocked.isEmpty)
                   const ListTile(title: Text('No blocked people')),
