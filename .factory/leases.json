@@ -23,12 +23,12 @@
         "packages/commerce/migrations/0146_msnw_p2p_evidence_original_index.sql"
       ],
       "branch": "feat/p2p-evidence-recovery-oct24",
-      "base_sha": "931149305277694857947fd317c9e34d953315cb",
-      "pr": "",
+      "base_sha": "3be75f9e6382d8288e189af2ff8e0562d539eb70",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/363",
       "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T08:17:01.467Z",
-      "expires_at": "2026-10-24T08:22:01.467Z",
-      "progress": "8 focused evidence tests and gateway/adapter types PASS; connected native memory-only file + encrypted identity recovery implemented, Flutter running. Independent review found authoritative-validation trap; fixed and added regression. Full P2P suite and PostgreSQL race qualification pending."
+      "heartbeat_at": "2026-10-24T08:22:13.447Z",
+      "expires_at": "2026-10-24T08:27:13.447Z",
+      "progress": "PR363 caa94b4f exacttree4a318230 published; all4CI running.115localP2P,types,17native+7finalevidencePASS;reviewclear. Next independent P5-15 staff evidence request/participant response source under inspection; current source gates remain open."
     }
   ],
   "history": [
