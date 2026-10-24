@@ -605,12 +605,14 @@ class AiChatController extends Notifier<AiChatState> {
   final Map<String, EncryptedShellActionJournal> _actionJournals = {};
   String? _cacheOwnerId;
   int _cacheGeneration = 0;
+  int _sessionAuthorizationEpoch = 0;
   Future<Directory?>? _documentsDirectoryFuture;
   Future<void> _previousCacheSave = Future<void>.value();
 
   @override
   AiChatState build() {
     final initialSession = ref.read(sessionProvider);
+    _sessionAuthorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     _cacheOwnerId =
         initialSession is SessionSignedIn ? initialSession.user.id : null;
     final initialOwner = _cacheOwnerId;
@@ -634,7 +636,28 @@ class AiChatController extends Notifier<AiChatState> {
     });
     ref.listen(sessionProvider, (previous, next) {
       final nextOwner = next is SessionSignedIn ? next.user.id : null;
-      if (nextOwner == _cacheOwnerId) return;
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      final replaced = epoch != _sessionAuthorizationEpoch;
+      _sessionAuthorizationEpoch = epoch;
+      if (nextOwner == _cacheOwnerId) {
+        if (replaced && nextOwner != null) {
+          // Re-login fences old callbacks without erasing this account's data
+          // or cancelling a server turn. Reopen/sync recovers original IDs.
+          _connectionGeneration++;
+          _bindings.clear();
+          for (final subscription in _eventSubscriptions.values) { unawaited(subscription.cancel()); }
+          _eventSubscriptions.clear(); _eventCursors.clear(); _actionCoordinators.clear();
+          state = state.copyWith(sendingIn: {}, shellConfigs: {}, threads: {
+            for (final entry in state.threads.entries) entry.key: entry.value.copyWith(messages: [
+              for (final message in entry.value.messages)
+                if (message.isUser || message.deliveryStatus != 'streaming')
+                  message.isUser && const {'sending','sent'}.contains(message.deliveryStatus)
+                    ? message.copyWith(deliveryStatus: 'processing') : message,
+            ]),
+          });
+        }
+        return;
+      }
       final previousOwner = _cacheOwnerId;
       _cacheOwnerId = nextOwner;
       final generation = ++_cacheGeneration;
@@ -1273,9 +1296,8 @@ class AiChatController extends Notifier<AiChatState> {
   }
 
   Future<void> clearSecureShellState({String? ownerId}) async {
-    final session = ref.read(sessionProvider);
-    final userId = ownerId ??
-        (session is SessionSignedIn ? session.user.id : null);
+    // Explicit owner cleanup may outlive this provider after logout.
+    final userId = ownerId ?? _cacheOwnerId;
     final journals = [..._actionJournals.values];
     _actionJournals.clear();
     _actionCoordinators.clear();
@@ -1444,7 +1466,11 @@ class AiChatController extends Notifier<AiChatState> {
     if (state.sendingIn.contains(characterId)) {
       throw StateError('A conversation turn is already in progress');
     }
-    if (await _offlineNow()) {
+    final owner = _cacheOwnerId, generation = _cacheGeneration, epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool current() => !_disposed && owner == _cacheOwnerId && generation == _cacheGeneration && epoch == ref.read(sessionProvider.notifier).authorizationEpoch;
+    final offline = await _offlineNow();
+    if (!current()) throw StateError('account_changed');
+    if (offline) {
       throw const ApiException('Connect to the internet to complete setup');
     }
     final result = await _sendViaTransport(
@@ -1452,6 +1478,7 @@ class AiChatController extends Notifier<AiChatState> {
       text,
       requestId: createRequestId(),
     );
+    if (!current()) throw StateError('account_changed');
     return result.text.trim();
   }
 
@@ -1464,7 +1491,9 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     final text = rawText.trim();
     if (text.isEmpty || state.sendingIn.contains(characterId)) return;
+    final authorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
+    final owner = _cacheOwnerId, generation = _cacheGeneration;
     final message = AiChatMessage(
       id: _newId(),
       isUser: true,
@@ -1476,7 +1505,7 @@ class AiChatController extends Notifier<AiChatState> {
       requestId: createRequestId(),
     );
     final offline = await _offlineNow();
-    if (_disposed ||
+    if (_disposed || owner != _cacheOwnerId || generation != _cacheGeneration || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) {
       return;
     }
@@ -1500,12 +1529,13 @@ class AiChatController extends Notifier<AiChatState> {
     Future<void> Function()? onAccepted,
   }) async {
     if (state.sendingIn.contains(characterId)) return;
+    final authorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
     final owner = _cacheOwnerId;
     final generation = _cacheGeneration;
     final requestId = createRequestId();
     final cached = await _retainMediaForOwner(owner, requestId, [attachment]);
-    if (_disposed || owner != _cacheOwnerId ||
+    if (_disposed || owner != _cacheOwnerId || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
         generation != _cacheGeneration ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
@@ -1520,12 +1550,13 @@ class AiChatController extends Notifier<AiChatState> {
       requestId: requestId,
     );
     final offline = await _offlineNow();
-    if (_disposed ||
+    if (_disposed || owner != _cacheOwnerId || generation != _cacheGeneration || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) {
       return;
     }
     if (offline) {
       await _enqueueMessage(characterId, message);
+      if (_disposed || owner != _cacheOwnerId || generation != _cacheGeneration || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
       await onAccepted?.call();
       return;
     }
@@ -1550,12 +1581,13 @@ class AiChatController extends Notifier<AiChatState> {
       );
       return;
     }
+    final authorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
     final owner = _cacheOwnerId;
     final generation = _cacheGeneration;
     final requestId = createRequestId();
     final bounded = await _retainMediaForOwner(owner, requestId, attachments);
-    if (_disposed || owner != _cacheOwnerId ||
+    if (_disposed || owner != _cacheOwnerId || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
         generation != _cacheGeneration ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) return;
     final message = AiChatMessage(
@@ -1571,7 +1603,7 @@ class AiChatController extends Notifier<AiChatState> {
       requestId: requestId,
     );
     final offline = await _offlineNow();
-    if (_disposed ||
+    if (_disposed || owner != _cacheOwnerId || generation != _cacheGeneration || authorizationEpoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) {
       return;
     }
@@ -1591,6 +1623,11 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     final connectionGeneration = _connectionGeneration;
     final threadGeneration = _threadGenerations[characterId] ?? 0;
+    final audioOwner = _cacheOwnerId;
+    final audioGeneration = _cacheGeneration;
+    final authorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    final originalShell = _shellTransport;
+    bool currentAudioOwner() => !_disposed && audioOwner == _cacheOwnerId && audioGeneration == _cacheGeneration && connectionGeneration == _connectionGeneration && threadGeneration == (_threadGenerations[characterId] ?? 0) && authorizationEpoch == ref.read(sessionProvider.notifier).authorizationEpoch;
     final thread = threadOf(characterId);
     state = state.copyWith(
       threads: {
@@ -1603,13 +1640,9 @@ class AiChatController extends Notifier<AiChatState> {
       sendingIn: {...state.sendingIn, characterId},
     );
     await _save();
+    if (!currentAudioOwner()) return;
     await onAccepted?.call();
-    _setDelivery(characterId, userMsg.id, 'sent');
-    if (_disposed || threadGeneration != (_threadGenerations[characterId] ?? 0))
-      return;
-    final audioOwner = _cacheOwnerId;
-    final audioGeneration = _cacheGeneration;
-    bool currentAudioOwner() => !_disposed && audioOwner == _cacheOwnerId && audioGeneration == _cacheGeneration && connectionGeneration == _connectionGeneration && threadGeneration == (_threadGenerations[characterId] ?? 0);
+    if (!currentAudioOwner()) return;
     try {
       final attachment = userMsg.attachment;
       final attachmentSet = userMsg.attachments;
@@ -1632,11 +1665,17 @@ class AiChatController extends Notifier<AiChatState> {
         // A successful transport may deliver text chunks but an empty final
         // text field. Retain the chunks for the durable completion fallback.
         streamedText += delta;
+        if (threadOf(characterId).messages.any((m) => m.id == userMsg.id && m.deliveryStatus == 'sending')) {
+          _setDelivery(characterId, userMsg.id, 'sent');
+        }
         if (spokenTranscript.isEmpty) _appendAiDelta(characterId,streamMessageId,delta);
       }
       void transcriptDelta(String delta) {
         if (!currentAudioOwner()) return;
         spokenTranscript += delta;
+        if (delta.isNotEmpty && threadOf(characterId).messages.any((m) => m.id == userMsg.id && m.deliveryStatus == 'sending')) {
+          _setDelivery(characterId, userMsg.id, 'sent');
+        }
         _updateMessage(characterId,streamMessageId,(message)=>message.copyWith(text:spokenTranscript,deliveryStatus:'streaming'),persist:false);
       }
       final result = !hasMedia
@@ -1665,10 +1704,7 @@ class AiChatController extends Notifier<AiChatState> {
               onTextDelta: textDelta,
               onAudioTranscriptDelta: transcriptDelta,
             );
-      if (_disposed ||
-          threadGeneration != (_threadGenerations[characterId] ?? 0)) {
-        return;
-      }
+      if (!currentAudioOwner()) return;
       if (connectionGeneration != _connectionGeneration) {
         throw const ApiException('Connection changed');
       }
@@ -1768,16 +1804,63 @@ class AiChatController extends Notifier<AiChatState> {
         );
 
     } catch (error) {
-      if (_disposed ||
-          threadGeneration != (_threadGenerations[characterId] ?? 0)) {
-        return;
-      }
+      if (!currentAudioOwner()) return;
       if (error is ApiException &&
           (error.statusCode == 401 ||
               error.statusCode == 403 ||
               error.statusCode == 404)) {
         _bindings.remove(characterId);
       }
+      // A timed-out HTTP stream is not proof the Gateway failed the turn.
+      // Reconcile the ORIGINAL request first. This GET cannot start another
+      // inference or charge, and it also rescues a reply finished after
+      // the client stream was interrupted.
+      final pendingTransport = originalShell;
+      final originalId = userMsg.requestId;
+      if (pendingTransport != null && originalId != null &&
+          originalId.isNotEmpty &&
+          !(error is ApiException &&
+              (error.statusCode == 401 || error.statusCode == 403))) {
+        try {
+          final original = await pendingTransport.turnStatus(characterId, originalId);
+          if (_disposed || connectionGeneration != _connectionGeneration ||
+              audioOwner != _cacheOwnerId ||
+              threadGeneration != (_threadGenerations[characterId] ?? 0)) {
+            return;
+          }
+          if (original.state == 'completed') {
+            _removeStreamingPlaceholders(characterId);
+            _setDelivery(characterId, userMsg.id, 'delivered');
+            await _appendAi(characterId, original.reply ?? '',
+              parts: [
+                for (final part in original.parts)
+                  AgentMessagePart.fromJson(part),
+              ],
+              agentRunId: original.agentRunId,
+              requestId: originalId,
+            );
+            return;
+          }
+          if (original.state == 'pending') {
+            _removeStreamingPlaceholders(characterId);
+            _setDelivery(characterId, userMsg.id, 'processing');
+            state = state.copyWith(
+              sendingIn: {...state.sendingIn}..remove(characterId),
+            );
+            await _save();
+            // Keep the one original request in progress. Its late server
+            // result is recovered by authorized SSE/status reconciliation.
+            return;
+          }
+          // A server-confirmed 'missing' request may now show a visible
+          // failed/retry state. Explicit retry rechecks status and reuses the
+          // SAME requestId rather than silently issuing a second operation.
+        } catch (_) {
+          // Unable to confirm: retain normal visible failed/retry feedback.
+          // retryMessage performs another status GET before any resend.
+        }
+      }
+      if (!currentAudioOwner()) return;
       _removeStreamingPlaceholders(characterId);
       _setDelivery(characterId, userMsg.id, 'failed');
       final feedback = AgentFeedback.fromError(error, conversation: true);
@@ -1895,8 +1978,11 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     final owner = _cacheOwnerId;
     final ownerGeneration = _cacheGeneration;
+    final connection = _connectionGeneration, thread = _threadGenerations[characterId] ?? 0;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool current() => !_disposed && owner == _cacheOwnerId && ownerGeneration == _cacheGeneration && connection == _connectionGeneration && thread == (_threadGenerations[characterId] ?? 0) && epoch == ref.read(sessionProvider.notifier).authorizationEpoch;
     void checkOwner() {
-      if (_disposed || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) {
+      if (!current()) {
         throw const ApiException('Account changed before media was sent');
       }
     }
@@ -1924,15 +2010,14 @@ class AiChatController extends Notifier<AiChatState> {
         name: attachment.name,
         bytes: bytes,
       );
-      if (_disposed || owner != _cacheOwnerId ||
-          ownerGeneration != _cacheGeneration) {
+      if (!current()) {
         throw const ApiException('Account changed before media was sent');
       }
     }
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
     void progress(int sent,int total) {
-      if (total <= 0 || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) return;
+      if (total <= 0 || !current()) return;
       _updateMessage(characterId,messageId,(message)=>message.copyWith(
         deliveryStatus:sent>=total?'processing':'uploading', uploadProgress:(sent/total).clamp(0.0,1.0).toDouble()),persist:false);
     }
@@ -1949,6 +2034,7 @@ class AiChatController extends Notifier<AiChatState> {
     try {
       return await send();
     } catch (error) {
+      checkOwner();
       if (!hadCachedBinding || !_isStaleSessionError(error)) rethrow;
       _bindings.remove(characterId);
       binding = await _bindingFor(characterId, transport);
@@ -1968,8 +2054,11 @@ class AiChatController extends Notifier<AiChatState> {
   }) async {
     final owner = _cacheOwnerId;
     final ownerGeneration = _cacheGeneration;
+    final connection = _connectionGeneration, thread = _threadGenerations[characterId] ?? 0;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool current() => !_disposed && owner == _cacheOwnerId && ownerGeneration == _cacheGeneration && connection == _connectionGeneration && thread == (_threadGenerations[characterId] ?? 0) && epoch == ref.read(sessionProvider.notifier).authorizationEpoch;
     void checkOwner() {
-      if (_disposed || owner != _cacheOwnerId || ownerGeneration != _cacheGeneration) {
+      if (!current()) {
         throw const ApiException('Account changed before media was sent');
       }
     }
@@ -2016,8 +2105,7 @@ class AiChatController extends Notifier<AiChatState> {
           name: part.name,
           bytes: part.bytes,
         );
-        if (_disposed || owner != _cacheOwnerId ||
-            ownerGeneration != _cacheGeneration) {
+        if (!current()) {
           throw const ApiException('Account changed before media was sent');
         }
       }
@@ -2025,7 +2113,7 @@ class AiChatController extends Notifier<AiChatState> {
     final binding = await _bindingFor(characterId, transport);
     checkOwner();
     void progress(int sent,int total) {
-      if(total<=0 || owner!=_cacheOwnerId || ownerGeneration!=_cacheGeneration)return;
+      if(total<=0 || !current())return;
       _updateMessage(characterId,messageId,(message)=>message.copyWith(deliveryStatus:sent>=total?'processing':'uploading',uploadProgress:(sent/total).clamp(0.0,1.0).toDouble()),persist:false);
     }
     if(transport is StreamingAgentMediaTransport){
@@ -2048,9 +2136,15 @@ class AiChatController extends Notifier<AiChatState> {
     Future<void> Function(Uint8List pcmChunk)? onAudioPcmChunk,
     String? requestId,
   }) async {
+    final owner = _cacheOwnerId, generation = _cacheGeneration, connection = _connectionGeneration;
+    final thread = _threadGenerations[characterId] ?? 0, epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    void check() {
+      if (_disposed || owner != _cacheOwnerId || generation != _cacheGeneration || connection != _connectionGeneration || thread != (_threadGenerations[characterId] ?? 0) || epoch != ref.read(sessionProvider.notifier).authorizationEpoch) throw const ApiException('Conversation changed');
+    }
     final transport = ref.read(agentTransportProvider);
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
+    check();
     try {
       return await transport.sendTurn(
         binding: binding,
@@ -2060,9 +2154,11 @@ class AiChatController extends Notifier<AiChatState> {
         requestId: requestId,
       );
     } catch (error) {
+      check();
       if (!hadCachedBinding || !_isStaleSessionError(error)) rethrow;
       _bindings.remove(characterId);
       binding = await _bindingFor(characterId, transport);
+      check();
       return transport.sendTurn(
         binding: binding,
         text: prompt,
@@ -2089,7 +2185,7 @@ class AiChatController extends Notifier<AiChatState> {
     final binding = await transport.openSession(characterId);
     if (connectionGeneration != _connectionGeneration ||
         threadGeneration != (_threadGenerations[characterId] ?? 0)) {
-      unawaited(transport.closeSession(binding));
+      unawaited(transport.closeSession(binding).catchError((_) {}));
       throw const ApiException('Conversation changed');
     }
     if (_disposed) return binding;
@@ -2130,8 +2226,9 @@ class AiChatController extends Notifier<AiChatState> {
       },
     );
     _save();
-    // The recipient opened the thread: anything we sent has now arrived.
-    _markUserMessages(characterId, {'sending', 'sent'}, 'delivered');
+    // This is a LOCAL placeholder. Its creation is not proof that the
+    // Gateway accepted the request or that the Masana read anything.
+    // Delivery/read require correlated server acknowledgement or completion.
     return id;
   }
 
@@ -2184,7 +2281,7 @@ class AiChatController extends Notifier<AiChatState> {
       sendingIn: {...state.sendingIn}..remove(characterId),
     );
     // A finished reply proves the recipient read our messages.
-    _markUserMessages(characterId, {'delivered'}, 'read');
+    if (requestId != null && requestId.isNotEmpty) _markUserMessages(characterId, {'sending','sent','processing','delivered'}, 'read', requestId: requestId);
     await _save();
   }
 
@@ -2256,8 +2353,13 @@ class AiChatController extends Notifier<AiChatState> {
       },
       sendingIn: {...state.sendingIn}..remove(characterId),
     );
-    // A delivered reply proves the recipient read our messages.
-    _markUserMessages(characterId, {'delivered'}, 'read');
+    // Only a correlated, confirmed reply (including recovered server turns)
+    // is acknowledgement of the original request. A locally synthesized
+    // error/greeting has no requestId and must never turn ticks blue.
+    if (requestId != null && requestId.isNotEmpty &&
+        !parts.any((p) => p.kind == AgentMessagePartKind.status && p.status == 'failed')) {
+      _markUserMessages(characterId, {'sending','sent','processing','delivered'}, 'read', requestId: requestId);
+    }
     await _save();
   }
 
@@ -2465,10 +2567,10 @@ class AiChatController extends Notifier<AiChatState> {
   /// Advances the user's own messages through receipt stages, mirroring a
   /// server-acknowledged → delivered → read pipeline. Only messages still in
   /// one of [from] move; failed, queued and stopped messages are untouched.
-  void _markUserMessages(String characterId, Set<String> from, String to) {
+  void _markUserMessages(String characterId, Set<String> from, String to, {required String requestId}) {
     final thread = threadOf(characterId);
     for (final m in thread.messages) {
-      if (m.isUser && !m.deleted && from.contains(m.deliveryStatus)) {
+      if (m.isUser && !m.deleted && m.requestId == requestId && from.contains(m.deliveryStatus)) {
         _setDelivery(characterId, m.id, to);
       }
     }
@@ -2733,9 +2835,13 @@ class AiChatController extends Notifier<AiChatState> {
       clearOpen: true,
     );
 
+    // Snapshot old in-memory journals before yielding; a replacement account
+    // can open its own journals while file cleanup is still in progress.
+    final shellCleanup = previousOwner != null && previousOwner.isNotEmpty
+        ? clearSecureShellState(ownerId: previousOwner) : Future<void>.value();
     if (previousOwner != null && previousOwner.isNotEmpty) {
       await _saveSessionExpiryDrafts(previousOwner,expiryOnly?safeDrafts:const {});
-      await clearSecureShellState(ownerId: previousOwner);
+      await shellCleanup;
       await _deleteThreadCache(previousOwner);
       await _deleteOwnedMediaCache(previousOwner);
     }

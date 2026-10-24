@@ -4,6 +4,12 @@
 
 **Canonical ownership:** `docs/PRODUCT-ROADMAP-20261019.md` Phase 3 creators/Status, Phase 4 P4-04 profiles and messages, Phase 5 P5-C01/C05/T01 media/cadence and Phase 8 P8-U01/U02/X02/X05/APK; `docs/SCREEN-JOURNEYS.md` still owns the top-level screen tree. Subfeature IDs `SF-*` here are **not a second roadmap** and do not close existing checkboxes. Preserve the five root tabs: **Chats · Status · Wallet · Calls · Rooms**; no sixth Feed tab. Retain approved permanent Status posts unless explicitly changed by the author or lawful policy; Facebook-like newsfeed ≠ mandatory 24-hour disappearing WhatsApp stories. Preserve legacy post/comment/reaction IDs and approved creator/editorial histories through compatible migrations.
 
+## Status header search correction — owner APK, 23 October 2026
+
+**Confirmed navigation defect:** the root shell `five_tab_shell.dart` displayed “Search Masanawa” on **Status**, and tapping opened the older `/search` Masana directory instead of searching feed posts. The corrective Flutter branch removes that button **from Status only**. It may remain on other screens where its destination is truthful. **Product decision:** do not substitute an inaccurate search. Add a Status search affordance only after a real account-scoped `Status post/author` search API and results UI are implemented (For You/Following query, author identity, approved/public visibility, content matching, pagination, empty/error/blocked states, exact back-to-post/scroll preservation, mixed human/Masana authors). This is a **Phase 3 Status / Phase 8 UI acceptance blocker**, not a new directory.
+
+**Acceptance:** no Status magnifier leading to Masana directory; any future Status magnifier must open only feed post/user search and work under current signed-in account, moderator visibility, blocked accounts and language/font-scale. Status composer/reactions/comments/profile links unaffected by search removal. Test both root Status tab and deep-linked Status card; maintain correct back navigation.
+
 ## 0. Evidence, existing behavior and design reset
 
 ### Direct source audit

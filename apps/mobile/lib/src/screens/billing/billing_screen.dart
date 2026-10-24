@@ -543,7 +543,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
-        title: Text(category?.name ?? 'Bills & Services'),
+        title: Text(category?.name ?? 'Pay bills'),
         backgroundColor: u.surfaceCard,
         foregroundColor: u.textPrimary,
         elevation: 0,
@@ -554,52 +554,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            // Available Wallet Balance Banner
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: u.surfaceMuted,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.account_balance_wallet_rounded, color: u.textPrimary, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'MSNW Wallet',
-                          style: TextStyle(color: u.textMuted, fontSize: 12),
-                        ),
-                        Text(
-                          'Fund wallet',
-                          style: TextStyle(
-                            color: u.textPrimary,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: u.textPrimary,
-                      side: BorderSide(color: u.structuralBorder),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      minimumSize: Size.zero,
-                    ),
-                    onPressed: _showFundingSheet,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Fund', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
+            // Only server-catalog billing controls appear here. The previous
+            // static "Fund wallet" banner was not a balance readback and
+            // falsely looked like a live wallet amount or bill prerequisite.
             // Category and live Flutterwave provider selection.
             SingleChildScrollView(scrollDirection: Axis.horizontal,
               child: Row(children: categories.map((entry) => Padding(
@@ -647,9 +604,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               'Phone prefixes are hints, not proof of your network. If your number was ported, choose its current operator.',
             ),
             if (mobileCategory && phoneHint != null)
-              Text('Prefix suggests ${phoneHint.label}. Confirm your current operator below.'),
+              Text('Check your operator: prefix suggests ${phoneHint.label}.'),
             if (mobileCategory && biller == null)
-              const Text('Choose your current operator to see eligible packages.'),
+              const Text('Select your operator.'),
             const SizedBox(height: 8),
             if (mobileCategory) Row(
               children: NigerianNetwork.values.map((net) {
@@ -787,7 +744,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             if (historyError != null) Center(child: TextButton(onPressed: refreshHistory, child: const Text('Retry receipts'))),
             if(beneficiaries.isNotEmpty)...[
               Text('Saved bill beneficiaries',style:Theme.of(context).textTheme.titleMedium),
-              const Text('Saved on this device. Every purchase checks current service availability, recipient and price.'),
               for(final entry in beneficiaries)ListTile(title:Text(entry['name']!),subtitle:Text(entry['customerId']!),
                 onTap:busy?null:()=>repeatBeneficiary(entry),trailing:IconButton(tooltip:'Remove bill beneficiary',onPressed:busy?null:()=>removeBeneficiary(entry),icon:const Icon(Icons.delete_outline))),
             ],

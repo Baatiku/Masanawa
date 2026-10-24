@@ -86,7 +86,11 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     return Scaffold(
       appBar: _index == 1 || _index == 2
           ? masanawaMainHeader(context, actions: [
-              IconButton(
+              // Status has no scoped post search yet; the old /search route
+              // opens the Masana directory and must not masquerade as Status search.
+              // Keep the existing directory search for Wallet until its own
+              // search affordance is redesigned.
+              if (_index == 2) IconButton(
                 tooltip: 'Search Masanawa',
                 icon: const Icon(Icons.search_outlined),
                 onPressed: accountKey == 'signed-out'
