@@ -5,15 +5,15 @@ import 'package:go_router/go_router.dart';
 import '../../l10n/app_localizations.dart';
 import '../screens/calls/calls_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
-import '../screens/rooms/rooms_screen.dart';
+import '../gb_wallet/data_redemption_screen.dart';
 import '../screens/status/status_screen.dart';
-import '../screens/wallet/wallet_screen.dart';
+import '../gb_wallet/gb_wallet_screen.dart';
 import '../screens/twin/shell_tab.dart';
 import '../ui/components/masanawa_main_header.dart';
 import '../theme/masanawa_theme.dart';
 import '../state/session_state.dart';
 
-/// Canonical five-tab root shell: Chats · Status · Wallet · Calls · Rooms.
+/// Canonical five-tab root shell: Chats · Status · Wallet · Calls · Data.
 ///
 /// This replaces the retired Home · Agents · Wallet · Talk shell. Each tab
 /// owns its screen; tabs only switch, they never fetch.
@@ -60,13 +60,9 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
   Widget _page(int index) => switch (index) {
     0 => const ChatListScreen(),
     1 => const StatusScreen(),
-    2 => WalletScreen(
-      embeddedInShell: true,
-      onOpenBillingService: (service) =>
-          context.push('/billing?service=' + Uri.encodeQueryComponent(service)),
-    ),
+    2 => const GbWalletScreen(),
     3 => const CallsScreen(),
-    _ => const RoomsScreen(),
+    _ => const DataRedemptionScreen(),
   };
 
   @override
@@ -88,14 +84,6 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
           ? masanawaMainHeader(context, actions: [
               // Status has no scoped post search yet; the old /search route
               // opens the Masana directory and must not masquerade as Status search.
-              // Keep the existing directory search for Wallet until its own
-              // search affordance is redesigned.
-              if (_index == 2) IconButton(
-                tooltip: 'Search Masanawa',
-                icon: const Icon(Icons.search_outlined),
-                onPressed: accountKey == 'signed-out'
-                    ? null : () => context.push('/search'),
-              ),
               IconButton(
                 tooltip: 'Notification activity',
                 icon: const Icon(Icons.notifications_none_outlined),
@@ -154,9 +142,9 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
               label: strings.calls,
             ),
             NavigationDestination(
-              icon: const Icon(Icons.groups_outlined),
-              selectedIcon: const Icon(Icons.groups),
-              label: strings.rooms,
+              icon: const Icon(Icons.sim_card_outlined),
+              selectedIcon: const Icon(Icons.sim_card),
+              label: 'Data',
             ),
           ],
         ),

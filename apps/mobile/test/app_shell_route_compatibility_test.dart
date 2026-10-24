@@ -9,7 +9,8 @@ void main() {
     expect(shellRootTabIndex('status'), 1);
     expect(shellRootTabIndex('wallet'), 2);
     expect(shellRootTabIndex('calls'), 3);
-    expect(shellRootTabIndex('rooms'), 4);
+    expect(shellRootTabIndex('data'), 4);
+    expect(shellRootTabIndex('rooms'), 0);
     expect(shellRootTabIndex('home'), 0);
     expect(shellRootTabIndex('agents'), 0);
     expect(shellRootTabIndex('talk'), 0);
@@ -34,6 +35,7 @@ void main() {
     expect(legacyShellDestination('activity'), '/home?tab=status');
     expect(legacyShellDestination('agents'), '/home?tab=chats');
     expect(legacyShellDestination('wallet'), '/home?tab=wallet');
+    expect(legacyShellDestination('rooms'), '/home?tab=status');
     expect(legacyShellDestination('talk'), '/home?tab=status');
     expect(legacyShellDestination('you'), isNull);
     expect(legacyShellDestination(null), isNull);

@@ -1,4 +1,4 @@
-/// Canonical consumer root tabs: Chats · Status · Wallet · Calls · Rooms.
+/// Canonical consumer root tabs: Chats · Status · Wallet · Calls · Data.
 ///
 /// Route identifiers are a navigation contract (query values stay stable for
 /// deep links); they are not service categories or permissions.
@@ -7,7 +7,7 @@ enum MasanawaRootTab {
   status('status'),
   wallet('wallet'),
   calls('calls'),
-  rooms('rooms');
+  data('data');
 
   const MasanawaRootTab(this.queryValue);
 
@@ -17,7 +17,7 @@ enum MasanawaRootTab {
         'status' => MasanawaRootTab.status,
         'wallet' => MasanawaRootTab.wallet,
         'calls' => MasanawaRootTab.calls,
-        'rooms' => MasanawaRootTab.rooms,
+        'data' => MasanawaRootTab.data,
         _ => MasanawaRootTab.chats,
       };
 
