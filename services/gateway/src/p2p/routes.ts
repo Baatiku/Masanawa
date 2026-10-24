@@ -70,6 +70,39 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.offersPage(a,input);
     }catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/ad-reports/page',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const q=req.query as {cursor?:unknown};if(q.cursor!==undefined&&typeof q.cursor!=='string')throw new P2pError('p2p.invalid_cursor',422);
+      return await deps.service.myAdReports(await actor(req.headers.authorization),typeof q.cursor==='string'?{cursor:q.cursor}:{});
+    }catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/wallet/msnw/p2p/offers/:offerId/report',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{return await deps.service.adReportByOffer(await actor(req.headers.authorization),(req.params as {offerId:string}).offerId);}
+    catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/offers/:offerId/report',{bodyLimit:12288},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const a=await actor(req.headers.authorization),b=req.body as Record<string,unknown>|null;
+      if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['category','details'].includes(k)))throw new P2pError('p2p.invalid_report',422);
+      const result=await deps.service.reportAd(a,(req.params as {offerId:string}).offerId,{category:b.category,details:b.details});
+      return reply.code(result.replay?200:201).send(result);
+    }catch(error){return respond(error,reply);}
+  });
+  app.get('/v1/admin/msnw/p2p/ad-reports',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const a=await operator(req.headers.authorization),q=req.query as {cursor?:unknown;filter?:unknown};
+      if((q.cursor!==undefined&&typeof q.cursor!=='string')||(q.filter!==undefined&&typeof q.filter!=='string'))throw new P2pError('p2p.invalid_filter',422);
+      return await deps.service.adReports(a,{...(typeof q.cursor==='string'?{cursor:q.cursor}:{}),...(typeof q.filter==='string'?{filter:q.filter}:{})});
+    }catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/admin/msnw/p2p/ad-reports/:reportId/review',{bodyLimit:12288},async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const a=await operator(req.headers.authorization),b=req.body as Record<string,unknown>|null;
+      if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['decision','reason','version'].includes(k)))throw new P2pError('p2p.invalid_ad_report_review',422);
+      return await deps.service.reviewAdReport(a,(req.params as {reportId:string}).reportId,{decision:b.decision,reason:b.reason,version:b.version});
+    }catch(error){return respond(error,reply);}
+  });
   app.get('/v1/wallet/msnw/p2p/offers/:offerId/trader',async(req,reply)=>{
     reply.header('Cache-Control','no-store');
     try {

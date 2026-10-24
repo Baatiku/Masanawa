@@ -306,7 +306,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P1-15 | N | Merchant reputation score withheld for low or missing samples. |
 | P1-16 | N | Counterparty restrictions and anti-scam checks only from approved risk policy. |
 | P1-17 | N | Restricted jurisdiction/blocked merchant/revoked account clear reason and appeal. |
-| P1-18 | N | Report merchant/offensive offer terms without sharing sensitive payment details. |
+| P1-18 | S/P | Private eligible-ad report, immutable public snapshot, original receipt/history and independent reasoned support review implemented; operational policy/retention, handset acceptance and enforcement remain open. |
 | P1-19 | N/Q | Fraud and sanction decisions applied before custody reservation or instructions. |
 | P1-20 | X | Do not copy Telegram merchant deposit (e.g. 50 USDT) or Binance tiers as Masanawa policy. |
 
@@ -722,6 +722,14 @@ Migration `0142_msnw_p2p_method_preferences.sql` adds private preference/archive
 Higgsfield: 30 focused backend/actual-SQL cases and Gateway typing PASS; 30 combined management/edit/Buy-Sell/marketplace cases plus the additional 320dp/200% RTL preference case PASS, including 13 management cases, including default-versus-existing-draft selection, private nickname/clear, removal refusal/recovery, old-account dialog fencing and prior 320dp/200% RTL coverage. First multi-file Flutter run hit a test-shell startup segmentation fault; no crash is counted as a pass. Analyzer reports informational lints only. The authored fourteenth real PostgreSQL case checks concurrent defaults, referenced-method refusal, archive replay, original bank instructions and unchanged custody/journal; independent read-only source review found no material findings; exact published-head hosted qualification belongs to the PR. No APK, live provider enrollment, production migration/deployment or real-funds operation.
 
 P1-04/P1-05 and all parent checkboxes remain partial/open. The five-contract 177-screen/820-requirement inventory is unchanged. Remaining P2P work includes public terms/report-ad/block policy, trusted merchant/risk/geography admission, protected media/retention, separately qualified assets/rails and staff/device/provider/production acceptance. Next: finish consolidated affected checks, preserve fresh-main peer work, publish/review/qualify and merge this coherent source batch, then continue independent required P2P source.
+
+## 23 October 2026 — P2P private ad reporting and support review (partial P1-18/P7-P01)
+
+Customers can report an eligible ad from its trader card, recover the original private receipt after an ambiguous response or later ad closure, and page their own report history. The server retains one immutable report per actor/ad with a whitelist of public ad context; bank account numbers, private bank labels and verification evidence are excluded. An actor-wide 20/hour quota is serialized across ads. Operators have a tenant-scoped paginated queue and independent, reasoned, versioned dismiss/refer reviews; reporting/review does not change ad availability, orders or custody. Referral records triage status only: automated case creation, policy enforcement and provider action remain open.
+
+Higgsfield evidence: six new SQL/HTTP cases, gateway TypeScript, eight customer Flutter cases and five admin Flutter cases passed; affected analyzers report informational lint only. Independent read-only review found no material findings. Added real PostgreSQL cross-ad quota and competing-review coverage for hosted qualification; exact-head CI results belong in the PR before merge. Fixed the existing admin dispute-page closing parenthesis needed to reach the queue. No APK, physical-device acceptance, production migration, provider qualification or live-funds action. Trusted buy-ad admission stays default closed; P1-19 sanctions/fraud enforcement, operational retention/access policy and parent Phase 7/8 gates remain open. The 177-screen/820-requirement scope is unchanged.
+
+Previous connected delivery: PR #335 merged at `29efd85eaf82e3932c1850fdc014a269f51acf82` with all four exact-head CI workflows passing, including 95 backend/storage, 7 Worker and 14 real PostgreSQL cases.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
