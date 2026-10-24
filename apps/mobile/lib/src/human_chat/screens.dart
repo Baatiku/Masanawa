@@ -298,7 +298,14 @@ class _HumanInboxSectionState extends ConsumerState<HumanInboxSection> {
         pageError = null;
       });
     } catch (e) {
-      if (stillCurrent()) setState(() => pageError = '$e');
+      if (stillCurrent()) {
+        if (e is DioException && const [401,403,404].contains(e.response?.statusCode)) {
+          setState(_clearOlder);
+          ref.invalidate(humanInboxProvider(key));
+        } else {
+          setState(() => pageError = 'Could not load older conversations. Check your connection and retry.');
+        }
+      }
     } finally {
       if (stillCurrent()) setState(() => pageLoading = false);
     }

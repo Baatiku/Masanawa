@@ -101,7 +101,7 @@ class MutableInbox extends InboxTransport {
     if (hide) {
       reads.add(Map<String, dynamic>.from(query ?? {}));
       return {
-        'items': [for (var i = 1; i < 50; i++) item(i)],
+        'items': [for (var i = 1; i < 49; i++) item(i)],
         'nextCursor': null,
       };
     }
@@ -183,6 +183,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Person 51'), findsNothing);
       expect(find.text('Person 0'), findsNothing);
+      expect(t.mutations, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      t.cancel();
+    },
+  );
+  testWidgets(
+    'manual continuation denial immediately reauthorizes rather than retaining known stale rows',
+    (tester) async {
+      final t = MutableInbox(),
+          container = ProviderContainer(
+            overrides: [
+              humanAccountProvider.overrideWithValue('alice'),
+              humanCommunicationTransportProvider.overrideWithValue(t),
+            ],
+          );
+      await renderInbox(tester, container);
+      expect(find.text('Person 49'), findsOneWidget);
+      t.denyAnchor = true;
+      await olderInbox(tester);
+      expect(find.text('Person 49'), findsNothing);
+      expect(find.text('Person 0'), findsNothing);
+      expect(t.reads.last['after'], isNull);
       expect(t.mutations, isEmpty);
       await tester.pumpWidget(const SizedBox());
       container.dispose();
