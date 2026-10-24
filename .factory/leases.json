@@ -34,15 +34,21 @@
         "apps/admin_mobile/lib/src/screens/p2p_support_requests.dart",
         "apps/admin_mobile/lib/src/screens/p2p_case_context.dart",
         "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
-        "apps/admin_mobile/test/p2p_support_requests_test.dart"
+        "apps/admin_mobile/test/p2p_support_requests_test.dart",
+        "apps/mobile/lib/src/finance/p2p_access_boundary.dart",
+        "apps/mobile/test/p2p_access_boundary_test.dart",
+        "apps/mobile/test/p2p_session_fencing_test.dart",
+        "apps/admin_mobile/test/p2p_case_context_test.dart"
       ],
       "branch": "feat/p2p-evidence-requests-oct24",
       "base_sha": "dfbfcdb5de6f9d093d19441660e1ef07f99b06d2",
       "pr": "https://github.com/Baatiku/Masanawa/pull/367",
       "claimed_at": "2026-10-24T08:44:48.530Z",
-      "heartbeat_at": "2026-10-24T08:52:17.514Z",
-      "expires_at": "2026-10-24T08:57:17.514Z",
-      "progress": "PR367 head65af3f46 exacttree9aae74f9 sourcepublished.3SQL+gateway/adaptertypes+27customer/support/root+9staff/caseFlutterPASS;reviewclear. AwaitexactheadCI/21realPGrace. Base363mergeddfbfcdb5. NoAPK/handset/provider/productionacceptance."
+      "heartbeat_at": "2026-10-24T08:56:06.133Z",
+      "expires_at": "2026-10-24T09:01:06.133Z",
+      "progress": "PR367 head65af3f46 exacttree9aae74f9 sourcepublished.3SQL+gateway/adaptertypes+27customer/support/root+9staff/caseFlutterPASS;reviewclear. AwaitexactheadCI/21realPGrace. Base363mergeddfbfcdb5. NoAPK/handset/provider/productionacceptance.",
+      "next_branch": "feat/p2p-session-boundaries-oct24",
+      "next_scope": "P6-16 protected P2P route/session epoch fencing, stale bearer response rejection, deep-link account guard and admin copy-access loss scrub; canonical financial authorization unchanged"
     }
   ],
   "history": [
