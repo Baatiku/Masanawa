@@ -44,7 +44,7 @@ it('creates a durable actor-only report receipt; original POST retry and GET rea
  const page=await send(bob,'GET','reports');
  expect(page.items).toEqual([{reportId:original.reportId,messageId:'msg-incoming',reason:body.reason,submittedAt:original.submittedAt,status:'submitted'}]);
  expect(page.nextCursor).toBeNull();
- expect((await db.query("SELECT count(*)::int AS n FROM talks.human_reports WHERE tenant_id='t'")).rows[0]?.n).toBe(1);
+ expect((await db.query<{n:number}>("SELECT count(*)::int AS n FROM talks.human_reports WHERE tenant_id='t'")).rows[0]?.n).toBe(1);
  await expect(send(alice,'GET','reports/original-report')).rejects.toMatchObject({statusCode:404});
  await expect(send(eve,'GET','reports/original-report')).rejects.toMatchObject({statusCode:404});
  await expect(send(outsider,'GET','reports/original-report')).rejects.toMatchObject({statusCode:404});
