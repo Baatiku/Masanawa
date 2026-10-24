@@ -37,4 +37,25 @@ describe.skipIf(!connection)('PG18 timeline search and thread pages',()=>{
    await pool.query("UPDATE rooms.memberships SET state='left' WHERE user_id='bob'");expect((await app.inject({method:'GET',url:base+'?cursor='+first.nextCursor,headers:{authorization:'author'}})).statusCode).toBe(404);
   }finally{await app.close();}
  });
+ it('HTTP pinned collection retains microsecond ties and excludes replies and removed roots',async()=>{
+  await pool.query("UPDATE rooms.memberships SET state='active' WHERE tenant_id='t' AND room_id='room_mod_pages' AND user_id='bob'");
+  await pool.query("UPDATE rooms.lessons SET pinned=true");
+  const app=Fastify();registerRoomCommunityRoutes(app,service);
+  try {
+   const base='/v1/rooms/room_mod_pages/community/timeline?pinnedOnly=true&limit=13';
+   let cursor:string|null=null;const ids:string[]=[];
+   do{
+    const result:{statusCode:number;json():any}=await app.inject({method:'GET',url:base+(cursor?'&cursor='+cursor:''),headers:{authorization:'author'}});
+    expect(result.statusCode).toBe(200);const page:{pinnedOnly:boolean;items:any[];nextCursor:string|null}=result.json();expect(page.pinnedOnly).toBe(true);
+    expect(page.items.every((v:any)=>v.pinned&&v.contentKind==='post'&&v.parentId===null)).toBe(true);
+    ids.push(...page.items.map((v:any)=>v.id));cursor=page.nextCursor;
+   }while(cursor);
+   expect(ids).toHaveLength(110);expect(new Set(ids).size).toBe(110);expect(ids).toContain('post_000');
+   const first=(await app.inject({method:'GET',url:base,headers:{authorization:'author'}})).json();
+   expect((await app.inject({method:'GET',url:'/v1/rooms/room_mod_pages/community/timeline?cursor='+first.nextCursor,headers:{authorization:'author'}})).statusCode).toBe(422);
+   await pool.query("UPDATE rooms.lessons SET pinned=false WHERE lesson_id='post_000'");
+   expect((await service.dispatch({tenantId:'t',userId:'bob'},'GET','room_mod_pages/community/timeline',{pinnedOnly:true,search:'Post 0'})).items).toEqual([]);
+  }finally{await app.close();}
+ });
+
 });

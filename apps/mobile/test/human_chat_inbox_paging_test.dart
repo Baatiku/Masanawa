@@ -87,13 +87,13 @@ class MutableInbox extends InboxTransport {
       );
     }
     if (query?['after'] != null && delayedOlder != null) {
-      reads.add(Map<String, dynamic>.from(query!));
+      reads.add(Map<String, dynamic>.from(query ?? {}));
       return delayedOlder!.future;
     }
     if (query?['after'] == null) {
       firstReads++;
       if (firstReads > 1 && delayedRefresh != null) {
-        reads.add(Map<String, dynamic>.from(query!));
+        reads.add(Map<String, dynamic>.from(query ?? {}));
         return delayedRefresh!.future;
       }
       if (firstReads > 1 && failRefresh) throw StateError('offline');
