@@ -27,6 +27,7 @@ import 'transport.dart';
 import 'report_history.dart';
 import 'report_request.dart';
 import 'edit_request.dart';
+import 'edit_dialog.dart';
 import 'search_highlight.dart';
 
 Future<void> humanConversationStart(
@@ -756,28 +757,10 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
       return;
     }
 
-    final editText = TextEditingController(text:m.text);
     final proposed = await showDialog<String>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(
-          key: const Key('human-edit-message-input'),
-          controller: editText,
-          minLines: 1, maxLines: 6, maxLength: 10000,
-          decoration: const InputDecoration(hintText:'Edit your text'),
-        ),
-        actions: [
-          TextButton(onPressed:()=>Navigator.pop(dialog),child:const Text('Cancel')),
-          FilledButton(
-            key: const Key('human-edit-message-save'),
-            onPressed:()=>Navigator.pop(dialog,editText.text.trim()),
-            child:const Text('Save edit'),
-          ),
-        ],
-      ),
+      builder: (_) => HumanMessageEditDialog(original: m.text),
     );
-    editText.dispose();
     if (proposed == null || proposed.isEmpty || proposed == m.text ||
         !mounted || controller != c || !c.current) return;
     await journal.stage(PendingHumanEdit(
