@@ -1,0 +1,44 @@
+/* Masanawa web semantic tokens. Source: apps/mobile/lib/src/tokens/masanawa_tokens.dart
+ * This file does not override legacy mirrored UI until imported by the maintained source app.
+ */
+:root,
+:root[data-masanawa-theme="light"] {
+  color-scheme: light;
+  --msnw-brand: #25D366;
+  --msnw-brand-strong: #075E54;
+  --msnw-brand-gradient-from: #25D366;
+  --msnw-brand-gradient-to: #128C7E;
+  --msnw-text: #111B21;
+  --msnw-text-muted: #54656F;
+  --msnw-background: #FFFFFF;
+  --msnw-surface: #FFFFFF;
+  --msnw-surface-muted: #E7FCEB;
+  --msnw-border: #E9EDEF;
+  --msnw-chat-out: #D9FDD3;
+  --msnw-chat-bg: #FFFFFF;
+  --msnw-success: #25D366;
+  --msnw-warning: #F59E0B;
+  --msnw-error: #D32F2F;
+  --msnw-verified: #128C7E;
+  --msnw-read: #53BDEB;
+}
+:root[data-masanawa-theme="dark"] {
+  color-scheme: dark;
+  --msnw-brand: #00A884;
+  --msnw-brand-strong: #00A884;
+  --msnw-brand-gradient-from: #00A884;
+  --msnw-brand-gradient-to: #25D366;
+  --msnw-text: #E9EDEF;
+  --msnw-text-muted: #8696A0;
+  --msnw-background: #0B141A;
+  --msnw-surface: #202C33;
+  --msnw-surface-muted: #2A3942;
+  --msnw-border: #2F3B43;
+  --msnw-chat-out: #144D37;
+  --msnw-chat-bg: #0B141A;
+  --msnw-success: #00A884;
+  --msnw-warning: #F7B928;
+  --msnw-error: #F15C6D;
+  --msnw-verified: #53BDEB;
+  --msnw-read: #53BDEB;
+}
