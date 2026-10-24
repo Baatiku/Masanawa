@@ -298,10 +298,12 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     }
   }
 
-  void _bind(String? next) {
+  void _bind(String? next, HumanCommunicationTransport transport) {
     if (bound &&
         owner == next &&
-        (next == null || controller?.id == widget.conversationId))
+        (next == null ||
+            (controller?.id == widget.conversationId &&
+                identical(controller?.transport, transport))))
       return;
     bound = true;
     controller?.removeListener(_redraw);
@@ -319,7 +321,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
     _reportWorking = false;
     if (next == null) return;
     final c = HumanThreadController(
-      ref.read(humanCommunicationTransportProvider),
+      transport,
       HumanJournal(next, widget.conversationId),
       widget.conversationId,
     );
@@ -764,8 +766,8 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
   @override
   Widget build(BuildContext context) {
     final next = ref.watch(humanAccountProvider);
-    ref.watch(humanCommunicationTransportProvider);
-    _bind(next);
+    final transport = ref.watch(humanCommunicationTransportProvider);
+    _bind(next, transport);
     final c = controller;
     final conversation = c?.conversation;
     if (next == null)
