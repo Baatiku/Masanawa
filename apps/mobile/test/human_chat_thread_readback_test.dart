@@ -15,6 +15,29 @@ class ThreadJournal extends HumanJournal {
       {List<HumanJson> attachments = const [], String? reply}) async {}
 }
 
+class FlakyEncryptedJournal extends ThreadJournal {
+  int remainingFailures=1, writes=0;
+  @override
+  Future<HumanJson> restore() async {
+    if (remainingFailures > 0) {
+      remainingFailures--;
+      throw StateError('Encrypted journal temporarily unreadable');
+    }
+    return {
+      'draft':'Recovered unsent text',
+      'pending':[],
+      'attachments':[],
+      'reply':null,
+    };
+  }
+  @override
+  Future<void> save(String draft,List<HumanJson> pending,{
+    List<HumanJson> attachments=const [],String? reply,
+  })async {
+    writes++;
+  }
+}
+
 class ThreadTransport extends HumanCommunicationTransport {
   ThreadTransport() : super(ApiClient(dio:Dio()));
   final events=StreamController<HumanJson>.broadcast();
@@ -84,7 +107,7 @@ void main(){
       final t=ThreadTransport(),c=HumanThreadController(t,ThreadJournal(),'thread');
       t.nextCursor='anchor';
       await c.refresh();
-      expect(c.messages,singleElement);
+      expect(c.messages,hasLength(1));
       t.rejectCode=code;
       await c.refresh();
       expect(c.messages,isEmpty,reason:'status $code must revoke cached rows');
@@ -183,4 +206,39 @@ void main(){
     expect(c.cursor,before);
     await t.finish();
   });
+  test('unreadable encrypted queue refuses sends and refresh recovers original draft before any write',()async{
+    final t=ThreadTransport(),j=FlakyEncryptedJournal();
+    final c=HumanThreadController(t,j,'thread');
+    await c.start();
+    expect(c.journalUnavailable,true);
+    expect(c.messages,isEmpty);
+    expect(c.error,contains('Could not restore encrypted'));
+    expect(await c.enqueue(text:'new message'),false);
+    expect(j.writes,0);
+    expect(t.requests.where((r)=>r.startsWith('POST')),isEmpty);
+    await expectLater(c.persist(),throwsA(isA<StateError>()));
+    expect(j.writes,0);
+    await c.refresh(); // UI banner Refresh is also encrypted restore recovery.
+    expect(c.journalUnavailable,false);
+    expect(c.draft,'Recovered unsent text');
+    expect(c.messages.single.id,'first');
+    expect(c.error,isNull);
+    await c.persist();
+    expect(j.writes,1);
+    c.dispose();await t.finish();
+  });
+  test('failed encrypted restore remains gated after another failed refresh, then recovers',()async{
+    final t=ThreadTransport(),j=FlakyEncryptedJournal()..remainingFailures=2;
+    final c=HumanThreadController(t,j,'thread');
+    await c.start();
+    await c.refresh();
+    expect(c.journalUnavailable,true);
+    expect(await c.enqueue(text:'not safe'),false);
+    expect(j.writes,0);
+    await c.refresh();
+    expect(c.journalUnavailable,false);
+    expect(c.draft,'Recovered unsent text');
+    c.dispose();await t.finish();
+  });
+
 }
