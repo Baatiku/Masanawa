@@ -72,7 +72,7 @@ void main() {
       )),
     ));
     final widget=tester.widget<Text>(find.byType(Text).last);
-    final span=widget.textSpan!;
+    final span=widget.textSpan! as TextSpan;
     final parts=span.children!.cast<TextSpan>();
     expect(parts.where((p)=>p.style?.backgroundColor != null).length, 2);
     expect(parts.map((p)=>p.text).join(), 'Alpha and ALPHA are both matches');
