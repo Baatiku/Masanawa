@@ -88,8 +88,6 @@ class HumanThreadController extends ChangeNotifier {
     var restored = false;
     try {
       final saved = await journal.restore();
-      restored = true;
-      _journalUnavailable = false;
       if (!current) return;
       draft = saved['draft'] as String? ?? '';
       draftAttachments = (saved['attachments'] as List? ?? [])
@@ -99,6 +97,10 @@ class HumanThreadController extends ChangeNotifier {
       pending = (saved['pending'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      // Invalid or truncated encrypted data is also an unreadable queue.
+      // Only mark it writable after every stored field was decoded.
+      restored = true;
+      _journalUnavailable = false;
       await refresh();
       if (current) {
         _connect();
