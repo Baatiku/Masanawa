@@ -29,7 +29,9 @@ class UnifiedChatInbox extends ConsumerStatefulWidget {
     super.key,
     required this.masanaThreads,
     required this.masanaRow,
+    this.masanaOnly = false,
   });
+  final bool masanaOnly;
   final List<ChatThread> masanaThreads;
   final Widget Function(ChatThread) masanaRow;
   @override
@@ -49,16 +51,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted && _foreground && ref.read(humanAccountProvider) != null)
-        ref.invalidate(humanInboxProvider(_key));
-    });
+    if (!widget.masanaOnly) {
+      _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (mounted && _foreground && ref.read(humanAccountProvider) != null)
+          ref.invalidate(humanInboxProvider(_key));
+      });
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    if (_foreground) ref.invalidate(humanInboxProvider(_key));
+    if (_foreground && !widget.masanaOnly) ref.invalidate(humanInboxProvider(_key));
   }
 
   @override
@@ -84,6 +88,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   }
 
   Future<void> _refresh() async {
+    if (widget.masanaOnly) {
+      await ref.read(agentDirectoryProvider.notifier).refresh();
+      return;
+    }
     ref.invalidate(humanInboxProvider(_key));
     await Future.wait([
       ref.read(humanInboxProvider(_key).future),
@@ -231,12 +239,13 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               ? confirmed : r;
         })
         .toList();
-    final humans = ref.watch(humanInboxProvider(_key));
-    final people = humans.valueOrNull ?? const <HumanConversation>[];
+    // Skip human provider subscription, not just human row rendering.
+    final humans = widget.masanaOnly ? null : ref.watch(humanInboxProvider(_key));
+    final people = humans?.valueOrNull ?? const <HumanConversation>[];
     final offline = !ref.watch(aiChatProvider).online;
     final rows = <({DateTime at, bool pinned, String id, Widget row})>[];
     final archived = _filter == 'Archived';
-    if (_filter != 'Masana')
+    if (!widget.masanaOnly && _filter != 'Masana')
       for (final c in people) {
         if (c.archived != archived || (c.state == 'pending' && !c.initiator))
           continue;
@@ -293,13 +302,9 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              for (final filter in [
-                'All',
-                'People',
-                'Masana',
-                'Unread',
-                'Archived',
-              ])
+              for (final filter in widget.masanaOnly
+                  ? const ['All', 'Unread', 'Archived']
+                  : const ['All', 'People', 'Masana', 'Unread', 'Archived'])
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: ChoiceChip(
@@ -324,9 +329,9 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     title: const Text('Message requests'),
                     onTap: () => context.push('/human/requests'),
                   ),
-                if (humans.isLoading)
+                if (humans?.isLoading == true)
                   const LinearProgressIndicator(minHeight: 2),
-                if (humans.hasError)
+                if (humans?.hasError == true)
                   ListTile(
                     title: const Text('Could not refresh people chats'),
                     trailing: TextButton(
@@ -334,7 +339,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       child: const Text('Retry'),
                     ),
                   ),
-                if (rows.isEmpty && !humans.isLoading)
+                if (rows.isEmpty && humans?.isLoading != true)
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Column(

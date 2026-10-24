@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../chat/chat_format.dart';
 import '../../chat/message_parts.dart';
 import '../../core/startup_metrics.dart';
-import '../wallet/wallet_screen.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../state/session_state.dart';
@@ -318,9 +317,7 @@ class ChatListScreen extends ConsumerWidget {
             tooltip: 'Wallet',
             icon: const Icon(Icons.account_balance_wallet_outlined),
             onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute<void>(builder: (_) => WalletScreen()));
+              context.go('/home?tab=wallet');
             },
           ),
           IconButton(
@@ -348,6 +345,7 @@ class ChatListScreen extends ConsumerWidget {
       ),
       body: UnifiedChatInbox(
         key: ValueKey(accountKey),
+        masanaOnly: true,
         masanaThreads: session is SessionSignedIn
             ? chat.threads.values
                   .where((t) => directory.find(t.characterId) != null)
