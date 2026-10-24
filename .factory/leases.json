@@ -4,7 +4,7 @@
     {
       "claim_id": "a6471180-04be-4d01-a957-27767cfa1118",
       "owner": "codex-p2p-evidence-recovery-oct24",
-      "scope": "P5-09 original evidence recovery by actor/order/content hash; prevent deletion after ambiguous record commit; private retained retry metadata, no settlement authority",
+      "scope": "P5-09/P5-03/P6-04 connected original evidence recovery, safe private blob lifetime and complete participant-safe public support timeline; no financial writes",
       "paths": [
         "services/gateway/src/p2p/service.ts",
         "services/gateway/src/p2p/routes.ts",
@@ -31,11 +31,9 @@
       "base_sha": "3be75f9e6382d8288e189af2ff8e0562d539eb70",
       "pr": "https://github.com/Baatiku/Masanawa/pull/363",
       "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T08:30:12.763Z",
-      "expires_at": "2026-10-24T08:35:12.763Z",
-      "progress": "PR363 exactcaa94b4f P2P118backend7Worker19realPG+Mobile+StatusPASS;Foundationfulltestsremaining. Nexttimelined9e01f68 source+docs committed andexportedbackup;5backend,types,21Flutter+10finalsupportPASS;reviewclearafterauthlossscrubfix. NoAPK/device/provider/productionacceptance.",
-      "next_branch": "feat/p2p-support-timeline-oct24",
-      "next_scope": "P5-03/P6-04 complete participant-safe public event history via scoped lossless keysets and native older-event recovery; no private notes, bank data, object refs or financial writes"
+      "heartbeat_at": "2026-10-24T08:34:32.955Z",
+      "expires_at": "2026-10-24T08:39:32.955Z",
+      "progress": "Connected PR363 final755e6c34 exacttree301b3019 combines evidence+completepublictimeline.18finalFlutterPASS; reviewclear. All4newexactheadCI running. Localcheckout3bce71b6 treeidentical, sourcebackups+GitHubcommitdurable. NoAPK/device/provider/productionacceptance."
     }
   ],
   "history": [
