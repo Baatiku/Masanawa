@@ -123,6 +123,174 @@ void main() {
     await c.close();
   });
 
+  test('end confirmation keeps new-call action disabled until server readback', () async {
+    final api = _Api()..current = record('accepted');
+    final audio = _Audio();
+    final c = HumanCallController(
+      api: api,
+      audioFactory: () => audio,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    api.before = (method, path) async {
+      if (path.endsWith('/transition')) throw StateError('Network unavailable');
+    };
+    await c.end();
+    expect(audio.closed, isTrue);
+    expect(c.active, isFalse);
+    expect(c.endConfirmationPending, isTrue);
+    expect(c.error, contains('Waiting to confirm'));
+    expect(api.actions.where((x) => x.endsWith('/transition')), hasLength(1));
+
+    // An explicit retry is an End transition for the SAME call, not a new POST.
+    api.before = null;
+    await c.retryEndConfirmation();
+    expect(c.endConfirmationPending, isFalse);
+    expect(c.call?.state, 'ended');
+    expect(c.error, isNull);
+    expect(api.actions.where((x) => x == 'POST /calls'), isEmpty);
+    expect(api.actions.where((x) => x.endsWith('/transition')), hasLength(2));
+    await c.close();
+  });
+
+  test('another route cannot overwrite a call awaiting End confirmation', () async {
+    final api = _Api()..current = record('accepted');
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    api.before = (method, path) async {
+      if (path.endsWith('/transition')) throw StateError('End response lost');
+    };
+    await c.end();
+    expect(c.endConfirmationPending, isTrue);
+
+    await c.open('call-two');
+    expect(c.call?.id, 'call-one');
+    expect(c.endConfirmationPending, isTrue);
+    expect(c.error, contains('Finish ending'));
+    expect(api.actions.where((x) => x == 'GET /calls/call-two'), isEmpty);
+
+    api.before = null;
+    await c.retryEndConfirmation();
+    expect(c.call?.id, 'call-one');
+    expect(c.call?.state, 'ended');
+    expect(c.endConfirmationPending, isFalse);
+    await c.close();
+  });
+
+  test('server-confirmed terminal GET clears stale end confirmation error', () async {
+    final api = _Api()..current = record('accepted');
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    api.before = (method, path) async {
+      if (path.endsWith('/transition')) throw StateError('Response lost');
+    };
+    await c.open('call-one');
+    await c.end();
+    expect(c.endConfirmationPending, isTrue);
+    api.current = record('ended');
+    await c.retryEndConfirmation();
+    expect(c.call?.state, 'ended');
+    expect(c.endConfirmationPending, isFalse);
+    expect(c.error, isNull);
+    await c.close();
+  });
+
+  test('permission prompt does not accept an invitation ended by another device', () async {
+    final incoming = {...record(), 'direction': 'incoming'};
+    final api = _Api()..current = incoming;
+    final permission = Completer<bool>();
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () => permission.future,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    final answering = c.accept();
+    api.current = {...incoming, 'state': 'missed'};
+    await c.refresh();
+    permission.complete(true);
+    await answering;
+    expect(c.call?.state, 'missed');
+    expect(c.active, isFalse);
+    expect(api.actions.where((x) => x.endsWith('/transition')), isEmpty);
+    await c.close();
+  });
+
+  test('permission return rechecks the Gateway even without a push or refresh', () async {
+    final incoming = {...record(), 'direction': 'incoming'};
+    final api = _Api()..current = incoming;
+    final permission = Completer<bool>();
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () => permission.future,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    final answering = c.accept();
+    // No refresh/push arrives while the native permission sheet is shown.
+    api.current = {...incoming, 'state': 'missed'};
+    permission.complete(true);
+    await answering;
+    expect(c.call?.state, 'missed');
+    expect(api.actions.where((x) => x == 'GET /calls/call-one'), hasLength(2));
+    expect(api.actions.where((x) => x.endsWith('/transition')), isEmpty);
+    await c.close();
+  });
+
+  test('failed post-permission revalidation never sends Accept', () async {
+    final api = _Api()..current = {...record(), 'direction': 'incoming'};
+    final c = HumanCallController(
+      api: api,
+      audioFactory: _Audio.new,
+      ownerId: 'a',
+      currentOwner: () => 'a',
+      requestMicrophone: () async => true,
+      startForeground: () async {},
+      stopForeground: () async {},
+      autoPoll: false,
+    );
+    await c.open('call-one');
+    api.before = (method, path) async {
+      if (method == 'GET') throw StateError('Temporary network loss');
+    };
+    await c.accept();
+    expect(api.actions.where((x) => x.endsWith('/transition')), isEmpty);
+    expect(c.error, contains('Could not answer'));
+    await c.close();
+  });
+
   test('same-user re-login invalidates old controller and late server results', () async {
     var epoch = 4;
     final api = _Api()..current = record('accepted');
