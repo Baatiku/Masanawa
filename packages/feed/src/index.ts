@@ -140,3 +140,6 @@ export class FeedService {
 export {EditorialReviewService} from './review.js';
 export type {EditorialPost,EditorialRepository,EditorialAction,EditorialState,DraftInput} from './review.js';
 
+
+export {SavedLibraryService, SavedError} from './saved.js';
+export type {SavedKind, SavedCursor, SavedItem, SavedRepository} from './saved.js';
