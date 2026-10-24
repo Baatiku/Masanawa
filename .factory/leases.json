@@ -26,9 +26,9 @@
       "base_sha": "931149305277694857947fd317c9e34d953315cb",
       "pr": "",
       "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T05:21:34.182Z",
-      "expires_at": "2026-10-24T05:26:34.182Z",
-      "progress": "Reproducingblindcleanup/stablepathregressionsfirst. Originalidentityisactor+order+SHA256, reuseexistingevidencerows/orderlock andprivateobjectstore; additive nonunique index preserveslegacyduplicates. Nativekeepshash/type/sizeinsecurestore,nofilebytes/signedURLpersistence."
+      "heartbeat_at": "2026-10-24T08:12:18.418Z",
+      "expires_at": "2026-10-24T08:17:18.418Z",
+      "progress": "Recovered continuation; verifying evidence stable-path and ambiguous-commit regression tests before native recovery integration. Source remains uncommitted in persistent Higgsfield checkout; no completion or provider qualification claim."
     }
   ],
   "history": [
