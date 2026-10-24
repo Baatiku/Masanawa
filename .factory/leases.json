@@ -19,15 +19,23 @@
         "CONTINUE-HERE.md",
         "docs/PRODUCT-ROADMAP-20261019.md",
         "docs/SCREEN-JOURNEYS.md",
-        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "packages/commerce/migrations/0145_msnw_p2p_dispute_context.sql",
+        "services/gateway/src/p2p/dispute_context.ts",
+        "services/gateway/src/p2p/dispute_context.pglite.test.ts",
+        "apps/mobile/lib/src/finance/p2p_order_support.dart",
+        "apps/mobile/test/p2p_order_support_test.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart"
       ],
       "branch": "feat/p2p-history-filters-oct24",
       "base_sha": "d83290f24a46c1beeab4f71c9bf247a7f7e263d5",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/352",
       "claimed_at": "2026-10-24T04:22:56.130Z",
-      "heartbeat_at": "2026-10-24T04:32:33.301Z",
-      "expires_at": "2026-10-24T04:37:33.301Z",
-      "progress": "17FlutterPASS +finalrootempty-state11rerunning;13SQLandgateway/adaptertypechecksPASS; fullP2Pnearlydone;reviewclear. PublishingP6-02scope,17threalPGauthored,noDBmigrationorfinancialauthoritychange."
+      "heartbeat_at": "2026-10-24T04:36:33.380Z",
+      "expires_at": "2026-10-24T04:41:33.380Z",
+      "progress": "17FlutterPASS +finalrootempty-state11rerunning;13SQLandgateway/adaptertypechecksPASS; fullP2Pnearlydone;reviewclear. PublishingP6-02scope,17threalPGauthored,noDBmigrationorfinancialauthoritychange.",
+      "next_branch": "feat/p2p-dispute-context-oct24",
+      "next_scope": "P5-12/P5-13 typed original dispute submissions and participant-safe recent support timeline using existing dispute state transition; no new settlement authority"
     }
   ],
   "history": [
