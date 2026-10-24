@@ -91,6 +91,9 @@ class HumanCallController extends ChangeNotifier {
       ownerId.isNotEmpty &&
       (authorizationEpoch == null ||
           currentAuthorizationEpoch?.call() == authorizationEpoch);
+  /// Local audio stops immediately on End, but a new call must wait for the
+  /// Gateway to confirm the previous call's terminal state.
+  bool get endConfirmationPending => sameAccount && _pendingEnd;
   bool get audioReady =>
       active &&
       _media?.audio != null &&
@@ -178,6 +181,13 @@ class HumanCallController extends ChangeNotifier {
 
   Future<void> open(String id) async {
     if (!sameAccount) return;
+    // Do not replace the original call while an End confirmation is pending.
+    // Its retry must never address another call opened from a stale route.
+    if (_pendingEnd && call?.id != id) {
+      error = 'Finish ending your previous call first.';
+      _changed();
+      return;
+    }
     if (active && call!.id != id) {
       error = 'Another call is already active.';
       _changed();
@@ -328,6 +338,29 @@ class HumanCallController extends ChangeNotifier {
           generation != _generation ||
           version != _signalVersion)
         return;
+      // A local ringing record is not proof the invitation survived Android's
+      // microphone prompt. Another device or the server may have ended it
+      // without a notification reaching this process. Re-read before POST.
+      final verified = HumanCallRecord.fromJson(await api.request(
+        'GET',
+        '/calls/${Uri.encodeComponent(record.id)}',
+      ));
+      if (!sameAccount ||
+          generation != _generation ||
+          version != _signalVersion ||
+          !active ||
+          call?.id != record.id ||
+          call?.state != 'ringing')
+        return;
+      call = verified;
+      _lastVerified = DateTime.now();
+      if (!active ||
+          verified.id != record.id ||
+          !verified.incoming ||
+          verified.state != 'ringing') {
+        _changed();
+        return;
+      }
       final data = await api.request(
         'POST',
         '/calls/${record.id}/transition',
@@ -488,6 +521,14 @@ class HumanCallController extends ChangeNotifier {
     }
   }
 
+  /// Safe to retry after network loss. Reuses the same logical call and
+  /// never restarts local media or creates a second outgoing invitation.
+  Future<void> retryEndConfirmation() async {
+    if (!sameAccount || !_localEnd || !_pendingEnd || _ending) return;
+    await _confirmEnd();
+    if (_pendingEnd) _startPolling();
+  }
+
   Future<void> _confirmEnd() async {
     final record = call;
     if (record == null || !sameAccount || _ending) return;
@@ -529,6 +570,7 @@ class HumanCallController extends ChangeNotifier {
           if (!_pendingEnd) {
             _poll?.cancel();
             _poll = null;
+            error = null;
           }
         }
       } catch (_) {}

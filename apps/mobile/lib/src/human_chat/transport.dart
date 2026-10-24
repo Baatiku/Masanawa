@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/network/api_client.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
+import 'event_frames.dart';
 import 'models.dart';
 
 final humanAccountProvider = Provider<String?>(
@@ -79,6 +80,10 @@ class HumanCommunicationTransport {
   }
 
   Stream<HumanJson> stream(int after) async* {
+    if (!active) return;
+    if (HumanEventFrameDecoder.eventSequence(after) == null) {
+      throw const FormatException('Invalid Human Chat event resume cursor');
+    }
     final response = await api.dio.get<ResponseBody>(
       '/v1/human/events/stream',
       queryParameters: {'after': after},
@@ -89,16 +94,33 @@ class HumanCommunicationTransport {
         headers: {'Accept': 'text/event-stream', 'Cache-Control': 'no-store'},
       ),
     );
+    if (!active) return;
+    final contentType =
+        response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
+    if (!contentType.startsWith('text/event-stream')) {
+      throw const FormatException('Unexpected Human Chat event content type');
+    }
+    if (response.data == null) {
+      throw const FormatException('Missing Human Chat event stream');
+    }
+
+    final decoder = HumanEventFrameDecoder();
+    var lastSequence = after;
     final lines = response.data!.stream
         .cast<List<int>>()
         .transform(utf8.decoder)
         .transform(const LineSplitter());
     await for (final line in lines) {
       if (!active) return;
-      if (line.startsWith('data:'))
-        yield Map<String, dynamic>.from(
-          jsonDecode(line.substring(5).trim()) as Map,
-        );
+      final event = decoder.accept(line);
+      if (event == null) continue; // heartbeat or unfinished SSE frame
+      final sequence = HumanEventFrameDecoder.eventSequence(event['sequence'])!;
+      if (sequence <= lastSequence) continue; // duplicate/replayed SSE event
+      lastSequence = sequence;
+      if (!active) return;
+      yield event;
     }
+    // Incomplete final data without the blank-line delimiter is intentionally
+    // discarded: reconnect from the last committed sequence to recover it.
   }
 }

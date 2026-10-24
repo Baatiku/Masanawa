@@ -67,6 +67,19 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant HumanCallScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // GoRouter can reuse this State for another call ID. Never leave the
+    // previous call's route bound to the new invitation.
+    if (oldWidget.callId != widget.callId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted)
+          unawaited(ref.read(humanCallControllerProvider).open(widget.callId));
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _clock?.cancel();
     super.dispose();
@@ -77,6 +90,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
       return c.active
           ? 'Another call is already active.'
           : c.error == null ? 'Loading call…' : 'Call unavailable';
+    if (c.endConfirmationPending) return 'Finishing call…';
     if (!c.active)
       return switch (call.state) {
         'missed' => 'Missed call',
@@ -161,6 +175,17 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ),
+                  if (call != null && c.endConfirmationPending) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Audio is off on this phone. Waiting for the call to end on the server.',
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton(
+                      onPressed: c.retryEndConfirmation,
+                      child: const Text('Retry end confirmation'),
+                    ),
+                  ],
                   if (call != null && c.error != null) ...[
                     const SizedBox(height: 16),
                     Text(c.error!, textAlign: TextAlign.center),
@@ -224,7 +249,7 @@ class _HumanCallScreenState extends ConsumerState<HumanCallScreen> {
                           onPressed: () => c.open(widget.callId),
                           child: const Text('Try again'),
                         ),
-                      if (call != null && !c.active)
+                      if (call != null && !c.active && !c.endConfirmationPending)
                         OutlinedButton.icon(
                           onPressed: () =>
                               humanCallStart(context, ref, call.handle),
