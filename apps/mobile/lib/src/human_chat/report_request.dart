@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -5,6 +6,61 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'models.dart';
 import 'transport.dart';
+
+abstract interface class HumanReportRequestStore {
+  Future<String?> read();
+  Future<void> write(String value);
+  Future<void> clear(String expected);
+}
+
+/// Device encryption is scoped to one account and conversation. A shared
+/// in-process queue prevents competing routes overwriting different intents.
+class EncryptedHumanReportRequestStore implements HumanReportRequestStore {
+  EncryptedHumanReportRequestStore(
+    String owner,
+    String conversationId, {
+    FlutterSecureStorage? storage,
+  }) : key = 'human-report.v1:${Uri.encodeComponent(owner)}:${Uri.encodeComponent(conversationId)}',
+       storage = storage ?? const FlutterSecureStorage();
+
+  final String key;
+  final FlutterSecureStorage storage;
+  static final Map<String, Future<void>> _queues = {};
+
+  Future<T> _serial<T>(Future<T> Function() work) async {
+    final previous = _queues[key] ?? Future<void>.value();
+    final done = Completer<void>();
+    _queues[key] = done.future;
+    await previous;
+    try {
+      return await work();
+    } finally {
+      done.complete();
+      if (identical(_queues[key], done.future)) _queues.remove(key);
+    }
+  }
+
+  @override
+  Future<String?> read() => _serial(() => storage.read(key: key));
+
+  @override
+  Future<void> write(String value) => _serial(() async {
+    final existing = await storage.read(key: key);
+    if (existing != null && existing != value) {
+      throw StateError('Resolve pending report first');
+    }
+    await storage.write(key: key, value: value);
+  });
+
+  @override
+  Future<void> clear(String expected) => _serial(() async {
+    final existing = await storage.read(key: key);
+    if (existing != null && existing != expected) {
+      throw StateError('Saved report changed');
+    }
+    if (existing != null) await storage.delete(key: key);
+  });
+}
 
 /// One immutable user-authorized report intent, isolated from message drafts.
 class PendingHumanReport {
@@ -56,15 +112,14 @@ class HumanReportRequestJournal {
   HumanReportRequestJournal(
     this.owner,
     this.conversationId, {
-    FlutterSecureStorage? storage,
-  }) : storage = storage ?? const FlutterSecureStorage();
+    HumanReportRequestStore? store,
+  }) : store = store ?? EncryptedHumanReportRequestStore(owner, conversationId);
 
   final String owner, conversationId;
-  final FlutterSecureStorage storage;
-  String get storageKey => 'human-report.v1.$owner.$conversationId';
+  final HumanReportRequestStore store;
 
   Future<PendingHumanReport?> read() async {
-    final raw = await storage.read(key: storageKey);
+    final raw = await store.read();
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -89,7 +144,7 @@ class HumanReportRequestJournal {
     if (existing != null && !existing.sameAs(incoming)) {
       throw StateError('Resolve the saved report before making another');
     }
-    await storage.write(key: storageKey, value: jsonEncode(incoming.toJson()));
+    await store.write(jsonEncode(incoming.toJson()));
   }
 
   Future<void> discard(String expectedRequestId) async {
@@ -97,7 +152,7 @@ class HumanReportRequestJournal {
     if (current != null && current.requestId != expectedRequestId) {
       throw StateError('Saved report changed');
     }
-    if (current != null) await storage.delete(key: storageKey);
+    if (current != null) await store.clear(jsonEncode(current.toJson()));
   }
 
   /// A 404 on the actor-bound original receipt means there is no accepted
