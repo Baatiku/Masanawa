@@ -896,6 +896,22 @@ it('pages the entire visible human inbox with microsecond ties, literal search a
   await send(a,'PATCH','conversations/inbox-tie-061',{archived:false});
   expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-061',filter:'active'})).items).toHaveLength(1);
   expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-061',filter:'archived'})).items).toHaveLength(0);
+  // Per-viewer pinning uses a *composite* keyset, so the pinned-to-normal
+  // boundary survives identical PostgreSQL microseconds and 50-item pages.
+  await db.query("UPDATE talks.human_viewers SET archived=false WHERE tenant_id='t' AND user_id='alice' AND conversation_id LIKE 'inbox-tie-%'");
+  await db.query("UPDATE talks.human_viewers SET pinned=true WHERE tenant_id='t' AND user_id='alice' AND conversation_id BETWEEN 'inbox-tie-008' AND 'inbox-tie-022'");
+  const pinnedPage=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active'});
+  expect(pinnedPage.items).toHaveLength(50);
+  expect(pinnedPage.items.slice(0,15).every((x:any)=>x.pinned)).toBe(true);
+  expect(pinnedPage.items.slice(15).every((x:any)=>!x.pinned)).toBe(true);
+  expect(pinnedPage.items[0].id).toBe('inbox-tie-022');
+  const normalPage=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active',after:pinnedPage.nextCursor});
+  expect(normalPage.items).toHaveLength(14);
+  expect(normalPage.items.every((x:any)=>!x.pinned)).toBe(true);
+  expect(new Set([...pinnedPage.items,...normalPage.items].map((x:any)=>x.id)).size).toBe(64);
+  await send(a,'PATCH','conversations/inbox-tie-022',{pinned:false});
+  const afterUnpin=await send(a,'GET','conversations',{}, {query:'bulkinbox-022',filter:'active'});
+  expect(afterUnpin.items[0].pinned).toBe(false);
 });
 
 it('preserves microsecond-tied message history without searching deleted plaintext',async()=>{

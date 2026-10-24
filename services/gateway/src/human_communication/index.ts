@@ -513,7 +513,7 @@ export function createHumanCommunicationService(o:HumanOptions){
           // A changed archive/request or a cursor from another tab cannot
           // silently skip a page or leak the other tab's conversation list.
           const anchor=await conversation(db,a,str(q.after));
-          const viewer=(await db.query(`SELECT v.archived,v.hidden,c.state,c.initiator,p.handle,p.display_name
+          const viewer=(await db.query(`SELECT v.pinned,v.archived,v.hidden,c.state,c.initiator,p.handle,p.display_name
             FROM talks.human_conversations c
             JOIN talks.human_viewers v ON v.tenant_id=c.tenant_id AND v.conversation_id=c.id AND v.user_id=$2
             JOIN talks.public_profiles p ON p.tenant_id=c.tenant_id AND p.user_id=CASE WHEN c.low_user=$2 THEN c.high_user ELSE c.low_user END
@@ -523,8 +523,8 @@ export function createHumanCommunicationService(o:HumanOptions){
             (filter==='archived'&&!viewer.archived)||
             (filter==='requests'&&(viewer.state!=='pending'||viewer.initiator===a.userId))||
             (query&&!String(viewer.handle).toLowerCase().includes(query)&&!String(viewer.display_name).toLowerCase().includes(query)))fail(404,'Inbox cursor unavailable');
-          values.push(anchor.cursor_updated_at,anchor.id);
-          condition+=' AND (c.updated_at,c.id)<($3,$4)';
+          values.push(viewer.pinned,anchor.cursor_updated_at,anchor.id);
+          condition+=' AND (v.pinned,c.updated_at,c.id)<($3,$4,$5)';
         }
         if(query){
           values.push(query);
@@ -544,7 +544,7 @@ export function createHumanCommunicationService(o:HumanOptions){
             AND (s.target_id=p.handle OR s.target_id IN
               (SELECT me.handle FROM talks.public_profiles me WHERE me.tenant_id=$1 AND me.user_id=$2)) AND s.visibility<>'public')
           ${condition}
-          ORDER BY c.updated_at DESC,c.id DESC LIMIT 51`,values);
+          ORDER BY v.pinned DESC,c.updated_at DESC,c.id DESC LIMIT 51`,values);
         const items=[];
         for(const c of r.rows){
           try{
