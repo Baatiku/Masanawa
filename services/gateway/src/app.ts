@@ -1,3 +1,10 @@
+import {
+  DEFAULT_RECHARGE_RATE_BOOK,
+  quotePackage,
+  quoteVerifiedDeposit,
+  validateRechargeRateBook,
+  type RechargeRateBook,
+} from "./gb_wallet/pricing.js";
 import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
@@ -219,6 +226,8 @@ export interface GatewayAppOptions {
     ledger: ReturnType<typeof createMsnwCustodyService>;
   };
   readonly p2p?: P2pRoutesDependencies;
+  /** Independently versioned MB package prices; never authorizes deposit credit. */
+  readonly gbRechargeRateBook?: RechargeRateBook;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -475,6 +484,28 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.accountDeletion) {
     registerAccountDeletionRoutes(app, options.accountDeletion);
   }
+
+  // READ-ONLY discovery and pricing preview. No user-provided amount ever
+  // creates a balance, payment intent, verified deposit or wallet receipt.
+  // Callers must re-quote against an immutable effective rate version before
+  // using verified provider events in the future MB ledger.
+  const rechargeBook = options.gbRechargeRateBook ?? DEFAULT_RECHARGE_RATE_BOOK;
+  validateRechargeRateBook(rechargeBook);
+  app.get("/v1/gb/recharge/packages", async () => ({
+    version: rechargeBook.version,
+    packages: rechargeBook.tiers.map((tier) => quotePackage(tier.sizeGb, rechargeBook)),
+    settlement: "verified_bank_deposit_only" as const,
+  }));
+  app.get("/v1/gb/recharge/preview", {
+    schema: {
+      querystring: Type.Object({
+        amountKobo: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+      }, { additionalProperties: false }),
+    },
+  }, async (request) => ({
+    previewOnly: true as const,
+    ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
+  }));
 
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
