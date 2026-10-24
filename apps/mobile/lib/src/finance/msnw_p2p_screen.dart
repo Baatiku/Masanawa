@@ -1,3 +1,4 @@
+import 'p2p_support_requests.dart';
 import 'p2p_evidence_upload.dart';
 import 'p2p_order_support.dart';
 import 'p2p_history_filters.dart';
@@ -1007,6 +1008,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if(!authorized()||!route.mounted)return;
     await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pOrderSupportPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
       load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support'));},
+      openRequests:(page)async{if(!authorized()||!page.mounted)return;await Navigator.of(page).push(MaterialPageRoute<void>(builder:(_)=>P2pSupportRequestsPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support/requests'));},respond:(request,details)async{if(!authorized())throw StateError('Account changed');await _request('POST','/orders/$id/support/requests/$request/respond',{'details':details});})));},
       loadOlder:(cursor)async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support/events?cursor=${Uri.encodeQueryComponent(cursor)}'));},
       submit:(category,details)async{if(!authorized())throw StateError('Account changed');return _json(await _request('POST','/orders/$id/dispute',{'category':category,'reason':details}));},
     )));

@@ -1124,6 +1124,16 @@ The existing support page adds Load older events, retry without discarding curre
 
 Complete public history source is distinct from formal staff responses, complete private investigation records, deployed retention, handset and production acceptance, which remain open. Parent P2P gates and 177 screens/820 requirements unchanged. No APK generated.
 
+## 24 October 2026 — P2P private evidence requests and original responses (partial P5-15)
+
+Authorized dispute staff can request supporting evidence from the original buyer or seller, with a clearly informational 24/48/72-hour response window. Instructions and replies remain private to the assigned participant and authorized staff. One unanswered request per participant and a 20-request order bound prevent uncontrolled threads. New requests/responses require an open dispute; immutable original receipts still recover after order closure. Late responses remain available for manual review and never release, refund, expire or reopen escrow.
+
+Migration 0147 adds immutable order-bound requests/responses. Actor/content/recipient/window identity deduplicates original staff submissions; a unique original response per request survives retries. Strict recipient types prevent coerced values from routing private instructions to another party. Existing operator authorization, P2P orders and custody authority remain canonical.
+
+Customer Order support → Support requests shows assigned instructions, due times, response state and original receipts; documents use the existing order attachment action. Staff case context → Evidence requests and responses selects buyer/seller and the response window. Both pages read before writes, recover uncertain originals, keep drafts in memory and scrub private context after session/account/access loss. Definitive rejections permit correction. Loading, empty, offline/retry, terminal, large-text/RTL and Back navigation remain within the original order/case.
+
+Local three backend checks, gateway/adapter types, customer/staff widget checks and informational-deadline/cap/immutable-original regressions passed. Independent review clear after strict-recipient correction; exact-head CI and the 21st real PostgreSQL duplicate request/response race are recorded in the delivery PR. Additional staff-only notes, request cancellation/extension policy, delivery notifications, retention, deployed support permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
+
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
 A native trader profile opens from a presently funded, verified-bank sell ad, shows the existing public profile display name, completed/closed cohort denominator, server sampling date and the precise 30-day opened-order window. Eligible ads paginate within that trader/reference/account scope and return to the original authoritative buy quote/review flow; no order is created from profile viewing. Paused, unverified, unfunded, self or foreign-tenant source references are unavailable, and private user/bank/KYC IDs are not projected. Flutter covers stale references, offline retry, pagination, account replacement and compact large-text RTL.

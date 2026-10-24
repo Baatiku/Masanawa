@@ -20,7 +20,9 @@ class P2pOrderSupportPage extends StatefulWidget {
     required this.load,
     required this.submit,
     this.loadOlder,
+    this.openRequests,
   });
+  final Future<void> Function(BuildContext)? openRequests;
   final Future<Map<String,dynamic>> Function(String cursor)? loadOlder;
   final String expectedUserId;
   final String? Function() currentUserId;
@@ -316,6 +318,7 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
                       : 'Refresh support context',
                 ),
               ),
+              if(widget.openRequests!=null)OutlinedButton(onPressed:_busy?null:()=>widget.openRequests!(context),child:const Text('Support requests')),
               if (_context != null) ...[
                 const SizedBox(height: 20),
                 const Text(
