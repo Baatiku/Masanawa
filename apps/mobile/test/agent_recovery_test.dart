@@ -305,6 +305,79 @@ class RotatingAuthAdapter implements HttpClientAdapter {
 }
 
 void main() {
+  test('stale-session fallback cannot reopen or resend under a replaced account', () async {
+    final transport = _StaleAfterSwitchTransport();
+    final c = ProviderContainer(overrides: [agentTransportProvider.overrideWithValue(transport), sessionProvider.overrideWith(_SwitchingSession.new)]);
+    addTearDown(c.dispose);final controller=c.read(aiChatProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.sendText('character-stale-binding','Warm binding');
+    final pending=controller.sendText('character-stale-binding','Private next turn');
+    for(var i=0;i<30&&transport.turns<2;i++){await Future<void>.delayed(Duration.zero);}
+    expect(transport.turns,2);
+    (c.read(sessionProvider.notifier) as _SwitchingSession).signOutForTest();
+    await Future<void>.delayed(Duration.zero);
+    transport.old.completeError(const ApiException('Expired session',statusCode:404));
+    await pending;
+    expect(transport.turns,2);expect(transport.opens,1);expect(c.read(aiChatProvider).threads,isEmpty);
+  });
+
+  for (final fresh in [false,true]) {
+    test(fresh ? 'same-ID fresh login fences an old turn without deleting the pending original' : 'routine token refresh preserves the active correlated reply', () async {
+      final transport = _DeferredShellTransport();
+      final c = ProviderContainer(overrides: [agentTransportProvider.overrideWithValue(transport), sessionProvider.overrideWith(_SwitchingSession.new)]);
+      addTearDown(c.dispose); final controller = c.read(aiChatProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      final sending = controller.sendText('character-epoch', 'Original session text');
+      for (var i=0; i<30 && transport.turns==0; i++) { await Future<void>.delayed(Duration.zero); }
+      expect(transport.turns,1);
+      final before = controller.threadOf('character-epoch').messages.firstWhere((m)=>m.isUser);
+      (c.read(sessionProvider.notifier) as _SwitchingSession).refreshForTest(freshLogin:fresh);
+      await Future<void>.delayed(Duration.zero);
+      transport.reply.complete(const AgentTurnResult(text:'Confirmed reply',agentRunId:'run-epoch'));
+      await sending;
+      final thread = controller.threadOf('character-epoch');
+      final original = thread.messages.singleWhere((m)=>m.isUser);
+      expect(original.requestId,before.requestId);
+      expect(original.deliveryStatus,fresh?'processing':'read');
+      expect(thread.messages.any((m)=>!m.isUser&&m.text=='Confirmed reply'),!fresh);
+      expect(transport.turns,1);
+      if(fresh)expect(c.read(aiChatProvider).sendingIn,isEmpty);
+    });
+  }
+
+  test('confirmed replies advance only their original user request', () async {
+    final transport = RecoveringShellTransport()..serverStatus = 'pending';
+    final c = ProviderContainer(overrides: [agentTransportProvider.overrideWithValue(transport), sessionProvider.overrideWith(_SignedInSessionController.new)]);
+    addTearDown(c.dispose);
+    final controller = c.read(aiChatProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.sendText('character-correlation', 'Earlier pending turn');
+    final first = controller.threadOf('character-correlation').messages.firstWhere((m) => m.isUser);
+    expect(first.deliveryStatus, 'processing');
+    await controller.sendText('character-correlation', 'Later completed turn');
+    final users = controller.threadOf('character-correlation').messages.where((m) => m.isUser).toList();
+    expect(users, hasLength(2));
+    expect(users.first.requestId, first.requestId);
+    expect(users.first.deliveryStatus, 'processing');
+    expect(users.last.deliveryStatus, 'read');
+  });
+  test('late failed original-status read cannot append feedback after account replacement', () async {
+    final transport = _DelayedStatusTransport();
+    final c = ProviderContainer(overrides: [agentTransportProvider.overrideWithValue(transport), sessionProvider.overrideWith(_SwitchingSession.new)]);
+    addTearDown(c.dispose);
+    final controller = c.read(aiChatProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    final send = controller.sendText('character-stale-status', 'Private earlier turn');
+    for (var i = 0; i < 30 && transport.checkedRequests.isEmpty; i++) { await Future<void>.delayed(Duration.zero); }
+    expect(transport.checkedRequests, hasLength(1));
+    (c.read(sessionProvider.notifier) as _SwitchingSession).signOutForTest();
+    await Future<void>.delayed(Duration.zero);
+    transport.status.completeError(const ApiException('Old status failure'));
+    await send;
+    expect(c.read(aiChatProvider).threads, isEmpty);
+    expect(transport.turns, 1);
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
@@ -533,9 +606,10 @@ void main() {
       await controller.retryMessage('character-1', userId);
       final thread = c.read(aiChatProvider).threads['character-1']!;
       expect(transport.turns, 2);
-      // Explicit Retry and the durable queue each check authoritative status.
-      // Both checks must preserve the original idempotency key.
+      // Catch reconciliation, explicit Retry and durable queue all inspect
+      // the same original requestId before another transport attempt.
       expect(transport.checkedRequests, [
+        thread.messages.first.requestId,
         thread.messages.first.requestId,
         thread.messages.first.requestId,
       ]);
@@ -567,7 +641,10 @@ void main() {
     expect(userTurns.first.requestId, original.requestId);
     expect(userTurns.last.requestId, isNot(original.requestId));
     expect(userTurns.last.text, original.text);
-    expect(transport.checkedRequests, [original.requestId, userTurns.last.requestId]);
+    // Server-confirmed failure is inspected both on transport error and
+    // on the user's explicit Retry; the NEW attempt has its own id.
+    expect(transport.checkedRequests,
+        [original.requestId, original.requestId, userTurns.last.requestId]);
     expect(transport.turns, 2);
     expect(after.messages.last.text, 'Real Gateway reply');
   });
@@ -750,4 +827,33 @@ void main() {
       expect(adapter.request!.followRedirects, isFalse);
     },
   );
+}
+
+class _SwitchingSession extends _SignedInSessionController {
+  int epoch = 0;
+  @override int get authorizationEpoch => epoch;
+  void refreshForTest({bool freshLogin = false}) { if (freshLogin) epoch++; state = SessionSignedIn(_directoryUser, _directoryTokens); }
+  void signOutForTest() { state = const SessionSignedOut(); }
+}
+class _DelayedStatusTransport extends RecoveringShellTransport {
+  final status = Completer<AgentTurnStatus>();
+  @override Future<AgentTurnStatus> turnStatus(String characterId, String requestId) {
+    checkedRequests.add(requestId);
+    return status.future;
+  }
+}
+
+class _DeferredShellTransport extends RecoveringShellTransport {
+  final reply = Completer<AgentTurnResult>();
+  @override Future<AgentTurnResult> sendTurn({required AgentSessionBinding binding,required String text,void Function(String)? onTextDelta,Future<void> Function(Uint8List)? onAudioPcmChunk,String? requestId}) {
+    turns++; onTextDelta?.call('Started'); return reply.future;
+  }
+}
+
+class _StaleAfterSwitchTransport extends RecoveringShellTransport {
+  int opens=0;final old=Completer<AgentTurnResult>();
+  @override Future<AgentSessionBinding> openSession(String id) async {opens++;return AgentSessionBinding(characterId:id,characterSessionId:'bound-original');}
+  @override Future<AgentTurnResult> sendTurn({required AgentSessionBinding binding,required String text,void Function(String)? onTextDelta,Future<void> Function(Uint8List)? onAudioPcmChunk,String? requestId}) {
+    turns++;return turns==2?old.future:Future.value(const AgentTurnResult(text:'Confirmed reply',agentRunId:'run-original'));
+  }
 }

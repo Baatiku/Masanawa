@@ -7,9 +7,17 @@ import 'package:masanawa/src/agents/agent_session.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/live_call_foreground.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
+import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/voice/voice_reply_playback_preference.dart';
 class _Controller extends AiChatController{@override AiChatState build()=>const AiChatState();}
 class _Autoplay extends VoiceReplyAutoplay{_Autoplay(this.enabled);final bool enabled;@override Future<bool> build()async=>enabled;}
+// The playback contract deliberately doesn't exercise persisted auth restore.
+// An actual SessionController would spawn an asynchronous secure-storage plugin
+// read/clear in a headless Flutter test, racing the streamed turn and leaking
+// a MissingPluginException. Keep the session state deterministic here.
+class _Session extends SessionController{
+ @override SessionState build()=>const SessionSignedOut();
+}
 class _Transport implements AgentTransport{
  final first=Completer<void>(),finish=Completer<AgentTurnResult>();int sends=0;
  @override Future<AgentSessionBinding> openSession(String id)async=>AgentSessionBinding(characterId:id,characterSessionId:'session');
@@ -27,6 +35,7 @@ void main(){
     aiChatProvider.overrideWith(_Controller.new),
     agentTransportProvider.overrideWithValue(transport),
     voiceReplyAutoplayProvider.overrideWith(() => _Autoplay(false)),
+    sessionProvider.overrideWith(_Session.new),
   ]);
   try {
    final sending = container.read(aiChatProvider.notifier).sendText('agent', 'Hello');
@@ -49,7 +58,7 @@ void main(){
   final calls=<String>[];
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel,(call)async{calls.add(call.method);return true;});
   final transport=_Transport();
-  final container=ProviderContainer(overrides:[aiChatProvider.overrideWith(_Controller.new),agentTransportProvider.overrideWithValue(transport),voiceReplyAutoplayProvider.overrideWith(()=>_Autoplay(mode!='off'))]);
+  final container=ProviderContainer(overrides:[aiChatProvider.overrideWith(_Controller.new),agentTransportProvider.overrideWithValue(transport),voiceReplyAutoplayProvider.overrideWith(()=>_Autoplay(mode!='off')),sessionProvider.overrideWith(_Session.new)]);
   if(mode=='call')await LiveCallForeground.startOrThrow(android:false);
   try{
    final sending=container.read(aiChatProvider.notifier).sendText('agent','Hello');

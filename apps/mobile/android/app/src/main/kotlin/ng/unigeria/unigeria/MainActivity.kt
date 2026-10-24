@@ -26,12 +26,18 @@ class MainActivity : FlutterActivity() {
     private var signalingAudio: CallSignalingAudio? = null
     private var toneChannel: MethodChannel? = null
     private var privacyChannel: MethodChannel? = null
+    private var incomingShare: IncomingShareBridge? = null
     private val privateScreenOwners = mutableSetOf<String>()
     private var activeCallOwners = 0
     @Volatile private var destroyed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        incomingShare = IncomingShareBridge(
+            this,
+            flutterEngine.dartExecutor.binaryMessenger,
+        ).also { bridge -> bridge.accept(intent) }
 
         signalingAudio = CallSignalingAudio(this)
         // Recent-apps thumbnails, Android screenshots and untrusted screen
@@ -329,6 +335,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        incomingShare?.accept(intent)
         val uri = intent.data
         if (intent.action == Intent.ACTION_VIEW && isSupportedDeepLink(uri)) {
             deepLinkChannel?.invokeMethod("open", uri.toString())
@@ -349,6 +356,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        incomingShare?.close()
+        incomingShare = null
         privateScreenOwners.clear()
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         privacyChannel?.setMethodCallHandler(null)
