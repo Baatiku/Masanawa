@@ -1464,8 +1464,14 @@ class _InfoState extends State<_CommunityInfo> {
       if (api is AccountBoundRoomCommunityApi) api.assertActive();
     }
     check();
-    if (!const ['admin','member','transfer','left','banned'].contains(action)) throw const FormatException('Invalid member action');
-    if (action == 'admin' || action == 'member') { await api.member(id, target, {'role': action}); }
+    if (!const ['admin','member','transfer','left','banned','unban'].contains(action)) throw const FormatException('Invalid member action');
+    if (action == 'unban') {
+      final version = person['membershipVersion'];
+      if (person['state'] != 'banned' || version is! String) throw const FormatException('Refresh the banned member list.');
+      if (await confirm('Unban member?', 'They may request to rejoin. This does not restore access, revive invitations or make them an admin.')) {
+        check(); await api.member(id, target, {'state': 'left', 'expectedBannedAt': version});
+      }
+    } else if (action == 'admin' || action == 'member') { await api.member(id, target, {'role': action}); }
     else if (action == 'transfer') {
       if (await confirm('Offer Room ownership?', 'This member must open Room info and accept. You stay owner until then.')) {
         check(); ownershipRequestKeys[target] ??= communityRequestId();
@@ -1550,6 +1556,14 @@ class _InfoState extends State<_CommunityInfo> {
       final api = widget.api, id = room.id, protect = widget.protectDetail;
       await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
         final detail = RoomRosterScreen(api: api, roomId: id, onManage: (person, action) => changeMember(person, action, expectedApi: api, expectedRoom: id));
+        return protect?.call(routeContext, detail) ?? detail;
+      }));
+      if (mounted && identical(api, widget.api) && id == room.id) await refresh();
+    }),
+    if (room.manages) ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('Banned members'), subtitle: const Text('Review bans and allow people to rejoin'), trailing: const Icon(Icons.chevron_right), onTap: busy ? null : () async {
+      final api = widget.api, id = room.id, protect = widget.protectDetail;
+      await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+        final detail = RoomRosterScreen(api: api, roomId: id, bannedOnly: true, onManage: (person, action) => changeMember(person, action, expectedApi: api, expectedRoom: id));
         return protect?.call(routeContext, detail) ?? detail;
       }));
       if (mounted && identical(api, widget.api) && id == room.id) await refresh();

@@ -89,3 +89,44 @@ it('exposes read-only HTTP route, no-store cache, and bounded query validation',
   expect((await app.inject({method:'GET',url:'/v1/rooms/'+roomId+'/community/members/page?limit=999',headers:{authorization:'bob'}})).statusCode).toBe(422);
  }finally{await app.close();}
 });
+it('keeps banned pages manager-only, searchable and cursor-scoped to the collection',async()=>{
+ await db.query("UPDATE rooms.memberships SET state='banned' WHERE tenant_id='t' AND room_id=$1 AND user_id LIKE 'roster_%'",[roomId]);
+ await expect(service.dispatch(bob,'GET',roomId+'/community/members/page',{state:'banned'})).rejects.toMatchObject({statusCode:403});
+ const first:Page=await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned',limit:23});
+ expect(first.items).toHaveLength(23);expect(first.nextCursor).toBeTruthy();
+ expect(first.items.every(v=>v.state==='banned')).toBe(true);
+ await expect(service.dispatch(alice,'GET',roomId+'/community/members/page',{cursor:first.nextCursor})).rejects.toMatchObject({statusCode:422});
+ const found=await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned',search:'Member 239'});
+ expect(found.items.map((v:Member)=>v.userId)).toEqual(['roster_239']);
+ let cursor=first.nextCursor;const ids=first.items.map(v=>v.userId);
+ while(cursor){const p:Page=await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned',limit:41,cursor});ids.push(...p.items.map(v=>v.userId));cursor=p.nextCursor;}
+ expect(ids).toHaveLength(240);expect(new Set(ids).size).toBe(240);
+ await expect(service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'left'})).rejects.toMatchObject({statusCode:422});
+});
+it('unbans only the selected current ban and requires fresh consent before access',async()=>{
+ await service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{state:'banned'});
+ const page=await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned'});
+ const version=page.items[0].membershipVersion;
+ expect(version).toMatch(/^\d{4}-\d{2}-\d{2}T.*\.\d{6}Z$/);
+ await expect(service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{state:'active',expectedBannedAt:version})).rejects.toMatchObject({statusCode:422});
+ await db.query("UPDATE rooms.memberships SET updated_at=updated_at+interval '1 microsecond' WHERE tenant_id='t' AND room_id=$1 AND user_id='bob'",[roomId]);
+ await expect(service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{state:'left',expectedBannedAt:version})).rejects.toMatchObject({statusCode:409,message:'member_ban_changed'});
+ const fresh=await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned'});
+ await service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{state:'left',expectedBannedAt:fresh.items[0].membershipVersion});
+ const member=(await db.query<{state:string;role:string}>("SELECT state,role FROM rooms.memberships WHERE tenant_id='t' AND room_id=$1 AND user_id='bob'",[roomId])).rows[0];
+ expect(member).toMatchObject({state:'left',role:'member'});
+ await expect(service.dispatch(bob,'GET',roomId+'/community/members/page')).rejects.toMatchObject({statusCode:403});
+ expect((await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned'})).items).toEqual([]);
+ await expect(service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{state:'left',expectedBannedAt:version})).rejects.toMatchObject({statusCode:409});
+ await service.dispatch(bob,'POST',roomId+'/community/join',{});
+ expect((await service.dispatch(bob,'GET',roomId+'/community/members/page')).items.some((v:Member)=>v.userId==='bob')).toBe(true);
+});
+it('revoked manager, blocked and suspended targets cannot leak through banned reads',async()=>{
+ await service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{role:'admin'});
+ await db.query("UPDATE rooms.memberships SET state='banned' WHERE tenant_id='t' AND room_id=$1 AND user_id LIKE 'roster_%'",[roomId]);
+ const first=await service.dispatch(bob,'GET',roomId+'/community/members/page',{state:'banned',limit:2});
+ await db.exec("INSERT INTO talks.safety_preferences VALUES('t','roster_239','alice',true); UPDATE identity.users SET state='suspended' WHERE tenant_id='t' AND user_id='roster_238'");
+ for(const search of ['Member 239','Member 238'])expect((await service.dispatch(alice,'GET',roomId+'/community/members/page',{state:'banned',search})).items).toEqual([]);
+ await service.dispatch(alice,'PATCH',roomId+'/community/members/bob',{role:'member'});
+ await expect(service.dispatch(bob,'GET',roomId+'/community/members/page',{state:'banned',cursor:first.nextCursor})).rejects.toMatchObject({statusCode:403});
+});

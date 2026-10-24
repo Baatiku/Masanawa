@@ -17,9 +17,11 @@ Future<RoomRosterPage> readRoomRoster(
   String id, {
   String search = '',
   String? cursor,
+  bool bannedOnly = false,
 }) async {
   final result = await api.request(id, 'GET', 'members/page', {
     'search': search,
+    if (bannedOnly) 'state': 'banned',
     if (cursor != null) 'cursor': cursor,
   });
   final next = result['nextCursor'];
@@ -40,7 +42,11 @@ Future<RoomRosterPage> readRoomRoster(
           'moderator',
           'member',
         ].contains(row['role']) ||
-        row['state'] != 'active' ||
+        row['state'] != (bannedOnly ? 'banned' : 'active') ||
+        bannedOnly &&
+            (row['membershipVersion'] is! String ||
+                !RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$')
+                    .hasMatch(row['membershipVersion'] as String)) ||
         row['displayName'] != null && row['displayName'] is! String ||
         row['handle'] != null && row['handle'] is! String)
       throw const FormatException('Invalid member');
@@ -56,9 +62,11 @@ class RoomRosterScreen extends StatefulWidget {
     required this.api,
     required this.roomId,
     this.onManage,
+    this.bannedOnly = false,
   });
   final RoomCommunityApi api;
   final String roomId;
+  final bool bannedOnly;
   final Future<void> Function(Map<String, dynamic> member, String action)?
   onManage;
   @override
@@ -105,7 +113,9 @@ class _RoomRosterState extends State<RoomRosterScreen> {
   @override
   void didUpdateWidget(covariant RoomRosterScreen old) {
     super.didUpdateWidget(old);
-    if (!identical(old.api, widget.api) || old.roomId != widget.roomId) {
+    if (!identical(old.api, widget.api) ||
+        old.roomId != widget.roomId ||
+        old.bannedOnly != widget.bannedOnly) {
       generation++;
       debounce?.cancel();
       search.clear();
@@ -132,7 +142,7 @@ class _RoomRosterState extends State<RoomRosterScreen> {
 
   Future<CommunityRoom> membership(RoomCommunityApi api, String id) async {
     final fresh = await api.room(id);
-    if (!fresh.joined)
+    if (!fresh.joined || widget.bannedOnly && !fresh.manages)
       throw DioException(
         requestOptions: RequestOptions(),
         response: Response(requestOptions: RequestOptions(), statusCode: 403),
@@ -182,7 +192,13 @@ class _RoomRosterState extends State<RoomRosterScreen> {
       String? next;
       var count = 0;
       do {
-        final page = await readRoomRoster(api, id, search: query, cursor: next);
+        final page = await readRoomRoster(
+          api,
+          id,
+          bannedOnly: widget.bannedOnly,
+          search: query,
+          cursor: next,
+        );
         if (!current(read, api)) return;
         if (page.nextCursor != null && !cursors.add(page.nextCursor!))
           throw const FormatException('Repeated cursor');
@@ -239,7 +255,13 @@ class _RoomRosterState extends State<RoomRosterScreen> {
     try {
       final fresh = await membership(api, id);
       if (!current(read, api)) return;
-      final page = await readRoomRoster(api, id, search: query, cursor: next);
+      final page = await readRoomRoster(
+        api,
+        id,
+        bannedOnly: widget.bannedOnly,
+        search: query,
+        cursor: next,
+      );
       if (!current(read, api)) return;
       if (page.nextCursor != null && seen.contains(page.nextCursor))
         throw const FormatException('Repeated cursor');
@@ -295,8 +317,8 @@ class _RoomRosterState extends State<RoomRosterScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text(
-        'Room members',
+      title: Text(
+        widget.bannedOnly ? 'Banned members' : 'Room members',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -327,7 +349,11 @@ class _RoomRosterState extends State<RoomRosterScreen> {
             ),
             onChanged: (_) => change(),
           ),
-          const Text('Only current visible members appear here.'),
+          Text(
+            widget.bannedOnly
+                ? 'Unbanning lets this person request to rejoin. It does not restore access or revive old invitations. Only visible active accounts appear here.'
+                : 'Only current visible members appear here.',
+          ),
           if (loading)
             const Padding(
               padding: EdgeInsets.all(24),
@@ -345,45 +371,60 @@ class _RoomRosterState extends State<RoomRosterScreen> {
             ),
           ],
           if (!loading && error == null && rows.isEmpty)
-            const Text('No members match this search.'),
+            Text(
+              widget.bannedOnly
+                  ? 'No banned members match this search.'
+                  : 'No members match this search.',
+            ),
           for (final person in rows)
             ListTile(
               key: ValueKey(person['userId']),
               contentPadding: EdgeInsets.zero,
               leading: const CircleAvatar(child: Icon(Icons.person_outline)),
               title: Text(roomVisibleIdentity(person)),
-              subtitle: Text('${person['role']}'),
+              subtitle: Text(
+                widget.bannedOnly
+                    ? 'Banned · no Room access'
+                    : '${person['role']}',
+              ),
               trailing: manages(person)
                   ? PopupMenuButton<String>(
                       tooltip: 'Manage member',
                       enabled: !busy && !loading && !uncertain,
                       onSelected: (action) => manage(person, action),
-                      itemBuilder: (_) => [
-                        if (room?.role == 'owner') ...[
-                          PopupMenuItem(
-                            value: person['role'] == 'admin'
-                                ? 'member'
-                                : 'admin',
-                            child: Text(
-                              person['role'] == 'admin'
-                                  ? 'Make member'
-                                  : 'Make admin',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'transfer',
-                            child: Text('Offer ownership'),
-                          ),
-                        ],
-                        const PopupMenuItem(
-                          value: 'left',
-                          child: Text('Remove member'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'banned',
-                          child: Text('Ban member'),
-                        ),
-                      ],
+                      itemBuilder: (_) => widget.bannedOnly
+                          ? [
+                              const PopupMenuItem(
+                                value: 'unban',
+                                child: Text('Unban member'),
+                              ),
+                            ]
+                          : [
+                              if (room?.role == 'owner') ...[
+                                PopupMenuItem(
+                                  value: person['role'] == 'admin'
+                                      ? 'member'
+                                      : 'admin',
+                                  child: Text(
+                                    person['role'] == 'admin'
+                                        ? 'Make member'
+                                        : 'Make admin',
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'transfer',
+                                  child: Text('Offer ownership'),
+                                ),
+                              ],
+                              const PopupMenuItem(
+                                value: 'left',
+                                child: Text('Remove member'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'banned',
+                                child: Text('Ban member'),
+                              ),
+                            ],
                     )
                   : null,
             ),
