@@ -90,8 +90,10 @@ void main() {
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
     expect(find.text('Create Talk'), findsNothing);
-    expect(find.text('Videos'), findsOneWidget);
-    expect(find.text('Updates'), findsOneWidget);
+    // Status is now the single platform-Masana feed: no former two-tab bar.
+    expect(find.text('Videos'), findsNothing);
+    expect(find.text('Updates'), findsNothing);
+    expect(find.text('Create Status'), findsNothing);
     expect(feed.requests, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
