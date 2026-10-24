@@ -634,9 +634,9 @@ export function createHumanCommunicationService(o:HumanOptions){
           id,messageId:m.id,reason:b.reason
         }
         ,async()=>{
-          const reportId=randomUUID(),submittedAt=now();
-          await db.query('INSERT INTO talks.human_reports VALUES($1,$2,$3,$4,$5,$6)',[a.tenantId,reportId,a.userId,m.id,str(b.reason,2000),submittedAt]);
-          return {ok:true,reportId,submittedAt};
+          const reportId=randomUUID();
+          const inserted=await db.query('INSERT INTO talks.human_reports VALUES($1,$2,$3,$4,$5,$6) RETURNING created_at',[a.tenantId,reportId,a.userId,m.id,str(b.reason,2000),now()]);
+          return {ok:true,reportId,submittedAt:iso(inserted.rows[0]?.created_at)};
         }
         );
         }
