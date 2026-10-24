@@ -19,15 +19,16 @@
         "CONTINUE-HERE.md",
         "docs/PRODUCT-ROADMAP-20261019.md",
         "docs/SCREEN-JOURNEYS.md",
-        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "packages/commerce/migrations/0146_msnw_p2p_evidence_original_index.sql"
       ],
       "branch": "feat/p2p-evidence-recovery-oct24",
       "base_sha": "931149305277694857947fd317c9e34d953315cb",
       "pr": "",
       "claimed_at": "2026-10-24T05:17:00.252Z",
-      "heartbeat_at": "2026-10-24T05:17:00.252Z",
-      "expires_at": "2026-10-24T05:22:00.252Z",
-      "progress": "SourceauditfoundblindcleanupafterrecordEvidenceuncertaintycanremoveacceptedattachment. Reusingprivateobjectstoreandcanonicalorderlock forcontentoriginaldedupe/recovery; no newprovider/schema/financialauthority."
+      "heartbeat_at": "2026-10-24T05:21:34.182Z",
+      "expires_at": "2026-10-24T05:26:34.182Z",
+      "progress": "Reproducingblindcleanup/stablepathregressionsfirst. Originalidentityisactor+order+SHA256, reuseexistingevidencerows/orderlock andprivateobjectstore; additive nonunique index preserveslegacyduplicates. Nativekeepshash/type/sizeinsecurestore,nofilebytes/signedURLpersistence."
     }
   ],
   "history": [
