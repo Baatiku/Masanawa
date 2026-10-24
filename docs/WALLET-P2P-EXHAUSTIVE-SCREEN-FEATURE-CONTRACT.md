@@ -293,7 +293,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P1-10 | N | Trading identity/region/KYC/AML level and capability shown before ad creation. |
 | P1-11 | N | Merchant verification workflow only with a real provider and audit trail. |
 | P1-12 | N | Independent evidence of merchant badge authenticity and revocation. |
-| P1-13 | N | Merchant performance page: same-window completed/cancelled/disputed counts. |
+| P1-13 | S/P | Public eligible trader profile shows same-opening-window completed/cancelled/expired/currently-disputed/total counts; device acceptance and approved reputation/risk policy remain open. |
 | P1-14 | N | Anti-self-trade and wash-trading metric defense enforced server-side. |
 | P1-15 | N | Merchant reputation score withheld for low or missing samples. |
 | P1-16 | N | Counterparty restrictions and anti-scam checks only from approved risk policy. |
@@ -323,7 +323,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P2-16 | S/P | Buy-ad publishing retains exact original payload/key and account-fenced recovery; trusted admission and production acceptance remain open. |
 | P2-17 | S/P | Pausing/resuming/closing own sell ad without altering active orders. |
 | P2-18 | S/P | Versioned own-ad price/limits/bank/remaining edits and original-request audit/recovery are implemented in source; accepted orders stay immutable. Public terms/moderation and device/production acceptance remain open. |
-| P2-19 | N | Taking a break/merchant offline status with no accidental active ad exposure. |
+| P2-19 | P | Current ads can be paused atomically with original recovery; future publications remain explicit new ads. Persistent merchant-offline policy and schedules remain open. |
 | P2-20 | N | Manual versus automatic maker acceptance, if and only if server supports safe policy. |
 | P2-21 | N | Maker incoming request queue (accept/reject/expiry), original quote bound. |
 | P2-22 | P | Rejected/expired/ambiguous offer write explicitly recoverable and auditable. |
@@ -416,8 +416,8 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-03 | P | My Offers and Updates nested below primary Buy/Sell/Orders flow. |
 | P6-04 | P | Dedicated order event timeline rather than only current status chip. |
 | P6-05 | S/P | Canonical receipt and Wallet Activity point to same operation and roles. |
-| P6-06 | N | Merchant profile shows live eligible offers and real statistics, not fake rating. |
-| P6-07 | N | Merchant pause-all or scheduled availability if actually supported server-side. |
+| P6-06 | S/P | Public trader profile pages live eligible ads and same-window real order outcomes; no invented badge/rating, device/provider acceptance remains open. |
+| P6-07 | S/P | Owner pause-all-current-ads, durable original receipt/recovery and individually eligible resume implemented; schedules/persistent offline mode and device acceptance remain open. |
 | P6-08 | N | Merchant support case performance without exposing competitor proprietary limits. |
 | P6-09 | N/Q | Verified region/currency/provider/KYC eligibility gates every offer action. |
 | P6-10 | P/Q | Suspended account cannot trade; can still view own records/support. |
@@ -722,6 +722,16 @@ Customers can report an eligible ad from its trader card, recover the original p
 Higgsfield evidence: six new SQL/HTTP cases, gateway TypeScript, eight customer Flutter cases and five admin Flutter cases passed; affected analyzers report informational lint only. Independent read-only review found no material findings. Added real PostgreSQL cross-ad quota and competing-review coverage for hosted qualification; exact-head CI results belong in the PR before merge. Fixed the existing admin dispute-page closing parenthesis needed to reach the queue. No APK, physical-device acceptance, production migration, provider qualification or live-funds action. Trusted buy-ad admission stays default closed; P1-19 sanctions/fraud enforcement, operational retention/access policy and parent Phase 7/8 gates remain open. The 177-screen/820-requirement scope is unchanged.
 
 Previous connected delivery: PR #335 merged at `29efd85eaf82e3932c1850fdc014a269f51acf82` with all four exact-head CI workflows passing, including 95 backend/storage, 7 Worker and 14 real PostgreSQL cases.
+
+## 24 October 2026 — P2P current-ad bulk pause and trader outcome context (partial P6-07/P2-19/P1-13)
+
+P2P options → Ad availability shows owner-scoped active/paused/closed counts and explicitly confirms pausing the ads active when the operation runs. The original request key is saved in account/base-scoped secure storage before POST; reopening recovers the original receipt before same-key retry. Migration 0144 retains immutable owner-bound pause receipts. UUID-ordered row locks serialize against reservations; no order, inventory, custody or receiving-bank field is changed. Retrying never repauses resumed ads or ads published afterward. Operations above 1000 active ads fail atomically rather than partially pausing. Each ad is resumed individually under existing eligibility checks; schedules and a persistent merchant-offline mode remain unimplemented.
+
+Trader profiles now expose completed/cancelled/expired/currently-disputed/total outcomes from the same last-30-day opening-date cohort. These are current order outcomes, not lifetime dispute counts, a reputation score, merchant verification, sanctions or wash-trading policy. Public eligibility and private identity/bank boundaries remain unchanged.
+
+Higgsfield: five new SQL/HTTP cases and the existing nine read-journey cases pass; gateway TypeScript passes; fifteen Flutter cases pass (six pause and nine trader), including durable-save failure, reopening/lost-result recovery, late 404 after account replacement, outcome display and 320dp/200% RTL. Exact-head hosted CI evidence belongs in the PR. Affected analyzer has informational lints only. Independent read-only review found no material findings. A sixteenth real PostgreSQL test covers duplicate bulk pause/reservation races, accepted bank instructions and replay after resume/new ads; hosted qualification pending. No APK, physical-device, provider or production acceptance claimed. Parent Phase 7/8 and risk/provider gates stay open; 177 screens/820 requirements retained.
+
+Previous delivery: PR #337 merged at `060b61ce4c576ea797d0cb28b15e72c2df10c98d`; exact `4bb1f544` passed Foundation, Mobile, P2P and Status CI, including 101 backend/storage + 7 Worker + 15 real PostgreSQL cases. Ad report policy/retention, enforcement and production/device gates remain open.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

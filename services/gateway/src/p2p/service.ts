@@ -1,3 +1,4 @@
+import {createBulkPause} from './bulk_pause.js';
 import {createAdReports} from './ad_reports.js';
 import {createMethodManagement} from './method_management.js';
 import {createOfferEditing} from "./offer_editing.js";
@@ -201,17 +202,22 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
     return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,o.offer_side,seller.display_name,p.bank_name,o.rate_kobo_per_msnw::text,o.min_micro::text,
       LEAST(o.max_micro::numeric,o.remaining_micro::numeric,CASE WHEN o.offer_side='buy' THEN o.remaining_micro::numeric ELSE floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)) END)::text AS max_micro,to_jsonb(o)->>'terms_revision' AS terms_revision,
       statement_timestamp() AS as_of,
-      (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
-        AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id) AND past.created_at>=statement_timestamp()-interval '30 days'
-        AND past.state='completed') AS completed,
-      (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
-        AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id) AND past.created_at>=statement_timestamp()-interval '30 days'
-        AND past.state IN ('completed','cancelled','expired')) AS closed
+      history.completed,history.closed,history.cancelled,history.expired,history.disputed,history.total
       FROM commerce.msnw_p2p_offers o
       JOIN commerce.msnw_p2p_payment_methods p ON p.tenant_id=o.tenant_id AND p.method_id=o.payment_method_id
         AND p.owner_id=o.seller_id
       LEFT JOIN commerce.msnw_custody_accounts c ON c.tenant_id=o.tenant_id AND c.user_id=o.seller_id
       LEFT JOIN security.platform_user_profiles seller ON seller.tenant_id=o.tenant_id AND seller.user_id=o.seller_id
+      LEFT JOIN LATERAL(SELECT count(*)::int AS total,
+       count(*) FILTER(WHERE past.state='completed')::int AS completed,
+       count(*) FILTER(WHERE past.state IN ('completed','cancelled','expired'))::int AS closed,
+       count(*) FILTER(WHERE past.state='cancelled')::int AS cancelled,
+       count(*) FILTER(WHERE past.state='expired')::int AS expired,
+       count(*) FILTER(WHERE past.state='disputed')::int AS disputed
+       FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
+        AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id)
+        AND past.seller_id<>past.buyer_id AND past.created_at>=statement_timestamp()-interval '30 days'
+        AND past.created_at<=statement_timestamp()) history ON true
       WHERE o.tenant_id=$1 AND o.offer_id=$2 AND o.seller_id<>$3 AND o.state='active'
         AND p.verified_at IS NOT NULL AND p.disabled_at IS NULL
         AND (o.offer_side='buy' OR LEAST(o.remaining_micro::numeric,floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)))>=o.min_micro)
@@ -312,7 +318,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
       return {items,nextCursor,market:{asset:'MSNW',fiat:'NGN',method:'ng_bank_transfer',offerSide:effectiveSide},
         filters:{amountMicro:amount,search,...(fiatBudget!==null?{fiatKobo:fiatBudget}:{})},sort,
         ...(trader?{trader:{displayName:trader.display_name,completedOrders30d:trader.completed,
-          closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
+          closedOrders30d:trader.closed,cancelledOrders30d:trader.cancelled,expiredOrders30d:trader.expired,disputedOrders30d:trader.disputed,totalOrders30d:trader.total,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }
   return Object.freeze({
     ...createAdReports(pool,async(actor,offerId)=>{
@@ -326,6 +332,7 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
         termsRevision:Number(ad.terms_revision??1),observedAt:new Date(ad.as_of as string|Date).toISOString()}};
     }),
     ...createMethodManagement(pool),
+    ...createBulkPause(pool),
     ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {
       const rights=await admission(actor);
