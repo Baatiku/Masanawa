@@ -24,6 +24,7 @@ import '../core/voice_note_recorder.dart';
 import 'controller.dart';
 import 'models.dart';
 import 'transport.dart';
+import 'report_history.dart';
 
 Future<void> humanConversationStart(
   BuildContext context,
@@ -1425,6 +1426,18 @@ class _HumanPrivacyScreenState extends ConsumerState<HumanPrivacyScreen> {
                     onChanged: busy ? null : (v) => _save(entry.key, v),
                   ),
                 const Divider(),
+                ListTile(
+                  key: const Key('human-open-report-history'),
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('My message reports'),
+                  subtitle: const Text('View submitted reports and their receipts'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const HumanReportHistoryScreen(),
+                    ),
+                  ),
+                ),
                 const ListTile(title: Text('Blocked people')),
                 if (blocked.isEmpty)
                   const ListTile(title: Text('No blocked people')),
