@@ -137,7 +137,7 @@ void main() {
                       'status' => 1,
                       'wallet' => 2,
                       'calls' => 3,
-                      'rooms' => 4,
+                      'data' => 4,
                       _ => 0,
                     },
                   ),
@@ -275,50 +275,33 @@ void main() {
             session.signOut();
             await tester.pumpAndSettle();
             await tab(2);
-            await tester.scrollUntilVisible(
-              find.text('Sign in to view your balance'),
-              120,
-              scrollable: find.byType(Scrollable).first,
-            );
-            await save('wallet-outage');
-            expect(find.text('Sign in to view your balance'), findsOneWidget);
-            // Owner-approved Wallet is a single ten-card list. Never route a
-            // signed-out visitor through an obsolete second crypto home.
+            // Refactor: show no invented MB balance or historic money,
+            // even when legacy wallet network data is unavailable.
+            expect(find.text('Exact MB balance unavailable'), findsOneWidget);
             expect(find.text('All crypto assets'), findsNothing);
-            await tester.scrollUntilVisible(
-              find.text('P2P'),
-              150,
-              scrollable: find.byType(Scrollable).first,
-            );
-            final p2pAction = tester.widget<InkWell>(
-              find
-                  .ancestor(
-                    of: find.text('P2P'),
-                    matching: find.byType(InkWell),
-                  )
-                  .first,
-            );
-            expect(p2pAction.onTap, isNull);
+            expect(find.text('P2P'), findsNothing);
             expect(find.byType(CryptoWalletScreen), findsNothing);
-            expect(
-              tester
-                  .widget<NavigationBar>(find.byType(NavigationBar))
-                  .selectedIndex,
-              2,
-            );
+            await save('wallet-unavailable');
             await tab(3);
             await save('calls-signedout');
             expect(find.text('Sign in to see your calls.'), findsOneWidget);
             await tab(4);
-            await save('rooms-unavailable');
-            expect(find.text('Sign in to view Rooms.'), findsOneWidget);
+            await save('data-unavailable');
+            expect(find.text('No verified GB bundles available'), findsOneWidget);
+            expect(find.text('Redeem mobile data'), findsOneWidget);
+            // Data never offers a purchase when the provider's structured
+            // whole-GB allowance has not been verified.
+            expect(
+              tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+              isNull,
+            );
             await tab(1);
             expect(
               find.text('Sign in to view Status updates.'),
               findsOneWidget,
             );
             await save('status-unavailable');
-            // Signed-out Status and Rooms deny private content before requesting it.
+            // Signed-out Status denies private content before requesting it.
             await tab(0);
             expect(find.byType(TextField), findsNothing);
             expect(
