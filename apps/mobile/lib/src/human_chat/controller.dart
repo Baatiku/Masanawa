@@ -52,6 +52,8 @@ class HumanThreadController extends ChangeNotifier {
   String? draftReply;
   String? before, error;
   bool loading = true, closed = false, sending = false, journaling = false;
+  bool _journalUnavailable = false;
+  bool get journalUnavailable => _journalUnavailable;
   bool get busy => sending || journaling;
   int cursor = 0;
   StreamSubscription<HumanJson>? _events;
@@ -66,6 +68,9 @@ class HumanThreadController extends ChangeNotifier {
   }
 
   Future<void> persist() {
+    if (_journalUnavailable) {
+      return Future.error(StateError('Encrypted conversation needs recovery'));
+    }
     final text = draft;
     final queue = pending.map((e) => Map<String, dynamic>.from(e)).toList();
     final files = draftAttachments
@@ -80,8 +85,11 @@ class HumanThreadController extends ChangeNotifier {
   }
 
   Future<void> start() async {
+    var restored = false;
     try {
       final saved = await journal.restore();
+      restored = true;
+      _journalUnavailable = false;
       if (!current) return;
       draft = saved['draft'] as String? ?? '';
       draftAttachments = (saved['attachments'] as List? ?? [])
@@ -98,8 +106,11 @@ class HumanThreadController extends ChangeNotifier {
           if (current) unawaited(refresh());
         });
       }
-    } catch (e) {
-      error = 'Could not restore this private conversation. Please retry.';
+    } catch (_) {
+      if (!restored) _journalUnavailable = true;
+      error = restored
+          ? 'Could not resume conversation updates. Refresh to try again.'
+          : 'Could not restore encrypted messages. Refresh to retry before sending.';
     } finally {
       loading = false;
       changed();
@@ -107,6 +118,12 @@ class HumanThreadController extends ChangeNotifier {
   }
 
   Future<void> refresh({bool older = false}) async {
+    if (_journalUnavailable) {
+      // The existing Refresh action is also the explicit recovery path.
+      // Never overwrite a prior encrypted unsent queue after failed restore.
+      await start();
+      return;
+    }
     final epoch = ++_loadEpoch;
     final query = search;
     final append = older && query == _loadedSearch;
@@ -261,7 +278,7 @@ class HumanThreadController extends ChangeNotifier {
     List<String> attachments = const [],
     String? replyToId,
   }) async {
-    if (!current || busy) return false;
+    if (!current || busy || _journalUnavailable) return false;
     journaling = true;
     changed();
     final oldDraft = draft;
@@ -296,7 +313,7 @@ class HumanThreadController extends ChangeNotifier {
   }
 
   Future<void> retry() async {
-    if (busy || !current) return;
+    if (busy || !current || _journalUnavailable) return;
     sending = true;
     changed();
     try {
