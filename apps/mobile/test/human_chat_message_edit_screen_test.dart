@@ -50,7 +50,7 @@ class EditJourneyTransport extends HumanCommunicationTransport {
       return {
         'id':'msg','conversationId':'thread','text':text,
         'createdAt':'2026-10-24T09:00:00.000Z',
-        'deliveredAt':null,'readAt':null,'editedAt':editedAt,
+        'deliveredAt':null,'readAt':null,'editedAt':editedAt,'editVersion':editVersion,
         'deliveryStatus':'sent',
       };
     }
