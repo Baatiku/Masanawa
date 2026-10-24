@@ -68,18 +68,18 @@ class PendingHumanEdit {
     required this.messageId,
     required this.text,
     required this.requestId,
-    required this.expectedEditedAt,
+    required this.expectedVersion,
   });
 
   final String conversationId, messageId, text, requestId;
-  final String? expectedEditedAt;
+  final int expectedVersion;
 
   HumanJson toJson() => {
     'conversationId': conversationId,
     'messageId': messageId,
     'text': text,
     'requestId': requestId,
-    'expectedEditedAt': expectedEditedAt,
+    'expectedVersion': expectedVersion,
   };
 
   factory PendingHumanEdit.fromJson(HumanJson data) {
@@ -91,9 +91,8 @@ class PendingHumanEdit {
       }
       return value;
     }
-    final expected = data['expectedEditedAt'];
-    if (expected != null && (expected is! String || expected.length > 50 ||
-        DateTime.tryParse(expected) == null)) {
+    final expected = data['expectedVersion'];
+    if (expected is! int || expected < 0) {
       throw const FormatException('Saved edit revision is unavailable');
     }
     return PendingHumanEdit(
@@ -101,7 +100,7 @@ class PendingHumanEdit {
       messageId: field('messageId', 200),
       text: field('text', 10000),
       requestId: field('requestId', 200),
-      expectedEditedAt: expected as String?,
+      expectedVersion: expected,
     );
   }
 }
@@ -174,11 +173,11 @@ class HumanEditRequestJournal {
           info['conversationId'] != pending.conversationId) {
         throw const FormatException('Invalid message edit receipt');
       }
-      final revision = info['editedAt'];
-      if (revision != null && revision is! String) {
+      final revision = info['editVersion'];
+      if (revision is! int || revision < 0) {
         throw const FormatException('Invalid message edit revision');
       }
-      if (revision != pending.expectedEditedAt) {
+      if (revision != pending.expectedVersion) {
         if (info['text'] == pending.text) {
           await discard(pending.requestId);
           return HumanEditRecovery.confirmed;
@@ -197,7 +196,7 @@ class HumanEditRequestJournal {
       await transport.request('PATCH', path, data: {
         'requestId': pending.requestId,
         'text': pending.text,
-        'expectedEditedAt': pending.expectedEditedAt,
+        'expectedVersion': pending.expectedVersion,
       });
     } on DioException catch (e) {
       if (e.response?.statusCode != null && e.response!.statusCode! < 500) rethrow;
