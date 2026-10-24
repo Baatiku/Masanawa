@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -104,7 +105,8 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
       if (late != null && (late is! Map || late['events'] is! List))
         throw const FormatException();
       setState(() => _file = file);
-    } catch (_) {
+    } catch (error) {
+      if(error is DioException&&[401,403,404].contains(error.response?.statusCode)){_clear();return;}
       if (mounted && _same)
         setState(() => _error = 'Case file unavailable. Reopen or retry.');
     } finally {
@@ -117,7 +119,8 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
     setState(() => _copying = true);
     try {
       await widget.copyEvidence(id);
-    } catch (_) {
+    } catch (error) {
+      if(error is DioException&&[401,403,404].contains(error.response?.statusCode)){_clear();return;}
       if (mounted && _same)
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

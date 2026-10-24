@@ -434,7 +434,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-13 | P/Q | SQL row locks/transactions and unique original IDs survive cross-device races. |
 | P6-14 | P/Q | Ledger holds, release, refund, fees never double count in portfolio estimates. |
 | P6-15 | P | All errors show safe original ID status or Retry, no fake success indicator. |
-| P6-16 | N | Account/phone switch and logout clear protected lists and invalidate stale replies. |
+| P6-16 | S/P | Account/token changes clear P2P private state and revoke old routes; renewed same-account sessions read fresh records and reject stale replies. Installed-device/phone-change and deployed revocation acceptance remain open. |
 | P6-17 | P | Small screen 320dp at 200% text, RTL, TalkBack, keyboard action order, non-color labels. |
 | P6-18 | P | Loading/empty/error/offline/blocked/permission-limited states for each screen ID. |
 | P6-19 | N | Exact user-facing service maintenance/degraded-rail and stale price clock. |
@@ -788,6 +788,16 @@ Migration 0147 adds immutable order-bound requests/responses. Actor/content/reci
 Customer Order support → Support requests shows assigned instructions, due times, response state and original receipts; documents use the existing order attachment action. Staff case context → Evidence requests and responses selects buyer/seller and the response window. Both pages read before writes, recover uncertain originals, keep drafts in memory and scrub private context after session/account/access loss. Definitive rejections permit correction. Loading, empty, offline/retry, terminal, large-text/RTL and Back navigation remain within the original order/case.
 
 Local three backend checks, gateway/adapter types, customer/staff widget checks and informational-deadline/cap/immutable-original regressions passed. Independent review clear after strict-recipient correction; exact-head CI and the 21st real PostgreSQL duplicate request/response race are recorded in the delivery PR. Additional staff-only notes, request cancellation/extension policy, delivery notifications, retention, deployed support permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
+
+## 24 October 2026 — P2P protected session boundaries (partial P6-16)
+
+P2P root state now observes account and bearer changes, clears private lists/drafts/filter state, and rebinds a renewed same-account session through fresh reads. Late replies from an older bearer are rejected. A 401 clears protected state; a valid replacement token restores the root without resurrecting old private routes. Account replacement latches the old route closed, including direct order links. Encrypted original-request identities remain available for authorized recovery; no automatic financial retry is added.
+
+Private P2P forms, reviews, order detail, receipt sharing and evidence previews use an account/base/session/epoch boundary. Previously opened routes stay revoked, with Back available, even if the same account signs back in. Copy/share callbacks and order actions check their original authorization. Staff case context also scrubs cached private evidence when refresh or evidence-link access returns 401/403/404.
+
+Focused source verification passed five session scenarios, the boundary latch, 18 marketplace/buy regression checks and six staff case tests. Immediate future error handlers prevent an orphaned refresh exception when access loss removes its view; original futures still expose normal errors to the UI. A Flutter runner segmentation fault was retried serially. Independent review clear after fixing same-account reauthentication recovery. The wider run plus isolated repairs qualified 122 distinct P2P Flutter checks; the existing quote-switch test now asserts that revoked controls are removed, and a trader startup crash was retried serially. Exact-head CI results are recorded in the delivery PR.
+
+This is source qualification. Phone/account changes on installed devices, process kill, deployed revocation behavior and production acceptance remain open; legacy original-request storage is preserved rather than silently migrated or discarded. Parent gates and 177-screen/820-requirement inventory remain unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

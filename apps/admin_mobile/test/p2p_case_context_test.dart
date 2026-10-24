@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa_admin/src/screens/p2p_case_context.dart';
@@ -142,4 +143,9 @@ void main() {
       await t.pumpWidget(const SizedBox());
     },
   );
+ testWidgets('evidence-link access denial scrubs cached private case',(t)async{
+  await t.pumpWidget(MaterialApp(home:Scaffold(body:P2pCaseContext(orderId:'order',currentSession:()=>'staff',load:()async=>{...file(),'evidence':[{'evidence_id':'evidence','submitted_by':'buyer','sha256':'a'*64}]},copyEvidence:(_)async=>throw DioException(requestOptions:RequestOptions(path:'/evidence'),response:Response(requestOptions:RequestOptions(path:'/evidence'),statusCode:403))))));
+  await t.pumpAndSettle();await t.scrollUntilVisible(find.byTooltip('Copy 60-second private evidence link').hitTestable(),150,scrollable:find.byType(Scrollable).first);await t.tap(find.byTooltip('Copy 60-second private evidence link'));await t.pumpAndSettle();expect(find.text('Private opening evidence'),findsNothing);expect(find.text('Admin session changed. Reopen the case.'),findsOneWidget);await t.pumpWidget(const SizedBox());
+ });
+
 }
