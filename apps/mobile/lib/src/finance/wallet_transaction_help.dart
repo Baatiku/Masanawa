@@ -129,7 +129,9 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
   Future<void> _checkCase() async {
     final token = _boundToken, generation = _generation;
     if (busy || token == null || token.isEmpty ||
-        !_scopeMatches(generation, token)) return;
+        !_scopeMatches(generation, token)) {
+      return;
+    }
     final operation = _boundOperation, base = _boundBase, dio = _boundDio;
     setState(() {
       busy = true;
@@ -188,7 +190,9 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
     final token = _boundToken, generation = _generation;
     if (busy || ticket != null || (!verifiedAbsent && !uncertainOriginal) ||
         token == null || token.isEmpty ||
-        !_scopeMatches(generation, token)) return;
+        !_scopeMatches(generation, token)) {
+      return;
+    }
     // Frozen after the first attempt. A retry can only use the same
     // owner, operation, reason, and Gateway's idempotent case identity.
     final original = originalReason ?? reason;
