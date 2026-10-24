@@ -1,3 +1,4 @@
+import {createAdReports} from './ad_reports.js';
 import {createMethodManagement} from './method_management.js';
 import {createOfferEditing} from "./offer_editing.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -197,7 +198,8 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
   // Public trader context is discoverable only through a currently eligible ad.
   // No raw user ID, receiving account, email, KYC record or invented badge is returned.
   async function traderReference(actor:P2pActor,offerId:string) {
-    return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,o.offer_side,seller.display_name,
+    return take<Record<string,unknown>>(await pool.query(`SELECT o.seller_id,o.offer_side,seller.display_name,p.bank_name,o.rate_kobo_per_msnw::text,o.min_micro::text,
+      LEAST(o.max_micro::numeric,o.remaining_micro::numeric,CASE WHEN o.offer_side='buy' THEN o.remaining_micro::numeric ELSE floor(coalesce(c.available_micro,0)::numeric*10000/(10000+o.fee_bps)) END)::text AS max_micro,to_jsonb(o)->>'terms_revision' AS terms_revision,
       statement_timestamp() AS as_of,
       (SELECT count(*)::int FROM commerce.msnw_p2p_orders past WHERE past.tenant_id=o.tenant_id
         AND (past.seller_id=o.seller_id OR past.buyer_id=o.seller_id) AND past.created_at>=statement_timestamp()-interval '30 days'
@@ -313,6 +315,16 @@ export function createP2pService(pool: P2pPool, escrow: MsnwEscrowAuthority,
           closedOrders30d:trader.closed,windowDays:30,asOf:trader.as_of,sourceOfferId:input.traderOfferId,offerSide:effectiveSide}}:{})};
     }
   return Object.freeze({
+    ...createAdReports(pool,async(actor,offerId)=>{
+      const ad=await traderReference(actor,id(offerId));
+      if(ad.offer_side==='buy'){
+        await requireBuyAdmission(actor,'taker');
+        await requireBuyAdmission({tenantId:actor.tenantId,userId:String(ad.seller_id)},'maker');
+      }
+      return{makerId:String(ad.seller_id),snapshot:{offerSide:ad.offer_side,traderName:ad.display_name??null,
+        bankName:ad.bank_name,rateKoboPerMsnw:ad.rate_kobo_per_msnw,minMicro:ad.min_micro,maxMicro:ad.max_micro,
+        termsRevision:Number(ad.terms_revision??1),observedAt:new Date(ad.as_of as string|Date).toISOString()}};
+    }),
     ...createMethodManagement(pool),
     ...createOfferEditing(pool,actor=>requireBuyAdmission(actor,'maker')),
     async capabilities(actor:P2pActor) {

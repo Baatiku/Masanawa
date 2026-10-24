@@ -1,3 +1,4 @@
+import 'p2p_ad_reports.dart';
 import 'p2p_methods_page.dart';
 import 'p2p_order_messages.dart';
 import 'p2p_trader_page.dart';
@@ -1133,21 +1134,38 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     ),
   );
 
+  Future<void> _reportAd(String offerId)async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    void authorize(){if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');}
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pAdReportPage(expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
+      recover:()async{authorize();return _json(await _request('GET','/offers/$offerId/report'));},
+      submit:(category,details)async{authorize();return _json(await _request('POST','/offers/$offerId/report',{'category':category,'details':details}));},
+    )));
+  }
+  Future<void> _myAdReports()async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>P2pMyAdReportsPage(expectedUserId:owner,currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,
+      load:(cursor)async{if(!mounted||!_sameAccount||widget.expectedUserId!=owner||widget.baseUrl!=base)throw StateError('Account changed.');
+        return _json(await _request('GET','/ad-reports/page${cursor==null?'':'?cursor=${Uri.encodeQueryComponent(cursor)}'}'));},
+    )));
+  }
   Future<void> _viewTrader(Map<String,dynamic> ad) async {
     if(!_sameAccount||_busy)return;
+    final owner=widget.expectedUserId,base=widget.baseUrl;
     final offerId=ad['offer_id'];
     if(offerId is! String)return;
     final selected=await openWalletPage<Map<String,dynamic>>(
       context:context,title:'Trader profile',wrapScaffold:false,
-      builder:(_)=>P2pTraderPage(expectedUserId:widget.expectedUserId,
-        currentUserId:widget.currentUserId,formatMsnw:_msnw,formatNgn:_ngn,
+      builder:(_)=>P2pTraderPage(expectedUserId:owner,
+        currentUserId:()=>widget.baseUrl==base?widget.currentUserId():null,formatMsnw:_msnw,formatNgn:_ngn,
+        report:(id)async{if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base)await _reportAd(id);},
         load:(cursor)async=>_json(await _request('GET',
             '/offers/$offerId/trader${cursor == null ? '' : '?cursor=${Uri.encodeQueryComponent(cursor)}'}',
           ),
         ),
       ),
     );
-    if(mounted&&_sameAccount&&selected!=null)await _buy(selected);
+    if(mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base&&selected!=null)await _buy(selected);
   }
 
   Widget _offerTile(Map<String, dynamic> item, bool own) => _tile(
@@ -1535,11 +1553,12 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
       appBar: AppBar(title: Text(switch (_tab) {
         1 => 'My ads', 3 => 'Order updates', _ => 'MSNW P2P',
       }), actions: [PopupMenuButton<int>(tooltip: 'P2P options',
-        onSelected: (value) {if(value==5){_manageMethods();}else{_reload(value);}},
+        onSelected: (value) {if(value==5){_manageMethods();}else if(value==6){_myAdReports();}else{_reload(value);}},
         itemBuilder: (_) => const [
           PopupMenuItem(value: 1, child: Text('My ads')),
           PopupMenuItem(value: 3, child: Text('Order updates')),
           PopupMenuItem(value: 5, child: Text('Manage bank methods')),
+          PopupMenuItem(value: 6, child: Text('My ad reports')),
         ],
           ),
         ],

@@ -434,4 +434,32 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   expect((await pool.query('SELECT count(*)::int AS total FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[tenant])).rows[0]).toEqual(journal);
  });
 
+ it('serializes cross-ad reporting quotas and independent review without changing funds or ads',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic Report Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},actor={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'Report Test Bank',bankCode:'058',accountName:'Synthetic Report Test',accountNumber:'0123456789',verificationReference:'test-report-proof'});
+  const ids:string[]=[];
+  for(let n=0;n<21;n++)ids.push((await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'100000',inventoryMicro:'100000'})).offerId);
+  for(const id of ids.slice(0,19))await pool.query(`INSERT INTO commerce.msnw_p2p_ad_reports(report_id,tenant_id,offer_id,maker_id,reporter_id,category,details,public_snapshot) VALUES($1,$2,$3,$4,$5,'other','Synthetic report fixture','{}'::jsonb)`,[randomUUID(),scope,id,owner,taker]);
+  const before=(await pool.query('SELECT offer_id,remaining_micro::text,state FROM commerce.msnw_p2p_offers WHERE tenant_id=$1 ORDER BY offer_id',[scope])).rows;
+  const race=await Promise.allSettled(ids.slice(19).map(id=>api.reportAd(actor,id,{category:'misleading',details:'Synthetic misleading advertisement report'})));
+  expect(race.filter(x=>x.status==='fulfilled')).toHaveLength(1);
+  expect((race.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'p2p.report_rate_limited',status:429});
+  const accepted=(race.find(x=>x.status==='fulfilled') as PromiseFulfilledResult<Record<string,unknown>>).value;
+  expect(await api.reportAd(actor,String(accepted.offer_id),{category:'other',details:'A different retry explanation'})).toMatchObject({report_id:accepted.report_id,replay:true});
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_ad_reports WHERE tenant_id=$1',[scope])).rows[0].n).toBe(20);
+  const review=await Promise.allSettled([
+   api.reviewAdReport({tenantId:scope,userId:'user_'+randomUUID()},String(accepted.report_id),{decision:'dismiss',reason:'Synthetic independent dismissal reason',version:1}),
+   api.reviewAdReport({tenantId:scope,userId:'user_'+randomUUID()},String(accepted.report_id),{decision:'refer',reason:'Synthetic independent referral reason',version:1}),
+  ]);
+  expect(review.filter(x=>x.status==='fulfilled')).toHaveLength(1);
+  expect((review.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({code:'p2p.stale_ad_report_review',status:409});
+  expect((await pool.query('SELECT offer_id,remaining_micro::text,state FROM commerce.msnw_p2p_offers WHERE tenant_id=$1 ORDER BY offer_id',[scope])).rows).toEqual(before);
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 ORDER BY available_micro DESC',[scope])).rows).toEqual([{available_micro:'2000000',reserved_micro:'0'},{available_micro:'0',reserved_micro:'0'}]);
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n).toBe(0);
+  expect((await pool.query('SELECT account_number FROM commerce.msnw_p2p_payment_methods WHERE method_id=$1',[method])).rows[0].account_number).toBe('0123456789');
+ });
+
 });
