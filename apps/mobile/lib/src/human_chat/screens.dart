@@ -26,6 +26,7 @@ import 'models.dart';
 import 'transport.dart';
 import 'report_history.dart';
 import 'report_request.dart';
+import 'edit_request.dart';
 import 'search_highlight.dart';
 
 Future<void> humanConversationStart(
@@ -607,6 +608,8 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
               'Reply',
               'Copy',
               'Share',
+              if (m.mine) 'Edit',
+              if (m.mine) 'Info',
               if (m.mine) 'Delete',
               if (!m.mine) 'Report',
             ])
@@ -638,6 +641,12 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
               ShareParams(text: m.text, files: files),
             );
           break;
+        case 'Edit':
+          await _handleEdit(c, m);
+          break;
+        case 'Info':
+          await _messageInfo(c, m);
+          break;
         case 'Delete':
           await c.transport.request(
             'DELETE',
@@ -650,6 +659,141 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
           break;
       }
     });
+  }
+
+  Future<void> _messageInfo(HumanThreadController c, HumanMessage m) async {
+    final record = await c.transport.request(
+      'GET', '/conversations/${c.id}/messages/${m.id}/info',
+    );
+    if (!mounted || controller != c || !c.current || !m.mine) return;
+    String confirmed(Object? value) =>
+        value is String && value.isNotEmpty ? value : 'Not confirmed';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Message details'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Sent · ${confirmed(record['createdAt'])}'),
+          Text('Delivered · ${confirmed(record['deliveredAt'])}'),
+          Text('Read · ${confirmed(record['readAt'])}'),
+          if (record['editedAt'] != null)
+            Text('Edited · ${confirmed(record['editedAt'])}'),
+          const SizedBox(height: 12),
+          const Text('Only server-confirmed delivery and read times are shown.'),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Future<void> _handleEdit(HumanThreadController c, HumanMessage m) async {
+    if (owner == null || !c.current || controller != c || !m.mine) return;
+    final journal = HumanEditRequestJournal(owner!, c.id);
+    final saved = await journal.read();
+    if (!mounted || controller != c || !c.current) return;
+    if (saved != null) {
+      // Check first, never submit a different edit over an unresolved one.
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (sheet) => SafeArea(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text('Saved message edit'),
+              subtitle: Text('An earlier edit may have reached the server. Checking does not send it again.'),
+            ),
+            ListTile(
+              key: const Key('human-edit-check-original'),
+              title: const Text('Check original edit'),
+              onTap: () => Navigator.pop(sheet,'check'),
+            ),
+            ListTile(
+              key: const Key('human-edit-retry-original'),
+              title: const Text('Retry original edit'),
+              onTap: () => Navigator.pop(sheet,'retry'),
+            ),
+            ListTile(
+              key: const Key('human-edit-discard-original'),
+              title: const Text('Discard local saved edit'),
+              subtitle: const Text('Does not undo an edit already on the server'),
+              onTap: () => Navigator.pop(sheet,'discard'),
+            ),
+            ListTile(
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(sheet),
+            ),
+          ],
+        )),
+      );
+      if (choice == null || !mounted || controller != c || !c.current) return;
+      if (choice == 'discard') {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+            title: const Text('Discard saved edit?'),
+            content: const Text('This only clears the encrypted local request; a completed server edit remains unchanged.'),
+            actions: [
+              TextButton(onPressed: ()=>Navigator.pop(dialog,false),child:const Text('Keep')),
+              FilledButton(onPressed: ()=>Navigator.pop(dialog,true),child:const Text('Discard')),
+            ],
+          ),
+        );
+        if (ok == true && mounted && controller == c && c.current) {
+          await journal.discard(saved.requestId);
+        }
+        return;
+      }
+      final result = await journal.recover(c.transport, retryOriginal:choice=='retry');
+      if (!mounted || controller != c || !c.current) return;
+      if (result == HumanEditRecovery.confirmed) {
+        await c.refresh();
+        if (mounted && controller == c && c.current) _notice(context, 'Message edit confirmed.');
+      } else {
+        _notice(context, result == HumanEditRecovery.changed
+            ? 'The message changed elsewhere. Discard the saved edit before making another.'
+            : 'Edit unconfirmed. Check or retry the original saved request.');
+      }
+      return;
+    }
+
+    final editText = TextEditingController(text:m.text);
+    final proposed = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          key: const Key('human-edit-message-input'),
+          controller: editText,
+          minLines: 1, maxLines: 6, maxLength: 10000,
+          decoration: const InputDecoration(hintText:'Edit your text'),
+        ),
+        actions: [
+          TextButton(onPressed:()=>Navigator.pop(dialog),child:const Text('Cancel')),
+          FilledButton(
+            key: const Key('human-edit-message-save'),
+            onPressed:()=>Navigator.pop(dialog,editText.text.trim()),
+            child:const Text('Save edit'),
+          ),
+        ],
+      ),
+    );
+    editText.dispose();
+    if (proposed == null || proposed.isEmpty || proposed == m.text ||
+        !mounted || controller != c || !c.current) return;
+    await journal.stage(PendingHumanEdit(
+      conversationId:c.id,messageId:m.id,
+      text:proposed,requestId:createRequestId(),
+      expectedEditedAt:m.json['editedAt'] as String?,
+    ));
+    if (!mounted || controller != c || !c.current) return;
+    final outcome = await journal.recover(c.transport,retryOriginal:true);
+    if (!mounted || controller != c || !c.current) return;
+    if (outcome == HumanEditRecovery.confirmed) {
+      await c.refresh();
+      if (mounted && controller == c && c.current) _notice(context, 'Message updated.');
+    } else {
+      _notice(context, 'Edit not confirmed. Open the message Edit option to check or retry the same request.');
+    }
   }
 
   Future<XFile> _shareFile(HumanThreadController c, HumanAttachment a) async {
@@ -1157,7 +1301,7 @@ class _HumanChatScreenState extends ConsumerState<HumanChatScreen>
                   ),
               const SizedBox(height: 3),
               Text(
-                '${m.createdAt.split('T').last.substring(0, 5)}${m.mine ? ' · ${m.json['deliveryStatus']}' : ''}',
+                '${m.createdAt.split('T').last.substring(0, 5)}${m.json['editedAt'] != null && !m.deleted ? ' · edited' : ''}${m.mine ? ' · ${m.json['deliveryStatus']}' : ''}',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
