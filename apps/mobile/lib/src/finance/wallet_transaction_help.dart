@@ -43,6 +43,7 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
   late String _boundOperation, _boundBase;
   late Dio _boundDio;
   bool _rebindScheduled = false;
+  bool _authorizationWasLost = false;
 
   String get _base => widget.baseUrl.replaceFirst(RegExp(r'/$'), '');
   String? get _liveToken => widget.accessToken()?.trim();
@@ -80,6 +81,7 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
     _boundOperation = widget.operationId;
     _boundBase = _base;
     _boundToken = _liveToken;
+    _authorizationWasLost = false;
     reason = reasons.first;
     ticket = null;
     error = null;
@@ -157,6 +159,10 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
       final isAbsent = e.response?.statusCode == 404 &&
           body is Map && body['error'] == 'wallet.support_not_found';
       setState(() {
+        if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+          // Session/operation denial revokes even previously loaded support data.
+          ticket = null;
+        }
         verifiedAbsent = isAbsent && !uncertainOriginal;
         error = isAbsent
             ? uncertainOriginal
@@ -231,10 +237,11 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
   @override
   Widget build(BuildContext context) {
     if (!widget.authorized() || _liveToken == null || _liveToken!.isEmpty) {
+      _authorizationWasLost = true;
       // No stale account receipt can be rendered while signed out.
       return const Center(child: Text('Sign in to view this operation'));
     }
-    if (_boundToken != _liveToken || _boundOperation != widget.operationId ||
+    if (_authorizationWasLost || _boundToken != _liveToken || _boundOperation != widget.operationId ||
         _boundBase != _base || _boundDio != widget.dio) {
       _scheduleRebind();
       return const Center(child: Text('Checking transaction session'));
