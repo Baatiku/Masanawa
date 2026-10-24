@@ -1296,9 +1296,8 @@ class AiChatController extends Notifier<AiChatState> {
   }
 
   Future<void> clearSecureShellState({String? ownerId}) async {
-    final session = ref.read(sessionProvider);
-    final userId = ownerId ??
-        (session is SessionSignedIn ? session.user.id : null);
+    // Explicit owner cleanup may outlive this provider after logout.
+    final userId = ownerId ?? _cacheOwnerId;
     final journals = [..._actionJournals.values];
     _actionJournals.clear();
     _actionCoordinators.clear();
@@ -2836,9 +2835,13 @@ class AiChatController extends Notifier<AiChatState> {
       clearOpen: true,
     );
 
+    // Snapshot old in-memory journals before yielding; a replacement account
+    // can open its own journals while file cleanup is still in progress.
+    final shellCleanup = previousOwner != null && previousOwner.isNotEmpty
+        ? clearSecureShellState(ownerId: previousOwner) : Future<void>.value();
     if (previousOwner != null && previousOwner.isNotEmpty) {
       await _saveSessionExpiryDrafts(previousOwner,expiryOnly?safeDrafts:const {});
-      await clearSecureShellState(ownerId: previousOwner);
+      await shellCleanup;
       await _deleteThreadCache(previousOwner);
       await _deleteOwnedMediaCache(previousOwner);
     }

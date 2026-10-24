@@ -169,6 +169,11 @@ void main() {
       await mount(tester, api);
       await tap(tester, 'Load older posts');
       expect(find.text('Original parent'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Latest post'), -180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Latest post'), findsOneWidget);
       expect(api.reads.last['cursor'], 'root-next');
       expect(find.text('Load older posts'), findsNothing);
@@ -333,6 +338,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Original parent'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Latest post'), -180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Latest post'), findsOneWidget);
     },
   );
