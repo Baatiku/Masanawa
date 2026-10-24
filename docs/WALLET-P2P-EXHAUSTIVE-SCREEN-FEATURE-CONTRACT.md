@@ -405,7 +405,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P5-12 | S/P | Typed reason picker, immutable original opening and order-bound recovery implemented through canonical dispute transition; device/operational acceptance remains open. |
 | P5-13 | P | Participant support context shows current order status, own opening and recent public transitions without private staff/counterparty notes; formal responses/staff thread/appeal remain open. |
 | P5-14 | P | Frozen escrow clearly marked while dispute unresolved. |
-| P5-15 | S/P | Private assigned-party evidence requests, informational response windows and immutable original responses implemented; separate staff notes, extension/cancellation/delivery policy and deployed acceptance remain open. |
+| P5-15 | S/P | Private evidence requests, informational response windows, immutable original participant responses and staff-only case notes implemented; extension/cancellation/delivery policy, retention and deployed acceptance remain open. |
 | P5-16 | N | Withdraw/reopen dispute only under safe and authorized rules, no timer hacks. |
 | P5-17 | P | Report late payment on already refunded/expired order as separate case. |
 | P5-18 | P/Q | Operator case listing, evidence read rights and audited authorized decision. |
@@ -798,6 +798,16 @@ Private P2P forms, reviews, order detail, receipt sharing and evidence previews 
 Focused source verification passed five session scenarios, the boundary latch, 18 marketplace/buy regression checks and six staff case tests. Immediate future error handlers prevent an orphaned refresh exception when access loss removes its view; original futures still expose normal errors to the UI. A Flutter runner segmentation fault was retried serially. Independent review clear after fixing same-account reauthentication recovery. The wider run plus isolated repairs qualified 122 distinct P2P Flutter checks; the existing quote-switch test now asserts that revoked controls are removed, and a trader startup crash was retried serially. Exact-head CI results are recorded in the delivery PR.
 
 This is source qualification. Phone/account changes on installed devices, process kill, deployed revocation behavior and production acceptance remain open; legacy original-request storage is preserved rather than silently migrated or discarded. Parent gates and 177-screen/820-requirement inventory remain unchanged. No APK generated.
+
+## 24 October 2026 — P2P immutable private staff case notes (partial P5-15)
+
+Authorized P2P dispute staff can append private investigation notes from the existing case context. Notes are never returned through participant support history, request responses or public order timelines. The canonical order/tenant and operator authorization remain the boundary; notes never change order state, custody, escrow or payment verification. Investigation context remains readable after settlement without reopening the order.
+
+Migration 0148 adds immutable note records with actor/order/content original identity. Locked appends serialize retries, and original recovery precedes the 50-note per-order source bound. The existing admin case route adds Private staff notes, a bounded explicit form, original receipt checks, loading/empty/retry/limit states and memory-only drafts. Session/access loss scrubs private content; uncertain results check the original note before retrying. No edit/delete or participant notification controls are added.
+
+Local three backend tests, gateway/adapter types and 15 staff widget checks passed, including source authorization, tenant isolation, immutable original/cap handling, lost response, stale session, revoked access and 320dp RTL/enlarged text. Independent read-only review found no material issues. Exact-head CI and the 22nd real PostgreSQL duplicate-note test are recorded in the delivery PR.
+
+Request cancellation/extension/delivery policy, lawful retention/erasure tooling, deployed operator permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 
