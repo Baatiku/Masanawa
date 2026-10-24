@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:masanawa/src/features/rooms/room_community_api.dart';
 import 'package:masanawa/src/features/rooms/room_content_changes.dart';
 import 'package:masanawa/src/features/rooms/room_content_request.dart';
+import 'package:masanawa/src/features/rooms/room_edit_draft.dart';
 import 'package:masanawa/src/features/rooms/room_community_screen.dart';
 
 import 'room_community_screen_test.dart' show FakeCommunityApi;
@@ -56,6 +57,28 @@ class _Store implements RoomContentRequestStore {
     if (value != null && value != expected)
       throw StateError('content_change_pending');
     value = null;
+  }
+}
+
+class _Draft implements RoomEditDraftStore {
+  String? value;
+  bool failWrite = false;
+  Completer<void>? delayedClear;
+  @override
+  Future<String?> read() async => value;
+  @override
+  Future<void> write(String next, String? expected) async {
+    if (failWrite) throw StateError('storage');
+    if (value != expected) throw StateError('edit_draft_changed');
+    value = next;
+  }
+
+  @override
+  Future<bool> clear(String expected) async {
+    if (delayedClear != null) await delayedClear!.future;
+    if (value != expected) return false;
+    value = null;
+    return true;
   }
 }
 
@@ -129,6 +152,7 @@ Future<void> mount(
   _Store store, {
   Map<String, dynamic>? target,
   bool embedded = false,
+  RoomEditDraftStore? draft,
 }) async {
   await t.pumpWidget(
     MaterialApp(
@@ -138,6 +162,7 @@ Future<void> mount(
         initialItem: target ?? item(),
         store: store,
         embedded: embedded,
+        editDraftStore: draft,
       ),
     ),
   );
@@ -154,6 +179,179 @@ Future<void> saveEdit(WidgetTester t) async {
 }
 
 void main() {
+  testWidgets(
+    'unsent edits restore after leaving without issuing a server mutation',
+    (t) async {
+      final api = _Api(), requests = _Store(), draft = _Draft();
+      await mount(t, api, requests, draft: draft);
+      await t.enterText(find.byType(TextField), 'Unsent private edit');
+      await t.pumpAndSettle();
+      expect(RoomEditDraft.decode(draft.value!).text, 'Unsent private edit');
+      await t.pumpWidget(const MaterialApp(home: SizedBox()));
+      await t.pumpAndSettle();
+      await mount(t, api, requests, draft: draft);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Unsent private edit',
+      );
+      expect(find.textContaining('draft restored'), findsOneWidget);
+      expect(api.mutations, isEmpty);
+      expect(requests.value, isNull);
+    },
+  );
+  testWidgets(
+    'confirmed discard disables typing until its exact local clear completes',
+    (t) async {
+      final api = _Api(),
+          draft = _Draft()
+            ..value = const RoomEditDraft(
+              'post',
+              'post_1',
+              0,
+              'Original text',
+              'Unsent text',
+            ).encode()
+            ..delayedClear = Completer<void>();
+      await mount(t, api, _Store(), draft: draft);
+      await t.tap(find.text('Discard unsent draft'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Confirm'));
+      await t.pump();
+      expect(t.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+      draft.delayedClear!.complete();
+      await t.pumpAndSettle();
+      expect(draft.value, isNull);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Original text',
+      );
+      expect(api.mutations, isEmpty);
+    },
+  );
+  testWidgets(
+    'same-target refreshed version never silently rebases typed text',
+    (t) async {
+      final api = _Api(), requests = _Store(), draft = _Draft();
+      await mount(t, api, requests, draft: draft);
+      await t.enterText(find.byType(TextField), 'Typed against old version');
+      await t.pumpAndSettle();
+      await mount(
+        t,
+        api,
+        requests,
+        draft: draft,
+        target: {
+          ...item(text: 'Latest server text'),
+          'contentRevision': 1,
+        },
+      );
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Latest server text',
+      );
+      expect(find.text('Draft from an earlier post version'), findsOneWidget);
+      expect(api.mutations, isEmpty);
+    },
+  );
+  testWidgets(
+    'an older-version draft is disclosed without replacing current post text and discards only after confirmation',
+    (t) async {
+      final api = _Api(),
+          draft = _Draft()
+            ..value = const RoomEditDraft(
+              'post',
+              'post_1',
+              0,
+              'Old original',
+              'Older draft text',
+            ).encode();
+      await mount(
+        t,
+        api,
+        _Store(),
+        draft: draft,
+        target: {
+          ...item(text: 'New current post'),
+          'contentRevision': 1,
+        },
+      );
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'New current post',
+      );
+      expect(find.text('Draft from an earlier post version'), findsOneWidget);
+      expect(api.mutations, isEmpty);
+      await t.tap(find.text('Discard unsent draft'));
+      await t.pumpAndSettle();
+      expect(draft.value, isNotNull);
+      await t.tap(find.text('Confirm'));
+      await t.pumpAndSettle();
+      expect(draft.value, isNull);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'New current post',
+      );
+      expect(api.mutations, isEmpty);
+    },
+  );
+  testWidgets(
+    'submitted original recovery takes precedence over a different unsent draft',
+    (t) async {
+      final api = _Api(), requests = _Store()..value = saved().encode();
+      final draft = _Draft()
+        ..value = const RoomEditDraft(
+          'post',
+          'post_1',
+          0,
+          'Original text',
+          'Different unsent text',
+        ).encode();
+      await mount(t, api, requests, draft: draft);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Original saved edit',
+      );
+      expect(api.mutations, isEmpty);
+      final retry = find.text('Retry original');
+      await t.ensureVisible(retry);
+      await t.pumpAndSettle();
+      await t.tap(retry);
+      await t.pumpAndSettle();
+      // Retry requires explicit confirmation before the original mutation.
+      if (find.text('Confirm').evaluate().isNotEmpty) {
+        await t.tap(find.text('Confirm'));
+        await t.pumpAndSettle();
+      }
+      expect(api.mutations.single['body'], 'Original saved edit');
+      expect(draft.value, isNull);
+    },
+  );
+  testWidgets(
+    'draft storage failure preserves editable text and a durable explicit server save still succeeds',
+    (t) async {
+      final api = _Api(), draft = _Draft()..failWrite = true;
+      await mount(t, api, _Store(), draft: draft);
+      await t.enterText(find.byType(TextField), 'Updated text');
+      await t.pumpAndSettle();
+      expect(
+        find.textContaining('local draft could not be saved'),
+        findsOneWidget,
+      );
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Updated text',
+      );
+      expect(api.mutations, isEmpty);
+      final save = find.widgetWithText(FilledButton, 'Save edits');
+      await t.ensureVisible(save);
+      await t.pumpAndSettle();
+      await t.tap(save);
+      await t.pumpAndSettle();
+      expect(api.mutations.single['body'], 'Updated text');
+      expect(find.text('Your edit was saved.'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'an accepted earlier target cannot be mistaken for saving the selected post',
     (t) async {

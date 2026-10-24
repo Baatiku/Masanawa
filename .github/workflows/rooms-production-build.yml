@@ -17,6 +17,8 @@ on:
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
       - "apps/mobile/test/room_timeline_pagination_test.dart"
+      - "apps/mobile/test/room_pinned_posts_test.dart"
+      - "apps/mobile/test/room_edit_draft_test.dart"
       - "apps/mobile/test/room_media_library_test.dart"
       - "apps/mobile/test/room_content_changes_test.dart"
       - "apps/mobile/test/room_roster_screen_test.dart"
@@ -50,6 +52,8 @@ on:
       - "apps/mobile/test/room_invitation_pagination_test.dart"
       - "apps/mobile/test/room_list_search_pagination_test.dart"
       - "apps/mobile/test/room_timeline_pagination_test.dart"
+      - "apps/mobile/test/room_pinned_posts_test.dart"
+      - "apps/mobile/test/room_edit_draft_test.dart"
       - "apps/mobile/test/room_media_library_test.dart"
       - "apps/mobile/test/room_content_changes_test.dart"
       - "apps/mobile/test/room_roster_screen_test.dart"
@@ -146,6 +150,8 @@ jobs:
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
           test/room_timeline_pagination_test.dart
+          test/room_pinned_posts_test.dart
+          test/room_edit_draft_test.dart
           test/room_media_library_test.dart
           test/room_content_changes_test.dart
           test/room_roster_screen_test.dart
@@ -177,6 +183,8 @@ jobs:
           dart analyze lib/src/features/rooms/rooms_screen.dart
           lib/src/features/rooms/room_community_api.dart
           lib/src/features/rooms/room_community_screen.dart
+          lib/src/features/rooms/room_pinned_posts.dart
+          lib/src/features/rooms/room_edit_draft.dart
           lib/src/features/rooms/room_media_library.dart
           lib/src/features/rooms/room_content_changes.dart
           lib/src/features/rooms/room_content_request.dart
@@ -193,6 +201,8 @@ jobs:
           test/room_invitation_pagination_test.dart
           test/room_list_search_pagination_test.dart
           test/room_timeline_pagination_test.dart
+          test/room_pinned_posts_test.dart
+          test/room_edit_draft_test.dart
           test/room_media_library_test.dart
           test/room_content_changes_test.dart
           test/room_roster_screen_test.dart
