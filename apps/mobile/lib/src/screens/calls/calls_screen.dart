@@ -74,7 +74,7 @@ class CallsScreen extends ConsumerWidget {
     );
   }
 
-  static void _showCallOptions(
+  void _showCallOptions(
     BuildContext context,
     WidgetRef ref,
     SessionSignedIn session,
