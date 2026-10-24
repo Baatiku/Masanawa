@@ -86,6 +86,10 @@ void main() {
     expect(find.text('Private peer'),findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
+    // VoiceNoteRecorder.close has an existing delayed temporary-file cleanup.
+    // Advance fake time after all remounted recorder instances are disposed.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
     container.dispose();
     await before.cleanup();
     await after.cleanup();
@@ -127,6 +131,10 @@ void main() {
     expect(find.text('Fresh session'),findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
+    // VoiceNoteRecorder.close has an existing delayed temporary-file cleanup.
+    // Advance fake time after all remounted recorder instances are disposed.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
     container.dispose();
     await before.cleanup();
     await after.cleanup();
