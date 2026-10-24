@@ -357,7 +357,7 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
                               ),
                             ),
                           ],
-                          ),
+                        );
                       },
                     ),
                   ),
