@@ -463,6 +463,21 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.action(a,orderId,"confirm",{releaseAuthorized:true});
     }catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/support/events',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const q=req.query as Record<string,unknown>;
+      if(Object.keys(q).some(key=>key!=='cursor')||(q.cursor!==undefined&&typeof q.cursor!=='string'))throw new P2pError('p2p.invalid_cursor',422);
+      return await deps.service.supportEvents(await actor(req.headers.authorization),(req.params as {orderId:string}).orderId,q.cursor as string|undefined);
+    }catch(error){return respond(error,reply);}
+  });
+  app.post('/v1/wallet/msnw/p2p/orders/:orderId/evidence/original',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{
+      const actorValue=await actor(req.headers.authorization),body=req.body as Record<string,unknown>|null;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==1||typeof body.sha256!=='string')throw new P2pError('p2p.evidence_invalid_digest',422);
+      return await deps.service.evidenceByDigest(actorValue,(req.params as {orderId:string}).orderId,body.sha256);
+    }catch(error){return respond(error,reply);}
+  });
   app.get("/v1/wallet/msnw/p2p/orders/:orderId/evidence",async(req,reply)=>{
     try {
       const a=await actor(req.headers.authorization);
