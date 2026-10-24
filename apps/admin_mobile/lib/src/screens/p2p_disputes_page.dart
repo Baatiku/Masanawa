@@ -1,3 +1,4 @@
+import 'p2p_case_context.dart';
 import 'p2p_ad_reports_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -35,90 +36,28 @@ class _P2pDisputesPageState extends State<P2pDisputesPage> {
       .map((e)=>Map<String,dynamic>.from(e as Map)).toList();
   }
   void _reload()=>setState(()=>_disputes=_load());
-  Future<void> _copyPrivateEvidenceLink(String orderId,String evidenceId) async {
-    try {
-      final response=await _dio.get<dynamic>(
-        '$_base/v1/admin/msnw/p2p/disputes/$orderId/evidence/$evidenceId',
-        options:_auth);
-      final data=Map<String,dynamic>.from(response.data as Map);
-      final url='${data['url'] ?? ''}';
-      if(!url.startsWith('https://'))throw StateError('Evidence not available');
-      await Clipboard.setData(ClipboardData(text:url));
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:Text('Private evidence link copied; it expires in 60 seconds.')));
-    } catch(error) {
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:Text('Unable to access evidence: $error')));
-    }
-  }
   Future<void> _inspect(Map<String,dynamic> order) async {
-    final id='${order['order_id']}';
-    await showModalBottomSheet<void>(context:context,isScrollControlled:true,
-      showDragHandle:true,builder:(ctx)=>FractionallySizedBox(
-        heightFactor:0.85,child:SafeArea(child:FutureBuilder<Map<String,dynamic>>(
-          future:()async{
-            final response=await _dio.get<dynamic>(
-              '$_base/v1/admin/msnw/p2p/disputes/$id',options:_auth);
-            return Map<String,dynamic>.from(response.data as Map);
-          }(),
-          builder:(ctx,snapshot){
-            if(!snapshot.hasData)return Center(child:snapshot.hasError
-              ? Text('Case file unavailable: ${snapshot.error}')
-              : const CircularProgressIndicator());
-            final file=snapshot.data!;
-            final events=(file['events'] as List<dynamic>? ?? []);
-            final evidence=(file['evidence'] as List<dynamic>? ?? []);
-            final late=file['latePayment'] is Map
-              ? Map<String,dynamic>.from(file['latePayment'] as Map)
-              : <String,dynamic>{};
-            return ListView(padding:const EdgeInsets.all(18),children:[
-              Text('Escrow audit • $id',style:Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height:8),
-              Text('State: ${(file['order'] as Map?)?['state'] ?? 'Unknown'}'),
-              const Text('Payment is not provider-verified. A screenshot or buyer '
-                'claim alone must never authorize a release.'),
-              const SizedBox(height:12),
-              if(late.isNotEmpty) ...[
-                Text('Late-payment appeal: ${late['state']}',
-                  style:Theme.of(ctx).textTheme.titleMedium),
-                Text('Buyer report: ${late['buyer_reason']}'),
-                if(late['operator_note']!=null)
-                  Text('Operator note: ${late['operator_note']}'),
-                for(final item in (late['events'] as List<dynamic>? ?? []))
-                  ListTile(
-                    leading:const Icon(Icons.history_outlined),
-                    title:Text('${(item as Map)['action']}'),
-                    subtitle:Text('${item['explanation']}')),
-                const SizedBox(height:16),
-              ],
-              Text('Evidence references (${evidence.length})',
-                style:Theme.of(ctx).textTheme.titleMedium),
-              if(evidence.isEmpty)const Text('No evidence attached.'),
-              for(final entry in evidence)
-                ListTile(leading:const Icon(Icons.attachment_outlined),
-                  title:Text('Evidence ${(entry as Map)['evidence_id']}'),
-                  subtitle:Text('Submitted by ${entry['submitted_by']}\\nSHA-256: ${entry['sha256']}'),
-                  trailing:IconButton(
-                    icon:const Icon(Icons.copy_outlined),
-                    tooltip:'Copy 60-second private evidence link',
-                    onPressed:()=>_copyPrivateEvidenceLink(
-                      id,'${entry['evidence_id']}')),
-                ),
-              const SizedBox(height:12),
-              Text('Audit events (${events.length})',
-                style:Theme.of(ctx).textTheme.titleMedium),
-              if(events.isEmpty)const Text('No recorded state changes.'),
-              for(final entry in events)
-                ListTile(leading:const Icon(Icons.history_outlined),
-                  title:Text('${(entry as Map)['action']}'),
-                  subtitle:Text('${entry['from_state']} → ${entry['to_state']}\n'
-                    'Actor: ${entry['actor_id']}\n'
-                    'Reason: ${entry['reason'] ?? '—'}')),
-            ]);
-          }))),
-      );
+    final id='${order['order_id']}',session=widget.api.currentAccessToken,base=_base;
+    bool same()=>mounted&&widget.api.currentAccessToken==session&&_base==base;
+    final auth=Options(headers:{'Authorization':'Bearer $session','Cache-Control':'no-store'});
+    await showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,builder:(ctx)=>FractionallySizedBox(heightFactor:0.85,child:SafeArea(child:P2pCaseContext(
+      orderId:id,currentSession:()=>same()?session:null,
+      load:()async{
+        if(!same())throw StateError('Admin session changed');
+        final response=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id',options:auth);
+        if(!same())throw StateError('Admin session changed');return Map<String,dynamic>.from(response.data as Map);
+      },
+      copyEvidence:(evidenceId)async{
+        if(!same())throw StateError('Admin session changed');
+        final response=await _dio.get<dynamic>('$base/v1/admin/msnw/p2p/disputes/$id/evidence/$evidenceId',options:auth);
+        if(!same())throw StateError('Admin session changed');
+        final data=Map<String,dynamic>.from(response.data as Map),url='${(response.data as Map)['url']??''}';
+        if(!url.startsWith('https://')||data['url'] is! String)throw const FormatException();
+        await Clipboard.setData(ClipboardData(text:url));
+        if(same())ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Private evidence link copied; it expires in 60 seconds.')));
+      },
+    ))));
   }
-
   Future<void> _showReconciliation() async {
     final result=_dio.get<dynamic>(
       '$_base/v1/admin/msnw/p2p/reconciliation',options:_auth);

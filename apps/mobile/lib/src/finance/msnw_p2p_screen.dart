@@ -1,3 +1,4 @@
+import 'p2p_order_support.dart';
 import 'p2p_history_filters.dart';
 import 'p2p_pause_all.dart';
 import 'p2p_ad_reports.dart';
@@ -999,7 +1000,17 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     await openWalletPage<void>(context:context,title:'P2P order',wrapScaffold:false,builder:(_)=>_orderView(id),
     );
   }
+  Future<void> _orderSupport(BuildContext route,String id)async{
+    final owner=widget.expectedUserId,base=widget.baseUrl;
+    bool authorized()=>mounted&&_sameAccount&&widget.expectedUserId==owner&&widget.baseUrl==base;
+    if(!authorized()||!route.mounted)return;
+    await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pOrderSupportPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
+      load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support'));},
+      submit:(category,details)async{if(!authorized())throw StateError('Account changed');return _json(await _request('POST','/orders/$id/dispute',{'category':category,'reason':details}));},
+    )));
+  }
   Widget _orderView(String id)=>_P2pOrderDetail(
+        openSupport:(route)=>_orderSupport(route,id),
         load: () async => _json(await _request('GET','/orders/$id')),
         act: (action, [reason]) async {
           await _request('POST','/orders/$id/$action',
@@ -2550,12 +2561,13 @@ class _P2pOrderDetail extends StatefulWidget {
   const _P2pOrderDetail({required this.load,required this.act,
     required this.confirmReceipt,required this.listEvidence,
     required this.uploadEvidence,required this.openEvidence,
-    required this.loadReceipt,required this.userId,required this.openMessages,
+    required this.loadReceipt,required this.userId,required this.openMessages,required this.openSupport,
   });
   final Future<Map<String,dynamic>> Function() load;
   final Future<void> Function(String action,[String? reason]) act;
   final Future<void> Function(Map<String,dynamic> order) confirmReceipt;
   final Future<void> Function(BuildContext) openMessages;
+  final Future<void> Function(BuildContext) openSupport;
   final Future<Map<String,dynamic>> Function() loadReceipt;
   final Future<List<Map<String,dynamic>>> Function() listEvidence;
   final Future<void> Function(Map<String,dynamic>) uploadEvidence;
@@ -2725,6 +2737,12 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
+  }
+
+  Future<void> _support()async{
+    if(_working)return;setState(()=>_working=true);
+    try{await widget.openSupport(context);if(mounted)_refresh();}
+    finally{if(mounted)setState(()=>_working=false);}
   }
 
   Future<void> _perform(String action,{bool reasonRequired=false}) async {
@@ -3005,7 +3023,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
               ),
         ],
         if(state=='awaiting_payment'||state=='payment_claimed') ...[
-          OutlinedButton(onPressed:_working?null:()=>_perform('dispute',reasonRequired:true),
+          OutlinedButton(onPressed:_working?null:()=>_support(),
             child:const Text('Open dispute'),
               ),
         ],
@@ -3133,6 +3151,7 @@ class _P2pOrderDetailState extends State<_P2pOrderDetail> {
             },
               ),
         ],
+        OutlinedButton.icon(onPressed:_working?null:_support,icon:const Icon(Icons.support_agent),label:const Text('Support context and events')),
         if(state=='disputed')const ListTile(
           title:Text('Escrow frozen'),
           subtitle:Text('An authorized operator must resolve this dispute.',
