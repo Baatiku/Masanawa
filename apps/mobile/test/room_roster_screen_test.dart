@@ -71,21 +71,164 @@ class _Api extends FakeCommunityApi {
   }
 }
 
+const banVersion = '2026-10-01T10:00:00.123456Z';
+Map<String, dynamic> bannedMember(String id, String name) => {
+  ...rosterMember(id, name),
+  'state': 'banned',
+  'membershipVersion': banVersion,
+};
+
+class _BannedApi extends _Api {
+  bool unbanned = false, badVersion = false;
+  @override
+  Future<Map<String, dynamic>> request(
+    String id,
+    String method,
+    String resource,
+    Map<String, dynamic> values,
+  ) async {
+    if (resource != 'members/page' || values['state'] != 'banned')
+      return super.request(id, method, resource, values);
+    reads.add({'room': id, 'method': method, ...values});
+    if (offline) throw StateError('offline');
+    if (values['cursor'] != null)
+      return page([bannedMember('user_old', 'Banned Grace')]);
+    if (unbanned) return page([]);
+    final person = bannedMember('user_new', 'Banned Amina');
+    if (badVersion) person.remove('membershipVersion');
+    return page([person], 'next');
+  }
+
+  @override
+  Future<void> member(
+    String id,
+    String userId,
+    Map<String, dynamic> values,
+  ) async {
+    await super.member(id, userId, values);
+    unbanned = true;
+  }
+}
+
 Future<void> mount(
   WidgetTester t,
   RoomCommunityApi api, {
   String id = 'room_1',
+  bool bannedOnly = false,
   Future<void> Function(Map<String, dynamic>, String)? manage,
 }) async {
   await t.pumpWidget(
     MaterialApp(
-      home: RoomRosterScreen(api: api, roomId: id, onManage: manage),
+      home: RoomRosterScreen(
+        api: api,
+        roomId: id,
+        onManage: manage,
+        bannedOnly: bannedOnly,
+      ),
     ),
   );
   await t.pumpAndSettle();
 }
 
 void main() {
+  testWidgets(
+    'banned roster pages expose only unban and preserve selected version',
+    (t) async {
+      final api = _BannedApi()..role = 'owner';
+      final actions = <Map<String, dynamic>>[];
+      await mount(
+        t,
+        api,
+        bannedOnly: true,
+        manage: (person, action) async {
+          actions.add({...person, 'action': action});
+          api.unbanned = true;
+        },
+      );
+      expect(find.text('Banned Amina'), findsOneWidget);
+      await t.tap(find.text('Load more members'));
+      await t.pumpAndSettle();
+      expect(find.text('Banned Grace'), findsOneWidget);
+      await t.tap(find.byTooltip('Manage member').first);
+      await t.pumpAndSettle();
+      expect(find.text('Make admin'), findsNothing);
+      expect(find.text('Offer ownership'), findsNothing);
+      await t.tap(find.text('Unban member'));
+      await t.pumpAndSettle();
+      expect(actions.single['membershipVersion'], banVersion);
+      expect(actions.single['action'], 'unban');
+      expect(api.reads.every((r) => r['state'] == 'banned'), isTrue);
+      expect(find.text('Banned Amina'), findsNothing);
+    },
+  );
+  testWidgets(
+    'banned identities clear after manager downgrade and ordinary members never fetch them',
+    (t) async {
+      final api = _BannedApi()..role = 'owner';
+      await mount(t, api, bannedOnly: true);
+      expect(find.text('Banned Amina'), findsOneWidget);
+      api.role = 'member';
+      await t.pump(const Duration(seconds: 20));
+      await t.pumpAndSettle();
+      expect(find.text('Banned Amina'), findsNothing);
+      expect(find.textContaining('access may have changed'), findsOneWidget);
+      final ordinary = _BannedApi()..role = 'member';
+      await mount(t, ordinary, bannedOnly: true);
+      expect(ordinary.reads, isEmpty);
+    },
+  );
+  testWidgets('malformed banned versions are rejected before management', (
+    t,
+  ) async {
+    final api = _BannedApi()
+      ..role = 'owner'
+      ..badVersion = true;
+    await mount(t, api, bannedOnly: true, manage: (_, __) async {});
+    expect(find.text('Banned Amina'), findsNothing);
+    expect(find.byTooltip('Manage member'), findsNothing);
+    expect(find.textContaining('could not be verified'), findsOneWidget);
+  });
+  testWidgets(
+    'Info unban confirmation sends left with original version and never restores active access',
+    (t) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final api = _BannedApi()..role = 'owner';
+      await t.pumpWidget(
+        MaterialApp(
+          home: RoomCommunityScreen(api: api, roomId: 'room_1'),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.tap(find.text('Garden'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('Banned members'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.ensureVisible(find.text('Banned members'));
+      await t.pumpAndSettle();
+      expect(find.text('Banned members').hitTestable(), findsOneWidget);
+      await t.tap(find.text('Banned members'));
+      await t.pumpAndSettle();
+      await t.tap(find.byTooltip('Manage member'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Unban member'));
+      await t.pumpAndSettle();
+      expect(find.text('Unban member?'), findsOneWidget);
+      expect(api.changes, isEmpty);
+      await t.tap(find.text('Confirm'));
+      await t.pumpAndSettle();
+      expect(api.changes.single, {
+        'room': 'room_1',
+        'userId': 'user_new',
+        'state': 'left',
+        'expectedBannedAt': banVersion,
+      });
+      expect(find.text('Banned Amina'), findsNothing);
+    },
+  );
+
   testWidgets(
     'old-account confirmation cannot remove a member under a replaced session',
     (t) async {

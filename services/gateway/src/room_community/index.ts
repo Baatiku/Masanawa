@@ -145,7 +145,7 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     if(allowed&&r.plan_mode==='free'){await q.query("INSERT INTO rooms.memberships(tenant_id,room_id,user_id) VALUES($1,$2,$3) ON CONFLICT(tenant_id,room_id,user_id) DO UPDATE SET state='active',role='member',updated_at=now()",[a.tenantId,id,target]);await notice(q,a,id,'rooms.member.added',target);return {status:'added',userId:target};}
     const inviteId='room-invite_'+randomUUID();await q.query("INSERT INTO rooms.membership_invites(tenant_id,room_id,invite_id,token_hash,created_by,recipient_user_id,request_id,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '24 hours')",[a.tenantId,id,inviteId,hash(randomBytes(32).toString('base64url')),a.userId,target,key]);await notice(q,a,id,'rooms.member.invited',target,{inviteId});return {status:'invited',userId:target};
    }
-   if(operation==='members'&&method==='GET'&&parts[3]==='page')return roomMemberPage(q,a,id,input);
+   if(operation==='members'&&method==='GET'&&parts[3]==='page'){if(input.state==='banned')await owned(q,a,id);return roomMemberPage(q,a,id,input);}
    if(operation==='media'){
     if(method==='GET'){
      if(parts[3]){const m=(await q.query(`SELECT m.* FROM rooms.media m LEFT JOIN rooms.lessons l ON l.tenant_id=m.tenant_id AND l.lesson_id=m.lesson_id LEFT JOIN rooms.discussion_replies d ON d.tenant_id=m.tenant_id AND d.reply_id=m.reply_id LEFT JOIN rooms.lessons parent ON parent.tenant_id=d.tenant_id AND parent.room_id=d.room_id AND parent.lesson_id=d.lesson_id WHERE m.tenant_id=$1 AND m.room_id=$2 AND m.media_id=$3 AND ((m.user_id=$4 AND m.lesson_id IS NULL AND m.reply_id IS NULL) OR (l.state='published' AND (l.publish_at IS NULL OR l.publish_at<=now())) OR (d.moderation_state='visible' AND parent.state='published' AND (parent.publish_at IS NULL OR parent.publish_at<=now())))`,[a.tenantId,id,parts[3],a.userId])).rows[0];if(!m)fail(404,'media_not_found');return {...mediaView(m),dataBase64:m.data_base64};}
@@ -166,11 +166,19 @@ export function createRoomCommunityService(o:RoomCommunityOptions){
     await owned(q,a,id);const target=text(parts[3],160);if(target===r.owner_user_id)fail(403,'cannot_modify_owner');
     const old=(await q.query('SELECT * FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target])).rows[0];if(!old)fail(404,'member_not_found');
     if((input.role!==undefined||old.role==='admin')&&r.owner_user_id!==a.userId)fail(403,'room_owner_required');
+    if(input.expectedBannedAt!==undefined){
+     if(input.state!=='left'||input.role!==undefined||typeof input.expectedBannedAt!=='string'||
+       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(input.expectedBannedAt))fail(422,'invalid_ban_version');
+     const matches=(await q.query(`SELECT 1 FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3
+       AND state='banned' AND to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')=$4`,
+       [a.tenantId,id,target,input.expectedBannedAt])).rows.length;
+     if(!matches)fail(409,'member_ban_changed');
+    }
     const role=input.role??old.role,state=input.state??old.state;
     if(!['admin','member'].includes(role)||!['active','left','banned'].includes(state))fail(422,'invalid_member');
     // Removed/banned people must consent to rejoin; management may unban to left.
     if(state==='active'&&old.state!=='active')fail(409,'member_must_rejoin');
-    await q.query('UPDATE rooms.memberships SET role=$4,state=$5,updated_at=now() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target,state==='active'?role:'member',state]);
+    await q.query('UPDATE rooms.memberships SET role=$4,state=$5,updated_at=clock_timestamp() WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',[a.tenantId,id,target,state==='active'?role:'member',state]);
     if(state!=='active')await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND recipient_user_id=$3',[a.tenantId,id,target]);
     if(state!=='active')await cancelRoomOwnershipTransfers(q,a,id,target,'participant_removed');
     if(state!=='active'||!['admin','moderator'].includes(role))await q.query('UPDATE rooms.membership_invites SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE tenant_id=$1 AND room_id=$2 AND created_by=$3',[a.tenantId,id,target]);

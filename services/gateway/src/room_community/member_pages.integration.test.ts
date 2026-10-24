@@ -60,4 +60,30 @@ describe.skipIf(!connection)('PostgreSQL 18 authorized Rooms member roster pages
    expect((await app.inject({method:'GET',url:path,headers:{authorization:'bob'}})).statusCode).toBe(403);
   }finally{await app.close();}
  });
+ it('pages private ban identities and uses an exact PG microsecond version for unban',async()=>{
+  const id=(await service.dispatch(owner,'POST','',{name:'Ban management',requestId:'pg-bans'})).id;
+  await pool.query(`INSERT INTO rooms.memberships(tenant_id,room_id,user_id,state)
+    SELECT 't',$1,user_id,'banned' FROM identity.users
+    WHERE tenant_id='t' AND user_id IN ('pgmember_000','pgmember_001','pgmember_002')`,[id]);
+  await pool.query("UPDATE rooms.memberships SET updated_at='2026-10-01T10:00:00.123456Z' WHERE tenant_id='t' AND room_id=$1 AND state='banned'",[id]);
+  await service.dispatch(viewer,'POST',id+'/community/join',{});
+  await expect(service.dispatch(viewer,'GET',id+'/community/members/page',{state:'banned'})).rejects.toMatchObject({statusCode:403});
+  const first=await service.dispatch(owner,'GET',id+'/community/members/page',{state:'banned',limit:2});
+  expect(first.items).toHaveLength(2);expect(first.items[0].membershipVersion).toBe('2026-10-01T10:00:00.123456Z');
+  const older=await service.dispatch(owner,'GET',id+'/community/members/page',{state:'banned',limit:2,cursor:first.nextCursor});
+  expect(older.items).toHaveLength(1);
+  const target=first.items[0];
+  await pool.query("UPDATE rooms.memberships SET updated_at=updated_at+interval '1 microsecond' WHERE tenant_id='t' AND room_id=$1 AND user_id=$2",[id,target.userId]);
+  await expect(service.dispatch(owner,'PATCH',id+'/community/members/'+target.userId,{state:'left',expectedBannedAt:target.membershipVersion})).rejects.toMatchObject({statusCode:409});
+  const fresh=await service.dispatch(owner,'GET',id+'/community/members/page',{state:'banned',search:'Member 000'});
+  await service.dispatch(owner,'PATCH',id+'/community/members/'+target.userId,{state:'left',expectedBannedAt:fresh.items[0].membershipVersion});
+  const row=(await pool.query('SELECT state,role FROM rooms.memberships WHERE tenant_id=$1 AND room_id=$2 AND user_id=$3',['t',id,target.userId])).rows[0];
+  expect(row).toMatchObject({state:'left',role:'member'});
+  await expect(service.dispatch({tenantId:'t',userId:target.userId},'GET',id+'/community/members/page')).rejects.toMatchObject({statusCode:403});
+  await service.dispatch(owner,'PATCH',id+'/community/members/bob',{role:'admin'});
+  const managerPage=await service.dispatch(viewer,'GET',id+'/community/members/page',{state:'banned',limit:1});
+  await service.dispatch(owner,'PATCH',id+'/community/members/bob',{role:'member'});
+  await expect(service.dispatch(viewer,'GET',id+'/community/members/page',{state:'banned',cursor:managerPage.nextCursor})).rejects.toMatchObject({statusCode:403});
+ });
+
 });
