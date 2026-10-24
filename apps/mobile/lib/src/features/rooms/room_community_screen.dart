@@ -13,6 +13,9 @@ import 'room_moderation_screen.dart';
 import 'room_request_id.dart';
 import 'room_media_library.dart';
 import 'room_content_changes.dart';
+import 'room_identity.dart';
+import 'room_roster_screen.dart';
+export 'room_identity.dart';
 
 /// An uncertain upload keeps one server request ID, even across process loss.
 /// Only an identical local file may retry it; hashes never leave this device.
@@ -950,7 +953,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
             child: Column(
               children: [
                 Text(room!.description),
-                Text('Owner: ${room!.ownerId}'),
+                Text('Owner: ${roomVisibleIdentity({'displayName': room!.ownerDisplayName}, fallback: 'Room owner')}'),
                 Text(
                   '${room!.visibility} · ${room!.postingPolicy == 'admins' ? 'Admins only post' : 'All members post'}',
                 ),
@@ -1015,17 +1018,18 @@ class _CommunityState extends State<RoomCommunityScreen> {
                         ? 'No replies yet.'
                         : 'No replies match this search.',
                   ),
-                for (final post in posts)
+                for (final post in widget.threadPostId == null ? orderRoomTimeline(posts) : posts)
                   Card(
+                    margin: EdgeInsetsDirectional.only(start: post['parentId'] == null ? 0 : 20, bottom: 8),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${post['authorId'] ?? ''}',
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
+                          ListTile(dense: true, contentPadding: EdgeInsets.zero,
+                            leading: CircleAvatar(radius: 18, child: Icon(post['authorKind'] == 'masana' ? Icons.smart_toy_outlined : Icons.person_outline, size: 20)),
+                            title: Text(roomVisibleIdentity(post), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(post['parentId'] != null ? 'Reply' : post['pinned'] == true ? 'Pinned post' : 'Post')),
                           if (widget.threadPostId == null)
                             TextButton(
                               onPressed: busy || loading
@@ -1039,8 +1043,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
                                     : 'Open parent thread',
                               ),
                             ),
-                          if (post['parentId'] != null)
-                            const Text('Reply', style: TextStyle(fontSize: 12)),
+
                           if (post['authorKind'] == 'masana') const Text('AI · Masana'),
                           if (post['createdAt'] is String && DateTime.tryParse(post['createdAt'] as String) != null)
                             Text(DateTime.parse(post['createdAt'] as String).toLocal().toIso8601String().substring(0,16).replaceFirst('T', ' ')),
@@ -1255,7 +1258,7 @@ class _CommunityState extends State<RoomCommunityScreen> {
                             Padding(
                               padding: const EdgeInsetsDirectional.only(end: 8),
                               child: FilterChip(
-                                label: Text('Mention ${agent['characterId']}'),
+                                label: Text('Mention ${roomVisibleIdentity(agent, masana: true)}'),
                                 selected: mentions.contains(
                                   agent['characterId'],
                                 ),
@@ -1454,11 +1457,32 @@ class _InfoState extends State<_CommunityInfo> {
       reviewRequestKeys.remove(key);
     });
   }
+  Future<void> changeMember(Map<String,dynamic> person, String action, {RoomCommunityApi? expectedApi, String? expectedRoom}) async {
+    final api = expectedApi ?? widget.api, id = expectedRoom ?? room.id, target = '${person['userId']}';
+    void check() {
+      if (!mounted || !identical(api, widget.api) || id != room.id) throw StateError('account_changed');
+      if (api is AccountBoundRoomCommunityApi) api.assertActive();
+    }
+    check();
+    if (!const ['admin','member','transfer','left','banned'].contains(action)) throw const FormatException('Invalid member action');
+    if (action == 'admin' || action == 'member') { await api.member(id, target, {'role': action}); }
+    else if (action == 'transfer') {
+      if (await confirm('Offer Room ownership?', 'This member must open Room info and accept. You stay owner until then.')) {
+        check(); ownershipRequestKeys[target] ??= communityRequestId();
+        final result = await api.request(id, 'POST', 'ownership-transfer', {'targetUserId': target, 'requestId': ownershipRequestKeys[target]});
+        check();
+        if (result['ownershipVersion'] != 1 || (result['transfer'] as Map?)?['targetUserId'] != target) throw const FormatException('Could not verify the ownership offer. Refresh Room info.');
+      }
+    } else if (await confirm('Remove member?', action == 'banned' ? 'They lose access and cannot rejoin while banned.' : 'They lose access to this Room.')) {
+      check(); await api.member(id, target, {'state': action});
+    }
+    check();
+  }
   Future<bool> confirm(String title, String message) async => await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))])) ?? false;
   @override Widget build(BuildContext context) => unavailable
     ? Scaffold(appBar: AppBar(title: const Text('Room info')), body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Text('Room access is unavailable.'), TextButton(onPressed: busy ? null : () => run(refresh), child: const Text('Retry'))])))
     : Scaffold(appBar: AppBar(title: const Text('Room info')), body: ListView(padding: const EdgeInsets.all(20), children: [
-    Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('Owner: ${room.ownerId}'), Text('${room.visibility} · ${room.memberCount} members'),
+    Text(room.name, style: Theme.of(context).textTheme.headlineSmall), Text(room.description), Text('Owner: ${roomVisibleIdentity({'displayName': room.ownerDisplayName}, fallback: 'Room owner')}'), Text('${room.visibility} · ${room.memberCount} members'),
     if (room.joined) ...[
       TextButton.icon(icon: const Icon(Icons.policy_outlined), label: const Text('Moderation and appeals'), onPressed: () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = RoomModerationScreen(api: widget.api, roomId: room.id); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }),
       RoomOwnershipTransferPanel(key: ValueKey('ownership-${room.ownerId}-$ownershipRefresh'), api: widget.api, roomId: room.id, onChanged: refresh),
@@ -1522,20 +1546,16 @@ class _InfoState extends State<_CommunityInfo> {
     }),
     if (room.manages) FilledButton.icon(onPressed: busy ? null : () async { await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) { final detail = _AddParticipants(api: widget.api, roomId: room.id, owner: room.role == 'owner'); return widget.protectDetail?.call(routeContext, detail) ?? detail; })); if (mounted) await refresh(); }, icon: const Icon(Icons.person_add_outlined), label: const Text('Add participants')),
     const SizedBox(height: 16), Text('Members', style: Theme.of(context).textTheme.titleMedium),
-    for (final person in members) ListTile(title: Text('${person['userId']}'), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() async {
-      if (action == 'admin' || action == 'member') { await widget.api.member(room.id, '${person['userId']}', {'role': action}); }
-      else if (action == 'transfer') {
-        if (await confirm('Offer Room ownership?', 'This member must open Room info and accept. You stay owner until then.')) {
-          final target = '${person['userId']}';
-          ownershipRequestKeys[target] ??= communityRequestId();
-          final result = await widget.api.request(room.id, 'POST', 'ownership-transfer', {'targetUserId': target, 'requestId': ownershipRequestKeys[target]});
-          if (result['ownershipVersion'] != 1 || (result['transfer'] as Map?)?['targetUserId'] != target) throw const FormatException('Could not verify the ownership offer. Refresh Room info.');
-          ownershipRequestKeys.remove(target); ownershipRefresh++;
-        }
-      }
-      else if (await confirm('Remove member?', 'They lose access to this Room.')) { await widget.api.member(room.id, '${person['userId']}', {'state': action}); }
-    }), itemBuilder: (_) => [if (room.role == 'owner') ...[const PopupMenuItem(value: 'admin', child: Text('Make admin')), const PopupMenuItem(value: 'member', child: Text('Make member')), const PopupMenuItem(value: 'transfer', child: Text('Offer ownership'))], const PopupMenuItem(value: 'left', child: Text('Remove')), const PopupMenuItem(value: 'banned', child: Text('Ban'))]) : null),
-    for (final agent in masana) ListTile(title: Text('Masana ${agent['characterId']}'), subtitle: Text('${agent['instructions'] ?? ''}\nMention and direct replies only'), trailing: room.role == 'owner' ? PopupMenuButton<String>(enabled: !busy, onSelected: (action) => run(() async {
+    if (room.joined) ListTile(leading: const Icon(Icons.groups_outlined), title: const Text('All members'), subtitle: const Text('Search and browse the full visible member list'), trailing: const Icon(Icons.chevron_right), onTap: busy ? null : () async {
+      final api = widget.api, id = room.id, protect = widget.protectDetail;
+      await Navigator.push<void>(context, MaterialPageRoute(builder: (routeContext) {
+        final detail = RoomRosterScreen(api: api, roomId: id, onManage: (person, action) => changeMember(person, action, expectedApi: api, expectedRoom: id));
+        return protect?.call(routeContext, detail) ?? detail;
+      }));
+      if (mounted && identical(api, widget.api) && id == room.id) await refresh();
+    }),
+    for (final person in members) ListTile(title: Text(roomVisibleIdentity(person)), subtitle: Text('${person['role']} · ${person['state']}'), trailing: room.manages && person['role'] != 'owner' ? PopupMenuButton<String>(enabled: !busy, tooltip: 'Manage member', onSelected: (action) => run(() => changeMember(person, action)), itemBuilder: (_) => [if (room.role == 'owner') ...[const PopupMenuItem(value: 'admin', child: Text('Make admin')), const PopupMenuItem(value: 'member', child: Text('Make member')), const PopupMenuItem(value: 'transfer', child: Text('Offer ownership'))], const PopupMenuItem(value: 'left', child: Text('Remove')), const PopupMenuItem(value: 'banned', child: Text('Ban'))]) : null),
+    for (final agent in masana) ListTile(title: Text(roomVisibleIdentity(agent, masana: true)), subtitle: Text('${agent['instructions'] ?? ''}\nMention and direct replies only'), trailing: room.role == 'owner' ? PopupMenuButton<String>(enabled: !busy, onSelected: (action) => run(() async {
       if (action == 'remove') { await widget.api.remove(room.id, 'masana/${agent['characterId']}'); }
       else { await widget.api.action(room.id, 'masana', {'characterId': agent['characterId'], 'instructions': agent['instructions'] ?? '', 'active': agent['active'] != true}); }
     }), itemBuilder: (_) => [PopupMenuItem(value: 'toggle', child: Text(agent['active'] == true ? 'Deactivate' : 'Activate mention replies')), const PopupMenuItem(value: 'remove', child: Text('Remove Masana'))]) : null),

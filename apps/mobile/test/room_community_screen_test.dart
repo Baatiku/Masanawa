@@ -17,7 +17,7 @@ class FakeCommunityApi implements RoomCommunityApi {
   @override Future<List<Map<String, dynamic>>> invitations() async => [];
   @override Future<List<CommunityRoom>> list(bool joined) async => [value];
   @override Future<List<Map<String, dynamic>>> items(String id, String collection) async =>
-    collection == 'timeline' ? [{'id': 'post_1', 'authorId': 'owner', 'body': 'Welcome gardeners'}]
+    collection == 'timeline' ? [{'id': 'post_1', 'authorId': 'owner', 'authorDisplayName': 'Amina', 'body': 'Welcome gardeners'}]
       : collection == 'reports/summary' ? [{'postId': 'post_1', 'excerpt': 'Welcome gardeners', 'reportCount': 2}]
       : collection == 'reports/reviews' ? [{'postId': 'post_0', 'decision': 'dismissed', 'reportCount': 1, 'reviewedAt': '2026-10-22T00:00:00Z'}]
       : [];
@@ -37,6 +37,29 @@ class FakeCommunityApi implements RoomCommunityApi {
   @override Future<void> member(String id, String userId, Map<String, dynamic> values) async {}
 }
 void main() {
+  test('Room author projection never prints a raw identifier as a name', () {
+    expect(roomVisibleIdentity({'authorId': 'user_123'}), 'Room member');
+    expect(roomVisibleIdentity({'authorDisplayName': 'Amina', 'authorId': 'user_123'}), 'Amina');
+    expect(roomVisibleIdentity({'authorDisplayName': 'character_badid', 'authorKind': 'masana'}), 'Masana');
+  });
+
+  test('Room timeline places pinned/new posts first and comments below their parent', () {
+    final sorted = orderRoomTimeline([
+      {'id': 'r1', 'parentId': 'p1', 'createdAt': '2026-10-23T03:02:00Z'},
+      {'id': 'p2', 'createdAt': '2026-10-23T03:03:00Z'},
+      {'id': 'p1', 'createdAt': '2026-10-23T03:01:00Z', 'pinned': true},
+      {'id': 'r2', 'parentId': 'p1', 'createdAt': '2026-10-23T03:04:00Z'},
+    ]);
+    expect(sorted.map((p) => p['id']), ['p1', 'r1', 'r2', 'p2']);
+  });
+
+  testWidgets('Rooms display a public name instead of an internal user ID', (tester) async {
+    final api = FakeCommunityApi();
+    await tester.pumpWidget(MaterialApp(home: RoomCommunityScreen(api: api, roomId: 'room_1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Amina'), findsOneWidget);
+    expect(find.text('owner'), findsNothing);
+  });
   testWidgets('broadcast member reads timeline then comments with parent attribution', (tester) async {
     final api = FakeCommunityApi();
     await tester.pumpWidget(MaterialApp(home: RoomCommunityScreen(api: api, roomId: 'room_1')));
