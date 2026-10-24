@@ -111,7 +111,7 @@ void main(){
     humanCommunicationTransportProvider.overrideWithValue(t),
   ],child:const MaterialApp(home:HumanPrivacyScreen())));
   await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(find.byKey(const Key('human-open-report-history')),150);
+  await tester.scrollUntilVisible(find.byKey(const Key('human-open-report-history')),150,scrollable:find.byType(Scrollable).first);
   await tester.tap(find.byKey(const Key('human-open-report-history')));
   await tester.pumpAndSettle();
   expect(find.text('Reason one'),findsOneWidget);
