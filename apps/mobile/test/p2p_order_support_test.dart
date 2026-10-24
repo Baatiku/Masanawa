@@ -230,4 +230,24 @@ void main() {
       await t.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('older public events retry without losing current context and deduplicate overlap',(t)async{
+    int reads=0;bool offline=true;
+    Map<String,dynamic> event(String id,String action)=>{'event_id':id,'action':action,'created_at':'2026-10-24T00:00:00Z'};
+    await t.pumpWidget(MaterialApp(home:P2pOrderSupportPage(expectedUserId:'buyer',currentUserId:()=>'buyer',load:()async=>{'state':'disputed','canOpenDispute':false,'submission':null,'events':[event('new','dispute_opened')],'nextCursor':'older-cursor'},submit:(_,__)async=>{},loadOlder:(cursor)async{reads++;expect(cursor,'older-cursor');if(offline)throw fail(503);return{'events':[event('old','reserve'),event('new','dispute_opened')],'nextCursor':null};})));
+    await t.pumpAndSettle();await press(t,'Load older events');expect(find.textContaining('Older events could not'),findsOneWidget);expect(reads,1);
+    offline=false;await press(t,'Load older events');expect(reads,2);expect(find.text('Load older events'),findsNothing);expect(find.text('Dispute opened'),findsOneWidget);expect(find.text('Escrow reserved'),findsOneWidget);await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('refresh fences an older page that completes late',(t)async{
+    final held=Completer<Map<String,dynamic>>();int reads=0;
+    await t.pumpWidget(MaterialApp(home:P2pOrderSupportPage(expectedUserId:'buyer',currentUserId:()=>'buyer',load:()async{reads++;return{'state':reads>1?'completed':'disputed','canOpenDispute':false,'submission':null,'events':[],'nextCursor':reads>1?null:'cursor'};},submit:(_,__)async=>{},loadOlder:(_)=>held.future)));
+    await t.pumpAndSettle();await t.scrollUntilVisible(find.text('Load older events'),150,scrollable:find.byType(Scrollable).first);await t.tap(find.text('Load older events'));await t.pump();
+    await press(t,'Refresh support context');held.complete({'events':[{'event_id':'stale','action':'reserve','created_at':'2026-10-24T00:00:00Z'}],'nextCursor':null});await t.pumpAndSettle();expect(find.text('Escrow reserved'),findsNothing);expect(find.text('Load older events'),findsNothing);await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('older-event authorization loss scrubs cached private report',(t)async{
+    final fixture=Fixture()..exists=true;
+    await t.pumpWidget(MaterialApp(home:P2pOrderSupportPage(expectedUserId:'buyer',currentUserId:()=>'buyer',load:()async=>{...fixture.context(),'nextCursor':'cursor'},submit:fixture.submit,loadOlder:(_)async=>throw fail(403))));
+    await t.pumpAndSettle();await press(t,'Load older events');expect(find.text('Private original report details'),findsNothing);expect(find.text('Load older events'),findsNothing);expect(find.text('Access changed. Reopen P2P.'),findsOneWidget);await t.pumpWidget(const SizedBox());
+  });
+
 }

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -17,7 +18,9 @@ class P2pCaseContext extends StatefulWidget {
     required this.currentSession,
     required this.load,
     required this.copyEvidence,
+    this.openSupportRequests,
   });
+  final Future<void> Function(BuildContext)? openSupportRequests;
   final String orderId;
   final String? Function() currentSession;
   final Future<Map<String, dynamic>> Function() load;
@@ -102,7 +105,8 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
       if (late != null && (late is! Map || late['events'] is! List))
         throw const FormatException();
       setState(() => _file = file);
-    } catch (_) {
+    } catch (error) {
+      if(error is DioException&&[401,403,404].contains(error.response?.statusCode)){_clear();return;}
       if (mounted && _same)
         setState(() => _error = 'Case file unavailable. Reopen or retry.');
     } finally {
@@ -115,7 +119,8 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
     setState(() => _copying = true);
     try {
       await widget.copyEvidence(id);
-    } catch (_) {
+    } catch (error) {
+      if(error is DioException&&[401,403,404].contains(error.response?.statusCode)){_clear();return;}
       if (mounted && _same)
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -155,6 +160,7 @@ class _P2pCaseContextState extends State<P2pCaseContext> {
         if (_error != null) Text(_error!),
         if (file != null) ...[
           Text('State: ${(file['order'] as Map)['state']}'),
+          if(widget.openSupportRequests!=null)OutlinedButton(onPressed:_loading||_copying?null:()=>widget.openSupportRequests!(context),child:const Text('Evidence requests and responses')),
           const Text(
             'Payment is not provider-verified. A screenshot or buyer claim alone must never authorize a release.',
           ),

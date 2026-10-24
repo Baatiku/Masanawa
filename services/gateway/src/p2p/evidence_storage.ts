@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createReplayObjectStore, type ReplayObjectStore } from "../talk_replay/playback/s3_object_store.js";
 import { P2pError, type P2pActor, type P2pService } from "./service.js";
 
@@ -7,7 +7,7 @@ const base64=/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const maxBytes=2*1024*1024;
 export interface P2pEvidenceStorage {
   upload(actor:P2pActor,orderId:string,request:unknown):Promise<{
-    evidenceId:string;state:string;sha256:string;bytes:number;
+    evidenceId:string;state:string;sha256:string;bytes:number;replay?:boolean;
   }>;
   download(actor:P2pActor,orderId:string,evidenceId:string,operator?:boolean):Promise<{
     url:string;expiresAt:string;sha256:string;
@@ -49,16 +49,25 @@ export function createP2pEvidenceStorage(input:{
         :body.contentType==="image/webp" ? magic.toString("ascii",0,4)==="RIFF" && magic.toString("ascii",8,12)==="WEBP"
         :magic.toString("ascii",0,5)==="%PDF-";
       if(!valid)throw new P2pError("p2p.evidence_signature_invalid",422);
-      await input.service.assertEvidenceAllowed(actor,orderId);
       const digest=createHash("sha256").update(bytes).digest("hex");
+      try{
+        const original=await input.service.evidenceByDigest(actor,orderId,digest);
+        return{evidenceId:original.evidenceId,state:original.state,sha256:digest,bytes:bytes.length,replay:true};
+      }catch(error){if(!(error instanceof P2pError)||error.status!==404)throw error;}
+      await input.service.assertEvidenceAllowed(actor,orderId);
       const scope=createHash("sha256").update(actor.tenantId).digest("hex").slice(0,24);
       const format=body.contentType==="application/pdf"?"pdf":
         body.contentType==="image/png"?"png":
         body.contentType==="image/webp"?"webp":"jpg";
       // Type and size live in the private immutable object key; existing DB
       // schema and previous evidence references remain compatible.
-      const path=`p2p/${scope}/${orderId}/${randomUUID()}_${bytes.length}_${format}`;
-      try {
+      const owner=createHash('sha256').update(actor.userId).digest('hex').slice(0,24);
+      const path=`p2p/${scope}/${orderId}/${owner}-${digest}_${bytes.length}_${format}`;
+      // Concurrent retries share this immutable content path. Never delete it
+      // on a failed/ambiguous response: another transaction may have recorded
+      // it already. Unreferenced private objects require qualified retention
+      // cleanup, not a request handler guessing whether COMMIT succeeded.
+      {
         const object=await input.objects.putObject!(path,bytes,body.contentType);
         if(object.sha256!==digest||object.bytes!==bytes.length)
           throw new P2pError("p2p.evidence_checksum_mismatch",503);
@@ -68,9 +77,6 @@ export function createP2pEvidenceStorage(input:{
           objectRef:path,sha256:digest,verifiedOwnerId:actor.userId,
         });
         return {...record,sha256:digest,bytes:bytes.length};
-      }catch(error){
-        await input.objects.deleteObject(path).catch(()=>undefined);
-        throw error;
       }
     },
     async download(actor,orderId,evidenceId,operator=false){

@@ -399,13 +399,13 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P5-06 | P | Receipt/evidence upload to participant-only order storage, 2MB cap in source. |
 | P5-07 | S/P | Evidence list includes creator, date, file type, authorized preview/download. |
 | P5-08 | P | Evidence links short-lived, authenticated, non-guessable, no public bank records. |
-| P5-09 | N | Evidence metadata hashes and linked original request/file on uncertain upload. |
+| P5-09 | S/P | Actor/order/hash original receipt recovery, stable private object retries and secure native metadata implemented; retention cleanup, deployed storage and handset acceptance remain open. |
 | P5-10 | N | Report/deletion/retention policy preserving investigation evidence legally. |
 | P5-11 | P | Open dispute against original order with typed reason and text. |
 | P5-12 | S/P | Typed reason picker, immutable original opening and order-bound recovery implemented through canonical dispute transition; device/operational acceptance remains open. |
 | P5-13 | P | Participant support context shows current order status, own opening and recent public transitions without private staff/counterparty notes; formal responses/staff thread/appeal remain open. |
 | P5-14 | P | Frozen escrow clearly marked while dispute unresolved. |
-| P5-15 | N | Support intervention with staff notes, request for additional evidence, response window. |
+| P5-15 | S/P | Private assigned-party evidence requests, informational response windows and immutable original responses implemented; separate staff notes, extension/cancellation/delivery policy and deployed acceptance remain open. |
 | P5-16 | N | Withdraw/reopen dispute only under safe and authorized rules, no timer hacks. |
 | P5-17 | P | Report late payment on already refunded/expired order as separate case. |
 | P5-18 | P/Q | Operator case listing, evidence read rights and audited authorized decision. |
@@ -422,7 +422,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-01 | S/P | P2P order list with stable cursor, all/active/finished and user Buy/Sell role. |
 | P6-02 | S/P | Orders/own ads have server status/direction/inclusive UTC-date filters and scoped keysets in the qualified MSNW/NGN/bank market; additional asset/rail qualification and device acceptance remain open. |
 | P6-03 | P | My Offers and Updates nested below primary Buy/Sell/Orders flow. |
-| P6-04 | P | Dedicated support view shows up to 50 recent public order transitions and current status; complete historical audit/retention and device qualification remain open. |
+| P6-04 | S/P | Dedicated support view pages the complete participant-safe public transition history with scoped lossless keysets; private audit/retention, formal responses and device qualification remain open. |
 | P6-05 | S/P | Canonical receipt and Wallet Activity point to same operation and roles. |
 | P6-06 | S/P | Public trader profile pages live eligible ads and same-window real order outcomes; no invented badge/rating, device/provider acceptance remains open. |
 | P6-07 | S/P | Owner pause-all-current-ads, durable original receipt/recovery and individually eligible resume implemented; schedules/persistent offline mode and device acceptance remain open. |
@@ -434,7 +434,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-13 | P/Q | SQL row locks/transactions and unique original IDs survive cross-device races. |
 | P6-14 | P/Q | Ledger holds, release, refund, fees never double count in portfolio estimates. |
 | P6-15 | P | All errors show safe original ID status or Retry, no fake success indicator. |
-| P6-16 | N | Account/phone switch and logout clear protected lists and invalidate stale replies. |
+| P6-16 | S/P | Account/token changes clear P2P private state and revoke old routes; renewed same-account sessions read fresh records and reject stale replies. Installed-device/phone-change and deployed revocation acceptance remain open. |
 | P6-17 | P | Small screen 320dp at 200% text, RTL, TalkBack, keyboard action order, non-color labels. |
 | P6-18 | P | Loading/empty/error/offline/blocked/permission-limited states for each screen ID. |
 | P6-19 | N | Exact user-facing service maintenance/degraded-rail and stale price clock. |
@@ -762,6 +762,42 @@ Staff case context now displays original typed evidence and retains existing aud
 Higgsfield: 111 full P2P backend cases PASS, including four new typed-context SQL/HTTP/privacy/rollback cases; Gateway and storage-adapter TypeScript PASS. Twenty-nine focused Flutter cases PASS (seven customer support, twelve marketplace/order integration, five new staff context and five existing staff report cases); affected analyzers have informational lints only. Independent read-only review found no material findings. An eighteenth real PostgreSQL test covers competing participant openings, unchanged escrow hold and original recovery after canonical refund; hosted exact-head qualification remains a merge gate and is recorded in the PR. No APK, physical handset, live provider, production migration or live-funds acceptance. All 177 screens / 820 requirements and parent Phase 7/8 gates remain open.
 
 Previous delivery: PR #352 merged `487fbabd5012b82506f12c3467be47617f4e1a72`; exact `4e382abf` passed Foundation/Mobile/P2P/Status, including 110 backend/storage + 7 Worker + 17 real PostgreSQL cases. Current source is isolated on `feat/p2p-dispute-context-oct24`, with Gateway P2P service/routes/context module, migration 0145, customer order/support pages, staff case view and scoped tests. Safe next action: hosted source/migration/native checks → repair material failures → merge fresh main; operational dispute policy/staffing, formal responses and real-device/provider acceptance remain explicit follow-up.
+
+## 24 October 2026 — P2P original attachment recovery (partial P5-09)
+
+Order evidence now recovers the submitting account’s original receipt by order and SHA-256 through an authenticated no-store POST read. Locked recording deduplicates retries, preserves legacy duplicate records and selects the earliest original; another participant or tenant cannot recover that receipt. Private content-addressed upload paths remain intact after uncertain writes rather than risking deletion after an accepted database commit. No evidence operation releases or refunds assets.
+
+The attachment page supports file selection, explicit submission, original receipt checks, same-file retry, loading/error/rejected-file recovery and account/base-change fencing. Only hash, MIME type and byte count are retained in account/order/base-scoped secure storage; file bytes remain in memory. Definitive validation rejection permits replacement; uncertain outcomes keep the original identity. Back navigation preserves recovery metadata. PNG/JPG/WEBP/PDF remain limited to 2 MB.
+
+Source checks: 115 local P2P tests, gateway and PostgreSQL adapter types passed; 17 native regression tests plus the final seven evidence tests passed, including 320dp RTL/200% text and late account-change fencing. One Flutter startup segfault was retried; a lazy-list test scroll was corrected. Exact-head hosted qualification and the new PostgreSQL duplicate-record race are recorded in the delivery PR. Independent read-only review clear after fixing rejected-file replacement. This is source qualification, not handset/provider/production acceptance. Private unreferenced-object retention cleanup, deployed storage/retention policy, actual handset file-picker behavior and complete P5-09 acceptance remain open. Parent gates and the 177-screen/820-requirement inventory remain unchanged. No APK generated.
+
+## 24 October 2026 — P2P complete public support timeline (partial P5-03/P6-04)
+
+Participant support history now pages older public order transitions through an authenticated no-store endpoint. Lossless PostgreSQL microsecond/UUID keysets bind the order, tenant and viewing account; attachment-recorded summaries join the existing public transition allowlist without hashes, storage references, bank data, raw actor IDs, private openings or staff notes. Reading history never changes escrow, order state or custody.
+
+The existing support page adds Load older events, retry without discarding current content, overlap removal and a refresh generation fence. Account/access loss clears private cached context; older pages cannot overwrite a refreshed order. Loading, empty, transient failure and revoked-access states remain on the original order route. Local five backend checks, gateway/adapter types and 21 Flutter regression checks passed; the final 18 attachment/support tests also passed after authorization-loss repairs. Hosted tied-microsecond PostgreSQL paging acceptance is recorded in the delivery PR. Independent review clear after correcting authorization-loss cache handling.
+
+Complete public history source is distinct from formal staff responses, complete private investigation records, deployed retention, handset and production acceptance, which remain open. Parent P2P gates and 177 screens/820 requirements unchanged. No APK generated.
+
+## 24 October 2026 — P2P private evidence requests and original responses (partial P5-15)
+
+Authorized dispute staff can request supporting evidence from the original buyer or seller, with a clearly informational 24/48/72-hour response window. Instructions and replies remain private to the assigned participant and authorized staff. One unanswered request per participant and a 20-request order bound prevent uncontrolled threads. New requests/responses require an open dispute; immutable original receipts still recover after order closure. Late responses remain available for manual review and never release, refund, expire or reopen escrow.
+
+Migration 0147 adds immutable order-bound requests/responses. Actor/content/recipient/window identity deduplicates original staff submissions; a unique original response per request survives retries. Strict recipient types prevent coerced values from routing private instructions to another party. Existing operator authorization, P2P orders and custody authority remain canonical.
+
+Customer Order support → Support requests shows assigned instructions, due times, response state and original receipts; documents use the existing order attachment action. Staff case context → Evidence requests and responses selects buyer/seller and the response window. Both pages read before writes, recover uncertain originals, keep drafts in memory and scrub private context after session/account/access loss. Definitive rejections permit correction. Loading, empty, offline/retry, terminal, large-text/RTL and Back navigation remain within the original order/case.
+
+Local three backend checks, gateway/adapter types, customer/staff widget checks and informational-deadline/cap/immutable-original regressions passed. Independent review clear after strict-recipient correction; exact-head CI and the 21st real PostgreSQL duplicate request/response race are recorded in the delivery PR. Additional staff-only notes, request cancellation/extension policy, delivery notifications, retention, deployed support permissions and handset/production acceptance remain open. P5-15 and parent gates remain partial; 177 screens/820 requirements unchanged. No APK generated.
+
+## 24 October 2026 — P2P protected session boundaries (partial P6-16)
+
+P2P root state now observes account and bearer changes, clears private lists/drafts/filter state, and rebinds a renewed same-account session through fresh reads. Late replies from an older bearer are rejected. A 401 clears protected state; a valid replacement token restores the root without resurrecting old private routes. Account replacement latches the old route closed, including direct order links. Encrypted original-request identities remain available for authorized recovery; no automatic financial retry is added.
+
+Private P2P forms, reviews, order detail, receipt sharing and evidence previews use an account/base/session/epoch boundary. Previously opened routes stay revoked, with Back available, even if the same account signs back in. Copy/share callbacks and order actions check their original authorization. Staff case context also scrubs cached private evidence when refresh or evidence-link access returns 401/403/404.
+
+Focused source verification passed five session scenarios, the boundary latch, 18 marketplace/buy regression checks and six staff case tests. Immediate future error handlers prevent an orphaned refresh exception when access loss removes its view; original futures still expose normal errors to the UI. A Flutter runner segmentation fault was retried serially. Independent review clear after fixing same-account reauthentication recovery. The wider run plus isolated repairs qualified 122 distinct P2P Flutter checks; the existing quote-switch test now asserts that revoked controls are removed, and a trader startup crash was retried serially. Exact-head CI results are recorded in the delivery PR.
+
+This is source qualification. Phone/account changes on installed devices, process kill, deployed revocation behavior and production acceptance remain open; legacy original-request storage is preserved rather than silently migrated or discarded. Parent gates and 177-screen/820-requirement inventory remain unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

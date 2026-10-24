@@ -19,7 +19,11 @@ class P2pOrderSupportPage extends StatefulWidget {
     required this.currentUserId,
     required this.load,
     required this.submit,
+    this.loadOlder,
+    this.openRequests,
   });
+  final Future<void> Function(BuildContext)? openRequests;
+  final Future<Map<String,dynamic>> Function(String cursor)? loadOlder;
   final String expectedUserId;
   final String? Function() currentUserId;
   final Future<Map<String, dynamic>> Function() load;
@@ -40,6 +44,8 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
       _uncertain = false,
       _gone = false;
   Timer? _fence;
+  bool _older=false;
+  int _generation=0;
   bool get _same => !_gone && widget.currentUserId() == widget.expectedUserId;
   bool get _busy => _checking || _sending;
   @override
@@ -61,6 +67,7 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
   void _clear() {
     if (!mounted || _gone) return;
     _fence?.cancel();
+    _generation++;
     _details.clear();
     setState(() {
       _gone = true;
@@ -82,10 +89,11 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
       _checking = true;
       _error = null;
     });
+    final generation=++_generation;
     var resend = false;
     try {
       final data = await widget.load().timeout(const Duration(seconds: 20));
-      if (!mounted || !_same) return;
+      if (!mounted || !_same || generation!=_generation) return;
       final report = data['submission'], events = data['events'];
       if (data['canOpenDispute'] is! bool ||
           data['state'] is! String ||
@@ -137,6 +145,22 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
     if (resend && mounted && _same) await _send(retry: true);
   }
 
+  Future<void> _loadOlder()async{
+    final cursor=_context?['nextCursor'];
+    if(_busy||_older||!_same||cursor is! String||widget.loadOlder==null)return;
+    final generation=_generation;setState(()=>_older=true);
+    try{
+      final page=await widget.loadOlder!(cursor).timeout(const Duration(seconds:20));
+      if(!mounted||!_same||generation!=_generation)return;
+      final events=page['events'];
+      if(events is! List||events.length>50||(page['nextCursor']!=null&&page['nextCursor'] is! String))throw const FormatException();
+      for(final e in events){if(e is! Map||e['event_id'] is! String||e['action'] is! String||DateTime.tryParse('${e['created_at']}')==null)throw const FormatException();}
+      final existing=_context!['events'] as List,ids=existing.map((e)=>(e as Map)['event_id']).toSet();
+      setState((){_context={..._context!,'events':[...events.where((e)=>!ids.contains((e as Map)['event_id'])),...existing],'nextCursor':page['nextCursor']};_error=null;});
+    }catch(error){if(mounted&&_same&&generation==_generation){if(error is DioException&&[401,403,404].contains(error.response?.statusCode)){_clear();}else{setState(()=>_error='Older events could not be loaded. Retry.');}}}
+    finally{if(mounted&&_same)setState(()=>_older=false);}
+  }
+
   Future<void> _send({bool retry = false}) async {
     if (_busy ||
         !_same ||
@@ -185,6 +209,7 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
 
   String _event(String action) =>
       const {
+        'evidence_recorded': 'Attachment recorded',
         'reserve': 'Escrow reserved',
         'buyer_claimed_payment': 'Buyer reported payment sent',
         'dispute_opened': 'Dispute opened',
@@ -293,15 +318,18 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
                       : 'Refresh support context',
                 ),
               ),
+              if(widget.openRequests!=null)OutlinedButton(onPressed:_busy?null:()=>widget.openRequests!(context),child:const Text('Support requests')),
               if (_context != null) ...[
                 const SizedBox(height: 20),
                 const Text(
-                  'Recent order events',
+                  'Order events',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const Text(
-                  'Up to 50 recent public transitions. Private staff notes and bank records are excluded.',
+                  'Public order transitions. Private staff notes and bank records are excluded.',
                 ),
+                if(_context!['nextCursor'] is String && widget.loadOlder!=null)
+                  OutlinedButton(onPressed:_busy||_older?null:_loadOlder,child:Text(_older?'Loading older events…':'Load older events')),
                 for (final event in (_context!['events'] as List))
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -309,7 +337,7 @@ class _P2pOrderSupportPageState extends State<P2pOrderSupportPage> {
                     subtitle: Text(_time(event['created_at'])),
                   ),
                 if ((_context!['events'] as List).isEmpty)
-                  const Text('No recent order events.'),
+                  const Text('No order events.'),
                 if (_context!['canOpenDispute'] == false &&
                     _context!['submission'] == null)
                   const Text(

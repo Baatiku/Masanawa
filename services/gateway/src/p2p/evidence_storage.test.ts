@@ -1,6 +1,7 @@
 import { describe,expect,it,vi } from "vitest";
 import { createP2pEvidenceStorage } from "./evidence_storage.js";
 import type { ReplayObjectStore } from "../talk_replay/playback/s3_object_store.js";
+import {P2pError} from "./service.js";
 import type { P2pService } from "./service.js";
 
 const actor={tenantId:"tenant-A",userId:"buyer-1"};
@@ -9,6 +10,7 @@ const evidenceId="2432556d-8c3e-489a-bde2-620b13d529b6";
 const pdf=Buffer.from("%PDF-1.7\nEvidence only\n");
 function fixtures() {
   const service={
+    evidenceByDigest:vi.fn(async()=>{throw new P2pError('p2p.evidence_original_not_found',404);}),
     assertEvidenceAllowed:vi.fn(async()=>undefined),
     recordEvidence:vi.fn(async()=>({evidenceId,state:"disputed"})),
     evidenceFor:vi.fn(async()=>({objectRef:
@@ -48,13 +50,26 @@ describe("P2P private evidence",()=>{
     }
     expect(t.objects.putObject).not.toHaveBeenCalled();
   });
-  it("deletes an orphan upload when the order closes during DB commit",async()=>{
+  it("retains a private upload when record commit outcome is unknown",async()=>{
     const t=fixtures();
     vi.mocked(t.service.recordEvidence).mockRejectedValueOnce(new Error("order closed"));
     await expect(t.storage.upload(actor,orderId,{
       contentType:"application/pdf",contentBase64:pdf.toString("base64"),
     })).rejects.toThrow("order closed");
-    expect(t.objects.deleteObject).toHaveBeenCalledOnce();
+    expect(t.objects.deleteObject).not.toHaveBeenCalled();
+  });
+  it('uses the same private content path for same-actor retries and a separate path for another actor',async()=>{
+    const t=fixtures(),payload={contentType:'application/pdf',contentBase64:pdf.toString('base64')};
+    await t.storage.upload(actor,orderId,payload);await t.storage.upload(actor,orderId,payload);
+    await t.storage.upload({...actor,userId:'other-owner'},orderId,payload);
+    const paths=vi.mocked(t.objects.putObject!).mock.calls.map(x=>x[0]);
+    expect(paths[0]).toBe(paths[1]);expect(paths[0]).not.toBe(paths[2]);expect(paths[0]).not.toContain('buyer-1');
+  });
+  it('recovers accepted original evidence after upload permission closes without another object write',async()=>{
+    const t=fixtures();vi.mocked(t.service.evidenceByDigest).mockResolvedValueOnce({evidenceId,state:'cancelled',sha256:'1'.repeat(64),bytes:pdf.length,contentType:'application/pdf',createdAt:new Date()});
+    vi.mocked(t.service.assertEvidenceAllowed).mockRejectedValueOnce(new P2pError('p2p.evidence_forbidden',403));
+    expect(await t.storage.upload(actor,orderId,{contentType:'application/pdf',contentBase64:pdf.toString('base64')})).toMatchObject({evidenceId,state:'cancelled',replay:true});
+    expect(t.objects.putObject).not.toHaveBeenCalled();expect(t.service.recordEvidence).not.toHaveBeenCalled();
   });
   it("reads private short-lived link only through participant-scoped service",async()=>{
     const t=fixtures();

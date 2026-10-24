@@ -11,17 +11,28 @@ import '../state/session_state.dart';
 import 'event_frames.dart';
 import 'models.dart';
 
+/// A fresh sign-in is a new authorization lease even when the user ID is the
+/// same. Routine access-token refresh preserves the epoch and live transports.
+typedef HumanAuthorizationLease = (String?, int);
+final humanAuthorizationLeaseProvider = Provider<HumanAuthorizationLease>((
+  ref,
+) {
+  final state = ref.watch(sessionProvider);
+  final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+  return (state is SessionSignedIn ? state.user.id : null, epoch);
+});
+
 final humanAccountProvider = Provider<String?>(
-  (ref) => ref.watch(
-    sessionProvider.select((s) => s is SessionSignedIn ? s.user.id : null),
-  ),
+  (ref) => ref.watch(humanAuthorizationLeaseProvider).$1,
 );
 final humanCommunicationTransportProvider =
     Provider<HumanCommunicationTransport>((ref) {
-      ref.watch(humanAccountProvider);
+      ref.watch(humanAuthorizationLeaseProvider);
       final transport = HumanCommunicationTransport(
         ref.watch(apiClientProvider),
       );
+      // Provider recomputation revokes the old live request/stream lease before
+      // the next account/session may render or post with its replacement.
       ref.onDispose(transport.cancel);
       return transport;
     });

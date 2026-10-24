@@ -165,7 +165,7 @@ void main(){
   await t.enterText(find.byKey(const ValueKey('p2p-buy-amount')),'1');await t.pump();
   await t.tap(find.text('Review price and fees'));await t.pumpAndSettle();expect(find.text('Review P2P order'),findsOneWidget);
   owner.value='replacement';await t.pumpAndSettle();
-  await t.ensureVisible(find.text('Place order'));await t.tap(find.text('Place order'));await t.pumpAndSettle();
+  expect(find.text('Place order'),findsNothing);expect(find.text('Access changed. Reopen P2P.'),findsOneWidget);
   expect(a.calls.where((r)=>r.method!='GET'),isEmpty);
   expect(await const FlutterSecureStorage().read(key:'masanawa.p2p.order.replacement'),isNull);
   await t.pumpWidget(const SizedBox());
