@@ -172,7 +172,9 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
         });
       }
     } finally {
-      if (_scopeMatches(generation, token)) setState(() => busy = false);
+      if (_scopeMatches(generation, token)) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -217,7 +219,9 @@ class _WalletTransactionHelpState extends State<WalletTransactionHelp> {
         error = 'Support request outcome unknown. Checking the original case; do not open another.';
       });
     } finally {
-      if (_scopeMatches(generation, token)) setState(() => busy = false);
+      if (_scopeMatches(generation, token)) {
+        setState(() => busy = false);
+      }
     }
     if (needsReadback && _scopeMatches(generation, token)) {
       await _checkCase();
