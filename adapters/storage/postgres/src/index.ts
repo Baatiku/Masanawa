@@ -53,3 +53,5 @@ export {ensureMasanaCatalogProfiles,withCatalogProvisionLock} from "./masana/cat
 
 // Canonical immutable Masana editorial revisions and staff audit.
 export {createMasanaPostgresStore} from './masana/repository.js';
+
+export * from "./gb_wallet/repository.js";
