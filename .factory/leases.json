@@ -20,11 +20,11 @@
       ],
       "branch": "feat/p2p-session-boundaries-oct24",
       "base_sha": "52be919c4f2a91eb35e56709eaccba37866288e7",
-      "pr": "",
+      "pr": "https://github.com/Baatiku/Masanawa/pull/368",
       "claimed_at": "2026-10-24T09:06:01.830Z",
-      "heartbeat_at": "2026-10-24T09:09:52.599Z",
-      "expires_at": "2026-10-24T09:14:52.599Z",
-      "progress": "FullP2PFlutter112PASS sofar; oldtesttriesConfirmafteraccountchange butnewboundarycorrectlyremovesform, updatingassertion. Traderfiletestprocesssegfault; isolatedserialretryplanned.5specificsession+6staffPASS;reviewclear."
+      "heartbeat_at": "2026-10-24T09:13:28.761Z",
+      "expires_at": "2026-10-24T09:18:28.761Z",
+      "progress": "PR368 headf23b2ac4 exacttree85c52a8f published;122distinctP2PFlutter+6staffPASS via broadserial+isolatedrepairs.5newsessioncases+reviewclear; exactheadCIpending. Base367merged52be919c. NoAPK/handset/deployedrevocationacceptance."
     }
   ],
   "history": [
