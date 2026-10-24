@@ -16,15 +16,26 @@
         "docs/PRODUCT-ROADMAP-20261019.md",
         "docs/SCREEN-JOURNEYS.md",
         "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
-        "apps/mobile/test/p2p_market_filters_test.dart"
+        "apps/mobile/test/p2p_market_filters_test.dart",
+        "services/gateway/src/p2p/case_notes.ts",
+        "services/gateway/src/p2p/case_notes.pglite.test.ts",
+        "services/gateway/src/p2p/service.ts",
+        "services/gateway/src/p2p/routes.ts",
+        "packages/commerce/migrations/0148_msnw_p2p_case_notes.sql",
+        "adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts",
+        "apps/admin_mobile/lib/src/screens/p2p_case_notes.dart",
+        "apps/admin_mobile/lib/src/screens/p2p_disputes_page.dart",
+        "apps/admin_mobile/test/p2p_case_notes_test.dart"
       ],
       "branch": "feat/p2p-session-boundaries-oct24",
       "base_sha": "52be919c4f2a91eb35e56709eaccba37866288e7",
       "pr": "https://github.com/Baatiku/Masanawa/pull/368",
       "claimed_at": "2026-10-24T09:06:01.830Z",
-      "heartbeat_at": "2026-10-24T09:16:07.775Z",
-      "expires_at": "2026-10-24T09:21:07.775Z",
-      "progress": "PR368f23b2ac4 exact85c52a8f P2PCI PASS;Mobile/Foundationrunning.122distinctlocalP2PFlutter+6staffPASS;reviewclear. OnlyUI/sessionboundarysourcechanges; all financialAPI/ledgerunchanged. NextsourceP5-15staff-onlynotes/P5-05orderchatattachmentpreviewremainopen;provider/handset/retentiongatesexplicit."
+      "heartbeat_at": "2026-10-24T09:17:23.243Z",
+      "expires_at": "2026-10-24T09:22:23.243Z",
+      "progress": "PR368f23b2ac4 exact85c52a8f P2PCI PASS;Mobile/Foundationrunning.122distinctlocalP2PFlutter+6staffPASS;reviewclear. OnlyUI/sessionboundarysourcechanges; all financialAPI/ledgerunchanged. NextsourceP5-15staff-onlynotes/P5-05orderchatattachmentpreviewremainopen;provider/handset/retentiongatesexplicit.",
+      "next_branch": "feat/p2p-private-case-notes-oct24",
+      "next_scope": "P5-15 immutable staff-only case notes with actor/content original recovery; private authorized operator context, no customer/public timeline or financial mutation"
     }
   ],
   "history": [
