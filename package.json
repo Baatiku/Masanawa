@@ -24,7 +24,9 @@
     "test:security": "vitest run tests/security",
     "test:recovery": "vitest run tests/recovery",
     "test:load": "vitest run tests/load",
-    "test:chaos": "vitest run tests/chaos"
+    "test:chaos": "vitest run tests/chaos",
+    "build:cloudflare": "node scripts/check-cloudflare-web-source.mjs && npm --prefix apps/web run build:cloudflare",
+    "deploy:cloudflare": "npm --prefix apps/web run deploy:cloudflare --"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

@@ -1,1 +1,19 @@
-{"name":"Nasfam Pay","short_name":"Nasfam Pay","description":"Crypto services and digital payments","start_url":"/","display":"standalone","background_color":"#0A0B0D","theme_color":"#0A0B0D","lang":"en","scope":"/","icons":[{"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png"}]}
+{
+  "name": "Masanawa",
+  "short_name": "Masanawa",
+  "description": "Connect with people and Masana through chats, Status, Calls and Rooms. Wallet services appear only where available.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#25D366",
+  "lang": "en",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/assets/masanawa-mark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
