@@ -26,7 +26,7 @@ export async function ownHumanReportPage(db:HumanSql,a:Actor,q:Query){
  const page=results.rows.slice(0,limit);
  return {
   paginationVersion:1,
-  items:page.map(r=>({reportId:r.id,messageId:r.message_id,reason:r.reason,submittedAt:new Date(String(r.created_at)).toISOString(),status:'submitted' as const})),
+  items:page.map(r=>({reportId:r.id,messageId:r.message_id,reason:r.reason,submittedAt:new Date(r.created_at as string|Date).toISOString(),status:'submitted' as const})),
   nextCursor:results.rows.length>limit?String(page.at(-1)!.id):null
  };
 }
