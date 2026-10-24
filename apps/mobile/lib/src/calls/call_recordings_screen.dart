@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../core/call_recording.dart';
 import '../core/live_call_foreground.dart';
 import '../state/session_state.dart';
+import '../theme/masanawa_theme.dart';
 
 /// All searches are local to the authenticated owner's on-device recordings.
 enum RecordingOrder { newest, oldest, longest }
@@ -149,7 +150,9 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
       );
     }
     final visible = selectRecordings(rows, search: search, order: order);
+    final u = context.masanawa;
     return Scaffold(
+      backgroundColor: u.surfaceBg,
       appBar: AppBar(
         title: const Text('Call recordings'),
         actions: [
@@ -200,17 +203,24 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                loading
-                    ? 'Loading recordings on this device'
-                    : error != null
-                    ? 'Recordings on this device'
-                    : '${visible.length} of ${rows.length} recordings on this device',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            padding: const EdgeInsets.fromLTRB(16, 5, 16, 10),
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline, size: 17, color: u.brand),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    loading
+                        ? 'Loading recordings on this device'
+                        : error != null
+                        ? 'Recordings on this device'
+                        : '${visible.length} of ${rows.length} recordings on this device',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: u.textMuted, fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -276,33 +286,77 @@ class _RecordingsState extends ConsumerState<CallRecordingsScreen> {
                   )
                 : RefreshIndicator(
                     onRefresh: load,
-                    child: ListView.separated(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                       itemCount: visible.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = visible[index];
-                        return ListTile(
-                          leading: const Icon(Icons.graphic_eq),
-                          title: Text(item.agentName),
-                          subtitle: Text(
-                            '${_date(context, item.createdAt)} · ${_duration(item.durationMs)}',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () async {
-                            await Navigator.push<void>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => _RecordingDetail(
-                                  owner: widget.ownerId,
-                                  store: store,
-                                  item: item,
-                                  createPlayer: widget.createPlayer,
+                        final local = item.createdAt.toLocal();
+                        final previous = index == 0
+                            ? null
+                            : visible[index - 1].createdAt.toLocal();
+                        final groupByDay = order != RecordingOrder.longest;
+                        final newDay = groupByDay &&
+                            (previous == null || !DateUtils.isSameDay(local, previous));
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (newDay)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
+                                child: Text(
+                                  MaterialLocalizations.of(context).formatMediumDate(local),
+                                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: u.textMuted, fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            );
-                            if (mounted && _active(ref, widget.ownerId))
-                              await load();
-                          },
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: u.surfaceCard,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(color: u.structuralBorder),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  leading: CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: u.surfaceMuted,
+                                    child: Icon(Icons.graphic_eq, color: u.brand),
+                                  ),
+                                  title: Text(item.agentName,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: u.textPrimary, fontWeight: FontWeight.w700),
+                                  ),
+                                  subtitle: Text(
+                                    '${_date(context, item.createdAt)} · ${_duration(item.durationMs)}',
+                                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: u.textMuted),
+                                  ),
+                                  trailing: Icon(Icons.chevron_right, color: u.textMuted),
+                                  onTap: () async {
+                                    await Navigator.push<void>(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => _RecordingDetail(
+                                          owner: widget.ownerId,
+                                          store: store,
+                                          item: item,
+                                          createPlayer: widget.createPlayer,
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted && _active(ref, widget.ownerId)) {
+                                      await load();
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -572,7 +626,9 @@ class _RecordingDetailState extends ConsumerState<_RecordingDetail>
         .toDouble()
         .clamp(1, double.infinity)
         .toDouble();
+    final u = context.masanawa;
     return Scaffold(
+      backgroundColor: u.surfaceBg,
       appBar: AppBar(
         title: const Text('Recording'),
         actions: [
@@ -584,21 +640,49 @@ class _RecordingDetailState extends ConsumerState<_RecordingDetail>
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(18, 24, 18, 40),
         children: [
-          const Icon(Icons.graphic_eq, size: 72),
-          const SizedBox(height: 24),
+          Center(
+            child: Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                color: u.surfaceCard,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: u.structuralBorder),
+              ),
+              child: Icon(Icons.graphic_eq, size: 58, color: u.brand),
+            ),
+          ),
+          const SizedBox(height: 18),
           Text(
             widget.item.agentName,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800, color: u.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             _date(context, widget.item.createdAt),
             textAlign: TextAlign.center,
+            style: TextStyle(color: u.textMuted),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Local recording · Saved on this device',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: u.textMuted),
           ),
           const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+            decoration: BoxDecoration(
+              color: u.surfaceCard,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: u.structuralBorder),
+            ),
+            child: Column(children: [
           Slider(
             label: _duration(position.inMilliseconds),
             min: 0,
@@ -618,6 +702,9 @@ class _RecordingDetailState extends ConsumerState<_RecordingDetail>
           Text(
             '${_duration(position.inMilliseconds)} / ${_duration(widget.item.durationMs)}',
             textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700, color: u.textPrimary,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -641,6 +728,7 @@ class _RecordingDetailState extends ConsumerState<_RecordingDetail>
                 tooltip: playing ? 'Pause' : 'Play',
                 onPressed: busy ? null : toggle,
                 iconSize: 56,
+                color: u.brand,
                 icon: Icon(
                   playing
                       ? Icons.pause_circle_outline
@@ -678,10 +766,18 @@ class _RecordingDetailState extends ConsumerState<_RecordingDetail>
               child: Text('${speed}×'),
             ),
           ),
-          if (error != null) Text(error!, textAlign: TextAlign.center),
+            ]),
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(error!, textAlign: TextAlign.center,
+                style: TextStyle(color: u.emergency)),
+            ),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: delete,
+            style: OutlinedButton.styleFrom(foregroundColor: u.emergency),
             icon: const Icon(Icons.delete_outline),
             label: const Text('Delete recording'),
           ),

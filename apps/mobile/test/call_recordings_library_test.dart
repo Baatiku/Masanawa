@@ -201,6 +201,31 @@ void main() {
     },
   );
 
+  testWidgets('local recording cards use date sections only for chronological sorts', (tester) async {
+    final session = RecordingSession();
+    final store = RecordingStoreStub('a', [
+      row('1-a', 'Gwani', 18, 10000),
+      row('2-b', 'Zainab', 18, 30000),
+      row('3-c', 'Sadiq', 17, 5000),
+    ]);
+    await mount(tester, session, 'a', store);
+    final strings = MaterialLocalizations.of(tester.element(find.text('Gwani')));
+    final newerDay = strings.formatMediumDate(DateTime(2026, 10, 18));
+    final olderDay = strings.formatMediumDate(DateTime(2026, 10, 17));
+    expect(find.text(newerDay), findsOneWidget);
+    expect(find.text(olderDay), findsOneWidget);
+    expect(find.text('3 of 3 recordings on this device'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Sort recordings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CheckedPopupMenuItem<RecordingOrder>).at(2));
+    await tester.pumpAndSettle();
+    expect(find.text(newerDay), findsNothing);
+    expect(find.text(olderDay), findsNothing);
+    expect(listedNames(tester), ['Zainab', 'Gwani', 'Sadiq']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'recording list has usable controls at 320dp, 200% text and RTL',
     (tester) async {
@@ -231,6 +256,12 @@ void main() {
       expect(find.text('Sadiq'), findsOneWidget);
       expect(find.byTooltip('Sort recordings'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Sadiq'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Play'), findsOneWidget);
+      expect(find.byTooltip('Share recording'), findsOneWidget);
+      expect(find.text('Local recording · Saved on this device'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
