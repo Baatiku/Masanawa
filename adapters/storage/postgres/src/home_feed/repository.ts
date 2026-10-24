@@ -14,7 +14,7 @@ function item(r:Row){
  }:{type:'masana' as const,id:authorMasanaId,displayName:authorName};
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
-  publishedAt:new Date(String(r.published_at)).toISOString(),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
+  publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
   viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
   reactionCounts:(r.reaction_counts??{}) as Record<string,number>};
@@ -44,7 +44,10 @@ const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.
         ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
         OR (block.viewer_user_id=p.author_user_id AND block.subject_user_id=$2)))
  )))`;
+// A JS Date discards PostgreSQL microseconds and can skip tied older rows.
+// Serialize UTC in SQL before the driver parses timestamptz into a Date.
 const projection=`p.*,
+ to_char(p.published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published_at_exact,
  CASE WHEN p.author_type='human'
   THEN (SELECT hp.display_name FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id)
   ELSE (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1)

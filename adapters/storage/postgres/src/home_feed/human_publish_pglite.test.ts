@@ -3,6 +3,7 @@ import {describe,expect,it} from "vitest";
 import {PGlite} from "@electric-sql/pglite";
 import type {Pool} from "pg";
 import {PgHomeFeedRepository} from "./repository.js";
+import {FeedService} from "@masanawa/feed";
 import {PgSavedLibraryRepository} from "./saved_repository.js";
 
 const migration=(file:string)=>readFileSync(
@@ -105,6 +106,36 @@ describe("ST1 public human Status PostgreSQL-compatible migration and readback",
    // Leave this pre-existing lifecycle test's later own-post counts unchanged.
    await db.query("DELETE FROM feed.posts WHERE tenant_id='tenant' AND idempotency_key LIKE 'river-search-%'");
    await db.query("DELETE FROM talks.safety_preferences");
+   // Real SQL + service cursors must preserve sub-millisecond ties, including
+   // the 21st lookahead row that is not returned on the first 20-item page.
+   await db.query(`INSERT INTO feed.posts(tenant_id,author_type,author_user_id,
+     author_masana_id,audience,kind,body,media_ids,idempotency_key,published_by,published_at)
+     SELECT 'tenant','human','fanA',NULL,'public','text','Precision needle '||n,
+       ARRAY[]::text[],'precision-page-'||n,'fanA',
+       '2026-10-01T10:00:00.123456Z'::timestamptz +
+         CASE WHEN n=32 THEN interval '1 microsecond'
+              WHEN n=33 THEN interval '-1 microsecond' ELSE interval '0' END
+     FROM generate_series(1,33)n`);
+   await db.query("INSERT INTO talks.follows VALUES('tenant','fanB','fanA')");
+   const service=new FeedService(repo,async()=>true);
+   for(const mode of ['for_you','following','mine'] as const){
+    const viewer=mode==='mine'?'fanA':'fanB';
+    for(const search of [undefined,'Precision needle']){
+     let cursor:string|undefined;
+     const ids:string[]=[];
+     do {
+      const page=await service.list('tenant',viewer,mode,cursor,undefined,search);
+      ids.push(...page.items.filter(p=>p.body.startsWith('Precision needle')).map(p=>p.id));
+      cursor=page.nextCursor??undefined;
+      expect(ids.length).toBeLessThanOrEqual(33);
+     }while(cursor);
+     expect(ids).toHaveLength(33);
+     expect(new Set(ids).size).toBe(33);
+    }
+   }
+   await db.query("DELETE FROM feed.posts WHERE tenant_id='tenant' AND idempotency_key LIKE 'precision-page-%'");
+   await db.query("DELETE FROM talks.follows");
+
    await db.query("INSERT INTO talks.safety_enforcement(tenant_id,target_kind,target_id,revision,visibility,reason_code) VALUES('tenant','profile','amina',1,'blocked','fraud')");
    expect(await repo.find("tenant","fanB",created.id)).toBeNull();
    expect(await savedRepo.list("tenant","fanB",null,20)).toHaveLength(0);

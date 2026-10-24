@@ -1,6 +1,9 @@
 import {readFileSync} from "node:fs";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {createIsolatedPostgresTestDatabase} from "./isolated_test_database.js";
+import {SavedLibraryService} from "@masanawa/feed";
+import {PgSavedLibraryRepository} from "./saved_repository.js";
+import {FeedService} from "@masanawa/feed";
 import {PgHomeFeedRepository} from "./repository.js";
 import {PgEditorialReviewRepository} from "./review_repository.js";
 const conn=process.env.MASANAWA_TEST_DATABASE_URL;
@@ -45,6 +48,68 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
+ it("ST0/ST4 pages microsecond ties through service cursors on real PG18",async()=>{
+  const pool=isolated.pool;
+  await pool.query(`INSERT INTO identity.users VALUES
+    ('tenant_precision','precision_author','active'),('tenant_precision','precision_viewer','active');
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES
+    ('tenant_precision','precision_author','precision_author','Precision Author');
+    INSERT INTO talks.follows(tenant_id,follower_user_id,followed_user_id,created_at) VALUES
+    ('tenant_precision','precision_viewer','precision_author',now());
+    INSERT INTO feed.posts(tenant_id,author_type,author_user_id,author_masana_id,
+      audience,kind,body,media_ids,idempotency_key,published_by,published_at)
+    SELECT 'tenant_precision','human','precision_author',NULL,'public','text',
+      'Precision needle '||n,ARRAY[]::text[],'precision-page-'||n,'precision_author',
+      '2026-10-01T10:00:00.123456Z'::timestamptz +
+        CASE WHEN n=32 THEN interval '1 microsecond'
+             WHEN n=33 THEN interval '-1 microsecond' ELSE interval '0' END
+    FROM generate_series(1,33)n`);
+  const service=new FeedService(repo,async()=>true);
+  for(const mode of ['for_you','following','mine'] as const){
+   for(const search of [undefined,'Precision needle']){
+    const viewer=mode==='mine'?'precision_author':'precision_viewer';
+    const first=await service.list('tenant_precision',viewer,mode,undefined,undefined,search);
+    expect(first.items).toHaveLength(20);
+    expect(first.nextCursor).toBeTruthy();
+    expect(first.items[19]!.publishedAt).toBe('2026-10-01T10:00:00.123456Z');
+    const second=await service.list('tenant_precision',viewer,mode,first.nextCursor!,undefined,search);
+    expect(second.items).toHaveLength(13);
+    expect(second.nextCursor).toBeNull();
+    expect(new Set([...first.items,...second.items].map(p=>p.id)).size).toBe(33);
+    expect(second.items[12]!.publishedAt).toBe('2026-10-01T10:00:00.123455Z');
+   }
+  }
+  await pool.query(`CREATE SCHEMA external_videos;
+    CREATE TABLE external_videos.items(tenant_id text,item_id uuid,provider text,
+      source_url text,title text,channel_name text,review_state text,
+      verified_at timestamptz,verification_reference text,PRIMARY KEY(tenant_id,item_id));`);
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0003_saved_videos.sql",import.meta.url),"utf8"));
+  await pool.query(`INSERT INTO feed.saves(tenant_id,post_id,fan_id,created_at)
+    SELECT tenant_id,id,'precision_viewer','2026-10-01T10:00:00.123456Z'
+    FROM feed.posts WHERE tenant_id='tenant_precision';
+    INSERT INTO external_videos.items VALUES
+      ('tenant_precision','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','youtube','https://example.invalid/1','One','Public','approved',now(),'fixture-1'),
+      ('tenant_precision','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','youtube','https://example.invalid/2','Two','Public','approved',now(),'fixture-2');
+    INSERT INTO feed.saved_videos(tenant_id,video_id,fan_id,created_at)
+    SELECT tenant_id,item_id,'precision_viewer','2026-10-01T10:00:00.123456Z'
+    FROM external_videos.items;`);
+  const saved=new SavedLibraryService(new PgSavedLibraryRepository(pool));
+  const actor={kind:'fan' as const,tenantId:'tenant_precision',id:'precision_viewer'};
+  const firstSaved=await saved.list(actor);
+  expect(firstSaved.items).toHaveLength(20);
+  expect(firstSaved.items[19]!.savedAt).toBe('2026-10-01T10:00:00.123456Z');
+  const secondSaved=await saved.list(actor,firstSaved.nextCursor!);
+  expect(secondSaved.items).toHaveLength(15);
+  expect(secondSaved.nextCursor).toBeNull();
+  expect(new Set([...firstSaved.items,...secondSaved.items].map(p=>p.kind+':'+p.id)).size).toBe(35);
+  expect(firstSaved.items.slice(0,2).map(p=>p.kind)).toEqual(['video','video']);
+  expect((await saved.list({...actor,id:'precision_author'})).items).toEqual([]);
+  const page=await service.list('tenant_precision','precision_viewer','for_you',undefined,undefined,'Precision needle');
+  await pool.query(`INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    VALUES('tenant_precision','precision_author','precision_viewer',true,now())`);
+  expect((await service.list('tenant_precision','precision_viewer','for_you',page.nextCursor!,undefined,'Precision needle')).items).toEqual([]);
+  expect((await saved.list(actor,firstSaved.nextCursor!)).items.map(p=>p.kind)).not.toContain('post');
+ });
  it("publishes once on stable key and rejects changed payload",async()=>{
   const value={authorMasanaId:"masana_one",kind:"text",body:"Welcome",media:[],transcript:null,idempotencyKey:"request-publish-001"};
   const first=await repo.publish("tenant_test","masana_one",value);
