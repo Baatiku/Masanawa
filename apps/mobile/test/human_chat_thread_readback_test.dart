@@ -17,12 +17,14 @@ class ThreadJournal extends HumanJournal {
 
 class FlakyEncryptedJournal extends ThreadJournal {
   int remainingFailures=1, writes=0;
+  HumanJson? corrupt;
   @override
   Future<HumanJson> restore() async {
     if (remainingFailures > 0) {
       remainingFailures--;
       throw StateError('Encrypted journal temporarily unreadable');
     }
+    if (corrupt != null) return corrupt!;
     return {
       'draft':'Recovered unsent text',
       'pending':[],
@@ -235,6 +237,24 @@ void main(){
     expect(c.journalUnavailable,true);
     expect(await c.enqueue(text:'not safe'),false);
     expect(j.writes,0);
+    await c.refresh();
+    expect(c.journalUnavailable,false);
+    expect(c.draft,'Recovered unsent text');
+    c.dispose();await t.finish();
+  });
+
+  test('malformed restored encrypted pending queue cannot be silently replaced',() async{
+    final t=ThreadTransport(),j=FlakyEncryptedJournal()
+      ..remainingFailures=0
+      ..corrupt={'draft':'existing','attachments':[],
+        'pending':['not a message payload'],'reply':null};
+    final c=HumanThreadController(t,j,'thread');
+    await c.start();
+    expect(c.journalUnavailable,true);
+    expect(c.error,contains('Could not restore encrypted'));
+    expect(await c.enqueue(text:'must not overwrite'),false);
+    expect(j.writes,0);
+    j.corrupt=null;
     await c.refresh();
     expect(c.journalUnavailable,false);
     expect(c.draft,'Recovered unsent text');
