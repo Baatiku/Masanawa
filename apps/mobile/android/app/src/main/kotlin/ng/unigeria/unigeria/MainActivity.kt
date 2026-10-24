@@ -3,6 +3,7 @@ package ng.unigeria.unigeria
 import android.Manifest
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
+import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -27,6 +28,7 @@ class MainActivity : FlutterActivity() {
     private var toneChannel: MethodChannel? = null
     private var privacyChannel: MethodChannel? = null
     private var incomingShare: IncomingShareBridge? = null
+    private var deviceUnlockChannel: MethodChannel? = null
     private val privateScreenOwners = mutableSetOf<String>()
     private var activeCallOwners = 0
     @Volatile private var destroyed = false
@@ -38,6 +40,24 @@ class MainActivity : FlutterActivity() {
             this,
             flutterEngine.dartExecutor.binaryMessenger,
         ).also { bridge -> bridge.accept(intent) }
+
+        deviceUnlockChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "masanawa/device_unlock",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method != "isUnlocked") {
+                    result.notImplemented()
+                } else {
+                    try {
+                        val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+                        result.success(!keyguard.isDeviceLocked && !keyguard.isKeyguardLocked)
+                    } catch (_: RuntimeException) {
+                        result.success(false)
+                    }
+                }
+            }
+        }
 
         signalingAudio = CallSignalingAudio(this)
         // Recent-apps thumbnails, Android screenshots and untrusted screen
@@ -358,6 +378,8 @@ class MainActivity : FlutterActivity() {
         destroyed = true
         incomingShare?.close()
         incomingShare = null
+        deviceUnlockChannel?.setMethodCallHandler(null)
+        deviceUnlockChannel = null
         privateScreenOwners.clear()
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         privacyChannel?.setMethodCallHandler(null)
