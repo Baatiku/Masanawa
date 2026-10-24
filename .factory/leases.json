@@ -19,15 +19,26 @@
         "CONTINUE-HERE.md",
         "docs/PRODUCT-ROADMAP-20261019.md",
         "docs/SCREEN-JOURNEYS.md",
-        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md"
+        "docs/WALLET-P2P-EXHAUSTIVE-SCREEN-FEATURE-CONTRACT.md",
+        "packages/commerce/migrations/0149_msnw_p2p_message_attachments.sql",
+        "services/gateway/src/p2p/message_attachments.ts",
+        "services/gateway/src/p2p/message_attachments.pglite.test.ts",
+        "services/gateway/src/p2p/order_messages.pglite.test.ts",
+        "apps/mobile/lib/src/finance/msnw_p2p_screen.dart",
+        "apps/mobile/lib/src/finance/p2p_order_messages.dart",
+        "apps/mobile/lib/src/finance/p2p_message_attachments.dart",
+        "apps/mobile/test/p2p_order_messages_test.dart",
+        "apps/mobile/test/p2p_message_attachments_test.dart"
       ],
       "branch": "feat/p2p-private-case-notes-oct24",
       "base_sha": "ef55d8108a80d51a8b55bf08549216f8c314fd62",
       "pr": "https://github.com/Baatiku/Masanawa/pull/369",
       "claimed_at": "2026-10-24T09:26:37.069Z",
-      "heartbeat_at": "2026-10-24T09:28:21.013Z",
-      "expires_at": "2026-10-24T09:33:21.013Z",
-      "progress": "PR3699974896f exacttree4df01851 published;3SQL+gateway/adaptertypes+15staffFlutterPASS;reviewclear. AwaitexactheadCI including22realPG. NoAPK/provider/handsetacceptance. RemainingclearrequiredsourcegapP5-05orderchatattachmentpreview underinspection."
+      "heartbeat_at": "2026-10-24T09:35:35.428Z",
+      "expires_at": "2026-10-24T09:40:35.428Z",
+      "progress": "PR3699974896f exacttree4df01851 published;3SQL+gateway/adaptertypes+15staffFlutterPASS;reviewclear. AwaitexactheadCI including22realPG. NoAPK/provider/handsetacceptance. RemainingclearrequiredsourcegapP5-05orderchatattachmentpreview underinspection.",
+      "next_branch": "feat/p2p-discussion-attachments-oct24",
+      "next_scope": "P5-05 message-linked private evidence references and native preview/selection using existing private uploads; actor/order-bound original send identity, moderation tombstones, no payment authority"
     }
   ],
   "history": [
