@@ -5,6 +5,7 @@ import '../screens/profile/person_profile_screen.dart';
 import '../calls/incoming_call_coordinator.dart';
 import '../calls/incoming_call_screen.dart';
 import '../features/share_intake/share_intake_screen.dart';
+import '../features/notification_reply/notification_reply_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -236,6 +237,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/chats', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/share', builder: (_, __) => const ShareIntakeScreen()),
+      GoRoute(
+        path: '/human/quick-reply',
+        builder: (_, __) => const HumanNotificationReplyScreen(),
+      ),
       GoRoute(
         path: '/chat/:id',
         builder: (context, state) {

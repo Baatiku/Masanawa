@@ -279,15 +279,35 @@ class HumanThreadController extends ChangeNotifier {
     required String text,
     List<String> attachments = const [],
     String? replyToId,
+    String? requestId,
   }) async {
     if (!current || busy || _journalUnavailable) return false;
+    // A notification reply can reserve its original ID in encrypted storage
+    // before queueing. Never silently mint another ID on retry or duplicate
+    // the same pending body in the human conversation journal.
+    final originalId = requestId ?? createRequestId();
+    if (!RegExp(r'^request_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+        .hasMatch(originalId)) return false;
+    final duplicates = pending.where((body) => body['requestId'] == originalId);
+    if (duplicates.isNotEmpty) {
+      final first = duplicates.first;
+      final files = first['attachments'];
+      if (first['text'] != text || first['replyToId'] != replyToId ||
+          files is! List || files.length != attachments.length ||
+          !files.asMap().entries.every((e) =>
+              e.value is Map && e.value['id'] == attachments[e.key])) {
+        return false;
+      }
+      await retry();
+      return true;
+    }
     journaling = true;
     changed();
     final oldDraft = draft;
     final oldAttachments = draftAttachments;
     final oldReply = draftReply;
     final body = {
-      'requestId': createRequestId(),
+      'requestId': originalId,
       'text': text,
       if (replyToId != null) 'replyToId': replyToId,
       'attachments': attachments.map((id) => {'id': id}).toList(),

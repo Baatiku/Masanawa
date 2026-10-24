@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../agents/agent_shell.dart';
 import 'request_id.dart';
 import 'shell_deep_link.dart';
+import '../features/notification_reply/notification_reply.dart';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -83,6 +84,28 @@ const _workNotificationDetails = NotificationDetails(
     visibility: NotificationVisibility.private,
   ),
   iOS: DarwinNotificationDetails(),
+);
+
+final _humanReplyNotificationDetails = NotificationDetails(
+  android: AndroidNotificationDetails(
+    'masanawa_work',
+    'Masanawa updates',
+    channelDescription: 'Agent replies, approvals and completed work',
+    icon: 'ic_stat_masanawa',
+    importance: Importance.high,
+    priority: Priority.high,
+    visibility: NotificationVisibility.private,
+    actions: [
+      AndroidNotificationAction(
+        humanReplyActionId,
+        'Write reply',
+        showsUserInterface: true,
+        allowGeneratedReplies: false,
+        cancelNotification: true,
+        inputs: [AndroidNotificationActionInput(label: 'Draft a reply')],
+      ),
+    ],
+  ),
 );
 
 String? humanIncomingCallLink(Map<String, dynamic> data) {
@@ -186,6 +209,8 @@ class MobilePushService {
   static const _nativeLinks = MethodChannel('masanawa/deep_links');
   static String? _installationId;
   static AgentShellTransport? _transport;
+  static String? _humanReplyOwner;
+  static int _humanReplyEpoch = -1;
   static String? _characterId;
   static int _contextGeneration = 0;
   static StreamSubscription<String>? _tokenRefresh;
@@ -195,6 +220,29 @@ class MobilePushService {
   Stream<Uri> get deepLinks => _links.stream;
   Stream<Uri> get incomingHints => _incomingHints.stream;
   bool get configured => firebasePushConfigured;
+
+  /// Only an already-authenticated foreground account may mint a reply
+  /// notification. The bound owner/epoch is embedded in its local payload;
+  /// stale actions from another account never become a send authorization.
+  void bindHumanReplyAuthorization(String? owner, int epoch) {
+    _humanReplyOwner = owner;
+    _humanReplyEpoch = epoch;
+  }
+
+  void _onLocalNotificationResponse(NotificationResponse response) {
+    final replyHint = HumanNotificationReplyHint.fromPayload(response.payload);
+    if (response.actionId == humanReplyActionId) {
+      HumanNotificationReplyInbox.instance.offer(
+        payload: response.payload, input: response.input,
+      );
+      return;
+    }
+    if (replyHint != null) {
+      _emitLink(replyHint.deepLink);
+    } else if (response.payload != null) {
+      _emitLink(response.payload!);
+    }
+  }
 
   Uri? takeInitialDeepLink() {
     final link = _initialLink;
@@ -246,8 +294,7 @@ class MobilePushService {
         ),
       ),
       onDidReceiveNotificationResponse: (response) {
-        final payload = response.payload;
-        if (payload != null) _emitLink(payload);
+        _onLocalNotificationResponse(response);
       },
     );
 
@@ -262,9 +309,9 @@ class MobilePushService {
     await channels?.createNotificationChannel(_incomingCallChannel);
 
     final launch = await _notifications.getNotificationAppLaunchDetails();
-    final localPayload = launch?.notificationResponse?.payload;
-    if (launch?.didNotificationLaunchApp == true && localPayload != null) {
-      _emitLink(localPayload);
+    final localResponse = launch?.notificationResponse;
+    if (launch?.didNotificationLaunchApp == true && localResponse != null) {
+      _onLocalNotificationResponse(localResponse);
     }
 
     final initial = await FirebaseMessaging.instance.getInitialMessage();
@@ -281,6 +328,9 @@ class MobilePushService {
         }
       }
       final isCall = isIncomingCallPush(message.data);
+      final replyHint = HumanNotificationReplyHint.fromPush(
+        message.data, _humanReplyOwner, _humanReplyEpoch,
+      );
       final notification = message.notification;
       if (notification == null && !isCall) return;
       await _notifications.show(
@@ -300,8 +350,12 @@ class MobilePushService {
             : 'Open the app to view your update',
         notificationDetails: isCall
             ? _callNotificationDetails
-            : _workNotificationDetails,
-        payload: _linkFor(message),
+            : replyHint != null && Platform.isAndroid
+                ? _humanReplyNotificationDetails
+                : _workNotificationDetails,
+        payload: replyHint != null && Platform.isAndroid
+            ? replyHint.toPayload()
+            : _linkFor(message),
       );
     });
     _opened = FirebaseMessaging.onMessageOpenedApp.listen(_emitMessageLink);

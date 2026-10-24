@@ -130,6 +130,25 @@ void main() {
     c.dispose();
     await t.events.close();
   });
+  test('externally reserved quick-reply ID is never changed or duplicated while queued', () async {
+    const original = 'request_019a2b3c-4d5e-7a8b-9c0d-111122223333';
+    final t = Transport()..fail = true;
+    final j = Journal('alice');
+    final c = HumanThreadController(t, j, 'thread');
+    expect(await c.enqueue(text: 'Notification reply', requestId: original), isTrue);
+    expect(c.pending, hasLength(1));
+    expect((t.sent.single)['requestId'], original);
+    expect(await c.enqueue(text: 'Notification reply', requestId: original), isTrue);
+    expect(c.pending, hasLength(1));
+    expect(await c.enqueue(text: 'Substituted', requestId: original), isFalse);
+    expect(await c.enqueue(text: 'Invalid', requestId: 'not-a-request'), isFalse);
+    t.fail = false;
+    await c.retry();
+    expect(c.pending, isEmpty);
+    expect(t.sent.every((body) => body['requestId'] == original), isTrue);
+    c.dispose();
+    await t.events.close();
+  });
   test(
     'private store failure prevents network send and keeps recoverable draft',
     () async {
