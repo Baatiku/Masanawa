@@ -872,6 +872,46 @@ it('pages the entire visible human inbox with microsecond ties, literal search a
   expect((await send(a,'GET','conversations',{}, {query:'bulk_inbox'})).items).toHaveLength(0);
   expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-071'})).items).toHaveLength(1);
   await expect(send(eve,'GET','conversations',{}, {query:'Bulk inbox',after:firstPage.nextCursor})).rejects.toMatchObject({statusCode:404});
+  // The user's archive is a private SQL-side filter, including rows
+  // beyond page 1. Both filters must preserve identical microsecond ties.
+  await db.query(`UPDATE talks.human_viewers SET archived=true
+    WHERE tenant_id='t' AND user_id='alice'
+      AND conversation_id BETWEEN 'inbox-tie-008' AND 'inbox-tie-061'`);
+  const archived1=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'archived'});
+  expect(archived1.items).toHaveLength(50);
+  expect(archived1.items.every((x:any)=>x.archived)).toBe(true);
+  const archived2=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'archived',after:archived1.nextCursor});
+  expect(archived2.items).toHaveLength(4);
+  expect(archived2.nextCursor).toBeNull();
+  expect(new Set([...archived1.items,...archived2.items].map((x:any)=>x.id)).size).toBe(54);
+  const active=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active'});
+  expect(active.items).toHaveLength(10);
+  expect(active.items.every((x:any)=>!x.archived)).toBe(true);
+  const pending=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'requests'});
+  expect(pending.items).toHaveLength(12); // A request remains a request even when archived.
+  await expect(send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active',after:archived1.nextCursor})).rejects.toMatchObject({statusCode:404});
+  await expect(send(a,'GET','conversations',{}, {query:'no-match',filter:'archived',after:archived1.nextCursor})).rejects.toMatchObject({statusCode:404});
+  await expect(send(b,'GET','conversations',{}, {filter:'archived',after:archived1.nextCursor})).rejects.toMatchObject({statusCode:404});
+  await expect(send(a,'GET','conversations',{}, {filter:'unknown'})).rejects.toMatchObject({statusCode:400});
+  await send(a,'PATCH','conversations/inbox-tie-061',{archived:false});
+  expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-061',filter:'active'})).items).toHaveLength(1);
+  expect((await send(a,'GET','conversations',{}, {query:'bulkinbox-061',filter:'archived'})).items).toHaveLength(0);
+  // Per-viewer pinning uses a *composite* keyset, so the pinned-to-normal
+  // boundary survives identical PostgreSQL microseconds and 50-item pages.
+  await db.query("UPDATE talks.human_viewers SET archived=false WHERE tenant_id='t' AND user_id='alice' AND conversation_id LIKE 'inbox-tie-%'");
+  await db.query("UPDATE talks.human_viewers SET pinned=true WHERE tenant_id='t' AND user_id='alice' AND conversation_id BETWEEN 'inbox-tie-008' AND 'inbox-tie-022'");
+  const pinnedPage=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active'});
+  expect(pinnedPage.items).toHaveLength(50);
+  expect(pinnedPage.items.slice(0,15).every((x:any)=>x.pinned)).toBe(true);
+  expect(pinnedPage.items.slice(15).every((x:any)=>!x.pinned)).toBe(true);
+  expect(pinnedPage.items[0].id).toBe('inbox-tie-022');
+  const normalPage=await send(a,'GET','conversations',{}, {query:'Bulk inbox',filter:'active',after:pinnedPage.nextCursor});
+  expect(normalPage.items).toHaveLength(14);
+  expect(normalPage.items.every((x:any)=>!x.pinned)).toBe(true);
+  expect(new Set([...pinnedPage.items,...normalPage.items].map((x:any)=>x.id)).size).toBe(64);
+  await send(a,'PATCH','conversations/inbox-tie-022',{pinned:false});
+  const afterUnpin=await send(a,'GET','conversations',{}, {query:'bulkinbox-022',filter:'active'});
+  expect(afterUnpin.items[0].pinned).toBe(false);
 });
 
 it('preserves microsecond-tied message history without searching deleted plaintext',async()=>{
