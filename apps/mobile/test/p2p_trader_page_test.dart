@@ -17,7 +17,7 @@ Map<String, dynamic> ad(String id) => {
 class Fixture {
   String? user = 'buyer';
   int completed = 7, closed = 10;
-  bool fail = false, denied = false;
+  bool fail = false, denied = false, breakdown = false;
   String? cursor;
   final cursors = <String?>[];
   final offers = <Map<String, dynamic>>[ad('ad-one')];
@@ -40,6 +40,12 @@ class Fixture {
         'displayName': 'Public Seller',
         'completedOrders30d': completed,
         'closedOrders30d': closed,
+        if (breakdown) ...{
+          'cancelledOrders30d': 2,
+          'expiredOrders30d': 1,
+          'disputedOrders30d': 1,
+          'totalOrders30d': 12,
+        },
         'windowDays': 30,
         'asOf': '2026-10-23T05:00:00Z',
       },
@@ -66,6 +72,25 @@ class Fixture {
 }
 
 void main() {
+  testWidgets(
+    'shows separate same-cohort outcomes without implying a reputation score',
+    (t) async {
+      final f = Fixture()..breakdown = true;
+      await t.pumpWidget(f.page());
+      await t.pumpAndSettle();
+      expect(
+        find.text('2 cancelled · 1 expired · 1 currently disputed'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('12 total orders opened in this window'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not a lifetime score'), findsOneWidget);
+      expect(find.textContaining('%'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets(
     'shows the actual cohort denominator and bank-method scope without a fabricated merchant badge',
     (t) async {

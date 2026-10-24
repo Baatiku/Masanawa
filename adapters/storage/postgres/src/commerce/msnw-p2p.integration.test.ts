@@ -462,4 +462,28 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
   expect((await pool.query('SELECT account_number FROM commerce.msnw_p2p_payment_methods WHERE method_id=$1',[method])).rows[0].account_number).toBe('0123456789');
  });
 
+ it('serializes duplicate bulk pauses with reservations and never repauses resumed or later ads on replay',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic Pause Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'Pause Test Bank',bankCode:'058',accountName:'Synthetic Pause Test',accountNumber:'0123456789',verificationReference:'test-pause-proof'});
+  const input={paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'};
+  const one=await api.createOffer(maker,input);await api.createOffer(maker,input);
+  const accepted=await api.createOrder(buyer,{offerId:one.offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+  const payment=(await api.order(buyer,accepted.orderId)).payment,key=randomUUID();
+  const race=await Promise.allSettled([api.pauseAllAds(maker,key),api.pauseAllAds(maker,key),api.createOrder(buyer,{offerId:one.offerId,amountMicro:'100000',idempotencyKey:randomUUID()})]);
+  expect(race[0].status).toBe('fulfilled');expect(race[1].status).toBe('fulfilled');
+  const receipts=race.slice(0,2).map(x=>(x as PromiseFulfilledResult<Record<string,unknown>>).value);
+  expect(receipts[0]).toMatchObject({paused_count:2});expect(receipts[1]).toMatchObject({paused_count:2,operation_id:receipts[0]!.operation_id});expect(receipts.filter(x=>!x.replay)).toHaveLength(1);
+  if(race[2].status==='rejected')expect(race[2].reason).toMatchObject({code:'p2p.offer_unavailable'});
+  const orders=race[2].status==='fulfilled'?2:1;
+  expect((await pool.query('SELECT available_micro::text,reserved_micro::text FROM commerce.msnw_custody_accounts WHERE tenant_id=$1 AND user_id=$2',[scope,owner])).rows[0]).toEqual({available_micro:String(2000000-orders*100500),reserved_micro:String(orders*100500)});
+  expect((await api.order(buyer,accepted.orderId)).payment).toEqual(payment);
+  await api.resumeOffer(maker,one.offerId);const later=await api.createOffer(maker,input);
+  expect(await api.pauseAllAds(maker,key)).toMatchObject({paused_count:2,replay:true,operation_id:receipts[0]!.operation_id});
+  expect((await pool.query('SELECT state FROM commerce.msnw_p2p_offers WHERE offer_id=ANY($1::uuid[])',[[one.offerId,later.offerId]])).rows).toEqual([{state:'active'},{state:'active'}]);
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_bulk_pauses WHERE tenant_id=$1',[scope])).rows[0].n).toBe(1);
+ });
+
 });

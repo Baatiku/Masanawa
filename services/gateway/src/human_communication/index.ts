@@ -2,6 +2,7 @@ import {
   randomUUID, createHash
 }
 from 'node:crypto';
+import {ownHumanReportPage} from './report_pages.js';
 import type {
   FastifyInstance
 }
@@ -239,6 +240,16 @@ export function createHumanCommunicationService(o:HumanOptions){
       if(!self.rows.length)fail(401,'Account unavailable');
       const parts=path.split('/').filter(Boolean);
       const id=parts[1]??'';
+      if(parts[0]==='reports'&&method==='GET'){
+        if(parts.length===1)return ownHumanReportPage(db,a,q);
+        if(parts.length===2){
+          const key=str(parts[1]);
+          const receipt=(await db.query("SELECT result FROM talks.human_requests WHERE tenant_id=$1 AND user_id=$2 AND request_id=$3 AND operation='report'",[a.tenantId,a.userId,key])).rows[0];
+          if(!receipt)fail(404,'Report receipt unavailable');
+          return {ok:true,...(receipt.result as object)};
+        }
+        fail(404,'Not found');
+      }
       if(parts[0]==='profiles'&&parts[2]==='rooms'&&method==='GET'){
         const subject=(await db.query('SELECT user_id FROM talks.public_profiles WHERE tenant_id=$1 AND handle=$2',[a.tenantId,str(parts[1])])).rows[0];
         if(!subject)fail(404,'Person unavailable');
@@ -640,15 +651,14 @@ export function createHumanCommunicationService(o:HumanOptions){
           if(method!=='POST')fail(404,'Not found');
           if(m.user_id===a.userId)fail(403,'Cannot report your own message');
           return idem(db,a,b.requestId,'report',{
-            id,messageId:m.id,reason:b.reason
-          }
-          ,async()=>{
-            await db.query('INSERT INTO talks.human_reports VALUES($1,$2,$3,$4,$5,$6)',[a.tenantId,randomUUID(),a.userId,m.id,str(b.reason,2000),now()]);
-            return {
-              ok:true
-            }
-          }
-          );
+          id,messageId:m.id,reason:b.reason
+        }
+        ,async()=>{
+          const reportId=randomUUID();
+          const inserted=await db.query('INSERT INTO talks.human_reports VALUES($1,$2,$3,$4,$5,$6) RETURNING created_at',[a.tenantId,reportId,a.userId,m.id,str(b.reason,2000),now()]);
+          return {ok:true,reportId,submittedAt:iso(inserted.rows[0]?.created_at)};
+        }
+        );
         }
         if(method!=='DELETE')fail(404,'Not found');
         if(m.user_id!==a.userId)fail(403,'Sender only');

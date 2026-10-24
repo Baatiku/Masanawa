@@ -203,6 +203,11 @@ class _P2pTraderPageState extends State<P2pTraderPage> {
                 const Text(
                   'Orders opened in the last 30 days. Closed includes completed, cancelled and expired orders.',
                 ),
+                if (_trader!['cancelledOrders30d'] is int && _trader!['expiredOrders30d'] is int && _trader!['disputedOrders30d'] is int && _trader!['totalOrders30d'] is int) ...[
+                  Text('${_trader!['cancelledOrders30d']} cancelled · ${_trader!['expiredOrders30d']} expired · ${_trader!['disputedOrders30d']} currently disputed'),
+                  Text('${_trader!['totalOrders30d']} total orders opened in this window'),
+                  const Text('These are current outcomes of the same opening-date cohort, not a lifetime score or a count of every historical dispute.'),
+                ],
                 const Text('Trading history does not guarantee payment.'),
                 Text(
                   'As of ${MaterialLocalizations.of(context).formatCompactDate(DateTime.parse(_trader!['asOf'] as String).toLocal())}',
