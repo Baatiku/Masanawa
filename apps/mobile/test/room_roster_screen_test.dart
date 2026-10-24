@@ -206,6 +206,9 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await t.ensureVisible(find.text('Banned members'));
+      await t.pumpAndSettle();
+      expect(find.text('Banned members').hitTestable(), findsOneWidget);
       await t.tap(find.text('Banned members'));
       await t.pumpAndSettle();
       await t.tap(find.byTooltip('Manage member'));
