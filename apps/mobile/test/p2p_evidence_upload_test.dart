@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,6 +54,12 @@ void main(){
     tester.view.physicalSize=const Size(320,900);tester.view.devicePixelRatio=1;addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(builder:(context,child)=>MediaQuery(data:MediaQuery.of(context).copyWith(textScaler:const TextScaler.linear(2)),child:Directionality(textDirection:TextDirection.rtl,child:child!)),home:P2pEvidenceUploadPage(expectedUserId:'owner',currentUserId:()=>'owner',pick:()async=>file,restore:()async=>file.metadata,persist:(_)async{},original:(_)async=>null,upload:(_)async{})));
     await tester.pumpAndSettle();await tester.scrollUntilVisible(find.text('Choose original file'),150,scrollable:find.byType(Scrollable).first);await tester.tap(find.text('Choose original file'));await tester.pumpAndSettle();expect(tester.takeException(),isNull);await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('authorization loss clears selected bytes even while account ID stays unchanged',(tester)async{
+    int uploads=0;
+    await tester.pumpWidget(MaterialApp(home:P2pEvidenceUploadPage(expectedUserId:'owner',currentUserId:()=>'owner',pick:()async=>file,restore:()async=>null,persist:(_)async{},original:(_)async=>throw DioException(requestOptions:RequestOptions(path:'/evidence/original'),response:Response(requestOptions:RequestOptions(path:'/evidence/original'),statusCode:403)),upload:(_)async{uploads++;})));
+    await tester.pumpAndSettle();await tester.tap(find.text('Choose file'));await tester.pumpAndSettle();await tester.tap(find.text('Attach selected file'));await tester.pumpAndSettle();expect(uploads,0);expect(find.text('Account changed. Reopen this order.'),findsOneWidget);expect(find.text('Attach selected file'),findsNothing);await tester.pumpWidget(const SizedBox());
   });
 
 }

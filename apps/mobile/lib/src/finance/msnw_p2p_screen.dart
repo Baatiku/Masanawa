@@ -1007,6 +1007,7 @@ class _MsnwP2pScreenState extends State<MsnwP2pScreen> with WidgetsBindingObserv
     if(!authorized()||!route.mounted)return;
     await Navigator.of(route).push(MaterialPageRoute<void>(builder:(_)=>P2pOrderSupportPage(expectedUserId:owner,currentUserId:()=>authorized()?owner:null,
       load:()async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support'));},
+      loadOlder:(cursor)async{if(!authorized())throw StateError('Account changed');return _json(await _request('GET','/orders/$id/support/events?cursor=${Uri.encodeQueryComponent(cursor)}'));},
       submit:(category,details)async{if(!authorized())throw StateError('Account changed');return _json(await _request('POST','/orders/$id/dispute',{'category':category,'reason':details}));},
     )));
   }

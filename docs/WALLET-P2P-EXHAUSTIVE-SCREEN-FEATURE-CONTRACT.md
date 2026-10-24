@@ -422,7 +422,7 @@ Legend: `S` source, `P` partial, `N` absent/not verified in inspected source, `Q
 | P6-01 | S/P | P2P order list with stable cursor, all/active/finished and user Buy/Sell role. |
 | P6-02 | S/P | Orders/own ads have server status/direction/inclusive UTC-date filters and scoped keysets in the qualified MSNW/NGN/bank market; additional asset/rail qualification and device acceptance remain open. |
 | P6-03 | P | My Offers and Updates nested below primary Buy/Sell/Orders flow. |
-| P6-04 | P | Dedicated support view shows up to 50 recent public order transitions and current status; complete historical audit/retention and device qualification remain open. |
+| P6-04 | S/P | Dedicated support view pages the complete participant-safe public transition history with scoped lossless keysets; private audit/retention, formal responses and device qualification remain open. |
 | P6-05 | S/P | Canonical receipt and Wallet Activity point to same operation and roles. |
 | P6-06 | S/P | Public trader profile pages live eligible ads and same-window real order outcomes; no invented badge/rating, device/provider acceptance remains open. |
 | P6-07 | S/P | Owner pause-all-current-ads, durable original receipt/recovery and individually eligible resume implemented; schedules/persistent offline mode and device acceptance remain open. |
@@ -770,6 +770,14 @@ Order evidence now recovers the submitting account’s original receipt by order
 The attachment page supports file selection, explicit submission, original receipt checks, same-file retry, loading/error/rejected-file recovery and account/base-change fencing. Only hash, MIME type and byte count are retained in account/order/base-scoped secure storage; file bytes remain in memory. Definitive validation rejection permits replacement; uncertain outcomes keep the original identity. Back navigation preserves recovery metadata. PNG/JPG/WEBP/PDF remain limited to 2 MB.
 
 Source checks: 115 local P2P tests, gateway and PostgreSQL adapter types passed; 17 native regression tests plus the final seven evidence tests passed, including 320dp RTL/200% text and late account-change fencing. One Flutter startup segfault was retried; a lazy-list test scroll was corrected. Exact-head hosted qualification and the new PostgreSQL duplicate-record race are recorded in the delivery PR. Independent read-only review clear after fixing rejected-file replacement. This is source qualification, not handset/provider/production acceptance. Private unreferenced-object retention cleanup, deployed storage/retention policy, actual handset file-picker behavior and complete P5-09 acceptance remain open. Parent gates and the 177-screen/820-requirement inventory remain unchanged. No APK generated.
+
+## 24 October 2026 — P2P complete public support timeline (partial P5-03/P6-04)
+
+Participant support history now pages older public order transitions through an authenticated no-store endpoint. Lossless PostgreSQL microsecond/UUID keysets bind the order, tenant and viewing account; attachment-recorded summaries join the existing public transition allowlist without hashes, storage references, bank data, raw actor IDs, private openings or staff notes. Reading history never changes escrow, order state or custody.
+
+The existing support page adds Load older events, retry without discarding current content, overlap removal and a refresh generation fence. Account/access loss clears private cached context; older pages cannot overwrite a refreshed order. Loading, empty, transient failure and revoked-access states remain on the original order route. Local five backend checks, gateway/adapter types and 21 Flutter regression checks passed; the final 18 attachment/support tests also passed after authorization-loss repairs. Hosted tied-microsecond PostgreSQL paging acceptance is recorded in the delivery PR. Independent review clear after correcting authorization-loss cache handling.
+
+Complete public history source is distinct from formal staff responses, complete private investigation records, deployed retention, handset and production acceptance, which remain open. Parent P2P gates and 177 screens/820 requirements unchanged. No APK generated.
 
 ## 23 October 2026 — P2P public trader context and report-boundary hardening (partial P7-T01/P27)
 

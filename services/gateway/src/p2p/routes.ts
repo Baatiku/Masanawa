@@ -463,6 +463,13 @@ export function registerP2pRoutes(app: FastifyInstance, deps: P2pRoutesDependenc
       return await deps.service.action(a,orderId,"confirm",{releaseAuthorized:true});
     }catch(error){return respond(error,reply);}
   });
+  app.get('/v1/wallet/msnw/p2p/orders/:orderId/support/events',async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    try{const q=req.query as Record<string,unknown>;
+      if(Object.keys(q).some(key=>key!=='cursor')||(q.cursor!==undefined&&typeof q.cursor!=='string'))throw new P2pError('p2p.invalid_cursor',422);
+      return await deps.service.supportEvents(await actor(req.headers.authorization),(req.params as {orderId:string}).orderId,q.cursor as string|undefined);
+    }catch(error){return respond(error,reply);}
+  });
   app.post('/v1/wallet/msnw/p2p/orders/:orderId/evidence/original',async(req,reply)=>{
     reply.header('Cache-Control','no-store');
     try{

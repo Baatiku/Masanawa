@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 class P2pEvidenceRejected implements Exception { const P2pEvidenceRejected(); }
@@ -33,7 +34,9 @@ class _EvidenceState extends State<P2pEvidenceUploadPage> {
   @override void initState(){super.initState();_timer=Timer.periodic(const Duration(milliseconds:250),(_){if(!_owner&&mounted&&!_revoked)setState((){_revoked=true;_file=null;_pending=null;_receipt=null;});});_restore();}
   @override void dispose(){_timer?.cancel();_file=null;super.dispose();}
   bool _valid(Map<String,dynamic> p)=>p.length==4&&p['version']==1&&p['sha256'] is String&&RegExp(r'^[a-f0-9]{64}$').hasMatch(p['sha256'] as String)&&const {'image/png','image/jpeg','image/webp','application/pdf'}.contains(p['contentType'])&&p['bytes'] is int&&(p['bytes'] as int)>0&&(p['bytes'] as int)<=2*1024*1024;
-  Future<void> _restore()async{try{final p=await widget.restore();if(!_owner)return;if(p!=null&&!_valid(p))throw StateError('Invalid saved retry');_pending=p;_ready=true;if(p!=null)await _recover();}catch(_){if(_owner)_message='Retry details could not be read. Reopen this screen to recover.';}finally{if(_owner)setState(()=>_busy=false);}}
+  void _revoke(){if(!mounted)return;setState((){_revoked=true;_file=null;_pending=null;_receipt=null;_message=null;});}
+  bool _accessLost(Object error)=>error is DioException&&[401,403].contains(error.response?.statusCode);
+  Future<void> _restore()async{try{final p=await widget.restore();if(!_owner)return;if(p!=null&&!_valid(p))throw StateError('Invalid saved retry');_pending=p;_ready=true;if(p!=null)await _recover();}catch(error){if(_accessLost(error)){_revoke();}else if(_owner){_message='Retry details could not be read. Reopen this screen to recover.';}}finally{if(_owner)setState(()=>_busy=false);}}
   Future<bool> _recover()async{
     if(!_owner||_pending==null)return false;
     final result=await widget.original(_pending!['sha256'] as String);
@@ -46,7 +49,7 @@ class _EvidenceState extends State<P2pEvidenceUploadPage> {
   }
   Future<void> _run(Future<void> Function() action)async{
     if(_busy||!_owner)return;setState(()=>_busy=true);
-    try{await action();}catch(_){if(_owner)_message='Attachment outcome is uncertain. Check the original before retrying.';}
+    try{await action();}catch(error){if(_accessLost(error)){_revoke();}else if(_owner){_message='Attachment outcome is uncertain. Check the original before retrying.';}}
     finally{if(_owner)setState(()=>_busy=false);}
   }
   Future<void> _choose()async{

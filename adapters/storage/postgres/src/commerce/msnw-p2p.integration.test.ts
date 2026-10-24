@@ -559,4 +559,23 @@ suite("MSNW P2P real PostgreSQL atomic custody settlement (test DB only)",()=>{
  });
 
 
+ it('pages complete public support events with tied PostgreSQL microseconds and actor-bound cursors',async()=>{
+  const scope='tenant_'+randomUUID(),owner='user_'+randomUUID(),taker='user_'+randomUUID(),staff='user_'+randomUUID(),method=randomUUID();
+  for(const user of [owner,taker,staff])await pool.query(`INSERT INTO security.platform_user_profiles(tenant_id,user_id,display_name,email,locale,created_at,updated_at) VALUES($1,$2,'Synthetic Support Test',$3,'en',now(),now())`,[scope,user,user+'@example.com']);
+  await pool.query(`INSERT INTO commerce.msnw_custody_accounts(tenant_id,user_id,available_micro) VALUES($1,$2,2000000),($1,$3,0)`,[scope,owner,taker]);
+  const api=service(),maker={tenantId:scope,userId:owner},buyer={tenantId:scope,userId:taker};
+  await api.recordVerifiedMethod(maker,{methodId:method,bankName:'Support Test Bank',bankCode:'058',accountName:'Synthetic Support Test',accountNumber:'0123456789',verificationReference:'test-support-proof'});
+  const ad=await api.createOffer(maker,{paymentMethodId:method,rateKoboPerMsnw:'100',minMicro:'100000',maxMicro:'1000000',inventoryMicro:'1000000'});
+  const order=await api.createOrder(buyer,{offerId:ad.offerId,amountMicro:'100000',idempotencyKey:randomUUID()});
+  for(let n=0;n<105;n++)await pool.query(`INSERT INTO commerce.msnw_p2p_events(event_id,tenant_id,order_id,actor_id,action,to_state,reason,created_at) VALUES($1,$2,$3,$4,'evidence_recorded','disputed','Private assessment','2026-01-01T00:00:00.123456Z')`,[randomUUID(),scope,order.orderId,staff]);
+  const first=await api.supportEvents(buyer,order.orderId),second=await api.supportEvents(buyer,order.orderId,first.nextCursor!),third=await api.supportEvents(buyer,order.orderId,second.nextCursor!);
+  expect([first.events.length,second.events.length,third.events.length]).toEqual([50,50,6]);expect(third.nextCursor).toBeNull();
+  expect(new Set([...first.events,...second.events,...third.events].map(x=>x.event_id)).size).toBe(106);
+  expect(JSON.stringify(first)).not.toMatch(/Private assessment|reason|actor_id|account_number|sha256/);
+  await expect(api.supportEvents(maker,order.orderId,first.nextCursor!)).rejects.toMatchObject({status:422});
+  const context=await api.orderSupport(buyer,order.orderId);expect(context.nextCursor).toBe(first.nextCursor);
+  expect((await pool.query('SELECT count(*)::int AS n FROM commerce.msnw_p2p_custody_journal WHERE tenant_id=$1',[scope])).rows[0].n).toBe(1);
+ });
+
+
 });

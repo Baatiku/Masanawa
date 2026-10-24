@@ -1,3 +1,4 @@
+import {supportTimeline} from './support_timeline.js';
 import {randomUUID} from 'node:crypto';
 import {P2pError,type P2pActor,type P2pPool,type P2pQuery} from './service.js';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -21,9 +22,7 @@ export function createDisputeContext(pool:P2pPool){return{
   const report=await pool.query(`SELECT submission_id,category,created_at,opened_by=$3 AS is_own,CASE WHEN opened_by=$3 THEN details ELSE NULL END AS details FROM commerce.msnw_p2p_dispute_submissions WHERE tenant_id=$1 AND order_id=$2`,[actor.tenantId,orderId,actor.userId]);
   // Only public transition summaries; original explanations, operator notes,
   // bank records and raw actor IDs never enter the shared timeline.
-  const events=await pool.query(`SELECT event_id,action,to_state,created_at,
-   CASE WHEN actor_id=$3 THEN 'you' WHEN actor_id IN ($4,$5) THEN 'counterparty' ELSE 'support' END AS actor_role
-   FROM commerce.msnw_p2p_events WHERE tenant_id=$1 AND order_id=$2 AND action IN('reserve','buyer_claimed_payment','dispute_opened','escrow_released','cancelled','expired','late_payment_reported','late_payment_escalated','late_payment_closed') ORDER BY created_at DESC,event_id DESC LIMIT 50`,[actor.tenantId,orderId,actor.userId,order.seller_id,order.buyer_id]);
-  return{orderId,state:order.state,version:order.version,canOpenDispute:['awaiting_payment','payment_claimed','release_pending'].includes(String(order.state)),submission:report.rows[0]??null,events:events.rows.reverse(),timelineLimit:50};
+  const timeline=await supportTimeline(pool,actor,orderId);
+  return{orderId,state:order.state,version:order.version,canOpenDispute:['awaiting_payment','payment_claimed','release_pending'].includes(String(order.state)),submission:report.rows[0]??null,...timeline};
  },
 };}
