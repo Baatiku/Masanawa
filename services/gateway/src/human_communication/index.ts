@@ -612,8 +612,13 @@ export function createHumanCommunicationService(o:HumanOptions){
         ;
       }
       if(parts[2]==='read'){
+        if(method!=='POST')fail(405,'Method not allowed');
         const m=(await db.query('SELECT * FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND id=$3 AND NOT deleted',[a.tenantId,id,str(b.messageId)])).rows[0];
         if(!m)fail(404,'Message unavailable');
+        // A read anchor must be an actual incoming message. A client can have
+        // a newer *outgoing* bubble at the bottom of the thread; using that as
+        // the anchor would falsely acknowledge unseen peer messages.
+        if(m.user_id===a.userId)fail(400,'Read anchor must be an incoming message');
         await db.query('UPDATE talks.human_viewers SET read_at=GREATEST(COALESCE(read_at,$4),$4) WHERE tenant_id=$1 AND conversation_id=$2 AND user_id=$3',[a.tenantId,id,a.userId,m.created_at]);
         if((await privacy(db,a)).readReceipts){
           const changed=await db.query('UPDATE talks.human_messages SET read_at=$4 WHERE tenant_id=$1 AND conversation_id=$2 AND user_id<>$3 AND created_at<=$5 AND NOT deleted AND read_at IS NULL RETURNING id',[a.tenantId,id,a.userId,now(),m.created_at]);
@@ -642,6 +647,9 @@ export function createHumanCommunicationService(o:HumanOptions){
         }
         if(method!=='DELETE')fail(404,'Not found');
         if(m.user_id!==a.userId)fail(403,'Sender only');
+        // An interrupted DELETE can be retried. Keep the existing tombstone
+        // without generating another revoke event or touching durable history.
+        if(m.deleted)return {ok:true};
         await db.query("UPDATE talks.human_messages SET text='',deleted=true,reply_to_id=NULL WHERE tenant_id=$1 AND id=$2",[a.tenantId,m.id]);
         await db.query("UPDATE talks.human_media SET data_base64='' WHERE tenant_id=$1 AND message_id=$2",[a.tenantId,m.id]);await db.query("UPDATE talks.human_requests SET result=jsonb_set(result,'{lastMessage}',(result->'lastMessage') || '{\"deleted\":true,\"text\":\"\",\"attachments\":[],\"replyToId\":null}'::jsonb) WHERE tenant_id=$1 AND result->'lastMessage'->>'id'=$2",[a.tenantId,m.id]);
         await db.query("UPDATE talks.human_requests SET result=result || '{\"deleted\":true,\"text\":\"\",\"attachments\":[],\"replyToId\":null}'::jsonb WHERE tenant_id=$1 AND operation='message' AND result->>'id'=$2",[a.tenantId,m.id]);
@@ -684,7 +692,8 @@ export function createHumanCommunicationService(o:HumanOptions){
         }
         )
       }
-      const query=typeof q.query==='string'?q.query:'';
+      if(q.query!==undefined&&(typeof q.query!=='string'||q.query.trim().length>80))fail(400,'Invalid message search');
+      const query=typeof q.query==='string'?q.query.trim():'';
       const params:unknown[]=[a.tenantId,id,query];
       let cursor='';
       if(q.before){
@@ -701,7 +710,7 @@ export function createHumanCommunicationService(o:HumanOptions){
       const r=await db.query(`SELECT * FROM talks.human_messages WHERE tenant_id=$1 AND conversation_id=$2 AND ($3='' OR (NOT deleted AND position(lower($3) in lower(text))>0)) ${cursor} ORDER BY created_at DESC,id DESC LIMIT 51`,params);
       const page=r.rows.slice(0,50);
       if(page.length){
-        const delivered=await db.query('UPDATE talks.human_messages SET delivered_at=$4 WHERE tenant_id=$1 AND conversation_id=$2 AND user_id<>$3 AND delivered_at IS NULL AND id=ANY($5::text[]) RETURNING id',[a.tenantId,id,a.userId,now(),page.map(m=>m.id)]);
+        const delivered=await db.query('UPDATE talks.human_messages SET delivered_at=$4 WHERE tenant_id=$1 AND conversation_id=$2 AND user_id<>$3 AND NOT deleted AND delivered_at IS NULL AND id=ANY($5::text[]) RETURNING id',[a.tenantId,id,a.userId,now(),page.map(m=>m.id)]);
         if(delivered.rows.length)await event(db,a,[target],'messages.delivered',id,null)
       }
       return {

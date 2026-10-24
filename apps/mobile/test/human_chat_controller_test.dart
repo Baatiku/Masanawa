@@ -37,7 +37,9 @@ class Journal extends HumanJournal {
 class Transport extends HumanCommunicationTransport {
   Transport() : super(ApiClient(dio: Dio()));
   final sent = <HumanJson>[];
+  final readIds = <String>[];
   bool fail = false;
+  bool failRead = false;
   Completer<HumanJson>? wait;
   final events = StreamController<HumanJson>.broadcast();
   @override
@@ -50,6 +52,11 @@ class Transport extends HumanCommunicationTransport {
     Map<String, dynamic>? query,
   }) async {
     if (wait != null) return wait!.future;
+    if (method == 'POST' && path.endsWith('/read')) {
+      readIds.add((data as Map)['messageId'] as String);
+      if (failRead) throw StateError('Read confirmation interrupted');
+      return {'ok': true};
+    }
     if (method == 'POST' && path.endsWith('/messages')) {
       sent.add(Map<String, dynamic>.from(data as Map));
       if (fail) throw StateError('Network interrupted after write');
@@ -67,6 +74,42 @@ class Transport extends HumanCommunicationTransport {
 }
 
 void main() {
+  test('read receipts use the latest incoming non-deleted message, never own text', () async {
+    final t = Transport();
+    final c = HumanThreadController(t, Journal('alice'), 'thread');
+    HumanMessage message(String id, {bool mine = false, bool deleted = false}) =>
+        HumanMessage({
+          'id': id,
+          'mine': mine,
+          'deleted': deleted,
+          'createdAt': '2026-10-19T12:00:00Z',
+        });
+    c.messages = [message('incoming'), message('own', mine: true)];
+    expect(c.lastIncomingMessageId, 'incoming');
+    expect(await c.visibleRead(), 'incoming');
+    expect(t.readIds, ['incoming']);
+
+    c.messages = [message('own', mine: true)];
+    expect(c.lastIncomingMessageId, isNull);
+    expect(await c.visibleRead(), isNull);
+    expect(t.readIds, ['incoming']);
+
+    c.messages = [
+      message('earlier'),
+      message('deleted', deleted: true),
+      message('own', mine: true),
+    ];
+    c.search = 'find';
+    expect(await c.visibleRead(), isNull); // Search is not ordinary viewport visibility.
+    c.search = '';
+    t.failRead = true;
+    expect(await c.visibleRead(), isNull);
+    t.failRead = false;
+    expect(await c.visibleRead(), 'earlier');
+    expect(t.readIds, ['incoming', 'earlier', 'earlier']);
+    c.dispose();
+    await t.events.close();
+  });
   test('retry preserves immutable request identity and reply/media after interrupted response', () async {
     final t = Transport()..fail = true;
     final j = Journal('alice');

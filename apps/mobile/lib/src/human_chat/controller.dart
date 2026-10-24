@@ -166,15 +166,31 @@ class HumanThreadController extends ChangeNotifier {
     }
   }
 
-  Future<void> visibleRead() async {
-    if (!current || search.isNotEmpty || messages.isEmpty) return;
+  /// Only incoming, non-deleted messages can acknowledge what this viewer saw.
+  /// A newer outgoing bubble is never a valid receipt anchor.
+  String? get lastIncomingMessageId {
+    for (final message in messages.reversed) {
+      if (!message.mine && !message.deleted) return message.id;
+    }
+    return null;
+  }
+
+  /// Return the confirmed anchor, never an optimistic acknowledgement. The
+  /// widget retries after a later refresh/resume when the request failed.
+  Future<String?> visibleRead() async {
+    if (!current || search.isNotEmpty) return null;
+    final messageId = lastIncomingMessageId;
+    if (messageId == null) return null;
     try {
       await transport.request(
         'POST',
         '/conversations/$id/read',
-        data: {'messageId': messages.last.id},
+        data: {'messageId': messageId},
       );
-    } catch (_) {}
+      return current ? messageId : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _connect() {
