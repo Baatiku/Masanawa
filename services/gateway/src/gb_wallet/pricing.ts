@@ -86,8 +86,10 @@ function parseRemainder(carry: ExactKoboRemainder | undefined): [bigint, bigint]
   }
   const numerator = BigInt(carry.numerator);
   const denominator = BigInt(carry.denominator);
-  if (numerator >= denominator) {
-    throw new TypeError("Kobo remainder must be less than one kobo");
+  // A whole MB can cost 25–40 kobo at current rates. A remainder
+  // is therefore often MORE than one kobo; only bound malformed carry.
+  if (numerator > denominator * 100_000n) {
+    throw new TypeError("Kobo remainder exceeds the permitted bound");
   }
   return [numerator, denominator];
 }
