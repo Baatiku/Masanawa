@@ -110,7 +110,7 @@ void main() {
     }), throwsFormatException);
   });
 
-  testWidgets('Data tab exposes only approved GB bundle review, not purchase',
+  testWidgets('Data enables reviewed approved bundles but never unreviewed purchase',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -131,15 +131,16 @@ void main() {
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pump();
     final action = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Review verified bundle'));
+      find.widgetWithText(FilledButton, 'Review bundle'));
     expect(action.onPressed, isNull);
     expect(find.textContaining('Suggested: MTN'), findsOneWidget);
     await tester.tap(find.text('2 GB'));
     await tester.pump();
     expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Review verified bundle')).onPressed,
+      find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
       isNotNull);
-    expect(find.text('Purchase unavailable'), findsOneWidget);
+    expect(find.text('Review before purchase'), findsOneWidget);
+    expect(find.text('Confirm data purchase'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
