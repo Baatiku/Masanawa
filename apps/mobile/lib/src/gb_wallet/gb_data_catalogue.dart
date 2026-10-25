@@ -8,6 +8,28 @@ typedef GbDataOwner = ({String accountId, int authorizationEpoch});
 
 const gbDataNetworks = ['MTN', 'AIRTEL', 'GLO', '9MOBILE'];
 
+/// A display filter over provider-approved exact validity days. Never parse
+/// a product name to claim a daily/weekly/monthly allowance.
+enum GbDataValidity {
+  any('Any validity'),
+  daily('Daily'),
+  weekly('Weekly'),
+  monthly('Monthly'),
+  other('Other');
+
+  const GbDataValidity(this.label);
+  final String label;
+
+  bool includes(int days) => switch (this) {
+    GbDataValidity.any => true,
+    GbDataValidity.daily => days == 1,
+    GbDataValidity.weekly => days == 7,
+    GbDataValidity.monthly => days >= 28 && days <= 31,
+    GbDataValidity.other => days != 1 && days != 7 &&
+        (days < 28 || days > 31),
+  };
+}
+
 /// Client projection of a reviewed whole-GB mapping *and* a current provider
 /// item. A product name is never allowed to imply its allowance or validity.
 class GbVerifiedBundle {

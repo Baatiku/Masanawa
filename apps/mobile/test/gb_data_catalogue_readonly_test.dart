@@ -13,6 +13,26 @@ Map<String, dynamic> _bundle() => {
 };
 
 void main() {
+  test('validity filters use exact authorized days without inventing duration', () {
+    for (final entry in <int, GbDataValidity>{
+      1: GbDataValidity.daily,
+      7: GbDataValidity.weekly,
+      28: GbDataValidity.monthly,
+      30: GbDataValidity.monthly,
+      31: GbDataValidity.monthly,
+      2: GbDataValidity.other,
+      14: GbDataValidity.other,
+      32: GbDataValidity.other,
+    }.entries) {
+      expect(GbDataValidity.any.includes(entry.key), isTrue);
+      for (final filter in GbDataValidity.values.where(
+          (filter) => filter != GbDataValidity.any)) {
+        expect(filter.includes(entry.key), filter == entry.value,
+          reason: '${entry.key} days in ${filter.name}');
+      }
+    }
+  });
+
   test('NCC-prefix suggestions cover operators with manual portability override', () {
     for (final sample in <String,String>{
       '08031234567': 'MTN',
