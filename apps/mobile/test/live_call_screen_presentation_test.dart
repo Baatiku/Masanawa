@@ -44,6 +44,9 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false}) async 
   ));
   await tester.tap(find.text('Open call'));
   // The timer runs continuously after connection; never pumpAndSettle.
+  // First frame starts Masanawa's fade-up page transition; the following
+  // timed frame advances it before any viewport-position assertion.
+  await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   await tester.pump();
   return session;
@@ -67,6 +70,7 @@ void main() {
     expect(tester.getCenter(find.byKey(const ValueKey('live-call-end-action'))).dy,
       lessThan(600));
     await tester.tap(find.text('End call'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds:400));
     expect(screen,findsNothing);expect(find.text('Open call'),findsOneWidget);
     verify(()=>session.start()).called(1);
@@ -95,6 +99,7 @@ void main() {
     expect(find.text('Earpiece'), findsOneWidget);
     verify(() => session.setSpeaker(false)).called(1);
     await tester.tap(find.text('End call'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Open call'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -115,6 +120,7 @@ void main() {
       const Offset(0, -600));
     await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.text('End call'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Open call'), findsOneWidget);
     expect(tester.takeException(), isNull);
