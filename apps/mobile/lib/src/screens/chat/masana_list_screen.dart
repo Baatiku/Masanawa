@@ -1,18 +1,14 @@
-import 'human_contacts_list.dart';
-import '../../human_calls/human_calls.dart';
 import '../../calls/masana_voice_route.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../l10n/app_localizations.dart';
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../agents/agent_feedback.dart';
 import '../../agents/agent_presence_labels.dart';
 import '../../state/session_state.dart';
-import '../profile/my_masana_screen.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../theme/masanawa_theme.dart';
@@ -37,17 +33,6 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _filter = 'all';
-  late int _tab;
-  String _humanQuery = '';
-  late bool _humansVisited;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = widget.initialTab;
-    _humansVisited = _tab == 1;
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -69,16 +54,12 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         _searchController.clear();
         setState(() {
           _query = '';
-          _humanQuery = '';
           _filter = 'all';
         });
       }
     });
 
-    return DefaultTabController(
-      length: 2,
-      initialIndex: widget.initialTab,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: u.surfaceBg,
         appBar: AppBar(
           backgroundColor: u.surfaceCard,
@@ -108,9 +89,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                 ),
               ),
               Text(
-                _tab == 1
-                    ? 'People and creators'
-                    : directory.loading && directory.agents.isEmpty
+                directory.loading && directory.agents.isEmpty
                     ? 'Loading…'
                     : '${directory.agents.length} Masana${directory.loading ? ' · refreshing…' : ''}',
                 style: TextStyle(color: u.textMuted, fontSize: 12.5),
@@ -123,8 +102,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
               icon: const Icon(Icons.manage_search_outlined),
               onPressed: () => context.push('/search'),
             ),
-            if (_tab == 0)
-              IconButton(
+            IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh),
                 onPressed: () =>
@@ -134,80 +112,20 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         ),
         body: Column(
           children: [
-            TabBar(
-              tabs: const [
-                Tab(text: 'Masana'),
-                Tab(text: 'Humans'),
-              ],
-              onTap: (index) {
-                if (index == _tab) return;
-                setState(() {
-                  _tab = index;
-                  _humansVisited = _humansVisited || index == 1;
-                  _searchController.text = index == 0 ? _query : _humanQuery;
-                });
-              },
-            ),
             ConversationSearchField(
               controller: _searchController,
-              hintText: _tab == 0
-                  ? 'Search Masana contacts'
-                  : 'Find people by name or @username',
-              clearTooltip: 'Clear contact search',
-              onChanged: (value) => setState(() {
-                if (_tab == 0) {
-                  _query = value.trim().toLowerCase();
-                } else {
-                  _humanQuery = value;
-                }
-              }),
+              hintText: 'Search Masana',
+              clearTooltip: 'Clear Masana search',
+              onChanged: (value) =>
+                  setState(() => _query = value.trim().toLowerCase()),
               onClear: () => setState(() {
                 _searchController.clear();
-                if (_tab == 0) {
-                  _query = '';
-                } else {
-                  _humanQuery = '';
-                }
+                _query = '';
               }),
             ),
-            Expanded(
-              child: IndexedStack(
-                index: _tab,
-                children: [
-                  _body(context, directory, accountId),
-                  if (_humansVisited)
-                    HumanContactsList(
-                      key: ValueKey('human-contacts-$accountId'),
-                      query: _humanQuery,
-                      onCall: widget.callPicker
-                          ? (handle) => humanCallStart(context, ref, handle)
-                          : null,
-                    )
-                  else
-                    const SizedBox.shrink(),
-                ],
-              ),
-            ),
+            Expanded(child: _body(context, directory, accountId)),
           ],
         ),
-        floatingActionButton: widget.callPicker || session is! SessionSignedIn || _tab != 0
-            ? null
-            : FloatingActionButton.extended(
-                tooltip: 'Create a new Masana',
-                icon: const Icon(Icons.add),
-                label: const Text('Create Masana'),
-                onPressed: () async {
-                  final saved = await MyMasanaScreen.openCreate(context);
-                  final active = ref.read(sessionProvider);
-                  if (!mounted ||
-                      active is! SessionSignedIn ||
-                      active.user.id != accountId)
-                    return;
-                  if (saved == true)
-                    await ref.read(agentDirectoryProvider.notifier).refresh();
-                },
-              ),
-      ),
     );
   }
 
