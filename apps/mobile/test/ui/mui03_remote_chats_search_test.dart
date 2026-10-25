@@ -76,6 +76,8 @@ class FakeInbox implements MasanaInboxSearchAccess {
   final reads = <String>[];
   final pending = <String, Completer<List<MasanaInboxSearchItem>>>{};
   final responses = <String, List<MasanaInboxSearchItem>>{};
+  final pages = <String, MasanaInboxPage>{};
+  final pageCursors = <String?>[];
   bool disabled = false;
   final remote = const MasanaInboxSearchItem(
     characterId: 'character_00000000-0000-0000-0000-000000000099',
@@ -87,8 +89,15 @@ class FakeInbox implements MasanaInboxSearchAccess {
   @override
   Future<List<MasanaInboxSearchItem>> search({
     required String bearer, required String query,
+  }) async => (await searchPage(bearer: bearer, query: query)).items;
+
+  @override
+  Future<MasanaInboxPage> searchPage({
+    required String bearer, required String query, String? cursor,
+    int limit = 15,
   }) async {
     calls.add('$bearer:$query');
+    pageCursors.add(cursor);
     if (disabled) {
       final options = RequestOptions(path: '/v1/chats');
       throw DioException(
@@ -98,9 +107,11 @@ class FakeInbox implements MasanaInboxSearchAccess {
       );
     }
     final wait = pending[query];
-    if (wait != null) return wait.future;
-    if (responses.containsKey(query)) return responses[query]!;
-    return query == 'astronomy' ? [remote] : [];
+    if (cursor != null && pages.containsKey(cursor)) return pages[cursor]!;
+    if (wait != null) return MasanaInboxPage(items:await wait.future,nextCursor:null);
+    if (responses.containsKey(query))
+      return MasanaInboxPage(items:responses[query]!,nextCursor: pages.containsKey('first') ? 'first' : null);
+    return MasanaInboxPage(items:query == 'astronomy' ? [remote] : [],nextCursor:null);
   }
 
   @override
@@ -278,5 +289,53 @@ void main() {
     expect(find.textContaining('Server conversations are not available yet'), findsOneWidget);
     expect(find.byTooltip('Retry server search'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('paged search keeps one list, old rows on retry and stable scroll', (tester) async {
+    final inbox = FakeInbox();
+    inbox.responses['stars'] = [inbox.remote];
+    final second = const MasanaInboxSearchItem(
+      characterId:'character_00000000-0000-0000-0000-000000000087',
+      displayName:'Physics Masana',profession:'Teacher',
+      lastMessage:'Another star',pinned:false,unreadCount:0,revision:1,
+    );
+    inbox.pages['first'] = MasanaInboxPage(items:[second,inbox.remote],nextCursor:null);
+    await mount(tester,inbox);
+    await tester.enterText(find.byType(TextField),'stars');
+    await tester.pump(const Duration(milliseconds:380));
+    await tester.pump();
+    expect(find.text('Load more conversations'),findsOneWidget);
+    expect(find.text('Astronomy Masana'),findsOneWidget);
+    await tester.tap(find.text('Load more conversations'));
+    await tester.pumpAndSettle();
+    expect(find.text('Physics Masana'),findsOneWidget);
+    expect(find.text('Astronomy Masana'),findsOneWidget);
+    expect(find.text('Load more conversations'),findsNothing);
+    expect(inbox.pageCursors,contains('first'));
+    expect(find.byType(ListTile),findsNWidgets(2));
+    expect(tester.takeException(),isNull);
+  });
+  testWidgets('failed page retries the same cursor, query change drops older results', (tester) async {
+    final inbox=FakeInbox();
+    inbox.responses['stars'] = [inbox.remote];
+    inbox.pages['first']=const MasanaInboxPage(items:[],nextCursor:null);
+    await mount(tester,inbox);
+    await tester.enterText(find.byType(TextField),'stars');
+    await tester.pump(const Duration(milliseconds:380));
+    await tester.pump();
+    inbox.disabled=true;
+    await tester.tap(find.text('Load more conversations'));
+    await tester.pumpAndSettle();
+    expect(find.text('Astronomy Masana'),findsOneWidget);
+    expect(find.byTooltip('Retry loading conversations'),findsOneWidget);
+    inbox.disabled=false;
+    await tester.tap(find.byTooltip('Retry loading conversations'));
+    await tester.pumpAndSettle();
+    expect(inbox.pageCursors.where((x)=>x=='first'),hasLength(2));
+    expect(find.text('Load more conversations'),findsNothing);
+    await tester.enterText(find.byType(TextField),'history');
+    await tester.pump(const Duration(milliseconds:380));
+    await tester.pump();
+    expect(find.text('Astronomy Masana'),findsNothing);
+    expect(find.text('Local history'),findsOneWidget);
   });
 }

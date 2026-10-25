@@ -65,4 +65,42 @@ describe("C10 authenticated Chats list HTTP",()=>{
         url:"/v1/chats/"+character+"/read",headers})).statusCode).toBe(404);
     }finally{await f.app.close();}
   });
+  it("pages by a query-bound cursor, retains legacy responses and fails closed on malformed positions",async()=>{
+    const f=fixture(),headers={authorization:"Bearer fan"};
+    const second="character_0199f0d0-0000-7000-8000-000000000004";
+    f.list.mockResolvedValueOnce([
+      {characterId:character,displayName:"Gwana",profession:"Teacher",
+        lastMessage:"Salam",lastActivityAt:"2026-10-11T14:00:00Z",
+        pinned:false,unreadCount:1,revision:0},
+      {characterId:second,displayName:"Amina",profession:"Teacher",
+        lastMessage:"Reply",lastActivityAt:"2026-10-11T13:00:00Z",
+        pinned:true,unreadCount:0,revision:0},
+    ]);
+    try {
+      const first=await f.app.inject({method:"GET",url:"/v1/chats?q=teacher&limit=1",headers});
+      expect(first.statusCode).toBe(200);
+      expect(first.json().chats).toHaveLength(1);
+      const cursor=first.json().nextCursor as string;
+      expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(f.list).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},"teacher",
+        {limit:2,cursor:null});
+      const next=await f.app.inject({method:"GET",
+        url:`/v1/chats?q=teacher&limit=1&cursor=${cursor}`,headers});
+      expect(next.statusCode).toBe(200);
+      expect(next.json().nextCursor).toBeNull();
+      expect(f.list).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},"teacher",
+        {limit:2,cursor:{lastActivityAt:"2026-10-11T14:00:00.000Z",characterId:character}});
+      for (const url of [
+        `/v1/chats?q=other&limit=1&cursor=${cursor}`,
+        "/v1/chats?limit=0", "/v1/chats?limit=31",
+        "/v1/chats?cursor=abc", "/v1/chats?limit=2&cursor=abc",
+      ]) {
+        const invalid=await f.app.inject({method:"GET",url,headers});
+        expect(invalid.statusCode).toBe(422);
+      }
+      const legacy=await f.app.inject({method:"GET",url:"/v1/chats?q=teacher",headers});
+      expect(legacy.statusCode).toBe(200);
+      expect(legacy.json()).not.toHaveProperty("nextCursor");
+    } finally {await f.app.close();}
+  });
 });

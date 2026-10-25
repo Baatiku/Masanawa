@@ -107,6 +107,10 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
       expect(first[0]?.displayName).toBe("Test Teacher");
       expect(first[0]?.lastMessage).toBe("Teacher reply");
       expect(first[0]?.unreadCount).toBe(1);
+      expect(await inbox.list(scope,"",{limit:1,cursor:null})).toHaveLength(1);
+      expect(await inbox.list(scope,"",{limit:1,cursor:{
+        lastActivityAt:first[0]!.lastActivityAt,characterId:character,
+      }})).toEqual([]);
       expect(await inbox.list({tenantId:tenant,fanUserId:other})).toEqual([]);
       expect(await inbox.list({tenantId:"tenant-other",fanUserId:fan})).toEqual([]);
       expect(await inbox.setPinned(scope,human,true,0)).toBeNull();

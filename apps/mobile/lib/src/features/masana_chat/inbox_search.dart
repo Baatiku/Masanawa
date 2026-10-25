@@ -71,11 +71,24 @@ class MasanaInboxSearchItem {
       );
 }
 
+class MasanaInboxPage {
+  const MasanaInboxPage({required this.items, required this.nextCursor});
+  final List<MasanaInboxSearchItem> items;
+  final String? nextCursor;
+}
+
 /// Injected for widget tests and pinned to the signed-in account's credential.
 abstract class MasanaInboxSearchAccess {
+  /// Kept for the global search surface, which only previews the first page.
   Future<List<MasanaInboxSearchItem>> search({
     required String bearer,
     required String query,
+  });
+  Future<MasanaInboxPage> searchPage({
+    required String bearer,
+    required String query,
+    String? cursor,
+    int limit = 15,
   });
   Future<int> setPinned({
     required String bearer,
@@ -116,24 +129,41 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
   Future<List<MasanaInboxSearchItem>> search({
     required String bearer,
     required String query,
+  }) async => (await searchPage(bearer: bearer, query: query,
+    limit: 20)).items;
+
+  @override
+  Future<MasanaInboxPage> searchPage({
+    required String bearer,
+    required String query,
+    String? cursor,
+    int limit = 15,
   }) async {
     final term = query.trim();
-    if (term.isEmpty || term.length > 80) {
+    if (term.isEmpty || term.length > 80 || limit < 1 || limit > 30 ||
+        (cursor != null && (cursor.isEmpty || cursor.length > 1024 ||
+            !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)))) {
       throw const FormatException('Invalid search query');
     }
     final response = await _dio.get<Map<String, dynamic>>(
       '/v1/chats',
-      queryParameters: {'q': term},
+      queryParameters: {'q': term, 'limit': limit,
+        if (cursor != null) 'cursor': cursor},
       options: _options(bearer),
     );
     final rows = response.data?['chats'];
     if (rows is! List || rows.length > 100) {
       throw const FormatException('Invalid authorized inbox response');
     }
-    return List.unmodifiable(rows.map((row) {
+    final next = response.data?['nextCursor'];
+    if (next != null && (next is! String || next.isEmpty ||
+        next.length > 1024 || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(next))) {
+      throw const FormatException('Invalid inbox cursor');
+    }
+    return MasanaInboxPage(items: List.unmodifiable(rows.map((row) {
       if (row is! Map) throw const FormatException('Invalid authorized inbox row');
       return MasanaInboxSearchItem.fromJson(Map<String, dynamic>.from(row));
-    }));
+    })), nextCursor: next as String?);
   }
 
   @override

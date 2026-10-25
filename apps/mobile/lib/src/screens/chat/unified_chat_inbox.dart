@@ -14,11 +14,11 @@ import '../../state/session_state.dart';
 import '../../ui/components/conversation_search_field.dart';
 
 final _serverSearch = FutureProvider.autoDispose
-    .family<List<MasanaInboxSearchItem>, String>((ref, key) {
+    .family<MasanaInboxPage, String>((ref, key) {
       final parts = jsonDecode(key) as List;
       return ref
           .watch(masanaInboxSearchProvider)
-          .search(bearer: parts[1] as String, query: parts[2] as String);
+          .searchPage(bearer: parts[1] as String, query: parts[2] as String);
     });
 
 /// Account-scoped Masana conversations.
@@ -40,6 +40,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   String _query = '', _remoteQuery = '';
   Timer? _searchDebounce;
   final Map<String, MasanaInboxSearchItem> _confirmedPinUpdates = {};
+  final List<MasanaInboxSearchItem> _additionalResults = [];
+  final Set<String> _seenCursors = {};
+  String? _additionalResultsKey, _nextCursor;
+  bool _loadedMore = false, _loadingMore = false, _pageError = false;
+
+  void _resetPages() {
+    _additionalResults.clear();
+    _seenCursors.clear();
+    _additionalResultsKey = null;
+    _nextCursor = null;
+    _loadedMore = _loadingMore = _pageError = false;
+  }
   @override
   void dispose() {
     _searchDebounce?.cancel();
@@ -53,6 +65,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       _query = raw.trim().toLowerCase();
       _remoteQuery = '';
       _confirmedPinUpdates.clear();
+      _resetPages();
     });
     if (_query.isNotEmpty && _query.length <= 80)
       _searchDebounce = Timer(const Duration(milliseconds: 350), () {
@@ -66,9 +79,43 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
         owner is! SessionSignedIn || _remoteQuery.isEmpty ||
         _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
+    setState(_resetPages);
     ref.invalidate(_serverSearch(jsonEncode([
       owner.user.id, owner.tokens.accessToken, _remoteQuery,
     ])));
+  }
+
+  Future<void> _loadMore(String key, String cursor) async {
+    if (_loadingMore || _seenCursors.contains(cursor)) return;
+    final owner = ref.read(sessionProvider);
+    if (owner is! SessionSignedIn || !ref.read(aiChatProvider).online ||
+        _remoteQuery != _query || _remoteQuery.isEmpty ||
+        jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery]) != key) return;
+    setState(() { _loadingMore = true; _pageError = false; });
+    try {
+      final page = await ref.read(masanaInboxSearchProvider).searchPage(
+        bearer: owner.tokens.accessToken, query: _remoteQuery,
+        cursor: cursor,
+      );
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          _remoteQuery != _query || !ref.read(aiChatProvider).online ||
+          jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery]) != key) return;
+      setState(() {
+        _additionalResultsKey = key;
+        _loadedMore = true;
+        _loadingMore = false;
+        _seenCursors.add(cursor);
+        _additionalResults.addAll(page.items);
+        // A stale/empty/repeated cursor must terminate rather than loop.
+        _nextCursor = page.items.isEmpty || page.nextCursor == cursor ||
+                (page.nextCursor != null && _seenCursors.contains(page.nextCursor))
+            ? null : page.nextCursor;
+      });
+    } catch (_) {
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
+      setState(() { _loadingMore = false; _pageError = true; });
+    }
   }
 
   @override
@@ -90,7 +137,13 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     // One identity per result, including server replay and locally archived
     // history. A search hit must never replace the device's draft/messages.
     final serverById = <String, MasanaInboxSearchItem>{};
-    for (final incoming in server?.valueOrNull ?? const <MasanaInboxSearchItem>[]) {
+    final firstPage = server?.valueOrNull;
+    final resultPages = <MasanaInboxSearchItem>[
+      ...?firstPage?.items,
+      if (firstPage != null && _additionalResultsKey == serverKey)
+        ..._additionalResults,
+    ];
+    for (final incoming in resultPages) {
       final confirmed = _confirmedPinUpdates[incoming.characterId];
       final result = confirmed != null && confirmed.revision > incoming.revision
           ? confirmed : incoming;
@@ -243,6 +296,32 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     trailing: IconButton(
                       tooltip: 'Retry server search',
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ),
+                if (firstPage != null && !_pageError && !_loadingMore &&
+                    (_loadedMore && _additionalResultsKey == serverKey
+                        ? _nextCursor : firstPage.nextCursor) != null)
+                  Center(child: TextButton.icon(
+                    onPressed: () => _loadMore(serverKey,
+                      (_loadedMore && _additionalResultsKey == serverKey
+                          ? _nextCursor : firstPage.nextCursor)!),
+                    icon: const Icon(Icons.expand_more),
+                    label: const Text('Load more conversations'),
+                  )),
+                if (firstPage != null && _loadingMore && _remoteQuery == _query)
+                  const LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: 'Loading more conversations'),
+                if (firstPage != null && _pageError && _remoteQuery == _query)
+                  ListTile(
+                    title: const Text('Could not load more conversations. Previous results are saved.'),
+                    trailing: IconButton(
+                      tooltip: 'Retry loading conversations',
+                      onPressed: () {
+                        final cursor = _loadedMore && _additionalResultsKey == serverKey
+                            ? _nextCursor : firstPage.nextCursor;
+                        if (cursor != null) _loadMore(serverKey, cursor);
+                      },
                       icon: const Icon(Icons.refresh),
                     ),
                   ),
