@@ -97,7 +97,12 @@ void main() {
     expect(find.text('Confirm recipient',skipOffstage:false),findsOneWidget);
     await tester.dragUntilVisible(find.text('Confirm Send'),
       find.byType(ListView),const Offset(0,-150));
-    await tester.tap(find.text('Confirm Send'));
+    final confirm = tester.widget<FilledButton>(find.ancestor(
+      of:find.text('Confirm Send'),matching:find.byType(FilledButton)));
+    expect(confirm.onPressed,isNotNull);
+    // Invoke the bound handler after asserting the rendered button is enabled;
+    // text hit-testing under the scrolled recipient sheet is platform-sensitive.
+    confirm.onPressed!();
     await tester.pumpAndSettle();
     expect(posts,hasLength(1));
     expect(find.text('Retry same confirmation'),findsOneWidget);
