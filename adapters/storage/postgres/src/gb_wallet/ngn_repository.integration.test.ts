@@ -23,6 +23,19 @@ const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
   return {actor,payment};
  }
  const exchange=(a:{tenantId:string;userId:string},amountKobo=500_000)=>({...a,operationId:"ngnx_"+createCanonicalId("operation"),sizeGb:10,amountKobo,expiresAt:"2099-01-01T00:00:00Z",rateVersion:"test-quantity-v1"});
+ it("stores and reads the provider-confirmed PalmPay bank without changing 9PSB assignments",async()=>{
+  const storage=createGbBillstackRepository(pool);
+  const actor={tenantId:createCanonicalId("tenant"),userId:createCanonicalId("user")};
+  const reference=createCanonicalId("operation");
+  await storage.start(actor,reference);
+  const assigned=await storage.finalize(actor,reference,{reference:"R-"+reference,
+    accountNumber:String(1000000000+Math.floor(Math.random()*8999999999)),
+    accountName:"Test only",bankName:"PalmPay",bankId:"PALMPAY"});
+  expect(assigned.bankId).toBe("PALMPAY");
+  expect((await storage.read(actor))?.bankId).toBe("PALMPAY");
+  const other=await account();
+  expect((await storage.read(other.actor))?.bankId).toBe("9PSB");
+ });
  it("settles NGN only; concurrent callbacks credit once; exact kobo retained",async()=>{
   const {actor,payment}=await account(500_001);
   expect((await Promise.all([repo().deposit(payment),repo().deposit(payment)])).map(x=>x.state).sort()).toEqual(["credited","duplicate"]);
