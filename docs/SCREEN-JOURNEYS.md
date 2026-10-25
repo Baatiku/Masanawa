@@ -57,3 +57,7 @@ The app bootstrap no longer subscribes to human calls, incoming human shares or 
 ## Mixed Status and media source retirement — 25 October
 
 Status offers platform Masana posts, search, Saved, social reactions/comments/follows/shares and tips. It has no My posts, authoring, edit/remove-human-post menu or video library. Saved retains approved Masana posts; old human/video bookmarks are filtered without deleting server history. Loading/retry, empty/offline, authentication and account-switch fences remain; Back returns to the feed. Saved rows wrap at 320dp/large text and use directional alignment. Old video chat attachments render a noninteractive retired-media label, without downloading or starting a player. Camera/photos/audio remain available and denied permissions preserve text fallback.
+
+## Retired legacy Gateway Home path
+
+Legacy HTTP `GET /home` (old hard-coded Rooms showcase) must return 404; it is not the Flutter `/home?tab=...` shell route. The account-bound `GET /agent/directory` remains the Masana roster authority, while five-tab navigation uses the mobile shell.
