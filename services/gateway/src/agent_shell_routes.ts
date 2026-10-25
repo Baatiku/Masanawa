@@ -266,6 +266,17 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
       reply.header("cache-control", "no-store");
       return { items: await service.history(request.headers.authorization) };
     });
+    app.put("/agent/notifications/history/:eventId/read", async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const params = request.params as Record<string, unknown>;
+      const readAt = await service.markRead(
+        request.headers.authorization, text(params.eventId, "eventId", 160));
+      if (readAt == null) {
+        reply.code(404);
+        return { error: "notification.not_found" };
+      }
+      return { readAt };
+    });
   }
 
   if (options.mobilePush) {

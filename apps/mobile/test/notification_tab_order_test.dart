@@ -31,6 +31,100 @@ class _Session extends SessionController {
 }
 
 void main() {
+  testWidgets('mark read commits only after account-scoped server acknowledgement; failed write retries',
+      (tester) async {
+    var attempts = 0;
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.method == 'PUT' && options.path.endsWith('/notice-1/read')) {
+        attempts++;
+        if (attempts == 1) {
+          handler.reject(DioException(requestOptions: options,
+            type: DioExceptionType.connectionError, message: 'offline'));
+        } else {
+          handler.resolve(Response<Map<String, dynamic>>(
+            requestOptions: options, statusCode: 200,
+            data: {'readAt': '2026-10-25T18:00:00Z'}));
+        }
+        return;
+      }
+      handler.resolve(Response<Map<String, dynamic>>(
+        requestOptions: options, statusCode: 200,
+        data: options.path.endsWith('/history') ? {'items': [
+          {'id': 'notice-1', 'category': 'status', 'title': 'New Status post',
+            'createdAt': '2026-10-25T16:00:00Z', 'readAt': null},
+        ]} : {'preferences': {
+          'messages': true, 'calls': true, 'status': true,
+          'wallet': true, 'quietStart': null, 'quietEnd': null,
+          'utcOffsetMinutes': 0,
+        }},
+      ));
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+    ], child: const MaterialApp(home: NotificationPreferencesScreen())));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Mark as read'), findsOneWidget);
+    await tester.tap(find.byTooltip('Mark as read'));
+    await tester.pumpAndSettle();
+    expect(attempts, 1);
+    expect(find.byTooltip('Retry mark as read'), findsOneWidget);
+    expect(find.textContaining('Read failed'), findsOneWidget);
+    expect(find.byIcon(Icons.done_all), findsNothing);
+    await tester.tap(find.byTooltip('Retry mark as read'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.byIcon(Icons.done_all), findsOneWidget);
+    expect(find.byTooltip('Retry mark as read'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('late read receipt from old account cannot mark a new account alert',
+      (tester) async {
+    final pending = Completer<RequestInterceptorHandler>();
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.method == 'PUT') {
+        pending.complete(handler);
+        return;
+      }
+      handler.resolve(Response<Map<String, dynamic>>(
+        requestOptions: options, statusCode: 200,
+        data: options.path.endsWith('/history') ? {'items': [
+          {'id': 'same-id', 'category': 'wallet',
+            'title': 'Account-owned alert',
+            'createdAt': '2026-10-25T16:00:00Z', 'readAt': null},
+        ]} : {'preferences': {
+          'messages': true, 'calls': true, 'status': true,
+          'wallet': true, 'quietStart': null, 'quietEnd': null,
+          'utcOffsetMinutes': 0,
+        }},
+      ));
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+    ], child: const MaterialApp(home: NotificationPreferencesScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mark as read'));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NotificationPreferencesScreen)));
+    (container.read(sessionProvider.notifier) as _Session).switchAccount();
+    await tester.pumpAndSettle();
+    (await pending.future).resolve(Response<Map<String, dynamic>>(
+      requestOptions: RequestOptions(path: '/agent/notifications/history/same-id/read'),
+      statusCode: 200, data: {'readAt': '2026-10-25T18:00:00Z'},
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Mark as read'), findsOneWidget);
+    expect(find.byIcon(Icons.done_all), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Activity opens first and Preferences opens its own content', (tester) async {
     final dio = Dio();
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {

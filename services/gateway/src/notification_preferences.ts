@@ -5,6 +5,7 @@ export interface AccountNotificationService {
   preferences(authorizationHeader: string | undefined): Promise<MobileNotificationPreferences>;
   update(authorizationHeader: string | undefined, input: unknown): Promise<MobileNotificationPreferences>;
   history(authorizationHeader: string | undefined): Promise<readonly MobileNotificationRecord[]>;
+  markRead(authorizationHeader: string | undefined, eventId: string): Promise<string | null>;
 }
 
 export function parseNotificationPreferences(raw: unknown): MobileNotificationPreferences {
@@ -61,6 +62,12 @@ export function createAccountNotificationService(input: {
     },
     async history(header: string | undefined) {
       return input.repository.listNotices(await owner(header));
+    },
+    async markRead(header: string | undefined, eventId: string) {
+      if (!eventId || eventId.length > 160) {
+        throw Object.assign(new TypeError("notification.event_id_invalid"), { statusCode: 422 });
+      }
+      return input.repository.markNoticeRead({ ...await owner(header), eventId });
     },
   });
 }

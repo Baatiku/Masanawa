@@ -179,6 +179,7 @@ export interface MobileNotificationRecord {
   readonly title: string;
   readonly createdAt: string;
   readonly deepLink: string | null;
+  readonly readAt: string | null;
 }
 
 export interface MobilePushRepository {
@@ -203,6 +204,11 @@ export interface MobilePushRepository {
     readonly tenantId: TenantId;
     readonly userId: UserId;
   }): Promise<readonly MobileNotificationRecord[]>;
+  markNoticeRead(input: {
+    readonly tenantId: TenantId;
+    readonly userId: UserId;
+    readonly eventId: string;
+  }): Promise<string | null>;
   register(input: {
     readonly tenantId: TenantId;
     readonly userId: UserId;
