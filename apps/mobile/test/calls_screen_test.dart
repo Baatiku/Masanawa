@@ -68,14 +68,6 @@ class _HumanHistory implements HumanCallsTransport {
   void cancel() {}
 }
 
-class _Contacts implements HumanContactsTransport {
-  @override
-  Future<HumanContactPage> load({String query = '', String? after}) async =>
-      const HumanContactPage(items: [
-        HumanContact(handle: 'amina', displayName: 'Amina Yusuf'),
-      ]);
-}
-
 Map<String, dynamic> humanPage(String id, String name,
         {String? nextCursor, String state = 'missed'}) => {
       'items': [
