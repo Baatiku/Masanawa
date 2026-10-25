@@ -6,6 +6,8 @@ import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_balance_card.dart';
 import 'gb_wallet_summary.dart';
+import 'gb_wallet_activity.dart';
+import 'gb_wallet_activity_screen.dart';
 import 'ngn_wallet.dart';
 
 /// Single authoritative MB wallet. The compact card never displays a
@@ -33,6 +35,7 @@ class GbWalletScreen extends ConsumerWidget {
       ref.invalidate(gbWalletSummaryProvider(owner));
       ref.invalidate(ngnWalletBalanceProvider(owner));
       ref.invalidate(ngnBankAccountProvider(owner));
+      ref.invalidate(gbActivityPageProvider((owner:owner,limit:5)));
       try {
         await ref.read(gbWalletSummaryProvider(owner).future);
       } catch (_) {
@@ -125,20 +128,7 @@ class GbWalletScreen extends ConsumerWidget {
             );
           }),
           const SizedBox(height: 26),
-          Text('Activity', style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Column(children: [
-              Icon(Icons.receipt_long_outlined,
-                size: 32, color: colors.textMuted),
-              const SizedBox(height: 8),
-              Text('No activity yet',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colors.textMuted)),
-            ]),
-          ),
+          const GbWalletActivitySection(),
         ],
       ),
     );

@@ -15,6 +15,7 @@ import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_d
 import { registerGbDataPurchaseRoutes, type GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
 import { registerBillstackFundingRoutes, type BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import { registerGbWalletActivityRoutes, type GbActivityPorts } from "./gb_wallet/activity_routes.js";
 import { registerGbSendReviewRoutes } from "./gb_wallet/send_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
 import { registerGbRequestRoutes, type GbRequestPorts } from "./gb_wallet/request_routes.js";
@@ -105,6 +106,7 @@ export interface GatewayAppOptions {
   readonly gbRechargeRateBook?: RechargeRateBook;
   readonly ngnWallet?: NgnWalletPorts;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
+  readonly gbWalletActivity?: GbActivityPorts;
   /** New review-confirmed purchased-MB transfer; no legacy Credits. */
   readonly gbSendReview?: GbSendPorts;
   readonly gbRequests?: GbRequestPorts;
@@ -362,6 +364,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.ngnWallet) registerNgnWalletRoutes(app, options.ngnWallet);
   if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbWalletActivity) registerGbWalletActivityRoutes(app,options.gbWalletActivity);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
   if (options.gbCalls) registerGbCallRoutes(app, options.gbCalls);
