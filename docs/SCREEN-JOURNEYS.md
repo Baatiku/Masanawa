@@ -49,3 +49,7 @@ Retired deep links `/rooms/:id`, `/human/*`, `/talk/*`, `/crypto`, `/billing` (n
 ## Boundary/proof matrix
 
 A successful source test alone is not a provider confirmation. Validate each stage in PostgreSQL concurrency fixtures, unit/widget tests, emulator/handset and actual authorized Billstack/Flutterwave sandbox or production. Billstack account assignment/verification/webhook format currently unverified, so no transfer instructions or credit. A Flutterwave catalogue product without independently certified GB allowance cannot be purchased. No signed APK until owner explicitly requests one.
+
+## Retirement implementation — 25 October
+
+The app bootstrap no longer subscribes to human calls, incoming human shares or notification replies. Chats has a single Masana inbox with All/Unread/Archived, local and server search, refresh/retry and offline saved results; no People filter, message requests or five-second human polling. Account changes continue to clear pending deep links. Incoming-call push notifications and full-screen/phone-call permissions are removed; microphone foreground service remains for user-started Masana audio. Android no longer advertises SEND/SEND_MULTIPLE intake. Legacy URLs remain navigation-only redirects. Unreachable Rooms, Talks, human communication, public creator, crypto/P2P/non-data wallet screens and transports are deleted after traversing imports from `lib/main.dart`. Financial database records and applied migrations are unaffected.

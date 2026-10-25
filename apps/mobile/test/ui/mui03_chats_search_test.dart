@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/chat/chat_list_screen.dart';
-import 'package:masanawa/src/human_chat/screens.dart' show humanInboxProvider;
 import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
 import 'package:masanawa/src/state/session_state.dart';
@@ -152,7 +151,6 @@ void main() {
       ProviderScope(
         overrides: [
           sessionProvider.overrideWith(_Session.new),
-          humanInboxProvider.overrideWith((ref, key) async => []),
           aiChatProvider.overrideWith(() => _Chats(offline)),
           agentDirectoryProvider.overrideWith(_Directory.new),
         ],

@@ -1,5 +1,4 @@
 import 'src/core/live_call_foreground.dart';
-import 'src/human_calls/human_calls.dart';
 
 import 'dart:async';
 
@@ -15,8 +14,6 @@ import 'src/core/startup_metrics.dart';
 import 'src/core/mobile_diagnostics.dart';
 import 'src/core/pending_deep_link.dart';
 import 'src/core/shell_deep_link.dart';
-import 'src/features/share_intake/incoming_share.dart';
-import 'src/features/notification_reply/notification_reply.dart';
 import 'src/router/app_router.dart';
 import 'src/state/session_state.dart';
 import 'src/theme/masanawa_theme.dart';
@@ -41,11 +38,7 @@ class MasanawaApp extends ConsumerStatefulWidget {
 class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   StreamSubscription<Uri>? _links;
   final _pendingLink = PendingDeepLink();
-  final _incomingShare = IncomingShareService.instance;
-  final _quickReply = HumanNotificationReplyInbox.instance;
   bool _linkDrainScheduled = false;
-  bool _shareDrainScheduled = false;
-  bool _replyDrainScheduled = false;
   late int _linkAuthorizationEpoch;
   late final GoRouter _router;
   late final LocalePreferenceController _localePreference;
@@ -54,21 +47,6 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
   void initState() {
     super.initState();
     _linkAuthorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-    final initialSession = ref.read(sessionProvider);
-    _incomingShare.updateAuthorization(
-      initialSession is SessionSignedIn ? initialSession.user.id : null,
-      _linkAuthorizationEpoch,
-    );
-    _quickReply.bindAuthorization(
-      initialSession is SessionSignedIn ? initialSession.user.id : null,
-      _linkAuthorizationEpoch,
-    );
-    MobilePushService.instance.bindHumanReplyAuthorization(
-      initialSession is SessionSignedIn ? initialSession.user.id : null,
-      _linkAuthorizationEpoch,
-    );
-    _incomingShare.addListener(_scheduleShareDrain);
-    _quickReply.addListener(_scheduleReplyDrain);
     _localePreference = LocalePreferenceController(
       SecureLocalePreferenceStore(),
     );
@@ -78,8 +56,6 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     if (initial != null) _pendingLink.offer(initial);
     _router = ref.read(appRouterProvider);
     _router.routeInformationProvider.addListener(_scheduleLinkDrain);
-    _router.routeInformationProvider.addListener(_scheduleShareDrain);
-    _router.routeInformationProvider.addListener(_scheduleReplyDrain);
     _scheduleLinkDrain();
 
     // Push/Firebase/native-link setup is useful but not required to paint the
@@ -88,7 +64,6 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(MobilePushService.instance.initialize().catchError((_) {}));
-      unawaited(_incomingShare.initialize().catchError((_) {}));
     });
   }
 
@@ -116,8 +91,7 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
               currentPath: router.routeInformationProvider.value.uri.path,
               targetPath: route,
               hasActiveCall:
-                  LiveCallForeground.active ||
-                  ref.read(humanCallControllerProvider).active,
+                  LiveCallForeground.active,
             )) {
           router.go(route);
         }
@@ -126,59 +100,11 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  void _scheduleShareDrain() {
-    if (!mounted || _shareDrainScheduled) return;
-    _shareDrainScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _shareDrainScheduled = false;
-      if (!mounted) return;
-      final session = ref.read(sessionProvider);
-      final draft = _incomingShare.pending;
-      if (session is! SessionSignedIn || session.user.isNewUser || draft == null ||
-          (_quickReply.pending != null &&
-              _quickReply.authorized(_quickReply.pending!)) ||
-          LiveCallForeground.active ||
-          ref.read(humanCallControllerProvider).active) return;
-      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-      if (!_incomingShare.authorized(session.user.id, epoch, draft.token)) return;
-      final router = ref.read(appRouterProvider);
-      if (router.routeInformationProvider.value.uri.path != '/share') {
-        router.go('/share');
-      }
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  void _scheduleReplyDrain() {
-    if (!mounted || _replyDrainScheduled) return;
-    _replyDrainScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _replyDrainScheduled = false;
-      if (!mounted) return;
-      final session = ref.read(sessionProvider);
-      final reply = _quickReply.pending;
-      if (session is! SessionSignedIn || session.user.isNewUser ||
-          reply == null ||
-          LiveCallForeground.active ||
-          ref.read(humanCallControllerProvider).active ||
-          !_quickReply.authorized(reply)) return;
-      final router = ref.read(appRouterProvider);
-      if (router.routeInformationProvider.value.uri.path != '/human/quick-reply') {
-        router.go('/human/quick-reply');
-      }
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
   @override
   void dispose() {
     _links?.cancel();
-    _incomingShare.removeListener(_scheduleShareDrain);
-    _quickReply.removeListener(_scheduleReplyDrain);
     _localePreference.dispose();
     _router.routeInformationProvider.removeListener(_scheduleLinkDrain);
-    _router.routeInformationProvider.removeListener(_scheduleShareDrain);
-    _router.routeInformationProvider.removeListener(_scheduleReplyDrain);
     super.dispose();
   }
 
@@ -193,18 +119,7 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
         _pendingLink.clear();
       }
       _linkAuthorizationEpoch = nextEpoch;
-      _incomingShare.updateAuthorization(
-        next is SessionSignedIn ? next.user.id : null, nextEpoch,
-      );
-      _quickReply.bindAuthorization(
-        next is SessionSignedIn ? next.user.id : null, nextEpoch,
-      );
-      MobilePushService.instance.bindHumanReplyAuthorization(
-        next is SessionSignedIn ? next.user.id : null, nextEpoch,
-      );
       _scheduleLinkDrain();
-      _scheduleShareDrain();
-      _scheduleReplyDrain();
     });
     final router = ref.watch(appRouterProvider);
     return ListenableBuilder(
@@ -228,8 +143,6 @@ class _MasanawaAppState extends ConsumerState<MasanawaApp> {
                 supportedLocales,
               ),
           routerConfig: router,
-          builder: (context, child) =>
-              HumanCallCoordinator(child: child ?? const SizedBox.shrink()),
         ),
       ),
     );
