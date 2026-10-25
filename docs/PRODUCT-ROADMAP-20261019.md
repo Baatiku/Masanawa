@@ -104,10 +104,10 @@ Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, c
 
 ### Chats — One conversation list, ordered by message activity
 
-- [ ] **UX-C01** Remove All, Unread and Archived chips plus filter-only state/branches from the active inbox; keep conversation search and unread/read state. Evidence: pending.
-- [ ] **UX-C02** One thread per Masana, newest real sent/received message activity first with stable tie breaking; opening/closing a screen, drafts and failed retries do not promote old threads. Prevent pinned-first ordering from contradicting the requested default chronology. Evidence: pending.
+- [x] **UX-C01** Remove All, Unread and Archived chips plus filter-only state/branches from the active inbox; keep conversation search and unread/read state. Evidence: `fix/single-recent-masana-inbox`; 13 focused chronology/inbox/search tests pass, including archived visibility and incoming-message reordering. Full Flutter/analysis and exact-head CI gate merge; no provider/device recovery claim.
+- [x] **UX-C02** One thread per Masana, newest real sent/received message activity first with stable tie breaking; opening/closing a screen, drafts and failed retries do not promote old threads. Prevent pinned-first ordering from contradicting the requested default chronology. Evidence: `fix/single-recent-masana-inbox`; 13 focused chronology/inbox/search tests pass, including archived visibility and incoming-message reordering. Full Flutter/analysis and exact-head CI gate merge; no provider/device recovery claim.
 - [ ] **UX-C03** Merge received/server search/history results into the existing thread without duplicates; preserve scroll, search, retries, pagination and offline results. Define safe visibility/recovery of previously archived histories without deleting records or recreating the removed chip row. Evidence: pending.
-- [ ] **UX-C04** Update canonical journey and meaningful tests for no filter chips, chronology, late/replayed messages, close/reopen, archived compatibility, account switch and empty/error/offline states. Evidence: pending.
+- [ ] **UX-C04** Update canonical journey and meaningful tests for no filter chips, chronology, late/replayed messages, close/reopen, archived compatibility, account switch and empty/error/offline states. Evidence: partial — no-chip/chronology/replay/archive/account-search tests added in `fix/single-recent-masana-inbox`; explicit device close/reopen and the full journey matrix remain open.
 
 ### Portraits — Use the existing Masana pictures consistently
 

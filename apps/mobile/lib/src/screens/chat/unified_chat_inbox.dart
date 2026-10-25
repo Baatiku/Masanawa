@@ -37,7 +37,7 @@ class UnifiedChatInbox extends ConsumerStatefulWidget {
 class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     {
   final _search = TextEditingController();
-  String _filter = 'All', _query = '', _remoteQuery = '';
+  String _query = '', _remoteQuery = '';
   Timer? _searchDebounce;
   final Map<String, MasanaInboxSearchItem> _confirmedPinUpdates = {};
   @override
@@ -74,15 +74,14 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       _remoteQuery,
     ]);
     final server =
-        _remoteQuery.isNotEmpty && _filter != 'Archived'
+        _remoteQuery.isNotEmpty
         ? ref.watch(_serverSearch(serverKey))
         : null;
     final savedIds = widget.masanaThreads.map((t) => t.characterId).toSet();
     final serverRows = (server?.valueOrNull ?? const <MasanaInboxSearchItem>[])
         .where(
           (r) =>
-              !savedIds.contains(r.characterId) &&
-              (_filter != 'Unread' || r.unreadCount > 0),
+              !savedIds.contains(r.characterId),
         )
         .map((r) {
           final confirmed = _confirmedPinUpdates[r.characterId];
@@ -91,11 +90,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         })
         .toList();
     final offline = !ref.watch(aiChatProvider).online;
-    final rows = <({DateTime at, bool pinned, String id, Widget row})>[];
-    final archived = _filter == 'Archived';
+    final rows = <({DateTime at, String id, Widget row})>[];
       for (final t in widget.masanaThreads) {
-        if (t.archived != archived || (_filter == 'Unread' && t.unread == 0))
-          continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
@@ -103,15 +99,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                 .contains(_query))
           continue;
         rows.add((
-          at: t.updatedAt,
-          pinned: t.pinned,
+          at: t.lastMessageActivityAt,
           id: 'masana-${t.characterId}',
           row: widget.masanaRow(t),
         ));
       }
     rows.sort((a, b) {
-      final pin = (b.pinned ? 1 : 0).compareTo(a.pinned ? 1 : 0);
-      if (pin != 0) return pin;
       final time = b.at.compareTo(a.at);
       return time != 0 ? time : a.id.compareTo(b.id);
     });
@@ -127,29 +120,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             _changed('');
           },
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              for (final filter in const ['All', 'Unread', 'Archived'])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(filter),
-                    selected: filter == _filter,
-                    onSelected: (_) => setState(() => _filter = filter),
-                  ),
-                ),
-            ],
-          ),
-        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              key: PageStorageKey('unified-inbox-$_filter'),
+              key: const PageStorageKey('unified-inbox'),
               children: [
                 if (rows.isEmpty)
                   Padding(

@@ -410,6 +410,17 @@ class ChatThread {
 
   AiChatMessage? get lastMessage => messages.isEmpty ? null : messages.last;
 
+  /// Message chronology is independent of drafts, pins, retries and route close.
+  DateTime get lastMessageActivityAt {
+    var latest = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    for (final message in messages) {
+      if (!const {'sent', 'delivered', 'read'}.contains(message.deliveryStatus)) continue;
+      if (message.createdAt.isAfter(latest)) latest = message.createdAt;
+    }
+    return latest;
+  }
+
+
   ChatThread copyWith({
     List<AiChatMessage>? messages,
     int? unread,
@@ -505,11 +516,11 @@ class AiChatState {
 
   List<ChatThread> get chatList {
     final list = threads.values
-        .where((t) => t.messages.isNotEmpty && !t.archived)
+        .where((t) => t.messages.isNotEmpty)
         .toList();
     list.sort((a, b) {
-      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-      return b.updatedAt.compareTo(a.updatedAt);
+      final time = b.lastMessageActivityAt.compareTo(a.lastMessageActivityAt);
+      return time != 0 ? time : a.characterId.compareTo(b.characterId);
     });
     return list;
   }
