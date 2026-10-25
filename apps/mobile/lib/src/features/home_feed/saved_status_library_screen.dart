@@ -1,10 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-import '../videos/video_models.dart';
 import 'feed_api.dart';
 
-/// Private, server-authoritative saved Status and approved-video collection.
+/// Private, server-authoritative saved Masana Status posts.
 /// The app never retains a cross-account/offline copy of these items.
 class SavedStatusLibraryScreen extends StatefulWidget {
   const SavedStatusLibraryScreen({
@@ -13,14 +12,12 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     required this.accountKey,
     required this.isAccountCurrent,
     required this.openPost,
-    this.openVideo,
   });
 
   final SavedStatusLibraryApi api;
   final String accountKey;
   final bool Function() isAccountCurrent;
   final Future<void> Function(FeedPost) openPost;
-  final Future<void> Function(ExternalVideo)? openVideo;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -149,7 +146,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Remove saved item?'),
         content: const Text(
-          'This only removes your bookmark, not the original post or video.',
+          'This only removes your bookmark, not the original post.',
         ),
         actions: [
           TextButton(
@@ -191,11 +188,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   Future<void> open(SavedStatusItem item) async {
     if (!current) return;
     try {
-      if (item.post != null) {
-        await widget.openPost(item.post!);
-      } else if (item.video != null) {
-        await widget.openVideo?.call(item.video!);
-      }
+      if (item.post != null) await widget.openPost(item.post!);
     } catch (_) {
       if (!mounted || !current) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -264,21 +257,16 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     padding: EdgeInsets.all(32),
                                     child: Center(
                                       child: Text(
-                                        'No saved posts or videos yet.',
+                                        'No saved Status posts yet.',
                                       ),
                                     ),
                                   )
                                 : const SizedBox.shrink();
                           }
                           final item = items[index];
-                          final title =
-                              item.post?.displayAuthor ??
-                              item.video?.channelName ??
-                              'Saved item';
-                          final description =
-                              item.post?.body ?? item.video?.title ?? '';
-                          final canOpen =
-                              item.isPost || widget.openVideo != null;
+                          final title = item.post?.displayAuthor ?? 'Masana';
+                          final description = item.post?.body ?? '';
+                          final canOpen = item.post != null;
                           return Card(
                             key: ValueKey('saved-${item.isPost}-${item.id}'),
                             margin: const EdgeInsets.symmetric(
@@ -288,11 +276,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                             child: Column(
                               children: [
                                 ListTile(
-                                  leading: Icon(
-                                    item.isPost
-                                        ? Icons.article_outlined
-                                        : Icons.ondemand_video_outlined,
-                                  ),
+                                  leading: const Icon(Icons.article_outlined),
                                   title: Text(
                                     title,
                                     maxLines: 1,
@@ -313,11 +297,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                           canOpen && !pending.contains(item.id)
                                           ? () => open(item)
                                           : null,
-                                      child: Text(
-                                        item.isPost
-                                            ? 'Open post'
-                                            : 'Watch video',
-                                      ),
+                                      child: const Text('Open post'),
                                     ),
                                     TextButton.icon(
                                       onPressed: pending.contains(item.id)
