@@ -35,3 +35,7 @@ Validation pending at branch head; no provider/device/APK acceptance claimed.
 ## Subsequent retirement — legacy Home and CI
 
 A dedicated batch removes the old HTTP `/home` Rooms showcase, deletes three obsolete P2P/Rooms/Status-video CI workflows, and replaces them with retained Status/MB/financial-history PostgreSQL qualification. Tests now assert HTTP `/home` is unavailable and `/agent/directory` remains functional. This is source-level retirement only; migration and historical escrow data remain untouched. Host CI still required on the exact batch head.
+
+## Final Flutter Rooms and Videos feature package sweep — 25 October
+
+The last unreferenced `lib/src/features/videos/video_embed_policy.dart` is removed after confirming the active Status feed, media, detail and root screens import no legacy video-player component. The obsolete `lib/src/features/rooms` feature directory was already absent from main. A source-level regression test now fails if either feature directory reappears. The supported Status photo/audio media reader stays in place, and the historical server SQL schema and finance records are not affected. This is not proof of production-device performance or of full backend video/creator source retirement.
