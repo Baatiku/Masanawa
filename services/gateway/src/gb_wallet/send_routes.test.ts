@@ -29,6 +29,24 @@ function setup(overrides:Partial<GbSendPorts>={}) {
   return {app,transfer};
 }
 describe("exact whole-MB internal Send review",()=>{
+  it("exposes only an authenticated, active exact-handle identity preview",async()=>{
+    const resolution=vi.fn(async()=>target);
+    const {app,transfer}=setup({resolveRecipient:resolution});
+    const path="/v1/gb/wallet/recipients/%40BELLO.User";
+    expect((await app.inject({method:"GET",url:path})).statusCode).toBe(401);
+    const headers={authorization:"Bearer current"};
+    const read=await app.inject({method:"GET",url:path,headers});
+    expect(read.statusCode).toBe(200);
+    expect(read.headers["cache-control"]).toBe("no-store");
+    expect(read.json()).toEqual({recipient:{id:"recipient-b",username:"bello.user",displayName:"Bello"}});
+    expect(resolution).toHaveBeenCalledWith(actor,"bello.user");
+    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/recipients/bo",headers})).statusCode).toBe(422);
+    expect(transfer).not.toHaveBeenCalled();
+    const self=setup({resolveRecipient:async()=>({...target,userId:actor.userId})});
+    expect((await self.app.inject({method:"GET",url:path,headers})).statusCode).toBe(404);
+    const blocked=setup({resolveRecipient:async()=>null});
+    expect((await blocked.app.inject({method:"GET",url:path,headers})).statusCode).toBe(404);
+  });
   it("quotes server-verified recipient and atomically transfers only after accepted review",async()=>{
     const {app,transfer}=setup();
     const unauthorized=await app.inject({method:"POST",url:"/v1/gb/wallet/send/quote",

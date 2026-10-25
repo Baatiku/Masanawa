@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
 import 'gb_balance_card.dart';
+import 'gb_recipient_lookup.dart';
 import 'gb_wallet_summary.dart';
 
 /// Server-bound signed review. The phone alone never authorizes or identifies
@@ -271,15 +272,12 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               ),
             ),
           const SizedBox(height: 18),
-          TextField(
+          GbRecipientField(
             controller: _username,
+            owner: owner,
             enabled: owner != null && !_busy && _quote == null,
             onChanged: (_) => setState(_clearReview),
-            decoration: const InputDecoration(
-              labelText: 'Recipient username',
-              hintText: '@username',
-              border: OutlineInputBorder(),
-            ),
+            label: 'Recipient username',
           ),
           const SizedBox(height: 12),
           Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(
