@@ -83,7 +83,7 @@ void main() {
     final notifications =
         _source('screens/settings/notification_preferences_screen.dart');
     final start = notifications.indexOf('const notificationCategories =');
-    final end = notifications.indexOf('class NotificationPreferences', start);
+    final end = notifications.indexOf('// Keep the old keys', start);
     final visible = notifications.substring(start, end);
     expect(visible, contains("'messages':"));
     expect(visible, contains("'status':"));
