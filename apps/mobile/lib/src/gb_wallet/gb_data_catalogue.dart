@@ -8,6 +8,27 @@ typedef GbDataOwner = ({String accountId, int authorizationEpoch});
 
 const gbDataNetworks = ['MTN', 'AIRTEL', 'GLO', '9MOBILE'];
 
+/// Buckets are derived solely from verified numeric validityDays. Avoid
+/// describing a 3-day or 60-day item as a weekly/monthly offer by guesswork.
+enum GbDataValidityPeriod { daily, weekly, monthly, other }
+
+GbDataValidityPeriod gbDataValidityPeriod(int validityDays) {
+  if (validityDays == 1) return GbDataValidityPeriod.daily;
+  if (validityDays == 7) return GbDataValidityPeriod.weekly;
+  if (validityDays >= 28 && validityDays <= 31) {
+    return GbDataValidityPeriod.monthly;
+  }
+  return GbDataValidityPeriod.other;
+}
+
+bool gbBundleMatchesSelection(
+  GbVerifiedBundle bundle, {
+  required String? network,
+  required GbDataValidityPeriod? period,
+}) => network != null && gbDataNetworks.contains(network) &&
+    bundle.network == network &&
+    (period == null || gbDataValidityPeriod(bundle.validityDays) == period);
+
 /// Client projection of a reviewed whole-GB mapping *and* a current provider
 /// item. A product name is never allowed to imply its allowance or validity.
 class GbVerifiedBundle {
