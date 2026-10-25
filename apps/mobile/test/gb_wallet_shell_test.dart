@@ -108,9 +108,12 @@ void main() {
 
   testWidgets('Data never offers unverified Flutterwave purchases',
       (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(
-      body: DataRedemptionScreen(),
-    )));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [sessionProvider.overrideWith(_SignedOut.new)],
+      child: const MaterialApp(home: Scaffold(
+        body: DataRedemptionScreen(),
+      )),
+    ));
     expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
