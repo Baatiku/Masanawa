@@ -77,6 +77,9 @@ class MemorySessions implements PlatformSessionRepository {
       name: input.name,
       email: input.channel === "email" ? input.identifier : null,
       phone: input.channel === "sms" ? input.identifier : null,
+      contactPhone: input.contactPhone ?? null,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
       locale: input.locale,
       createdAt: input.createdAt,
     });
@@ -492,6 +495,7 @@ describe("customer authentication", () => {
       email: "inactive@example.com",
       code,
       name: "Inactive Customer",
+      firstName:"Inactive",lastName:"Customer",contactPhone:"08012345678",
     })).rejects.toMatchObject({
       code: "ACCOUNT_SUSPENDED",
       statusCode: 403,
@@ -543,11 +547,12 @@ describe("customer authentication", () => {
     const signedIn = await service.verifyOtp({
       email: "user@example.com",
       code,
-      name: "Amina",
+      firstName:"Amina",lastName:"Okafor",contactPhone:"08012345678",
     });
     expect(signedIn.user).toMatchObject({
-      name: "Amina",
+      name: "Amina Okafor",
       email: "user@example.com",
+      phone:null,contactPhone:"08012345678",
       isNewUser: true,
     });
 
@@ -556,7 +561,7 @@ describe("customer authentication", () => {
     const financial = createPlatformSessionFinancialAuthorizer({ repository, now: authorizationNow });
     await expect(customer.authorize({
       authorizationHeader: `Bearer ${signedIn.accessToken}`,
-    })).resolves.toMatchObject({ tenantId, profile: { name: "Amina" } });
+    })).resolves.toMatchObject({ tenantId, profile: { name: "Amina Okafor" } });
     await expect(financial.authorize({
       authorizationHeader: `Bearer ${signedIn.accessToken}`,
     })).resolves.toMatchObject({ tenantId });
@@ -890,7 +895,8 @@ describe('new account welcome delivery',()=>{
     const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
       emailDelivery:{async send(input){code=input.code;},async sendWelcome(input){welcomes.push(input.identifier);}}});
     await service.sendOtp({email:'welcome@example.com'});
-    const created=await service.verifyOtp({email:'welcome@example.com',code,name:'Amina'});
+    const created=await service.verifyOtp({email:'welcome@example.com',code,
+      firstName:'Amina',lastName:'Okafor',contactPhone:'08012345678'});
     expect(created.user.isNewUser).toBe(true);
     expect(welcomes).toEqual(['welcome@example.com']);
     await service.sendOtp({email:'welcome@example.com'});
@@ -960,7 +966,8 @@ describe('new account welcome delivery',()=>{
     const email="account@example.com";
     const first="a".repeat(32), second="b".repeat(32);
     await auth.sendOtp({email});
-    await auth.verifyOtp({email,code,name:"Amina",deviceId:first,
+    await auth.verifyOtp({email,code,firstName:'Amina',lastName:'Okafor',
+      contactPhone:'08012345678',deviceId:first,
       clientLabel:"Android · Masanawa app"});
     expect(notices).toHaveLength(0);
     await auth.sendOtp({email});
@@ -982,6 +989,7 @@ describe('new account welcome delivery',()=>{
     const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
       emailDelivery:{async send(input){code=input.code;},async sendWelcome(){throw new Error('provider unavailable');}}});
     await service.sendOtp({email:'welcome-fail@example.com'});
-    expect((await service.verifyOtp({email:'welcome-fail@example.com',code,name:'Amina'})).accessToken).toBeTruthy();
+    expect((await service.verifyOtp({email:'welcome-fail@example.com',code,
+      firstName:'Amina',lastName:'Okafor',contactPhone:'08012345678'})).accessToken).toBeTruthy();
   });
 });

@@ -18,12 +18,16 @@ class NameScreen extends ConsumerStatefulWidget {
 }
 
 class _NameScreenState extends ConsumerState<NameScreen> {
-  final _name = TextEditingController();
+  final _first = TextEditingController();
+  final _last = TextEditingController();
+  final _phone = TextEditingController();
   bool _saving = false;
 
   @override
   void dispose() {
-    _name.dispose();
+    _first.dispose();
+    _last.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -31,17 +35,6 @@ class _NameScreenState extends ConsumerState<NameScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _skip() async {
-    // Every account needs a server display_name; this explicitly recognizable
-    // placeholder marks onboarding incomplete until the user edits it.
-    if(_saving)return;
-    final state=ref.read(sessionProvider);
-    if(state is! SessionNameRequired && state is! SessionRegisterProfile)return;
-    setState(()=>_saving=true);
-    await ref.read(sessionProvider.notifier).submitProfile(name:'Masanawa member');
-    if(mounted)setState(()=>_saving=false);
   }
 
   Future<void> _submit() async {
@@ -55,14 +48,25 @@ class _NameScreenState extends ConsumerState<NameScreen> {
       return;
     }
 
-    final name = _name.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (name.length < 2) {
+    final first = _first.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final last = _last.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final phone = _phone.text.replaceAll(RegExp(r'[\s()-]'), '');
+    if (first.isEmpty ||
+        last.isEmpty ||
+        !RegExp(r'^0(70|80|81|90|91)\d{8}$').hasMatch(phone)) {
       _snack(AppLocalizations.of(context).fullNameRequired);
       return;
     }
     if (_saving) return;
     setState(() => _saving = true);
-    await ref.read(sessionProvider.notifier).submitProfile(name: name);
+    await ref
+        .read(sessionProvider.notifier)
+        .submitProfile(
+          name: '$first $last',
+          firstName: first,
+          lastName: last,
+          contactPhone: phone,
+        );
     if (mounted) setState(() => _saving = false);
   }
 
@@ -121,7 +125,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           ),
           const SizedBox(height: 8),
           TextField(
-            controller: _name,
+            controller: _first,
             autofocus: false,
             enabled: !_saving,
             textCapitalization: TextCapitalization.words,
@@ -132,7 +136,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
               color: Theme.of(context).colorScheme.onSurface,
             ),
             decoration: InputDecoration(
-              labelText: l10n.fullNameLabel,
+              labelText: 'First name',
               hintText: l10n.fullNameExample,
               prefixIcon: const Icon(Icons.person_outline),
               filled: true,
@@ -144,16 +148,34 @@ class _NameScreenState extends ConsumerState<NameScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _last,
+            enabled: !_saving,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Last name',
+              prefixIcon: Icon(Icons.person_outline),
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phone,
+            enabled: !_saving,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Contact phone for data bundles',
+              hintText: '08012345678',
+              prefixIcon: Icon(Icons.phone_outlined),
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 24),
           PrimaryButton(
             label: _saving ? l10n.finishingSignIn : l10n.continueAction,
             loading: _saving,
             onPressed: _saving ? null : _submit,
-          ),
-          const SizedBox(height:12),
-          TextButton(
-            onPressed:_saving?null:_skip,
-            child:const Text('Skip for now — complete later in Profile'),
           ),
           const SizedBox(height: 12),
           Text(

@@ -23,6 +23,9 @@ export interface BillstackFundingPorts {
   state:"credited"|"duplicate";creditedKobo:number;eventId:string;
  }>;
  ready?:()=>boolean;
+ /** Allocation is independent of settlement credit; the card can show
+  * assigned details while transfer instructions remain disabled. */
+ canAssign?:()=>boolean;
  /** Independent provider transaction final-state/amount/account verification. */
  verifySettlement:(payment:BillstackReceivedPayment)=>Promise<BillstackReceivedPayment>;
  webhookSecret:string;
@@ -60,7 +63,8 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
     reply.code(401);return {error:{code:"unauthorized"}};
   }
   try{
-    if(ports.ready && !ports.ready())throw new Error("funding_not_verified");
+    if(ports.canAssign ? !ports.canAssign() : ports.ready && !ports.ready())
+      throw new Error("account_assignment_not_verified");
     const existing=await ports.read(person);
     if(existing)return {account:safe(existing)};
     const ref="gb"+randomUUID().replaceAll("-","");

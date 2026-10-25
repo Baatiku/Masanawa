@@ -115,9 +115,11 @@ class SessionError extends SessionState {
 
 class SessionController extends Notifier<SessionState> {
   int _authEpoch = 0;
+
   /// Stable through token refresh; changes on restore, login and logout.
   int get authorizationEpoch => _authEpoch;
   String? _recentlyExpiredOwnerId;
+
   /// Only a session-expiry redirect may resume this account's protected route.
   String? get recentlyExpiredOwnerId => _recentlyExpiredOwnerId;
   Future<void> _storageWrites = Future<void>.value();
@@ -163,10 +165,14 @@ class SessionController extends Notifier<SessionState> {
     final identifier = phone ?? email!;
     state = SessionSendingOtp(channel, identifier);
     try {
-      final res =
-          await ref.read(apiClientProvider).otpSend(phone: phone, email: email);
-      state =
-          SessionAwaitingOtp(res.channel, res.identifier, res.resendInSeconds);
+      final res = await ref
+          .read(apiClientProvider)
+          .otpSend(phone: phone, email: email);
+      state = SessionAwaitingOtp(
+        res.channel,
+        res.identifier,
+        res.resendInSeconds,
+      );
     } catch (e) {
       final err = e is ApiException
           ? e
@@ -185,24 +191,45 @@ class SessionController extends Notifier<SessionState> {
     String? phone,
     String? email,
     String? name,
+    String? firstName,
+    String? lastName,
+    String? contactPhone,
   }) async {
     final channel = phone != null ? OtpChannel.sms : OtpChannel.email;
     final identifier = phone ?? email!;
     state = SessionVerifying(channel, identifier);
     try {
-      final deviceId=await _deviceId();
-      final tokens = await ref.read(apiClientProvider).otpVerify(
+      final deviceId = await _deviceId();
+      final tokens = await ref
+          .read(apiClientProvider)
+          .otpVerify(
             code,
-            deviceId:deviceId,
+            deviceId: deviceId,
             phone: phone,
             email: email,
             name: name,
+            firstName: firstName,
+            lastName: lastName,
+            contactPhone: contactPhone,
           );
       await _persist(tokens);
+      if (tokens.user.isNewUser && tokens.user.email != null) {
+        try {
+          await ref
+              .read(apiClientProvider)
+              .dio
+              .post<Object?>('/v1/gb/wallet/virtual-account')
+              .timeout(const Duration(seconds: 20));
+        } catch (_) {
+          // The server keeps the original pending reference. Account creation
+          // can be checked later; sign-in is never undone by provider outage.
+        }
+      }
       state = SessionSignedIn(tokens.user, tokens);
     } catch (e) {
-      final err =
-          e is ApiException ? e : const ApiException('Could not verify code');
+      final err = e is ApiException
+          ? e
+          : const ApiException('Could not verify code');
       if (err.code == 'NAME_REQUIRED_ON_SIGNUP') {
         state = SessionNameRequired(channel, identifier, code);
         return;
@@ -248,9 +275,10 @@ class SessionController extends Notifier<SessionState> {
     final existing = await _storage.read(key: _kDeviceId);
     if (existing != null && existing.isNotEmpty) return existing;
     final rand = Random.secure();
-    final id = List<int>.generate(16, (_) => rand.nextInt(256))
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final id = List<int>.generate(
+      16,
+      (_) => rand.nextInt(256),
+    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     await _storage.write(key: _kDeviceId, value: id);
     return id;
   }
@@ -291,11 +319,9 @@ class SessionController extends Notifier<SessionState> {
   }) async {
     try {
       final deviceId = await _deviceId();
-      final tokens = await ref.read(apiClientProvider).passwordVerify(
-            phone: phone,
-            deviceId: deviceId,
-            password: password,
-          );
+      final tokens = await ref
+          .read(apiClientProvider)
+          .passwordVerify(phone: phone, deviceId: deviceId, password: password);
       await _persist(tokens);
       state = SessionSignedIn(tokens.user, tokens);
     } catch (e) {
@@ -336,6 +362,9 @@ class SessionController extends Notifier<SessionState> {
   /// original verified identifier; a different phone/email is not proof.
   Future<void> submitProfile({
     required String name,
+    String? firstName,
+    String? lastName,
+    String? contactPhone,
     String? phone,
     String? email,
     String? code,
@@ -344,7 +373,9 @@ class SessionController extends Notifier<SessionState> {
     try {
       if (current is SessionRegisterProfile) {
         final deviceId = await _deviceId();
-        final tokens = await ref.read(apiClientProvider).passwordSetup(
+        final tokens = await ref
+            .read(apiClientProvider)
+            .passwordSetup(
               phone: current.phone,
               deviceId: deviceId,
               password: current.password,
@@ -359,15 +390,20 @@ class SessionController extends Notifier<SessionState> {
         await verifyOtp(
           code ?? current.code,
           phone: current.channel == OtpChannel.sms ? current.identifier : null,
-          email:
-              current.channel == OtpChannel.email ? current.identifier : null,
+          email: current.channel == OtpChannel.email
+              ? current.identifier
+              : null,
           name: name,
+          firstName: firstName,
+          lastName: lastName,
+          contactPhone: contactPhone,
         );
         return;
       }
     } catch (e) {
-      final err =
-          e is ApiException ? e : const ApiException('Could not save profile');
+      final err = e is ApiException
+          ? e
+          : const ApiException('Could not save profile');
       state = SessionError(err.message, code: err.code);
     }
   }
@@ -377,15 +413,17 @@ class SessionController extends Notifier<SessionState> {
     final stored = await _readPersisted();
     if (epoch != _authEpoch) return;
     if (stored == null) {
-      _recentlyExpiredOwnerId=(state is SessionSignedIn)
-        ? (state as SessionSignedIn).user.id : null;
+      _recentlyExpiredOwnerId = (state is SessionSignedIn)
+          ? (state as SessionSignedIn).user.id
+          : null;
       await _clear();
       state = const SessionSignedOut();
       return;
     }
     try {
-      final rotated =
-          await ref.read(apiClientProvider).refresh(stored.refreshToken);
+      final rotated = await ref
+          .read(apiClientProvider)
+          .refresh(stored.refreshToken);
       if (epoch != _authEpoch) return;
       if (rotated.user.id != stored.user.id) {
         throw StateError('Refresh cannot replace the authenticated account');
@@ -397,11 +435,13 @@ class SessionController extends Notifier<SessionState> {
       if (epoch != _authEpoch) return;
       // Temporary outages must not destroy authenticated drafts/credentials.
       // Only a rejected refresh (or changed account) requires re-login.
-      final unauthorized=error is ApiException &&
-          (error.statusCode==401 || error.code=='SESSION_NOT_FOUND' ||
-           error.code=='UNAUTHORIZED');
-      if(!unauthorized && error is! StateError)return;
-      _recentlyExpiredOwnerId=stored.user.id;
+      final unauthorized =
+          error is ApiException &&
+          (error.statusCode == 401 ||
+              error.code == 'SESSION_NOT_FOUND' ||
+              error.code == 'UNAUTHORIZED');
+      if (!unauthorized && error is! StateError) return;
+      _recentlyExpiredOwnerId = stored.user.id;
       await _clear();
       state = const SessionSignedOut();
     }
@@ -416,7 +456,8 @@ class SessionController extends Notifier<SessionState> {
   }
 
   Future<void> logout() async {
-    _recentlyExpiredOwnerId=null; // Explicit sign-out never resumes a private route.
+    _recentlyExpiredOwnerId =
+        null; // Explicit sign-out never resumes a private route.
     // Immediately revoke permission for in-flight refresh to write the old
     // session, even if the best-effort remote logout is slow/offline.
     final epoch = ++_authEpoch;
@@ -516,9 +557,7 @@ class SessionController extends Notifier<SessionState> {
         accessToken: access,
         refreshToken: refresh,
         accessExpiresIn: int.tryParse(expiryRaw ?? '') ?? 900,
-        user: AuthUser.fromJson(
-          jsonDecode(userRaw) as Map<String, dynamic>,
-        ),
+        user: AuthUser.fromJson(jsonDecode(userRaw) as Map<String, dynamic>),
       );
 
       // The old fire-and-forget write could race sign-out and recreate a
@@ -582,8 +621,9 @@ class SessionController extends Notifier<SessionState> {
   }
 }
 
-final sessionProvider =
-    NotifierProvider<SessionController, SessionState>(SessionController.new);
+final sessionProvider = NotifierProvider<SessionController, SessionState>(
+  SessionController.new,
+);
 
 final isSignedInProvider = Provider<bool>((ref) {
   return ref.watch(sessionProvider) is SessionSignedIn;

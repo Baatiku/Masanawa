@@ -10,7 +10,6 @@ import 'package:go_router/go_router.dart';
 import '../screens/chat/ai_chat_screen.dart';
 import '../screens/onboarding/name_screen.dart';
 import '../screens/onboarding/otp_screen.dart';
-import '../screens/onboarding/password_screen.dart';
 import '../screens/onboarding/phone_login_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/settings/settings_screen.dart';
@@ -99,10 +98,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             session is SessionRegisterProfile) {
           return '/name';
         }
-        if (session is SessionPasswordRequired) {
-          return '/password?phone=${Uri.encodeComponent(session.identifier)}'
-              '&setup=${session.setup ? '1' : '0'}';
-        }
+        if (session is SessionPasswordRequired) return '/phone-login';
         if (session is SessionAwaitingOtp) return '/otp';
         // Signed-in users have completed account creation. Optional
         // profile fields belong to Settings, not a mandatory auth loop.
@@ -172,21 +168,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const PhoneLoginScreen(),
       ),
       GoRoute(path: '/otp', builder: (_, _) => const OtpScreen()),
-      GoRoute(
-        path: '/password',
-        builder: (_, state) => PasswordScreen(
-          phone: state.uri.queryParameters['phone'] ?? '',
-          setup: state.uri.queryParameters['setup'] == '1',
-        ),
-      ),
+      GoRoute(path: '/password', redirect: (_, __) => '/phone-login'),
       GoRoute(path: '/name', builder: (_, _) => const NameScreen()),
       GoRoute(
         path: '/home',
         builder: (_, state) {
           final index = shellRootTabIndex(state.uri.queryParameters['tab']);
-          return StartupGate(
-            child: FiveTabShell(initialIndex: index),
-          );
+          return StartupGate(child: FiveTabShell(initialIndex: index));
         },
       ),
       // Legacy publishing, user-to-user Talks, personal
@@ -209,23 +197,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Legacy finance links cannot mount old currency, custody or bill
       // screens during the MB-ledger cutover.
       GoRoute(path: '/wallet/pay', redirect: (_, __) => '/home?tab=wallet'),
-      GoRoute(path: '/wallet/transactions/:id',
-        redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(
+        path: '/wallet/transactions/:id',
+        redirect: (_, __) => '/home?tab=wallet',
+      ),
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
-      GoRoute(path: '/wallet/fund',
-        builder: (_, __) => const NgnFundingScreen()),
-      GoRoute(path: '/wallet/add',
-        builder: (_, __) => const RechargePackagesScreen()),
-      GoRoute(path: '/wallet/request',
-        builder: (_, __) => const GbRequestScreen()),
-      GoRoute(path: '/wallet/send',
-        builder: (_, __) => const GbSendScreen()),
-      GoRoute(path: '/calls/incoming/:callId',
-        redirect: (_, __) => '/home?tab=calls'),
+      GoRoute(
+        path: '/wallet/fund',
+        builder: (_, __) => const NgnFundingScreen(),
+      ),
+      GoRoute(
+        path: '/wallet/add',
+        builder: (_, __) => const RechargePackagesScreen(),
+      ),
+      GoRoute(
+        path: '/wallet/request',
+        builder: (_, __) => const GbRequestScreen(),
+      ),
+      GoRoute(path: '/wallet/send', builder: (_, __) => const GbSendScreen()),
+      GoRoute(
+        path: '/calls/incoming/:callId',
+        redirect: (_, __) => '/home?tab=calls',
+      ),
       GoRoute(path: '/chats', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/share', redirect: (_, __) => '/home?tab=chats'),
-      GoRoute(path: '/human/quick-reply',
-        redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(
+        path: '/human/quick-reply',
+        redirect: (_, __) => '/home?tab=chats',
+      ),
       GoRoute(
         path: '/chat/:id',
         builder: (context, state) {
@@ -256,15 +255,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             StatusResourceLinkScreen(postId: state.pathParameters['postId']!),
       ),
-      GoRoute(path: '/rooms/:id',
-        redirect: (_, __) => '/home?tab=status'),
-      GoRoute(path: '/human/chat/:id',
-        redirect: (_, __) => '/home?tab=chats'),
-      GoRoute(path: '/human/call/:id',
-        redirect: (_, __) => '/home?tab=calls'),
+      GoRoute(path: '/rooms/:id', redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/human/chat/:id', redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(path: '/human/call/:id', redirect: (_, __) => '/home?tab=calls'),
       GoRoute(path: '/privacy', redirect: (_, __) => '/settings'),
-      GoRoute(path: '/human/requests',
-        redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(path: '/human/requests', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/billing', redirect: (_, __) => '/home?tab=data'),
       GoRoute(path: '/crypto', redirect: (_, __) => '/home?tab=wallet'),

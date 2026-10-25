@@ -27,6 +27,9 @@ interface ProfileRow {
   username?: string;
   email: string | null;
   phone: string | null;
+  contact_phone?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   locale: string;
   created_at: Date | string;
   account_state?: "active"|"restricted"|"suspended"|"recovery";
@@ -40,6 +43,9 @@ function profile(row: ProfileRow): PlatformAuthProfile {
     ...(row.username ? {username:row.username} : {}),
     email: row.email,
     phone: row.phone,
+    contactPhone: row.contact_phone ?? null,
+    firstName: row.first_name ?? null,
+    lastName: row.last_name ?? null,
     locale: row.locale,
     ...(row.account_state ? {accountState:row.account_state} : {}),
     createdAt: (row.created_at instanceof Date ? row.created_at : new Date(row.created_at)).toISOString(),
@@ -63,7 +69,7 @@ async function loadProfile(
   userId: UserId,
 ): Promise<PlatformAuthProfile | null> {
   const result = await client.query<ProfileRow>(
-    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.locale,p.created_at,h.handle AS username,
+    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.first_name,p.last_name,p.contact_phone,p.locale,p.created_at,h.handle AS username,
          CASE WHEN c.state IS NOT NULL AND
            (c.until_at IS NULL OR c.until_at>clock_timestamp())
            THEN c.state
@@ -237,13 +243,14 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         });
         const inserted = await client.query<ProfileRow>(
           `INSERT INTO security.platform_user_profiles(
-             tenant_id,user_id,display_name,email,phone,locale,created_at,updated_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
-           RETURNING tenant_id,user_id,display_name,email,phone,locale,created_at`,
+             tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,locale,created_at,updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
+           RETURNING tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,locale,created_at`,
           [
             input.tenantId,userId,name,
             input.channel === "email" ? input.identifier : null,
             input.channel === "sms" ? input.identifier : null,
+            input.firstName ?? null,input.lastName ?? null,input.contactPhone ?? null,
             input.locale,input.createdAt,
           ],
         );
