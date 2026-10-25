@@ -479,6 +479,20 @@ void main() {
     },
   );
 
+  testWidgets('repeated server cursor ends pagination without a loop',
+      (tester) async {
+    final api = StubFeed('first');
+    api.onList = (_, cursor) async => FeedPage([update('first')], 'stuck');
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: MasanaFeedScreen(api: api, accountKey: 'fan'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(api.calls, 2);
+    expect(find.text('Load more'), findsNothing);
+    expect(find.text('first'), findsOneWidget);
+  });
+
   testWidgets(
     'same account replacement of auth-backed API does not re-fetch feed',
     (tester) async {
@@ -569,8 +583,8 @@ void main() {
             accountKey: 'owner1',
             mediaApi: InlineMediaStub((p, id) {
               expect(p, 'post1');
-              expect(id, 'media1');
-              return pending.future;
+              return id == 'media1'
+                  ? pending.future : Future.value(inlineGrant(id));
             }),
             inlineMediaRenderer: (grant) =>
                 Text('AUTHORIZED IMAGE: ${grant.mediaId}'),
@@ -580,13 +594,57 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.textContaining('AUTHORIZED IMAGE'), findsNothing);
+    expect(find.text('AUTHORIZED IMAGE: media1'), findsNothing);
     pending.complete(inlineGrant('media1'));
     await tester.pumpAndSettle();
     expect(find.text('AUTHORIZED IMAGE: media1'), findsOneWidget);
+    expect(find.text('AUTHORIZED IMAGE: media2'), findsOneWidget);
     await tester.tap(find.text('View all 2 images'));
     await tester.pump();
     expect(opened, 'media1');
+  });
+
+  testWidgets('mosaic grants at most four images and opens the exact tile',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final feed = StubFeed('images');
+    feed.onList = (_, __) async => FeedPage([
+      FeedPost(id: 'post-gallery', authorMasanaId: 'masana', kind: 'image',
+        body: 'Image collection',
+        mediaIds: const ['one','two','three','four','five','six'],
+        publishedAt: DateTime.utc(2026), likeCount: 0, commentCount: 0,
+        liked: false, saved: false),
+    ], null);
+    final granted = <String>[];
+    String? opened;
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2)),
+        child: Directionality(textDirection: TextDirection.rtl, child: child!),
+      ),
+      home: Scaffold(body: MasanaFeedScreen(
+      api: feed, accountKey: 'fan',
+      mediaApi: InlineMediaStub((_, id) async {
+        granted.add(id);
+        return inlineGrant(id);
+      }),
+      inlineMediaRenderer: (g) => Center(child: Text('Image ${g.mediaId}')),
+      onOpenMedia: (_, id) => opened = id,
+    ))));
+    await tester.pumpAndSettle();
+    expect(granted, containsAll(['one','two','three','four']));
+    expect(granted, isNot(contains('five')));
+    expect(granted, isNot(contains('six')));
+    expect(find.text('+2'), findsOneWidget);
+    await tester.ensureVisible(find.text('Image three'));
+    await tester.tap(find.text('Image three'));
+    await tester.pump();
+    expect(opened, 'three');
+    expect(tester.takeException(), isNull);
   });
   testWidgets('a new account cannot render an outstanding old media grant', (
     tester,

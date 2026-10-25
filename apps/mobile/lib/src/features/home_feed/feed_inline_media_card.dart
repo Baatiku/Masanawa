@@ -17,12 +17,18 @@ class FeedInlineMediaCard extends StatefulWidget {
     required this.mediaCount,
     this.onOpen,
     this.renderer,
+    this.tile = false,
+    this.imageIndex = 1,
+    this.remainingCount = 0,
   });
   final FeedMediaApi api;
   final String accountKey,postId,mediaId;
   final int mediaCount;
   final VoidCallback? onOpen;
   final Widget Function(FeedMediaGrant)? renderer;
+  final bool tile;
+  final int imageIndex;
+  final int remainingCount;
   @override State<FeedInlineMediaCard> createState()=>_FeedInlineMediaCardState();
 }
 
@@ -81,29 +87,50 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   @override void dispose(){_discard();super.dispose();}
   @override Widget build(BuildContext context){
     final current=grant;
-    if(loading)return SizedBox(height:120,child:Center(
+    Widget frame(Widget child)=>widget.tile?SizedBox.expand(child:child):
+      SizedBox(height:120,child:child);
+    Widget retry(String label)=>widget.tile
+      ?IconButton(tooltip:label,onPressed:_retryPreview,
+          icon:const Icon(Icons.refresh),iconSize:28)
+      :TextButton.icon(onPressed:_retryPreview,
+          icon:const Icon(Icons.refresh),label:Text(label));
+    if(loading)return frame(Center(
       child:Semantics(label:'Loading approved image preview',
         child:const CircularProgressIndicator(strokeWidth:2))));
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
-      return Align(alignment:Alignment.centerLeft,child:TextButton.icon(
-        onPressed:_retryPreview,
-        icon:const Icon(Icons.refresh),
-        label:const Text('Image unavailable · retry preview')));
+      return frame(Center(child:retry('Image unavailable · retry preview')));
+    }
+    final preview=widget.renderer?.call(current)??Image.network(
+      current.url.toString(),
+      height:widget.tile?double.infinity:220,
+      width:double.infinity,
+      cacheWidth:960,fit:BoxFit.cover,
+      errorBuilder:(_,__,___)=>Center(child:retry(
+        'Image failed to load · retry preview')),
+    );
+    if(widget.tile){
+      return Semantics(
+        label:'Image ${widget.imageIndex} of ${widget.mediaCount}',
+        child:ClipRRect(borderRadius:BorderRadius.circular(10),child:Stack(
+          fit:StackFit.expand,children:[
+            InkWell(onTap:widget.onOpen,child:preview),
+            if(widget.remainingCount>0)
+              IgnorePointer(child:ColoredBox(
+                color:Colors.black54,
+                child:Center(child:Text('+${widget.remainingCount}',
+                  style:Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color:Colors.white,fontWeight:FontWeight.bold))),
+              )),
+          ],
+        )),
+      );
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       InkWell(
         onTap:widget.onOpen,
         child:ClipRRect(
           borderRadius:BorderRadius.circular(10),
-          child:widget.renderer?.call(current)??Image.network(
-            current.url.toString(),height:220,width:double.infinity,
-            cacheWidth:960,fit:BoxFit.cover,
-            errorBuilder:(_,__,___)=>SizedBox(height:120,
-              child:Center(child:TextButton.icon(
-                onPressed:_retryPreview,
-                icon:const Icon(Icons.refresh),
-                label:const Text('Image failed to load · retry preview')))),
-          ),
+          child:preview,
         ),
       ),
       if(widget.mediaCount>1)
