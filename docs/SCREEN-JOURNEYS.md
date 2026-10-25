@@ -61,3 +61,7 @@ Status offers platform Masana posts, search, Saved, social reactions/comments/fo
 ## Retired legacy Gateway Home path
 
 Legacy HTTP `GET /home` (old hard-coded Rooms showcase) must return 404; it is not the Flutter `/home?tab=...` shell route. The account-bound `GET /agent/directory` remains the Masana roster authority, while five-tab navigation uses the mobile shell.
+
+## Retired directory cache metadata — 25 October
+
+The Masana directory strips legacy `roomId`, `creatorHandle` and `creatorName` keys even when present in an old serialized cache or backend response. Readiness/portrait/follow, identity, country metadata and valid professional public social channels are retained. Restore retains no retired navigation metadata; no Room or public creator link can be recovered through cached Masana identities.
