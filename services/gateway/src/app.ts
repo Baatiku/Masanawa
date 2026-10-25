@@ -1,3 +1,5 @@
+import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
+import { registerHistoricalFinancialCallbacks } from './historical_financial_callbacks.js';
 import {
   DEFAULT_RECHARGE_RATE_BOOK,
   quotePackage,
@@ -9,14 +11,11 @@ import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_d
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
-import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
 import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
-import { registerExternalVideoRoutes } from "./modules/external_videos/routes.js";
-import { registerYouTubeSourceAdminRoutes } from "./modules/youtube_websub/source_admin_routes.js";
 import type { AdminYouTubeSourceStore } from "./modules/youtube_websub/source_admin.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
 import {registerMasanaRoutes} from "./modules/masana/service.js";
@@ -25,10 +24,6 @@ import {registerCreatorPolicyRoutes} from "./creator_agents/policy.js";
 import type { VideoStore } from "./modules/external_videos/service.js";
 import type { VideoPrincipal } from "./modules/external_videos/contract.js";
 import type { FastifyRequest } from "fastify";
-import { registerIncomingCallRoutes } from "./incoming_calls/routes.js";
-import { IncomingCallError, type IncomingCallService } from "./incoming_calls/service.js";
-import { registerGroupCallRoutes } from "./group_calls/routes.js";
-import { GroupCallError, type GroupCallService } from "./group_calls/service.js";
 import Fastify from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
@@ -46,68 +41,33 @@ import type {
 import { registerAgentShellRoutes } from "./agent_shell_routes.js";
 import { registerPrivateChatMediaRoutes } from "./private_chat_media_routes.js";
 import type { createPrivateChatMediaService } from "./private_chat_media.js";
-import { registerBillingRoutes } from "./billing_routes.js";
-import { registerMsnwBillingRoutes } from "./msn_wallet/billing_routes.js";
-import { registerMsnwUsdtConversionRoutes } from "./msn_wallet/usdt_conversion_routes.js";
 import type { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
 import type { createMsnwBillingService } from "./msn_wallet/billing_service.js";
-import { registerTalkRoutes } from "./talk_routes.js";
-import { registerTalkReplayRoutes } from "./talk_replay_routes.js";
 import type { TalkReplayService } from "./talk_replay/service.js";
-import { registerTalkModerationRoutes } from "./talk_moderation_routes.js";
 import type { TalkModerationService } from "./talk_moderation/service.js";
-import { registerTalkAiSeatRoutes } from "./talk_ai_seat_routes.js";
 import type { TalkAiSeatService } from "./talk_ai_seats/service.js";
-import { registerTalkLiveRoutes } from "./talk_live_routes.js";
 import type { TalkLiveService } from "./talk_live/service.js";
 import { registerTalkProfileRoutes } from "./talk_profile_routes.js";
 import type { TalkProfileService } from "./talk_profiles/service.js";
-import { registerTalkActivityRoutes } from "./talk_activity_routes.js";
 import type { TalkActivityService } from "./talk_activity/service.js";
-import { registerTalkSearchRoutes } from "./talk_search_routes.js";
 import type { TalkSearchService } from "./talk_search/service.js";
-import { registerTalkLibraryRoutes } from "./talk_library_routes.js";
 import type { TalkLibraryService } from "./talk_library/service.js";
-import { registerTalkGiftRoutes } from "./talk_gift_routes.js";
 import type { TalkGiftService } from "./talk_gifts/service.js";
-import { registerTalkPollRoutes } from "./talk_poll_routes.js";
 import type { TalkPollService } from "./talk_polls/service.js";
-import { registerTalkSafetyRoutes } from "./talk_safety_routes.js";
 import type { TalkSafetyService } from "./talk_safety/service.js";
-import { registerDirectTwinRoutes } from "./talk_direct_twin_routes.js";
 import type { DirectTwinService } from "./talk_direct_twin/service.js";
 import type { TalkService } from "./talks/service.js";
 import type { TwinProductionRuntime } from "./twin_production_runtime.js";
-import { registerTwinProfileRoutes } from "./twin_profile_routes.js";
 import { registerAccountDeletionRoutes } from "./account_deletion_routes.js";
 import type { AccountDeletionService } from "./account_deletion.js";
-import { registerTwinDirectoryRoutes } from "./twin_directory_routes.js";
-import { registerMyTwinProjectionRoutes } from "./my_twin_projection_routes.js";
-import { registerTwinActivityRoutes } from "./twin_activity_routes.js";
-import { registerWalletProjectionRoutes } from "./wallet_projection_routes.js";
-import { registerCreditTransferRoutes, registerGiftRoutes } from "./credit_transfer_routes.js";
-import { registerMsnBalanceRoutes, type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
-import { registerMsnFundingStatusRoutes, type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
-import { registerMsnwPaystackDvaRoutes } from "./msn_wallet/paystack_dva_routes.js";
-import { registerMsnwPaystackEnrollmentRoutes } from "./msn_wallet/paystack_customer_enrollment_routes.js";
+import { type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
+import { type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
 import type { MsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
-import { registerMsnwOnchainBalanceRoutes } from "./msn_wallet/msnw_onchain_routes.js";
 import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
-import { registerMsnwPaystackFiatRoutes } from "./msn_wallet/paystack_fiat_routes.js";
-import { registerMsnwCustodyRoutes } from "./msn_wallet/custody_routes.js";
 import type { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import type { MsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
-import { registerP2pRoutes, type P2pRoutesDependencies } from "./p2p/routes.js";
-import { registerTwinAttributionRoutes, registerCommissionPolicyAdminRoutes } from "./twin_attribution_routes.js";
-import { registerProviderValuationAdminRoutes } from "./provider_valuation_admin_routes.js";
-import { registerPaidVoiceRoutes, registerPaidVoiceSettlementRoutes } from "./paid_voice_routes.js";
-import { registerPaidFeatureTrialAdminRoutes } from "./paid_feature_trial_admin_routes.js";
-import {
-  registerOwnerAccessRoutes,
-  registerOwnerAccessDisputeAdminRoutes,
-} from "./owner_access_routes.js";
-import { registerOwnerAccessOfferingRoutes } from "./owner_access_offering_routes.js";
+import { type P2pRoutesDependencies } from "./p2p/routes.js";
 import { registerTwinSafetyRoutes } from "./twin_safety_routes.js";
 import type { BillingCheckoutService } from "./billing_checkout.js";
 import type { BillingFinancialService } from "./financial_billing.js";
@@ -115,12 +75,6 @@ import type { BillingWalletService } from "./billing_wallet.js";
 import type { MobilePushRegistrationService } from "./mobile_push.js";
 import type { AccountNotificationService } from "./notification_preferences.js";
 import type { FinancialService } from "./financial_service.js";
-import {
-  registerCustomerChannelRoutes,
-  type CustomerChannelOptions,
-} from "./customer_channel_routes.js";
-import type { LinkedWhatsAppController } from "./whatsapp_linked_device.js";
-import { registerLinkedWhatsAppAdminRoutes } from "./whatsapp_linked_device_routes.js";
 import {
   CustomerAuthError,
   type CustomerAuthService,
@@ -161,9 +115,6 @@ export interface GatewayAppOptions {
     resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
   };
   readonly callHistory?: CallHistoryService;
-  readonly groupCalls?: GroupCallService;
-  readonly incomingCalls?: IncomingCallService;
-  readonly humanCommunication?: HumanCommunicationService;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
@@ -205,14 +156,6 @@ export interface GatewayAppOptions {
     service: ReturnType<typeof createMsnwUsdtConversion>;
   };
   readonly financial?: FinancialService;
-  readonly customerChannels?: CustomerChannelOptions;
-  readonly linkedWhatsApp?: Readonly<{
-    controller: LinkedWhatsAppController;
-    adminToken?: string;
-    authorizeSession?: (
-      authorizationHeader: string | undefined,
-    ) => Promise<boolean>;
-  }>;
   readonly twinProduction?: TwinProductionRuntime;
   /** Read-only off-chain MSN. No issuance authority in a customer route. */
   readonly msnBalance?: Readonly<{ authorizer: MsnBalanceAuthority; ledger: MsnBalanceReader }>;
@@ -410,7 +353,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     requestTimeout: 30_000,
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  const legacyProduct = options.productScope !== "masana-lite";
   const now = options.now ?? nowInstant;
   const checks = options.readinessChecks ?? [];
 
@@ -421,16 +363,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     }
     if (error instanceof GeminiProviderError) {
       void reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
-      return;
-    }
-    if (error instanceof IncomingCallError) {
-      void reply.code(error.statusCode).send({ error: { code: error.code, message: "Incoming call request could not be completed" } });
-      return;
-    }
-    if (error instanceof GroupCallError) {
-      void reply.code(error.statusCode).send({
-        error: { code: error.code, message: "Group call request could not be completed" },
-      });
       return;
     }
     if (error instanceof Error && error.message === "financial.auth.unauthorized") {
@@ -468,6 +400,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   });
 
   registerGatewayRequestCorrelation(app);
+  registerHistoricalFinancialCallbacks(app, options);
   // Apply to all money-affecting HTTP writes regardless of the individual
   // service's route registration. Reads and non-financial account recovery
   // remain available for restricted customers. Refuse new financial actions
@@ -476,6 +409,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     // A provider-signed callback must reconcile even if the customer's
     // login is restricted or recovering. The callback handler separately
     // authenticates the provider signature against the original payload.
+    // Unknown/retired URLs have no mutation handler and must remain 404.
+    if (!request.routeOptions.url) return;
     if(!requiresFinancialCustomerState(request.method,request.url))return;
     // A missing customer-auth component is a production configuration failure,
     // not permission to spend. Never silently bypass suspended/recovery holds.
@@ -519,7 +454,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
-  if (!legacyProduct && options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 
@@ -1070,284 +1005,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-
-
-
-
-
-
-  if (legacyProduct && options.commerceFulfillment) {
-    const commerceFulfillment = options.commerceFulfillment;
-    app.post(
-      "/fulfillments",
-      {
-        schema: {
-          body: Type.Object(
-            { quoteId: Type.String() },
-            { additionalProperties: false },
-          ),
-          response: {
-            200: Type.Object(
-              {
-                schemaVersion: Type.Literal(1),
-                tenantId: Type.String(),
-                fulfillmentId: Type.String(),
-                quoteId: Type.String(),
-                offerId: Type.String(),
-                offerRevision: Type.Integer({ minimum: 1 }),
-                skillVersionId: Type.String(),
-                originatingCharacterId: Type.String(),
-                executorCharacterId: Type.String(),
-                creatorUserId: Type.Union([Type.String(), Type.Null()]),
-                fundingSource: Type.Union([
-                  Type.Literal("agent-float"),
-                  Type.Literal("platform"),
-                ]),
-                reserveCredits: Type.Integer({ minimum: 0 }),
-                creatorCommissionCredits: Type.Integer({ minimum: 0 }),
-                platformRevenueCredits: Type.Integer({ minimum: 0 }),
-                state: Type.Literal("admitted"),
-                createdAt: Type.String(),
-              },
-              { additionalProperties: false },
-            ),
-          },
-        },
-      },
-      async (request) =>
-        commerceFulfillment.admit({
-          authorizationHeader: request.headers.authorization,
-          quoteId: request.body.quoteId,
-        }),
-    );
-  }
-
-  if (legacyProduct && options.commerceCatalog) {
-    const commerceCatalog = options.commerceCatalog;
-    const OfferViewSchema = Type.Object(
-      {
-        offerId: Type.String(),
-        revision: Type.Integer({ minimum: 1 }),
-        key: Type.String(),
-        title: Type.String(),
-        description: Type.String(),
-        skillVersionId: Type.String(),
-        priceCredits: Type.Integer({ minimum: 1 }),
-        active: Type.Literal(true),
-      },
-      { additionalProperties: false },
-    );
-
-    app.get(
-      "/offers",
-      {
-        schema: {
-          response: {
-            200: Type.Object(
-              { offers: Type.Array(OfferViewSchema) },
-              { additionalProperties: false },
-            ),
-          },
-        },
-      },
-      async (request) => ({
-        offers: [
-          ...(await commerceCatalog.list({
-            authorizationHeader: request.headers.authorization,
-          })),
-        ],
-      }),
-    );
-
-    app.post(
-      "/quotes",
-      {
-        schema: {
-          body: Type.Object(
-            {
-              offerId: Type.String(),
-              originatingCharacterId: Type.String(),
-            },
-            { additionalProperties: false },
-          ),
-          response: {
-            200: Type.Object(
-              {
-                schemaVersion: Type.Literal(1),
-                tenantId: Type.String(),
-                quoteId: Type.String(),
-                offerId: Type.String(),
-                offerRevision: Type.Integer({ minimum: 1 }),
-                customerUserId: Type.String(),
-                originatingCharacterId: Type.String(),
-                creatorUserId: Type.Union([Type.String(), Type.Null()]),
-                priceCredits: Type.Integer({ minimum: 1 }),
-                creatorCommissionCredits: Type.Integer({ minimum: 0 }),
-                fulfillmentReserveCredits: Type.Integer({ minimum: 0 }),
-                platformMarginCredits: Type.Integer({ minimum: 0 }),
-                expiresAt: Type.String(),
-                createdAt: Type.String(),
-              },
-              { additionalProperties: false },
-            ),
-          },
-        },
-      },
-      async (request) =>
-        commerceCatalog.quote({
-          authorizationHeader: request.headers.authorization,
-          offerId: request.body.offerId,
-          originatingCharacterId: request.body.originatingCharacterId,
-        }),
-    );
-  }
-
-  if (legacyProduct && options.creatorSkills) {
-    const creatorSkills = options.creatorSkills;
-    const CreatorSkillSchema = Type.Object(
-      {
-        skillVersionId: Type.String(),
-        key: Type.String(),
-        displayName: Type.String(),
-        description: Type.String(),
-        triggerDescription: Type.String(),
-        category: Type.String(),
-        enabled: Type.Boolean(),
-      },
-      { additionalProperties: false },
-    );
-    const CreatorSkillResponse = Type.Object(
-      { skills: Type.Array(CreatorSkillSchema) },
-      { additionalProperties: false },
-    );
-
-    app.get(
-      "/creator/skills",
-      { schema: { response: { 200: CreatorSkillResponse } } },
-      async (request) => ({
-        skills: [
-          ...(await creatorSkills.list({
-            authorizationHeader: request.headers.authorization,
-          })),
-        ],
-      }),
-    );
-
-    app.put(
-      "/creator/skills",
-      {
-        schema: {
-          body: Type.Object(
-            {
-              skillVersionId: Type.String(),
-              enabled: Type.Boolean(),
-            },
-            { additionalProperties: false },
-          ),
-          response: { 200: CreatorSkillResponse },
-        },
-      },
-      async (request) => ({
-        skills: [
-          ...(await creatorSkills.setEnabled({
-            authorizationHeader: request.headers.authorization,
-            skillVersionId: request.body.skillVersionId,
-            enabled: request.body.enabled,
-          })),
-        ],
-      }),
-    );
-  }
-
-  if (legacyProduct && options.creatorEconomy) {
-    const creatorEconomy = options.creatorEconomy;
-    const EconomyResponse = Type.Object(
-      {
-        hasClone: Type.Boolean(),
-        characterId: Type.Union([Type.String(), Type.Null()]),
-        customerCredits: Type.Integer({ minimum: 0 }),
-        agentFloatCredits: Type.Integer({ minimum: 0 }),
-        pendingEarningsCredits: Type.Integer({ minimum: 0 }),
-        availableEarningsCredits: Type.Integer({ minimum: 0 }),
-      },
-      { additionalProperties: false },
-    );
-
-    app.get(
-      "/creator/economy",
-      { schema: { response: { 200: EconomyResponse } } },
-      async (request) =>
-        creatorEconomy.read({
-          authorizationHeader: request.headers.authorization,
-        }),
-    );
-
-    app.post(
-      "/creator/float",
-      {
-        schema: {
-          body: Type.Object(
-            { amountCredits: Type.Integer({ minimum: 1, maximum: 1000000000 }) },
-            { additionalProperties: false },
-          ),
-          response: { 200: EconomyResponse },
-        },
-      },
-      async (request) =>
-        creatorEconomy.allocateFloat({
-          authorizationHeader: request.headers.authorization,
-          amountCredits: request.body.amountCredits,
-        }),
-    );
-  }
-
-  if (legacyProduct && options.creatorClone) {
-    const creatorClone = options.creatorClone;
-    app.post(
-      "/creator/clone",
-      {
-        schema: {
-          body: Type.Object(
-            {
-              displayName: Type.String({ minLength: 1, maxLength: 120 }),
-              biography: Type.String({ minLength: 1, maxLength: 1000 }),
-              languages: Type.Array(
-                Type.String({ minLength: 1, maxLength: 120 }),
-                { minItems: 1, maxItems: 16 },
-              ),
-              personality: Type.Array(
-                Type.String({ minLength: 1, maxLength: 120 }),
-                { minItems: 1, maxItems: 24 },
-              ),
-              expertise: Type.Array(
-                Type.String({ minLength: 1, maxLength: 120 }),
-                { minItems: 1, maxItems: 32 },
-              ),
-            },
-            { additionalProperties: false },
-          ),
-          response: {
-            200: Type.Object(
-              {
-                created: Type.Boolean(),
-                characterId: Type.String(),
-                characterVersionId: Type.String(),
-                relationshipId: Type.String(),
-                displayName: Type.String(),
-              },
-              { additionalProperties: false },
-            ),
-          },
-        },
-      },
-      async (request) =>
-        creatorClone.create({
-          authorizationHeader: request.headers.authorization,
-          ...request.body,
-        }),
-    );
-  }
-
   if (options.agentConversation) {
     const conversation = options.agentConversation;
 
@@ -1574,251 +1231,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (legacyProduct && options.financial) {
-    const financial = options.financial;
-    const auth = (request: { headers: { authorization?: string | undefined } }) =>
-      request.headers.authorization;
-
-    app.get('/v1/financial/crypto/holdings',async(request,reply)=>{
-      reply.header('Cache-Control','private, no-store');
-      if(!financial.listHoldings) {reply.code(503);return {error:'crypto.holdings_unavailable'};}
-      return {items:await financial.listHoldings({authorizationHeader:auth(request)})};
-    });
-    app.get("/v1/financial/capabilities", async (request) =>
-      financial.capabilities({ authorizationHeader: auth(request) }));
-
-    app.get("/v1/financial/crypto/routes", async (request) => ({
-      routes: (await financial.listDepositRoutes({
-        authorizationHeader: auth(request),
-      })).map((route) => ({
-        providerCode: route.providerCode,
-        asset: route.asset,
-        network: route.network,
-      })),
-    }));
-
-    app.get("/v1/financial/crypto/conversion-routes", async (request) => ({
-      routes: (await financial.listConversionRoutes({
-        authorizationHeader: auth(request),
-      })).map((route) => ({
-        providerCode: route.providerCode,
-        asset: route.asset,
-        network: route.network,
-      })),
-    }));
-
-    app.get("/v1/financial/crypto/withdrawal-routes", async (request) => ({
-      routes: (await financial.listWithdrawalRoutes({
-        authorizationHeader: auth(request),
-      })).map((route) => ({
-        providerCode: route.providerCode,
-        asset: route.asset,
-        network: route.network,
-      })),
-    }));
-
-    app.post(
-      "/v1/financial/crypto/deposits",
-      { schema: { body: Type.Object({
-        requestId: Type.String(),
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-        amount: Type.String({ minLength: 1, maxLength: 80 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.createDeposit({
-        authorizationHeader: auth(request),
-        requestId: request.body.requestId,
-        providerCode: request.body.providerCode,
-        amount: request.body.amount,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/purchases",
-      { schema: { body: Type.Object({
-        requestId: Type.String(),
-        fiatAmount: Type.String({ minLength: 1, maxLength: 32 }),
-        fiatCurrency: Type.String({ minLength: 2, maxLength: 32 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.createFiatPurchase({
-        authorizationHeader: auth(request),
-        requestId: request.body.requestId,
-        fiatAmount: request.body.fiatAmount,
-        fiatCurrency: request.body.fiatCurrency,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/purchases/:requestId/refresh",
-      { schema: { params: Type.Object({ requestId: Type.String() }, { additionalProperties: false }) } },
-      async (request) => financial.refreshFiatPurchase({
-        authorizationHeader: auth(request),
-        requestId: request.params.requestId,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/withdrawals/quote",
-      { schema: { body: Type.Object({
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-        amount: Type.String({ minLength: 1, maxLength: 80 }),
-        destinationAddress: Type.String({ minLength: 1, maxLength: 512 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.quoteWithdrawal({
-        authorizationHeader: auth(request),
-        providerCode: request.body.providerCode,
-        amount: request.body.amount,
-        destinationAddress: request.body.destinationAddress,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/withdrawals",
-      { schema: { body: Type.Object({
-        requestId: Type.String(),
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-        amount: Type.String({ minLength: 1, maxLength: 80 }),
-        destinationAddress: Type.String({ minLength: 1, maxLength: 512 }),
-      }, { additionalProperties: false }) } },
-      async (request) => {
-        if(!options.customerAuth)throw new CustomerAuthError("STEP_UP_REQUIRED",403);
-        await options.customerAuth.consumeWithdrawalStepUp({
-          authorizationHeader:auth(request),
-          stepUpToken:request.headers["x-masanawa-step-up"] as string|undefined,
-          requestId:request.body.requestId,
-          providerCode:request.body.providerCode,
-          amount:request.body.amount,
-          destinationAddress:request.body.destinationAddress,
-        });
-        return financial.createWithdrawal({
-          authorizationHeader:auth(request),
-          requestId:request.body.requestId,
-          providerCode:request.body.providerCode,
-          amount:request.body.amount,
-          destinationAddress:request.body.destinationAddress,
-        });
-      },
-    );
-
-    app.post(
-      "/v1/financial/crypto/withdrawals/:requestId/refresh",
-      { schema: { params: Type.Object({ requestId: Type.String() }, { additionalProperties: false }) } },
-      async (request) => financial.refreshWithdrawal({
-        authorizationHeader: auth(request),
-        requestId: request.params.requestId,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/conversions/quote",
-      { schema: { body: Type.Object({
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-        targetProviderCode: Type.String({ minLength: 2, maxLength: 32 }),
-        amount: Type.String({ minLength: 1, maxLength: 80 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.quoteConversion({
-        authorizationHeader: auth(request),
-        providerCode: request.body.providerCode,
-        targetProviderCode: request.body.targetProviderCode,
-        amount: request.body.amount,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/conversions",
-      { schema: { body: Type.Object({
-        requestId: Type.String(),
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-        targetProviderCode: Type.String({ minLength: 2, maxLength: 32 }),
-        amount: Type.String({ minLength: 1, maxLength: 80 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.createConversion({
-        authorizationHeader: auth(request),
-        requestId: request.body.requestId,
-        providerCode: request.body.providerCode,
-        targetProviderCode: request.body.targetProviderCode,
-        amount: request.body.amount,
-      }),
-    );
-
-    app.post(
-      "/v1/financial/crypto/conversions/:requestId/refresh",
-      { schema: { params: Type.Object({ requestId: Type.String() }, { additionalProperties: false }) } },
-      async (request) => financial.refreshConversion({
-        authorizationHeader: auth(request),
-        requestId: request.params.requestId,
-      }),
-    );
-
-    app.get(
-      "/v1/financial/crypto/balances/:providerCode",
-      { schema: { params: Type.Object({
-        providerCode: Type.String({ minLength: 2, maxLength: 32 }),
-      }, { additionalProperties: false }) } },
-      async (request) => financial.readBalance({
-        authorizationHeader: auth(request),
-        providerCode: request.params.providerCode,
-      }),
-    );
-
-    app.get(
-      "/v1/financial/crypto/history",
-      { schema: { querystring: Type.Object({
-        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-      }, { additionalProperties: false }) } },
-      async (request) => ({
-        intents: await financial.listHistory({
-          authorizationHeader: auth(request),
-          ...(request.query.limit === undefined ? {} : { limit: request.query.limit }),
-        }),
-      }),
-    );
-
-    app.get(
-      "/v1/financial/crypto/intents/:requestId",
-      { schema: { params: Type.Object({ requestId: Type.String() }, { additionalProperties: false }) } },
-      async (request, reply) => {
-        const intent = await financial.readIntent({
-          authorizationHeader: auth(request),
-          requestId: request.params.requestId,
-        });
-        if (!intent) {
-          reply.code(404);
-          return { error: "intent_not_found" };
-        }
-        return intent;
-      },
-    );
-
-    const nowPaymentsHeaders = Type.Object(
-      { "x-nowpayments-sig": Type.String({ minLength: 128, maxLength: 128 }) },
-      { additionalProperties: true },
-    );
-    app.post(
-      "/v1/financial/nowpayments/ipn",
-      { bodyLimit: 256_000, schema: { headers: nowPaymentsHeaders, body: Type.Unknown() } },
-      async (request, reply) => {
-        await financial.handleNowPaymentsIpn({
-          signature: request.headers["x-nowpayments-sig"],
-          payload: request.body,
-        });
-        reply.code(202);
-        return { accepted: true as const };
-      },
-    );
-    app.post(
-      "/v1/financial/nowpayments/payout-ipn",
-      { bodyLimit: 256_000, schema: { headers: nowPaymentsHeaders, body: Type.Unknown() } },
-      async (request, reply) => {
-        await financial.handleNowPaymentsPayoutIpn({
-          signature: request.headers["x-nowpayments-sig"],
-          payload: request.body,
-        });
-        reply.code(202);
-        return { accepted: true as const };
-      },
-    );
-  }
-
   // These modules reuse the same host app, tenant authority and database.
   if (options.status) {
     app.register(async scope => {
@@ -1826,26 +1238,13 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         ...options.status!,
         // Root Status is Masana-editorial only in the reduced product.
         // Normal fans retain reactions, comments, follows and saves.
-        allowHumanPublishing: legacyProduct,
+        allowHumanPublishing: false,
       });
     });
   }
-  if (legacyProduct && options.videos) {
-    app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });
-  }
-  if (legacyProduct && options.videoSources) {
-    app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
-  }
   if (options.masana) registerMasanaRoutes(app, options.masana);
-  if (legacyProduct && options.roomCommunity) registerRoomCommunityRoutes(app, options.roomCommunity);
-  if (legacyProduct && options.creatorCompletion) registerCreatorCompletionRoutes(app, options.creatorCompletion);
-  if (legacyProduct && options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
-  if (legacyProduct && options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
   if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
-  if (legacyProduct && options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
-  if (legacyProduct && options.humanCommunication) registerHumanCommunicationRoutes(app, options.humanCommunication);
-  if (options.incomingCalls) registerIncomingCallRoutes(app, options.incomingCalls);
   if (options.privateChatMedia) {
     registerPrivateChatMediaRoutes(app, options.privateChatMedia);
   }
@@ -1858,114 +1257,12 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     ...(options.mobileNotifications
       ? { mobileNotifications: options.mobileNotifications } : {}),
   });
+  if (options.talkSafety) registerTalkSafetyRoutes(app, options.talkSafety);
 
-  if (legacyProduct && options.talks) {
-    registerTalkRoutes(app, options.talks);
-  }
-  if (legacyProduct && options.talkReplay) {
-    registerTalkReplayRoutes(app, options.talkReplay, {
-      includeMyTalks: !options.talkLibrary,
-    });
-  }
-  if (legacyProduct && options.talkModeration) {
-    registerTalkModerationRoutes(app, options.talkModeration);
-  }
-  if (legacyProduct && options.talkAiSeats) {
-    registerTalkAiSeatRoutes(app, options.talkAiSeats);
-  }
-  if (legacyProduct && options.talkLive) {
-    registerTalkLiveRoutes(app, options.talkLive);
-  }
-  if (legacyProduct && options.talkProfiles) {
+  if (options.talkProfiles) {
     registerTalkProfileRoutes(app, options.talkProfiles);
   }
-  if (legacyProduct && options.talkActivity) {
-    registerTalkActivityRoutes(app, options.talkActivity);
-  }
-  if (legacyProduct && options.talkSearch) {
-    registerTalkSearchRoutes(app, options.talkSearch);
-  }
-  if (legacyProduct && options.talkLibrary) {
-    registerTalkLibraryRoutes(app, options.talkLibrary);
-  }
-  if (legacyProduct && options.talkGifts) {
-    registerTalkGiftRoutes(app, options.talkGifts);
-  }
-  if (legacyProduct && options.talkPolls) {
-    registerTalkPollRoutes(app, options.talkPolls);
-  }
-  if (legacyProduct && options.talkSafety) {
-    registerTalkSafetyRoutes(app, options.talkSafety);
-  }
-  if (legacyProduct && options.directTwin) {
-    registerDirectTwinRoutes(app, options.directTwin);
-  }
-
-  if (legacyProduct && options.msnwBilling) {
-    registerMsnwBillingRoutes(app, options.msnwBilling);
-  }
-  if (legacyProduct && options.msnwConversion) {
-    registerMsnwUsdtConversionRoutes(app, options.msnwConversion);
-  }
-  if (legacyProduct) registerBillingRoutes(app, {
-    ...(options.billingCheckout ? { billingCheckout: options.billingCheckout } : {}),
-    ...(options.billingFinancial ? { billingFinancial: options.billingFinancial } : {}),
-    ...(options.billingWallet ? { billingWallet: options.billingWallet } : {}),
-  });
-
-  if (options.customerChannels) {
-    registerCustomerChannelRoutes(app, options.customerChannels);
-  }
-
-  if (options.linkedWhatsApp) {
-    registerLinkedWhatsAppAdminRoutes(app, options.linkedWhatsApp);
-  }
-
-  if (legacyProduct && options.msnBalance) {
-    registerMsnBalanceRoutes(app, options.msnBalance);
-  }
-  if (legacyProduct && options.msnFunding) {
-    registerMsnFundingStatusRoutes(app, options.msnFunding);
-  }
-  if (legacyProduct && options.msnwPaystackDva) {
-    registerMsnwPaystackDvaRoutes(app, options.msnwPaystackDva);
-  }
-  if (legacyProduct && options.msnwPaystackEnrollment) {
-    registerMsnwPaystackEnrollmentRoutes(app, options.msnwPaystackEnrollment);
-  }
-  if (legacyProduct && options.msnwOnchainBalance) {
-    registerMsnwOnchainBalanceRoutes(app, options.msnwOnchainBalance);
-  }
-  if (legacyProduct && options.msnwPaystackFiat) {
-    registerMsnwPaystackFiatRoutes(app, options.msnwPaystackFiat);
-  }
-  if (legacyProduct && options.msnwCustody) {
-    registerMsnwCustodyRoutes(app, options.msnwCustody);
-  }
-  if (legacyProduct && options.p2p) registerP2pRoutes(app, options.p2p);
-
-  if (legacyProduct && options.twinProduction) {
-    const twin = options.twinProduction;
-    registerTwinProfileRoutes(app, twin.twinProfile);
-    registerTwinDirectoryRoutes(app, twin.twinDirectory);
-    registerMyTwinProjectionRoutes(app, twin.myTwin);
-    registerTwinActivityRoutes(app, twin.twinActivity);
-    registerWalletProjectionRoutes(app, twin.wallet);
-    registerCreditTransferRoutes(
-      app, twin.creditTransfer, () => options.walletCreditSendEnabled === true,
-    );
-    registerGiftRoutes(app, twin.gifts);
-    registerTwinAttributionRoutes(app, twin.twinAttribution);
-    registerCommissionPolicyAdminRoutes(app, twin.commissionAdmin);
-    registerProviderValuationAdminRoutes(app, twin.providerValuationAdmin);
-    registerPaidVoiceRoutes(app, twin.paidVoice);
-    registerPaidVoiceSettlementRoutes(app, twin.voiceAdmissionGate);
-    registerPaidFeatureTrialAdminRoutes(app, twin.paidFeatureTrialAdmin);
-    registerOwnerAccessRoutes(app, twin.ownerAccess);
-    registerOwnerAccessDisputeAdminRoutes(app, twin.ownerAccessDisputes);
-    registerOwnerAccessOfferingRoutes(app, twin.ownerAccessOffering);
-    registerTwinSafetyRoutes(app, twin.twinSafety);
-  }
+  if (options.twinProduction) registerTwinSafetyRoutes(app, options.twinProduction.twinSafety);
 
   app.get(
     "/healthz",

@@ -58,13 +58,13 @@ describe("reduced product Status route boundary", () => {
     expect(feed.comment).toHaveBeenCalledTimes(1);
   });
 
-  it("legacy publishing compatibility is restricted to legacy scope", async()=>{
+  it("old scope values cannot revive human publishing", async()=>{
     const {app,feed}=setup("legacy");
     const result=await app.inject({method:"POST",url:"/v1/posts/human",
       payload:{body:"Old product",audience:"public"},
       headers:{"idempotency-key":"old-idempotency"},
     });
-    expect(result.statusCode).toBe(200);
-    expect(feed.publishHumanText).toHaveBeenCalledTimes(1);
+    expect(result.statusCode).toBe(404);
+    expect(feed.publishHumanText).not.toHaveBeenCalled();
   });
 });

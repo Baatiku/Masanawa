@@ -10,8 +10,6 @@ import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import {createRoomCommunityService} from "./room_community/index.js";
 import {createCreatorCompletionService} from "./creator_agents/completion.js";
-import { createHumanCommunicationService } from "./human_communication/index.js";
-import { createHumanCallRoomTerminator } from "./human_call_media.js";
 import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
@@ -31,9 +29,6 @@ import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
 import type { StatusRuntime } from "./modules/home_feed/runtime.js";
 import { VideoAdmissionError } from "./modules/external_videos/service.js";
-import { createIncomingCallService, type IncomingRepository, type IncomingCallService } from "./incoming_calls/service.js";
-import { createPostgresIncomingCallRepository } from "./incoming_calls/postgres_repository.js";
-import { createIncomingServerAuthorizer } from "./incoming_calls/server_authorizer.js";
 import { pathToFileURL } from "node:url";
 import type {
   AgentPresentationRepository,
@@ -75,11 +70,7 @@ import {
   readRequiredEnv,
   type TenantId,
 } from "@masanawa/contracts";
-import {
-  hashPlatformSessionToken,
-  type CustomerChannelRepository,
-  type PlatformSessionRepository,
-} from "@masanawa/security";
+import { type PlatformSessionRepository } from "@masanawa/security";
 import {
   FlutterwaveBillsClient,
   FlutterwaveFundingClient,
@@ -95,53 +86,12 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import {
-  platformProductMigrationRoots,
-  createPostgresAgentPresentationRepository,
-  createPostgresAgentRunRepository,
-  createPostgresCharacterSessionRepository,
-  createPostgresCharacterOwnershipReader,
-  createPostgresCharacterSkillAssignmentRepository,
-  createPostgresIdentityRepository,
-  createPostgresCommerceRepository,
-  createPostgresCryptoRepository,
-  createPostgresCryptoChatActionRepository,
-  createPostgresPlatformAgentProfileRepository,
-  createPostgresSkillGuideRepository,
-  createPostgresTeachingProgressRepository,
-  createPostgresSkillDistributionRepository,
-  createPostgresSkillRepository,
-  createPostgresUserAgentPreferenceRepository,
-  createPostgresCloneSetupRepository,
-  createPostgresPersonalCloneProvisioningRepository,
-  createPostgresUserRelationshipReader,
-  createPostgresUserRelationshipProvisioner,
-  createPostgresPlatformSessionRepository,
-  createPostgresAccountDeletionRepository,
-  createPostgresAccountDeletionChallengeRepository,
-  createPostgresCustomerChannelRepository,
-  createPostgresServiceDependency,
-  createPostgresMobileShellRepository,
-  createPostgresMobilePushRepository,
-  createPostgresMobileAgentActivityRepository,
-  createPostgresBillingQuoteRepository,
-  createPostgresNgnWalletRepository,
-  createPostgresBillingFulfillmentStore,
-  createPostgresBillingWebhookRepository,
-  createPostgresTwinProfileRepository,
-  createPostgresTwinRuntimeRepository,
-  createPostgresTwinEconomyEventStore,
-  withTransaction,
-  initializePostgresPolicyRevision,
-} from "@masanawa/postgres";
+import { platformProductMigrationRoots, createPostgresAgentPresentationRepository, createPostgresAgentRunRepository, createPostgresCharacterSessionRepository, createPostgresCharacterOwnershipReader, createPostgresCharacterSkillAssignmentRepository, createPostgresIdentityRepository, createPostgresCommerceRepository, createPostgresCryptoRepository, createPostgresCryptoChatActionRepository, createPostgresPlatformAgentProfileRepository, createPostgresSkillGuideRepository, createPostgresTeachingProgressRepository, createPostgresSkillDistributionRepository, createPostgresSkillRepository, createPostgresUserAgentPreferenceRepository, createPostgresCloneSetupRepository, createPostgresPersonalCloneProvisioningRepository, createPostgresUserRelationshipReader, createPostgresUserRelationshipProvisioner, createPostgresPlatformSessionRepository, createPostgresAccountDeletionRepository, createPostgresAccountDeletionChallengeRepository, createPostgresServiceDependency, createPostgresMobileShellRepository, createPostgresMobilePushRepository, createPostgresMobileAgentActivityRepository, createPostgresBillingQuoteRepository, createPostgresNgnWalletRepository, createPostgresBillingFulfillmentStore, createPostgresBillingWebhookRepository, createPostgresTwinProfileRepository, createPostgresTwinRuntimeRepository, createPostgresTwinEconomyEventStore, withTransaction, initializePostgresPolicyRevision } from "@masanawa/postgres";
 import {
   createAgentDirectoryService,
   type AgentDirectoryAuthorizer,
 } from "./agent_directory.js";
-import {
-  createAgentConversationService,
-  type TwinConversationObserver,
-} from "./agent_conversation.js";
+import { createAgentConversationService } from "./agent_conversation.js";
 import {
   createCreatorCloneService,
   type CreatorCloneAuthorizer,
@@ -213,8 +163,6 @@ import type {
   LiveVoiceTokenService,
 } from "./agent_shell_contract.js";
 import { createGeminiLiveTokenService } from "./live_voice_token.js";
-import { createPostgresGroupCallRepository } from "./group_calls/postgres_repository.js";
-import { createGroupCallService, GroupCallError, type GroupCallRepository } from "./group_calls/service.js";
 import { createPostgresCallHistoryRepository } from "./call_history/postgres_repository.js";
 import { createCallHistoryService, type CallHistoryRepository, type CallHistoryRecorder } from "./call_history/service.js";
 import { createAccountNotificationService } from "./notification_preferences.js";
@@ -315,29 +263,13 @@ import {
   createBillingWalletService,
   type BillingWalletService,
 } from "./billing_wallet.js";
-import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
-import {
-  MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS,
-  createMsnwAgentBillingAssistant,
-} from "./agent_msnw_billing_assistant.js";
+import { MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS } from "./agent_msnw_billing_assistant.js";
 import {
   TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
   createAgentTeachingAssistant,
   type AgentTeachingAssistant,
 } from "./agent_teaching_assistant.js";
-import { createCustomerChannelBridge } from "./customer_channel_bridge.js";
-import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
-import {
-  MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS,
-  createMsnwAgentCryptoAssistant,
-} from "./agent_msnw_crypto_assistant.js";
-import type { CustomerChannelOptions } from "./customer_channel_routes.js";
-import { sendTelegram } from "./customer_channel_routes.js";
-import { registerAndVerifyTelegramWebhook } from "./telegram_webhook_registration.js";
-import {
-  createLinkedWhatsAppController,
-  type LinkedWhatsAppController,
-} from "./whatsapp_linked_device.js";
+import { MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS } from "./agent_msnw_crypto_assistant.js";
 import {
   ensureDefaultPlatformAgents,
   type PlatformAgentIdentityProvisioner,
@@ -365,8 +297,6 @@ export interface ServiceDatabaseDependency {
   /** Reuses the same canonical platform Pool for Rooms and C10. */
   readonly featurePool?: Parameters<typeof createRoomCommunityService>[0]["pool"];
   readonly callHistory?: CallHistoryRepository & CallHistoryRecorder;
-  readonly groupCalls?: GroupCallRepository;
-  readonly incomingCalls?: IncomingRepository;
   readonly readinessCheck: ReadinessCheck;
   readonly platformAgentIdentity?: PlatformAgentIdentityProvisioner;
   readonly initializePlatformPolicy?: (tenantId: TenantId, revision: string) => Promise<void>;
@@ -387,7 +317,6 @@ export interface ServiceDatabaseDependency {
   readonly platformSessions?: PlatformSessionRepository;
   readonly accountDeletionRequests?: AccountDeletionRepository;
   readonly accountDeletionChallenges?: AccountDeletionChallengeRepository;
-  readonly customerChannels?: CustomerChannelRepository;
   readonly commerce?: CommerceRepository;
   readonly crypto?: CryptoRepository;
   readonly cryptoChatActions?: CryptoChatActionRepository;
@@ -490,7 +419,6 @@ function createDefaultDatabaseDependency(
     applicationName: "masanawa-gateway",
     migrationRoots: platformProductMigrationRoots(),
   });
-  const groupCalls = createPostgresGroupCallRepository(database.pool);
   return Object.freeze({
     readinessCheck: database.readinessCheck,
     featurePool: database.pool,
@@ -560,8 +488,6 @@ function createDefaultDatabaseDependency(
       },
     }),
     callHistory: createPostgresCallHistoryRepository(database.pool),
-    incomingCalls: createPostgresIncomingCallRepository(database.pool),
-    groupCalls,
     agentPresentations: createPostgresAgentPresentationRepository(database.pool),
     characterSkillAssignments:
       createPostgresCharacterSkillAssignmentRepository(database.pool),
@@ -583,7 +509,6 @@ function createDefaultDatabaseDependency(
     platformSessions: createPostgresPlatformSessionRepository(database.pool),
     accountDeletionRequests: createPostgresAccountDeletionRepository(database.pool),
     accountDeletionChallenges: createPostgresAccountDeletionChallengeRepository(database.pool),
-    customerChannels: createPostgresCustomerChannelRepository(database.pool),
     commerce: createPostgresCommerceRepository(database.pool),
     crypto: createPostgresCryptoRepository(database.pool),
     cryptoChatActions: createPostgresCryptoChatActionRepository(database.pool),
@@ -616,7 +541,6 @@ function createDefaultDatabaseDependency(
     talkSafetyReplay: createPostgresTalkSafetyReplayBridge(database.pool),
     directTwin: createPostgresDirectTwinRepository(database.pool),
     close: async () => {
-      await groupCalls.drainBackground();
       await database.close();
     },
   });
@@ -746,18 +670,10 @@ export async function startGatewayService(
   let strategy = options.agentStrategy;
   let nativeAudio;
   let liveVoiceTokens: LiveVoiceTokenService | undefined;
-  let twinConversationObserver: TwinConversationObserver | undefined;
   let twinProduction: TwinProductionRuntime | undefined =
     options.appOptions?.twinProduction;
   let pushSender: MobilePushSender | undefined;
   let ownerAccessSweepTenantId: TenantId | undefined;
-  let humanRecoveryTimer: ReturnType<typeof setInterval> | undefined;
-  let humanRecovery: Promise<void> | undefined;
-  let incomingRecoveryTimer: ReturnType<typeof setInterval> | undefined;
-  let incomingRecovery: Promise<void> | undefined;
-  let channelRecoveryTimer: ReturnType<typeof setInterval> | undefined;
-  let channelRecovery: Promise<void> | undefined;
-  let incomingCalls: IncomingCallService | undefined;
   let ownerAccessSweepTimer: ReturnType<typeof setInterval> | undefined;
   let ownerAccessSweepRunning = false;
   let talkPushDedupePurgeTimer: ReturnType<typeof setInterval> | undefined;
@@ -1188,52 +1104,6 @@ export async function startGatewayService(
       ownerAccessSweepTenantId = activePlatformTenantId;
     }
 
-    if (database.twinProfiles && database.twinEvents) {
-      twinConversationObserver = Object.freeze<TwinConversationObserver>({
-        async opened(request) {
-          const profile = await database.twinProfiles!.readForCharacter({
-            tenantId: request.tenantId as never,
-            characterId: request.characterId as never,
-          });
-          if (!profile) return;
-          await database.twinEvents!.append({
-            tenantId: request.tenantId as never,
-            payload: {
-              eventType: "twin.visited",
-              ownerUserId: profile.ownerUserId,
-              characterId: profile.characterId,
-              customerUserId: request.userId,
-              referenceId: request.characterSessionId,
-              visibility: "owner",
-              occurredAt: new Date().toISOString() as never,
-              amountCredits: null,
-              status: "observed",
-            },
-          });
-        },
-        async completed(request) {
-          const profile = await database.twinProfiles!.readForCharacter({
-            tenantId: request.tenantId as never,
-            characterId: request.characterId as never,
-          });
-          if (!profile) return;
-          await database.twinEvents!.append({
-            tenantId: request.tenantId as never,
-            payload: {
-              eventType: "twin.conversation.observed",
-              ownerUserId: profile.ownerUserId,
-              characterId: profile.characterId,
-              customerUserId: request.userId,
-              referenceId: request.referenceId,
-              visibility: "owner",
-              occurredAt: new Date().toISOString() as never,
-              amountCredits: null,
-              status: "observed",
-            },
-          });
-        },
-      });
-    }
 
     let productionGeminiPool: GeminiCredentialPool | undefined;
     if (!strategy) {
@@ -1456,7 +1326,6 @@ export async function startGatewayService(
     options.appOptions?.billingCheckout;
   let composedBillingWallet: BillingWalletService | undefined =
     options.appOptions?.billingWallet;
-  let composedBillingAssistant: AgentBillingAssistant | undefined;
 
   const webhookHash = env.FLUTTERWAVE_WEBHOOK_SECRET_HASH?.trim();
   const webhookUrl = env.FLUTTERWAVE_WEBHOOK_URL?.trim();
@@ -1550,14 +1419,6 @@ export async function startGatewayService(
         billing: composedBillingFinancial,
       })
     : undefined;
-  if (billingEnabled && composedBillingCheckout && composedBillingFinancial &&
-      msnwBillingService) {
-    composedBillingAssistant = createMsnwAgentBillingAssistant({
-      checkout: composedBillingCheckout,
-      billing: composedBillingFinancial,
-      msnw: msnwBillingService,
-    });
-  }
 
   const nowPaymentsApiKey = env.NOWPAYMENTS_API_KEY?.trim();
   const nowPaymentsIpnSecret = env.NOWPAYMENTS_IPN_SECRET?.trim();
@@ -1866,18 +1727,6 @@ export async function startGatewayService(
         })
       : undefined);
 
-  // Customer conversations are MSNW-only. Never mount the legacy crypto
-  // funds assistant that directly deposits/withdraws unrelated provider
-  // balances or converts currencies without MSNW custody authorization.
-  const composedCryptoAssistant: AgentCryptoAssistant | undefined =
-    composedMsnwConversion && database.cryptoChatActions
-      ? createMsnwAgentCryptoAssistant({
-          authorizer: composedMsnwConversion.authorizer,
-          service: composedMsnwConversion.service,
-          pending: database.cryptoChatActions,
-        })
-      : undefined;
-
   const composedTeachingAssistant: AgentTeachingAssistant | undefined =
     database.teachingProgress
       ? createAgentTeachingAssistant({
@@ -1914,155 +1763,10 @@ export async function startGatewayService(
             }) ?? undefined;
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
-          ...(twinConversationObserver ? { twinObserver: twinConversationObserver } : {}),
-          ...(composedBillingAssistant ? { billingAssistant: composedBillingAssistant } : {}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),
-          ...(composedCryptoAssistant ? { cryptoAssistant: composedCryptoAssistant } : {}),
           sessionDurationMs: 24 * 60 * 60 * 1000,
         })
       : undefined);
-
-  let composedCustomerChannels: CustomerChannelOptions | undefined =
-    options.appOptions?.customerChannels;
-  let telegramWebhookRegistration:
-    | Readonly<{ botToken: string; webhookSecret: string; webhookUrl: string }>
-    | undefined;
-  let linkedWhatsAppController: LinkedWhatsAppController | undefined;
-  let linkedWhatsAppAdmin:
-    | NonNullable<GatewayAppOptions["linkedWhatsApp"]>
-    | undefined;
-  const whatsappEnabled = env.MASANAWA_WHATSAPP_ENABLED === "true";
-  const telegramEnabled = env.MASANAWA_TELEGRAM_ENABLED === "true";
-  if (
-    !composedCustomerChannels &&
-    (whatsappEnabled || telegramEnabled)
-  ) {
-    if (
-      !platformTenantId ||
-      !database.platformSessions ||
-      !database.customerChannels ||
-      !database.platformAgentProfiles ||
-      !composedConversation
-    ) {
-      throw new TypeError(
-        "Customer channels require platform auth, channel storage, support agents, and Agent conversation runtime",
-      );
-    }
-
-    const bridge = createCustomerChannelBridge({
-      tenantId: platformTenantId,
-      sessions: database.platformSessions,
-      channels: database.customerChannels,
-      platformProfiles: database.platformAgentProfiles,
-      ...(database.userAgentPreferences
-        ? { userPreferences: database.userAgentPreferences }
-        : {}),
-      conversation: composedConversation,
-      // Use the same authenticated, tenant-scoped, published Masana directory
-      // as the Flutter app. Retired user-created Twins are not channel targets.
-      ...(composedDirectory ? { directory: composedDirectory } : {}),
-    });
-
-    if (whatsappEnabled) {
-      const mode = env.MASANAWA_WHATSAPP_MODE?.trim() || "linked-device";
-      if (mode !== "linked-device") {
-        throw new TypeError(
-          "MASANAWA_WHATSAPP_MODE must be linked-device; Meta Cloud transport is not the production WhatsApp mode",
-        );
-      }
-      const authDir = env.MASANAWA_WHATSAPP_AUTH_DIR?.trim();
-      const adminToken = env.MASANAWA_WHATSAPP_ADMIN_TOKEN?.trim();
-      const adminPrincipals = readPrincipalSet(
-        env.MASANAWA_ADMIN_PRINCIPALS ??
-          env.MASANAWA_ADMIN_USER_IDS ??
-          env.MASANAWA_ADMIN_EMAILS,
-      );
-      if (!authDir) {
-        throw new TypeError(
-          "WhatsApp linked-device mode requires MASANAWA_WHATSAPP_AUTH_DIR",
-        );
-      }
-      if (!adminToken && adminPrincipals.size === 0) {
-        throw new TypeError(
-          "WhatsApp linked-device administration requires MASANAWA_WHATSAPP_ADMIN_TOKEN or configured platform admin principals",
-        );
-      }
-      linkedWhatsAppController = createLinkedWhatsAppController({
-        bridge,
-        authDir,
-      });
-      linkedWhatsAppAdmin = Object.freeze({
-        controller: linkedWhatsAppController,
-        ...(adminToken ? { adminToken } : {}),
-        ...(adminPrincipals.size > 0
-          ? {
-              async authorizeSession(authorizationHeader: string | undefined) {
-                const supplied = /^Bearer\s+(.+)$/iu.exec(
-                  authorizationHeader?.trim() ?? "",
-                )?.[1]?.trim();
-                if (!supplied) return false;
-                let accessHash: string;
-                try {
-                  accessHash = hashPlatformSessionToken(supplied);
-                } catch {
-                  return false;
-                }
-                const identity = await database.platformSessions!.resolveAccess({
-                  accessHash,
-                  at: new Date().toISOString(),
-                });
-                if (!identity || identity.tenantId !== platformTenantId) {
-                  return false;
-                }
-                const candidates = [
-                  identity.userId,
-                  identity.profile.email?.trim().toLowerCase() ?? "",
-                  identity.profile.phone?.trim() ?? "",
-                ].filter(Boolean);
-                return candidates.some((candidate) =>
-                  adminPrincipals.has(candidate),
-                );
-              },
-            }
-          : {}),
-      });
-    }
-
-    let telegram: CustomerChannelOptions["telegram"];
-    if (telegramEnabled) {
-      const botToken = env.MASANAWA_TELEGRAM_BOT_TOKEN?.trim();
-      const webhookSecret = env.MASANAWA_TELEGRAM_WEBHOOK_SECRET?.trim();
-      const explicitWebhookUrl = env.MASANAWA_TELEGRAM_WEBHOOK_URL?.trim();
-      const publicBaseUrl = env.MASANAWA_PUBLIC_BASE_URL?.trim();
-      const webhookUrl =
-        explicitWebhookUrl ||
-        (publicBaseUrl
-          ? new URL(
-              "/channels/telegram/webhook",
-              publicBaseUrl.endsWith("/") ? publicBaseUrl : `${publicBaseUrl}/`,
-            ).toString()
-          : "");
-      if (!botToken || !webhookSecret || !webhookUrl) {
-        throw new TypeError(
-          "Telegram is enabled but bot token, webhook secret, or public webhook URL is missing",
-        );
-      }
-      if (new URL(webhookUrl).protocol !== "https:") {
-        throw new TypeError("Telegram webhook URL must use HTTPS");
-      }
-      telegram = Object.freeze({ botToken, webhookSecret });
-      telegramWebhookRegistration = Object.freeze({
-        botToken,
-        webhookSecret,
-        webhookUrl,
-      });
-    }
-
-    composedCustomerChannels = Object.freeze({
-      bridge,
-      ...(telegram ? { telegram } : {}),
-    });
-  }
 
   const composedPush =
     options.appOptions?.mobilePush ??
@@ -2074,48 +1778,7 @@ export async function startGatewayService(
       : undefined);
 
   const composedShellActionExecutor: AgentShellActionExecutor | undefined =
-    composedBillingCheckout && composedBillingWallet
-      ? Object.freeze({
-          async execute(request: Parameters<AgentShellActionExecutor["execute"]>[0]) {
-            if (request.action.actionId === "billing.wallet.confirm") {
-              const verified = await composedBillingCheckout.verifyWalletConfirmAction({
-                authorizationHeader: request.authorizationHeader,
-                documentId: request.action.documentId,
-                revision: request.action.revision,
-                actionId: request.action.actionId,
-                token: request.action.token,
-              });
-              const view = await composedBillingWallet.confirmAndPurchase({
-                authorizationHeader: request.authorizationHeader,
-                quoteId: verified.quoteId,
-                quoteRevision: verified.quoteRevision,
-              });
-              return Object.freeze({
-                accepted: true,
-                phase:
-                  view.phase === "fulfilled"
-                    ? ("fulfilled" as const)
-                    : view.phase === "failed"
-                      ? ("failed" as const)
-                      : view.phase === "awaiting-funds"
-                        ? ("submitted" as const)
-                        : ("processing" as const),
-                document: view.document,
-                message:
-                  view.phase === "awaiting-funds"
-                    ? "Temporary funding account created in chat. Masanawa will continue automatically after verified funding."
-                    : view.phase === "fulfilled"
-                      ? "Bill completed successfully."
-                      : "Bill processing.",
-              });
-            }
-            if (options.agentShellActionExecutor) {
-              return options.agentShellActionExecutor.execute(request);
-            }
-            throw new Error("agents.shell_action_unavailable");
-          },
-        })
-      : options.agentShellActionExecutor;
+    options.agentShellActionExecutor;
 
   const composedShell =
     options.appOptions?.agentShell ??
@@ -2254,34 +1917,6 @@ export async function startGatewayService(
           apiSecret: liveKitApiSecret,
         })
       : undefined;
-  const humanCommunication = options.appOptions?.humanCommunication ??
-    (database.featurePool && talkProfileAuthorizer
-      ? createHumanCommunicationService({
-          pool: database.featurePool,
-          authorizer: talkProfileAuthorizer,
-          ...(talkMediaTokens ? { mediaTokens: talkMediaTokens } : {}),
-          ...(liveKitServerUrl && liveKitApiKey && liveKitApiSecret ? {
-            endMediaRoom: createHumanCallRoomTerminator({
-              serverUrl: liveKitServerUrl, apiKey: liveKitApiKey, apiSecret: liveKitApiSecret,
-            }),
-          } : {}),
-          ...(pushSender ? { push: async (notice) => {
-            const match = /^\/human\/(call|chat)\/([0-9a-f-]{36})$/u.exec(notice.deepLink);
-            if (!match) throw new Error("Invalid human notification route");
-            const result = await pushSender!.send({
-              scope: { tenantId: parseCanonicalId("tenant", notice.tenantId), userId: parseCanonicalId("user", notice.userId) },
-              title: notice.title, body: notice.body,
-              data: {
-                type: notice.category === "calls" ? "human_call" : "human_message",
-                eventId: `human-${notice.eventId}`,
-                deepLink: `masanawa://human/${match[1]}/${match[2]}`,
-                ...(notice.category === "calls" ? {callId: match[2]!} : {conversationId: match[2]!}),
-              },
-            });
-            if (result.attempted > result.delivered) throw new Error("Human notification delivery incomplete");
-          } } : {}),
-        })
-      : undefined);
   const talkMediaAdmin =
     liveKitServerUrl && liveKitApiKey && liveKitApiSecret
       ? createLiveKitTalkMediaAdmin({
@@ -2560,8 +2195,7 @@ export async function startGatewayService(
       sessions,
       feed: new FeedService(
         feed, author, mediaRuntime.approved,
-        options.appOptions?.productScope === "masana-lite" ||
-          env.MASANAWA_PRODUCT_SCOPE === "masana-lite",
+        true,
       ),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
       isEditor: async session => editors.has(session.userId),
@@ -2737,17 +2371,6 @@ export async function startGatewayService(
 
   let app: ManagedNodeServer;
   try {
-    incomingCalls = options.appOptions?.incomingCalls ??
-      (directoryAuthorizer && database.incomingCalls && liveVoiceTokens
-        ? createIncomingCallService({
-            repository: database.incomingCalls,
-            authorizer: directoryAuthorizer,
-           ...(database.featurePool ? { rooms:createPgAgentRoomDirectory(database.featurePool) } : {}),
-            serverAuthorizer: createIncomingServerAuthorizer(env.MASANAWA_INCOMING_CALLS_SERVER_TOKEN),
-            liveVoiceTokens,
-            ...(pushSender ? { pushSender } : {}),
-          })
-        : undefined);
     const msnwPaystackEnrollment = env.PAYSTACK_SECRET_KEY?.trim() &&
       database.featurePool && billingCustomerAuthorizer
       ? createMsnwPaystackEnrollmentService({
@@ -2756,20 +2379,8 @@ export async function startGatewayService(
           paystackSecretKey: env.PAYSTACK_SECRET_KEY,
         })
       : undefined;
-    // Explicit rollout selection activates the staged reduced-product
-    // route fence. Unknown values are configuration errors, not permission
-    // to silently keep retired public financial and human endpoints open.
-    const rawProductScope = env.MASANAWA_PRODUCT_SCOPE?.trim();
-    if (rawProductScope && rawProductScope !== "legacy" &&
-        rawProductScope !== "masana-lite") {
-      throw new TypeError("MASANAWA_PRODUCT_SCOPE must be legacy or masana-lite");
-    }
-    const productScope = options.appOptions?.productScope ??
-      (rawProductScope === "masana-lite" ? "masana-lite" : "legacy");
-    if (env.MASANAWA_GB_DATA_CATALOG_ENABLED === "true" &&
-        productScope !== "masana-lite") {
-      throw new TypeError("GB data routes may be enabled only in the reduced product scope");
-    }
+    // Retirement is permanent: old rollout values cannot restore customer APIs.
+    const productScope = "masana-lite" as const;
 
     // Read-only data discovery is off by default. Server/operator-reviewed
     // exact bundle mapping plus the existing credentialed Flutterwave adapter
@@ -2841,12 +2452,6 @@ export async function startGatewayService(
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
       ...(composedMsnwConversion ? {msnwConversion:composedMsnwConversion} : {}),
-      ...(composedCustomerChannels
-        ? { customerChannels: composedCustomerChannels }
-        : {}),
-      ...(linkedWhatsAppAdmin
-        ? { linkedWhatsApp: linkedWhatsAppAdmin }
-        : {}),
       // MSN is separate from legacy Credits and customer-facing NGN.
       // Read-only, requiring explicit operator flag and platform session.
       // No payment, issuance, conversion or transfer route is registered.
@@ -2964,37 +2569,8 @@ export async function startGatewayService(
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
-      ...(humanCommunication ? { humanCommunication } : {}),
-      ...(incomingCalls ? { incomingCalls } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
-        : {}),
-      ...(!options.appOptions?.groupCalls && directoryAuthorizer &&
-          database.groupCalls && liveVoiceTokens && database.callHistory
-        ? { groupCalls: createGroupCallService({
-            repository: database.groupCalls,
-            authorizer: directoryAuthorizer,
-            liveVoiceTokens,
-            paidAdmissionConfigured: !!twinProduction,
-            ...(database.twinEconomy ? {
-              validateAdmission: async (request: {
-                tenantId: string; userId: string; characterId: string; admissionId: string | null;
-              }) => {
-                const admission = request.admissionId
-                  ? await database.twinEconomy!.readVoiceAdmission({
-                      tenantId: request.tenantId as TenantId,
-                      admissionId: request.admissionId,
-                    })
-                  : null;
-                if (!admission || admission.userId !== request.userId ||
-                    admission.characterId !== request.characterId || admission.settledAt !== null ||
-                    !Number.isFinite(Date.parse(admission.expiresAt)) ||
-                    Date.parse(admission.expiresAt) <= Date.now()) {
-                  throw new GroupCallError("calls.paid_admission_invalid", 403);
-                }
-              },
-            } : {}),
-          }) }
         : {}),
       ...(composedConversation
         ? { agentConversation: composedConversation }
@@ -3032,15 +2608,6 @@ export async function startGatewayService(
     throw error;
   }
 
-  if (linkedWhatsAppController) {
-    try {
-      await linkedWhatsAppController.start();
-    } catch (error) {
-      await database.close().catch(() => undefined);
-      throw error;
-    }
-  }
-
   const lifecycle = await startNodeService({
     serviceName: "gateway",
     server: app,
@@ -3049,12 +2616,6 @@ export async function startGatewayService(
     ...(options.logger ? { logger: options.logger } : {}),
     onDraining: () => {
       drain.beginDraining();
-      if (humanRecoveryTimer) clearInterval(humanRecoveryTimer);
-      if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
-      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
-      if (linkedWhatsAppController) {
-        void linkedWhatsAppController.stop().catch(() => undefined);
-      }
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -3065,16 +2626,6 @@ export async function startGatewayService(
       }
     },
     onAfterClose: async () => {
-      if (humanRecoveryTimer) clearInterval(humanRecoveryTimer);
-      if (incomingRecoveryTimer) clearInterval(incomingRecoveryTimer);
-      await humanRecovery;
-      await humanCommunication?.close();
-      await incomingRecovery;
-      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
-      await channelRecovery;
-      if (linkedWhatsAppController) {
-        await linkedWhatsAppController.stop().catch(() => undefined);
-      }
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -3089,61 +2640,6 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
-
-  if (telegramWebhookRegistration) {
-    try {
-      await registerAndVerifyTelegramWebhook(telegramWebhookRegistration);
-    } catch (error) {
-      await lifecycle.stop("manual").catch(() => undefined);
-      throw error;
-    }
-  }
-
-  if (humanCommunication) {
-    const recover = () => {
-      if (humanRecovery || drain.isDraining()) return;
-      humanRecovery = humanCommunication.recover().catch(() => {
-        // Durable events, call teardown and outbox leases retry on the next sweep.
-      }).finally(() => { humanRecovery = undefined; });
-    };
-    humanRecoveryTimer = setInterval(recover, 2000);
-    humanRecoveryTimer.unref();
-    recover();
-  }
-  const runIncomingRecovery = () => {
-    if (!incomingCalls || incomingRecovery || drain.isDraining()) return;
-    incomingRecovery = incomingCalls.recover().catch(() => {
-      // Durable invitations/outbox are retried by the next sweep or process.
-    }).finally(() => { incomingRecovery = undefined; });
-  };
-  const runChannelRecovery = () => {
-    const channels=composedCustomerChannels;
-    if(channelRecovery || drain.isDraining() || !channels?.bridge.delivery) return;
-    const work:Promise<void>[]=[];
-    if(channels.telegram) {
-      const config=channels.telegram;
-      work.push(channels.bridge.delivery.recover("telegram",async(saved)=>{
-        await sendTelegram(config,saved.chatId,saved.reply,saved.requestContact);
-      },()=>!drain.isDraining()));
-    }
-    if(linkedWhatsAppController?.snapshot().connected && linkedWhatsAppController.sendReply) {
-      const controller=linkedWhatsAppController;
-      work.push(channels.bridge.delivery.recover("whatsapp",async(saved)=>{
-        await controller.sendReply!(saved.chatId,saved.reply);
-      },()=>!drain.isDraining()));
-    }
-    channelRecovery=Promise.allSettled(work).then(()=>undefined).finally(()=>{channelRecovery=undefined;});
-  };
-  if(composedCustomerChannels?.bridge.delivery) {
-    channelRecoveryTimer=setInterval(runChannelRecovery,5000);
-    channelRecoveryTimer.unref();
-    runChannelRecovery();
-  }
-  if (incomingCalls) {
-    incomingRecoveryTimer = setInterval(runIncomingRecovery, 1000);
-    incomingRecoveryTimer.unref();
-    runIncomingRecovery();
-  }
 
   const runTalkPushDedupePurge = async () => {
     if (

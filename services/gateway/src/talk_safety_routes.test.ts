@@ -94,7 +94,7 @@ describe("Talk safety HTTP routes",()=>{
   it("does not let customer auth mutate platform enforcement",async()=>{
     const denied=await app().inject({
       method:"PUT",
-      url:"/admin/talk-safety/talk/talk-1",
+      url:"/admin/talk-safety/profile/amina",
       headers:{authorization:"Bearer customer"},
       payload:{
         expectedRevision:0,visibility:"blocked",reasonCode:"policy.abuse",
@@ -104,7 +104,7 @@ describe("Talk safety HTTP routes",()=>{
 
     const allowed=await app().inject({
       method:"PUT",
-      url:"/admin/talk-safety/talk/talk-1",
+      url:"/admin/talk-safety/profile/amina",
       headers:{authorization:"Bearer safety-admin"},
       payload:{
         expectedRevision:0,visibility:"blocked",reasonCode:"policy.abuse",

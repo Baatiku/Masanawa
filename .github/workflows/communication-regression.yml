@@ -95,8 +95,8 @@ jobs:
         # files concurrently can terminate another suite's pool (PG 57P01).
         run: |
           pnpm exec vitest run --no-file-parallelism services/gateway/src/call_history
-          pnpm exec vitest run --no-file-parallelism services/gateway/src/incoming_calls
-          pnpm exec vitest run --no-file-parallelism services/gateway/src/human_communication services/gateway/src/talk_profiles/human_contacts.integration.test.ts services/gateway/src/human_call_media.test.ts adapters/storage/postgres/src/masana_chat/inbox.integration.test.ts
+          pnpm exec vitest run --no-file-parallelism
+          pnpm exec vitest run --no-file-parallelism services/gateway/src/talk_profiles/human_contacts.integration.test.ts adapters/storage/postgres/src/masana_chat/inbox.integration.test.ts
 
   flutter-message-recording-and-live-call:
     runs-on: ubuntu-latest

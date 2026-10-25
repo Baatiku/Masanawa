@@ -61,6 +61,9 @@ describe("gateway production lifecycle", () => {
         MASANAWA_GATEWAY_HOST: "127.0.0.1",
         MASANAWA_GATEWAY_PORT: "4100",
         MASANAWA_SHUTDOWN_TIMEOUT_MS: "1000",
+        // Retired deployment flags cannot restart external channel listeners.
+        MASANAWA_TELEGRAM_ENABLED: "true",
+        MASANAWA_WHATSAPP_ENABLED: "true",
       },
       processRef: processRef(),
       logger: log,
@@ -153,27 +156,6 @@ describe("gateway production lifecycle", () => {
     expect(runtime.config).not.toHaveProperty("connectionString");
     await runtime.shutdown();
   });
-  it("runs and drains the durable human recovery service before closing storage", async () => {
-    let finish!: () => void;
-    const work = new Promise<void>((resolve) => { finish = resolve; });
-    const human = {
-      authorize: async () => ({tenantId:"tenant-test",userId:"user-test"}),
-      dispatch: vi.fn(async () => ({})),
-      recover: vi.fn(() => work), close: vi.fn(async () => undefined),
-    };
-    const databaseClose=vi.fn(async () => undefined);
-    const runtime=await startGatewayService({
-      env:{}, processRef:processRef(), logger:{info:vi.fn(),error:vi.fn()},
-      databaseFactory:()=>({readinessCheck:{name:"database-schema",check:async()=>({ready:true})},close:databaseClose}),
-      appOptions:{humanCommunication:human},
-      appFactory:(options)=>{expect(options.humanCommunication).toBe(human); return {listen:async()=>"http://127.0.0.1:3000",close:async()=>undefined};},
-    });
-    expect(human.recover).toHaveBeenCalledTimes(1);
-    const stopping=runtime.shutdown();
-    expect(databaseClose).not.toHaveBeenCalled();
-    finish(); await stopping;
-    expect(human.close).toHaveBeenCalledOnce();
-    expect(databaseClose).toHaveBeenCalledOnce();
-  });
+
 
 });

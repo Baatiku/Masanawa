@@ -132,7 +132,7 @@ describe("gateway service bootstrap", () => {
     expect(response.json()).toEqual({ otpChannels: ["email"] });
   });
 
-  it("keeps billing history behind the canonical customer token", async () => {
+  it("retired bill quote routes remain absent with an injected legacy service", async () => {
     const billingCheckout: BillingCheckoutService = {
       async createQuote() { throw new Error("unused"); },
       async startCheckout() { throw new Error("unused"); },
@@ -156,14 +156,13 @@ describe("gateway service bootstrap", () => {
       url: "/v1/commerce/bills/quotes?limit=10",
       headers: { authorization: "Bearer customer" },
     });
-    expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toEqual({ quotes: [] });
+    expect(allowed.statusCode).toBe(404);
 
     const denied = await app.inject({
       method: "GET",
       url: "/v1/commerce/bills/quotes",
     });
-    expect(denied.statusCode).toBe(401);
+    expect(denied.statusCode).toBe(404);
   });
 
   it("fails readiness closed when a probe throws", async () => {
