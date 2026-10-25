@@ -152,15 +152,15 @@ class GbWalletScreen extends ConsumerWidget {
               children: [
                 _WalletShortcut(
                   width: tileWidth,
-                  label: 'Add data',
-                  icon: Icons.add_circle_outline_rounded,
-                  onTap: () => context.push('/wallet/add'),
+                  label: 'Redeem',
+                  icon: Icons.sim_card_outlined,
+                  onTap: () => context.go('/home?tab=data'),
                 ),
                 _WalletShortcut(
                   width: tileWidth,
-                  label: 'Send',
-                  icon: Icons.north_east_rounded,
-                  onTap: () => context.push('/wallet/send'),
+                  label: 'Add data',
+                  icon: Icons.add_circle_outline_rounded,
+                  onTap: () => context.push('/wallet/add'),
                 ),
                 _WalletShortcut(
                   width: tileWidth,
@@ -170,9 +170,9 @@ class GbWalletScreen extends ConsumerWidget {
                 ),
                 _WalletShortcut(
                   width: tileWidth,
-                  label: 'Redeem',
-                  icon: Icons.sim_card_outlined,
-                  onTap: () => context.go('/home?tab=data'),
+                  label: 'Send',
+                  icon: Icons.north_east_rounded,
+                  onTap: () => context.push('/wallet/send'),
                 ),
               ],
             );

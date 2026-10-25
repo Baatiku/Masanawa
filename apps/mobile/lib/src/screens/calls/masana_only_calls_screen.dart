@@ -264,6 +264,7 @@ class _PrivateMasanaCallHistoryState
                 horizontal: 4, vertical: 5),
               leading: MasanaPortraitAvatar(
                 characterId: call.characterId,
+                agent: ref.watch(agentDirectoryProvider).find(call.characterId),
                 displayName: call.displayName,
                 size: 48,
               ),

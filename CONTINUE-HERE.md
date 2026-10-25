@@ -4,13 +4,13 @@
 
 Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.md` — these replace the former 177-screen/820-item old product. Keep this one handoff as a status checkpoint; source, exact Git SHA, tests and provider verification are independently authoritative.
 
-## Latest checkpoint — owner UX checklist and regressions
+## Latest implementation checkpoint
 
-Main baseline **0c1dc595** (#421 merged). Start with `docs/PRODUCT-ROADMAP-20261019.md#owner-ux-and-communication-repair-checklist`: stable **UX-R/C/P/S/W/T/D/H/L/N/Q** IDs are the shared implementation checklist for ALL recent feedback. Original detail: `docs/FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md`; new audit: `docs/CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md`. All new repair/UI items are unchecked; this checkpoint is an audit/plan, not completed fixes.
+Follow the stable UX checklist in `docs/PRODUCT-ROADMAP-20261019.md#owner-ux-and-communication-repair-checklist`. First implementation batch `fix/canonical-call-history-portrait` completes **UX-P01, UX-W01, UX-N01**: call-history approved portraits react to directory hydration, wallet grid is Redeem/Add data then Request/Send, and Notifications opens Activity with Preferences second and resets on account switch. Focused Flutter tests pass; inspect the branch PR for the authoritative hosted-CI/merge status. Runtime/provider recovery and visual device acceptance are not claimed.
 
-P0 findings: mobile voice admission still calls retired `/agent/twin/voice/quote` (observed 404); live-token 500s and recorded-note/text failures need separate diagnosis and MB-safe repair. Calls history omits the directory entry in canonical portrait construction, forcing initials. Current source still has chat filter chips, wrong wallet shortcut order and Preferences-first notification tabs. The decoded OPay reference exists at `opay-decloned/` and has been reinspected. Audit tests: 57 Flutter + 37 server passed (simulated, not real recovery). No APK; fixed-IP hosting hold; preserve history and separate Masanawa-App.
+**Next priority: UX-R01–R08.** Mobile still calls retired `/agent/twin/voice/quote` (observed 404); live-token 500s and recorded-note/text errors require separate diagnosis. Implement retained MB reservation/admission/settlement with original-operation recovery; do not restore Credits routes or bypass balances. P0 scope is not solved by the portrait/layout batch. See the audit addendum for exact paths and bounded runtime evidence. Preserve approved voices and canonical identity.
 
-The older sections below are historical checkpoints; do not infer current PR state or disabled wallet functionality from them. Main through #420 already has MB Send/Request, bank assignment and durable Data purchase, and #421 removed disconnected retired source. Follow the stable checklist and exact source for new work.
+Original detail: `docs/FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md`; additions: `docs/CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md`. Remaining unchecked UX IDs are the continuation queue. No APK; fixed-IP hosting hold; preserve historical finances and separate Masanawa-App. Older sections below are historical checkpoints, not current PR statuses.
 
 ## Actual source work, separate non-overlapping paths
 

@@ -49,6 +49,15 @@ void main() {
     expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(find.text('Send'), findsOneWidget);
     expect(find.text('Request'), findsOneWidget);
+    final redeem = tester.getCenter(find.text('Redeem'));
+    final add = tester.getCenter(find.text('Add data'));
+    final request = tester.getCenter(find.text('Request'));
+    final send = tester.getCenter(find.text('Send'));
+    expect(redeem.dy, add.dy);
+    expect(request.dy, send.dy);
+    expect(redeem.dx, lessThan(add.dx));
+    expect(request.dx, lessThan(send.dx));
+    expect(redeem.dy, lessThan(request.dy));
     expect(tester.takeException(), isNull);
   });
 

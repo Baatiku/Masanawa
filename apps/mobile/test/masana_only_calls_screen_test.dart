@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:masanawa/src/agents/agent_directory.dart';
+import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,12 +40,47 @@ class _History implements CallHistoryTransport {
   ]);
 }
 
+class _Directory extends AgentDirectoryController {
+  @override
+  AgentDirectoryState build() => const AgentDirectoryState(loading: false,
+    agents: [AgentDirectoryEntry(characterId: 'masana-a', characterVersionId: 'v1',
+      displayName: 'Renamed Masana', roleLabel: '', about: '',
+      presence: AgentPresence.unknown, portraitKey: 'amina')]);
+}
+
+class _CachedDirectory extends _Directory {
+  @override
+  AgentDirectoryState build() => const AgentDirectoryState(loading: true);
+  void restore() => state = super.build();
+}
+
 void main() {
+  testWidgets('history resolves the canonical picture when cached directory arrives', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      callHistoryTransportProvider.overrideWithValue(_History()),
+      agentDirectoryProvider.overrideWith(_CachedDirectory.new),
+    ], child: MaterialApp(theme: buildMasanawaTheme(brightness: Brightness.light),
+      home: const MasanaOnlyCallsScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MasanaOnlyCallsScreen)));
+    (container.read(agentDirectoryProvider.notifier) as _CachedDirectory).restore();
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsNothing);
+    expect(tester.widgetList<Image>(find.byType(Image)).any((image) =>
+      image.image is AssetImage && (image.image as AssetImage).assetName ==
+        'assets/masana/portraits/amina.webp'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('only individual Masana history is shown, no human or group call CTA',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(_SignedIn.new),
+        agentDirectoryProvider.overrideWith(_Directory.new),
         callHistoryTransportProvider.overrideWithValue(_History()),
       ],
       child: MaterialApp(
@@ -53,6 +90,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Amina'), findsOneWidget);
+    final portrait = tester.widgetList<Image>(find.byType(Image)).where(
+      (image) => image.image is AssetImage &&
+        (image.image as AssetImage).assetName == 'assets/masana/portraits/amina.webp');
+    expect(portrait, hasLength(1));
     expect(find.text('Legacy group'), findsNothing);
     expect(find.text('Call a person'), findsNothing);
     expect(find.text('Call multiple Masana'), findsNothing);
