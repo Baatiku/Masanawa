@@ -4,6 +4,9 @@ import {
 } from "./gb_data/data_catalogue.js";
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import {createBillstack9PsbClient} from "./gb_wallet/billstack_provider.js";
+import type {BillstackFundingPorts} from "./gb_wallet/billstack_funding_routes.js";
+import {DEFAULT_RECHARGE_RATE_BOOK} from "./gb_wallet/pricing.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
@@ -19,6 +22,7 @@ import {
   PgFeedMediaAuthorization, createPostgresVideoStore,
   createPostgresYouTubeSourceAdminStore,
   createMasanaInboxRepository,
+  createGbBillstackRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
@@ -2711,6 +2715,42 @@ export async function startGatewayService(
       validateProfile:validateMasanaProfile,
       ...createApprovedMasanaMediaPort(featurePool,mediaConfiguration),
     } : undefined);
+  // A valid server-only Railway secret automatically composes the documented
+  // Billstack 9PSB path in the reduced product. If absent, no virtual account
+  // or callback route exists, and the client cannot invent transfer details.
+  const billstackSecret=env.MASANAWA_BILLSTACK_SECRET_KEY?.trim();
+  const billstackFunding:BillstackFundingPorts|undefined =
+    options.appOptions?.billstackFunding ??
+    (billstackSecret && featurePool && sessions && featureTenant ? (()=>{
+      const storage=createGbBillstackRepository(featurePool);
+      const provider=createBillstack9PsbClient({secretKey:billstackSecret});
+      return {
+        authorize:async(header:string|undefined)=>resolveFeatureFan(header),
+        applicant:async(actor:{tenantId:string;userId:string},reference:string)=>{
+          const result=await featurePool.query<{
+            display_name:string;email:string|null;phone:string|null;
+          }>("SELECT display_name,email,phone FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2",
+          [actor.tenantId,actor.userId]);
+          const profile=result.rows[0];
+          if(!profile?.email || !profile.phone){
+            throw new Error("billstack.verified_contact_required");
+          }
+          const phone=profile.phone.trim().replace(/^\+234/,"0");
+          const names=profile.display_name.trim().split(/\s+/);
+          return {reference,email:profile.email.trim(),phone,
+            firstName:names[0]??"",lastName:names.slice(1).join(" ") || (names[0] ?? "")};
+        },
+        read:storage.read,
+        start:storage.start,
+        create:provider.reserve,
+        finalize:storage.finalize,
+        credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0],
+          quote:Parameters<typeof storage.applyVerifiedPayment>[1])=>
+          storage.applyVerifiedPayment(payment,quote),
+        webhookSecret:billstackSecret,
+        rateBook:DEFAULT_RECHARGE_RATE_BOOK,
+      };
+    })() : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2952,6 +2992,7 @@ export async function startGatewayService(
       walletCreditSendEnabled: env.MASANAWA_WALLET_CREDIT_SEND_ENABLED === "true" && !!twinProduction,
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
+      ...(billstackFunding ? { billstackFunding } : {}),
       ...(humanCommunication ? { humanCommunication } : {}),
       ...(incomingCalls ? { incomingCalls } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory

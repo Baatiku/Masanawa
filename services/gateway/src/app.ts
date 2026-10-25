@@ -6,6 +6,7 @@ import {
   type RechargeRateBook,
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import {registerBillstackFundingRoutes,type BillstackFundingPorts} from "./gb_wallet/billstack_funding_routes.js";
 import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
@@ -231,6 +232,8 @@ export interface GatewayAppOptions {
   readonly p2p?: P2pRoutesDependencies;
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
+  /** 9PSB reserved collection, enabled only with operator server credentials and lite scope. */
+  readonly billstackFunding?: BillstackFundingPorts;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
 
@@ -517,6 +520,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
+  if(!legacyProduct && options.billstackFunding) registerBillstackFundingRoutes(app,options.billstackFunding);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 
