@@ -63,6 +63,9 @@ void main() {
     expect(tester.getSize(find.byKey(
       const ValueKey('live-call-end-action'))).height,
       greaterThanOrEqualTo(54));
+    await tester.drag(find.byType(SingleChildScrollView),
+      const Offset(0, -400));
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.text('End call'));
     await tester.pump(const Duration(milliseconds:400));
     expect(screen,findsNothing);expect(find.text('Open call'),findsOneWidget);
@@ -80,18 +83,17 @@ void main() {
     final session = await _openCall(tester, largeText: true);
     expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
       const ValueKey('live-call-masana-portrait'))).size, 144);
-    await tester.ensureVisible(find.byKey(const ValueKey('live-call-end-action')));
-    await tester.ensureVisible(find.byTooltip('Mute'));
+    await tester.drag(find.byType(SingleChildScrollView),
+      const Offset(0, -450));
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.byTooltip('Mute'));
     await tester.pump();
     expect(find.text('Unmute'), findsOneWidget);
     verify(() => session.mute(true)).called(1);
-    await tester.ensureVisible(find.byTooltip('Speaker'));
     await tester.tap(find.byTooltip('Speaker'));
     await tester.pump();
     expect(find.text('Earpiece'), findsOneWidget);
     verify(() => session.setSpeaker(false)).called(1);
-    await tester.ensureVisible(find.byKey(const ValueKey('live-call-end-action')));
     await tester.tap(find.text('End call'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Open call'), findsOneWidget);
@@ -109,7 +111,9 @@ void main() {
       const ValueKey('live-call-masana-portrait'))).size, 116);
     expect(find.byTooltip('Mute'), findsOneWidget);
     expect(find.byTooltip('Speaker'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const ValueKey('live-call-end-action')));
+    await tester.drag(find.byType(SingleChildScrollView),
+      const Offset(0, -600));
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.text('End call'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Open call'), findsOneWidget);

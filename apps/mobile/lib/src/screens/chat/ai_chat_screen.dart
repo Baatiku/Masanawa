@@ -2543,8 +2543,10 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                   if(_recording!.error!=null)Text(_recording!.error!,textAlign:TextAlign.center),
                 ],
                 const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 32,
+                  runSpacing: 16,
                   children: [
                     _CallControl(
                       label: _muted ? 'Unmute' : 'Mute',
@@ -2556,7 +2558,6 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                         if (mounted) setState(() => _muted = next);
                       },
                     ),
-                    const SizedBox(width: 32),
                     _CallControl(
                       label: _speaker ? 'Speaker' : 'Earpiece',
                       icon: _speaker ? Icons.volume_up : Icons.hearing,
