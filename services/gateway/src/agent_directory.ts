@@ -1,4 +1,3 @@
-import type {MasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import type {MasanaSocialChannel} from "@masanawa/masana";
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import type { AgentMasanaIdentityReader } from "./agent_directory_rooms.js";
@@ -38,20 +37,14 @@ export interface MobileAgentDirectoryEntry {
   readonly defaultPlatformAgent: boolean;
   readonly voiceProvider: string | null;
   readonly voiceName: string | null;
-  readonly roomId?: string;
   readonly portraitKey?: string;
   readonly following?: boolean;
   readonly conversationStarters?: readonly string[];
   readonly socialChannels?: readonly MasanaSocialChannel[];
-  readonly creatorHandle?: string;
-  readonly creatorName?: string;
   readonly countryCode?: string | null;
   readonly countryName?: string | null;
 }
 
-export interface AgentRoomDirectoryReader {
-  readPublished(input:{readonly tenantId:TenantId;readonly characterIds:readonly CharacterId[]}):Promise<ReadonlyMap<CharacterId,string>>;
-}
 export interface AgentDirectoryService {
   list(input: {
     readonly authorizationHeader: string | undefined;
@@ -79,9 +72,7 @@ export function createAgentDirectoryService(input: {
   readonly platformProfiles?: PlatformAgentProfileRepository;
   readonly userPreferences?: UserAgentPreferenceRepository;
   readonly activity?: MobileAgentActivityRepository;
-  readonly rooms?: AgentRoomDirectoryReader;
   readonly identities?: AgentMasanaIdentityReader;
-  creators?: MasanaCreatorDirectory;
 }): AgentDirectoryService {
   return Object.freeze<AgentDirectoryService>({
     async list(
@@ -103,7 +94,7 @@ export function createAgentDirectoryService(input: {
       );
 
       const characterIds = visible.map((item) => item.characterId);
-      const [preference, profiles, activity, rooms, identities, creators] = await Promise.all([
+      const [preference, profiles, activity, identities] = await Promise.all([
         input.userPreferences?.readForUser({
           tenantId: authority.tenantId,
           userId: authority.userId,
@@ -125,11 +116,7 @@ export function createAgentDirectoryService(input: {
               characterIds,
             })
           : Promise.resolve([]),
-        input.rooms ? input.rooms.readPublished({tenantId:authority.tenantId,characterIds})
-          : Promise.resolve(new Map<CharacterId,string>()),
         input.identities ? input.identities.read({tenantId:authority.tenantId,userId:authority.userId,characterIds})
-          : Promise.resolve(new Map()),
-        input.creators ? input.creators.read({tenantId:authority.tenantId,characterIds})
           : Promise.resolve(new Map()),
       ]);
       const profileByCharacter = new Map(
@@ -145,7 +132,6 @@ export function createAgentDirectoryService(input: {
             profileByCharacter.get(presentation.characterId) ?? null;
           const currentActivity =
             activityByCharacter.get(presentation.characterId) ?? null;
-          const roomId=rooms.get(presentation.characterId);
           const identity=identities.get(presentation.characterId);
           const design=identity?.portraitKey?MASANA_CHARACTER_DESIGNS[identity.portraitKey]:null;
           const defaultPlatformAgent =
@@ -163,17 +149,12 @@ export function createAgentDirectoryService(input: {
             about: presentation.about,
             greeting: presentation.greeting,
             countryCode:presentation.countryCode??null,countryName:presentation.countryName??null,
-            ...(creators.get(presentation.characterId) ? {
-              creatorHandle:creators.get(presentation.characterId)!.handle,
-              creatorName:creators.get(presentation.characterId)!.displayName,
-            } : {}),
             presence: currentActivity?.presence ?? ("unknown" as const),
             activeWorkCount: currentActivity?.activeWorkCount ?? 0,
             supportAgent: profile?.supportAgent ?? false,
             defaultPlatformAgent,
             voiceProvider: profile?.voiceProvider ?? null,
             voiceName: profile?.voiceName ?? null,
-            ...(roomId ? {roomId} : {}),
             ...(identity?.portraitKey ? {portraitKey:identity.portraitKey} : {}),
             following:identity?.following??false,
             conversationStarters:Object.freeze([...(design?.starters??[])]),
