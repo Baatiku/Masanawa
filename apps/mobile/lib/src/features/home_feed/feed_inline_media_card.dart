@@ -54,6 +54,12 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
     // is alive, including when the app switches accounts.
     if(previous!=null) unawaited(NetworkImage(previous.url.toString()).evict());
   }
+  void _retryPreview(){
+    // A failed network decode must request a new scoped grant rather than
+    // invoking the parent post/media tap with the failed signed URL.
+    _discard();
+    unawaited(load());
+  }
   Future<void> load()async{
     if(!mounted||widget.accountKey.isEmpty)return;
     final ticket=++generation;
@@ -80,7 +86,7 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
         child:const CircularProgressIndicator(strokeWidth:2))));
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
       return Align(alignment:Alignment.centerLeft,child:TextButton.icon(
-        onPressed:load,
+        onPressed:_retryPreview,
         icon:const Icon(Icons.refresh),
         label:const Text('Image unavailable · retry preview')));
     }
@@ -92,8 +98,11 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
           child:widget.renderer?.call(current)??Image.network(
             current.url.toString(),height:220,width:double.infinity,
             cacheWidth:960,fit:BoxFit.cover,
-            errorBuilder:(_,__,___)=>const SizedBox(height:120,
-              child:Center(child:Text('Image failed to load · tap to retry'))),
+            errorBuilder:(_,__,___)=>SizedBox(height:120,
+              child:Center(child:TextButton.icon(
+                onPressed:_retryPreview,
+                icon:const Icon(Icons.refresh),
+                label:const Text('Image failed to load · retry preview')))),
           ),
         ),
       ),

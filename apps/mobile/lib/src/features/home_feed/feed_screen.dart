@@ -7,6 +7,7 @@ import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'feed_inline_media_card.dart';
 import 'status_post_author_header.dart';
+import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'saved_status_library_screen.dart';
@@ -691,9 +692,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                               if (post.body.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-                                  child: Text(
-                                    post.body,
-                                    style: Theme.of(context).textTheme.bodyLarge,
+                                  child: StatusPostBody(
+                                    key: ValueKey('status-body-${widget.accountKey}-${post.id}'),
+                                    accountKey: widget.accountKey,
+                                    postId: post.id,
+                                    body: post.body,
                                   ),
                                 ),
                               if (post.kind == 'image' &&
