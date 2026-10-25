@@ -124,14 +124,22 @@ void main() {
       ..responses['next-page']=GbActivityPage([
         item('mb:1',-500),item('mb:2',1000,kind:'ngn_exchange')],null);
     await mount(tester,fake);
+    await tester.dragUntilVisible(find.text('−500 MB'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('−500 MB'),findsOneWidget);
+    await tester.dragUntilVisible(find.text('+₦5,000.50'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('+₦5,000.50'),findsOneWidget);
     await tester.dragUntilVisible(find.text('Load more activity'),
       find.byType(ListView),const Offset(0,-170));
     expect(find.text('Load more activity'),findsOneWidget);
     await tester.tap(find.text('Load more activity'));
     await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('+1,000 MB'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('+1,000 MB'),findsOneWidget);
+    await tester.dragUntilVisible(find.text('−500 MB'),
+      find.byType(ListView),const Offset(0,160));
     expect(find.text('−500 MB'),findsOneWidget);
     expect(find.text('Load more activity'),findsNothing);
     expect(fake.requests,contains('next-page'));
@@ -148,12 +156,18 @@ void main() {
       find.byType(ListView),const Offset(0,-170));
     await tester.tap(find.text('Load more activity'));
     await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('−100 MB'),
+      find.byType(ListView),const Offset(0,150));
     expect(find.text('−100 MB'),findsOneWidget);
+    await tester.dragUntilVisible(find.byTooltip('Retry loading activity'),
+      find.byType(ListView),const Offset(0,-150));
     expect(find.byTooltip('Retry loading activity'),findsOneWidget);
     fake.fail=false;
     await tester.tap(find.byTooltip('Retry loading activity'));
     await tester.pumpAndSettle();
     expect(fake.requests.where((cursor)=>cursor=='next-page'),hasLength(2));
+    await tester.dragUntilVisible(find.text('+200 MB'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('+200 MB'),findsOneWidget);
   });
 
@@ -173,6 +187,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('+300 MB'),findsNothing);
     expect(find.text('−100 MB'),findsNothing);
+    await tester.dragUntilVisible(find.text('+50 MB'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('+50 MB'),findsOneWidget,
       reason:'Only the newly authorized account\'s journal may become visible');
     expect(tester.takeException(),isNull);
@@ -197,6 +213,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.units,contains('NGN'));
     expect(fake.units.first,'all');
+    await tester.dragUntilVisible(find.text('+₦5,000.50'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('+₦5,000.50'),findsOneWidget);
     expect(find.text('+999 MB'),findsNothing);
     expect(find.text('−200 MB'),findsNothing);
@@ -221,12 +239,20 @@ void main() {
       ..responses[null]=GbActivityPage([item('mb:posted_1',-200)],null);
     await mount(tester,fake);
     expect(find.text('Period totals unavailable. No zero balance is assumed.'),findsOneWidget);
+    await tester.dragUntilVisible(find.text('−200 MB'),
+      find.byType(ListView),const Offset(0,-140));
     expect(find.text('−200 MB'),findsOneWidget);
     fake.failSummary=false;
+    await tester.dragUntilVisible(find.text('Retry totals'),
+      find.byType(ListView),const Offset(0,150));
     await tester.tap(find.text('Retry totals'));
     await tester.pumpAndSettle();
     expect(fake.summaryRequests,[7,7]);
+    await tester.dragUntilVisible(find.text('Received: +500 MB'),
+      find.byType(ListView),const Offset(0,-120));
     expect(find.text('Received: +500 MB'),findsOneWidget);
+    await tester.dragUntilVisible(find.text('−200 MB'),
+      find.byType(ListView),const Offset(0,-140));
     expect(find.text('−200 MB'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });

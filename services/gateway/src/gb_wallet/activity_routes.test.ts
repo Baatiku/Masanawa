@@ -11,7 +11,7 @@ function fixture() {
   const authorize=vi.fn(async()=>owner);
   const list=vi.fn(async()=>[item(2),item(1)]);
   const find=vi.fn(async()=>item(2) as ReturnType<typeof item> | null);
-  const summary=vi.fn(async(days:7|30)=>({periodDays:days,
+  const summary=vi.fn(async(_actor:typeof owner,days:7|30)=>({periodDays:days,
     fromAt:"2026-10-18T00:00:00.000Z",toAt:"2026-10-25T00:00:00.000Z",
     MB:{received:1000,spent:500,net:500},
     NGN:{received:500050,spent:100,net:499950}}));
