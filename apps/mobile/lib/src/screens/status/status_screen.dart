@@ -14,6 +14,7 @@ import '../../state/agent_directory_state.dart';
 import '../profile/masana_profile_screen.dart';
 import '../profile/person_profile_screen.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../ui/components/masanawa_main_header.dart';
 
 /// Scope every Status operation to the signed-in fan who opened the tab.
 /// The Gateway remains the authority for Masana eligibility and post visibility.
@@ -139,11 +140,24 @@ final statusFeedApiProvider = Provider<FeedApi>((ref) {
 
 /// The Status root is for Masana-authored approved updates only. The former
 /// Talk creation route is not a Status action and is deliberately absent.
-class StatusScreen extends ConsumerWidget {
+class StatusScreen extends ConsumerStatefulWidget {
   const StatusScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StatusScreen> createState() => _StatusScreenState();
+}
+
+class _StatusScreenState extends ConsumerState<StatusScreen> {
+  final ValueNotifier<bool> _searchExpanded = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _searchExpanded.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     if (session is! SessionSignedIn) {
       return Center(
@@ -280,11 +294,24 @@ class StatusScreen extends ConsumerWidget {
       },
     );
 
-    return KeyedSubtree(
+    return Scaffold(
+      backgroundColor: context.masanawa.surfaceBg,
+      appBar: masanawaMainHeader(context, actions: [
+        ValueListenableBuilder<bool>(
+          valueListenable: _searchExpanded,
+          builder: (context, expanded, _) => IconButton(
+            tooltip: expanded ? 'Close Status search' : 'Search Status',
+            icon: Icon(expanded ? Icons.close_rounded : Icons.search_rounded),
+            onPressed: () => _searchExpanded.value = !expanded,
+          ),
+        ),
+      ]),
+      body: KeyedSubtree(
       key: ValueKey('status-account-$account'),
       child: MasanaFeedScreen(
         api: feed,
         accountKey: account,
+        searchExpanded: _searchExpanded,
         mediaApi: inlineMedia,
         onOpenMedia: openMedia,
         onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
@@ -292,6 +319,7 @@ class StatusScreen extends ConsumerWidget {
         wrapAccountRoute: accountRouteGuard,
         audioPlaybackAvailable: true,
       ),
+    ),
     );
   }
 }
