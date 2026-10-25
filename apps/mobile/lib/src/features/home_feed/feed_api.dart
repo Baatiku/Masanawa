@@ -245,21 +245,6 @@ abstract class FeedApi {
   Future<List<FeedComment>> comments(String postId);
 }
 
-abstract class HumanStatusPublisher {
-  /// Public text only; the Gateway derives human owner from the current session.
-  Future<FeedPost> publishHumanText(String body, String idempotencyKey);
-}
-
-/// Own human posts only; Gateway independently verifies ownership and visibility.
-abstract class HumanPostManager {
-  Future<FeedPost> editHumanText(
-    String postId,
-    String expectedBody,
-    String body,
-  );
-  Future<void> removeHumanPost(String postId);
-}
-
 abstract class ReactionFeedApi {
   /// One authoritative reaction per signed-in user and post; null clears it.
   Future<void> react(String postId, String? kind);
@@ -281,9 +266,8 @@ class DioFeedApi
         FeedApi,
         SearchFeedApi,
         ReactionFeedApi,
-        HumanStatusPublisher,
         SavedStatusLibraryApi,
-        HumanPostManager {
+        SavedStatusLibraryApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -344,38 +328,6 @@ class DioFeedApi
     await _dio.put<void>(
       '/v1/posts/' + Uri.encodeComponent(id) + '/reaction',
       data: {'kind': kind},
-      options: await _options(authRequired: true),
-    );
-  }
-
-  @override
-  Future<FeedPost> publishHumanText(String body, String idempotencyKey) async {
-    final r = await _dio.post<Map<String, dynamic>>(
-      '/v1/posts/human',
-      data: {'body': body, 'audience': 'public'},
-      options: await _options(key: idempotencyKey, authRequired: true),
-    );
-    return FeedPost.fromJson(r.data ?? const <String, dynamic>{});
-  }
-
-  @override
-  Future<FeedPost> editHumanText(
-    String id,
-    String expectedBody,
-    String body,
-  ) async {
-    final result = await _dio.patch<Map<String, dynamic>>(
-      '/v1/posts/' + Uri.encodeComponent(id) + '/human',
-      data: {'expectedBody': expectedBody, 'body': body},
-      options: await _options(authRequired: true),
-    );
-    return FeedPost.fromJson(result.data ?? const <String, dynamic>{});
-  }
-
-  @override
-  Future<void> removeHumanPost(String id) async {
-    await _dio.delete<void>(
-      '/v1/posts/' + Uri.encodeComponent(id) + '/human',
       options: await _options(authRequired: true),
     );
   }
