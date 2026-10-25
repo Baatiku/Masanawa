@@ -9,7 +9,7 @@ import {
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import type { GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
-import { createBillstack9PsbClient } from "./gb_wallet/billstack_provider.js";
+import { createBillstackReservedAccountClient } from "./gb_wallet/billstack_provider.js";
 import type { BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
 import { DEFAULT_RECHARGE_RATE_BOOK } from "./gb_wallet/pricing.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
@@ -1721,7 +1721,7 @@ export async function startGatewayService(
          resolveRecipient: gbSendReview.resolveRecipient,
          store: createPostgresGbRequestRepository(featurePool)}
       : undefined);
-  // Funding instructions appear only after provider-verified 9PSB assignment.
+  // Funding instructions appear only after provider-confirmed assignment.
   // Railway's existing merchant secret uses BILLSTACK_SECRET_KEY. Prefer the
   // namespaced setting if both are provisioned during a credential rotation.
   const billstackSecret =
@@ -1730,7 +1730,10 @@ export async function startGatewayService(
     options.appOptions?.billstackFunding ??
     (billstackSecret && featurePool && sessions && featureTenant ? (() => {
       const storage = createGbBillstackRepository(featurePool);
-      const provider = createBillstack9PsbClient({secretKey:billstackSecret});
+      const configuredBank=env.MASANAWA_BILLSTACK_BANK_ID?.trim() || "9PSB";
+      if(configuredBank!=="9PSB"&&configuredBank!=="PALMPAY")
+        throw new Error("Invalid Billstack reserved-account bank configuration");
+      const provider = createBillstackReservedAccountClient({secretKey:billstackSecret,bankId:configuredBank});
       return {
         authorize:async(header:string|undefined)=>resolveFeatureFan(header),
         applicantComplete:async(actor)=>{

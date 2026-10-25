@@ -78,7 +78,7 @@ class NgnBankAccount {
         assignmentEnabled: data['assignmentEnabled'] == true,
         applicantComplete: data['applicantComplete'] == true,
       );
-    if (r['bankId'] != '9PSB' ||
+    if (!['9PSB', 'PALMPAY'].contains(r['bankId']) ||
         r['accountNumber'] is! String ||
         !RegExp(r'^\d{10}$').hasMatch(r['accountNumber'] as String) ||
         r['accountName'] is! String ||
