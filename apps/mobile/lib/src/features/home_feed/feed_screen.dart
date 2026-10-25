@@ -315,12 +315,14 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     final index = items.indexWhere((row) => row.id == post.id);
     if (index < 0) return;
     final version = generation;
+    var accepted = false;
     setState(() {
       pendingActions.add(post.id);
       items[index] = post.withReaction(kind);
     });
     try {
       await (widget.api as ReactionFeedApi).react(post.id, kind);
+      accepted = true;
       // Verify the authoritative counters after concurrent reaction writes.
       if (widget.api is DioFeedApi) {
         final projected = await (widget.api as DioFeedApi).detail(post.id);
@@ -337,15 +339,20 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         });
         return;
       }
-      final now = items.indexWhere((row) => row.id == post.id);
-      if (now >= 0) setState(() => items[now] = post);
+      // The write completed before the count readback failed. Do not tell the
+      // user the reaction was undone: the authoritative total is merely stale.
+      if (!accepted) {
+        final now = items.indexWhere((row) => row.id == post.id);
+        if (now >= 0) setState(() => items[now] = post);
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            t(
-              'Reaction not confirmed. Refresh or retry.',
-              'Ba a tabbatar da martani ba. Sake gwadawa.',
-            ),
+            accepted
+              ? t('Reaction saved. Refresh to verify counts.',
+                  'An adana martani. Sake sabunta don tabbatar da adadi.')
+              : t('Reaction not confirmed. Refresh or retry.',
+                  'Ba a tabbatar da martani ba. Sake gwadawa.'),
           ),
         ),
       );

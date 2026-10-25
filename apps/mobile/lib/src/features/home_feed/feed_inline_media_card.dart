@@ -67,7 +67,11 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
     unawaited(load());
   }
   Future<void> load()async{
-    if(!mounted||widget.accountKey.isEmpty)return;
+    if(!mounted)return;
+    if(widget.accountKey.isEmpty){
+      setState((){loading=false;error='Preview unavailable';grant=null;});
+      return;
+    }
     final ticket=++generation;
     setState(() {loading=true;error=null;grant=null;});
     try{
