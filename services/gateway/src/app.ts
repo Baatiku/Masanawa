@@ -9,6 +9,9 @@ import {
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import { registerGbSendReviewRoutes } from "./gb_wallet/send_routes.js";
+import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import { registerGbRequestRoutes, type GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
@@ -156,6 +159,9 @@ export interface GatewayAppOptions {
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
+  /** New review-confirmed purchased-MB transfer; no legacy Credits. */
+  readonly gbSendReview?: GbSendPorts;
+  readonly gbRequests?: GbRequestPorts;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
 
@@ -400,6 +406,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
 
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
+  if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 

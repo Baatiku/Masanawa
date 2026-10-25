@@ -166,7 +166,7 @@ class GbWalletScreen extends ConsumerWidget {
                   width: tileWidth,
                   label: 'Request',
                   icon: Icons.south_west_rounded,
-                  onTap: null,
+                  onTap: () => context.push('/wallet/request'),
                 ),
                 _WalletShortcut(
                   width: tileWidth,

@@ -347,6 +347,13 @@
       "description": "Disabled by default. Set true only after verified operator mapping and credentialed live Flutterwave Bills read are configured in Masana-lite scope; does not enable purchases."
     },
     {
+      "name": "MASANAWA_GB_SEND_REVIEW_SECRET",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional 32-byte-or-longer private signing authority for immutable purchased-MB Send review tokens. Provision only when the production atomic recipient ledger and recipient eligibility reader are verified; never reveal to clients."
+    },
+    {
       "name": "MASANAWA_GEMINI_API_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",

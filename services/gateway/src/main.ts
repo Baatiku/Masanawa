@@ -6,6 +6,8 @@ import {
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
@@ -16,6 +18,7 @@ import {
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
+  createPostgresGbRequestRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
@@ -2225,6 +2228,60 @@ export async function startGatewayService(
       authorize: async (header: string | undefined) => resolveFeatureFan(header),
       read: createPostgresGbWalletRepository(featurePool).read,
     } : undefined);
+  // No legacy Credit Send fallback. The signer is a private Railway secret,
+  // never a client-supplied or generated-on-each-request review authority.
+  const mbSendReviewSecret = env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
+  const gbSendReview: GbSendPorts | undefined =
+    options.appOptions?.gbSendReview ??
+    (featurePool && sessions && featureTenant &&
+        mbSendReviewSecret && Buffer.byteLength(mbSendReviewSecret, "utf8") >= 32
+      ? {
+          authorize: resolveFeatureFan,
+          resolveRecipient: async (actor, username) => {
+            // Server-only resolution; do not infer ownership from a display
+            // name, user-provided ID, unverified contact or human chat.
+            // Active user + mutual block + operator-safety checks are required.
+            const result = await featurePool.query<{
+              user_id: string; handle: string; display_name: string;
+            }>(`
+              SELECT p.user_id,p.handle,p.display_name
+              FROM talks.public_profiles p
+              JOIN identity.users u
+                ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
+              WHERE p.tenant_id=$1 AND p.handle=$3
+                AND u.state='active' AND p.user_id <> $2
+                AND NOT EXISTS (
+                  SELECT 1 FROM talks.safety_preferences b
+                  WHERE b.tenant_id=p.tenant_id AND b.blocked=true
+                    AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id)
+                      OR (b.subject_user_id=$2 AND b.viewer_user_id=p.user_id))
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM talks.safety_enforcement se
+                  WHERE se.tenant_id=p.tenant_id
+                    AND se.target_kind='profile' AND se.target_id=p.handle
+                    AND se.visibility IN ('restricted','blocked')
+                )
+              LIMIT 1
+            `, [actor.tenantId,actor.userId,username]);
+            const row = result.rows[0];
+            return row ? {
+              userId: row.user_id, username: row.handle,
+              displayName: row.display_name, active: true,
+            } : null;
+          },
+          balance: createPostgresGbWalletRepository(featurePool).read,
+          transfer: createPostgresGbWalletRepository(featurePool).transfer,
+          reviewSecret: mbSendReviewSecret,
+        }
+      : undefined);
+  const gbRequests: GbRequestPorts | undefined =
+    options.appOptions?.gbRequests ??
+    (featurePool && sessions && featureTenant && gbSendReview
+      ? {authorize: resolveFeatureFan,
+         resolveRecipient: gbSendReview.resolveRecipient,
+         store: createPostgresGbRequestRepository(featurePool)}
+      : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2336,6 +2393,8 @@ export async function startGatewayService(
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
+      ...(gbSendReview ? { gbSendReview } : {}),
+      ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
         : {}),
