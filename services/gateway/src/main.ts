@@ -2550,7 +2550,11 @@ export async function startGatewayService(
     const author = (tenant:string,id:string) => eligibility.author(tenant,id);
     status = {
       sessions,
-      feed: new FeedService(feed,author,mediaRuntime.approved),
+      feed: new FeedService(
+        feed, author, mediaRuntime.approved,
+        options.appOptions?.productScope === "masana-lite" ||
+          env.MASANAWA_PRODUCT_SCOPE === "masana-lite",
+      ),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
       isEditor: async session => editors.has(session.userId),
       // Publication and media access require explicit runtime qualification;
