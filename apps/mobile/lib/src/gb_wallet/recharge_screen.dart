@@ -276,151 +276,173 @@ class _RechargePackagesScreenState
         ? null
         : ref.watch(ngnWalletBalanceProvider(owner));
     final review = _review;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          review == null
-              ? 'Add data'
-              : _completed
-              ? 'Data added'
-              : 'Review exchange',
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (owner == null)
-            const Text('Sign in to add data.')
-          else ...[
-            Text('NGN balance', style: Theme.of(context).textTheme.labelLarge),
-            Text(
-              cash?.valueOrNull == null
-                  ? 'Balance unavailable'
-                  : formatNgn(cash!.valueOrNull!.balanceKobo),
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 12),
-            if (_loading || _busy) const LinearProgressIndicator(),
-            if (_error != null)
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            if (review == null) ...[
-              Text(
-                'Choose a package',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              if (!_enabled && !_loading)
-                const Text('Package exchange is currently unavailable.'),
-              for (final p in _packages)
-                RadioListTile<int>(
-                  key: ValueKey('gb-package-${p.gb}'),
-                  value: p.gb,
-                  groupValue: _selected,
-                  title: Text('${p.gb} GB'),
-                  subtitle: Text(
-                    '${formatNgn(p.kobo)} · ${groupedMb(p.gb * 1000)} MB',
-                  ),
-                  onChanged: _busy
-                      ? null
-                      : (v) => setState(() {
-                          _selected = v;
-                          _custom.clear();
-                        }),
-                ),
-              TextField(
-                controller: _custom,
-                enabled: !_busy,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Custom quantity (GB)',
-                  helperText: '1–2,000 whole GB',
-                ),
-                onChanged: (v) => setState(() {
-                  final n = int.tryParse(v);
-                  _selected = n != null && n >= 1 && n <= 2000 ? n : null;
-                }),
-              ),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed:
-                    _enabled &&
-                        !_loading &&
-                        !_busy &&
-                        _storeReady &&
-                        _selected != null
-                    ? _quote
-                    : null,
-                child: const Text('Continue'),
-              ),
-              TextButton(
-                onPressed: _busy ? null : () => _load(owner),
-                child: const Text('Refresh packages'),
-              ),
-            ] else ...[
-              Text(
-                '${review.sizeGb} GB',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              Text('${groupedMb(review.amountMb)} MB added to purchased data'),
-              const SizedBox(height: 10),
-              Text('NGN cost: ${formatNgn(review.amountKobo)}'),
-                const SizedBox(height: 10),
-              if (_completed) ...[
-                const Text('Exchange completed'),
-                SelectableText('Receipt: ${review.operationId}'),
-                FilledButton(
-                  onPressed: () => setState(() {
-                    _review = null;
-                    _completed = false;
-                  }),
-                  child: const Text('Choose another package'),
-                ),
-              ] else if (_uncertain) ...[
-                SelectableText('Reference: ${review.operationId}'),
-                FilledButton(
-                  onPressed: _busy ? null : () => _confirm(recover: true),
-                  child: const Text('Check original exchange'),
-                ),
-                if (_canReplay)
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => _confirm(replay: true),
-                    child: const Text('Retry same exchange'),
-                  ),
-              ] else ...[
-                FilledButton(
-                  onPressed:
-                      _busy ||
-                          (cash?.valueOrNull?.balanceKobo ?? 0) <
-                              review.amountKobo ||
-                          cash?.valueOrNull?.frozen == true ||
-                          !review.expiresAt.isAfter(DateTime.now().toUtc())
-                      ? null
-                      : _confirm,
-                  child: const Text('Confirm exchange'),
-                ),
-                TextButton(
+    return PopScope(
+      canPop: review == null || _uncertain || _completed,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && !_busy && review != null && !_uncertain && !_completed) {
+          setState(() => _review = null);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: review != null && !_uncertain && !_completed
+              ? IconButton(
+                  tooltip: 'Back to packages',
                   onPressed: _busy
                       ? null
                       : () => setState(() => _review = null),
-                  child: const Text('Change package'),
-                ),
-              ],
-            ],
-            if (!_uncertain && !_busy)
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await context.push('/wallet/fund');
-                  if (mounted && _owner == owner)
-                    ref.invalidate(ngnWalletBalanceProvider(owner));
-                },
-                icon: const Icon(Icons.account_balance_outlined),
-                label: const Text('Fund NGN wallet'),
+                  icon: const Icon(Icons.arrow_back),
+                )
+              : null,
+          title: Text(
+            review == null
+                ? 'Add data'
+                : _completed
+                ? 'Data added'
+                : 'Review exchange',
+          ),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (owner == null)
+              const Text('Sign in to add data.')
+            else ...[
+              Text(
+                'NGN balance',
+                style: Theme.of(context).textTheme.labelLarge,
               ),
+              Text(
+                cash?.valueOrNull == null
+                    ? 'Balance unavailable'
+                    : formatNgn(cash!.valueOrNull!.balanceKobo),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              if (_loading || _busy) const LinearProgressIndicator(),
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              if (review == null) ...[
+                Text(
+                  'Choose a package',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (!_enabled && !_loading)
+                  const Text('Package exchange is currently unavailable.'),
+                for (final p in _packages)
+                  RadioListTile<int>(
+                    key: ValueKey('gb-package-${p.gb}'),
+                    value: p.gb,
+                    groupValue: _selected,
+                    title: Text('${p.gb} GB'),
+                    subtitle: Text(
+                      '${formatNgn(p.kobo)} · ${groupedMb(p.gb * 1000)} MB',
+                    ),
+                    onChanged: _busy
+                        ? null
+                        : (v) => setState(() {
+                            _selected = v;
+                            _custom.clear();
+                          }),
+                  ),
+                TextField(
+                  controller: _custom,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Custom quantity (GB)',
+                    helperText: '1–2,000 whole GB',
+                  ),
+                  onChanged: (v) => setState(() {
+                    final n = int.tryParse(v);
+                    _selected = n != null && n >= 1 && n <= 2000 ? n : null;
+                  }),
+                ),
+                const SizedBox(height: 14),
+                FilledButton(
+                  onPressed:
+                      _enabled &&
+                          !_loading &&
+                          !_busy &&
+                          _storeReady &&
+                          _selected != null
+                      ? _quote
+                      : null,
+                  child: const Text('Continue'),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : () => _load(owner),
+                  child: const Text('Refresh packages'),
+                ),
+              ] else ...[
+                Text(
+                  '${review.sizeGb} GB',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                Text(
+                  '${groupedMb(review.amountMb)} MB added to purchased data',
+                ),
+                const SizedBox(height: 10),
+                Text('NGN cost: ${formatNgn(review.amountKobo)}'),
+                const SizedBox(height: 10),
+                if (_completed) ...[
+                  const Text('Exchange completed'),
+                  SelectableText('Receipt: ${review.operationId}'),
+                  FilledButton(
+                    onPressed: () => setState(() {
+                      _review = null;
+                      _completed = false;
+                    }),
+                    child: const Text('Choose another package'),
+                  ),
+                ] else if (_uncertain) ...[
+                  SelectableText('Reference: ${review.operationId}'),
+                  FilledButton(
+                    onPressed: _busy ? null : () => _confirm(recover: true),
+                    child: const Text('Check original exchange'),
+                  ),
+                  if (_canReplay)
+                    OutlinedButton(
+                      onPressed: _busy ? null : () => _confirm(replay: true),
+                      child: const Text('Retry same exchange'),
+                    ),
+                ] else ...[
+                  FilledButton(
+                    onPressed:
+                        _busy ||
+                            (cash?.valueOrNull?.balanceKobo ?? 0) <
+                                review.amountKobo ||
+                            cash?.valueOrNull?.frozen == true ||
+                            !review.expiresAt.isAfter(DateTime.now().toUtc())
+                        ? null
+                        : _confirm,
+                    child: const Text('Confirm exchange'),
+                  ),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() => _review = null),
+                    child: const Text('Change package'),
+                  ),
+                ],
+              ],
+              if (!_uncertain && !_busy)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await context.push('/wallet/fund');
+                    if (mounted && _owner == owner)
+                      ref.invalidate(ngnWalletBalanceProvider(owner));
+                  },
+                  icon: const Icon(Icons.account_balance_outlined),
+                  label: const Text('Fund NGN wallet'),
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

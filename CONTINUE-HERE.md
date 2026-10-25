@@ -6,6 +6,15 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
+**Latest owner steering: NGN wallet and OPay-inspired Data, PR #444.** Another window's main through Status #440 (`b5de6630`) has been merged into isolated `feat/ngn-wallet-data-layout-oct25`. Read `docs/NGN-WALLET-DATA-REDESIGN-20261025.md` and canonical UX-NGN01–06. The owner's revised model supersedes automatic deposit→MB conversion: new verified deposits settle separate NGN; explicit server-reviewed NGN→purchased-MB package exchange is atomic. Existing balances/old financial records/carry are unchanged, no historical import. Forward migration **0205** avoids local call-runtime's uncommitted 0204.
+
+Source: NGN ledger/deposit dedupe/reversal debt+freeze, actor-bound signed quantity pricing through 2 TB/custom whole GB, original receipt and secure account-scoped recovery, shared balance/account-number/Add data card, separate package/review/funding states and bank instructions route. Data uses card→compact network/phone→Daily/Weekly/Monthly→adaptive three-column bundles, no promo/cashback/All/Other. Review Back preserves quantity. Existing redemption minimum/exact verified allowance and original purchase locks are retained. The open voice #427 and uncommitted `/workspace/Masanawa-calls-service` are preserved, not merged by this batch.
+
+Validation: full local PG **2,003 pass, 3 skip**, full Flutter **706 pass** at `6131b551`; workspace TS/analyze/Gateway build pass; final NGN-only settlement-contract and review-Back follow-up has focused checks and needs exact final-head hosted CI. PR #444 is the ownership checkpoint; fetch its current head/status before continuing, merge automatically when verified. Update the evidence after merge. Do not blindly duplicate other-window PRs #442/#443 or revive old funding instructions.
+
+**Production funding remains blocked:** a flag/key/HMAC alone cannot credit NGN. Composition requires independently qualified `billstackSettlementVerifier`; allocation separately requires `billstackVerifiedApplicant`. No guessed provider finality/reversal contract is implemented. New quantity prices also stay off until cost/margin/fees/limits are qualified. Next work: UX-NGN06 provider/client-cutoff/migration/handset qualification and remaining canonical UX items. No APK, deployment, fixed-IP hosting or separate Masanawa-App changes.
+
+
 Fetch latest GitHub main and follow the stable UX checklist in `docs/PRODUCT-ROADMAP-20261019.md#owner-ux-and-communication-repair-checklist`. Merged #423 (`ba638f48`) completes UX-P01/W01/N01; merged #424 (`f9a67387`) completes UX-C01/C02. Full Flutter 676 and all hosted checks passed on #424. Their UI/device follow-up and UX-C03/C04 remain open.
 
 **Merged #425** (`53efc5ec`): durable MB call admission journal/leases, original target/key binding, internal server-proof timing, once-only settlement and crash/late-hold recovery. Real PG suite 1,971 passed (3 skipped), workspace TypeScript/build and hosted CI passed. Forward migration 0203 only; no historical money conversion or public activation.

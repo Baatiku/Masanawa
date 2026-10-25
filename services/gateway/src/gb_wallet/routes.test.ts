@@ -14,7 +14,8 @@ describe("public GB recharge previews never mint balance", () => {
     expect(packages.statusCode).toBe(200);
     expect(packages.json()).toMatchObject({
       version: "gb-recharge-initial-v1",
-      settlement: "verified_bank_deposit_only",
+      settlement: "historical_reference_only",
+      automaticDepositConversion: false,
     });
     expect(packages.json().packages).toHaveLength(6);
     expect(packages.json().packages[0]).toMatchObject({

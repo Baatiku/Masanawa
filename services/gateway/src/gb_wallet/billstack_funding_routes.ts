@@ -1,7 +1,6 @@
 import {randomUUID} from "node:crypto";
 import type {FastifyInstance} from "fastify";
 import {verifyBillstackWebhook,type BillstackReceivedPayment} from "./billstack_provider.js";
-import {quoteVerifiedDeposit,type RechargeRateBook} from "./pricing.js";
 
 export interface BillstackFundingActor {tenantId:string;userId:string}
 export interface BillstackAccount {
@@ -20,15 +19,13 @@ export interface BillstackFundingPorts {
  finalize:(actor:BillstackFundingActor,reference:string,account:{
   reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB";
  })=>Promise<BillstackAccount>;
- credit:(payment:BillstackReceivedPayment,quote:(amountKobo:number,carry:{
-  numerator:string;denominator:string;
- })=>{rateVersion:string;creditedMb:number;remainder:{numerator:string;denominator:string}})
- =>Promise<{state:"credited"|"duplicate";creditedMb?:number;creditedKobo?:number;eventId:string}>;
+ credit:(payment:BillstackReceivedPayment)=>Promise<{
+  state:"credited"|"duplicate";creditedKobo:number;eventId:string;
+ }>;
  ready?:()=>boolean;
  /** Independent provider transaction final-state/amount/account verification. */
  verifySettlement:(payment:BillstackReceivedPayment)=>Promise<BillstackReceivedPayment>;
  webhookSecret:string;
- rateBook:RechargeRateBook;
  now?:()=>number;
 }
 
@@ -104,11 +101,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
       if(settlement.eventId!==verified.eventId || settlement.merchantReference!==verified.merchantReference ||
         settlement.accountNumber!==verified.accountNumber || settlement.amountKobo!==verified.amountKobo ||
         !Number.isFinite(Date.parse(settlement.receivedAt)))throw new Error("provider_settlement_mismatch");
-      const receipt=await ports.credit(settlement,(amountKobo,carry)=>{
-        const result=quoteVerifiedDeposit(amountKobo,ports.rateBook,carry);
-        return {rateVersion:result.rateVersion,creditedMb:result.creditedMb,
-          remainder:result.remainder};
-      });
+      const receipt=await ports.credit(settlement);
       return {accepted:true,duplicate:receipt.state==="duplicate"};
     }catch{
       // Unknown event remains retryable; never acknowledge a forged or

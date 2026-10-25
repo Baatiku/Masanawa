@@ -330,14 +330,16 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   // READ-ONLY discovery and pricing preview. No user-provided amount ever
   // creates a balance, payment intent, verified deposit or wallet receipt.
-  // Callers must re-quote against an immutable effective rate version before
-  // using verified provider events in the future MB ledger.
+  // Historical compatibility reference only. New deposits settle NGN; the
+  // signed exchange routes are the only current package purchase authority.
   const rechargeBook = options.gbRechargeRateBook ?? DEFAULT_RECHARGE_RATE_BOOK;
   validateRechargeRateBook(rechargeBook);
   app.get("/v1/gb/recharge/packages", async () => ({
     version: rechargeBook.version,
     packages: rechargeBook.tiers.map((tier) => quotePackage(tier.sizeGb, rechargeBook)),
-    settlement: "verified_bank_deposit_only" as const,
+    settlement: "historical_reference_only" as const,
+    automaticDepositConversion: false,
+    currentPackagesPath: "/v1/gb/wallet/exchange/packages",
   }));
   app.get("/v1/gb/recharge/preview", {
     schema: {
@@ -347,6 +349,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     },
   }, async (request) => ({
     previewOnly: true as const,
+    historicalReferenceOnly: true as const,
+    automaticDepositConversion: false,
     ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
   }));
 

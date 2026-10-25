@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import {createHmac} from "node:crypto";
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {registerBillstackFundingRoutes,type BillstackFundingPorts} from "./billstack_funding_routes.js";
-import {DEFAULT_RECHARGE_RATE_BOOK} from "./pricing.js";
 const apps:Array<ReturnType<typeof Fastify>>=[];
 afterEach(async()=>{await Promise.all(apps.splice(0).map(x=>x.close()));});
 const secret="server-side-test-webhook-9psb-abcdefgh";
@@ -10,7 +9,7 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
  const account={state:"assigned" as const,reference:"merchant-ref",bankId:"9PSB" as const,
   accountNumber:"0000000100",accountName:"Masanawa Recipient",bankName:"9PSB Bank"};
  const create=vi.fn(async()=>({...account,reference:"provider-ref",accountNumber:"0000000100"}));
- const credit=vi.fn(async()=>({state:"credited" as const,eventId:"provider-transaction",creditedMb:200}));
+ const credit=vi.fn(async()=>({state:"credited" as const,eventId:"provider-transaction",creditedKobo:100000}));
  const p:BillstackFundingPorts={
   authorize:async h=>{if(h!=="Bearer session")throw Error("unauthorized");
     return {tenantId:"tenant-a",userId:"fan-a"};},
@@ -23,7 +22,6 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
   credit,
   verifySettlement:async payment=>payment,
   webhookSecret:secret,
-  rateBook:DEFAULT_RECHARGE_RATE_BOOK,
   now:()=>1792886400*1000,
   ...overrides,
  };
@@ -61,7 +59,7 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
     headers,payload});
   expect(valid.statusCode).toBe(200);
   expect(credit).toHaveBeenCalledTimes(1);
-  expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}),expect.any(Function));
+  expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}));
  });
  it("fails closed on unverified funding while retaining assigned-account readback",async()=>{
   const f=setup({ready:()=>false});

@@ -1,3 +1,4 @@
+import {CustomerAuthError,type CustomerAuthService} from "../customer_auth.js";
 import Fastify from "fastify";
 import {registerNgnWalletRoutes} from "./ngn_routes.js";
 import {afterEach,describe,it,expect,vi} from "vitest";
@@ -57,4 +58,15 @@ describe("NGN wallet authenticated reviewed exchange",()=>{
   const next=fixture();vi.mocked(next.p.read).mockResolvedValue({balanceKobo:0,debtKobo:0,frozen:false});expect((await next.request("/v1/gb/wallet/exchange/quote",{sizeGb:10})).json()).toMatchObject({canAfford:false});
   vi.mocked(next.p.read).mockResolvedValue({balanceKobo:0,debtKobo:1,frozen:true});expect((await next.request("/v1/gb/wallet/exchange/quote",{sizeGb:10})).statusCode).toBe(403);
  });
+ it("recovery holds block new exchange while private balance readback remains available",async()=>{
+  const f=fixture();const auth={authorizeSensitiveMutation:async()=>{throw new CustomerAuthError("ACCOUNT_RECOVERY_HOLD",403);}} as unknown as CustomerAuthService;
+  const app=createGatewayApp({ngnWallet:f.p,customerAuth:auth});apps.push(app);
+  for(const [path,payload] of [["quote",{sizeGb:10}],["confirm",{reviewToken:"x".repeat(100),reviewAccepted:true}]] as const){
+   const response=await app.inject({method:"POST",url:"/v1/gb/wallet/exchange/"+path,headers:{authorization:"Bearer fixture"},payload});
+   expect(response.statusCode).toBe(403);expect(response.json().error.code).toBe("ACCOUNT_RECOVERY_HOLD");
+  }
+  expect((await app.inject({url:"/v1/gb/wallet/ngn/summary",headers:{authorization:"Bearer fixture"}})).statusCode).toBe(200);
+  expect(f.p.exchange).not.toHaveBeenCalled();
+ });
+
 });

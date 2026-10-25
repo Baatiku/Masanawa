@@ -1746,7 +1746,6 @@ export async function startGatewayService(
         ready:()=>env.MASANAWA_NGN_FUNDING_VERIFIED==="true" &&
           typeof options.appOptions?.billstackSettlementVerifier==="function",
         webhookSecret:billstackSecret,
-        rateBook:DEFAULT_RECHARGE_RATE_BOOK,
       };
     })() : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =

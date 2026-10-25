@@ -267,6 +267,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Review exchange'), findsOneWidget);
       expect(f.posts, isEmpty);
+      await tester.tap(find.byTooltip('Back to packages'));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a package'), findsOneWidget);
+      expect(
+        tester
+            .widget<RadioListTile<int>>(
+              find.byKey(const ValueKey('gb-package-10')),
+            )
+            .groupValue,
+        10,
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
       await tester.pumpAndSettle();
       expect(find.text('Exchange completed'), findsOneWidget);
