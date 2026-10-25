@@ -45,10 +45,6 @@ function checkActor(a: GbRequestActor): void {
     throw new GbRequestStoreError(403, "unauthorized");
   }
 }
-function isConstraintError(error: unknown): boolean {
-  return typeof error === "object" && error !== null &&
-    "code" in error && (error as {code?: string}).code === "23505";
-}
 
 type RequestRow = {
   request_id: string; requester_id: string; payer_id: string;
