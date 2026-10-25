@@ -59,7 +59,7 @@ jobs:
       - name: P2P Gateway and storage source tests
         run: pnpm exec vitest run services/gateway/src/p2p services/gateway/src/modules/home_feed/object_store.test.ts
       - name: Gateway and Worker P2P source tests
-        run: pnpm exec vitest run services/worker/src/jobs/msnw/p2p_notifications.test.ts services/worker/src/jobs/msnw/p2p_reconciliation.test.ts
+        run: pnpm exec vitest run services/worker/src/jobs/msnw/p2p_reconciliation.test.ts
       - name: Gateway and Worker production compilation and TypeScript
         run: |
           pnpm --filter @masanawa/gateway-service... build

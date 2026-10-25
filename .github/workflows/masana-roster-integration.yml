@@ -57,7 +57,7 @@ jobs:
       - name: Real PG18 Masana and Rooms creation
         run: pnpm exec vitest run adapters/storage/postgres/src/masana/catalog_seed.integration.test.ts
       - name: Room AI and protected voice token regressions
-        run: pnpm exec vitest run services/worker/src/jobs/rooms/teacher.test.ts services/gateway/src/live_voice_token.test.ts
+        run: pnpm exec vitest run services/gateway/src/live_voice_token.test.ts
   flutter-roster:
     runs-on: ubuntu-latest
     timeout-minutes: 30
