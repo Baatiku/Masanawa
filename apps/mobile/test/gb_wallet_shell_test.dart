@@ -78,7 +78,7 @@ void main() {
   });
 
   test('rejects fabricated or inconsistent MB readback', () {
-    const valid = {
+    final valid = <String, dynamic>{
       'balance': {
         'unit': 'MB',
         'conversion': 'decimal_1000',
@@ -98,11 +98,11 @@ void main() {
     expect(groupedMb(1234567), '1,234,567');
     expect(() => GbWalletBalance.fromJson({
       ...valid,
-      'balance': {...valid['balance']!, 'unit': 'MSNW'},
+      'balance': {...(valid['balance'] as Map<String, dynamic>), 'unit': 'MSNW'},
     }), throwsFormatException);
     expect(() => GbWalletBalance.fromJson({
       ...valid,
-      'balance': {...valid['balance']!, 'welcomeAvailableMb': 500},
+      'balance': {...(valid['balance'] as Map<String, dynamic>), 'welcomeAvailableMb': 500},
     }), throwsFormatException);
   });
 
