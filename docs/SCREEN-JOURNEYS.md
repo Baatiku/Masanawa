@@ -198,6 +198,8 @@ UX-N02 reauthorization continuation: claim `fix/ux-notifications-reauth-session-
 
 ### Internal MB call accounting foundation (UX-R02/R06 partial)
 
+UX-R03 live-token diagnostics continuation: a failed incoming or outgoing Masana voice-token mint must leave the call in an actionable non-connected failure state and may not imply the provider connected or charge connected seconds. Operations may fail independently at canonical authorization, MB admission, published Masana profile/voice selection, conversation-history read, provider transport/rejection/JSON response, admission issuance bookkeeping or call-history persistence. Gateway logs report only these fixed stage labels, closed error codes and allowlisted numeric upstream status; never emit a bearer, ephemeral token, provider error message, private persona/history, user ID or API key. An HTTP response with headers or an accepted issuance request does not qualify audible audio; device and real-provider checks remain open.
+
 The call admission journal reserves an owner/character-bound MB budget and accepts connected-time proof only from internal trusted server relay code. Failed/ringing/setup calls release the hold, reconnect excludes downtime, and expired-lease recovery captures only saved proof. Public call screens, routes and legacy admission are not switched by this foundation batch; they remain open repair work. No client duration, mock success or unreserved fallback may be introduced during integration. See `MB-CALL-ADMISSION-AUTHORITY-20261025.md` for boundaries and required relay/mobile/recovery work.
 
 ### Protected MB call review and admission contract (not yet composed in main)
