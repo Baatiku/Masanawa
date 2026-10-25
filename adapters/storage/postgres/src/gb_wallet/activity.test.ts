@@ -9,6 +9,22 @@ function fixture(rows: unknown[] = []) {
 }
 
 describe("read-only NGN and MB wallet activity",()=>{
+  it("totals only authorized posted units in an exact UTC window, rejecting overflow",async()=>{
+    const f=fixture([{unit:"MB",received:"1000",spent:"400"},
+      {unit:"NGN",received:"500050",spent:"50"}]);
+    const result=await f.repo.summary(scope,7,new Date("2026-10-26T00:00:00.000Z"));
+    expect(result.MB).toEqual({received:1000,spent:400,net:600});
+    expect(result.NGN).toEqual({received:500050,spent:50,net:500000});
+    const [sql,args]=f.query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("gb_wallet.movements");
+    expect(sql).toContain("gb_wallet.ngn_entries");
+    expect(sql).not.toMatch(/credits|msnw|ledger\.journal/i);
+    expect(args).toEqual(["tenant_one","fan_one",
+      "2026-10-19T00:00:00.000Z","2026-10-26T00:00:00.000Z"]);
+    await expect(f.repo.summary(scope,1 as 7)).rejects.toThrow();
+    const invalid=fixture([{unit:"MB",received:"9007199254740992",spent:"0"}]);
+    await expect(invalid.repo.summary(scope,7)).rejects.toThrow("invalid_activity_summary_amount");
+  });
   it("reads only owned immutable entries in exact tenant/user scope",async()=>{
     const f=fixture([
       {entry_id:"mb:123",operation_id:"send_one",unit:"MB",signed_amount:"-500",

@@ -47,6 +47,14 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
       expect(first.map(x=>[x.unit,x.amount,x.operationId])).toEqual([
         ["NGN",500050,"deposit_a"], ["MB",-500,"sent"],
       ]);
+      const summary=await repository.summary(actor,7,new Date("2026-10-26T00:00:00.000Z"));
+      expect(summary.MB).toEqual({received:300,spent:500,net:-200});
+      expect(summary.NGN).toEqual({received:500050,spent:0,net:500050});
+      const outsider=await repository.summary({tenantId:"a",userId:"fan_b"},7,
+        new Date("2026-10-26T00:00:00.000Z"));
+      expect(outsider.NGN.received).toBe(700000);
+      const old=await repository.summary(actor,7,new Date("2026-11-20T00:00:00.000Z"));
+      expect(old.MB).toEqual({received:0,spent:0,net:0});
       expect((await repository.list(actor,5,null,"MB")).every(x=>x.unit==="MB")).toBe(true);
       expect((await repository.list(actor,5,null,"NGN")).every(x=>x.unit==="NGN")).toBe(true);
       expect((await repository.list(actor,5,null,"NGN")).map(x=>x.operationId))

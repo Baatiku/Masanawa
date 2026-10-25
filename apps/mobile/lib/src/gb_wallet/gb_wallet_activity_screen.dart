@@ -42,6 +42,11 @@ String _kindText(String kind) => switch(kind) {
   _=>'Wallet movement',
 };
 
+String _groupActivity(int n)=>n.toString().replaceAllMapped(
+  RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>',');
+String _ngnActivity(int kobo)=>'₦${_groupActivity(kobo~/100)}.'
+  '${(kobo%100).toString().padLeft(2,'0')}';
+
 class GbActivityTile extends StatelessWidget {
   const GbActivityTile({super.key,required this.item});
   final GbActivityItem item;
@@ -129,6 +134,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   CancelToken? _cancel;
   int _request=0;
   String _unit='all';
+  int _days=7;
 
   void _reset() {
     ++_request;_cancel?.cancel();_cancel=null;
@@ -170,9 +176,12 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   @override
   Widget build(BuildContext context) {
     final owner=_ownerFor(ref);
-    if(owner!=_owner){_reset();_owner=owner;_unit='all';}
+    if(owner!=_owner){_reset();_owner=owner;_unit='all';_days=7;}
     final request=owner==null?null:(owner:owner,limit:20,unit:_unit);
     final first=request==null?null:ref.watch(gbActivityPageProvider(request));
+    final summaryRequest=owner==null?null:(owner:owner,days:_days);
+    final summary=summaryRequest==null?null:ref.watch(gbActivitySummaryProvider(summaryRequest));
+    final totals=summary?.valueOrNull;
     final initial=first?.valueOrNull;
     final entries=<GbActivityItem>[
       ...?initial?.items,
@@ -211,6 +220,45 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                       setState((){_reset();_unit=choice.key;});},
                   )),
             ])),
+          const SizedBox(height:12),
+          Card(child:Padding(padding:const EdgeInsets.all(14),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Text('Posted activity totals',style:Theme.of(context).textTheme.titleMedium),
+              const Text('Only verified journal rows; MB and NGN are never combined.'),
+              const SizedBox(height:8),
+              Wrap(spacing:8,runSpacing:4,children:[
+                for(final days in const [7,30])
+                  ChoiceChip(key:ValueKey('activity-period-$days'),
+                    label:Text('Last $days days'),selected:_days==days,
+                    onSelected:(_){if(_days!=days)setState(()=>_days=days);}),
+              ]),
+              if(totals==null && summary?.isLoading==true)
+                const Padding(padding:EdgeInsets.all(12),
+                  child:LinearProgressIndicator(semanticsLabel:'Loading period totals')),
+              if(totals==null && summary?.isLoading!=true)
+                Row(children:[
+                  const Expanded(child:Text('Period totals unavailable. No zero balance is assumed.')),
+                  TextButton(onPressed:()=>ref.invalidate(gbActivitySummaryProvider(summaryRequest!)),
+                    child:const Text('Retry totals')),
+                ]),
+              if(totals!=null)...[
+                Text('UTC ${totals.fromAt.toIso8601String()} – '
+                  '${totals.toAt.toIso8601String()}',
+                  style:Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height:12),
+                Text('Data MB',style:Theme.of(context).textTheme.titleSmall),
+                Wrap(spacing:18,runSpacing:8,children:[
+                  Text('Received: +${_groupActivity(totals.mb.received)} MB'),
+                  Text('Used: −${_groupActivity(totals.mb.spent)} MB'),
+                ]),
+                const SizedBox(height:10),
+                Text('Naira NGN',style:Theme.of(context).textTheme.titleSmall),
+                Wrap(spacing:18,runSpacing:8,children:[
+                  Text('Received: +${_ngnActivity(totals.ngn.received)}'),
+                  Text('Spent: −${_ngnActivity(totals.ngn.spent)}'),
+                ]),
+              ],
+            ]))),
           const SizedBox(height:12),
           if(initial==null && first?.isLoading==true)
             const ListTile(title:Text('Loading verified activity…'),
