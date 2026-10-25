@@ -5,6 +5,7 @@ import {
   validateRechargeRateBook,
   type RechargeRateBook,
 } from "./gb_wallet/pricing.js";
+import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
@@ -231,8 +232,9 @@ export interface GatewayAppOptions {
   readonly p2p?: P2pRoutesDependencies;
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
-  /** The canonical, independent MB ledger only; never an MSNW projection. */
   readonly gbWalletSummary?: GbWalletSummaryPorts;
+  /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
+  readonly gbDataCatalogue?: GbDataCataloguePorts;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -513,12 +515,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
   }));
 
-  // Read-only balance is intentionally absent from legacy deployments.
-  // Missing migrated MB accounts surface 503 and never masquerade as 0 MB.
-  if (!legacyProduct && options.gbWalletSummary) {
-    registerGbWalletSummaryRoutes(app, options.gbWalletSummary);
+  if (options.gbDataCatalogue) {
+    registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
+  if (!legacyProduct && options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 
@@ -1820,7 +1821,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   // These modules reuse the same host app, tenant authority and database.
   if (options.status) {
-    app.register(async scope => { await registerStatusRuntime(scope, options.status!); });
+    app.register(async scope => {
+      await registerStatusRuntime(scope, {
+        ...options.status!,
+        // Root Status is Masana-editorial only in the reduced product.
+        // Normal fans retain reactions, comments, follows and saves.
+        allowHumanPublishing: legacyProduct,
+      });
+    });
   }
   if (legacyProduct && options.videos) {
     app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });

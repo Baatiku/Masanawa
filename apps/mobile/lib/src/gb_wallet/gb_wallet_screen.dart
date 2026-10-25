@@ -1,15 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../state/session_state.dart';
+import 'gb_wallet_summary.dart';
 
 /// Deliberately not connected to historic MSNW/Credits balances. The GB ledger
 /// must be authoritative before numeric balances and spend controls appear.
-class GbWalletScreen extends StatelessWidget {
+class GbWalletScreen extends ConsumerWidget {
   const GbWalletScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return ListView(
+    final session = ref.watch(sessionProvider);
+    final owner = session is SessionSignedIn
+        ? (accountId: session.user.id,
+            authorizationEpoch: ref.read(sessionProvider.notifier).authorizationEpoch)
+        : null;
+    final balanceState = owner == null
+        ? null : ref.watch(gbWalletSummaryProvider(owner));
+    final balance = balanceState?.valueOrNull;
+    final isLoading = balanceState?.isLoading ?? false;
+    final isUnavailable = balance == null;
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (owner == null) return;
+        ref.invalidate(gbWalletSummaryProvider(owner));
+        try {
+          await ref.read(gbWalletSummaryProvider(owner).future);
+        } catch (_) {
+          // The visible error remains actionable; never coerce it to 0 MB.
+        }
+      },
+      child: ListView(
       key: const PageStorageKey<String>('gb-wallet-home'),
       padding: const EdgeInsets.all(16),
       children: [
@@ -30,14 +53,42 @@ class GbWalletScreen extends StatelessWidget {
             children: [
               Text('Data balance', style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),
-              Text('— GB', style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              )),
+              Text(
+                isUnavailable ? '— GB' : decimalGb(balance.availableMb) + ' GB',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 4),
-              const Text('Exact MB balance unavailable'),
+              if (isUnavailable)
+                const Text('Exact MB balance unavailable')
+              else
+                Text(groupedMb(balance.availableMb) + ' MB available',
+                    style: theme.textTheme.titleMedium),
+              if (isLoading)
+                const LinearProgressIndicator(minHeight: 2),
               const SizedBox(height: 8),
-              const Text('Wallet migration is in progress. No historical '
-                  'credit or crypto balance has been converted.'),
+              if (owner == null)
+                const Text('Sign in to view your MB balance.')
+              else if (balanceState?.hasError ?? false) ...[
+                const Text('Could not verify your MB balance. Check your connection.'),
+                TextButton(
+                  onPressed: () => ref.invalidate(gbWalletSummaryProvider(owner)),
+                  child: const Text('Retry balance'),
+                ),
+              ] else if (isUnavailable)
+                const Text('The MB ledger is not available yet. '
+                    'No historical money has been converted.')
+              else ...[
+                Text('Purchased: ' + groupedMb(balance.purchasedAvailableMb) +
+                     ' MB · Welcome: ' + groupedMb(balance.welcomeAvailableMb) + ' MB'),
+                if (balance.reservedMb > 0)
+                  Text('Pending reservations: ' + groupedMb(balance.reservedMb) + ' MB'),
+                if (balance.frozen)
+                  const Text('This wallet is currently restricted.'),
+                const Text('Welcome MB can only pay for Masana replies and '
+                  'connected call time.'),
+              ],
             ],
           ),
         ),
@@ -74,6 +125,7 @@ class GbWalletScreen extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }
