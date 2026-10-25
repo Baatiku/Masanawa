@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import '../agents/agent_shell.dart';
 import 'request_id.dart';
 import 'shell_deep_link.dart';
-import '../features/notification_reply/notification_reply.dart';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -42,42 +41,18 @@ FirebaseOptions get _firebaseOptions => const FirebaseOptions(
   projectId: _firebaseProjectId,
 );
 
-const _incomingCallChannel = AndroidNotificationChannel(
-  'masanawa_calls',
-  'Incoming calls',
-  description: 'Ringing invitations from your contacts',
-  importance: Importance.max,
-  playSound: true,
-);
-
 const _workChannel = AndroidNotificationChannel(
   'masanawa_work',
   'Masanawa updates',
-  description: 'Agent replies, approvals and completed work',
+  description: 'Masana replies and account updates',
   importance: Importance.high,
-);
-
-const _callNotificationDetails = NotificationDetails(
-  android: AndroidNotificationDetails(
-    'masanawa_calls',
-    'Incoming calls',
-    channelDescription: 'Ringing invitations from your contacts',
-    icon: 'ic_stat_masanawa',
-    category: AndroidNotificationCategory.call,
-    fullScreenIntent: true,
-    importance: Importance.max,
-    priority: Priority.max,
-    playSound: true,
-    visibility: NotificationVisibility.private,
-  ),
-  iOS: DarwinNotificationDetails(presentSound: true),
 );
 
 const _workNotificationDetails = NotificationDetails(
   android: AndroidNotificationDetails(
     'masanawa_work',
     'Masanawa updates',
-    channelDescription: 'Agent replies, approvals and completed work',
+    channelDescription: 'Masana replies and account updates',
     icon: 'ic_stat_masanawa',
     importance: Importance.high,
     priority: Priority.high,
@@ -86,52 +61,8 @@ const _workNotificationDetails = NotificationDetails(
   iOS: DarwinNotificationDetails(),
 );
 
-final _humanReplyNotificationDetails = NotificationDetails(
-  android: AndroidNotificationDetails(
-    'masanawa_work',
-    'Masanawa updates',
-    channelDescription: 'Agent replies, approvals and completed work',
-    icon: 'ic_stat_masanawa',
-    importance: Importance.high,
-    priority: Priority.high,
-    visibility: NotificationVisibility.private,
-    actions: [
-      AndroidNotificationAction(
-        humanReplyActionId,
-        'Write reply',
-        showsUserInterface: true,
-        allowGeneratedReplies: false,
-        cancelNotification: true,
-        inputs: [AndroidNotificationActionInput(label: 'Draft a reply')],
-      ),
-    ],
-  ),
-);
-
-String? humanIncomingCallLink(Map<String, dynamic> data) {
-  final raw = data['deepLink'];
-  final callId = data['callId'];
-  if (data['type'] != 'human_call' || raw is! String || callId is! String ||
-      !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(callId)) {
-    return null;
-  }
-  final uri = Uri.tryParse(raw);
-  return uri != null && shellDeepLinkRoute(uri) == '/human/call/$callId'
-      ? raw : null;
-}
-
-/// Push metadata is only a navigation hint. A call's typed identity wins over
-/// an optional generic link, so one notification cannot name two calls.
 String? mobilePushNavigationLink(Map<String, dynamic> data) {
-  if (data['type'] == 'human_call') return humanIncomingCallLink(data);
-  if (data['type'] == 'incoming_call') {
-    final callId = data['callId'];
-    if (callId is! String) return null;
-    final raw = 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}';
-    final uri = Uri.tryParse(raw);
-    return uri != null && shellDeepLinkRoute(uri) == '/calls/incoming/$callId'
-        ? raw : null;
-  }
+  if (const {'human_call', 'human_message', 'incoming_call', 'room'}.contains(data['type'])) return null;
   final explicit = data['deepLink'];
   if (explicit is String && explicit.isNotEmpty) {
     final uri = Uri.tryParse(explicit);
@@ -146,52 +77,6 @@ String? mobilePushNavigationLink(Map<String, dynamic> data) {
   return null;
 }
 
-bool isIncomingCallPush(Map<String, dynamic> data) {
-  if (humanIncomingCallLink(data) != null) return true;
-  if (data['type'] != 'incoming_call' || data['callId'] is! String) {
-    return false;
-  }
-  final callId = data['callId'] as String;
-  final uri = Uri.tryParse(
-    'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
-  );
-  return uri != null &&
-      shellDeepLinkRoute(uri)?.startsWith('/calls/incoming/') == true;
-}
-
-@pragma('vm:entry-point')
-Future<void> masanawaFirebaseBackgroundMessage(RemoteMessage message) async {
-  if (!firebasePushConfigured) return;
-  await Firebase.initializeApp(options: _firebaseOptions);
-  // Notification-bearing FCM messages are already displayed by Android
-  // while backgrounded. Only show data-only call invitations here.
-  if (!isIncomingCallPush(message.data) || message.notification != null) {
-    return;
-  }
-  final notifications = FlutterLocalNotificationsPlugin();
-  await notifications.initialize(
-    settings: const InitializationSettings(
-      android: AndroidInitializationSettings('ic_stat_masanawa'),
-      iOS: DarwinInitializationSettings(),
-    ),
-  );
-  final android = notifications
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >();
-  await android?.createNotificationChannel(_incomingCallChannel);
-  final humanLink = humanIncomingCallLink(message.data);
-  final callId = humanLink ?? message.data['callId'] as String;
-  await notifications.show(
-    id: callId.hashCode,
-    title: 'Incoming call',
-    body: 'Open Calls to respond',
-    notificationDetails: _callNotificationDetails,
-    payload:
-        humanLink ?? 'masanawa://calls/incoming/${Uri.encodeComponent(callId)}',
-  );
-}
-
 class MobilePushService {
   MobilePushService._();
 
@@ -200,7 +85,6 @@ class MobilePushService {
   static const _installationKey = 'masanawa.push.installation.v1';
   static const _enabledKey = 'masanawa.push.enabled.v1';
   static final _links = StreamController<Uri>.broadcast(sync: true);
-  static final _incomingHints = StreamController<Uri>.broadcast(sync: true);
   static final _notifications = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static bool _nativeLinksInitialized = false;
@@ -209,8 +93,6 @@ class MobilePushService {
   static const _nativeLinks = MethodChannel('masanawa/deep_links');
   static String? _installationId;
   static AgentShellTransport? _transport;
-  static String? _humanReplyOwner;
-  static int _humanReplyEpoch = -1;
   static String? _characterId;
   static int _contextGeneration = 0;
   static StreamSubscription<String>? _tokenRefresh;
@@ -218,30 +100,10 @@ class MobilePushService {
   static StreamSubscription<RemoteMessage>? _opened;
 
   Stream<Uri> get deepLinks => _links.stream;
-  Stream<Uri> get incomingHints => _incomingHints.stream;
   bool get configured => firebasePushConfigured;
 
-  /// Only an already-authenticated foreground account may mint a reply
-  /// notification. The bound owner/epoch is embedded in its local payload;
-  /// stale actions from another account never become a send authorization.
-  void bindHumanReplyAuthorization(String? owner, int epoch) {
-    _humanReplyOwner = owner;
-    _humanReplyEpoch = epoch;
-  }
-
   void _onLocalNotificationResponse(NotificationResponse response) {
-    final replyHint = HumanNotificationReplyHint.fromPayload(response.payload);
-    if (response.actionId == humanReplyActionId) {
-      HumanNotificationReplyInbox.instance.offer(
-        payload: response.payload, input: response.input,
-      );
-      return;
-    }
-    if (replyHint != null) {
-      _emitLink(replyHint.deepLink);
-    } else if (response.payload != null) {
-      _emitLink(response.payload!);
-    }
+    if (response.payload != null) _emitLink(response.payload!);
   }
 
   Uri? takeInitialDeepLink() {
@@ -282,7 +144,6 @@ class MobilePushService {
     }
     if (!firebasePushConfigured) return;
     await Firebase.initializeApp(options: _firebaseOptions);
-    FirebaseMessaging.onBackgroundMessage(masanawaFirebaseBackgroundMessage);
 
     await _notifications.initialize(
       settings: const InitializationSettings(
@@ -298,15 +159,12 @@ class MobilePushService {
       },
     );
 
-    // FCM background notification payloads reference these exact channel IDs.
-    // Register them before token registration; otherwise Android may silently
-    // fall back to a generic system channel for incoming calls.
+    // Register the retained update channel before token registration.
     final channels = _notifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
     await channels?.createNotificationChannel(_workChannel);
-    await channels?.createNotificationChannel(_incomingCallChannel);
 
     final launch = await _notifications.getNotificationAppLaunchDetails();
     final localResponse = launch?.notificationResponse;
@@ -319,43 +177,13 @@ class MobilePushService {
 
     _foreground = FirebaseMessaging.onMessage.listen((message) async {
       final hint = _linkFor(message);
-      if (hint != null) {
-        final uri = Uri.tryParse(hint);
-        if (uri != null &&
-            (shellDeepLinkRoute(uri)?.startsWith('/calls/incoming/') == true ||
-                shellDeepLinkRoute(uri)?.startsWith('/human/call/') == true)) {
-          _incomingHints.add(uri);
-        }
-      }
-      final isCall = isIncomingCallPush(message.data);
-      final replyHint = HumanNotificationReplyHint.fromPush(
-        message.data, _humanReplyOwner, _humanReplyEpoch,
-      );
-      final notification = message.notification;
-      if (notification == null && !isCall) return;
+      if (hint == null || message.notification == null) return;
       await _notifications.show(
-        id: isCall
-            ? (humanIncomingCallLink(message.data) ??
-                      message.data['callId'] as String)
-                  .hashCode
-            : ((message.data['eventId'] is String
-                      ? (message.data['eventId'] as String).hashCode
-                      : message.messageId?.hashCode) ??
-                  DateTime.now().millisecondsSinceEpoch),
-        // Foreground FCM payload text is untrusted and may contain private
-        // message or money details. Keep both device states preview-safe.
-        title: isCall ? 'Incoming call' : 'Masanawa',
-        body: isCall
-            ? 'Open Calls to respond'
-            : 'Open the app to view your update',
-        notificationDetails: isCall
-            ? _callNotificationDetails
-            : replyHint != null && Platform.isAndroid
-                ? _humanReplyNotificationDetails
-                : _workNotificationDetails,
-        payload: replyHint != null && Platform.isAndroid
-            ? replyHint.toPayload()
-            : _linkFor(message),
+        id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+        title: 'Masanawa',
+        body: 'Open the app to view your update',
+        notificationDetails: _workNotificationDetails,
+        payload: hint,
       );
     });
     _opened = FirebaseMessaging.onMessageOpenedApp.listen(_emitMessageLink);

@@ -16,7 +16,7 @@ echo "==> Full workspace gate"
 cd "${ROOT}"
 npx -y pnpm@12.8.2 install --frozen-lockfile
 npx -y pnpm@12.8.2 typecheck
-rm -rf apps/ops/.next apps/web/.next
+rm -rf apps/ops/.next
 npx -y pnpm@12.8.2 test:ci
 npx -y pnpm@12.8.2 build
 

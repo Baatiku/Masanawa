@@ -2,9 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agents/agent_directory.dart';
-import '../agents/creator_clone.dart';
-import '../agents/creator_economy.dart';
-import '../agents/creator_skills.dart';
 import '../agents/agent_session.dart';
 import '../agents/masanawa_transport.dart';
 import '../core/network/api_client.dart';
@@ -37,36 +34,6 @@ final agentDirectoryTransportProvider = Provider<AgentDirectoryTransport>((ref) 
 
 final agentTransportProvider = Provider<AgentTransport>((ref) {
   return MasanawaAgentTransport(
-    dio: ref.watch(dioProvider),
-    baseUrl: kAgentBaseUrl,
-    readAccessToken: () => ref.read(apiClientProvider).accessToken,
-    refreshAccessToken: () =>
-        ref.read(apiClientProvider).refreshAuthorization(),
-  );
-});
-
-final creatorCloneTransportProvider = Provider<CreatorCloneTransport>((ref) {
-  return MasanawaCreatorCloneTransport(
-    dio: ref.watch(dioProvider),
-    baseUrl: kAgentBaseUrl,
-    readAccessToken: () => ref.read(apiClientProvider).accessToken,
-    refreshAccessToken: () =>
-        ref.read(apiClientProvider).refreshAuthorization(),
-  );
-});
-
-final creatorEconomyTransportProvider = Provider<CreatorEconomyTransport>((ref) {
-  return MasanawaCreatorEconomyTransport(
-    dio: ref.watch(dioProvider),
-    baseUrl: kAgentBaseUrl,
-    readAccessToken: () => ref.read(apiClientProvider).accessToken,
-    refreshAccessToken: () =>
-        ref.read(apiClientProvider).refreshAuthorization(),
-  );
-});
-
-final creatorSkillTransportProvider = Provider<CreatorSkillTransport>((ref) {
-  return MasanawaCreatorSkillTransport(
     dio: ref.watch(dioProvider),
     baseUrl: kAgentBaseUrl,
     readAccessToken: () => ref.read(apiClientProvider).accessToken,

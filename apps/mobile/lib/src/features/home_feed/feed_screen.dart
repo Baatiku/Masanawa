@@ -7,7 +7,6 @@ import 'feed_inline_media_card.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'saved_status_library_screen.dart';
-import '../videos/video_models.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -25,8 +24,6 @@ class MasanaFeedScreen extends StatefulWidget {
     this.ownPostsOnly = false,
     this.mediaApi,
     this.inlineMediaRenderer,
-    this.onCreateHumanStatus,
-    this.onOpenSavedVideo,
     this.wrapAccountRoute,
   });
   final FeedApi api;
@@ -35,8 +32,6 @@ class MasanaFeedScreen extends StatefulWidget {
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final ValueChanged<String>? onReport;
   final bool enabled;
-  final Future<bool> Function()? onCreateHumanStatus;
-  final Future<void> Function(ExternalVideo)? onOpenSavedVideo;
 
   /// Session owner installs a reactive guard on each pushed page. Switching
   /// accounts hides previous-account content without waiting for a request.
@@ -337,146 +332,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }
   }
 
-  Future<void> manageOwnPost(FeedPost post, String operation) async {
-    if (widget.api is! HumanPostManager ||
-        !post.isHuman ||
-        post.authorId != widget.accountKey ||
-        pendingActions.contains(post.id))
-      return;
-    final scope = generation, account = widget.accountKey;
-    if (operation == 'remove') {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(t('Remove this Status?', 'Cire wannan labari?')),
-          content: Text(
-            t(
-              'This removes the post from public Status. Existing references will no longer open.',
-              'Ba za a sake ganin wannan labari a Status ba.',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(t('Cancel', 'Soke')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(t('Remove', 'Cire')),
-            ),
-          ],
-        ),
-      );
-      if (approved != true ||
-          !mounted ||
-          scope != generation ||
-          account != widget.accountKey)
-        return;
-      setState(() => pendingActions.add(post.id));
-      try {
-        await (widget.api as HumanPostManager).removeHumanPost(post.id);
-        if (!mounted || scope != generation || account != widget.accountKey)
-          return;
-        setState(() => items.removeWhere((p) => p.id == post.id));
-        await refresh();
-      } catch (_) {
-        if (!mounted || scope != generation || account != widget.accountKey)
-          return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              t(
-                'Removal unconfirmed. Refresh to check before trying again.',
-                'Ba a tabbatar da cirewa ba. Sake duba labaran.',
-              ),
-            ),
-          ),
-        );
-      } finally {
-        if (mounted && scope == generation)
-          setState(() => pendingActions.remove(post.id));
-      }
-      return;
-    }
-    if (operation != 'edit') return;
-    var draft = post.body;
-    final next = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t('Edit public Status', 'Gyara labari')),
-        content: TextFormField(
-          initialValue: post.body,
-          onChanged: (text) => draft = text,
-          maxLength: 2000,
-          maxLines: 5,
-          minLines: 2,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: t('Your update', 'Sabuntawarka'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(t('Cancel', 'Soke')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, draft.trim()),
-            child: Text(t('Save edit', 'Ajiye gyara')),
-          ),
-        ],
-      ),
-    );
-    if (next == null ||
-        next == post.body ||
-        !mounted ||
-        scope != generation ||
-        account != widget.accountKey)
-      return;
-    if (next.isEmpty || next.length > 2000) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            t('Enter 1–2000 characters.', 'Rubuta haruffa 1 zuwa 2000.'),
-          ),
-        ),
-      );
-      return;
-    }
-    setState(() => pendingActions.add(post.id));
-    try {
-      final updated = await (widget.api as HumanPostManager).editHumanText(
-        post.id,
-        post.body,
-        next,
-      );
-      if (!mounted || scope != generation || account != widget.accountKey)
-        return;
-      if (!updated.isHuman ||
-          updated.authorId != account ||
-          updated.id != post.id)
-        throw StateError('author_mismatch');
-      final index = items.indexWhere((p) => p.id == post.id);
-      if (index >= 0) setState(() => items[index] = updated);
-    } catch (_) {
-      if (!mounted || scope != generation || account != widget.accountKey)
-        return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            t(
-              'Edit unconfirmed or changed elsewhere. Refresh the post before retrying.',
-              'Ba a tabbatar da gyara ba. Sake dauko labarin.',
-            ),
-          ),
-        ),
-      );
-    } finally {
-      if (mounted && scope == generation)
-        setState(() => pendingActions.remove(post.id));
-    }
-  }
-
   Future<void> openPost(FeedPost post) async {
     if (!widget.enabled || widget.accountKey.isEmpty) return;
     final feed = widget.api, account = widget.accountKey;
@@ -519,37 +374,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     );
   }
 
-  void openMine() {
-    if (!widget.enabled || widget.accountKey.isEmpty) return;
-    final account = widget.accountKey;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) {
-          final child = Scaffold(
-            appBar: AppBar(title: Text(t('My posts', 'Labaraina'))),
-            body: MasanaFeedScreen(
-              api: widget.api,
-              accountKey: account,
-              authorScoped: true,
-              ownPostsOnly: true,
-              onMasanaProfile: widget.onMasanaProfile,
-              onHumanProfile: widget.onHumanProfile,
-              onOpenMedia: widget.onOpenMedia,
-              onReport: widget.onReport,
-              enabled: widget.enabled,
-              audioPlaybackAvailable: widget.audioPlaybackAvailable,
-              mediaApi: widget.mediaApi,
-              inlineMediaRenderer: widget.inlineMediaRenderer,
-              onOpenSavedVideo: widget.onOpenSavedVideo,
-              wrapAccountRoute: widget.wrapAccountRoute,
-            ),
-          );
-          return widget.wrapAccountRoute?.call(child) ?? child;
-        },
-      ),
-    );
-  }
-
   void openSaved() {
     if (widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty)
       return;
@@ -573,7 +397,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               if (!mounted || widget.accountKey != account) return;
               await openPost(currentPost);
             },
-            openVideo: widget.onOpenSavedVideo,
           );
           return guard?.call(saved) ?? saved;
         },
@@ -597,25 +420,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       );
     return Column(
       children: [
-        if (!widget.authorScoped && widget.onCreateHumanStatus != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final changed = await widget.onCreateHumanStatus!();
-                if (changed && mounted) {
-                  setState(() {
-                    mode = 'for_you';
-                    items = [];
-                    cursor = null;
-                  });
-                  await refresh();
-                }
-              },
-              icon: const Icon(Icons.edit_outlined),
-              label: Text(t('Write a Status', 'Rubuta labari')),
-            ),
-          ),
         if (!widget.authorScoped)
           Align(
             alignment: AlignmentDirectional.centerEnd,
@@ -624,11 +428,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               runSpacing: 4,
               alignment: WrapAlignment.end,
               children: [
-                TextButton.icon(
-                  onPressed: widget.accountKey.isNotEmpty ? openMine : null,
-                  icon: const Icon(Icons.person_outline),
-                  label: Text(t('My posts', 'Labaraina')),
-                ),
                 if (widget.api is SavedStatusLibraryApi)
                   TextButton.icon(
                     onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
@@ -870,46 +669,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                               post.isHuman
                                                   ? 'Member'
                                                   : 'Masana · AI',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.labelSmall,
                                             ),
                                           ],
                                         ),
                                       ),
                                     ),
                                   ),
-                                  if (post.isHuman &&
-                                      post.authorId == widget.accountKey &&
-                                      widget.api is HumanPostManager)
-                                    PopupMenuButton<String>(
-                                      key: ValueKey(
-                                        'status-own-actions-' + post.id,
-                                      ),
-                                      tooltip: t(
-                                        'Manage your Status',
-                                        'Sarrafa labarinka',
-                                      ),
-                                      enabled: !pendingActions.contains(
-                                        post.id,
-                                      ),
-                                      onSelected: (value) =>
-                                          manageOwnPost(post, value),
-                                      itemBuilder: (_) => [
-                                        PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text(
-                                            t('Edit post', 'Gyara labari'),
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'remove',
-                                          child: Text(
-                                            t('Remove post', 'Cire labari'),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                 ],
                               ),
                               Padding(
@@ -1003,9 +771,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                                   .toString(),
                                         )
                                         .join('  '),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                   ),
                                 ),
                               Wrap(

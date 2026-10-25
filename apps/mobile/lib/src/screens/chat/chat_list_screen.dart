@@ -345,7 +345,6 @@ class ChatListScreen extends ConsumerWidget {
       ),
       body: UnifiedChatInbox(
         key: ValueKey(accountKey),
-        masanaOnly: true,
         masanaThreads: session is SessionSignedIn
             ? chat.threads.values
                   .where((t) => directory.find(t.characterId) != null)

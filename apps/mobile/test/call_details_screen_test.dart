@@ -9,7 +9,29 @@ import 'package:masanawa/src/calls/call_history.dart';
 import 'package:masanawa/src/calls/call_outcome.dart';
 import 'package:masanawa/src/calls/group_call_transport.dart';
 import 'package:masanawa/src/state/session_state.dart';
-import 'calls_screen_test.dart' show signedIn;
+import 'package:masanawa/src/core/api/models.dart';
+SessionSignedIn signedIn(String id) {
+  final user = AuthUser(
+    id: id,
+    name: id,
+    locale: 'en',
+    status: 'ACTIVE',
+    role: 'USER',
+    isNewUser: false,
+    createdAt: '2026-10-11T00:00:00Z',
+  );
+  return SessionSignedIn(
+    user,
+    AuthTokens(
+      accessToken: 'access-$id',
+      refreshToken: 'refresh-$id',
+      accessExpiresIn: 3600,
+      user: user,
+    ),
+  );
+}
+
+
 class _Session extends SessionController {
  @override SessionState build()=>signedIn('a');
  void change(String id)=>state=signedIn(id);
