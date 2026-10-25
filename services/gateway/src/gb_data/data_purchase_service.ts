@@ -72,7 +72,8 @@ export function createDataRedemptionService(ports:DataRedemptionPorts) {
    const approved=await ports.approved();
    const live=await ports.liveItems(approved);
    const quote=quoteVerifiedWholeGb({approved,liveItems:live,itemId:input.bundleId,
-     version:input.version,recipientPhone:input.recipientPhone,now:ports.now?.()});
+     version:input.version,recipientPhone:input.recipientPhone,
+     ...(ports.now ? {now:ports.now()} : {})});
    const id="data_"+createHash("sha256").update(JSON.stringify([
      actor.tenantId,actor.userId,input.idempotencyKey,
    ])).digest("hex").slice(0,48);
