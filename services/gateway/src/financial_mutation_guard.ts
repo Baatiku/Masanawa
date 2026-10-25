@@ -19,6 +19,7 @@ export function requiresFinancialCustomerState(
   const path = requestUrl.split("?")[0] ?? "";
   if (signedProviderCallbacks.has(path)) return false;
   return path.startsWith("/v1/gb/wallet/send/") ||
+    path.startsWith("/v1/gb/wallet/requests") ||
     path.startsWith("/v1/financial/") ||
     path.startsWith("/v1/wallet/") ||
     path.startsWith("/v1/commerce/bills/");

@@ -17,6 +17,9 @@ describe("financial account-status admission",()=>{
     for(const route of [
       "/v1/gb/wallet/send/confirm",
       "/v1/gb/wallet/send/quote",
+      "/v1/gb/wallet/requests",
+      "/v1/gb/wallet/requests/mbreq_example/pay",
+      "/v1/gb/wallet/requests/mbreq_example/cancel",
       "/v1/wallet/msnw/custody/send",
       "/v1/wallet/msnw/p2p/methods/verify",
       "/v1/financial/crypto/withdrawals",

@@ -108,7 +108,8 @@ class GbWalletScreen extends ConsumerWidget {
         _ActionRow(
           icon: Icons.call_received_outlined,
           label: 'Request',
-          subtitle: 'Available after the GB ledger is connected',
+          subtitle: 'Request purchased MB from another user',
+          onTap: () => context.push('/wallet/request'),
         ),
         _ActionRow(
           icon: Icons.sim_card_outlined,
