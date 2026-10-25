@@ -232,18 +232,37 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
 
   if (options.liveVoiceTokens) {
     app.post("/agent/live/token", async (request) => {
+      // Public input validation must not misreport malformed token requests as
+      // internal/provisioning 500s, or invoke admission/provider side effects.
+      const invalidRequest = () =>
+        Object.assign(new Error("Invalid live token request"), { statusCode: 400 });
+      if (!request.body || typeof request.body !== "object" ||
+          Array.isArray(request.body)) {
+        throw invalidRequest();
+      }
       const body = request.body as Record<string, unknown>;
-      const purpose =
-        body.purpose == null ? "conversation" : text(body.purpose, "purpose", 32);
-      if (purpose !== "conversation" && purpose !== "twin-setup") {
-        throw new TypeError("Invalid live voice purpose");
+      let purpose: "conversation" | "twin-setup";
+      let characterId: string;
+      let admissionId: string | undefined;
+      try {
+        const selected = body.purpose == null
+          ? "conversation"
+          : text(body.purpose, "purpose", 32);
+        if (selected !== "conversation" && selected !== "twin-setup") {
+          throw new TypeError("Invalid live voice purpose");
+        }
+        purpose = selected;
+        characterId = parseCanonicalId("character", text(body.characterId, "characterId", 160));
+        admissionId = body.admissionId == null
+          ? undefined
+          : text(body.admissionId, "admissionId", 256);
+      } catch {
+        throw invalidRequest();
       }
       return options.liveVoiceTokens!.mint({
         authorizationHeader: request.headers.authorization,
-        characterId: text(body.characterId, "characterId", 160),
-        ...(body.admissionId == null
-          ? {}
-          : { admissionId: text(body.admissionId, "admissionId", 256) }),
+        characterId,
+        ...(admissionId === undefined ? {} : { admissionId }),
         purpose,
       });
     });
