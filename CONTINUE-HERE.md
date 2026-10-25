@@ -38,6 +38,8 @@ Fetch latest GitHub main and follow the stable UX checklist in `docs/PRODUCT-ROA
 
 **Merged UX #442** (`061aed5f`, exact head `19634e82`): Status multi-image mosaic loads at most four separate account/post-bound signed preview grants, taps exact media, indicates +N, and retains full-viewer entry. Empty/repeating server pagination cursors stop without endless Load more. Mobile Build #930/Foundation #1363 PASS_REAL exact head (Mobile #929 caught a compile defect that was corrected). Scoped six-image, 320dp/200%-text RTL widget regressions pass; real signed image/network rendering, approved captions, audio, accessibility and device acceptance remain S06/S07 NOT_RUN.
 
+**Merged UX #447** (`06ea4fb6`, exact head `af5406d2`): Calls history now opens the original one-to-one Masana call detail, groups authorized records by local date, and keeps verified rows through failed older-page recovery with terminal empty/repeated cursors. Live-call redial remains a separately guarded action; no client-created MB cost/receipt was added. Mobile Build #940/Foundation CI #1375 PASS_REAL. Initial Mobile #936 caught an offscreen detail-assertion test failure, fixed at final head. UX-H04/H05 remain partial for authoritative billed MB usage/receipt, complete filters/export, actual device/audio and accessibility.
+
 Remaining unchecked UX IDs are the queue, especially P0 chat/note/call recovery, portraits, financial recipient selection, Add Data, authoritative history/receipts and device/provider acceptance. No APK; fixed-IP hosting on hold; preserve historical finances and separate Masanawa-App. Older sections below are historical checkpoints, not current PR statuses.
 
 ## Actual source work, separate non-overlapping paths
