@@ -169,6 +169,10 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     }
     final account = session.user.id;
     final feed = ref.watch(statusFeedApiProvider);
+    final directory = ref.watch(agentDirectoryProvider);
+    final authorDirectory = {
+      for (final agent in directory.agents) agent.characterId: agent,
+    };
     final api = ref.watch(apiClientProvider);
     String? currentAccount() {
       try {
@@ -311,6 +315,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       child: MasanaFeedScreen(
         api: feed,
         accountKey: account,
+        authorDirectory: authorDirectory,
         searchExpanded: _searchExpanded,
         mediaApi: inlineMedia,
         onOpenMedia: openMedia,

@@ -122,6 +122,7 @@ class MasanaStatusPostsScreen extends ConsumerWidget {
         child: MasanaFeedScreen(
           api: feed,
           accountKey: account,
+          authorDirectory: {agent.characterId: agent},
           mediaApi: inlineMedia,
           authorScoped: true,
           audioPlaybackAvailable: true,

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
+import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
 
 class StubFeed implements FeedApi {
   StubFeed(this.label);
@@ -99,6 +100,35 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
   expiresAt: DateTime.now().add(const Duration(minutes: 2)),
 );
 void main() {
+  testWidgets('Status opens card body once, retains independent profile and removes flag',
+      (tester) async {
+    final api = StubFeed('A useful public post');
+    final opened = <String>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
+      api: api,
+      accountKey: 'fan',
+      onMasanaProfile: opened.add,
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('Open post'), findsNothing);
+    expect(find.byIcon(Icons.flag_outlined), findsNothing);
+    expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    await tester.tap(find.text('masana_one'));
+    await tester.pump();
+    expect(opened, ['masana_one']);
+    expect(find.byType(FeedPostDetailScreen), findsNothing);
+    await tester.tap(find.text('A useful public post'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FeedPostDetailScreen), findsOneWidget);
+    expect(find.byIcon(Icons.flag_outlined), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(FeedPostDetailScreen), findsNothing);
+    expect(find.text('A useful public post'), findsOneWidget);
+  });
+
   testWidgets(
     'Status search expands from one icon and never renders ranking tabs',
     (tester) async {
@@ -251,7 +281,7 @@ void main() {
       expect(find.text('Publish'), findsNothing);
       expect(find.text('Write a Status'), findsNothing);
       expect(find.text('My posts'), findsNothing);
-      await tester.tap(find.byIcon(Icons.favorite_border));
+      await tester.tap(find.byIcon(Icons.thumb_up_outlined));
       await tester.pumpAndSettle();
       expect(api.likes, 1);
     },
@@ -400,12 +430,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.favorite_border));
+    await tester.tap(find.byIcon(Icons.thumb_up_outlined));
     await tester.pump();
     final button = tester.widget<TextButton>(
       find
           .ancestor(
-            of: find.byIcon(Icons.favorite),
+            of: find.byIcon(Icons.thumb_up_rounded),
             matching: find.byType(TextButton),
           )
           .first,
@@ -413,9 +443,9 @@ void main() {
     expect(button.onPressed, isNull);
     pending.completeError(StateError('offline'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
     api.onLike = null;
-    await tester.tap(find.byIcon(Icons.favorite_border));
+    await tester.tap(find.byIcon(Icons.thumb_up_outlined));
     await tester.pumpAndSettle();
     expect(api.likes, 2);
   });

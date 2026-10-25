@@ -54,22 +54,23 @@ void main(){
     expect(changed.withAction(saved:true).saved,isTrue);
     expect(changed.withAction(liked:true).currentReaction,'like');
   });
-  testWidgets('Status seven-reaction menu sends one type and clears the same selection',(tester)async{
+  testWidgets('Status horizontal picker sends one type and clears the same selection',(tester)async{
     final api=_ReactionStub(_post({}));
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:
       MasanaFeedScreen(api:api,accountKey:'fan-a'))));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('React to post'));
     await tester.pumpAndSettle();
-    expect(find.text('❤️  Love'),findsOneWidget);
-    expect(find.text('😠  Angry'),findsOneWidget);
-    await tester.tap(find.text('❤️  Love'));
+    expect(find.text('Love'),findsOneWidget);
+    expect(find.text('Care'),findsOneWidget);
+    expect(find.text('Angry'),findsNothing);
+    await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
     expect(api.reactions,['love']);
     expect(find.textContaining('❤️ 1'),findsOneWidget);
     await tester.tap(find.byTooltip('React to post'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('❤️  Love'));
+    await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
     expect(api.reactions,['love',null]);
     expect(find.textContaining('❤️ 1'),findsNothing);
