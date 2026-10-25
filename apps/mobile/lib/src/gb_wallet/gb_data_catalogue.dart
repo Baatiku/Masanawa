@@ -88,7 +88,7 @@ class GbReadOnlyQuote {
     final quoteExpiry = raw['quoteExpiresAt'];
     final expiry = quoteExpiry is String ? DateTime.tryParse(quoteExpiry) : null;
     final normalized = normalizeNigerianDataPhone(enteredPhone);
-    if (phone != normalized ||
+    if (normalized == null || phone != normalized ||
         bundle.id != selected.id || bundle.version != selected.version ||
         bundle.network != selected.network ||
         bundle.costMb != selected.costMb ||
