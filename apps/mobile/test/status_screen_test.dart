@@ -94,6 +94,14 @@ void main() {
     expect(find.text('Videos'), findsNothing);
     expect(find.text('Updates'), findsNothing);
     expect(find.text('Create Status'), findsNothing);
+    expect(find.text('For You'), findsNothing);
+    expect(find.text('Following'), findsNothing);
+    expect(find.byTooltip('Search Status'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.byTooltip('Search Status'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byTooltip('Search all Status posts'), findsNothing);
     expect(feed.requests, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
