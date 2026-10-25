@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_summary.dart';
+import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
@@ -78,6 +79,8 @@ void main() {
             frozen: false,
           ),
         ),
+        gbActivityPageProvider.overrideWith((ref, request) async =>
+          const GbActivityPage([],null)),
       ],
       child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
     ));

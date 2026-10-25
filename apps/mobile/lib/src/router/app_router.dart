@@ -2,6 +2,7 @@ import '../gb_wallet/ngn_funding_screen.dart';
 import '../gb_wallet/recharge_screen.dart';
 import '../gb_wallet/gb_send_screen.dart';
 import '../gb_wallet/gb_request_screen.dart';
+import '../gb_wallet/gb_wallet_activity_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -202,6 +203,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (_, __) => '/home?tab=wallet',
       ),
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path: '/wallet/activity',
+        builder: (_, __) => const GbWalletActivityScreen()),
       GoRoute(
         path: '/wallet/fund',
         builder: (_, __) => const NgnFundingScreen(),

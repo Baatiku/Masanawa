@@ -13,6 +13,7 @@ import { createBillstackReservedAccountClient } from "./gb_wallet/billstack_prov
 import type { BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
 import { DEFAULT_RECHARGE_RATE_BOOK } from "./gb_wallet/pricing.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import type { GbActivityPorts } from "./gb_wallet/activity_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
 import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
@@ -25,6 +26,7 @@ import {
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
+  createGbWalletActivityRepository,
   createPostgresGbRequestRepository,
   createGbUsageReservations,
   createGbDataJournal,
@@ -1658,6 +1660,11 @@ export async function startGatewayService(
       authorize: async (header: string | undefined) => resolveFeatureFan(header),
       read: createPostgresGbWalletRepository(featurePool).read,
     } : undefined);
+  const gbWalletActivity: GbActivityPorts | undefined = options.appOptions?.gbWalletActivity ??
+    (featurePool && sessions && featureTenant ? {
+      authorize: resolveFeatureFan,
+      list: createGbWalletActivityRepository(featurePool).list,
+    } : undefined);
   // No legacy Credit Send fallback. The signer is a private Railway secret,
   // never a client-supplied or generated-on-each-request review authority.
   const mbSendReviewSecret = env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
@@ -1921,6 +1928,7 @@ export async function startGatewayService(
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
+      ...(gbWalletActivity ? { gbWalletActivity } : {}),
       ...(gbSendReview ? { gbSendReview } : {}),
       ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
