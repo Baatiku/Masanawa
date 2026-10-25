@@ -18,6 +18,8 @@ export interface GbActivityPorts {
   readonly list: (actor: GbActivityScope, limit: number,
     cursor: {readonly createdAt: string; readonly entryId: string} | null) =>
       Promise<readonly GbActivityItem[]>;
+  readonly find: (actor: GbActivityScope, entryId: string) =>
+    Promise<GbActivityItem | null>;
 }
 
 type PageCursor = {v:1; tenant:string; user:string; at:string; id:string};
@@ -71,6 +73,26 @@ export function registerGbWalletActivityRoutes(app: FastifyInstance, ports: GbAc
       const nextCursor = found.length > limit && items.length > 0
         ? pack(items[items.length-1]!,actor) : null;
       return {items,nextCursor};
+    } catch {
+      return reply.code(503).send({error:{code:"activity_ledger_unavailable"}});
+    }
+  });
+  app.get("/v1/gb/wallet/activity/:entryId", async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    let actor: GbActivityScope;
+    try {
+      actor = await ports.authorize(request.headers.authorization);
+      if (!actor?.tenantId || !actor.userId) throw new Error("unauthorized");
+    } catch {
+      return reply.code(401).send({error:{code:"activity_unauthorized"}});
+    }
+    const id = (request.params as {entryId?: unknown}).entryId;
+    if (typeof id !== "string" || !validEntryId.test(id))
+      return reply.code(422).send({error:{code:"invalid_activity_entry"}});
+    try {
+      const item = await ports.find(actor,id);
+      if (!item) return reply.code(404).send({error:{code:"activity_entry_unavailable"}});
+      return {item};
     } catch {
       return reply.code(503).send({error:{code:"activity_ledger_unavailable"}});
     }

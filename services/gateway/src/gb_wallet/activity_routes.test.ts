@@ -10,8 +10,9 @@ function fixture() {
   const app=Fastify();
   const authorize=vi.fn(async()=>owner);
   const list=vi.fn(async()=>[item(2),item(1)]);
-  registerGbWalletActivityRoutes(app,{authorize,list});
-  return {app,authorize,list};
+  const find=vi.fn(async()=>item(2) as ReturnType<typeof item> | null);
+  registerGbWalletActivityRoutes(app,{authorize,list,find});
+  return {app,authorize,list,find};
 }
 const headers={authorization:"Bearer scoped"};
 
@@ -61,5 +62,24 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       expect(r.statusCode).toBe(503);
       expect(r.json().error.code).toBe("activity_ledger_unavailable");
     } finally {await f.app.close();}
+  });
+  it("reads exact entry freshly within the authenticated actor scope",async()=>{
+    const f=fixture();
+    try {
+      const read=await f.app.inject({method:"GET",
+        url:"/v1/gb/wallet/activity/mb:2?userId=another",headers});
+      expect(read.statusCode).toBe(200);
+      expect(read.json().item).toEqual(item(2));
+      expect(f.find).toHaveBeenCalledWith(owner,"mb:2");
+      expect(read.headers["cache-control"]).toBe("no-store");
+      f.find.mockResolvedValueOnce(null);
+      const missing=await f.app.inject({method:"GET",
+        url:"/v1/gb/wallet/activity/ngn:another",headers});
+      expect(missing.statusCode).toBe(404);
+      const bad=await f.app.inject({method:"GET",
+        url:"/v1/gb/wallet/activity/INVALID",headers});
+      expect(bad.statusCode).toBe(422);
+      expect(f.find).toHaveBeenCalledTimes(2);
+    }finally{await f.app.close();}
   });
 });

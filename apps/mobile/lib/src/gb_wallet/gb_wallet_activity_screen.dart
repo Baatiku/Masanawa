@@ -55,6 +55,7 @@ class GbActivityTile extends StatelessWidget {
     final title=_kindText(item.kind);
     return ListTile(
       key:ValueKey('activity-${item.id}'),
+      onTap:()=>context.push('/wallet/activity/${Uri.encodeComponent(item.id)}'),
       contentPadding:const EdgeInsets.symmetric(horizontal:4,vertical:3),
       leading:CircleAvatar(
         backgroundColor:(positive?colors.brand:colors.textMuted).withValues(alpha:.12),
