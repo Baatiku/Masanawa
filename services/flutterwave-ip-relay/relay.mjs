@@ -89,8 +89,24 @@ export function createRelay({ token, fetchImpl=fetch, timeoutMs=16000 }) {
       if (Number(response.headers.get("content-length"))>2097152) {
         send(res,502,"upstream_too_large");return;
       }
-      const bytes=Buffer.from(await response.arrayBuffer());
-      if (bytes.length>2097152) {send(res,502,"upstream_too_large");return;}
+      // A provider can stream without content-length. Bound actual resident
+      // memory, not just the advertised length (important on free 1GB VMs).
+      const reader=response.body?.getReader();
+      if (!reader) {send(res,502,"upstream_invalid_json");return;}
+      const parts=[];
+      let size=0;
+      while (true) {
+        const {done,value}=await reader.read();
+        if (done) break;
+        size+=value.byteLength;
+        if (size>2097152) {
+          await reader.cancel();
+          send(res,502,"upstream_too_large");
+          return;
+        }
+        parts.push(value);
+      }
+      const bytes=Buffer.concat(parts);
       let json;
       try {json=JSON.parse(bytes.toString("utf8"));}
       catch {send(res,502,"upstream_invalid_json");return;}
