@@ -5,7 +5,7 @@ const apps: Array<ReturnType<typeof createGatewayApp>> = [];
 afterEach(async () => { await Promise.all(apps.splice(0).map(app=>app.close())); });
 
 describe("lite Gateway MB wallet read composition", () => {
-  it("does not mount new GB wallet as a second legacy financial ledger",async()=>{
+  it("old scope values cannot hide the canonical MB wallet",async()=>{
     const app=createGatewayApp({ productScope: "legacy", gbWalletSummary: {
       authorize: async()=>({tenantId:"tenant-a",userId:"fan-a"}),
       read: async()=>({
@@ -14,7 +14,7 @@ describe("lite Gateway MB wallet read composition", () => {
       }),
     }});
     apps.push(app);
-    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/summary"})).statusCode).toBe(404);
+    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/summary"})).statusCode).toBe(200);
   });
 
   it("only displays whole-MB values from authenticated owner and never caches it",async()=>{

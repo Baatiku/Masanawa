@@ -4,13 +4,12 @@ import { createGatewayApp, type GatewayAppOptions } from "../app.js";
 const open: ReturnType<typeof createGatewayApp>[] = [];
 afterEach(async()=>{await Promise.all(open.splice(0).map(app=>app.close()));});
 
-describe("explicit reduced-product route gate", () => {
+describe("permanent reduced-product routes", () => {
   it("removes legacy creator, P2P and Rooms registration in staged Lite mode",async()=>{
     const options:GatewayAppOptions={
       productScope:"masana-lite",
       creatorClone:{} as NonNullable<GatewayAppOptions["creatorClone"]>,
       roomCommunity:{} as NonNullable<GatewayAppOptions["roomCommunity"]>,
-      humanCommunication:{} as NonNullable<GatewayAppOptions["humanCommunication"]>,
       p2p:{} as NonNullable<GatewayAppOptions["p2p"]>,
     };
     const app=createGatewayApp(options);
@@ -23,7 +22,7 @@ describe("explicit reduced-product route gate", () => {
     expect(gb.json().packages).toHaveLength(6);
   });
 
-  it("does not silently change legacy deployments without an explicit cutover",async()=>{
+  it("exposes MB discovery without a rollout flag",async()=>{
     const app=createGatewayApp();
     open.push(app);
     const gb=await app.inject({method:"GET",url:"/v1/gb/recharge/packages"});
