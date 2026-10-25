@@ -92,9 +92,9 @@ class GbWalletActivitySection extends ConsumerWidget {
       const SizedBox(height:8),
       if(owner==null)
         const Padding(padding:EdgeInsets.all(16),child:Text('Sign in to see wallet activity.'))
-      else if(page!.isLoading && page!.valueOrNull==null)
+      else if(page!.isLoading && page.valueOrNull==null)
         const ListTile(leading:CircularProgressIndicator(),title:Text('Loading wallet activity…'))
-      else if(page!.hasError || page!.valueOrNull==null)
+      else if(page.hasError || page.valueOrNull==null)
         ListTile(
           title:const Text('Wallet activity is unavailable right now.'),
           subtitle:const Text('No transaction has been assumed or changed.'),
@@ -102,11 +102,11 @@ class GbWalletActivitySection extends ConsumerWidget {
             icon:const Icon(Icons.refresh),
             onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5)))),
         )
-      else if(page!.valueOrNull!.items.isEmpty)
+      else if(page.valueOrNull!.items.isEmpty)
         const Padding(padding:EdgeInsets.symmetric(vertical:22),
           child:Center(child:Text('No posted MB or NGN activity yet.')))
       else
-        for(final item in page!.valueOrNull!.items)
+        for(final item in page.valueOrNull!.items)
           GbActivityTile(key:ValueKey('wallet-preview-${item.id}'),item:item),
     ]);
   }
@@ -185,7 +185,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       RefreshIndicator(onRefresh:() async {
         setState(_reset);
         ref.invalidate(gbActivityPageProvider(request!));
-        try{await ref.read(gbActivityPageProvider(request!).future);}catch(_){/* retry state below */}
+        try{await ref.read(gbActivityPageProvider(request).future);}catch(_){/* retry state below */}
       },child:ListView(
         key:const PageStorageKey('gb-wallet-activity-all'),
         physics:const AlwaysScrollableScrollPhysics(),
