@@ -58,6 +58,16 @@ describe.skipIf(!url)("Masana catalog without retired Room seeding on real Postg
    expect(items.rows.every(r=>r.profile.roomId===undefined)).toBe(true);
    expect((await pool.query('SELECT * FROM rooms.rooms')).rows).toEqual([]);
    expect((await pool.query('SELECT * FROM rooms.lessons')).rows).toEqual([]);
+   const posts=await pool.query(`SELECT author_masana_id,author_type,kind,body,
+      published_by,idempotency_key,state FROM feed.posts
+      WHERE tenant_id=$1`,[tenant]);
+   expect(posts.rows).toHaveLength(roster.length);
+   expect(posts.rows.every((p)=>p.author_type==="masana"&&
+      p.kind==="text"&&p.state==="published"&&
+      p.author_masana_id===p.published_by&&
+      p.idempotency_key==="masanawa-platform-intro-v1"&&
+      String(p.body).length>30)).toBe(true);
+   expect(new Set(posts.rows.map((p)=>p.author_masana_id)).size).toBe(roster.length);
  });
  it("repairs only the legacy stock portrait and preserves curator media",async()=>{
    const first=roster[0]!, second=roster[1]!;
@@ -82,5 +92,11 @@ describe.skipIf(!url)("Masana catalog without retired Room seeding on real Postg
    expect(await ensureMasanaCatalogProfiles({pool,tenantId:tenant,catalog:roster})).toEqual({approved:0,rooms:0});
    expect((await pool.query('SELECT * FROM rooms.rooms')).rows).toEqual([]);
    expect((await pool.query('SELECT * FROM rooms.lessons')).rows).toEqual([]);
+   const posts=await pool.query(`SELECT author_masana_id,idempotency_key
+     FROM feed.posts WHERE tenant_id=$1`,[tenant]);
+   expect(posts.rows).toHaveLength(roster.length);
+   expect((await pool.query(
+     `SELECT COUNT(*)::int AS count FROM feed.posts WHERE tenant_id=$1`,[other]
+   )).rows[0].count).toBe(0);
  });
 });
