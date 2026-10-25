@@ -212,6 +212,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
       GoRoute(path: '/wallet/add',
         builder: (_, __) => const RechargePackagesScreen()),
+      GoRoute(path: '/wallet/send',
+        builder: (_, __) => const GbSendScreen()),
       GoRoute(path: '/calls/incoming/:callId',
         redirect: (_, __) => '/home?tab=calls'),
       GoRoute(path: '/chats', redirect: (_, __) => '/home?tab=chats'),
