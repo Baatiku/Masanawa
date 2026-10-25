@@ -38,7 +38,7 @@ class _Session extends SessionController {
   }
 }
 
-class _Feed implements FeedApi {
+class _Feed implements SearchFeedApi {
   String message = 'A verified Masana update';
   Completer<FeedPage>? pending;
   bool fail = false;
@@ -50,6 +50,9 @@ class _Feed implements FeedApi {
     if (fail) throw StateError('offline');
     return FeedPage([_post(message)], null);
   }
+  @override
+  Future<FeedPage> searchPosts({required String mode, required String query, String? cursor}) async =>
+    FeedPage([_post('Result for $query')], null);
   @override Future<void> like(String id, bool enabled) async {}
   @override Future<void> save(String id, bool enabled) async {}
   @override Future<void> comment(String id, String body, String key) async {}
