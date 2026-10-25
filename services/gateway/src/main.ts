@@ -132,13 +132,8 @@ import {
   createFinancialService,
   type FinancialAuthorizer,
 } from "./financial_service.js";
-import { createMsnLedgerStore } from "./msn_wallet/store.js";
-import { createMsnFundingJournal } from "./msn_wallet/quote_journal.js";
-import { createMsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
-import { createMsnwOnchainBalanceReader } from "./msn_wallet/msnw_onchain_balance.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
-import { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
 import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
@@ -2320,49 +2315,8 @@ export async function startGatewayService(
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
       ...(composedMsnwConversion ? {msnwConversion:composedMsnwConversion} : {}),
-      // MSN is separate from legacy Credits and customer-facing NGN.
-      // Read-only, requiring explicit operator flag and platform session.
-      // No payment, issuance, conversion or transfer route is registered.
-      ...(env.MASANAWA_MSN_BALANCE_ENABLED === "true" &&
-          database.featurePool && msnBalanceAuthorizer
-        ? { msnBalance: {
-            authorizer: msnBalanceAuthorizer,
-            ledger: createMsnLedgerStore(database.featurePool),
-          } }
-        : {}),
-      // Never register a customer write route or expose a made-up conversion.
-      // Requires a separately installed, approved staged quote journal.
-      ...(env.MASANAWA_MSN_FUNDING_READBACK_ENABLED === "true" &&
-          database.featurePool && msnBalanceAuthorizer
-        ? { msnFunding: {
-            authorizer: msnBalanceAuthorizer,
-            reader: createMsnFundingJournal(database.featurePool),
-          } }
-        : {}),
-      // Only the explicit, verified MSNW contract and finalized chain state
-      // can back a customer-facing MSNW balance. Real chain configuration is
-      // the rollout authority; no unrelated boolean deployment gate.
-      ...(env.MSNW_CHAIN_ID?.trim() &&
-          env.MSNW_TOKEN_CONTRACT?.trim() &&
-          env.MSNW_RPC_URL?.trim() &&
-          database.featurePool && msnBalanceAuthorizer
-        ? { msnwOnchainBalance: createMsnwOnchainBalanceReader({
-            pool: database.featurePool,
-            authorizer: msnBalanceAuthorizer,
-            chainId: env.MSNW_CHAIN_ID,
-            contract: env.MSNW_TOKEN_CONTRACT,
-            rpcUrl: env.MSNW_RPC_URL,
-          }) }
-        : {}),
-      // Custodied MSNW transfers are enabled by the installed, zero-initial
-      // custody ledger; no legacy NGN/Cr/MSN source is accepted. A missing
-      // provider-backed issuance leaves every new account at zero available.
-      ...(database.featurePool && msnBalanceAuthorizer
-        ? { msnwCustody: {
-            authorizer: msnBalanceAuthorizer,
-            ledger: createMsnwCustodyService(database.featurePool),
-          } }
-        : {}),
+      // Preserve signed provider callbacks for historic MSNW finance receipts.
+      // No new customer MSN/MSNW balance, custody, token or DVA surfaces.
       // Paystack verification is independent of MSNW issuance. Verified fiat
       // remains a pending obligation until custody/quote settlement.
       ...(env.PAYSTACK_SECRET_KEY?.trim() &&
@@ -2374,20 +2328,6 @@ export async function startGatewayService(
             ...(msnwPaystackEnrollment ? {
               onCustomerIdentification: msnwPaystackEnrollment.handleProviderIdentification,
             } : {}),
-          }) }
-        : {}),
-      // Paystack customer creation and identity verification precede account assignment.
-      // This never issues MSNW; it only establishes provider-verified KYC.
-      ...(msnwPaystackEnrollment ? { msnwPaystackEnrollment } : {}),
-      // A DVA is only a bank payment destination, never token issuance.
-      // Presence of credentials is enough to mount the route; the endpoint
-      // verifies actual staged schema/identity. Absence fails as unavailable.
-      ...(env.PAYSTACK_SECRET_KEY?.trim() &&
-          database.featurePool && msnBalanceAuthorizer
-        ? { msnwPaystackDva: createMsnwPaystackDvaService({
-            pool: database.featurePool,
-            authorizer: msnBalanceAuthorizer,
-            paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
         : {}),
       // Legacy P2P and Credit Send are retired at the application boundary.
