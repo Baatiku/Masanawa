@@ -145,7 +145,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Saved'));
+      await tester.tap(find.byTooltip('Saved Status'));
       await tester.pumpAndSettle();
       expect(find.text('Approved original'), findsOneWidget);
       active.value = false;
@@ -393,9 +393,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Saved'));
+    await tester.tap(find.byTooltip('Saved Status'));
     await tester.pumpAndSettle();
-    expect(find.text('Saved'), findsOneWidget);
+    expect(find.byTooltip('Saved Status'), findsOneWidget);
     expect(find.text('Hello Status'), findsWidgets);
     expect(find.text('Approved original'), findsOneWidget);
   });
