@@ -163,8 +163,9 @@ void main() {
     expect(find.text('−₦1,280.50'),findsOneWidget);
     expect(find.text('original_ngn:fund_1'),findsOneWidget);
     expect(find.text('Copy reference'),findsOneWidget);
-    await tester.scrollUntilVisible(find.textContaining(
-      'not proof of external bank settlement'),180);
+    await tester.dragUntilVisible(find.textContaining(
+      'not proof of external bank settlement'),find.byType(ListView),
+      const Offset(0,-150));
     await tester.pumpAndSettle();
     expect(find.textContaining('not proof of external bank settlement'),findsOneWidget);
     expect(tester.takeException(),isNull);
