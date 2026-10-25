@@ -231,7 +231,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
   }
 
   Future<void> _action(
-    _Owner owner, _MbRequest item, {required bool pay},
+    _Owner owner, _MbRequest item, {required bool pay}
   ) async {
     if (_busy || !_isCurrent(owner)) return;
     final accepted = await showDialog<bool>(
