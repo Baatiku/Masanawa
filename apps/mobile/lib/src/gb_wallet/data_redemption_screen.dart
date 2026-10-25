@@ -311,7 +311,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           FilledButton.icon(
             onPressed: canQuote ? () => _requestQuote(owner, selected!) : null,
             icon: const Icon(Icons.fact_check_outlined),
-            label: const Text('Review verified bundle'),
+            label: const Text('Review bundle'),
           ),
           const SizedBox(height: 8),
           if (_quote != null && owner != null)
