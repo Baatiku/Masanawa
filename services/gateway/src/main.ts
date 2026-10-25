@@ -1722,7 +1722,10 @@ export async function startGatewayService(
          store: createPostgresGbRequestRepository(featurePool)}
       : undefined);
   // Funding instructions appear only after provider-verified 9PSB assignment.
-  const billstackSecret = env.MASANAWA_BILLSTACK_SECRET_KEY?.trim();
+  // Railway's existing merchant secret uses BILLSTACK_SECRET_KEY. Prefer the
+  // namespaced setting if both are provisioned during a credential rotation.
+  const billstackSecret =
+    env.MASANAWA_BILLSTACK_SECRET_KEY?.trim() || env.BILLSTACK_SECRET_KEY?.trim();
   const billstackFunding: BillstackFundingPorts | undefined =
     options.appOptions?.billstackFunding ??
     (billstackSecret && featurePool && sessions && featureTenant ? (() => {

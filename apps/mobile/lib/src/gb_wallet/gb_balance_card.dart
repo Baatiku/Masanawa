@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../theme/masanawa_theme.dart';
 import 'gb_wallet_summary.dart';
@@ -33,51 +34,94 @@ class GbWalletBalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            Icon(Icons.account_balance_wallet_rounded,
-                size: 20, color: colors.brand),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Data balance', style: theme.textTheme.labelLarge?.copyWith(
-              color: colors.textPrimary, fontWeight: FontWeight.w600,
-            ))),
-            if (loading)
-              SizedBox(height: 16, width: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2, color: colors.brand)),
-          ]),
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 20,
+                color: colors.brand,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Data balance',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (loading)
+                SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.brand,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                key: const ValueKey('wallet-card-add-data'),
+                onPressed: () => context.push('/wallet/add'),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add data'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           if (balance == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 7),
-              child: Center(child: Text(
-                loading ? 'Checking balance…' : 'Balance unavailable',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colors.textPrimary, fontWeight: FontWeight.w600,
+              child: Center(
+                child: Text(
+                  loading ? 'Checking balance…' : 'Balance unavailable',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              )),
+              ),
             )
           else ...[
-            Text('${decimalGb(balance!.availableMb)} GB',
+            Text(
+              '${decimalGb(balance!.availableMb)} GB',
               style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800, color: colors.textPrimary)),
-            Text('${groupedMb(balance!.availableMb)} MB',
+                fontWeight: FontWeight.w800,
+                color: colors.textPrimary,
+              ),
+            ),
+            Text(
+              '${groupedMb(balance!.availableMb)} MB',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.textMuted)),
+                color: colors.textMuted,
+              ),
+            ),
             if (showSendable) ...[
               const SizedBox(height: 8),
-              Text('Sendable: ${groupedMb(
-                balance!.frozen ? 0 : balance!.purchasedAvailableMb,
-              )} MB purchased',
+              Text(
+                'Sendable: ${groupedMb(balance!.frozen ? 0 : balance!.purchasedAvailableMb)} MB purchased',
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: colors.textPrimary, fontWeight: FontWeight.w700)),
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               if (balance!.welcomeAvailableMb > 0 || balance!.reservedMb > 0)
-                Text('Welcome and reserved MB cannot be sent',
+                Text(
+                  'Welcome and reserved MB cannot be sent',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.textMuted)),
+                    color: colors.textMuted,
+                  ),
+                ),
               if (balance!.frozen)
-                Text('Wallet restricted',
-                  style: TextStyle(color: theme.colorScheme.error)),
+                Text(
+                  'Wallet restricted',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
             ],
           ],
           const NgnFundingCardDetails(),

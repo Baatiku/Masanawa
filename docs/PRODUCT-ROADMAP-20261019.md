@@ -64,7 +64,7 @@ In the active product **remove** human messaging/calls, Rooms, videos, human con
 
 ## Provider/authority blockers
 
-- Billstack no-BVN, webhook verification, assigned account and fees are UNVERIFIED (official docs returned HTTP 403 in prior research). Secrets in Railway only.
+- Billstack reserved-account creation and webhook payload/HMAC examples are now source-checked against the [25 October issuance audit](BILLSTACK-ISSUANCE-AUDIT-20261025.md). Persistent-product entitlement, verified applicant identity, independent final-state lookup, reversals, fees and real provider acceptance remain UNVERIFIED. Railway secret values stay private.
 - Existing Flutterwave catalogue does not prove an exact whole-GB allowance; allowlist only provider IDs with separately verified structured allowance/validity.
 - Old Credits/MSNW amounts are neither new MB funding nor eligible for conversion; historic data preservation and closing liabilities are separate administrative obligations.
 - CI/Flutter/real PG, phones, provider qualification and production rollout must be performed before calling this refactor complete.
@@ -186,5 +186,7 @@ This supersedes automatic deposit-to-MB conversion and UX-D02's All/Other durati
 Source evidence for UX-NGN01–05: PR #444 (`feat/ngn-wallet-data-layout-oct25`), source at `6131b551` plus the NGN-only funding/review-Back follow-up. Full local real-PG/workspace suite **2,003 passed, 3 skipped** and full Flutter **706 passed** at `6131b551`; focused follow-up contract/PG/Flutter checks and exact-head hosted CI are the final merge gate. Widget/provider replies are PASS_SIMULATED; database concurrency/migrations and compiler/build checks are PASS_REAL. These checks mark source delivery, not activation. Independent Billstack final-state verifier/applicant eligibility, network logo assets, real Flutterwave delivery, cost/fee/margin/limits, minimum-client cutoff, deployment and handset visual/audio/financial acceptance remain BLOCKED/NOT_RUN.
 
 - [ ] **UX-NGN06** Real PG concurrency/deduplication/reversal, HTTP auth/recovery/tamper/expiry/readback, Flutter account switches/unknown outcomes/320dp/200%/RTL and hosted exact-head CI. Real provider settlement and device acceptance stay separate.
+
+Billstack signup-to-account and deposit-to-NGN end-to-end gaps are itemized in [BILLSTACK-ISSUANCE-AUDIT-20261025.md](BILLSTACK-ISSUANCE-AUDIT-20261025.md). The existing Railway secret-name fallback and compact shared wallet-card change do not clear UX-NGN06 or activate funding.
 
 Read `docs/NGN-WALLET-DATA-REDESIGN-20261025.md` for cutover and reconciliation details. This is the sole active checklist; older automatic-conversion statements are historical and must not override this owner update.
