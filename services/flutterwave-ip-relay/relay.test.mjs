@@ -53,3 +53,16 @@ test("blocks unauthorised bill payload and unsafe upstream control",async()=>{
   assert.equal(calls,0);
   assert.throws(()=>createRelay({token:"short"}),/relay_secret_invalid/);
 });
+
+test("caps streamed upstream memory without a content-length header",async()=>{
+  const base=await start(async()=>new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(2_097_152));
+      controller.enqueue(new Uint8Array(1));
+      controller.close();
+    },
+  }), {status:200}));
+  const out=await fetch(base+"/v3/billers/BIL001/items",{headers});
+  assert.equal(out.status,502);
+  assert.equal((await out.json()).error,"upstream_too_large");
+});
