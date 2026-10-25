@@ -191,7 +191,7 @@ Source evidence for UX-NGN01–05: PR #444 (`feat/ngn-wallet-data-layout-oct25`)
 
 - [ ] **UX-NGN06** Real PG concurrency/deduplication/reversal, HTTP auth/recovery/tamper/expiry/readback, Flutter account switches/unknown outcomes/320dp/200%/RTL and hosted exact-head CI. Real provider settlement and device acceptance stay separate.
 
-Billstack signup-to-account and deposit-to-NGN end-to-end gaps are itemized in [BILLSTACK-ISSUANCE-AUDIT-20261025.md](BILLSTACK-ISSUANCE-AUDIT-20261025.md). The existing Railway secret-name fallback and compact shared wallet-card change do not clear UX-NGN06 or activate funding.
+Billstack signup-to-account and deposit-to-NGN end-to-end gaps are itemized in [BILLSTACK-ISSUANCE-AUDIT-20261025.md](BILLSTACK-ISSUANCE-AUDIT-20261025.md). The owner directed a separate live signed-webhook deposit mode without an arbitrary amount or event cap. This does not complete UX-NGN06's independent finality/reversal evidence or device acceptance.
 
 25 October owner update: mobile signup switches to verified email OTP, required first/last name and separately stored Nigerian contact phone. Data uses that phone as an editable account-scoped default. Billstack account assignment can be attempted once after new signup using the persistent reserved-account adapter. Independent final settlement verification, reversal/fee qualification, pending-reference recovery, existing-user completion and old-client cutoff are still required before enabling funding credit or transfer instructions. Contact phone is not proof for the phone-verified welcome grant.
 

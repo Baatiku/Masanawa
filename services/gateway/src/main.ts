@@ -1734,6 +1734,12 @@ export async function startGatewayService(
       if(configuredBank!=="9PSB"&&configuredBank!=="PALMPAY")
         throw new Error("Invalid Billstack reserved-account bank configuration");
       const provider = createBillstackReservedAccountClient({secretKey:billstackSecret,bankId:configuredBank});
+      const independentSettlementReady=env.MASANAWA_NGN_FUNDING_VERIFIED==="true" &&
+        typeof options.appOptions?.billstackSettlementVerifier==="function";
+      // Owner-authorized signed-webhook live mode. The flag deliberately does
+      // not claim independent settlement verification; exact receiving account,
+      // merchant reference, HMAC and the immutable NGN journal still apply.
+      const signedWebhookLive=env.MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED==="true";
       return {
         authorize:async(header:string|undefined)=>resolveFeatureFan(header),
         applicantComplete:async(actor)=>{
@@ -1778,11 +1784,14 @@ export async function startGatewayService(
         finalize:storage.finalize,
         credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0])=>
           createNgnWalletRepository(featurePool).deposit(payment),
-        verifySettlement:options.appOptions?.billstackSettlementVerifier ?? (async()=>{
-          throw new Error("billstack.independent_settlement_verifier_unqualified");
-        }),
-        ready:()=>env.MASANAWA_NGN_FUNDING_VERIFIED==="true" &&
-          typeof options.appOptions?.billstackSettlementVerifier==="function",
+        verifySettlement:independentSettlementReady
+          ? options.appOptions!.billstackSettlementVerifier!
+          : async(payment)=>{
+            if(!signedWebhookLive)
+              throw new Error("billstack.live_deposit_disabled");
+            return payment;
+          },
+        ready:()=>independentSettlementReady||signedWebhookLive,
         canAssign:()=>true,
         webhookSecret:billstackSecret,
       };
