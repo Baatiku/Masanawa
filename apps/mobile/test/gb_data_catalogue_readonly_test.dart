@@ -39,12 +39,14 @@ void main() {
 
   test('signed preview is only accepted for the same selected bundle and SIM', () {
     final item = GbVerifiedBundle.fromJson(_bundle());
+    final expiry = DateTime.now().toUtc().add(
+        const Duration(seconds: 60)).toIso8601String();
     final response = {
       'previewOnly': true,
       'quote': {
         ..._bundle(),
         'recipientPhone': '+2348012345678',
-        'quoteExpiresAt': '2098-12-01T00:00:00.000Z',
+        'quoteExpiresAt': expiry,
         'requiresWalletReservation': true,
         'feeMb': 0,
       },
@@ -56,7 +58,7 @@ void main() {
       {...response, 'previewOnly': false},
       {...response, 'quote': {..._bundle(),
         'recipientPhone': '+2348099999999',
-        'quoteExpiresAt': '2098-12-01T00:00:00.000Z',
+        'quoteExpiresAt': expiry,
         'requiresWalletReservation': true, 'feeMb': 0}},
       {...response, 'quote': {...(response['quote'] as Map),
         'feeMb': 1}},
