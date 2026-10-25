@@ -155,25 +155,25 @@ class MasanaPortraitAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = (displayName ?? agent?.displayName ?? '').trim();
+    final matchesIdentity = agent != null &&
+        (characterId == null || agent!.characterId == characterId);
+    final name = (displayName ??
+        (matchesIdentity ? agent!.displayName : null) ?? '').trim();
     // Agent objects have server-owned canonical IDs and must never use fuzzy
     // display-name matching, even when the stock portrait is unavailable.
     final canonical = characterId != null || agent != null;
-    final approvedKey = agent != null &&
-            (characterId == null || agent!.characterId == characterId)
-        ? agent!.portraitKey
-        : null;
+    final approvedKey = matchesIdentity ? agent!.portraitKey : null;
     final photoAsset = canonical
         ? portraitPhotoAssetForKey(approvedKey)
         : portraitPhotoAssetFor(name);
     final svgAsset = canonical
         ? portraitAssetForKey(approvedKey)
         : portraitAssetFor(name);
-    final url = agent != null && characterId != null &&
-            agent!.characterId != characterId
+    final url = agent != null && !matchesIdentity
         ? null
         : avatarUrl ?? agent?.avatarUrl;
-    final initial = agent?.initial ?? (name.isNotEmpty ? name[0].toUpperCase() : 'M');
+    final initial = matchesIdentity ? agent!.initial
+        : (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 
     Widget fallbackSvgOrUrl() {
       if (url != null && url.isNotEmpty) {
@@ -204,20 +204,26 @@ class MasanaPortraitAvatar extends StatelessWidget {
       return _initial(initial);
     }
 
-    return ClipOval(
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: photoAsset != null
-            ? Image.asset(
-                photoAsset,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (_, error, stackTrace) => fallbackSvgOrUrl(),
-              )
-            : fallbackSvgOrUrl(),
+    return Semantics(
+      label: name.isEmpty ? 'Masana profile avatar' : 'Profile avatar for $name',
+      image: true,
+      child: ExcludeSemantics(
+        child: ClipOval(
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: photoAsset != null
+                ? Image.asset(
+                    photoAsset,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, error, stackTrace) => fallbackSvgOrUrl(),
+                  )
+                : fallbackSvgOrUrl(),
+          ),
+        ),
       ),
     );
   }

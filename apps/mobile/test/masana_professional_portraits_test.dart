@@ -120,6 +120,34 @@ void main() {
         'assets/masana/portraits/amina.webp');
     expect(find.text('M'), findsOneWidget,
       reason:'An unknown caller must show a neutral initial, not a similarly named Masana');
+    expect(find.text('D'), findsOneWidget,
+      reason:'A mismatched directory entry must not supply another Masana initial');
+  });
+
+  testWidgets('shared portrait speaks one safe identity label for photo and missing ID', (tester) async {
+    final semantics = tester.ensureSemantics();
+    const authoritative = AgentDirectoryEntry(
+      characterId: 'character_one', characterVersionId:'version_1',
+      displayName:'Approved Masana', roleLabel:'Medicine', about:'',
+      presence:AgentPresence.unknown, portraitKey:'amina',
+      avatarUrl:'https://example.org/untrusted.jpg',
+    );
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Column(children: [
+      MasanaPortraitAvatar(characterId:'character_one',agent:authoritative),
+      MasanaPortraitAvatar(characterId:'character_two',agent:authoritative,
+        displayName:'Different Doctor',avatarUrl:'https://example.org/other.jpg'),
+      MasanaPortraitAvatar(characterId:'character_missing',agent:authoritative),
+    ]))));
+    expect(find.bySemanticsLabel('Profile avatar for Approved Masana'),findsOneWidget);
+    expect(find.bySemanticsLabel('Profile avatar for Different Doctor'),findsOneWidget);
+    expect(find.bySemanticsLabel('Masana profile avatar'),findsOneWidget);
+    expect(find.text('D'),findsOneWidget);
+    expect(find.text('M'),findsOneWidget);
+    final images = tester.widgetList<Image>(find.byType(Image)).toList();
+    expect(images,hasLength(1),reason:'Mismatched IDs must not render an approved asset or URL');
+    expect((images.single.image as AssetImage).assetName,
+      'assets/masana/portraits/amina.webp');
+    semantics.dispose();
   });
 
 }
