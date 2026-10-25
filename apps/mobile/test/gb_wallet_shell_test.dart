@@ -6,6 +6,7 @@ import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_summary.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
+import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
 
 class _SignedOut extends SessionController {
   @override
@@ -106,11 +107,50 @@ void main() {
     }), throwsFormatException);
   });
 
+  testWidgets('Data tab exposes only approved GB bundle review, not purchase',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async =>
+          [GbVerifiedBundle(
+            id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
+            allowanceGb: 2, costMb: 2000, validityDays: 30,
+            providerAmount: '1500.00',
+            expiresAt: DateTime.utc(2099),
+          )]),
+      ],
+      child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('MTN · 2 GB'), findsOneWidget);
+    expect(find.textContaining('2,000 MB'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '08012345678');
+    await tester.pump();
+    final action = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Review verified bundle'));
+    expect(action.onPressed, isNull);
+    await tester.tap(find.text('MTN · 2 GB'));
+    await tester.pump();
+    expect(tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Review verified bundle')).onPressed,
+      isNotNull);
+    expect(find.text('Purchase requires verified delivery'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Data never offers unverified Flutterwave purchases',
       (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(
-      body: DataRedemptionScreen(),
-    )));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
+      ],
+      child: const MaterialApp(home: Scaffold(
+        body: DataRedemptionScreen(),
+      )),
+    ));
+    await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);

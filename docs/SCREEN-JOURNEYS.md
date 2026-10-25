@@ -65,3 +65,20 @@ Legacy HTTP `GET /home` (old hard-coded Rooms showcase) must return 404; it is n
 ## Retired directory cache metadata — 25 October
 
 The Masana directory strips legacy `roomId`, `creatorHandle` and `creatorName` keys even when present in an old serialized cache or backend response. Readiness/portrait/follow, identity, country metadata and valid professional public social channels are retained. Restore retains no retired navigation metadata; no Room or public creator link can be recovered through cached Masana identities.
+
+## Read-only Data catalogue and quote implementation — 25 October 2026
+
+The Data tab may retrieve **only** the server-authorized `/v1/gb/data/bundles`
+list and quote a selected approved item with `/v1/gb/data/quote`. A network
+filter and recipient Nigerian mobile number are required for review. The
+server, not the device, asserts whole-GB allowance, version, validity, fee,
+recipient, purchased-MB cost and 120-second quote expiry. Quote is
+**previewOnly** and never reserves or debits MB; purchase remains blocked until
+verified purchase journal, provider delivery status and MB reservation routes
+are integrated. Zero/absent bundles show an actionable retry or Add Data route,
+not invented items. Loading, malformed/mismatched server data, 401/503, offline
+and stale selection surface explicit non-success states. Account/authorization-
+epoch replacement clears the previous account's bundles and quote, ignores
+late network results and cancels outstanding read/quote work. Narrow width and
+large font keep actions in a vertical scroll list. The Back to Wallet action
+remains; no legacy Bills, crypto or video pages are opened.
