@@ -567,7 +567,11 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
         audioBytes:result.audioBytes ?? (streamedAudio.isNotEmpty ? streamedAudio : null),
         audioMimeType:result.audioMimeType ?? (streamedAudio.isNotEmpty ? 'audio/l16;rate=24000' : null),
         audioDurationMs:result.audioDurationMs,
-        audioTranscript:result.audioTranscript ?? (transcript.isNotEmpty ? transcript : null));
+        // A complete final text reply does not imply a finalized audio ASR.
+        // Preserve the pre-existing optional-field contract in that case.
+        audioTranscript:result.audioTranscript ??
+            ((finalReply is! String || finalReply.trim().isEmpty) &&
+                    transcript.isNotEmpty ? transcript : null));
     } finally {
       if(identical(_turnTokens[binding.characterId],token))_turnTokens.remove(binding.characterId);
     }
