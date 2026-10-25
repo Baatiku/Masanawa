@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 
-import '../videos/video_models.dart';
 
 /// Typed Status authors preserve the legacy Masana projection without
 /// misrouting human posts to Masana profiles.
@@ -422,17 +421,8 @@ class DioFeedApi
 
   @override
   Future<void> removeSaved(SavedStatusItem item) async {
-    if (item.isPost) {
-      await save(item.id, false);
-    } else if (item.video != null) {
-      await _dio.put<void>(
-        '/v1/videos/${Uri.encodeComponent(item.id)}/save',
-        data: {'enabled': false},
-        options: await _options(authRequired: true),
-      );
-    } else {
-      throw const FormatException('Unsupported saved item');
-    }
+    if (!item.isPost) throw const FormatException('Unsupported saved item');
+    await save(item.id, false);
   }
 
   /// Reuse J06's authenticated Dio; never construct a second transport or session.
@@ -479,20 +469,17 @@ class DioFeedApi
   }
 }
 
-/// The existing /v1/saved library combines tenant-authorized Status posts
-/// and currently approved provider videos. A missing/invalid projection fails
-/// closed instead of displaying fabricated or stale media.
+/// Legacy video bookmarks are ignored rather than resurrecting retired media.
+/// Status save/remove is restricted to authorized post bookmarks.
 class SavedStatusItem {
   const SavedStatusItem({
     required this.id,
     required this.savedAt,
     this.post,
-    this.video,
   });
   final String id;
   final DateTime savedAt;
   final FeedPost? post;
-  final ExternalVideo? video;
   bool get isPost => post != null;
 
   factory SavedStatusItem.fromJson(Map<String, dynamic> data) {
@@ -511,13 +498,6 @@ class SavedStatusItem {
       if (post.id != id) throw const FormatException('Mismatched saved post');
       return SavedStatusItem(id: id, savedAt: at, post: post);
     }
-    if (kind == 'video' && data['video'] is Map) {
-      final video = ExternalVideo.fromJson(
-        Map<String, dynamic>.from(data['video'] as Map),
-      );
-      if (video.id != id) throw const FormatException('Mismatched saved video');
-      return SavedStatusItem(id: id, savedAt: at, video: video);
-    }
     throw const FormatException('Unsupported saved item');
   }
 }
@@ -534,11 +514,11 @@ class SavedStatusPage {
     }
     return SavedStatusPage(
       raw
-          .map(
-            (item) => SavedStatusItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),
-          )
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          // A legacy saved video must not hide or break legitimate Status
+          // bookmarks sharing the same paginated response.
+          .where((item) => item['kind'] != 'video')
+          .map(SavedStatusItem.fromJson)
           .toList(growable: false),
       next as String?,
     );
