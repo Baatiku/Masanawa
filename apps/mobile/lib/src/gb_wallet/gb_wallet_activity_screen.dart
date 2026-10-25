@@ -81,7 +81,7 @@ class GbWalletActivitySection extends ConsumerWidget {
   @override
   Widget build(BuildContext context,WidgetRef ref) {
     final owner=_ownerFor(ref);
-    final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5)));
+    final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5,unit:'all')));
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Row(children:[
         Expanded(child:Text('Activity',style:Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -101,7 +101,7 @@ class GbWalletActivitySection extends ConsumerWidget {
           subtitle:const Text('No transaction has been assumed or changed.'),
           trailing:IconButton(tooltip:'Retry wallet activity',
             icon:const Icon(Icons.refresh),
-            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5)))),
+            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,unit:'all')))),
         )
       else if(page.valueOrNull!.items.isEmpty)
         const Padding(padding:EdgeInsets.symmetric(vertical:22),
@@ -128,6 +128,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   bool _loadedMore=false,_loadingMore=false,_pageError=false;
   CancelToken? _cancel;
   int _request=0;
+  String _unit='all';
 
   void _reset() {
     ++_request;_cancel?.cancel();_cancel=null;
@@ -151,7 +152,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     setState((){_loadingMore=true;_pageError=false;});
     try {
       final page=await ref.read(gbActivityTransportProvider)
-        .page(limit:20,cursor:cursor,cancellation:cancel);
+        .page(limit:20,cursor:cursor,unit:_unit,cancellation:cancel);
       if(!_same(owner,ticket))return;
       setState((){
         _loadingMore=false;_loadedMore=true;_seen.add(cursor);
@@ -169,8 +170,8 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   @override
   Widget build(BuildContext context) {
     final owner=_ownerFor(ref);
-    if(owner!=_owner){_reset();_owner=owner;}
-    final request=owner==null?null:(owner:owner,limit:20);
+    if(owner!=_owner){_reset();_owner=owner;_unit='all';}
+    final request=owner==null?null:(owner:owner,limit:20,unit:_unit);
     final first=request==null?null:ref.watch(gbActivityPageProvider(request));
     final initial=first?.valueOrNull;
     final entries=<GbActivityItem>[
@@ -195,6 +196,22 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           const Padding(padding:EdgeInsets.only(bottom:12),
             child:Text('Posted MB and NGN movements. Pending authorizations and '
               'reservations are not counted as completed payments.')),
+          SingleChildScrollView(
+            key:const ValueKey('wallet-activity-unit-filters'),
+            scrollDirection:Axis.horizontal,
+            child:Row(children:[
+              for(final choice in const <String,String>{
+                'all':'All activity','MB':'Data MB','NGN':'Naira NGN',
+              }.entries)
+                Padding(padding:const EdgeInsetsDirectional.only(end:8),
+                  child:ChoiceChip(
+                    key:ValueKey('activity-unit-${choice.key}'),
+                    label:Text(choice.value),selected:_unit==choice.key,
+                    onSelected:(_){if(_unit==choice.key)return;
+                      setState((){_reset();_unit=choice.key;});},
+                  )),
+            ])),
+          const SizedBox(height:12),
           if(initial==null && first?.isLoading==true)
             const ListTile(title:Text('Loading verified activity…'),
               leading:CircularProgressIndicator()),

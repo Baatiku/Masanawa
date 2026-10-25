@@ -35,7 +35,7 @@ class GbWalletScreen extends ConsumerWidget {
       ref.invalidate(gbWalletSummaryProvider(owner));
       ref.invalidate(ngnWalletBalanceProvider(owner));
       ref.invalidate(ngnBankAccountProvider(owner));
-      ref.invalidate(gbActivityPageProvider((owner:owner,limit:5)));
+      ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,unit:'all')));
       try {
         await ref.read(gbWalletSummaryProvider(owner).future);
       } catch (_) {

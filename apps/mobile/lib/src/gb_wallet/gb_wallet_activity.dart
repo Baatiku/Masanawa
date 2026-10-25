@@ -53,6 +53,7 @@ class GbActivityPage {
 
 abstract class GbActivityTransport {
   Future<GbActivityPage> page({required int limit,String? cursor,
+    String unit='all',
     CancelToken? cancellation});
   Future<GbActivityItem> detail({required String entryId,
     CancelToken? cancellation});
@@ -63,14 +64,16 @@ class DioGbActivityTransport implements GbActivityTransport {
   final Dio dio;
   @override
   Future<GbActivityPage> page({required int limit,String? cursor,
+    String unit='all',
     CancelToken? cancellation}) async {
     if (limit<1 || limit>30 ||
+        !const {'all','MB','NGN'}.contains(unit) ||
         (cursor!=null && (cursor.isEmpty || cursor.length>1024 ||
           !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)))) {
       throw const FormatException('Invalid wallet activity request');
     }
     final response=await dio.get<Object?>(
-      '/v1/gb/wallet/activity',queryParameters:{'limit':limit,
+      '/v1/gb/wallet/activity',queryParameters:{'limit':limit,'unit':unit,
         if(cursor!=null)'cursor':cursor},cancelToken:cancellation,
       options:Options(headers:const {'Cache-Control':'no-store'}));
     return GbActivityPage.read(response.data);
@@ -98,7 +101,7 @@ class DioGbActivityTransport implements GbActivityTransport {
 final gbActivityTransportProvider=Provider<GbActivityTransport>((ref)=>
   DioGbActivityTransport(ref.watch(apiClientProvider).dio));
 
-typedef GbActivityRequest=({GbWalletOwner owner,int limit});
+typedef GbActivityRequest=({GbWalletOwner owner,int limit,String unit});
 final gbActivityPageProvider=FutureProvider.autoDispose.family<GbActivityPage,GbActivityRequest>(
   (ref,request) async {
     bool sameOwner() {
@@ -111,7 +114,7 @@ final gbActivityPageProvider=FutureProvider.autoDispose.family<GbActivityPage,Gb
     if(!sameOwner())throw StateError('account_changed');
     final cancel=CancelToken();ref.onDispose(cancel.cancel);
     final result=await ref.watch(gbActivityTransportProvider)
-      .page(limit:request.limit,cancellation:cancel);
+      .page(limit:request.limit,unit:request.unit,cancellation:cancel);
     if(!sameOwner())throw StateError('account_changed');
     return result;
   });

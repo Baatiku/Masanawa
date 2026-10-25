@@ -31,14 +31,16 @@ describe("read-only NGN and MB wallet activity",()=>{
     expect(sql).toContain("m.to_id=$2");
     expect(sql).toContain("n.account_id=$2");
     expect(sql).toContain("ORDER BY created_at DESC, entry_id DESC");
-    expect(args).toEqual(["tenant_one","fan_one",null,null,6]);
+    expect(args).toEqual(["tenant_one","fan_one",null,null,6,"all"]);
   });
   it("uses a stable time-plus-entry cursor for both ledgers",async()=>{
     const f=fixture();
     await f.repo.list(scope,11,{createdAt:"2026-10-20T08:00:00.000Z",entryId:"mb:77"});
     const [sql,args]=f.query.mock.calls[0] as unknown as [string,unknown[]];
     expect(sql).toContain("entry_id < $4");
-    expect(args).toEqual(["tenant_one","fan_one","2026-10-20T08:00:00.000Z","mb:77",11]);
+    expect(args).toEqual(["tenant_one","fan_one","2026-10-20T08:00:00.000Z","mb:77",11,"all"]);
+    await f.repo.list(scope,11,null,"MB");
+    expect((f.query.mock.calls[1] as unknown as [string,unknown[]])[1][5]).toBe("MB");
   });
   it("rejects malformed IDs, amount overflow, and bad scope before exposing an account",async()=>{
     const f=fixture([{entry_id:"mb:1",operation_id:"send",unit:"MB",
@@ -48,6 +50,7 @@ describe("read-only NGN and MB wallet activity",()=>{
     f.query.mockClear();
     await expect(f.repo.list({tenantId:"",userId:"fan_one"},5,null)).rejects.toThrow();
     await expect(f.repo.list(scope,32,null)).rejects.toThrow();
+    await expect(f.repo.list(scope,5,null,"invalid" as "MB")).rejects.toThrow();
     await expect(f.repo.list(scope,5,{createdAt:"bad",entryId:"mb:1"})).rejects.toThrow();
     expect(f.query).not.toHaveBeenCalled();
   });
