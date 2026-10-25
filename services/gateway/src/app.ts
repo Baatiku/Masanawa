@@ -1818,7 +1818,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   // These modules reuse the same host app, tenant authority and database.
   if (options.status) {
-    app.register(async scope => { await registerStatusRuntime(scope, options.status!); });
+    app.register(async scope => {
+      await registerStatusRuntime(scope, {
+        ...options.status!,
+        // Root Status is Masana-editorial only in the reduced product.
+        // Normal fans retain reactions, comments, follows and saves.
+        allowHumanPublishing: legacyProduct,
+      });
+    });
   }
   if (legacyProduct && options.videos) {
     app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });
