@@ -38,7 +38,7 @@ class _Session extends SessionController {
   }
 }
 
-class _Feed implements SearchFeedApi {
+class _Feed implements FeedApi, SearchFeedApi {
   String message = 'A verified Masana update';
   Completer<FeedPage>? pending;
   bool fail = false;
