@@ -44,6 +44,32 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   final Set<String> _seenCursors = {};
   String? _additionalResultsKey, _nextCursor;
   bool _loadedMore = false, _loadingMore = false, _pageError = false;
+  ProviderSubscription<SessionState>? _sessionSubscription;
+  String? _sessionOwnerId;
+  int _authorizationEpoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final current = ref.read(sessionProvider);
+    _sessionOwnerId = current is SessionSignedIn ? current.user.id : null;
+    _authorizationEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    _sessionSubscription = ref.listenManual(sessionProvider, (previous, next) {
+      final ownerId = next is SessionSignedIn ? next.user.id : null;
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      if (ownerId == _sessionOwnerId && epoch == _authorizationEpoch) return;
+      _sessionOwnerId = ownerId;
+      _authorizationEpoch = epoch;
+      _searchDebounce?.cancel();
+      _search.clear();
+      if (!mounted) return;
+      setState(() {
+        _query = _remoteQuery = '';
+        _confirmedPinUpdates.clear();
+        _resetPages();
+      });
+    });
+  }
 
   void _resetPages() {
     _additionalResults.clear();
@@ -54,6 +80,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   }
   @override
   void dispose() {
+    _sessionSubscription?.close();
     _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
@@ -82,15 +109,17 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     setState(_resetPages);
     ref.invalidate(_serverSearch(jsonEncode([
       owner.user.id, owner.tokens.accessToken, _remoteQuery,
+      ref.read(sessionProvider.notifier).authorizationEpoch,
     ])));
   }
 
   Future<void> _loadMore(String key, String cursor) async {
     if (_loadingMore || _seenCursors.contains(cursor)) return;
     final owner = ref.read(sessionProvider);
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     if (owner is! SessionSignedIn || !ref.read(aiChatProvider).online ||
         _remoteQuery != _query || _remoteQuery.isEmpty ||
-        jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery]) != key) return;
+        jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch]) != key) return;
     setState(() { _loadingMore = true; _pageError = false; });
     try {
       final page = await ref.read(masanaInboxSearchProvider).searchPage(
@@ -98,8 +127,9 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         cursor: cursor,
       );
       if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
           _remoteQuery != _query || !ref.read(aiChatProvider).online ||
-          jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery]) != key) return;
+          jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch]) != key) return;
       setState(() {
         _additionalResultsKey = key;
         _loadedMore = true;
@@ -113,6 +143,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       });
     } catch (_) {
       if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
           _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
       setState(() { _loadingMore = false; _pageError = true; });
     }
@@ -128,6 +159,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       session.user.id,
       session.tokens.accessToken,
       _remoteQuery,
+      ref.read(sessionProvider.notifier).authorizationEpoch,
     ]);
     final offline = !ref.watch(aiChatProvider).online;
     final server = !offline && _remoteQuery.isNotEmpty &&
@@ -198,6 +230,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             icon: Icon(result.pinned ? Icons.push_pin : Icons.push_pin_outlined),
             onPressed: () async {
               final owner = ref.read(sessionProvider);
+              final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
               final access = ref.read(masanaInboxSearchProvider);
               try {
                 final nextRevision = await access.setPinned(
@@ -206,13 +239,15 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                   pinned: !result.pinned,
                   expectedRevision: result.revision,
                 );
-                if (mounted && identical(owner, ref.read(sessionProvider))) {
+                if (mounted && identical(owner, ref.read(sessionProvider)) &&
+                    epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
                   setState(() => _confirmedPinUpdates[result.characterId] =
                       result.withPin(!result.pinned, nextRevision));
                   ref.invalidate(_serverSearch(serverKey));
                 }
               } catch (_) {
-                if (mounted && identical(owner, ref.read(sessionProvider))) {
+                if (mounted && identical(owner, ref.read(sessionProvider)) &&
+                    epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Could not update pin.')),
                   );
@@ -223,10 +258,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           onTap: () {
             final owner = ref.read(sessionProvider);
             if (owner is! SessionSignedIn) return;
+            final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
             context.push('/chat/${Uri.encodeComponent(result.characterId)}');
             // The read receipt may fail without blocking navigation.
             unawaited(() async {
-              if (!mounted || !identical(owner, ref.read(sessionProvider))) return;
+              if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+                  epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
               try {
                 await ref.read(masanaInboxSearchProvider).markRead(
                   bearer: owner.tokens.accessToken,
