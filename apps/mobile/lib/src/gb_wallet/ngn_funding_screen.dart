@@ -14,9 +14,17 @@ class NgnFundingScreen extends ConsumerStatefulWidget {
 }
 
 class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
+  final _first = TextEditingController();
+  final _last = TextEditingController();
+  final _contact = TextEditingController();
   bool _busy = false;
   String? _error;
   ({String accountId, int authorizationEpoch})? _owner;
+  @override
+  void dispose() {
+    _first.dispose();_last.dispose();_contact.dispose();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(sessionProvider);
@@ -32,6 +40,7 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
       _owner = owner;
       _busy = false;
       _error = null;
+      _first.clear();_last.clear();_contact.clear();
     }
     final state = owner == null
         ? null
@@ -88,7 +97,40 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
                     ? 'Sign in to view your funding account.'
                     : 'Bank details unavailable.',
             }),
-          if (bank?.state == 'unassigned' && bank!.fundingEnabled)
+          if (bank?.state == 'unassigned' && bank!.assignmentEnabled &&
+              !bank.applicantComplete) ...[
+            const SizedBox(height: 12),
+            const Text('Complete your funding details'),
+            TextField(controller:_first,enabled:!_busy,
+              decoration:const InputDecoration(labelText:'First name')),
+            TextField(controller:_last,enabled:!_busy,
+              decoration:const InputDecoration(labelText:'Last name')),
+            TextField(controller:_contact,enabled:!_busy,
+              keyboardType:TextInputType.phone,
+              decoration:const InputDecoration(labelText:'Contact phone',
+                hintText:'08012345678')),
+            FilledButton(onPressed:_busy?null:() async {
+              if(owner==null)return;
+              setState(() { _busy=true;_error=null; });
+              try {
+                await ref.read(apiClientProvider).dio.post<Object?>(
+                  '/v1/gb/wallet/virtual-account/applicant',data:{
+                    'firstName':_first.text.trim(),
+                    'lastName':_last.text.trim(),
+                    'contactPhone':_contact.text.replaceAll(RegExp(r'[\s()-]'),''),
+                  });
+                if(!mounted||_owner!=owner)return;
+                refresh();
+              } catch (_) {
+                if(!mounted||_owner!=owner)return;
+                setState(()=>_error='Check your names and Nigerian contact phone.');
+              } finally {
+                if(mounted&&_owner==owner)setState(()=>_busy=false);
+              }
+            },child:const Text('Save funding details')),
+          ],
+          if (bank?.state == 'unassigned' && bank!.assignmentEnabled &&
+              bank.applicantComplete)
             FilledButton(
               onPressed: _busy
                   ? null

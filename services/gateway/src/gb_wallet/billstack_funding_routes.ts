@@ -13,6 +13,8 @@ export interface BillstackFundingPorts {
   reference:string;email:string;phone:string;firstName:string;lastName:string;
  }>;
  read:(actor:BillstackFundingActor)=>Promise<BillstackAccount|null>;
+ applicantComplete?:(actor:BillstackFundingActor)=>Promise<boolean>;
+ completeApplicant?:(actor:BillstackFundingActor,details:{firstName:string;lastName:string;contactPhone:string})=>Promise<void>;
  start:(actor:BillstackFundingActor,reference:string)=>Promise<{account:BillstackAccount;created:boolean}>;
  create:(input:{reference:string;email:string;phone:string;firstName:string;lastName:string})=>
    Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB"}>;
@@ -52,8 +54,32 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   try{person=await actor(request.headers.authorization);}catch{
     reply.code(401);return {error:{code:"unauthorized"}};
   }
-  try{return {account:safe(await ports.read(person)),fundingEnabled:ports.ready?.()??false};}catch{
+  try{return {account:safe(await ports.read(person)),
+    fundingEnabled:ports.ready?.()??false,
+    assignmentEnabled:ports.canAssign?.()??ports.ready?.()??false,
+    applicantComplete:ports.applicantComplete?await ports.applicantComplete(person):false};}catch{
     reply.code(503);return {error:{code:"bank_account_unavailable"}};
+  }
+ });
+ app.post("/v1/gb/wallet/virtual-account/applicant",async(request,reply)=>{
+  reply.header("cache-control","no-store");
+  let person:BillstackFundingActor;
+  try{person=await actor(request.headers.authorization);}catch{
+    reply.code(401);return {error:{code:"unauthorized"}};
+  }
+  const body=request.body as Record<string,unknown>|null;
+  const firstName=body?.firstName,lastName=body?.lastName,contactPhone=body?.contactPhone;
+  if(!body||Object.keys(body).some(k=>!["firstName","lastName","contactPhone"].includes(k))||
+    typeof firstName!=="string"||typeof lastName!=="string"||typeof contactPhone!=="string"||
+    !/^[\p{L}\p{M} .'-]{1,80}$/u.test(firstName)||
+    !/^[\p{L}\p{M} .'-]{1,80}$/u.test(lastName)||
+    !/^0(?:70|80|81|90|91)\d{8}$/u.test(contactPhone)){
+    reply.code(400);return {error:{code:"invalid_applicant"}};
+  }
+  if(!ports.completeApplicant){reply.code(503);return {error:{code:"applicant_unavailable"}};}
+  try{await ports.completeApplicant(person,{firstName,lastName,contactPhone});
+    return {complete:true};}catch{
+    reply.code(409);return {error:{code:"applicant_change_unavailable"}};
   }
  });
  app.post("/v1/gb/wallet/virtual-account",async(request,reply)=>{

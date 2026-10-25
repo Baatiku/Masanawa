@@ -74,6 +74,9 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  it("can allocate a verified applicant account before settlement credit is enabled",async()=>{
   const f=setup({ready:()=>false,canAssign:()=>true});
   const headers={authorization:"Bearer session"};
+  const state=await f.app.inject({url:"/v1/gb/wallet/virtual-account",headers});
+  expect(state.json()).toMatchObject({account:{state:"unassigned"},
+    assignmentEnabled:true,fundingEnabled:false});
   const assigned=await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers});
   expect(assigned.statusCode).toBe(200);
   expect(assigned.json().account).toMatchObject({state:"assigned",accountNumber:"0000000100"});
@@ -82,6 +85,19 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
     headers:{"content-type":"application/json"},payload:"{}"});
   expect(unsigned.statusCode).toBe(503);
   expect(f.credit).not.toHaveBeenCalled();
+ });
+ it("completes missing applicant details only for an authenticated account",async()=>{
+  const save=vi.fn(async()=>{});
+  const f=setup({ready:()=>false,canAssign:()=>true,
+    applicantComplete:async()=>false,completeApplicant:save});
+  const url="/v1/gb/wallet/virtual-account/applicant";
+  expect((await f.app.inject({method:"POST",url,payload:{firstName:"Ada",lastName:"Obi",contactPhone:"08012345678"}})).statusCode).toBe(401);
+  const headers={authorization:"Bearer session"};
+  expect((await f.app.inject({method:"POST",url,headers,payload:{firstName:"Ada",lastName:"Obi",contactPhone:"07112345678"}})).statusCode).toBe(400);
+  const accepted=await f.app.inject({method:"POST",url,headers,payload:{firstName:"Ada",lastName:"Obi",contactPhone:"08012345678"}});
+  expect(accepted.statusCode).toBe(200);
+  expect(save).toHaveBeenCalledWith({tenantId:"tenant-a",userId:"fan-a"},
+    {firstName:"Ada",lastName:"Obi",contactPhone:"08012345678"});
  });
 
  it("rejects independent settlement mismatch even with a valid webhook signature",async()=>{
