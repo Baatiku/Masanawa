@@ -643,9 +643,6 @@ importers:
       '@masanawa/providers':
         specifier: workspace:*
         version: link:../../packages/providers
-      '@masanawa/rooms':
-        specifier: workspace:*
-        version: link:../../packages/rooms
       '@masanawa/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry

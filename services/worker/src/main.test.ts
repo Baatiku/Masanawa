@@ -4,9 +4,7 @@ import { safeWorkerStartupReason } from "./main.js";
 describe("worker startup diagnostics", () => {
   it("reports only explicitly allowlisted configuration and lifecycle errors", () => {
     for (const reason of [
-      "rooms_ai.credentials_required",
-      "rooms_ai.models_invalid",
-      "rooms_teacher_postgres_pool_required",
+      "worker_postgres_pool_required",
       "Missing required environment variable: DATABASE_URL",
       "service.start_failed",
     ]) {

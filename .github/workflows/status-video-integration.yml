@@ -56,7 +56,6 @@ jobs:
           adapters/storage/postgres/src/home_feed/eligibility.test.ts
           adapters/storage/postgres/src/external_videos/repository.integration.test.ts
           packages/feed/src/index.test.ts
-          services/worker/src/jobs/rooms
           services/worker/src/jobs/home_feed
       - name: Worker service typecheck
         run: pnpm --filter @masanawa/worker-service typecheck

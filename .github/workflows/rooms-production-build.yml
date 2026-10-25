@@ -107,12 +107,10 @@ jobs:
           pnpm exec vitest run
           services/gateway/src/call_history/routes.test.ts
           services/gateway/src/room_community
-          services/worker/src/jobs/rooms
           adapters/storage/postgres/src/rooms/teacher_outbox.test.ts
           packages/rooms/src/index.test.ts
       - name: Real PG18 forward-upgrade and Rooms schema readiness
         run: pnpm exec vitest run adapters/storage/postgres/src/home_feed/af00_migrations.integration.test.ts
-          adapters/storage/postgres/src/rooms/teacher_outbox.integration.test.ts
       - name: Room invitations and member authorization unit tests
         run: >-
           node --experimental-transform-types --test
