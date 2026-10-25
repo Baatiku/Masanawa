@@ -24,6 +24,14 @@ Fetch latest GitHub main and follow the stable UX checklist in `docs/PRODUCT-ROA
 
 **Merged UX #434** (`16a305a6`, final `83451947`): Request quick MB amounts, clarified incoming/sent payer roles and original-key retry under simulated uncertainty. Mobile Build #911 and Foundation CI #1338 PASS; T04 remains partial pending complete recipient/decline/device verification.
 
+**Merged docs #435** (`7ba41aa5`): reconciled active roadmap/handoff with completed Chats, Send and Request evidence; Foundation CI #1340 PASS.
+
+**Merged UX #436** (`09ac8846`, final `4af1eb7c`): Data ported-number safety retains a deliberately selected network across phone edits; a verified-empty catalogue cannot imply available bundles. Mobile Build #913 and Foundation CI #1342 PASS; UX-D01 still needs approved logos, contact/recent-number convenience and real provider/device evidence.
+
+**Merged UX #438** (`7ba8aeda`, final `814d5425`): Notifications independently fence account-bound Activity and Preferences load/save responses; failed Activity refresh leaves verified alerts readable with retry. Mobile Build #918 and Foundation CI #1347 PASS; N02 push/read/delivery/device proof remains open.
+
+**Merged UX #437** (`7f3e96b4`, final `115bca83`): full-screen Masana call stage has the canonical 160/144/short-116 dp portrait, readable name/state/connected time, wrapped larger controls and a fixed red End call footer. Mobile Build #924, Foundation CI #1353, communication #378, voice-note #155 and roster #346 PASS. Hosted Mobile Build's repeated GitHub runner Unicode encoder failure was solved by escaping the test log stream without changing Flutter exit status; actual audio/Bluetooth/reconnect/MB settlement and handset checks remain L02/L03 NOT_RUN. UX-L01 source checked.
+
 Remaining unchecked UX IDs are the queue, especially P0 chat/note/call recovery, portraits, financial recipient selection, Add Data, authoritative history/receipts and device/provider acceptance. No APK; fixed-IP hosting on hold; preserve historical finances and separate Masanawa-App. Older sections below are historical checkpoints, not current PR statuses.
 
 ## Actual source work, separate non-overlapping paths
