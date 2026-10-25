@@ -211,10 +211,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if (!mounted || ticket != generation) return;
       setState(() {
         items = page.items;
-        // Avoid offering an infinite Load more loop for empty pages or a
-        // server cursor that did not advance. Keep already loaded posts.
-        cursor = page.items.isEmpty || page.nextCursor == after
-            ? null : page.nextCursor;
+        cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
       });
@@ -249,7 +246,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       setState(() {
         final seen = items.map((p) => p.id).toSet();
         items = [...items, ...page.items.where((p) => seen.add(p.id))];
-        cursor = page.nextCursor;
+        // Avoid an infinite Load more loop for empty pages or a server cursor
+        // that did not advance. Keep already loaded authorized posts.
+        cursor = page.items.isEmpty || page.nextCursor == after
+            ? null : page.nextCursor;
         fetchingMore = false;
       });
     } catch (e) {
