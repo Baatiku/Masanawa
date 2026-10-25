@@ -10,6 +10,8 @@ import 'gb_data_catalogue.dart';
 import 'gb_data_choice_controls.dart';
 import 'gb_data_purchase_panel.dart';
 import 'gb_wallet_summary.dart';
+import 'gb_balance_card.dart';
+import 'ngn_wallet.dart';
 
 /// Server-verified whole-GB catalogue and quote, followed by a strictly
 /// reviewed durable purchase. No provider acknowledgement is a delivery claim.
@@ -26,7 +28,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   GbDataOwner? _owner;
   String? _network;
   bool _manualNetwork = false;
-  GbDataValidityPeriod? _validity;
+  GbDataValidityPeriod? _validity = GbDataValidityPeriod.daily;
   String? _bundleId;
   GbReadOnlyQuote? _quote;
   String? _error;
@@ -66,6 +68,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _bundleId = null;
     });
     ref.invalidate(gbDataCatalogueProvider(owner));
+    ref.invalidate(gbWalletSummaryProvider(owner));
+    ref.invalidate(ngnWalletBalanceProvider(owner));
+    ref.invalidate(ngnBankAccountProvider(owner));
     try {
       await ref.read(gbDataCatalogueProvider(owner).future);
     } catch (_) {
@@ -135,7 +140,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _phone.clear();
       _network = null;
       _manualNetwork = false;
-      _validity = null;
+      _validity = GbDataValidityPeriod.daily;
       _bundleId = null;
       _purchaseLocked = false;
       _owner = owner;
@@ -150,6 +155,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     for (final bundle in visible) {
       if (bundle.id == _bundleId) selected = bundle;
     }
+    final wallet = owner == null ? null : ref.watch(gbWalletSummaryProvider(owner));
     final phone = _phone.text.trim();
     final validPhone = normalizeNigerianDataPhone(phone) != null;
     final canQuote = owner != null && selected != null && validPhone &&
@@ -163,11 +169,35 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Data bundles',
+          Text('Mobile Data',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700)),
           const SizedBox(height: 14),
-          TextField(
+          GbWalletBalanceCard(balance: wallet?.valueOrNull,
+              loading: wallet?.isLoading ?? false),
+          const SizedBox(height: 18),
+          LayoutBuilder(builder: (context, constraints) {
+            final network = DropdownButtonFormField<String>(
+              key: ValueKey('data-network-selector-${_network ?? 'none'}'),
+              initialValue: _network,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Network',
+                  border: OutlineInputBorder()),
+              items: [for (final value in gbDataNetworks)
+                DropdownMenuItem(value: value, child: Text(switch (value) {
+                  'AIRTEL' => 'Airtel', 'GLO' => 'Glo',
+                  '9MOBILE' => '9mobile', _ => value,
+                }))],
+              onChanged: owner == null || _purchaseLocked ? null : (value) {
+                if (value == null) return;
+                setState(() {
+                  _network = value; _manualNetwork = true;
+                  _validity = GbDataValidityPeriod.daily;
+                  _bundleId = null; _clearQuote();
+                });
+              },
+            );
+            final phoneField = TextField(
             controller: _phone,
             enabled: owner != null && !_purchaseLocked,
             keyboardType: TextInputType.phone,
@@ -179,7 +209,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               if (!_manualNetwork) {
                 _network = guessGbNetworkForNigerianPhone(value);
               }
-              _validity = null;
+
             }),
             decoration: InputDecoration(
               labelText: 'Mobile number',
@@ -187,7 +217,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               prefixIcon: const Icon(Icons.phone_android_outlined),
               isDense: true,
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: colors.brand, width: 2),
+                borderSide: BorderSide(color: colors.brandStrong, width: 2),
                 borderRadius: BorderRadius.circular(13),
               ),
               errorText: phone.isNotEmpty && !validPhone
@@ -195,7 +225,16 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(13)),
             ),
-          ),
+          );
+            if (constraints.maxWidth < 330 ||
+                MediaQuery.textScalerOf(context).scale(16) > 20) {
+              return Column(children: [network, const SizedBox(height: 12), phoneField]);
+            }
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 112, child: network),
+              const SizedBox(width: 10), Expanded(child: phoneField),
+            ]);
+          }),
           if (validPhone && _network != null && !_manualNetwork)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -203,51 +242,24 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: colors.textMuted)),
             ),
-          const SizedBox(height: 18),
-          Text('Network', style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          GbDataNetworkChoices(
-            network: _network,
-            enabled: owner != null && !_purchaseLocked,
-            onChanged: (value) => setState(() {
-              _network = value;
-              _manualNetwork = true;
-              _validity = null;
-              _bundleId = null;
-              _clearQuote();
-            }),
-          ),
-          if (_network != null) ...[
-            const SizedBox(height: 14),
-            Text('Validity', style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            GbDataValidityChoices(
-              period: _validity,
-              enabled: owner != null && !_purchaseLocked,
-              onChanged: (choice) {
-                if (choice == _validity) return;
-                setState(() {
-                  _validity = choice;
-                  _bundleId = null;
-                  _clearQuote();
-                });
-              },
-            ),
-          ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(children: [
-            Expanded(child: Text('Available bundles',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700))),
-            if (owner != null)
-              IconButton(
-                tooltip: 'Refresh verified data bundles',
-                onPressed: _purchaseLocked ? null : () => _reload(owner),
-                icon: const Icon(Icons.refresh),
-              ),
+            Expanded(child: Text('Data plans',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+            if (owner != null) IconButton(
+              tooltip: 'Refresh verified data bundles',
+              onPressed: _purchaseLocked ? null : () => _reload(owner),
+              icon: const Icon(Icons.refresh)),
           ]),
+          GbDataValidityChoices(
+            period: _validity,
+            enabled: owner != null && _network != null && !_purchaseLocked,
+            onChanged: (choice) {
+              if (choice == _validity) return;
+              setState(() { _validity = choice; _bundleId = null; _clearQuote(); });
+            },
+          ),
+          const SizedBox(height: 12),
           if (catalogue?.isLoading ?? false)
             const LinearProgressIndicator(minHeight: 3),
           if (catalogue?.hasError ?? false)
@@ -275,7 +287,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               onRetry: () => _reload(owner),
             ),
           LayoutBuilder(builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 370 ? 2 : 1;
+            final scaled = MediaQuery.textScalerOf(context).scale(16);
+            final columns = constraints.maxWidth >= 330 && scaled <= 18 ? 3
+                : constraints.maxWidth >= 260 && scaled <= 24 ? 2 : 1;
             final tileWidth =
                 (constraints.maxWidth - (columns - 1) * 10) / columns;
             return Wrap(
@@ -313,7 +327,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Bundle review', style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700, color: colors.brand)),
+                    fontWeight: FontWeight.w700, color: colors.brandStrong)),
                   Text('${_quote!.bundle.network} · '
                       '${_quote!.bundle.allowanceGb} GB'),
                   Text('Cost: ${groupedMb(_quote!.bundle.costMb)} MB'),
@@ -405,7 +419,7 @@ class _SelectableDataBundle extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: selected ? colors.brand : colors.structuralBorder,
+            color: selected ? colors.brandStrong : colors.structuralBorder,
             width: selected ? 2 : 1,
           ),
         ),
@@ -413,28 +427,29 @@ class _SelectableDataBundle extends StatelessWidget {
         child: InkWell(
           onTap: onSelect,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(children: [
                   Expanded(child: Text('${bundle.allowanceGb} GB',
-                    style: theme.textTheme.titleLarge?.copyWith(
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800))),
                   Icon(selected
                       ? Icons.check_circle_rounded
                       : Icons.circle_outlined,
-                    size: 20,
-                    color: selected ? colors.brand : colors.structuralBorder),
+                    size: 16,
+                    color: selected ? colors.brandStrong : colors.structuralBorder),
                 ]),
                 const SizedBox(height: 7),
-                Text('${bundle.validityDays} days',
+                Text('${bundle.validityDays} ${bundle.validityDays == 1 ? 'day' : 'days'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colors.textMuted)),
                 const SizedBox(height: 12),
-                Text('${groupedMb(bundle.costMb)} MB',
+                Text('${groupedMb(bundle.costMb)} MB', textAlign: TextAlign.center,
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700, color: colors.brand)),
+                    fontWeight: FontWeight.w700, color: colors.brandStrong)),
               ],
             ),
           ),

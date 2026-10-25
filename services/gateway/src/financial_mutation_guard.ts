@@ -22,6 +22,7 @@ export function requiresFinancialCustomerState(
     path === "/v1/gb/data/redeem" ||
     path.startsWith("/v1/gb/calls/") ||
     path.startsWith("/v1/gb/data/purchases/") ||
+    path.startsWith("/v1/gb/wallet/exchange/") ||
     path.startsWith("/v1/gb/wallet/send/") ||
     path.startsWith("/v1/gb/wallet/requests") ||
     path.startsWith("/v1/financial/") ||

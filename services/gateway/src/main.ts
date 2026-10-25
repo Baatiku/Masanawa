@@ -1,3 +1,5 @@
+import {createNgnWalletRepository} from "@masanawa/postgres";
+import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import { PgSavedLibraryRepository } from "@masanawa/postgres";
 import type { Pool } from "@masanawa/postgres";
 import {
@@ -1659,6 +1661,15 @@ export async function startGatewayService(
   // No legacy Credit Send fallback. The signer is a private Railway secret,
   // never a client-supplied or generated-on-each-request review authority.
   const mbSendReviewSecret = env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
+  const ngnStorage=featurePool?createNgnWalletRepository(featurePool):undefined;
+  const ngnWallet:NgnWalletPorts|undefined=options.appOptions?.ngnWallet ??
+    (ngnStorage && sessions && featureTenant && mbSendReviewSecret && Buffer.byteLength(mbSendReviewSecret)>=32 ? {
+      authorize:resolveFeatureFan,read:ngnStorage.read,exchange:ngnStorage.exchange,
+      receipt:ngnStorage.readReceipt,reviewSecret:mbSendReviewSecret,
+      // Explicit operator gates follow provider/cost/limits qualification; no
+      // new live price or cash flow is activated by merely merging source.
+      ready:()=>env.MASANAWA_NGN_EXCHANGE_ENABLED==="true",
+    }:undefined);
   const gbSendReview: GbSendPorts | undefined =
     options.appOptions?.gbSendReview ??
     (featurePool && sessions && featureTenant &&
@@ -1719,29 +1730,22 @@ export async function startGatewayService(
       const provider = createBillstack9PsbClient({secretKey:billstackSecret});
       return {
         authorize:async(header:string|undefined)=>resolveFeatureFan(header),
-        applicant:async(actor:{tenantId:string;userId:string},reference:string)=>{
-          const result=await featurePool.query<{
-            display_name:string;email:string|null;phone:string|null;
-          }>("SELECT display_name,email,phone FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2",
-            [actor.tenantId,actor.userId]);
-          const profile=result.rows[0];
-          if(!profile?.email || !profile.phone) {
-            throw new Error("billstack.verified_contact_required");
-          }
-          const phone=profile.phone.trim().replace(/^\\+234/,"0");
-          const names=profile.display_name.trim().split(/\\s+/);
-          return {reference,email:profile.email.trim(),phone,
-            firstName:names[0]??"",lastName:names.slice(1).join(" ") || (names[0] ?? "")};
-        },
+        // Profile text alone does not prove verified contact/eligibility.
+        applicant:options.appOptions?.billstackVerifiedApplicant ?? (async()=>{
+          throw new Error("billstack.verified_applicant_unqualified");
+        }),
         read:storage.read,
         start:storage.start,
         create:provider.reserve,
         finalize:storage.finalize,
-        credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0],
-          quote:Parameters<typeof storage.applyVerifiedPayment>[1])=>
-          storage.applyVerifiedPayment(payment,quote),
+        credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0])=>
+          createNgnWalletRepository(featurePool).deposit(payment),
+        verifySettlement:options.appOptions?.billstackSettlementVerifier ?? (async()=>{
+          throw new Error("billstack.independent_settlement_verifier_unqualified");
+        }),
+        ready:()=>env.MASANAWA_NGN_FUNDING_VERIFIED==="true" &&
+          typeof options.appOptions?.billstackSettlementVerifier==="function",
         webhookSecret:billstackSecret,
-        rateBook:DEFAULT_RECHARGE_RATE_BOOK,
       };
     })() : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
@@ -1833,6 +1837,7 @@ export async function startGatewayService(
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(gbDataPurchases ? { gbDataPurchases } : {}),
       ...(billstackFunding ? { billstackFunding } : {}),
+      ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
       ...(sessions ? { mobileDiagnostics: {

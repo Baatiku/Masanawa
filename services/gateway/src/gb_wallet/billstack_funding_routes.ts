@@ -1,7 +1,6 @@
 import {randomUUID} from "node:crypto";
 import type {FastifyInstance} from "fastify";
 import {verifyBillstackWebhook,type BillstackReceivedPayment} from "./billstack_provider.js";
-import {quoteVerifiedDeposit,type RechargeRateBook} from "./pricing.js";
 
 export interface BillstackFundingActor {tenantId:string;userId:string}
 export interface BillstackAccount {
@@ -20,12 +19,13 @@ export interface BillstackFundingPorts {
  finalize:(actor:BillstackFundingActor,reference:string,account:{
   reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB";
  })=>Promise<BillstackAccount>;
- credit:(payment:BillstackReceivedPayment,quote:(amountKobo:number,carry:{
-  numerator:string;denominator:string;
- })=>{rateVersion:string;creditedMb:number;remainder:{numerator:string;denominator:string}})
- =>Promise<{state:"credited"|"duplicate";creditedMb:number;eventId:string}>;
+ credit:(payment:BillstackReceivedPayment)=>Promise<{
+  state:"credited"|"duplicate";creditedKobo:number;eventId:string;
+ }>;
+ ready?:()=>boolean;
+ /** Independent provider transaction final-state/amount/account verification. */
+ verifySettlement:(payment:BillstackReceivedPayment)=>Promise<BillstackReceivedPayment>;
  webhookSecret:string;
- rateBook:RechargeRateBook;
  now?:()=>number;
 }
 
@@ -49,7 +49,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   try{person=await actor(request.headers.authorization);}catch{
     reply.code(401);return {error:{code:"unauthorized"}};
   }
-  try{return {account:safe(await ports.read(person))};}catch{
+  try{return {account:safe(await ports.read(person)),fundingEnabled:ports.ready?.()??false};}catch{
     reply.code(503);return {error:{code:"bank_account_unavailable"}};
   }
  });
@@ -60,6 +60,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
     reply.code(401);return {error:{code:"unauthorized"}};
   }
   try{
+    if(ports.ready && !ports.ready())throw new Error("funding_not_verified");
     const existing=await ports.read(person);
     if(existing)return {account:safe(existing)};
     const ref="gb"+randomUUID().replaceAll("-","");
@@ -85,6 +86,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   scope.post("/webhooks/billstack/gb",async(request,reply)=>{
     reply.header("cache-control","no-store");
     try{
+      if(ports.ready && !ports.ready())throw new Error("funding_not_verified");
       const raw=request.body;
       if(!Buffer.isBuffer(raw))throw new Error("invalid_raw_body");
       const header=(name:string)=>{
@@ -95,11 +97,11 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
         "x-wiaxy-timestamp":header("x-wiaxy-timestamp"),
         "x-wiaxy-signature-256":header("x-wiaxy-signature-256"),
       },ports.webhookSecret,ports.now?.());
-      const receipt=await ports.credit(verified,(amountKobo,carry)=>{
-        const result=quoteVerifiedDeposit(amountKobo,ports.rateBook,carry);
-        return {rateVersion:result.rateVersion,creditedMb:result.creditedMb,
-          remainder:result.remainder};
-      });
+      const settlement=await ports.verifySettlement(verified);
+      if(settlement.eventId!==verified.eventId || settlement.merchantReference!==verified.merchantReference ||
+        settlement.accountNumber!==verified.accountNumber || settlement.amountKobo!==verified.amountKobo ||
+        !Number.isFinite(Date.parse(settlement.receivedAt)))throw new Error("provider_settlement_mismatch");
+      const receipt=await ports.credit(settlement);
       return {accepted:true,duplicate:receipt.state==="duplicate"};
     }catch{
       // Unknown event remains retryable; never acknowledge a forged or

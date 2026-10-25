@@ -1,3 +1,5 @@
+import {registerNgnWalletRoutes} from "./gb_wallet/ngn_routes.js";
+import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import {registerGbCallRoutes} from "./gb_calls/routes.js";
 import type {GbCallPorts} from "./gb_calls/review.js";
 import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
@@ -101,6 +103,7 @@ export interface GatewayAppOptions {
   readonly msnwPaystackFiat?: MsnwPaystackFiatService;
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
+  readonly ngnWallet?: NgnWalletPorts;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
   /** New review-confirmed purchased-MB transfer; no legacy Credits. */
   readonly gbSendReview?: GbSendPorts;
@@ -110,6 +113,8 @@ export interface GatewayAppOptions {
   readonly gbDataCatalogue?: GbDataCataloguePorts;
   readonly gbDataPurchases?: GbDataPurchaseRoutes;
   readonly billstackFunding?: BillstackFundingPorts;
+  readonly billstackSettlementVerifier?: BillstackFundingPorts["verifySettlement"];
+  readonly billstackVerifiedApplicant?: BillstackFundingPorts["applicant"];
 
 }
 
@@ -325,14 +330,16 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   // READ-ONLY discovery and pricing preview. No user-provided amount ever
   // creates a balance, payment intent, verified deposit or wallet receipt.
-  // Callers must re-quote against an immutable effective rate version before
-  // using verified provider events in the future MB ledger.
+  // Historical compatibility reference only. New deposits settle NGN; the
+  // signed exchange routes are the only current package purchase authority.
   const rechargeBook = options.gbRechargeRateBook ?? DEFAULT_RECHARGE_RATE_BOOK;
   validateRechargeRateBook(rechargeBook);
   app.get("/v1/gb/recharge/packages", async () => ({
     version: rechargeBook.version,
     packages: rechargeBook.tiers.map((tier) => quotePackage(tier.sizeGb, rechargeBook)),
-    settlement: "verified_bank_deposit_only" as const,
+    settlement: "historical_reference_only" as const,
+    automaticDepositConversion: false,
+    currentPackagesPath: "/v1/gb/wallet/exchange/packages",
   }));
   app.get("/v1/gb/recharge/preview", {
     schema: {
@@ -342,6 +349,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     },
   }, async (request) => ({
     previewOnly: true as const,
+    historicalReferenceOnly: true as const,
+    automaticDepositConversion: false,
     ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
   }));
 
@@ -350,6 +359,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   }
 
   if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
+  if (options.ngnWallet) registerNgnWalletRoutes(app, options.ngnWallet);
   if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);

@@ -1,3 +1,4 @@
+import '../gb_wallet/ngn_funding_screen.dart';
 import '../gb_wallet/recharge_screen.dart';
 import '../gb_wallet/gb_send_screen.dart';
 import '../gb_wallet/gb_request_screen.dart';
@@ -211,6 +212,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/wallet/transactions/:id',
         redirect: (_, __) => '/home?tab=wallet'),
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path: '/wallet/fund',
+        builder: (_, __) => const NgnFundingScreen()),
       GoRoute(path: '/wallet/add',
         builder: (_, __) => const RechargePackagesScreen()),
       GoRoute(path: '/wallet/request',

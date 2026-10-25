@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import {createHmac} from "node:crypto";
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {registerBillstackFundingRoutes,type BillstackFundingPorts} from "./billstack_funding_routes.js";
-import {DEFAULT_RECHARGE_RATE_BOOK} from "./pricing.js";
 const apps:Array<ReturnType<typeof Fastify>>=[];
 afterEach(async()=>{await Promise.all(apps.splice(0).map(x=>x.close()));});
 const secret="server-side-test-webhook-9psb-abcdefgh";
@@ -10,7 +9,7 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
  const account={state:"assigned" as const,reference:"merchant-ref",bankId:"9PSB" as const,
   accountNumber:"0000000100",accountName:"Masanawa Recipient",bankName:"9PSB Bank"};
  const create=vi.fn(async()=>({...account,reference:"provider-ref",accountNumber:"0000000100"}));
- const credit=vi.fn(async()=>({state:"credited" as const,eventId:"provider-transaction",creditedMb:200}));
+ const credit=vi.fn(async()=>({state:"credited" as const,eventId:"provider-transaction",creditedKobo:100000}));
  const p:BillstackFundingPorts={
   authorize:async h=>{if(h!=="Bearer session")throw Error("unauthorized");
     return {tenantId:"tenant-a",userId:"fan-a"};},
@@ -21,8 +20,8 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
   create,
   finalize:async()=>account,
   credit,
+  verifySettlement:async payment=>payment,
   webhookSecret:secret,
-  rateBook:DEFAULT_RECHARGE_RATE_BOOK,
   now:()=>1792886400*1000,
   ...overrides,
  };
@@ -60,6 +59,25 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
     headers,payload});
   expect(valid.statusCode).toBe(200);
   expect(credit).toHaveBeenCalledTimes(1);
-  expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}),expect.any(Function));
+  expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}));
  });
+ it("fails closed on unverified funding while retaining assigned-account readback",async()=>{
+  const f=setup({ready:()=>false});
+  const headers={authorization:"Bearer session"};
+  const result=await f.app.inject({url:"/v1/gb/wallet/virtual-account",headers});
+  expect(result.json().fundingEnabled).toBe(false);
+  expect((await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(503);
+  expect((await f.app.inject({method:"POST",url:"/webhooks/billstack/gb",headers:{"content-type":"application/json"},payload:"{}"})).statusCode).toBe(503);
+  expect(f.create).not.toHaveBeenCalled();expect(f.credit).not.toHaveBeenCalled();
+ });
+
+ it("rejects independent settlement mismatch even with a valid webhook signature",async()=>{
+  const f=setup({verifySettlement:async payment=>({...payment,amountKobo:payment.amountKobo+1})});
+  const timestamp="1792886400";
+  const payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-transaction",merchant_reference:"merchant-ref",amount:"1000.00",created_at:"2026-10-25T00:00:00Z",account:{account_number:"0000000100",bank_name:"9PSB Bank"}}});
+  const signature=createHmac("sha256",secret).update(timestamp+"."+payload).digest("hex");
+  const result=await f.app.inject({method:"POST",url:"/webhooks/billstack/gb",headers:{"content-type":"application/json","x-wiaxy-timestamp":timestamp,"x-wiaxy-signature-256":signature},payload});
+  expect(result.statusCode).toBe(503);expect(f.credit).not.toHaveBeenCalled();
+ });
+
 });

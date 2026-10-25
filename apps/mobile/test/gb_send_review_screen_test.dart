@@ -119,6 +119,7 @@ void main() {
     await tester.pump();
     expect(tester.widget<TextField>(find.byKey(
       const ValueKey('send-custom-mb'))).controller!.text, '500');
+    await tester.scrollUntilVisible(find.byType(TextField).first, 150, scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.byType(TextField).first, '@recipient');
     await tester.pump();
     expect(tester.widget<FilledButton>(find.widgetWithText(
@@ -156,6 +157,7 @@ void main() {
     expect(find.text('Sendable: 0 MB purchased'), findsOneWidget);
     expect(tester.widget<ChoiceChip>(find.byKey(
       const ValueKey('send-quick-100'))).onSelected, isNull);
+    await tester.scrollUntilVisible(find.byType(TextField).first, 150, scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.byType(TextField).first, '@recipient');
     await tester.enterText(find.byKey(const ValueKey('send-custom-mb')), '1');
     await tester.pump();

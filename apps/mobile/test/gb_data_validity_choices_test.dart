@@ -67,7 +67,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('All'), findsNothing);
-    expect(find.byType(ChoiceChip), findsNWidgets(9));
+    expect(find.text('All durations'), findsNothing);
+    expect(find.text('Other'), findsNothing);
+    expect(find.byType(ChoiceChip), findsNWidgets(7));
     await tester.tap(find.text('Airtel'));
     await tester.tap(find.text('Weekly'));
     expect(network, 'AIRTEL');

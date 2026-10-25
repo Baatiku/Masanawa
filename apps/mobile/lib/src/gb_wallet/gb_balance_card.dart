@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/masanawa_theme.dart';
 import 'gb_wallet_summary.dart';
+import 'ngn_funding_card_details.dart';
 
 /// The same server-authoritative available-MB display on Wallet and Send.
 /// Restricted welcome and reserved MB never enter the Sendable figure.
@@ -36,10 +37,9 @@ class GbWalletBalanceCard extends StatelessWidget {
             Icon(Icons.account_balance_wallet_rounded,
                 size: 20, color: colors.brand),
             const SizedBox(width: 8),
-            Text('Data balance', style: theme.textTheme.labelLarge?.copyWith(
+            Expanded(child: Text('Data balance', style: theme.textTheme.labelLarge?.copyWith(
               color: colors.textPrimary, fontWeight: FontWeight.w600,
-            )),
-            const Spacer(),
+            ))),
             if (loading)
               SizedBox(height: 16, width: 16,
                 child: CircularProgressIndicator(
@@ -80,6 +80,7 @@ class GbWalletBalanceCard extends StatelessWidget {
                   style: TextStyle(color: theme.colorScheme.error)),
             ],
           ],
+          const NgnFundingCardDetails(),
         ],
       ),
     );

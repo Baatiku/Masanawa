@@ -33,7 +33,7 @@ class GbDataNetworkChoices extends StatelessWidget {
 }
 
 /// These labels are mapped from verified validityDays, never from free-form
-/// provider titles. Other preserves valid nonstandard durations.
+/// provider titles. Only the three owner-approved periods are exposed.
 class GbDataValidityChoices extends StatelessWidget {
   const GbDataValidityChoices({super.key, required this.period,
     required this.onChanged, this.enabled = true});
@@ -47,10 +47,12 @@ class GbDataValidityChoices extends StatelessWidget {
     runSpacing: 4,
     children: [
       for (final choice in <GbDataValidityPeriod?>[
-        null, ...GbDataValidityPeriod.values,
+        GbDataValidityPeriod.daily, GbDataValidityPeriod.weekly,
+        GbDataValidityPeriod.monthly,
       ])
         ChoiceChip(
           key: ValueKey('data-validity-${choice?.name ?? 'all'}'),
+          checkmarkColor: Theme.of(context).colorScheme.onSurface,
           label: Text(switch (choice) {
             null => 'All durations',
             GbDataValidityPeriod.daily => 'Daily',

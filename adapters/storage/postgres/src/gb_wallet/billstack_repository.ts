@@ -34,6 +34,12 @@ function mapped(row:Record<string,unknown>):GbBillstackAccount {
     bankName:row.bank_name==null?null:String(row.bank_name), bankId:"9PSB",
   };
 }
+async function retryFunding<T>(run:()=>Promise<T>):Promise<T>{
+  for(let attempt=0;;attempt++)try{return await run();}catch(error){
+    const code=(error as {code?:string}).code;
+    if(attempt>=3||(code!=="40001"&&code!=="40P01"))throw error;
+  }
+}
 export function createGbBillstackRepository(pool:Pool) {
   return {
     async read(actor:GbBillstackActor):Promise<GbBillstackAccount|null> {
@@ -96,7 +102,8 @@ export function createGbBillstackRepository(pool:Pool) {
       if(!id(payment.eventId)||!id(payment.merchantReference)||
         !/^\d{10}$/.test(payment.accountNumber)||!safeInt(payment.amountKobo)||
         !Number.isFinite(Date.parse(payment.receivedAt)))throw new TypeError("Invalid verified payment");
-      return withTransaction(pool,async client=>{
+      return retryFunding(()=>withTransaction(pool,async client=>{
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",["gb-deposit:"+payment.eventId]);
         const match=await client.query(
           ["SELECT tenant_id,account_id,merchant_reference FROM gb_wallet.billstack_accounts",
           "WHERE merchant_reference=$1 AND account_number=$2 AND status='assigned' FOR UPDATE"].join(" "),
@@ -105,6 +112,12 @@ export function createGbBillstackRepository(pool:Pool) {
         const account=match.rows[0];
         if(!account)throw new Error("billstack.receiving_account_mismatch");
         const tenantId=String(account.tenant_id),userId=String(account.account_id);
+        const ngn=await client.query("SELECT * FROM gb_wallet.ngn_deposit_events WHERE provider_event_id=$1",[payment.eventId]);
+        if(ngn.rows[0]){
+          const r=ngn.rows[0];
+          if(r.tenant_id!==tenantId||r.account_id!==userId||r.merchant_reference!==payment.merchantReference||r.receiving_account!==payment.accountNumber||Number(r.amount_kobo)!==payment.amountKobo)throw new Error("billstack.duplicate_conflict");
+          return {state:"duplicate" as const,eventId:payment.eventId,creditedMb:0,amountKobo:payment.amountKobo,rateVersion:"ngn-settled-no-mb"};
+        }
         const prior=await client.query(
           "SELECT event_id,amount_kobo::text,credited_mb::text,rate_version,account_id FROM gb_wallet.billstack_deposits WHERE event_id=$1",
           [payment.eventId],
@@ -167,7 +180,7 @@ export function createGbBillstackRepository(pool:Pool) {
            payment.accountNumber,payment.amountKobo,result.rateVersion,result.creditedMb,payment.receivedAt],
         );
         return {state:"credited" as const,eventId:payment.eventId,creditedMb:result.creditedMb,amountKobo:payment.amountKobo,rateVersion:result.rateVersion};
-      },{isolation:"serializable"});
+      },{isolation:"serializable"}));
     },
   };
 }

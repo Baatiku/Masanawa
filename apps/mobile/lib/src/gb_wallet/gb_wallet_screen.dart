@@ -6,6 +6,7 @@ import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_balance_card.dart';
 import 'gb_wallet_summary.dart';
+import 'ngn_wallet.dart';
 
 /// Single authoritative MB wallet. The compact card never displays a
 /// fabricated zero or any historical Credits/MSNW balance.
@@ -30,6 +31,8 @@ class GbWalletScreen extends ConsumerWidget {
     Future<void> refresh() async {
       if (owner == null) return;
       ref.invalidate(gbWalletSummaryProvider(owner));
+      ref.invalidate(ngnWalletBalanceProvider(owner));
+      ref.invalidate(ngnBankAccountProvider(owner));
       try {
         await ref.read(gbWalletSummaryProvider(owner).future);
       } catch (_) {
