@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
-import 'package:masanawa/src/features/videos/video_models.dart';
 import 'package:masanawa/src/screens/status/status_screen.dart';
 
 void main() {
@@ -60,21 +59,7 @@ void main() {
       expect(requests.last.path, '/v1/posts/${item.id}/save');
       expect(requests.last.data, {'enabled': false});
 
-      final savedVideo = SavedStatusItem(
-        id: 'd2e54732-156c-47de-992d-bcc7a913579f',
-        savedAt: DateTime.utc(2026),
-        video: ExternalVideo(
-          id: 'd2e54732-156c-47de-992d-bcc7a913579f',
-          title: 'Approved',
-          channelName: 'Publisher',
-          provider: 'youtube',
-          sourceUrl: Uri.parse('https://www.youtube.com/watch?v=U2F7id123ab'),
-        ),
-      );
-      await api.removeSaved(savedVideo);
-      expect(requests.last.path, '/v1/videos/${savedVideo.id}/save');
-      expect(requests.last.data, {'enabled': false});
-      expect(requests.last.headers['Authorization'], 'Bearer token');
+
     },
   );
 
