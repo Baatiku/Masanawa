@@ -14,6 +14,7 @@ class MasanaInboxSearchItem {
     required this.pinned,
     required this.unreadCount,
     required this.revision,
+    this.lastActivityAt,
   });
 
   final String characterId;
@@ -23,6 +24,9 @@ class MasanaInboxSearchItem {
   final bool pinned;
   final int unreadCount;
   final int revision;
+  /// Server-reported message activity, not pin/edit activity. Older servers
+  /// may omit it; the UI then uses stable identity ordering.
+  final DateTime? lastActivityAt;
 
   factory MasanaInboxSearchItem.fromJson(Map<String, dynamic> data) {
     final id = data['characterId'];
@@ -31,11 +35,16 @@ class MasanaInboxSearchItem {
     final pinned = data['pinned'];
     final unread = data['unreadCount'];
     final revision = data['revision'];
+    final rawActivity = data['lastActivityAt'];
     if (id is! String || !id.startsWith('character_') ||
         name is! String || name.trim().isEmpty ||
         profession is! String || pinned is! bool ||
         unread is! int || unread < 0 || revision is! int || revision < 0) {
       throw const FormatException('Invalid authorized inbox row');
+    }
+    final activity = rawActivity is String ? DateTime.tryParse(rawActivity) : null;
+    if (rawActivity != null && activity == null) {
+      throw const FormatException('Invalid inbox message activity');
     }
     return MasanaInboxSearchItem(
       characterId: id,
@@ -45,6 +54,7 @@ class MasanaInboxSearchItem {
       pinned: pinned,
       unreadCount: unread,
       revision: revision,
+      lastActivityAt: activity,
     );
   }
 
@@ -57,6 +67,7 @@ class MasanaInboxSearchItem {
         pinned: isPinned,
         unreadCount: unreadCount,
         revision: version,
+        lastActivityAt: lastActivityAt,
       );
 }
 

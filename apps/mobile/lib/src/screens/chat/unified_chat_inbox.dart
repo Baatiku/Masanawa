@@ -60,7 +60,16 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       });
   }
 
-  Future<void> _refresh() => ref.read(agentDirectoryProvider.notifier).refresh();
+  Future<void> _refresh() async {
+    final owner = ref.read(sessionProvider);
+    await ref.read(agentDirectoryProvider.notifier).refresh();
+    if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+        owner is! SessionSignedIn || _remoteQuery.isEmpty ||
+        _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
+    ref.invalidate(_serverSearch(jsonEncode([
+      owner.user.id, owner.tokens.accessToken, _remoteQuery,
+    ])));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,37 +82,111 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       session.tokens.accessToken,
       _remoteQuery,
     ]);
-    final server =
-        _remoteQuery.isNotEmpty
+    final offline = !ref.watch(aiChatProvider).online;
+    final server = !offline && _remoteQuery.isNotEmpty &&
+            _remoteQuery == _query
         ? ref.watch(_serverSearch(serverKey))
         : null;
-    final savedIds = widget.masanaThreads.map((t) => t.characterId).toSet();
-    final serverRows = (server?.valueOrNull ?? const <MasanaInboxSearchItem>[])
-        .where(
-          (r) =>
-              !savedIds.contains(r.characterId),
-        )
-        .map((r) {
-          final confirmed = _confirmedPinUpdates[r.characterId];
-          return confirmed != null && confirmed.revision > r.revision
-              ? confirmed : r;
-        })
-        .toList();
-    final offline = !ref.watch(aiChatProvider).online;
+    // One identity per result, including server replay and locally archived
+    // history. A search hit must never replace the device's draft/messages.
+    final serverById = <String, MasanaInboxSearchItem>{};
+    for (final incoming in server?.valueOrNull ?? const <MasanaInboxSearchItem>[]) {
+      final confirmed = _confirmedPinUpdates[incoming.characterId];
+      final result = confirmed != null && confirmed.revision > incoming.revision
+          ? confirmed : incoming;
+      final previous = serverById[result.characterId];
+      if (previous == null || result.revision > previous.revision ||
+          (result.revision == previous.revision &&
+              (result.lastActivityAt ?? DateTime.utc(1970)).isAfter(
+                  previous.lastActivityAt ?? DateTime.utc(1970)))) {
+        serverById[result.characterId] = result;
+      }
+    }
     final rows = <({DateTime at, String id, Widget row})>[];
-      for (final t in widget.masanaThreads) {
+    final localIds = <String>{};
+    for (final t in widget.masanaThreads) {
+        if (!localIds.add(t.characterId)) continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
                 .toLowerCase()
-                .contains(_query))
+                .contains(_query) &&
+            !serverById.containsKey(t.characterId))
           continue;
         rows.add((
           at: t.lastMessageActivityAt,
-          id: 'masana-${t.characterId}',
+          id: t.characterId,
           row: widget.masanaRow(t),
         ));
-      }
+    }
+    for (final result in serverById.values) {
+      if (localIds.contains(result.characterId)) continue;
+      rows.add((
+        at: result.lastActivityAt ?? DateTime.utc(1970),
+        id: result.characterId,
+        row: ListTile(
+          key: ValueKey('remote-${result.characterId}'),
+          leading: MasanaPortraitAvatar(
+            characterId: result.characterId,
+            agent: ref.watch(agentDirectoryProvider).find(result.characterId),
+            displayName: result.displayName,
+            size: 44,
+          ),
+          title: Text(result.displayName),
+          subtitle: Text(
+            result.lastMessage.isEmpty ? result.profession : result.lastMessage,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: IconButton(
+            tooltip: result.pinned
+                ? 'Unpin server conversation'
+                : 'Pin server conversation',
+            icon: Icon(result.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+            onPressed: () async {
+              final owner = ref.read(sessionProvider);
+              final access = ref.read(masanaInboxSearchProvider);
+              try {
+                final nextRevision = await access.setPinned(
+                  bearer: session.tokens.accessToken,
+                  characterId: result.characterId,
+                  pinned: !result.pinned,
+                  expectedRevision: result.revision,
+                );
+                if (mounted && identical(owner, ref.read(sessionProvider))) {
+                  setState(() => _confirmedPinUpdates[result.characterId] =
+                      result.withPin(!result.pinned, nextRevision));
+                  ref.invalidate(_serverSearch(serverKey));
+                }
+              } catch (_) {
+                if (mounted && identical(owner, ref.read(sessionProvider))) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not update pin.')),
+                  );
+                }
+              }
+            },
+          ),
+          onTap: () {
+            final owner = ref.read(sessionProvider);
+            if (owner is! SessionSignedIn) return;
+            context.push('/chat/${Uri.encodeComponent(result.characterId)}');
+            // The read receipt may fail without blocking navigation.
+            unawaited(() async {
+              if (!mounted || !identical(owner, ref.read(sessionProvider))) return;
+              try {
+                await ref.read(masanaInboxSearchProvider).markRead(
+                  bearer: owner.tokens.accessToken,
+                  characterId: result.characterId,
+                );
+              } catch (_) {
+                // The chat screen can retry the original acknowledgement.
+              }
+            }());
+          },
+        ),
+      ));
+    }
     rows.sort((a, b) {
       final time = b.at.compareTo(a.at);
       return time != 0 ? time : a.id.compareTo(b.id);
@@ -127,7 +210,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               physics: const AlwaysScrollableScrollPhysics(),
               key: const PageStorageKey('unified-inbox'),
               children: [
-                if (rows.isEmpty)
+                if (rows.isEmpty && server?.isLoading != true)
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Column(
@@ -150,7 +233,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                   ),
                 for (final row in rows) row.row,
                 if (server?.isLoading == true)
-                  const LinearProgressIndicator(minHeight: 2),
+                  const LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: 'Searching server conversations'),
                 if (server?.hasError == true)
                   ListTile(
                     title: const Text(
@@ -161,86 +245,6 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
                       icon: const Icon(Icons.refresh),
                     ),
-                  ),
-                if (serverRows.isNotEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Other server conversations'),
-                  ),
-                for (final result in serverRows)
-                  ListTile(
-                    key: ValueKey('remote-${result.characterId}'),
-                    leading: MasanaPortraitAvatar(
-                      characterId: result.characterId,
-                      agent: ref
-                          .watch(agentDirectoryProvider)
-                          .find(result.characterId),
-                      displayName: result.displayName,
-                      size: 44,
-                    ),
-                    title: Text(result.displayName),
-                    subtitle: Text(
-                      result.lastMessage.isEmpty
-                          ? result.profession
-                          : result.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: result.pinned
-                          ? 'Unpin server conversation'
-                          : 'Pin server conversation',
-                      icon: Icon(
-                        result.pinned
-                            ? Icons.push_pin
-                            : Icons.push_pin_outlined,
-                      ),
-                      onPressed: () async {
-                        final owner = ref.read(sessionProvider);
-                        final access = ref.read(masanaInboxSearchProvider);
-                        try {
-                          final nextRevision = await access.setPinned(
-                            bearer: session.tokens.accessToken,
-                            characterId: result.characterId,
-                            pinned: !result.pinned,
-                            expectedRevision: result.revision,
-                          );
-                          if (mounted &&
-                              identical(owner, ref.read(sessionProvider))) {
-                            setState(() => _confirmedPinUpdates[result.characterId] =
-                                result.withPin(!result.pinned, nextRevision));
-                            ref.invalidate(_serverSearch(serverKey));
-                          }
-                        } catch (_) {
-                          if (mounted &&
-                              identical(owner, ref.read(sessionProvider)))
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Could not update pin.'),
-                              ),
-                            );
-                        }
-                      },
-                    ),
-                    onTap: () {
-                      final owner = ref.read(sessionProvider);
-                      if (owner is! SessionSignedIn) return;
-                      context.push('/chat/${Uri.encodeComponent(result.characterId)}');
-                      // Acknowledgment is server-authorized and deliberately
-                      // independent of navigation: a transient failure must
-                      // never prevent opening the conversation.
-                      unawaited(() async {
-                        if (!mounted || !identical(owner, ref.read(sessionProvider))) return;
-                        try {
-                          await ref.read(masanaInboxSearchProvider).markRead(
-                            bearer: owner.tokens.accessToken,
-                            characterId: result.characterId,
-                          );
-                        } catch (_) {
-                          // Failed read receipts can be retried when chat opens.
-                        }
-                      }());
-                    },
                   ),
                 const SizedBox(height: 88),
               ],
