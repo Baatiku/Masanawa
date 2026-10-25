@@ -53,9 +53,13 @@ class NgnBankAccount {
     this.name,
     this.bank,
     this.fundingEnabled = false,
+    this.assignmentEnabled = false,
+    this.applicantComplete = false,
   });
   final String state;
   final bool fundingEnabled;
+  final bool assignmentEnabled;
+  final bool applicantComplete;
   final String? number, name, bank;
   factory NgnBankAccount.fromJson(Object? data) {
     if (data is! Map<String, dynamic> ||
@@ -71,6 +75,8 @@ class NgnBankAccount {
       return NgnBankAccount(
         state as String,
         fundingEnabled: data['fundingEnabled'] == true,
+        assignmentEnabled: data['assignmentEnabled'] == true,
+        applicantComplete: data['applicantComplete'] == true,
       );
     if (r['bankId'] != '9PSB' ||
         r['accountNumber'] is! String ||
@@ -84,6 +90,8 @@ class NgnBankAccount {
     return NgnBankAccount(
       'assigned',
       fundingEnabled: data['fundingEnabled'] == true,
+      assignmentEnabled: data['assignmentEnabled'] == true,
+      applicantComplete: data['applicantComplete'] == true,
       number: r['accountNumber'] as String,
       name: r['accountName'] as String,
       bank: r['bankName'] as String,

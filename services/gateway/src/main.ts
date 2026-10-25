@@ -1733,6 +1733,26 @@ export async function startGatewayService(
       const provider = createBillstack9PsbClient({secretKey:billstackSecret});
       return {
         authorize:async(header:string|undefined)=>resolveFeatureFan(header),
+        applicantComplete:async(actor)=>{
+          const result=await featurePool.query(
+            `SELECT 1 FROM security.platform_user_profiles
+             WHERE tenant_id=$1 AND user_id=$2 AND email IS NOT NULL
+               AND first_name IS NOT NULL AND last_name IS NOT NULL
+               AND contact_phone IS NOT NULL`,
+            [actor.tenantId,actor.userId]);
+          return result.rowCount===1;
+        },
+        completeApplicant:async(actor,details)=>{
+          const result=await featurePool.query(
+            `UPDATE security.platform_user_profiles p
+             SET first_name=$3,last_name=$4,contact_phone=$5,updated_at=clock_timestamp()
+             WHERE p.tenant_id=$1 AND p.user_id=$2 AND p.email IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM gb_wallet.billstack_accounts a
+                 WHERE a.tenant_id=p.tenant_id AND a.account_id=p.user_id)
+             RETURNING p.user_id`,
+            [actor.tenantId,actor.userId,details.firstName,details.lastName,details.contactPhone]);
+          if(result.rowCount!==1)throw new Error("billstack.applicant_change_unavailable");
+        },
         // Profile text alone does not prove verified contact/eligibility.
         applicant:options.appOptions?.billstackVerifiedApplicant ?? (async(actor,reference)=>{
           const rows=await featurePool.query(

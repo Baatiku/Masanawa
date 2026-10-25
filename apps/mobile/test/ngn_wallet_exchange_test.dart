@@ -365,6 +365,22 @@ void main() {
       expect(f.posts, isEmpty);
     },
   );
+  testWidgets('existing email account can complete missing funding details',
+      (tester) async {
+    final f = _Fixture();
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(f.api),
+      ngnBankAccountProvider.overrideWith((ref, owner) async =>
+          const NgnBankAccount('unassigned', assignmentEnabled: true,
+              applicantComplete: false)),
+    ], child: const MaterialApp(home: NgnFundingScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('Complete your funding details'), findsOneWidget);
+    expect(find.text('Get funding account'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'Data uses three compact cards and only three periods, no cashback',
     (tester) async {
