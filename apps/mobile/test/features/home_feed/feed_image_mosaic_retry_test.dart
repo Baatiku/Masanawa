@@ -54,6 +54,7 @@ void main() {
     await tester.tap(find.text('Approved second'));
     await tester.pump();
     expect(opened, ['second']);
+    await tester.ensureVisible(find.text('View all 3 images'));
     await tester.tap(find.text('View all 3 images'));
     await tester.pump();
     expect(opened, ['second', 'first']);
