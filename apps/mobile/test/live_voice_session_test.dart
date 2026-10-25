@@ -356,6 +356,99 @@ void main() {
     }
   });
 
+  test('reconnect never uploads PCM before provider setup or reopens a muted microphone', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final firstPeer = Completer<WebSocket>();
+    final secondPeer = Completer<WebSocket>();
+    final secondSetup = Completer<void>();
+    var connections = 0;
+    var microphoneStarts = 0;
+    var secondSocketFrames = 0;
+    var connectedCalls = 0;
+    final microphone = StreamController<Uint8List>.broadcast(
+      onListen: () => microphoneStarts++,
+    );
+    final listener = server.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      final index = ++connections;
+      if (index == 1) {
+        firstPeer.complete(socket);
+      } else {
+        secondPeer.complete(socket);
+      }
+      socket.listen((raw) {
+        if (raw is! String) return;
+        final event = jsonDecode(raw);
+        if (event is! Map) return;
+        if (event['setup'] is Map) {
+          if (index == 1) {
+            socket.add(jsonEncode({'setupComplete': {}}));
+            socket.add(jsonEncode({
+              'sessionResumptionUpdate': {
+                'resumable': true,
+                'newHandle': 'same-call-handle',
+              },
+            }));
+          } else {
+            expect(event['setup']['sessionResumption'],
+                {'handle': 'same-call-handle'});
+            if (!secondSetup.isCompleted) secondSetup.complete();
+          }
+        } else if (index == 2 && event['realtimeInput'] is Map) {
+          secondSocketFrames++;
+        }
+      });
+    });
+    final live = LiveVoiceSession(
+      grant: AgentLiveVoiceGrant(
+        token: 'original',
+        websocketUrl: 'ws://127.0.0.1:${server.port}',
+        model: 'test',
+        voiceName: 'Bodi',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      ),
+      characterName: 'Gwani',
+      sharedMicrophone: microphone.stream,
+      sendGreeting: false,
+      onConnected: () => connectedCalls++,
+    );
+    try {
+      await live.start();
+      await live.ready.timeout(const Duration(seconds: 2));
+      expect(microphoneStarts, 1);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await (await firstPeer.future).close();
+      await secondSetup.future.timeout(const Duration(seconds: 5));
+      microphone.add(Uint8List.fromList([1, 2, 3]));
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(secondSocketFrames, 0,
+          reason: 'Open replacement WebSocket is not provider setup completion');
+
+      await live.mute(true);
+      (await secondPeer.future).add(jsonEncode({'setupComplete': {}}));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(live.muted, isTrue);
+      expect(microphoneStarts, 1,
+          reason: 'Reconnected setup cannot re-subscribe muted capture');
+      microphone.add(Uint8List.fromList([4, 5, 6]));
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(secondSocketFrames, 0);
+
+      await live.mute(false);
+      expect(microphoneStarts, 2);
+      microphone.add(Uint8List.fromList([7, 8, 9]));
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(secondSocketFrames, 1);
+      expect(connectedCalls, 1,
+          reason: 'Reconnected setup belongs to the same original call');
+    } finally {
+      await live.close();
+      await microphone.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
+
   test('a disconnected call without provider resumption handle ends once',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

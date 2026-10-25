@@ -334,15 +334,15 @@ class LiveVoiceSession with WidgetsBindingObserver {
     await _connectSocket(resumeHandle: handle);
   }
 
-  Future<void> _beginMicrophone({bool initialSetup = false}) async {
+  Future<void> _beginMicrophone() async {
     if (_closed ||
-        (_audioInterrupted || (_muted && !initialSetup)) ||
+        _audioInterrupted || _muted ||
         !_setupComplete ||
         _micSub != null)
       return;
     final active = _startingMic;
     if (active != null) return active;
-    final future = _startMicrophone(initialSetup: initialSetup);
+    final future = _startMicrophone();
     _startingMic = future;
     try {
       await future;
@@ -351,10 +351,10 @@ class LiveVoiceSession with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _startMicrophone({bool initialSetup = false}) async {
+  Future<void> _startMicrophone() async {
     final stream = sharedMicrophone ?? await startCallMicrophone(
       _recorder!, bluetoothGranted: await AppPermissions.bluetoothConnectGranted());
-    if (_closed || (_audioInterrupted || (_muted && !initialSetup))) {
+    if (_closed || _audioInterrupted || _muted || !_setupComplete) {
       try {
         if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
       } catch (_) {}
@@ -363,7 +363,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
     _micSub = stream.listen(
       (chunk) {
         if (_closed ||
-            _muted || _audioInterrupted ||
+            _muted || _audioInterrupted || !_setupComplete ||
             chunk.isEmpty ||
             _socket?.readyState != WebSocket.open) {
           return;
@@ -417,7 +417,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
         // intentionally never requested or rendered as text.
         final pendingSocket = _socket;
         if (pendingSocket == null || _closed) return;
-        await _beginMicrophone(initialSetup: true);
+        await _beginMicrophone();
         if (_closed) return;
         if (sendGreeting && !_ready.isCompleted) {
           pendingSocket.add(
