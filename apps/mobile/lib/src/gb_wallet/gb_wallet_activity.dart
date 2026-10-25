@@ -54,6 +54,8 @@ class GbActivityPage {
 abstract class GbActivityTransport {
   Future<GbActivityPage> page({required int limit,String? cursor,
     CancelToken? cancellation});
+  Future<GbActivityItem> detail({required String entryId,
+    CancelToken? cancellation});
 }
 
 class DioGbActivityTransport implements GbActivityTransport {
@@ -72,6 +74,24 @@ class DioGbActivityTransport implements GbActivityTransport {
         if(cursor!=null)'cursor':cursor},cancelToken:cancellation,
       options:Options(headers:const {'Cache-Control':'no-store'}));
     return GbActivityPage.read(response.data);
+  }
+
+  @override
+  Future<GbActivityItem> detail({required String entryId,
+    CancelToken? cancellation}) async {
+    if(!RegExp(r'^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$').hasMatch(entryId)) {
+      throw const FormatException('Invalid transaction reference');
+    }
+    final result=await dio.get<Object?>(
+      '/v1/gb/wallet/activity/${Uri.encodeComponent(entryId)}',
+      cancelToken:cancellation,
+      options:Options(headers:const {'Cache-Control':'no-store'}));
+    if(result.data is! Map || (result.data as Map)['item']==null) {
+      throw const FormatException('Transaction is unavailable');
+    }
+    final item=GbActivityItem.read((result.data as Map)['item']);
+    if(item.id!=entryId)throw const FormatException('Mismatched transaction');
+    return item;
   }
 }
 
@@ -94,4 +114,22 @@ final gbActivityPageProvider=FutureProvider.autoDispose.family<GbActivityPage,Gb
       .page(limit:request.limit,cancellation:cancel);
     if(!sameOwner())throw StateError('account_changed');
     return result;
+  });
+
+typedef GbActivityDetailRequest=({GbWalletOwner owner,String entryId});
+final gbActivityDetailProvider=FutureProvider.autoDispose.family<GbActivityItem,GbActivityDetailRequest>(
+  (ref,request) async {
+    bool sameOwner() {
+      final session=ref.read(sessionProvider);
+      return session is SessionSignedIn &&
+        session.user.id==request.owner.accountId &&
+        ref.read(sessionProvider.notifier).authorizationEpoch==
+          request.owner.authorizationEpoch;
+    }
+    if(!sameOwner())throw StateError('account_changed');
+    final cancel=CancelToken();ref.onDispose(cancel.cancel);
+    final item=await ref.watch(gbActivityTransportProvider).detail(
+      entryId:request.entryId,cancellation:cancel);
+    if(!sameOwner())throw StateError('account_changed');
+    return item;
   });

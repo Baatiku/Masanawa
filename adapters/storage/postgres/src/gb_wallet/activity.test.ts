@@ -51,4 +51,19 @@ describe("read-only NGN and MB wallet activity",()=>{
     await expect(f.repo.list(scope,5,{createdAt:"bad",entryId:"mb:1"})).rejects.toThrow();
     expect(f.query).not.toHaveBeenCalled();
   });
+  it("finds only an exact authorized immutable row, never by a bare operation ID",async()=>{
+    const f=fixture([{entry_id:"mb:123",operation_id:"send_one",unit:"MB",
+      signed_amount:"-100",kind:"send",status:"completed",
+      created_at:"2026-10-25T19:00:00Z"}]);
+    expect((await f.repo.find(scope,"mb:123"))?.amount).toBe(-100);
+    const [sql,params]=f.query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("m.tenant_id=$1");
+    expect(sql).toContain("m.from_id=$2");
+    expect(sql).toContain("m.to_id=$2");
+    expect(sql).toContain("n.account_id=$2");
+    expect(params).toEqual(["tenant_one","fan_one","mb:123"]);
+    f.query.mockClear();
+    await expect(f.repo.find(scope,"send_one")).rejects.toThrow();
+    expect(f.query).not.toHaveBeenCalled();
+  });
 });

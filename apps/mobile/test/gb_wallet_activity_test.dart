@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity_screen.dart';
+import 'package:masanawa/src/gb_wallet/gb_wallet_activity_detail_screen.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
 
@@ -33,8 +34,11 @@ GbActivityItem item(String id,int amount,{String unit='MB',String kind='send'})=
 
 class _Activity implements GbActivityTransport {
   final requests=<String?>[];
+  final detailRequests=<String>[];
   final responses=<String?,GbActivityPage>{};
   Completer<GbActivityPage>? pending;
+  Completer<GbActivityItem>? pendingDetail;
+  GbActivityItem? detailResponse;
   bool fail=false;
   @override
   Future<GbActivityPage> page({required int limit,String? cursor,
@@ -43,6 +47,15 @@ class _Activity implements GbActivityTransport {
     if(fail)throw StateError('offline');
     if(pending!=null && cursor!=null)return pending!.future;
     return responses[cursor]??const GbActivityPage([],null);
+  }
+  @override
+  Future<GbActivityItem> detail({required String entryId,
+    CancelToken? cancellation}) async {
+    detailRequests.add(entryId);
+    if(fail)throw StateError('offline');
+    if(pendingDetail!=null)return pendingDetail!.future;
+    if(detailResponse==null)throw StateError('missing');
+    return detailResponse!;
   }
 }
 
@@ -134,6 +147,55 @@ void main() {
     expect(find.text('−100 MB'),findsNothing);
     expect(find.text('+50 MB'),findsOneWidget,
       reason:'Only the newly authorized account\'s journal may become visible');
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('detail reads authoritative exact ID and copies its original reference', (tester) async {
+    final fake=_Activity()..detailResponse=item('ngn:fund_1',-128050,
+      unit:'NGN',kind:'deposit_reversal');
+    await tester.pumpWidget(ProviderScope(overrides:[
+      sessionProvider.overrideWith(_Session.new),
+      gbActivityTransportProvider.overrideWithValue(fake),
+    ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+      home:const GbWalletActivityDetailScreen(entryId:'ngn:fund_1'))));
+    await tester.pumpAndSettle();
+    expect(fake.detailRequests,['ngn:fund_1']);
+    expect(find.text('−₦1,280.50'),findsOneWidget);
+    expect(find.text('original_ngn:fund_1'),findsOneWidget);
+    expect(find.text('Copy reference'),findsOneWidget);
+    await tester.dragUntilVisible(find.textContaining(
+      'not proof of external bank settlement'),find.byType(ListView),
+      const Offset(0,-150));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('not proof of external bank settlement'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('detail failures retry and account change discards older private detail', (tester) async {
+    final fake=_Activity()..fail=true;
+    final container=ProviderContainer(overrides:[
+      sessionProvider.overrideWith(_Session.new),
+      gbActivityTransportProvider.overrideWithValue(fake),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(container:container,
+      child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+        home:const GbWalletActivityDetailScreen(entryId:'mb:1'))));
+    await tester.pumpAndSettle();
+    expect(find.text('This transaction could not be verified.'),findsOneWidget);
+    fake.fail=false;
+    fake.pendingDetail=Completer<GbActivityItem>();
+    await tester.tap(find.text('Retry transaction'));
+    await tester.pump();
+    (container.read(sessionProvider.notifier) as _Session).switchAccount();
+    // The new account cannot read the old actor's entry. A resolved old HTTP
+    // request is still delivered below to exercise the epoch guard.
+    fake.fail=true;
+    await tester.pump();
+    fake.pendingDetail!.complete(item('mb:1',150));
+    await tester.pumpAndSettle();
+    expect(find.text('+150 MB'),findsNothing);
+    expect(find.text('original_mb:1'),findsNothing);
     expect(tester.takeException(),isNull);
   });
 }
