@@ -25,8 +25,11 @@ class MasanaFeedScreen extends StatefulWidget {
     this.mediaApi,
     this.inlineMediaRenderer,
     this.wrapAccountRoute,
+    this.searchExpanded,
   });
   final FeedApi api;
+  /// Header-owned search affordance for the Status root.
+  final ValueNotifier<bool>? searchExpanded;
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile, onHumanProfile;
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
@@ -55,12 +58,19 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   final searchController = TextEditingController();
   String searchTerm = '';
   String mode = 'for_you';
+  bool localSearchExpanded = false;
   List<FeedPost> items = [];
   String? cursor, error;
   bool loading = false, fetchingMore = false, offline = false;
   int generation = 0;
   final Set<String> pendingActions = {};
   String? pageError;
+  void _onExternalSearchChanged() {
+    if (!mounted) return;
+    if (widget.searchExpanded?.value == false) clearSearch();
+    setState(() {});
+  }
+
   void clearProjection() {
     generation++;
     items = [];
@@ -76,6 +86,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override
   void dispose() {
     generation++;
+    widget.searchExpanded?.removeListener(_onExternalSearchChanged);
     searchController.dispose();
     super.dispose();
   }
@@ -142,6 +153,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override
   void initState() {
     super.initState();
+    widget.searchExpanded?.addListener(_onExternalSearchChanged);
     mode = widget.ownPostsOnly ? 'mine' : 'for_you';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) refresh();
@@ -151,6 +163,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override
   void didUpdateWidget(covariant MasanaFeedScreen old) {
     super.didUpdateWidget(old);
+    if (old.searchExpanded != widget.searchExpanded) {
+      old.searchExpanded?.removeListener(_onExternalSearchChanged);
+      widget.searchExpanded?.addListener(_onExternalSearchChanged);
+    }
     // A refreshed auth token recreates the Status API wrapper but keeps the
     // same authorized account. Do not erase visible posts or refetch then.
     if (old.accountKey != widget.accountKey ||
@@ -421,89 +437,57 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     return Column(
       children: [
         if (!widget.authorScoped)
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              alignment: WrapAlignment.end,
-              children: [
-                if (widget.api is SavedStatusLibraryApi)
-                  TextButton.icon(
-                    onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
-                    icon: const Icon(Icons.bookmarks_outlined),
-                    label: Text(t('Saved', 'Ajiye')),
-                  ),
-              ],
-            ),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 10, 4),
+            child: Row(children: [
+              Expanded(child: Text(
+                t('Status', 'Labarai'),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              )),
+              if (widget.api is SearchFeedApi && widget.searchExpanded == null)
+                IconButton(
+                  tooltip: localSearchExpanded ? 'Close Status search' : 'Search Status',
+                  icon: Icon(localSearchExpanded ? Icons.close : Icons.search),
+                  onPressed: () {
+                    if (localSearchExpanded) clearSearch();
+                    setState(() => localSearchExpanded = !localSearchExpanded);
+                  },
+                ),
+              if (widget.api is SavedStatusLibraryApi)
+                IconButton(
+                  tooltip: t('Saved Status', 'Labarai da aka ajiye'),
+                  onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
+                  icon: const Icon(Icons.bookmark_border_rounded),
+                ),
+            ]),
           ),
         if (!widget.authorScoped &&
             !widget.ownPostsOnly &&
-            widget.api is SearchFeedApi)
+            widget.api is SearchFeedApi &&
+            (widget.searchExpanded?.value ?? localSearchExpanded))
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => applySearch(),
-                    decoration: InputDecoration(
-                      labelText: t('Search Status posts', 'Bincika labarai'),
-                      hintText: t('Search post text', 'Bincika rubutun labari'),
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        tooltip: t('Clear Status search', 'Goge bincike'),
-                        onPressed: clearSearch,
-                        icon: const Icon(Icons.close),
-                      ),
-                    ),
-                  ),
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+            child: TextField(
+              controller: searchController,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => applySearch(),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: t('Search Status', 'Bincika labarai'),
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: IconButton(
+                  tooltip: t('Clear Status search', 'Goge bincike'),
+                  onPressed: clearSearch,
+                  icon: const Icon(Icons.close_rounded),
                 ),
-                const SizedBox(width: 6),
-                IconButton(
-                  tooltip: t('Search all Status posts', 'Bincika duk labarai'),
-                  onPressed: applySearch,
-                  icon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
                 ),
-              ],
+              ),
             ),
-          ),
-        if (!widget.authorScoped)
-          Row(
-            children: [
-              Expanded(
-                child: ChoiceChip(
-                  label: Text(t('For You', 'Domin Kai')),
-                  selected: mode == 'for_you',
-                  onSelected: (_) {
-                    setState(() {
-                      mode = 'for_you';
-                      items = [];
-                      cursor = null;
-                    });
-                    refresh();
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ChoiceChip(
-                  label: Text(t('Following', 'Wadanda nake bi')),
-                  selected: mode == 'following',
-                  onSelected: (_) {
-                    setState(() {
-                      mode = 'following';
-                      items = [];
-                      cursor = null;
-                    });
-                    refresh();
-                  },
-                ),
-              ),
-            ],
           ),
         if (pageError != null && items.isNotEmpty)
           MaterialBanner(
@@ -565,11 +549,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   'No Status posts match this search.',
                                   'Babu labarai masu dacewa da binciken.',
                                 )
-                              : mode == 'following'
-                              ? t(
-                                  'No updates from people or Masana you follow yet.',
-                                  'Har yanzu babu sabuntawa daga wadanda kake bi.',
-                                )
                               : widget.ownPostsOnly
                               ? t('No public posts yet', 'Babu labarana tukuna')
                               : t(
@@ -578,23 +557,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 ),
                           textAlign: TextAlign.center,
                         ),
-                        if (mode == 'following' && error == null)
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                mode = 'for_you';
-                                items = [];
-                                cursor = null;
-                              });
-                              refresh();
-                            },
-                            child: Text(t('Explore For You', 'Duba Domin Kai')),
-                          )
-                        else
-                          TextButton(
-                            onPressed: refresh,
-                            child: Text(t('Retry', 'Sake gwadawa')),
-                          ),
+                        TextButton(
+                          onPressed: refresh,
+                          child: Text(t('Retry', 'Sake gwadawa')),
+                        ),
                       ],
                     ),
                   ),
@@ -668,7 +634,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                             Text(
                                               post.isHuman
                                                   ? 'Member'
-                                                  : 'Masana · AI',
+                                                  : 'Status',
                                               style: Theme.of(
                                                 context,
                                               ).textTheme.labelSmall,
