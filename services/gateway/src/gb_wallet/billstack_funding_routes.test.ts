@@ -60,6 +60,6 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
     headers,payload});
   expect(valid.statusCode).toBe(200);
   expect(credit).toHaveBeenCalledTimes(1);
-  expect(credit.mock.calls[0]?.[0]).toMatchObject({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000});
+  expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}),expect.any(Function));
  });
 });
