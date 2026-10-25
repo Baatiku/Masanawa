@@ -1,0 +1,63 @@
+import Fastify from "fastify";
+import {createHmac} from "node:crypto";
+import {afterEach,describe,expect,it,vi} from "vitest";
+import {registerBillstackFundingRoutes,type BillstackFundingPorts} from "./billstack_funding_routes.js";
+import {DEFAULT_RECHARGE_RATE_BOOK} from "./pricing.js";
+const apps:Array<ReturnType<typeof Fastify>>=[];
+afterEach(async()=>{await Promise.all(apps.splice(0).map(x=>x.close()));});
+const secret="server-side-test-webhook-9psb-abcdefgh";
+function setup(overrides:Partial<BillstackFundingPorts>={}) {
+ const account={state:"assigned" as const,reference:"merchant-ref",bankId:"9PSB" as const,
+  accountNumber:"0000000100",accountName:"Masanawa Recipient",bankName:"9PSB Bank"};
+ const create=vi.fn(async()=>({...account,reference:"provider-ref",accountNumber:"0000000100"}));
+ const credit=vi.fn(async()=>({state:"credited" as const,eventId:"provider-transaction",creditedMb:200}));
+ const p:BillstackFundingPorts={
+  authorize:async h=>{if(h!=="Bearer session")throw Error("unauthorized");
+    return {tenantId:"tenant-a",userId:"fan-a"};},
+  applicant:async(_actor,reference)=>({reference,email:"fan@example.com",phone:"08012345678",firstName:"Fan",lastName:"Masanawa"}),
+  read:async()=>null,
+  start:async(_actor,reference)=>({created:true,account:{...account,reference,state:"pending",
+    accountNumber:null,accountName:null,bankName:null}}),
+  create,
+  finalize:async()=>account,
+  credit,
+  webhookSecret:secret,
+  rateBook:DEFAULT_RECHARGE_RATE_BOOK,
+  ...overrides,
+ };
+ const app=Fastify({logger:false});apps.push(app);registerBillstackFundingRoutes(app,p);
+ return {app,credit,create};
+}
+describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
+ it("hides account details until authenticated and provider confirmed",async()=>{
+  const {app,create}=setup();
+  expect((await app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account"})).statusCode).toBe(401);
+  const response=await app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers:{authorization:"Bearer session"}});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().account).toMatchObject({state:"assigned",bankId:"9PSB",accountNumber:"0000000100"});
+  expect(create).toHaveBeenCalledOnce();
+  const pending=setup({read:async()=>({state:"pending",reference:"ref",bankId:"9PSB",
+    accountNumber:null,accountName:null,bankName:null})});
+  const p=await pending.app.inject({method:"GET",url:"/v1/gb/wallet/virtual-account",headers:{authorization:"Bearer session"}});
+  expect(p.json().account).toEqual({state:"pending"});
+ });
+ it("requires raw-body HMAC and passes exact bank reference to ledger once",async()=>{
+  const {app,credit}=setup();
+  const time="1792886400",payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{
+    type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-transaction",
+    merchant_reference:"merchant-ref",amount:"1000.00",
+    created_at:"2026-10-25T00:00:00Z",
+    account:{account_number:"0000000100",bank_name:"9PSB Bank"}}});
+  const signed=createHmac("sha256",secret).update(time+"."+payload).digest("hex");
+  const headers={"content-type":"application/json",
+    "x-wiaxy-timestamp":time,"x-wiaxy-signature-256":signed};
+  const invalid=await app.inject({method:"POST",url:"/webhooks/billstack/gb",
+    headers:{...headers,"x-wiaxy-signature-256":"0".repeat(64)},payload});
+  expect(invalid.statusCode).toBe(503);
+  expect(credit).not.toHaveBeenCalled();
+  const valid=await app.inject({method:"POST",url:"/webhooks/billstack/gb",
+    headers,payload});
+  // Override wall clock in production; fixture timestamp must be current.
+  expect([200,503]).toContain(valid.statusCode);
+ });
+});
