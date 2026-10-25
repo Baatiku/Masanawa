@@ -3,11 +3,8 @@ import Type from "typebox";
 import type { TalkSafetyService } from "./talk_safety/service.js";
 
 const targetKind=Type.Union([
-  Type.Literal("talk"),
-  Type.Literal("replay"),
   Type.Literal("comment"),
   Type.Literal("profile"),
-  Type.Literal("persona"),
 ]);
 
 export function registerTalkSafetyRoutes(
@@ -34,7 +31,7 @@ export function registerTalkSafetyRoutes(
     },
     async(request,reply)=>{
       const body=request.body as {
-        targetKind:"talk"|"replay"|"comment"|"profile"|"persona";
+        targetKind:"comment"|"profile";
         targetId:string;
         reason:"spam"|"harassment"|"hate"|"sexual"|"violence"|"self-harm"|"fraud"|"impersonation"|"privacy"|"other";
         detail?:string|null;

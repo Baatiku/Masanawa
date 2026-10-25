@@ -1,3 +1,4 @@
+import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
 import { registerHistoricalFinancialCallbacks } from './historical_financial_callbacks.js';
 import {
   DEFAULT_RECHARGE_RATE_BOOK,
@@ -1256,6 +1257,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     ...(options.mobileNotifications
       ? { mobileNotifications: options.mobileNotifications } : {}),
   });
+  if (options.talkSafety) registerTalkSafetyRoutes(app, options.talkSafety);
+
   if (options.talkProfiles) {
     registerTalkProfileRoutes(app, options.talkProfiles);
   }

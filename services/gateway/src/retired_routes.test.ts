@@ -67,4 +67,21 @@ describe('permanent customer API retirement', () => {
       payload: {} })).statusCode).toBe(404);
   });
 
+  it('keeps social block/report controls while refusing retired report targets', async () => {
+    const report = vi.fn(async () => ({ reportId: 'profile-report', status: 'submitted' }));
+    const preference = vi.fn(async () => ({ blocked: false, muted: false }));
+    const app = createGatewayApp({ talkSafety: { report, readPreference: preference } as never });
+    apps.push(app);
+    expect((await app.inject({ url: '/safety/profiles/amina/preference' })).statusCode).toBe(200);
+    const request = { targetKind: 'profile', targetId: 'amina', reason: 'spam',
+      clientRequestId: 'profile-report-request' };
+    expect((await app.inject({ method: 'POST', url: '/safety/reports', payload: request })).statusCode).toBe(202);
+    expect(report).toHaveBeenCalledTimes(1);
+    for (const targetKind of ['talk', 'replay', 'persona']) {
+      expect((await app.inject({ method: 'POST', url: '/safety/reports',
+        payload: { ...request, targetKind } })).statusCode).toBe(400);
+    }
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
 });
