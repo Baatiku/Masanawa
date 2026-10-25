@@ -210,3 +210,31 @@ describe("ST4 scoped full-feed text search",()=>{
    .rejects.toMatchObject({status:422,code:"invalid_search"});
  });
 });
+
+
+// The refactor filters at the SQL query BEFORE limiting/paginating. A
+// post-pagination filter could return an empty page even when later Masana
+// posts exist, and a direct URL must not retrieve retired human authored posts.
+describe("lite Masana-only persisted Status visibility",()=>{
+ it("passes an explicit Masana author predicate for list and detail",async()=>{
+  const repo=mock();
+  const service=new FeedService(repo,async()=>true,async()=>false,true);
+  await service.list("tenant","fan","for_you");
+  expect(repo.list).toHaveBeenCalledWith(
+    "tenant","fan","for_you",null,21,undefined,undefined,true,
+  );
+  await service.detail("tenant","fan",post.id);
+  expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id,true);
+ });
+
+ it("keeps legacy Status read semantics until reduced scope activates",async()=>{
+  const repo=mock();
+  const service=new FeedService(repo,async()=>true);
+  await service.list("tenant","fan","for_you");
+  await service.detail("tenant","fan",post.id);
+  expect(repo.list).toHaveBeenCalledWith(
+    "tenant","fan","for_you",null,21,undefined,
+  );
+  expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id);
+ });
+});

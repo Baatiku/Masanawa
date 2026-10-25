@@ -65,7 +65,7 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
   const repo=new PgHomeFeedRepository({query} as unknown as Pool);
   await repo.list("tenantA","fanA","following",null,21);
   expect(query.mock.calls[0]?.[0]).toContain("FROM masana.follows");
-  expect(query.mock.calls[0]?.[1]).toEqual(["tenantA","fanA","following",null,null,21,null,null]);
+  expect(query.mock.calls[0]?.[1]).toEqual(["tenantA","fanA","following",null,null,21,null,null,false]);
  });
  it("never allows a reaction write without matching published post",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[{admitted:true}]}));
@@ -155,7 +155,7 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
   expect(sql).toContain("p.state='published'");
   expect(sql).toContain("p.author_masana_id=$7");
   expect(sql).toContain("m.state='approved'");
-  expect(args).toEqual(["tenantA","fanA","for_you",null,null,21,"character_professional",null]);
+  expect(args).toEqual(["tenantA","fanA","for_you",null,null,21,"character_professional",null,false]);
  });
 
 });

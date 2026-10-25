@@ -71,7 +71,7 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string) {
+ async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=false) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
@@ -85,13 +85,15 @@ export class PgHomeFeedRepository {
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
    AND ($7::text IS NULL OR p.author_masana_id=$7)
    AND ($8::text IS NULL OR p.body ILIKE $8 ESCAPE E'\\\\')
+   AND (NOT $9::boolean OR p.author_type='masana')
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,
    [tenant,viewer,mode,before?.at??null,before?.id??null,limit,authorMasanaId??null,
-    search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`]);
+    search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`,masanaOnly]);
   return rows.rows.map(item);
  }
- async find(tenant:string,viewer:string|null,id:string){
-  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}`,[tenant,viewer,id]);
+ async find(tenant:string,viewer:string|null,id:string,masanaOnly=false){
+  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}
+   AND (NOT $4::boolean OR p.author_type='masana')`,[tenant,viewer,id,masanaOnly]);
   return rows.rows[0]?item(rows.rows[0]):null;
  }
  async publishHumanText(tenant:string,userId:string,v:{body:string;audience:'public';idempotencyKey:string}){
