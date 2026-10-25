@@ -12,15 +12,11 @@ export interface Comment {id:string;postId:string;body:string;state:"pending"|"v
  author?:{type:"human";id:string;handle:string;displayName:string}|null}
 export interface Publish {authorMasanaId:string;kind:PostKind;body:string;media?:readonly string[];transcript?:string|null;idempotencyKey:string}
 export class FeedError extends Error {constructor(readonly status:number,readonly code:string){super(code)}}
-export interface HumanTextPublish {body:string;idempotencyKey:string;audience:"public"}
 
 export interface Repository {
  list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string,search?:string,masanaOnly?:boolean):Promise<readonly Post[]>;
  find(tenant:string,viewer:string|null,id:string,masanaOnly?:boolean):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
- publishHumanText?(tenant:string,userId:string,value:HumanTextPublish):Promise<Post>;
- editHumanText?(tenant:string,userId:string,postId:string,expectedBody:string,body:string):Promise<Post>;
- removeHumanPost?(tenant:string,userId:string,postId:string):Promise<{id:string;state:"removed"}>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
  setReaction?(tenant:string,fan:string,post:string,kind:ReactionKind|null):Promise<ReactionKind|null>;
  setSave(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
@@ -54,7 +50,7 @@ function searchCursor(raw:string,term:string,mode:FeedMode){
 export class FeedService {
  constructor(private readonly repo:Repository,private readonly approvedMasana:(tenant:string,id:string)=>Promise<boolean>,
   private readonly approvedMedia:(tenant:string,masana:string,mediaId:string,kind:PostKind)=>Promise<boolean> = async () => false,
-  private readonly masanaOnly = false){}
+  private readonly masanaOnly = true){}
  async list(tenant:string,viewer:string|null,mode:FeedMode,cursor?:string,authorMasanaId?:string,search?:string){
   requireId(tenant);if(viewer)requireId(viewer);
   if(mode!=="for_you"&&mode!=="following"&&mode!=="mine")throw new FeedError(422,"invalid_mode");
@@ -98,29 +94,6 @@ export class FeedService {
   if(value.kind==="audio"&&!value.transcript?.trim())throw new FeedError(422,"audio_transcript_required");
   for(const mediaId of media){if(!await this.approvedMedia(actor.tenantId,value.authorMasanaId,mediaId,value.kind))throw new FeedError(403,"media_not_approved");}
   return this.repo.publish(actor.tenantId,actor.id,{...value,body:value.body.trim(),media,transcript:value.transcript??null});
- }
- async publishHumanText(actor:Actor,value:HumanTextPublish) {
-  const user=this.fan(actor);
-  if(!value||value.audience!=="public")throw new FeedError(422,"unsupported_audience");
-  if(!key.test(value.idempotencyKey))throw new FeedError(422,"invalid_idempotency_key");
-  if(typeof value.body!=="string"||!value.body.trim()||value.body.trim().length>2000)
-   throw new FeedError(422,"invalid_post_text");
-  if(!this.repo.publishHumanText)throw new FeedError(503,"human_publishing_unavailable");
-  return this.repo.publishHumanText(actor.tenantId,user,{
-   body:value.body.trim(),audience:"public",idempotencyKey:value.idempotencyKey});
- }
- async editHumanText(actor:Actor,postId:string,expectedBody:string,body:string) {
-  const user=this.fan(actor);requirePostId(postId);
-  if(typeof expectedBody!=="string"||typeof body!=="string"||
-    !expectedBody.trim()||expectedBody.trim().length>2000||
-    !body.trim()||body.trim().length>2000)throw new FeedError(422,"invalid_post_text");
-  if(!this.repo.editHumanText)throw new FeedError(503,"human_edit_unavailable");
-  return this.repo.editHumanText(actor.tenantId,user,postId,expectedBody.trim(),body.trim());
- }
- async removeHumanPost(actor:Actor,postId:string) {
-  const user=this.fan(actor);requirePostId(postId);
-  if(!this.repo.removeHumanPost)throw new FeedError(503,"human_remove_unavailable");
-  return this.repo.removeHumanPost(actor.tenantId,user,postId);
  }
  private fan(actor:Actor){if(actor.kind!=="fan")throw new FeedError(403,"fan_only_action");requireId(actor.tenantId);requireId(actor.id);return actor.id}
  async like(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);

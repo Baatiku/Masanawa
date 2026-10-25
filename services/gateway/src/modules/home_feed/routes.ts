@@ -4,9 +4,6 @@ type FeedPort={
  list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string,search?:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
- publishHumanText?(a:Actor,p:{body:string;idempotencyKey:string;audience:"public"}):Promise<unknown>;
- editHumanText?(a:Actor,id:string,expectedBody:string,body:string):Promise<unknown>;
- removeHumanPost?(a:Actor,id:string):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
  react?(a:Actor,id:string,kind:"like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null):Promise<unknown>;
  comment(a:Actor,id:string,text:string,key:string,newAccount:boolean,parentId?:string|null):Promise<unknown>;
@@ -19,8 +16,6 @@ export interface FeedRoutesOptions {
  readonly tenant:(request:FastifyRequest)=>string|null;
  readonly isNewAccount:(request:FastifyRequest)=>Promise<boolean>;
  readonly enabled:()=>boolean;
- /** Human authoring must be absent from the reduced product route tree. */
- readonly allowHumanPublishing?:boolean;
 }
 const object=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const str=(v:unknown)=>typeof v==="string"?v:"";
@@ -60,42 +55,6 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
    :o.service.list(tenant,viewer,mode,str(q.cursor)||undefined,
     typeof author==="string"?author:undefined,search as string);
  }));
- // The lightweight product never registers human authoring endpoints, even
- // when an older production service still has the underlying write methods.
- // Legacy mode retains the original routes only until full API retirement.
- if (o.allowHumanPublishing !== false) {
- // Self-publishing is a separate fan route, never Masana editorial authority.
- // Start with explicitly public TEXT ONLY; unsupported audiences/media cannot
- // be silently downgraded to public posts.
- app.post("/v1/posts/human",async(req,rep)=>run(req,rep,async({actor})=>{
-  const a=member(actor),b=object(req.body);
-  if(a.kind!=="fan")return rep.code(403).send({code:"human_author_required"});
-  if(Object.keys(b).some(k=>k!=="body"&&k!=="audience")||
-    b.audience!=="public"||typeof b.body!=="string")
-   return rep.code(422).send({code:"unsupported_human_post"});
-  if(!o.service.publishHumanText)return rep.code(503).send({code:"human_publishing_unavailable"});
-  return o.service.publishHumanText(a,{
-   body:b.body,idempotencyKey:str(req.headers["idempotency-key"]),audience:"public"});
- }));
- // Only the signed-in human owns these mutations; a body author identifier
- // is never accepted. Optimistic concurrency preserves simultaneous edits.
- app.patch("/v1/posts/:id/human",async(req,rep)=>run(req,rep,async({actor})=>{
-  const a=member(actor),b=object(req.body);
-  if(a.kind!=="fan")return rep.code(403).send({code:"human_author_required"});
-  if(Object.keys(b).length!==2||typeof b.expectedBody!=="string"||typeof b.body!=="string"||
-    Object.keys(b).some(k=>k!=="expectedBody"&&k!=="body"))
-   return rep.code(422).send({code:"invalid_human_edit"});
-  if(!o.service.editHumanText)return rep.code(503).send({code:"human_edit_unavailable"});
-  return o.service.editHumanText(a,str(object(req.params).id),b.expectedBody,b.body);
- }));
- app.delete("/v1/posts/:id/human",async(req,rep)=>run(req,rep,async({actor})=>{
-  const a=member(actor),b=object(req.body);
-  if(a.kind!=="fan")return rep.code(403).send({code:"human_author_required"});
-  if(Object.keys(b).length!==0)return rep.code(422).send({code:"invalid_human_remove"});
-  if(!o.service.removeHumanPost)return rep.code(503).send({code:"human_remove_unavailable"});
-  return o.service.removeHumanPost(a,str(object(req.params).id));
- }));
- }
  app.get("/v1/posts/:id",async(req,rep)=>run(req,rep,async({tenant,viewer})=>o.service.detail(tenant,viewer,str(object(req.params).id))));
  app.get("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),sort=q.sort===undefined?"newest":str(q.sort);

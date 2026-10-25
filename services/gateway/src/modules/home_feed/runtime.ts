@@ -9,13 +9,12 @@ export interface StatusSession {tenantId:string;userId:string}
 export interface StatusRuntime {
  sessions:{authorize(input:{authorizationHeader:string|undefined}):Promise<StatusSession>};
  feed:FeedRoutesOptions["service"];
+ saved?:{list(actor:{kind:"fan";tenantId:string;id:string},cursor?:string):Promise<unknown>};
  editorial:AdminReviewRoutesOptions["service"];
  isEditor?:(session:StatusSession)=>Promise<boolean>;
  /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
- /** Presence false entirely removes fan publishing and edit/remove routes. */
- allowHumanPublishing?:boolean;
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
 }
 
@@ -62,9 +61,19 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
    // unserved review queue. A trusted server policy can explicitly quarantine
    // new-account comments without accepting a client-provided role/age flag.
    isNewAccount:async request=>options.isNewAccount
-     ? options.isNewAccount(await resolve(request)) : false,
-   ...(options.allowHumanPublishing === undefined
-     ? {} : { allowHumanPublishing: options.allowHumanPublishing }),enabled});
+     ? options.isNewAccount(await resolve(request)) : false,enabled});
+  if(options.saved) scope.get('/v1/saved',async(request,reply)=>{
+   reply.header('Cache-Control','private, no-store');
+   const query=request.query as Record<string,unknown>;
+   const cursor=query.cursor;
+   if(Object.keys(query).some(key=>key!=='cursor') ||
+      (cursor!==undefined && (typeof cursor!=='string' || !cursor || cursor.length>240)) ||
+      new URL(request.raw.url??'/v1/saved','http://local').searchParams.getAll('cursor').length>1)
+     return reply.code(422).send({code:'invalid_cursor'});
+   const actor=await resolve(request);
+   return options.saved!.list({kind:'fan',tenantId:actor.tenantId,id:actor.userId},
+     typeof cursor==='string'?cursor:undefined);
+  });
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
  });

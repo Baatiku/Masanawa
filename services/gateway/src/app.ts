@@ -26,11 +26,6 @@ import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentDirectoryService } from "./agent_directory.js";
 import type { AgentConversationService } from "./agent_conversation_contract.js";
-import type { CreatorCloneService } from "./creator_clone.js";
-import type { CreatorEconomyService } from "./creator_economy.js";
-import type { CreatorSkillService } from "./creator_skills.js";
-import type { CommerceCatalogService } from "./commerce_catalog.js";
-import type { CommerceFulfillmentService } from "./commerce_fulfillment.js";
 import type {
   AgentShellService,
   LiveVoiceTokenService,
@@ -38,33 +33,13 @@ import type {
 import { registerAgentShellRoutes } from "./agent_shell_routes.js";
 import { registerPrivateChatMediaRoutes } from "./private_chat_media_routes.js";
 import type { createPrivateChatMediaService } from "./private_chat_media.js";
-import type { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
-import type { createMsnwBillingService } from "./msn_wallet/billing_service.js";
-import type { TalkReplayService } from "./talk_replay/service.js";
-import type { TalkModerationService } from "./talk_moderation/service.js";
-import type { TalkAiSeatService } from "./talk_ai_seats/service.js";
-import type { TalkLiveService } from "./talk_live/service.js";
 import { registerTalkProfileRoutes } from "./talk_profile_routes.js";
 import type { TalkProfileService } from "./talk_profiles/service.js";
-import type { TalkActivityService } from "./talk_activity/service.js";
-import type { TalkSearchService } from "./talk_search/service.js";
-import type { TalkLibraryService } from "./talk_library/service.js";
-import type { TalkGiftService } from "./talk_gifts/service.js";
-import type { TalkPollService } from "./talk_polls/service.js";
 import type { TalkSafetyService } from "./talk_safety/service.js";
-import type { DirectTwinService } from "./talk_direct_twin/service.js";
-import type { TalkService } from "./talks/service.js";
 import type { TwinProductionRuntime } from "./twin_production_runtime.js";
 import { registerAccountDeletionRoutes } from "./account_deletion_routes.js";
 import type { AccountDeletionService } from "./account_deletion.js";
-import { type MsnBalanceAuthority, type MsnBalanceReader } from "./msn_wallet/routes.js";
-import { type MsnFundingStatusReader } from "./msn_wallet/funding_routes.js";
-import type { MsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
-import type { MsnwPaystackDvaService } from "./msn_wallet/paystack_dva.js";
-import type { MsnwOnchainBalanceDependencies } from "./msn_wallet/msnw_onchain_balance.js";
-import type { createMsnwCustodyService } from "./msn_wallet/custody_send.js";
 import type { MsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
-import { type P2pRoutesDependencies } from "./p2p/routes.js";
 import { registerTwinSafetyRoutes } from "./twin_safety_routes.js";
 import type { BillingCheckoutService } from "./billing_checkout.js";
 import type { BillingFinancialService } from "./financial_billing.js";
@@ -96,7 +71,6 @@ export interface GatewayAppOptions {
   readonly status?: StatusRuntime;
   /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
   readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
-  /** Owner-scoped creator Masana service. May return provider unavailable, never mock success. */
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
   readonly masanaInbox?: MasanaInboxRoutesDeps;
   readonly callHistory?: CallHistoryService;
@@ -105,11 +79,6 @@ export interface GatewayAppOptions {
   readonly isDraining?: () => boolean;
   readonly agentDirectory?: AgentDirectoryService;
   readonly agentConversation?: AgentConversationService;
-  readonly creatorClone?: CreatorCloneService;
-  readonly creatorEconomy?: CreatorEconomyService;
-  readonly creatorSkills?: CreatorSkillService;
-  readonly commerceCatalog?: CommerceCatalogService;
-  readonly commerceFulfillment?: CommerceFulfillmentService;
   readonly agentShell?: AgentShellService;
   readonly privateChatMedia?: ReturnType<typeof createPrivateChatMediaService>;
   readonly liveVoiceTokens?: LiveVoiceTokenService;
@@ -119,45 +88,15 @@ export interface GatewayAppOptions {
   readonly mobileDiagnostics?: MobileDiagnosticsPorts;
   readonly accountDataExports?: AccountDataExports;
   readonly accountDeletion?: AccountDeletionService;
-  readonly talks?: TalkService;
-  readonly talkReplay?: TalkReplayService;
-  readonly talkModeration?: TalkModerationService;
-  readonly talkAiSeats?: TalkAiSeatService;
-  readonly talkLive?: TalkLiveService;
   readonly talkProfiles?: TalkProfileService;
-  readonly talkActivity?: TalkActivityService;
-  readonly talkSearch?: TalkSearchService;
-  readonly talkLibrary?: TalkLibraryService;
-  readonly talkGifts?: TalkGiftService;
-  readonly talkPolls?: TalkPollService;
   readonly talkSafety?: TalkSafetyService;
-  readonly directTwin?: DirectTwinService;
   readonly billingCheckout?: BillingCheckoutService;
   readonly billingFinancial?: BillingFinancialService;
   readonly billingWallet?: BillingWalletService;
-  readonly msnwBilling?: ReturnType<typeof createMsnwBillingService>;
-  readonly msnwConversion?: {
-    authorizer: MsnBalanceAuthority;
-    service: ReturnType<typeof createMsnwUsdtConversion>;
-  };
   readonly financial?: FinancialService;
   readonly twinProduction?: TwinProductionRuntime;
-  /** Read-only off-chain MSN. No issuance authority in a customer route. */
-  readonly msnBalance?: Readonly<{ authorizer: MsnBalanceAuthority; ledger: MsnBalanceReader }>;
-  /** Funding-status read only, intentionally OFF until the staged schema is installed. */
-  readonly msnFunding?: Readonly<{ authorizer: MsnBalanceAuthority; reader: MsnFundingStatusReader }>;
-  /** Paystack DVA is consent and KYC gated; it does not credit MSNW. */
-  readonly msnwPaystackDva?: MsnwPaystackDvaService;
-  readonly msnwPaystackEnrollment?: MsnwPaystackEnrollmentService;
-  /** Finalized, identity-verified ERC20 MSNW customer balance (no legacy MSN). */
-  readonly msnwOnchainBalance?: MsnwOnchainBalanceDependencies;
   /** Fiat verification journal only: no MSNW issuance permission. */
   readonly msnwPaystackFiat?: MsnwPaystackFiatService;
-  readonly msnwCustody?: {
-    authorizer: MsnBalanceAuthority;
-    ledger: ReturnType<typeof createMsnwCustodyService>;
-  };
-  readonly p2p?: P2pRoutesDependencies;
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
@@ -169,8 +108,6 @@ export interface GatewayAppOptions {
   readonly gbDataPurchases?: GbDataPurchaseRoutes;
   readonly billstackFunding?: BillstackFundingPorts;
 
-  /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
-  readonly walletCreditSendEnabled?: boolean;
 }
 
 const HealthResponseSchema = Type.Object(
@@ -1089,7 +1026,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         ...options.status!,
         // Root Status is Masana-editorial only in the reduced product.
         // Normal fans retain reactions, comments, follows and saves.
-        allowHumanPublishing: false,
       });
     });
   }

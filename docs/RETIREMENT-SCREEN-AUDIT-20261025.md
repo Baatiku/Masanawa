@@ -68,3 +68,9 @@ registered, and **no applied migration or stored financial record is touched**.
 Source-level regression tests prevent the retired constructors returning.
 This does not yet remove their historical implementations or close all
 runtime/service dependencies.
+
+## Verified continuation and new UX direction
+
+PR #400 was already merged when inspected. Additional verified merges: #402 initial mobile source deletion, #403 retired workers, #404 permanent Gateway route shutdown/historical callback isolation, #405 obsolete mirrored web consumer, #406 mixed mobile Status/video/native incoming-call cleanup. Backend source deletion follows under `RETIREMENT-BACKEND-SOURCE-BATCH-20261025.md`; applied migrations and historic accounting dependency closure remain intact. Complete deletion of all remaining legacy domain helpers is not claimed.
+
+The owner's new-window feedback has a separate source-evidenced [Status/wallet audit and implementation plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md). It includes canonical portraits, one-tap cards, horizontal reactions, removal of feed flag, funding screen separation, proposed prices through 2 TB, Send/Request quick amounts, verified network/validity redemption, complete histories and branded PDF/image receipts. These UI changes are planned, not implemented by the retirement batches. No APK; Flutterwave fixed-IP hosting remains on hold.

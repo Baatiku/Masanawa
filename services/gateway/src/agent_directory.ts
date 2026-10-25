@@ -1,6 +1,6 @@
 import type {MasanaSocialChannel} from "@masanawa/masana";
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
-import type { AgentMasanaIdentityReader } from "./agent_directory_rooms.js";
+import type { AgentMasanaIdentityReader } from "./agent_identity.js";
 import type {
   AgentPresentationRepository,
   PlatformAgentProfileRepository,

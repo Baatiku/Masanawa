@@ -56,18 +56,22 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
     ('tenant_precision','precision_author','precision_author','Precision Author');
     INSERT INTO talks.follows(tenant_id,follower_user_id,followed_user_id,created_at) VALUES
     ('tenant_precision','precision_viewer','precision_author',now());
+    INSERT INTO identity.characters VALUES ('tenant_precision','precision_masana','active');
+    INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES ('tenant_precision','precision_masana','platform');
+    INSERT INTO masana.character_revisions VALUES ('tenant_precision','precision_masana','approved','{"displayName":"Precision Masana"}'::jsonb);
+    INSERT INTO masana.follows VALUES ('tenant_precision','precision_viewer','precision_masana');
     INSERT INTO feed.posts(tenant_id,author_type,author_user_id,author_masana_id,
       audience,kind,body,media_ids,idempotency_key,published_by,published_at)
-    SELECT 'tenant_precision','human','precision_author',NULL,'public','text',
+    SELECT 'tenant_precision','masana',NULL,'precision_masana','public','text',
       'Precision needle '||n,ARRAY[]::text[],'precision-page-'||n,'precision_author',
       '2026-10-01T10:00:00.123456Z'::timestamptz +
         CASE WHEN n=32 THEN interval '1 microsecond'
              WHEN n=33 THEN interval '-1 microsecond' ELSE interval '0' END
     FROM generate_series(1,33)n`);
   const service=new FeedService(repo,async()=>true);
-  for(const mode of ['for_you','following','mine'] as const){
+  for(const mode of ['for_you','following'] as const){
    for(const search of [undefined,'Precision needle']){
-    const viewer=mode==='mine'?'precision_author':'precision_viewer';
+    const viewer='precision_viewer';
     const first=await service.list('tenant_precision',viewer,mode,undefined,undefined,search);
     expect(first.items).toHaveLength(20);
     expect(first.nextCursor).toBeTruthy();
@@ -99,16 +103,13 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect(firstSaved.items).toHaveLength(20);
   expect(firstSaved.items[19]!.savedAt).toBe('2026-10-01T10:00:00.123456Z');
   const secondSaved=await saved.list(actor,firstSaved.nextCursor!);
-  expect(secondSaved.items).toHaveLength(15);
+  expect(secondSaved.items).toHaveLength(13);
   expect(secondSaved.nextCursor).toBeNull();
-  expect(new Set([...firstSaved.items,...secondSaved.items].map(p=>p.kind+':'+p.id)).size).toBe(35);
-  expect(firstSaved.items.slice(0,2).map(p=>p.kind)).toEqual(['video','video']);
+  expect(new Set([...firstSaved.items,...secondSaved.items].map(p=>p.kind+':'+p.id)).size).toBe(33);
+  expect(firstSaved.items.every(p=>p.kind==='post')).toBe(true);
+  expect((await pool.query("SELECT count(*)::int AS n FROM feed.saved_videos WHERE tenant_id='tenant_precision'")).rows[0]?.n).toBe(2);
   expect((await saved.list({...actor,id:'precision_author'})).items).toEqual([]);
-  const page=await service.list('tenant_precision','precision_viewer','for_you',undefined,undefined,'Precision needle');
-  await pool.query(`INSERT INTO talks.safety_preferences(tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
-    VALUES('tenant_precision','precision_author','precision_viewer',true,now())`);
-  expect((await service.list('tenant_precision','precision_viewer','for_you',page.nextCursor!,undefined,'Precision needle')).items).toEqual([]);
-  expect((await saved.list(actor,firstSaved.nextCursor!)).items.map(p=>p.kind)).not.toContain('post');
+
  });
  it("publishes once on stable key and rejects changed payload",async()=>{
   const value={authorMasanaId:"masana_one",kind:"text",body:"Welcome",media:[],transcript:null,idempotencyKey:"request-publish-001"};
@@ -170,26 +171,6 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await repo.setReaction("tenant_test","fan_one",id,null);
   expect((await repo.find("tenant_test","fan_one",id))?.viewerReaction).toBeNull();
  });
- it("ST1 two real PG users see canonical human text post, never duplicate/forge",async()=>{
-  const pool=isolated.pool;
-  await pool.query("INSERT INTO identity.users(tenant_id,user_id,state) VALUES('tenant_test','fan_two','active')");
-  await pool.query("INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES('tenant_test','fan_two','zainab_verified','Zainab')");
-  const request={body:"A public update",audience:"public" as const,idempotencyKey:"real-human-status-001"};
-  const created=await repo.publishHumanText("tenant_test","fan_one",request);
-  expect(created.author).toMatchObject({type:"human",id:"fan_one",handle:"musa_verified",displayName:"Musa Verified"});
-  expect((await repo.publishHumanText("tenant_test","fan_one",request)).id).toBe(created.id);
-  await expect(repo.publishHumanText("tenant_test","fan_one",{...request,body:"Different post"}))
-    .rejects.toMatchObject({status:409,code:"idempotency_conflict"});
-  expect((await repo.list("tenant_test","fan_two","for_you",null,25)).map(p=>p.id)).toContain(created.id);
-  await pool.query("INSERT INTO talks.follows(tenant_id,follower_user_id,followed_user_id,created_at) VALUES('tenant_test','fan_two','fan_one',now())");
-  expect((await repo.list("tenant_test","fan_two","following",null,25)).map(p=>p.id)).toContain(created.id);
-  await pool.query("UPDATE identity.users SET state='disabled' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
-  expect(await repo.find("tenant_test","fan_two",created.id)).toBeNull();
-  await pool.query("UPDATE identity.users SET state='active' WHERE tenant_id='tenant_test' AND user_id='fan_one'");
-  expect((await repo.find("tenant_test","fan_two",created.id))?.id).toBe(created.id);
-  const rows=await pool.query("SELECT count(*)::int AS n FROM feed.posts WHERE tenant_id='tenant_test' AND author_type='human' AND author_user_id='fan_one'");
-  expect(rows.rows[0]?.n).toBe(1);
- });
  it("C22 keeps historic comment bytes intact across forward-only migration",async()=>{
   const rows=await isolated.pool.query("SELECT body,fan_id,parent_comment_id FROM feed.comments WHERE tenant_id='tenant_upgrade' AND id=$1::uuid",[legacyCommentId]);
   expect(rows.rows).toEqual([{body:"Historic question",fan_id:"fan_old",parent_comment_id:null}]);
@@ -234,9 +215,9 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   ]){
    await pool.query(revoke);
    expect(await repo.list("tenant_test","fan_one","for_you",null,20,"masana_one")).toEqual([]);
-   // A revoked Masana does not hide unrelated active human authors.
+   // Retired human posts cannot substitute for a revoked platform Masana.
    expect((await repo.list("tenant_test","fan_one","for_you",null,20))
-    .some(entry=>entry.author.type==="human")).toBe(true);
+    .some(entry=>entry.author.type==="human")).toBe(false);
    expect(await repo.find("tenant_test","fan_one",id)).toBeNull();
    expect(await repo.comments("tenant_test",id,"fan_one",null,30)).toEqual([]);
    await expect(repo.setLike("tenant_test","denied_fan",id,true)).rejects.toMatchObject({status:404});

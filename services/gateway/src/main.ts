@@ -1,3 +1,4 @@
+import { PgSavedLibraryRepository } from "@masanawa/postgres";
 import type { Pool } from "@masanawa/postgres";
 import {
   projectVerifiedWholeGbBundles,
@@ -16,7 +17,7 @@ import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
-import { FeedService, EditorialReviewService } from "@masanawa/feed";
+import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
 import {
   createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgFeedMediaAuthorization,
@@ -28,7 +29,7 @@ import {
   createGbBillstackRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
-import {createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
+import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -70,11 +71,7 @@ import type {
   CryptoRepository,
   NgnWalletRepository,
 } from "@masanawa/commerce";
-import {
-  parseCanonicalId,
-  readRequiredEnv,
-  type TenantId,
-} from "@masanawa/contracts";
+import { parseCanonicalId, readRequiredEnv, type TenantId } from "@masanawa/contracts";
 import { type PlatformSessionRepository } from "@masanawa/security";
 import {
   FlutterwaveBillsClient,
@@ -97,30 +94,11 @@ import {
   type AgentDirectoryAuthorizer,
 } from "./agent_directory.js";
 import { createAgentConversationService } from "./agent_conversation.js";
-import {
-  createCreatorCloneService,
-  type CreatorCloneAuthorizer,
-} from "./creator_clone.js";
-import { createCreatorEconomyService } from "./creator_economy.js";
 import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
-import { createPgCreatorVoiceReader } from "./creator_agents/voice.js";
-import { createCreatorSkillService } from "./creator_skills.js";
-import {
-  createCommerceCatalogService,
-  type CommerceUserAuthorizer,
-} from "./commerce_catalog.js";
-import { createCommerceFulfillmentService } from "./commerce_fulfillment.js";
 import type {
   AgentConversationAuthorizer,
 } from "./agent_conversation_contract.js";
-import {
-  createAlphaDevAuthorizer,
-  createAlphaDirectoryAuthorizer,
-  createAlphaCreatorAuthorizer,
-  createAlphaCommerceAuthorizer,
-  parseAlphaDevIds,
-  parseAlphaRelationshipMap,
-} from "./alpha_dev.js";
+import { createAlphaDevAuthorizer, createAlphaDirectoryAuthorizer, parseAlphaDevIds, parseAlphaRelationshipMap } from "./alpha_dev.js";
 import {
   NowPaymentsClient,
   NowPaymentsCustodyClient,
@@ -145,8 +123,6 @@ import {
 import { createMsnwPaystackEnrollmentService } from "./msn_wallet/paystack_customer_enrollment.js";
 import { createMsnwPaystackFiatService } from "./msn_wallet/paystack_fiat_evidence.js";
 import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
-import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
-import { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
 import { probeNowPaymentsReadOnly } from "./nowpayments_readonly_probe.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
@@ -164,64 +140,14 @@ import {
   createFcmPushSender,
   type MobilePushSender,
 } from "./mobile_push.js";
-import { createTalkService, type TalkAuthorizer } from "./talks/service.js";
-import { createPostgresTalkRepository } from "./talks/postgres_repository.js";
-import { createTalkReplayService, type TalkReplayAuthorizer } from "./talk_replay/service.js";
-import { createPostgresTalkReplayRepository } from "./talk_replay/postgres_repository.js";
-import { createPostgresReplayMediaRepository } from "./talk_replay/egress/postgres_media_repository.js";
-import { createLiveKitReplayEgress } from "./talk_replay/egress/livekit_egress.js";
-import { createReplayObjectStore } from "./talk_replay/playback/s3_object_store.js";
-import { createTalkReplayCoordinator } from "./talk_replay/egress/coordinator.js";
-import {
-  createTalkLiveService,
-  type TalkLiveAuthorizer,
-} from "./talk_live/service.js";
-import { createPostgresTalkLiveRepository } from "./talk_live/postgres_repository.js";
-import { createLiveKitTalkMediaTokenIssuer } from "./talk_live/livekit_media.js";
-import { createLiveKitTalkMediaAdmin } from "./talk_moderation/livekit_admin.js";
-import { createLiveKitTalkAiRuntimeDispatcher } from "./talk_ai_worker/livekit_dispatch.js";
-import { createTalkModerationService, type TalkModerationAuthorizer } from "./talk_moderation/service.js";
-import { createPostgresTalkModerationRepository } from "./talk_moderation/postgres_repository.js";
-import { createTalkAiSeatService, type TalkAiSeatAuthorizer } from "./talk_ai_seats/service.js";
-import { createPostgresTalkAiSeatRepository } from "./talk_ai_seats/postgres_repository.js";
 import {
   createTalkProfileService,
   type TalkProfileAuthorizer,
 } from "./talk_profiles/service.js";
 import { createPostgresTalkProfileRepository } from "./talk_profiles/postgres_repository.js";
-import {
-  createTalkActivityService,
-  type TalkActivityAuthorizer,
-} from "./talk_activity/service.js";
-import { createPostgresTalkActivityRepository } from "./talk_activity/postgres_repository.js";
-import {
-  createTalkSearchService,
-  type TalkSearchAuthorizer,
-} from "./talk_search/service.js";
-import { createPostgresTalkSearchRepository } from "./talk_search/postgres_repository.js";
-import {
-  createTalkLibraryService,
-  type TalkLibraryAuthorizer,
-} from "./talk_library/service.js";
-import { createPostgresTalkLibraryRepository } from "./talk_library/postgres_repository.js";
-import { createPostgresTalkPushDedupeRepository } from "./talk_notifications/postgres_dedupe.js";
-import { createTalkPushDeliveryRuntime, type TalkPushDeliveryRuntime } from "./talk_notifications/runtime.js";
-import {
-  createTalkGiftService,
-  type TalkGiftAuthorizer,
-} from "./talk_gifts/service.js";
-import { createPostgresTalkGiftRepository } from "./talk_gifts/postgres_repository.js";
-import {
-  createTalkPollService,
-  type TalkPollAuthorizer,
-} from "./talk_polls/service.js";
-import { createPostgresTalkPollRepository } from "./talk_polls/postgres_repository.js";
 import { createPostgresTalkSafetyRepository } from "./talk_safety/repository.js";
 import { createTalkSafetyService, type TalkSafetyCustomerAuthorizer, type TalkSafetyPlatformAuthority } from "./talk_safety/service.js";
 import { createPrincipalTalkSafetyPlatformAuthority } from "./talk_safety/platform_authority.js";
-import { createPostgresTalkSafetyReplayBridge, withReplayBlockSynchronization } from "./talk_safety/replay_bridge.js";
-import { createDirectTwinService } from "./talk_direct_twin/service.js";
-import { createPostgresDirectTwinRepository } from "./talk_direct_twin/postgres_repository.js";
 import {
   createGatewayApp,
   type GatewayAppOptions,
@@ -325,22 +251,8 @@ export interface ServiceDatabaseDependency {
   readonly twinProfiles?: ReturnType<typeof createPostgresTwinProfileRepository>;
   readonly twinEconomy?: ReturnType<typeof createPostgresTwinRuntimeRepository>;
   readonly twinEvents?: ReturnType<typeof createPostgresTwinEconomyEventStore>;
-  readonly talks?: ReturnType<typeof createPostgresTalkRepository>;
-  readonly talkReplay?: ReturnType<typeof createPostgresTalkReplayRepository>;
-  readonly talkReplayMedia?: ReturnType<typeof createPostgresReplayMediaRepository>;
-  readonly talkLive?: ReturnType<typeof createPostgresTalkLiveRepository>;
-  readonly talkModeration?: ReturnType<typeof createPostgresTalkModerationRepository>;
-  readonly talkAiSeats?: ReturnType<typeof createPostgresTalkAiSeatRepository>;
   readonly talkProfiles?: ReturnType<typeof createPostgresTalkProfileRepository>;
-  readonly talkActivity?: ReturnType<typeof createPostgresTalkActivityRepository>;
-  readonly talkSearch?: ReturnType<typeof createPostgresTalkSearchRepository>;
-  readonly talkLibrary?: ReturnType<typeof createPostgresTalkLibraryRepository>;
-  readonly talkGifts?: ReturnType<typeof createPostgresTalkGiftRepository>;
-  readonly talkPolls?: ReturnType<typeof createPostgresTalkPollRepository>;
   readonly talkSafety?: ReturnType<typeof createPostgresTalkSafetyRepository>;
-  readonly talkSafetyReplay?: ReturnType<typeof createPostgresTalkSafetyReplayBridge>;
-  readonly directTwin?: ReturnType<typeof createPostgresDirectTwinRepository>;
-  readonly talkPushDedupe?: ReturnType<typeof createPostgresTalkPushDedupeRepository>;
   close(): Promise<void>;
 }
 
@@ -361,8 +273,6 @@ export interface StartGatewayServiceOptions {
   readonly appOptions?: Omit<GatewayAppOptions, "isDraining">;
   readonly agentDirectoryAuthorizer?: AgentDirectoryAuthorizer;
   readonly agentConversationAuthorizer?: AgentConversationAuthorizer;
-  readonly creatorCloneAuthorizer?: CreatorCloneAuthorizer;
-  readonly commerceAuthorizer?: CommerceUserAuthorizer;
   readonly financialAuthorizer?: FinancialAuthorizer;
   readonly agentStrategy?: AgentStrategy;
   readonly agentShellActionExecutor?: AgentShellActionExecutor;
@@ -373,7 +283,6 @@ export interface GatewayServiceRuntime {
   readonly address: string;
   readonly app: ManagedNodeServer;
   readonly pushSender?: MobilePushSender;
-  readonly talkPushDelivery?: TalkPushDeliveryRuntime;
   isDraining(): boolean;
   drain(): void;
   shutdown(reason?: ServiceSignal | "manual"): Promise<void>;
@@ -515,22 +424,8 @@ function createDefaultDatabaseDependency(
     twinProfiles: createPostgresTwinProfileRepository(database.pool),
     twinEconomy: createPostgresTwinRuntimeRepository(database.pool),
     twinEvents: createPostgresTwinEconomyEventStore(database.pool),
-    talks: createPostgresTalkRepository(database.pool),
-    talkReplay: createPostgresTalkReplayRepository(database.pool),
-    talkReplayMedia: createPostgresReplayMediaRepository(database.pool),
-    talkLive: createPostgresTalkLiveRepository(database.pool),
-    talkModeration: createPostgresTalkModerationRepository(database.pool),
-    talkAiSeats: createPostgresTalkAiSeatRepository(database.pool),
     talkProfiles: createPostgresTalkProfileRepository(database.pool),
-    talkActivity: createPostgresTalkActivityRepository(database.pool),
-    talkSearch: createPostgresTalkSearchRepository(database.pool),
-    talkLibrary: createPostgresTalkLibraryRepository(database.pool),
-    talkPushDedupe: createPostgresTalkPushDedupeRepository(database.pool),
-    talkGifts: createPostgresTalkGiftRepository(database.pool),
-    talkPolls: createPostgresTalkPollRepository(database.pool),
     talkSafety: createPostgresTalkSafetyRepository(database.pool),
-    talkSafetyReplay: createPostgresTalkSafetyReplayBridge(database.pool),
-    directTwin: createPostgresDirectTwinRepository(database.pool),
     close: async () => {
       await database.close();
     },
@@ -647,15 +542,10 @@ export async function startGatewayService(
   const databaseFactory =
     options.databaseFactory ?? createDefaultDatabaseDependency;
   const database = databaseFactory(env);
-  const creatorVoiceReader = database.featurePool
-    ? createPgCreatorVoiceReader(database.featurePool as unknown as
-        Parameters<typeof createPgCreatorVoiceReader>[0]) : undefined;
   const appFactory = options.appFactory ?? createGatewayApp;
 
   let directoryAuthorizer = options.agentDirectoryAuthorizer;
   let conversationAuthorizer = options.agentConversationAuthorizer;
-  let creatorCloneAuthorizer = options.creatorCloneAuthorizer;
-  let commerceAuthorizer = options.commerceAuthorizer;
   let financialAuthorizer = options.financialAuthorizer;
   let msnBalanceAuthorizer: MsnBalanceAuthority | undefined;
   let strategy = options.agentStrategy;
@@ -667,8 +557,6 @@ export async function startGatewayService(
   let ownerAccessSweepTenantId: TenantId | undefined;
   let ownerAccessSweepTimer: ReturnType<typeof setInterval> | undefined;
   let ownerAccessSweepRunning = false;
-  let talkPushDedupePurgeTimer: ReturnType<typeof setInterval> | undefined;
-  let talkPushDedupePurgeRunning = false;
   let customerAuth: CustomerAuthService | undefined =
     options.appOptions?.customerAuth;
   let accountDeletion: AccountDeletionService | undefined =
@@ -676,17 +564,7 @@ export async function startGatewayService(
   let billingCustomerAuthorizer:
     | ReturnType<typeof createPlatformCustomerSessionAuthorizer>
     | undefined;
-  let talkAuthorizer: TalkAuthorizer | undefined;
-  let talkReplayAuthorizer: TalkReplayAuthorizer | undefined;
-  let talkLiveAuthorizer: TalkLiveAuthorizer | undefined;
-  let talkModerationAuthorizer: TalkModerationAuthorizer | undefined;
-  let talkAiSeatAuthorizer: TalkAiSeatAuthorizer | undefined;
   let talkProfileAuthorizer: TalkProfileAuthorizer | undefined;
-  let talkActivityAuthorizer: TalkActivityAuthorizer | undefined;
-  let talkSearchAuthorizer: TalkSearchAuthorizer | undefined;
-  let talkLibraryAuthorizer: TalkLibraryAuthorizer | undefined;
-  let talkGiftAuthorizer: TalkGiftAuthorizer | undefined;
-  let talkPollAuthorizer: TalkPollAuthorizer | undefined;
   let talkSafetyCustomerAuthorizer: TalkSafetyCustomerAuthorizer | undefined;
   let talkSafetyPlatformAuthority: TalkSafetyPlatformAuthority | undefined;
   let billingFinancialAuthorizer:
@@ -705,11 +583,6 @@ export async function startGatewayService(
       repository: database.mobilePush,
     });
   }
-
-  const talkPushDelivery = createTalkPushDeliveryRuntime({
-    ...(pushSender ? { sender: pushSender } : {}),
-    ...(database.talkPushDedupe ? { dedupe: database.talkPushDedupe } : {}),
-  });
 
   if (alphaEnabled(env)) {
     if (
@@ -743,16 +616,6 @@ export async function startGatewayService(
       userId: ids.userId,
       relationshipIds,
       ...(database.relationships ? { relationships: database.relationships } : {}),
-    });
-    creatorCloneAuthorizer ??= createAlphaCreatorAuthorizer({
-      token,
-      tenantId: ids.tenantId,
-      userId: ids.userId,
-    });
-    commerceAuthorizer ??= createAlphaCommerceAuthorizer({
-      token,
-      tenantId: ids.tenantId,
-      userId: ids.userId,
     });
     conversationAuthorizer ??= createAlphaDevAuthorizer({
       config: {
@@ -789,7 +652,6 @@ export async function startGatewayService(
       ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
       ...(database.callHistory ? { callHistory: database.callHistory } : {}),
       ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
-          ...(creatorVoiceReader ? { creatorVoiceReader } : {}),
       model: env.MASANAWA_ALPHA_GEMINI_LIVE_MODEL ?? "gemini-3.8-live",
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
@@ -882,17 +744,7 @@ export async function startGatewayService(
     });
     billingCustomerAuthorizer = customerSessions;
     msnBalanceAuthorizer = customerSessions;
-    talkAuthorizer = customerSessions;
-    talkReplayAuthorizer = customerSessions;
-    talkLiveAuthorizer = customerSessions;
-    talkModerationAuthorizer = customerSessions;
-    talkAiSeatAuthorizer = customerSessions;
     talkProfileAuthorizer = customerSessions;
-    talkActivityAuthorizer = customerSessions;
-    talkSearchAuthorizer = customerSessions;
-    talkLibraryAuthorizer = customerSessions;
-    talkGiftAuthorizer = customerSessions;
-    talkPollAuthorizer = customerSessions;
     talkSafetyCustomerAuthorizer = customerSessions;
     talkSafetyPlatformAuthority = createPrincipalTalkSafetyPlatformAuthority({
       sessions: customerSessions,
@@ -988,12 +840,6 @@ export async function startGatewayService(
     }
     if (!options.agentConversationAuthorizer) {
       conversationAuthorizer = customerAuthorizers.conversation;
-    }
-    if (!options.creatorCloneAuthorizer) {
-      creatorCloneAuthorizer = customerAuthorizers.creator;
-    }
-    if (!options.commerceAuthorizer) {
-      commerceAuthorizer = customerAuthorizers.commerce;
     }
 
     if (
@@ -1257,7 +1103,6 @@ export async function startGatewayService(
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.callHistory ? { callHistory: database.callHistory } : {}),
           ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
-          ...(creatorVoiceReader ? { creatorVoiceReader } : {}),
           model: liveModel,
           voiceName: liveVoice,
           ...(twinProduction
@@ -1398,19 +1243,6 @@ export async function startGatewayService(
     });
   }
 
-  // The model-driven legacy NGN Wallet payment tool is retired. The app's
-  // customer-facing bill conversations use only MSNW custody, quoted price,
-  // and an explicit customer message through the canonical settlement rail.
-  const msnwBillingService = msnwBillingLedger && database.billingQuotes &&
-      composedBillingFinancial && msnBalanceAuthorizer
-    ? createMsnwBillingService({
-        authorizer: msnBalanceAuthorizer,
-        quotes: database.billingQuotes,
-        funding: msnwBillingLedger,
-        billing: composedBillingFinancial,
-      })
-    : undefined;
-
   const nowPaymentsApiKey = env.NOWPAYMENTS_API_KEY?.trim();
   const nowPaymentsIpnSecret = env.NOWPAYMENTS_IPN_SECRET?.trim();
   const nowPaymentsEmail = env.NOWPAYMENTS_PAYOUT_EMAIL?.trim();
@@ -1467,8 +1299,6 @@ export async function startGatewayService(
       externalPayoutIpApproved: env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true",
     }) + "\n");
   }
-
-  let composedMsnwConversion = options.appOptions?.msnwConversion;
   let composedFinancial = options.appOptions?.financial;
   if (
     !composedFinancial &&
@@ -1539,24 +1369,6 @@ export async function startGatewayService(
     // Compatibility column retained for old receipt recovery. New quotes
     // require fresh signed NGN evidence, never the static USD environment rate.
     const msnwRate = "1";
-    if (!composedMsnwConversion && database.featurePool && msnBalanceAuthorizer &&
-        payout && custody && msnwRate &&
-        env.NOWPAYMENTS_FIXED_EGRESS_CONFIRMED === "true" &&
-        env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true" &&
-        payoutFeeMode === "sender" && withdrawalAllowlist.size > 0 &&
-        env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE?.trim()) {
-      composedMsnwConversion = {
-        authorizer: msnBalanceAuthorizer,
-        service: createMsnwUsdtConversion({
-          pool: database.featurePool, payout, custody,
-          rateUsdMicroPerMsnw: msnwRate,requireNgnQuote:true,...(ngnQuote?{ngnQuote}:{}),
-          verificationCode: env.NOWPAYMENTS_PAYOUT_VERIFICATION_CODE.trim(),
-          enabledRoutes: withdrawalProviderCodes,
-          approvedDestination: (owner, route, address) =>
-            withdrawalAllowlist.has(owner.userId + "|" + route + "|" + address),
-        }),
-      };
-    }
 
     const runtimeEvidence = () => {
       if (!custody) throw new Error("nowpayments.custody.credentials_missing");
@@ -1638,84 +1450,6 @@ export async function startGatewayService(
         })
       : undefined);
 
-  const composedCommerceFulfillment =
-    options.appOptions?.commerceFulfillment ??
-    (commerceAuthorizer &&
-    database.commerce &&
-    database.ownerships &&
-    database.characterSkillAssignments &&
-    database.platformAgentProfiles &&
-    database.skills
-      ? createCommerceFulfillmentService({
-          authorizer: commerceAuthorizer,
-          commerce: database.commerce,
-          ownerships: database.ownerships,
-          assignments: database.characterSkillAssignments,
-          platformProfiles: database.platformAgentProfiles,
-          skills: database.skills,
-        })
-      : undefined);
-
-  const composedCommerceCatalog =
-    options.appOptions?.commerceCatalog ??
-    (commerceAuthorizer &&
-    database.commerce &&
-    database.relationships &&
-    database.ownerships &&
-    database.skills
-      ? createCommerceCatalogService({
-          authorizer: commerceAuthorizer,
-          commerce: database.commerce,
-          relationships: database.relationships,
-          ownerships: database.ownerships,
-          skills: database.skills,
-        })
-      : undefined);
-
-  const composedCreatorSkills =
-    options.appOptions?.creatorSkills ??
-    (creatorCloneAuthorizer &&
-    database.personalClones &&
-    database.characterSkillAssignments &&
-    database.skills &&
-    database.skillGuides &&
-    database.skillDistribution
-      ? createCreatorSkillService({
-          authorizer: creatorCloneAuthorizer,
-          personalClones: database.personalClones,
-          assignments: database.characterSkillAssignments,
-          skills: database.skills,
-          guides: database.skillGuides,
-          distribution: database.skillDistribution,
-        })
-      : undefined);
-
-  const composedCreatorEconomy =
-    options.appOptions?.creatorEconomy ??
-    (creatorCloneAuthorizer &&
-    database.personalClones &&
-    database.commerce
-      ? createCreatorEconomyService({
-          authorizer: creatorCloneAuthorizer,
-          personalClones: database.personalClones,
-          commerce: database.commerce,
-        })
-      : undefined);
-
-  const composedCreatorClone =
-    options.appOptions?.creatorClone ??
-    (creatorCloneAuthorizer &&
-    database.personalClones &&
-    database.agentPresentations &&
-    database.characterSkillAssignments
-      ? createCreatorCloneService({
-          authorizer: creatorCloneAuthorizer,
-          personalClones: database.personalClones,
-          presentations: database.agentPresentations,
-          skillAssignments: database.characterSkillAssignments,
-        })
-      : undefined);
-
   const composedTeachingAssistant: AgentTeachingAssistant | undefined =
     database.teachingProgress
       ? createAgentTeachingAssistant({
@@ -1747,9 +1481,7 @@ export async function startGatewayService(
           voiceForCharacter: async (scope) => {
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
             if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
-            return await creatorVoiceReader?.readPublished({
-              tenantId:scope.tenantId,characterId:scope.characterId,
-            }) ?? undefined;
+            return undefined;
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),
@@ -1792,39 +1524,12 @@ export async function startGatewayService(
         })
       : undefined);
 
-  const composedTalkActivity =
-    options.appOptions?.talkActivity ??
-    (database.talkActivity && talkActivityAuthorizer
-      ? createTalkActivityService({
-          repository: database.talkActivity,
-          authorizer: talkActivityAuthorizer,
-        })
-      : undefined);
-
   const composedTalkProfiles =
     options.appOptions?.talkProfiles ??
     (database.talkProfiles && talkProfileAuthorizer
       ? createTalkProfileService({
           repository: database.talkProfiles,
           authorizer: talkProfileAuthorizer,
-        })
-      : undefined);
-
-  const composedTalkSearch =
-    options.appOptions?.talkSearch ??
-    (database.talkSearch && talkSearchAuthorizer
-      ? createTalkSearchService({
-          repository: database.talkSearch,
-          authorizer: talkSearchAuthorizer,
-        })
-      : undefined);
-
-  const composedTalkLibrary =
-    options.appOptions?.talkLibrary ??
-    (database.talkLibrary && talkLibraryAuthorizer
-      ? createTalkLibraryService({
-          repository: database.talkLibrary,
-          authorizer: talkLibraryAuthorizer,
         })
       : undefined);
 
@@ -1839,294 +1544,8 @@ export async function startGatewayService(
             customerAuthorizer: talkSafetyCustomerAuthorizer!,
             platformAuthority: talkSafetyPlatformAuthority!,
           });
-          return database.talkSafetyReplay
-            ? withReplayBlockSynchronization(base, database.talkSafetyReplay)
-            : base;
+          return base;
         })()
-      : undefined);
-
-  const composedDirectTwin =
-    options.appOptions?.directTwin ??
-    (database.directTwin && talkSafetyCustomerAuthorizer
-      ? createDirectTwinService({
-          repository: database.directTwin,
-          authorizer: talkSafetyCustomerAuthorizer,
-        })
-      : undefined);
-
-  const composedTalkPolls =
-    options.appOptions?.talkPolls ??
-    (database.talkPolls && talkPollAuthorizer
-      ? createTalkPollService({
-          repository: database.talkPolls,
-          authorizer: talkPollAuthorizer,
-        })
-      : undefined);
-
-  const composedTalkGifts =
-    options.appOptions?.talkGifts ??
-    (database.talkGifts && talkGiftAuthorizer && twinProduction?.creditGift
-      ? createTalkGiftService({
-          repository: database.talkGifts,
-          authorizer: talkGiftAuthorizer,
-          executor: twinProduction.creditGift,
-          ...(database.talkActivity
-            ? {
-                activity: {
-                  async append(request) {
-                    await database.talkActivity!.append({
-                      tenantId: request.tenantId,
-                      activityId: `talk-gift:${request.requestId}:recipient`,
-                      userId: request.recipientUserId,
-                      kind: "gift",
-                      title: "Gift received",
-                      detail: `From “${request.talkTitle}”.`,
-                      createdAt: request.completedAt,
-                      talkId: request.talkId,
-                      transactionId: request.giftId,
-                      amountLabel: `${request.amountCredits} Cr`,
-                      requiresAction: false,
-                      unread: true,
-                    });
-                  },
-                },
-              }
-            : {}),
-        })
-      : undefined);
-
-  const liveKitServerUrl = env.LIVEKIT_URL?.trim();
-  const liveKitApiKey = env.LIVEKIT_API_KEY?.trim();
-  const liveKitApiSecret = env.LIVEKIT_API_SECRET?.trim();
-  const talkMediaTokens =
-    liveKitServerUrl && liveKitApiKey && liveKitApiSecret
-      ? createLiveKitTalkMediaTokenIssuer({
-          serverUrl: liveKitServerUrl,
-          apiKey: liveKitApiKey,
-          apiSecret: liveKitApiSecret,
-        })
-      : undefined;
-  const talkMediaAdmin =
-    liveKitServerUrl && liveKitApiKey && liveKitApiSecret
-      ? createLiveKitTalkMediaAdmin({
-          serverUrl: liveKitServerUrl,
-          apiKey: liveKitApiKey,
-          apiSecret: liveKitApiSecret,
-        })
-      : undefined;
-  const talkAiRuntimeDispatcher =
-    liveKitServerUrl && liveKitApiKey && liveKitApiSecret
-      ? createLiveKitTalkAiRuntimeDispatcher({
-          serverUrl: liveKitServerUrl,
-          apiKey: liveKitApiKey,
-          apiSecret: liveKitApiSecret,
-          agentName: env.MASANAWA_TALK_AI_AGENT_NAME ?? "masanawa-talk-ai",
-        })
-      : undefined;
-
-  const replayS3Endpoint = env.MASANAWA_TALK_REPLAY_S3_ENDPOINT?.trim();
-  const replayS3Region = env.MASANAWA_TALK_REPLAY_S3_REGION?.trim();
-  const replayS3Bucket = env.MASANAWA_TALK_REPLAY_S3_BUCKET?.trim();
-  const replayS3AccessKey = env.MASANAWA_TALK_REPLAY_S3_ACCESS_KEY?.trim();
-  const replayS3Secret = env.MASANAWA_TALK_REPLAY_S3_SECRET?.trim();
-  const replayS3Values = [
-    replayS3Endpoint,
-    replayS3Region,
-    replayS3Bucket,
-    replayS3AccessKey,
-    replayS3Secret,
-  ];
-  const replayS3Any = replayS3Values.some((value) => Boolean(value));
-  const replayS3All = replayS3Values.every((value) => Boolean(value));
-  if (replayS3Any && !replayS3All) {
-    throw new TypeError("Talk replay S3 configuration must be complete");
-  }
-
-  const replayObjectStore =
-    replayS3All
-      ? createReplayObjectStore({
-          endpoint: replayS3Endpoint!,
-          region: replayS3Region!,
-          bucket: replayS3Bucket!,
-          accessKey: replayS3AccessKey!,
-          secret: replayS3Secret!,
-        })
-      : undefined;
-
-  const replayEgress =
-    replayS3All && liveKitServerUrl && liveKitApiKey && liveKitApiSecret
-      ? createLiveKitReplayEgress({
-          serverUrl: liveKitServerUrl,
-          apiKey: liveKitApiKey,
-          apiSecret: liveKitApiSecret,
-          s3: {
-            endpoint: replayS3Endpoint!,
-            region: replayS3Region!,
-            bucket: replayS3Bucket!,
-            accessKey: replayS3AccessKey!,
-            secret: replayS3Secret!,
-          },
-        })
-      : undefined;
-
-  const talkReplayCoordinator =
-    database.talkReplay &&
-    database.talkReplayMedia &&
-    replayObjectStore &&
-    replayEgress
-      ? createTalkReplayCoordinator({
-          replay: database.talkReplay,
-          media: database.talkReplayMedia,
-          egress: replayEgress,
-          objects: replayObjectStore,
-          playbackTtlSeconds: boundedEnvInteger(
-            env.MASANAWA_TALK_REPLAY_PLAYBACK_TTL_SECONDS,
-            300,
-            30,
-            900,
-            "MASANAWA_TALK_REPLAY_PLAYBACK_TTL_SECONDS",
-          ),
-        })
-      : undefined;
-
-  const composedTalkLive =
-    options.appOptions?.talkLive ??
-    (database.talkLive && talkLiveAuthorizer
-      ? createTalkLiveService({
-          repository: database.talkLive,
-          authorizer: talkLiveAuthorizer,
-          ...(talkMediaTokens ? { mediaTokens: talkMediaTokens } : {}),
-          ...(database.talkReplay
-            ? {
-                onTalkEnded: async ({tenantId,talkId,reason,now}) => {
-                  if(talkReplayCoordinator){
-                    await talkReplayCoordinator.finalize({tenantId,talkId,reason,now});
-                  }else{
-                    await database.talkReplay!.finalizeFromLive({tenantId,talkId,reason,now});
-                  }
-                },
-              }
-            : {}),
-        })
-      : undefined);
-
-  const talkAiSeatHostShareBps = boundedEnvInteger(
-    env.MASANAWA_TALK_AI_SEAT_HOST_SHARE_BPS,
-    2000,
-    0,
-    10_000,
-    "MASANAWA_TALK_AI_SEAT_HOST_SHARE_BPS",
-  );
-  const talkTwinOwnerShareBps = boundedEnvInteger(
-    env.MASANAWA_TALK_TWIN_OWNER_SHARE_BPS,
-    5000,
-    0,
-    10_000,
-    "MASANAWA_TALK_TWIN_OWNER_SHARE_BPS",
-  );
-  if (talkAiSeatHostShareBps + talkTwinOwnerShareBps > 10_000) {
-    throw new TypeError("Talk AI Seat Host and Twin owner shares cannot exceed 100%");
-  }
-
-  const composedTalkAiSeats =
-    options.appOptions?.talkAiSeats ??
-    (database.talkAiSeats && talkAiSeatAuthorizer
-      ? createTalkAiSeatService({
-          repository: database.talkAiSeats,
-          authorizer: talkAiSeatAuthorizer,
-          ...(talkAiRuntimeDispatcher
-            ? { runtimeDispatcher: talkAiRuntimeDispatcher }
-            : {}),
-          pricing: {
-            expertPriceCredits: boundedEnvInteger(
-              env.MASANAWA_TALK_EXPERT_SEAT_PRICE_CREDITS,
-              100,
-              1,
-              1_000_000_000,
-              "MASANAWA_TALK_EXPERT_SEAT_PRICE_CREDITS",
-            ),
-            twinPriceCredits: boundedEnvInteger(
-              env.MASANAWA_TALK_TWIN_SEAT_PRICE_CREDITS,
-              120,
-              1,
-              1_000_000_000,
-              "MASANAWA_TALK_TWIN_SEAT_PRICE_CREDITS",
-            ),
-            hostShareBasisPoints: talkAiSeatHostShareBps,
-            twinOwnerShareBasisPoints: talkTwinOwnerShareBps,
-            quoteTtlSeconds: boundedEnvInteger(
-              env.MASANAWA_TALK_AI_SEAT_QUOTE_TTL_SECONDS,
-              120,
-              15,
-              3600,
-              "MASANAWA_TALK_AI_SEAT_QUOTE_TTL_SECONDS",
-            ),
-          },
-        })
-      : undefined);
-
-  const composedTalkModeration =
-    options.appOptions?.talkModeration ??
-    (database.talkModeration && talkModerationAuthorizer
-      ? createTalkModerationService({
-          repository: database.talkModeration,
-          authorizer: talkModerationAuthorizer,
-          ...(talkMediaAdmin ? { mediaAdmin: talkMediaAdmin } : {}),
-          ...(composedTalkAiSeats ? { aiSeats: composedTalkAiSeats } : {}),
-          ...(database.talkActivity
-            ? {
-                invitationActivity: {
-                  async append(request) {
-                    await database.talkActivity!.append({
-                      tenantId: request.tenantId,
-                      activityId: request.activityId,
-                      userId: request.userId,
-                      kind: "talk_invitation",
-                      title: request.title,
-                      detail: request.detail,
-                      createdAt: request.createdAt,
-                      talkId: request.talkId,
-                      requiresAction: request.requiresAction,
-                      ...(request.actionLabel
-                        ? { actionLabel: request.actionLabel }
-                        : {}),
-                      unread: request.unread,
-                    });
-                  },
-                },
-              }
-            : {}),
-          ...(database.talkReplay
-            ? {
-                onTalkEnded: async ({tenantId,talkId,reason,now}) => {
-                  if(talkReplayCoordinator){
-                    await talkReplayCoordinator.finalize({tenantId,talkId,reason,now});
-                  }else{
-                    await database.talkReplay!.finalizeFromLive({tenantId,talkId,reason,now});
-                  }
-                },
-              }
-            : {}),
-        })
-      : undefined);
-
-  const composedTalkReplay =
-    options.appOptions?.talkReplay ??
-    (database.talkReplay && talkReplayAuthorizer
-      ? createTalkReplayService({
-          repository: database.talkReplay,
-          authorizer: talkReplayAuthorizer,
-          ...(talkReplayCoordinator ? { coordinator: talkReplayCoordinator } : {}),
-        })
-      : undefined);
-
-  const composedTalks =
-    options.appOptions?.talks ??
-    (database.talks && talkAuthorizer
-      ? createTalkService({
-          repository: database.talks,
-          authorizer: talkAuthorizer,
-        })
       : undefined);
 
   // Account deletion is an independently authenticated, durable request intake.
@@ -2187,6 +1606,8 @@ export async function startGatewayService(
         true,
       ),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
+      ...(database.featurePool ? {saved:new SavedLibraryService(
+        new PgSavedLibraryRepository(database.featurePool))} : {}),
       isEditor: async session => editors.has(session.userId),
       // Publication and media access require explicit runtime qualification;
       // a mounted route must not implicitly activate editorial operations.
@@ -2422,27 +1843,12 @@ export async function startGatewayService(
         ? { accountDataExports: createAccountDataExports(database.featurePool,sessions) }
         : {}),
       ...(accountDeletion ? { accountDeletion } : {}),
-      ...(composedTalks ? { talks: composedTalks } : {}),
-      ...(composedTalkReplay ? { talkReplay: composedTalkReplay } : {}),
-      ...(composedTalkModeration ? { talkModeration: composedTalkModeration } : {}),
-      ...(composedTalkAiSeats ? { talkAiSeats: composedTalkAiSeats } : {}),
-      ...(composedTalkLive ? { talkLive: composedTalkLive } : {}),
       ...(composedTalkProfiles ? { talkProfiles: composedTalkProfiles } : {}),
-      ...(composedTalkActivity ? { talkActivity: composedTalkActivity } : {}),
-      ...(composedTalkSearch ? { talkSearch: composedTalkSearch } : {}),
-      ...(composedTalkLibrary ? { talkLibrary: composedTalkLibrary } : {}),
-      ...(composedTalkGifts ? { talkGifts: composedTalkGifts } : {}),
-      ...(composedTalkPolls ? { talkPolls: composedTalkPolls } : {}),
       ...(composedTalkSafety ? { talkSafety: composedTalkSafety } : {}),
-      ...(composedDirectTwin ? { directTwin: composedDirectTwin } : {}),
       ...(composedBillingFinancial ? { billingFinancial: composedBillingFinancial } : {}),
       ...(composedBillingCheckout ? { billingCheckout: composedBillingCheckout } : {}),
-      ...(msnwBillingService ? { msnwBilling: msnwBillingService } : {}),
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
-      ...(composedMsnwConversion ? {msnwConversion:composedMsnwConversion} : {}),
-      // Preserve signed provider callbacks for historic MSNW finance receipts.
-      // No new customer MSN/MSNW balance, custody, token or DVA surfaces.
       // Paystack verification is independent of MSNW issuance. Verified fiat
       // remains a pending obligation until custody/quote settlement.
       ...(env.PAYSTACK_SECRET_KEY?.trim() &&
@@ -2481,17 +1887,6 @@ export async function startGatewayService(
             repository: database.mobilePush,
           }) }
         : {}),
-      ...(composedCreatorClone ? { creatorClone: composedCreatorClone } : {}),
-      ...(composedCreatorEconomy
-        ? { creatorEconomy: composedCreatorEconomy }
-        : {}),
-      ...(composedCreatorSkills ? { creatorSkills: composedCreatorSkills } : {}),
-      ...(composedCommerceCatalog
-        ? { commerceCatalog: composedCommerceCatalog }
-        : {}),
-      ...(composedCommerceFulfillment
-        ? { commerceFulfillment: composedCommerceFulfillment }
-        : {}),
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
         database.readinessCheck,
@@ -2515,19 +1910,11 @@ export async function startGatewayService(
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
       }
-      if (talkPushDedupePurgeTimer) {
-        clearInterval(talkPushDedupePurgeTimer);
-        talkPushDedupePurgeTimer = undefined;
-      }
     },
     onAfterClose: async () => {
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
-      }
-      if (talkPushDedupePurgeTimer) {
-        clearInterval(talkPushDedupePurgeTimer);
-        talkPushDedupePurgeTimer = undefined;
       }
       await database.close();
     },
@@ -2535,35 +1922,6 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
-
-  const runTalkPushDedupePurge = async () => {
-    if (
-      talkPushDedupePurgeRunning ||
-      drain.isDraining() ||
-      !database.talkPushDedupe
-    ) {
-      return;
-    }
-    talkPushDedupePurgeRunning = true;
-    try {
-      await database.talkPushDedupe.purgeExpired({
-        before: new Date().toISOString(),
-        limit: 1000,
-      });
-    } catch {
-      // Push remains best effort. Retention cleanup must never crash Gateway.
-    } finally {
-      talkPushDedupePurgeRunning = false;
-    }
-  };
-
-  if (database.talkPushDedupe) {
-    talkPushDedupePurgeTimer = setInterval(() => {
-      void runTalkPushDedupePurge();
-    }, 6 * 60 * 60 * 1000);
-    talkPushDedupePurgeTimer.unref();
-    void runTalkPushDedupePurge();
-  }
 
   const runOwnerAccessSweep = async () => {
     if (
@@ -2601,7 +1959,6 @@ export async function startGatewayService(
     address: lifecycle.address,
     app,
     ...(pushSender ? { pushSender } : {}),
-    ...(talkPushDelivery ? { talkPushDelivery } : {}),
     isDraining: drain.isDraining,
     drain: drain.beginDraining,
     shutdown: (reason: ServiceSignal | "manual" = "manual") =>
