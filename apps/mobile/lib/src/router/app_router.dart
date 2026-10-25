@@ -1,5 +1,6 @@
 import '../gb_wallet/recharge_screen.dart';
 import '../gb_wallet/gb_send_screen.dart';
+import '../gb_wallet/gb_request_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -212,6 +213,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
       GoRoute(path: '/wallet/add',
         builder: (_, __) => const RechargePackagesScreen()),
+      GoRoute(path: '/wallet/request',
+        builder: (_, __) => const GbRequestScreen()),
       GoRoute(path: '/wallet/send',
         builder: (_, __) => const GbSendScreen()),
       GoRoute(path: '/calls/incoming/:callId',
