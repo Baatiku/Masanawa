@@ -102,6 +102,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   GbSendReceipt? _receipt;
   CancelToken? _cancel;
   bool _busy = false;
+  bool _uncertain = false;
   String? _error;
   String? _quickSelection;
   int _request = 0;
@@ -121,6 +122,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
     _quote = null;
     _receipt = null;
     _busy = false;
+    _uncertain = false;
     _error = null;
   }
 
@@ -218,14 +220,53 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       setState(() {
         _busy = false;
         _receipt = receipt;
+        _uncertain = false;
       });
       ref.invalidate(gbWalletSummaryProvider(owner));
     } catch (_) {
       if (!mounted || sequence != _request || !_isOwner(owner)) return;
       setState(() {
         _busy = false;
+        _uncertain = true;
         _error = 'Confirmation was not verified. Do not start another Send. '
             'Retry this SAME review, or contact support with the reference.';
+      });
+    }
+  }
+
+  Future<void> _checkOriginal(GbWalletOwner owner,GbSendQuote quote) async {
+    if(_busy || !_isOwner(owner))return;
+    final ticket=++_request;
+    _cancel?.cancel();
+    final cancel=CancelToken();_cancel=cancel;
+    setState((){_busy=true;_error=null;});
+    try {
+      final response=await ref.read(apiClientProvider).dio.get<Object?>(
+        '/v1/gb/wallet/send/receipt/${Uri.encodeComponent(quote.operationId)}',
+        cancelToken:cancel,
+        options:Options(headers:const {'Cache-Control':'no-store'}));
+      final receipt=GbSendReceipt.fromJson(response.data,quote);
+      if(!mounted || ticket!=_request || !_isOwner(owner))return;
+      setState((){_busy=false;_uncertain=false;_receipt=receipt;});
+      ref.invalidate(gbWalletSummaryProvider(owner));
+    }on DioException catch(error) {
+      if(!mounted || ticket!=_request || !_isOwner(owner))return;
+      setState((){
+        _busy=false;
+        _uncertain=true;
+        _error=error.response?.statusCode==404
+          ? 'No confirmed transfer was found yet. This does not mean it failed. '
+              'Keep the original review and check again.'
+          : 'Original transfer readback is unavailable. Keep this same review '
+              'and reference; no MB was sent by this check.';
+      });
+    }catch (_) {
+      if(!mounted || ticket!=_request || !_isOwner(owner))return;
+      setState((){
+        _busy=false;
+        _uncertain=true;
+        _error='Original transfer could not be verified. Keep the same review; '
+          'do not create another Send.';
       });
     }
   }
@@ -383,7 +424,12 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                     onPressed: _busy ||
                         !_quote!.expiresAt.isAfter(DateTime.now().toUtc())
                       ? null : () => _confirm(owner!, _quote!),
-                    child: const Text('Confirm Send'),
+                    child:Text(_uncertain?'Retry same confirmation':'Confirm Send'),
+                  ),
+                  TextButton.icon(
+                    onPressed:_busy?null:()=>_checkOriginal(owner!,_quote!),
+                    icon:const Icon(Icons.receipt_long_outlined),
+                    label:const Text('Check original transfer'),
                   ),
                   OutlinedButton(
                     onPressed: _busy ? null : () => setState(_clearReview),

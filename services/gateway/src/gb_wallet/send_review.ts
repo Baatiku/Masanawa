@@ -23,6 +23,7 @@ export interface GbSendPorts {
   ) => Promise<GbSendRecipient | null>;
   readonly balance: (actor: GbSendActor) => Promise<GbWalletSnapshot | null>;
   readonly transfer: (request: GbTransferRequest) => Promise<GbReceipt>;
+  readonly readTransfer: (actor:GbSendActor,operationId:string) => Promise<GbReceipt|null>;
   /** Server secret only. Must not be a public config, repo value or mobile key. */
   readonly reviewSecret: string;
   readonly now?: () => Date;
