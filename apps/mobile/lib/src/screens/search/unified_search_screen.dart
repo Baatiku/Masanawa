@@ -7,9 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/masana_chat/inbox_search.dart';
-import '../../features/rooms/room_community_api.dart';
 import '../../features/home_feed/feed_api.dart';
-import '../../screens/rooms/rooms_screen.dart';
 import '../../screens/status/status_screen.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/session_state.dart';
@@ -34,9 +32,8 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
   List<String> _recent = [];
   Future<void> _historyWrites = Future<void>.value();
   List<MasanaInboxSearchItem> _chats = [];
-  List<CommunityRoom> _rooms = [];
   List<FeedPost> _posts = [];
-  String? _chatError, _roomError, _statusError;
+  String? _chatError, _statusError;
 
   @override
   void dispose() {
@@ -56,11 +53,10 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     _input.clear();
     _recent = [];
     _chats = [];
-    _rooms = [];
     _posts = [];
     _error = null;
     _loading = false;
-    _chatError = _roomError = _statusError = null;
+    _chatError = _statusError = null;
     if (account != null) {
       final ticket = _generation;
       unawaited(_restore(account, ticket));
@@ -128,9 +124,8 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
       _loading = term.length >= 2;
       _error = null;
       _chats = [];
-      _rooms = [];
       _posts = [];
-      _chatError = _roomError = _statusError = null;
+      _chatError = _statusError = null;
     });
     if (term.length < 2 || term.length > 80) return;
     final ticket = _generation;
@@ -144,7 +139,6 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     final owner = session.user.id;
     final token = session.tokens.accessToken;
     final chatsApi = ref.read(masanaInboxSearchProvider);
-    final roomApi = ref.read(roomCommunityApiProvider);
     final feedApi = ref.read(statusFeedApiProvider);
     Future<Object?> safely(Future<Object?> Function() read) async {
       try {
@@ -155,7 +149,6 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     }
     final results = await Future.wait<Object?>([
       safely(() => chatsApi.search(bearer: token, query: term)),
-      safely(() => roomApi.list(false).then((rooms) => rooms.where((room) => '${room.name} ${room.description}'.toLowerCase().contains(term.toLowerCase())).toList())),
       safely(() => feedApi.list(mode: 'for_you')),
     ]);
     if (!mounted || ticket != _generation || _owner != owner ||
@@ -164,12 +157,10 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
         _input.text.trim() != term) return;
 
     final chatData = results[0];
-    final roomData = results[1];
-    final feedData = results[2];
+    final feedData = results[1];
     setState(() {
       _chats = chatData is List<MasanaInboxSearchItem>
           ? chatData.take(20).toList() : [];
-      _rooms = roomData is List<CommunityRoom> ? roomData.take(20).toList() : [];
       // The Status endpoint supplies the latest page. Explicitly avoid
       // claiming a corpus-wide search or showing unapproved content.
       _posts = feedData is FeedPage
@@ -178,7 +169,6 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
               (post.authorName ?? '').toLowerCase().contains(term.toLowerCase()))
               .take(10).toList() : [];
       _chatError = chatData == null ? 'Chats unavailable' : null;
-      _roomError = roomData == null ? 'Rooms unavailable' : null;
       _statusError = feedData == null ? 'Status unavailable' : null;
       _loading = false;
     });
@@ -211,7 +201,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Search Masanawa')),
       body: account == null
-        ? const Center(child: Text('Sign in to search Masana and Rooms.'))
+        ? const Center(child: Text('Sign in to search Masana, conversations and Status.'))
         : Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
@@ -227,7 +217,7 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
                 }
               },
               decoration: InputDecoration(
-                hintText: 'Masana, chats, Rooms, Status',
+                hintText: 'Masana, conversations, Status',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: query.isEmpty ? null
                     : IconButton(tooltip: 'Clear search',
@@ -283,18 +273,6 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
                 title: Text(chat.displayName),
                 subtitle: Text(chat.profession),
                 onTap: () => context.push('/chat/${Uri.encodeComponent(chat.characterId)}'),
-              ),
-              _heading('Rooms'),
-              if (_roomError != null) ListTile(title: Text(_roomError!),
-                trailing: IconButton(onPressed: () => _changed(query),
-                  icon: const Icon(Icons.refresh)))
-              else if (_rooms.isEmpty && !_loading)
-                const ListTile(title: Text('No matching Rooms'))
-              else for (final room in _rooms) ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text(room.name),
-                subtitle: Text(room.description),
-                onTap: () => context.push('/rooms/${Uri.encodeComponent(room.id)}'),
               ),
               _heading('Recent Status matches',
                 detail: 'Searches the latest approved updates'),
