@@ -7,10 +7,11 @@ import '../core/providers.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_data_catalogue.dart';
+import 'gb_data_purchase_panel.dart';
 import 'gb_wallet_summary.dart';
 
-/// Only verified read-only catalogue/quote operations are available until the
-/// durable MB reservation and delivered-status payment API is qualified.
+/// Server-verified whole-GB catalogue and quote, followed by a strictly
+/// reviewed durable purchase. No provider acknowledgement is a delivery claim.
 class DataRedemptionScreen extends ConsumerStatefulWidget {
   const DataRedemptionScreen({super.key});
 
@@ -29,6 +30,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   String? _error;
   CancelToken? _cancel;
   bool _loadingQuote = false;
+  bool _purchaseLocked = false;
   int _generation = 0;
 
   @override
@@ -56,6 +58,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   }
 
   Future<void> _reload(GbDataOwner owner) async {
+    if (_purchaseLocked) return; // Preserve the original uncertain request.
     setState(() {
       _clearQuote();
       _bundleId = null;
@@ -70,7 +73,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
 
   Future<void> _requestQuote(GbDataOwner owner, GbVerifiedBundle bundle) async {
     final phone = normalizeNigerianDataPhone(_phone.text);
-    if (phone == null || !_isOwner(owner)) return;
+    if (phone == null || !_isOwner(owner) || _purchaseLocked) return;
     _cancel?.cancel();
     final cancellation = CancelToken();
     _cancel = cancellation;
@@ -131,6 +134,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _network = null;
       _manualNetwork = false;
       _bundleId = null;
+      _purchaseLocked = false;
       _owner = owner;
     }
 
@@ -162,7 +166,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           const SizedBox(height: 14),
           TextField(
             controller: _phone,
-            enabled: owner != null,
+            enabled: owner != null && !_purchaseLocked,
             keyboardType: TextInputType.phone,
             onChanged: (value) => setState(() {
               _clearQuote();
@@ -207,7 +211,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   selectedColor: colors.brand.withValues(alpha: .15),
                   side: BorderSide(color: value == _network
                       ? colors.brand : colors.structuralBorder),
-                  onSelected: owner == null ? null : (_) {
+                  onSelected: owner == null || _purchaseLocked ? null : (_) {
                     setState(() {
                       _network = value;
                       _manualNetwork = true;
@@ -267,7 +271,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       key: ValueKey('verified-data-bundle-${bundle.id}'),
                       bundle: bundle,
                       selected: _bundleId == bundle.id,
-                      onSelect: () => setState(() {
+                      onSelect: _purchaseLocked ? () {} : () => setState(() {
                         _bundleId = bundle.id;
                         _clearQuote();
                       }),
@@ -310,9 +314,18 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             label: const Text('Review verified bundle'),
           ),
           const SizedBox(height: 8),
-          Center(child: Text('Purchase unavailable',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.textMuted))),
+          if (_quote != null && owner != null)
+            GbDataPurchasePanel(
+              key: ValueKey('data-purchase-${owner.accountId}-${_quote!.bundle.id}'),
+              owner: owner,
+              quote: _quote!,
+              onStarted: () => setState(() => _purchaseLocked = true),
+              onResolved: () => setState(() => _purchaseLocked = false),
+            )
+          else
+            Center(child: Text('Review before purchase',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.textMuted))),
           TextButton(
             onPressed: () => context.go('/home?tab=wallet'),
             child: const Text('Back to Wallet'),
