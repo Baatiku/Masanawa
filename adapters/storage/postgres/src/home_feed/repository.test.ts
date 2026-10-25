@@ -155,7 +155,7 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
   expect(sql).toContain("p.state='published'");
   expect(sql).toContain("p.author_masana_id=$7");
   expect(sql).toContain("m.state='approved'");
-  expect(args).toEqual(["tenantA","fanA","for_you",null,null,21,"character_professional",null]);
+  expect(args).toEqual(["tenantA","fanA","for_you",null,null,21,"character_professional",null,false]);
  });
 
 });
