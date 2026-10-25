@@ -122,8 +122,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pump();
-    expect(tester.widget<IconButton>(find.byTooltip('React to post'))
-      .onPressed,isNull);
+    expect(tester.widget<IconButton>(find.ancestor(
+      of:find.byIcon(Icons.add_reaction_outlined),
+      matching:find.byType(IconButton)).first).onPressed,isNull);
     pending.completeError(StateError('offline'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction not confirmed. Refresh or retry.'),
