@@ -23,6 +23,15 @@ class Directory extends AgentDirectoryController {
   @override AgentDirectoryState build() => const AgentDirectoryState(loading: false, agents: [old]);
   void update() => state = const AgentDirectoryState(loading: false, agents: [fresh]);
 }
+class RetryingDirectory extends Directory {
+  int attempts = 0;
+  @override AgentDirectoryState build() => const AgentDirectoryState(
+    loading: false, agents: [old], error: 'Offline');
+  @override Future<void> refresh() async {
+    attempts++;
+    state = const AgentDirectoryState(loading: false, agents: [fresh]);
+  }
+}
 const user = AuthUser(id: 'owner', name: 'Fan', locale: 'en', status: 'ACTIVE', role: 'USER', isNewUser: false, createdAt: '2026-10-19');
 const tokens = AuthTokens(accessToken: 'test', refreshToken: 'refresh', accessExpiresIn: 3600, user: user);
 class EmptyDirectory extends Directory {
@@ -31,6 +40,11 @@ class EmptyDirectory extends Directory {
 class SignedIn extends SessionController {
   @override SessionState build() => const SessionSignedIn(user, tokens);
   void signOut() => state = const SessionSignedOut();
+}
+class EpochSession extends SignedIn {
+  int epoch = 1;
+  @override int get authorizationEpoch => epoch;
+  void reauthenticate() { epoch++; state = const SessionSignedIn(user, tokens); }
 }
 ApiClient client({Completer<Response<dynamic>>? follow}) {
   final dio = Dio();
@@ -44,6 +58,48 @@ ApiClient client({Completer<Response<dynamic>>? follow}) {
   return ApiClient(dio: dio)..accessToken = 'test';
 }
 void main() {
+  testWidgets('offline portrait metadata stays identity-safe and explicit Retry restores verified key',
+      (tester) async {
+    final directory = RetryingDirectory();
+    await tester.pumpWidget(ProviderScope(overrides: [
+      agentDirectoryProvider.overrideWith(() => directory),
+      sessionProvider.overrideWith(SignedIn.new),
+      apiClientProvider.overrideWithValue(client()),
+    ], child: const MaterialApp(home: MasanaProfileScreen(agent: old))));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry profile details'), findsOneWidget);
+    expect(tester.widget<MasanaPortraitAvatar>(
+      find.byType(MasanaPortraitAvatar)).agent?.portraitKey, isNull);
+    await tester.tap(find.text('Retry profile details'));
+    await tester.pumpAndSettle();
+    expect(directory.attempts, 1);
+    expect(find.text('Retry profile details'), findsNothing);
+    expect(tester.widget<MasanaPortraitAvatar>(
+      find.byType(MasanaPortraitAvatar)).agent?.portraitKey, 'amina');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('same-user new authorization epoch cannot retain profile or late Follow',
+      (tester) async {
+    final session = EpochSession();
+    final pending = Completer<Response<dynamic>>();
+    await tester.pumpWidget(ProviderScope(overrides: [
+      agentDirectoryProvider.overrideWith(Directory.new),
+      sessionProvider.overrideWith(() => session),
+      apiClientProvider.overrideWithValue(client(follow: pending)),
+    ], child: const MaterialApp(home: MasanaProfileScreen(agent: old))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Follow'));
+    await tester.pump();
+    session.reauthenticate();
+    await tester.pump();
+    pending.complete(Response(requestOptions: RequestOptions(path: '/follow'),
+      statusCode: 200, data: {'following': true}));
+    await tester.pumpAndSettle();
+    expect(find.text('Session changed. Reopen this profile.'), findsOneWidget);
+    expect(find.text('Following'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('profile follows canonical portrait refresh and promotes recent posts without biography', (tester) async {
     final directory = Directory();
     await tester.pumpWidget(ProviderScope(overrides: [
