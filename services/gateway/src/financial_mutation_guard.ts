@@ -20,6 +20,7 @@ export function requiresFinancialCustomerState(
   if (signedProviderCallbacks.has(path)) return false;
   return path === "/v1/gb/wallet/virtual-account" ||
     path === "/v1/gb/data/redeem" ||
+    path.startsWith("/v1/gb/calls/") ||
     path.startsWith("/v1/gb/data/purchases/") ||
     path.startsWith("/v1/gb/wallet/send/") ||
     path.startsWith("/v1/gb/wallet/requests") ||

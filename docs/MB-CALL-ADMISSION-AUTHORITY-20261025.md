@@ -29,3 +29,16 @@ Real PostgreSQL tests cover concurrent duplicate admission, original target/budg
 6. Prove current text/recorded-note errors independently, retain text when audio fails, and validate actual audible provider/device recovery before marking UX-R01–R08 complete.
 
 No APK. Flutterwave fixed-IP hosting stays on hold. Separate Masanawa-App remains untouched.
+
+## Protected review/service batch
+
+Branch `feat/mb-call-review-service` adds the next server boundary, still without production relay composition:
+
+- Optional `GatewayAppOptions.gbCalls` mounts `/v1/gb/calls/review`, `/v1/gb/calls/admissions` and owner-scoped admission readback. Main does not compose these ports yet. Readiness must establish a working trusted relay and durable recovery before review can succeed.
+- Review quotes available purchased/welcome MB after reservations, capped by requested seconds, with exact 1 MB per started connected second and zero ringing cost. No reservation is created by browsing/review.
+- Domain-separated HMAC consent binds tenant, user, canonical Masana revision, MB cap, original request key and expiry. Explicit acceptance is mandatory. Changed/revoked targets, malformed/tampered/cross-owner tokens and expired new consent are rejected.
+- Confirmation resumes a pending original journal or returns its existing receipt after timeout/expiry; it never creates another hold under a different request. The PostgreSQL authority remains the final balance/frozen/concurrency check.
+- Public requests cannot supply owner IDs, connected duration or proof. Unknown fields are rejected before Fastify can strip them. Responses use private/no-store; receipt lookup stays principal-bound and rejects caller-selected query fields.
+- Customer recovery restrictions cover the new financial writes; original receipt GET remains available. Retired `/agent/twin/voice/*` routes remain absent.
+
+Validation includes signed consent/revision/expiry tests plus real PostgreSQL tests mounted through the actual reduced Gateway: concurrent confirmation, single hold, owner privacy, recovery holds, strict input and unchanged retired 404s. Source service/route/ledger tests do not establish provider/device calls. UX-R02/R06/R08 remain open until relay/token/mobile/recovery and actual acceptance are complete.

@@ -1,3 +1,5 @@
+import {registerGbCallRoutes} from "./gb_calls/routes.js";
+import type {GbCallPorts} from "./gb_calls/review.js";
 import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
 import { registerHistoricalFinancialCallbacks } from './historical_financial_callbacks.js';
 import {
@@ -103,6 +105,7 @@ export interface GatewayAppOptions {
   /** New review-confirmed purchased-MB transfer; no legacy Credits. */
   readonly gbSendReview?: GbSendPorts;
   readonly gbRequests?: GbRequestPorts;
+  readonly gbCalls?: GbCallPorts;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
   readonly gbDataPurchases?: GbDataPurchaseRoutes;
@@ -351,6 +354,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
+  if (options.gbCalls) registerGbCallRoutes(app, options.gbCalls);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 

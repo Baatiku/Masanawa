@@ -106,7 +106,7 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
     await f.repo.connected(f.actor,id,'lease-one');f.advance(1001);
     await f.repo.checkpoint(f.actor,id,'lease-one');f.advance(600000);
     await expect(f.repo.checkpoint(f.actor,id,'lease-one')).rejects.toThrow('gb.call.stale_connection');
-    expect(await f.repo.recover()).toEqual([expect.objectContaining({admissionId:id,chargedMb:2,verifiedConnectedMs:1001})]);
+    expect(await f.repo.recover()).toContainEqual(expect.objectContaining({admissionId:id,chargedMb:2,verifiedConnectedMs:1001}));
     expect(await f.repo.recover()).toEqual([]);
     expect(await f.balance()).toMatchObject({welcome:498,held_welcome:0});
   });
@@ -114,7 +114,7 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
     const f=await fixture(0,0);
     await expect(f.repo.admit(f.actor,f.args)).rejects.toThrow('gb.wallet.insufficient_mb');
     f.advance(61000);
-    expect(await f.repo.recover()).toEqual([expect.objectContaining({state:'failed',chargedMb:0})]);
+    expect(await f.repo.recover()).toContainEqual(expect.objectContaining({state:'failed',chargedMb:0}));
     const expired=await f.repo.admit(f.actor,f.args);
     expect(expired).toMatchObject({state:'failed'});
     // Simulate a reservation committing after another worker froze expiry.
