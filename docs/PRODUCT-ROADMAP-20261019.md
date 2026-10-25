@@ -91,6 +91,25 @@ Retirement evidence: #400 was already merged; #402 mobile, #403 worker, #404 rou
 
 Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, claimed files and base SHA here before overlapping implementation. Keep shared router/bootstrap/ledger/migrations under one integrator. On completion replace `Evidence: pending` with PR/commit and test outcomes, distinguishing source/mocked tests from real PG/provider/device checks. Do not tick an entire batch because a plan or one widget test merged. Merge each verified batch automatically under existing owner authorization.
 
+### 25 October — next ten scoped UX subfeatures, merge evidence
+
+The owner's requested set of ten *code-level subfeatures* is now merged. This is **not** ten entire UX checklist IDs: several IDs also require provider, live-device, receipt/export, screen-reader or payment acceptance. Keep those checkboxes open.
+
+| Scoped item | Merged implementation evidence | Verification |
+| --- | --- | --- |
+| 1. Immutable Wallet Activity entry detail | #461, final head `24839277` | Mobile #975, Foundation #1422, real PG #57 PASS |
+| 2. Send/Request exact recipient verification | #464, final head `7a3181ac` | Mobile #976, Foundation #1424, real PG #58 PASS |
+| 3. Server-side Activity MB/NGN filters and safe cursor switch | #465, final head `832ffb5e` | Mobile #980, Foundation #1428, real PG #62 PASS |
+| 4. Independent seven/thirty-day posted MB and NGN totals | #466, final head `f78074ac` | Mobile #984, Foundation #1432, real PG #65 PASS |
+| 5. Activity period retry without erasing confirmed journal rows | #466, same head | Hosted widget, Foundation and PG above PASS |
+| 6. Original Send operation readback after uncertain confirmation | #468, final head `68165833` | Mobile #992, Foundation #1440, real PG #69 PASS |
+| 7. Rich Status reaction rollback/accepted-count uncertainty | #462 (`fa77a99e`) and #473 (`f6b60ed6`) | #462 hosted PASS; #473 Mobile #1008, Foundation #1460 PASS |
+| 8. Missing/unauthorized inline Status image fallback and retry | #473, final head `f6b60ed6` | Mobile #1008, Foundation #1460 PASS |
+| 9. Durable account-fenced notification read acknowledgement and retry | #470, final head `09ec2fcf` | Mobile #996, Foundation #1445 PASS; local real PGlite migration/isolation 3 PASS |
+| 10. Visible Masana portrait metadata retry and same-user epoch fence | #472, final head `f9e3f00c` | Mobile #1004, Foundation #1454 PASS |
+
+No APK is requested/delivered. Production fixed-IP hosting, live Flutterwave qualification, external data/network redemption and handset/push/media/screen-reader acceptance remain on hold or NOT_RUN as recorded by their parent checklist IDs. Local code/CI success is not live operational qualification.
+
 ### P0 — Restore reliable chat, notes, calls and identity before polish
 
 - [ ] **UX-R01** Establish affected app/API/Gateway SHAs and compare the last verified working version; reproduce text, recorded note and call failures separately. Evidence: pending.
