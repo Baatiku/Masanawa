@@ -102,7 +102,8 @@ class GbWalletScreen extends ConsumerWidget {
         _ActionRow(
           icon: Icons.send_outlined,
           label: 'Send',
-          subtitle: 'Available after the GB ledger is connected',
+          subtitle: 'Send purchased MB to a verified user',
+          onTap: () => context.push('/wallet/send'),
         ),
         _ActionRow(
           icon: Icons.call_received_outlined,

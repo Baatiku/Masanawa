@@ -15,6 +15,8 @@ describe("financial account-status admission",()=>{
       expect(requiresFinancialCustomerState("POST",route+"/other")).toBe(true);
     }
     for(const route of [
+      "/v1/gb/wallet/send/confirm",
+      "/v1/gb/wallet/send/quote",
       "/v1/wallet/msnw/custody/send",
       "/v1/wallet/msnw/p2p/methods/verify",
       "/v1/financial/crypto/withdrawals",
