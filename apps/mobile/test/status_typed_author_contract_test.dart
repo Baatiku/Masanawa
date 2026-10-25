@@ -144,7 +144,7 @@ void main() {
         'fan_a',
       );
       expect(find.text('Zainab A.'), findsOneWidget);
-      expect(find.text('Member'), findsOneWidget);
+      expect(find.textContaining('Member ·'), findsOneWidget);
       await tester.tap(find.text('Zainab A.'));
       expect(openedHuman, 'zainab');
       expect(openedMasana, isNull);

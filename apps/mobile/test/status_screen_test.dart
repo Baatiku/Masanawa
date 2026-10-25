@@ -88,7 +88,7 @@ void main() {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
-    expect(find.text('2026-10-13'), findsOneWidget);
+    expect(find.textContaining('Oct 13, 2026'), findsOneWidget);
     expect(find.text('New status'), findsNothing);
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
