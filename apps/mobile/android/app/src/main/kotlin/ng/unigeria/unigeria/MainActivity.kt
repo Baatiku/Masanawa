@@ -160,9 +160,8 @@ class MainActivity : FlutterActivity() {
                         ) {
                             result.success(false)
                         } else {
-                            // Group calls share one microphone with several
-                            // independent Masana Live sessions. Keep the
-                            // service until the *last* session releases it.
+                            // Keep the microphone foreground service until
+                            // the final active audio owner releases it.
                             val ready = if (activeCallOwners > 0) {
                                 true
                             } else {
