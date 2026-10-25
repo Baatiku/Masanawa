@@ -118,6 +118,41 @@ void main() {
     expect(result.text,'Hello, two plus three is five.');
     expect(result.audioTranscript,isNull);
   });
+  test('completed voice note retains spoken text when final reply field is absent', () async {
+    final adapter=Adapter([
+      {'type':'audio-transcript','text':'I heard your question clearly.'},
+      {'type':'audio','dataBase64':'%%%bad-audio'},
+      {'type':'done','parts':[]},
+    ]);
+    final result=await transport(adapter).sendMediaTurnStream(
+      binding:binding,bytes:Uint8List.fromList([1,2]),
+      mimeType:'audio/mp4',caption:'',requestId:'original-voice-note');
+    expect(result.text,'I heard your question clearly.');
+    expect(result.audioTranscript,'I heard your question clearly.');
+    expect(result.audioBytes,isNull);
+    expect(adapter.requests,hasLength(1));
+  });
+  test('completed media turn recovers streamed text without duplicate POST', () async {
+    final adapter=Adapter([
+      {'type':'delta','text':'A clear answer'},
+      {'type':'done','reply':'','parts':[]},
+    ]);
+    final result=await transport(adapter).sendMediaTurnStream(
+      binding:binding,bytes:Uint8List.fromList([1,2]),
+      mimeType:'audio/mp4',caption:'',requestId:'original-note-text');
+    expect(result.text,'A clear answer');
+    expect(adapter.requests,hasLength(1));
+  });
+  test('a voice transcript without done is not a delivered answer', () async {
+    final adapter=Adapter([
+      {'type':'audio-transcript','text':'still generating'},
+    ]);
+    await expectLater(transport(adapter).sendMediaTurnStream(
+      binding:binding,bytes:Uint8List.fromList([1,2]),
+      mimeType:'audio/mp4',caption:'',requestId:'original-note-incomplete'),
+      throwsA(isA<ApiException>()));
+    expect(adapter.requests,hasLength(1));
+  });
   test('done ends a reply even when the HTTP connection remains open', () async {
     final adapter=Adapter([{'type':'done','reply':'Complete reply','parts':[]}],keepOpen:true);
     final result=await transport(adapter).sendMediaTurnStream(binding:binding,bytes:Uint8List.fromList([1,2]),mimeType:'audio/mp4',caption:'').timeout(const Duration(seconds:2));
