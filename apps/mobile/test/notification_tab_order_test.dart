@@ -11,9 +11,16 @@ import 'package:masanawa/src/screens/settings/notification_preferences_screen.da
 import 'package:masanawa/src/state/session_state.dart';
 
 class _Session extends SessionController {
+  int _epoch = 1;
+  @override int get authorizationEpoch => _epoch;
   @override
   SessionState build() => signedIn('owner');
   void switchAccount() => state = signedIn('other');
+  void reauthenticateSameAccount() {
+    ++_epoch;
+    state = signedIn('owner');
+  }
+  void rotateTokenWithinEpoch() => state = signedIn('owner');
   SessionState signedIn(String id) {
     final user = AuthUser(id: id, name: 'Fan', locale: 'en',
       status: 'ACTIVE', role: 'USER', isNewUser: false,
@@ -154,5 +161,110 @@ void main() {
     expect(find.text('Verified wallet update'), findsOneWidget);
     expect(find.text('Recent alerts remain available'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('same-user reauthentication drops previous-epoch late alerts and resets tabs',
+      (tester) async {
+    final oldResponse = Completer<RequestInterceptorHandler>();
+    var historyCalls = 0;
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.path.endsWith('/history')) {
+        if (historyCalls++ == 0) {
+          oldResponse.complete(handler);
+          return;
+        }
+        handler.resolve(Response<Map<String, dynamic>>(
+          requestOptions: options, statusCode: 200,
+          data: {'items': [
+            {'id': 'fresh', 'category': 'status',
+              'title': 'Alert from the new authorization',
+              'createdAt': '2026-10-25T16:00:00Z'},
+          ]},
+        ));
+        return;
+      }
+      handler.resolve(Response<Map<String, dynamic>>(
+        requestOptions: options, statusCode: 200,
+        data: {'preferences': {
+          'messages': true, 'calls': true, 'status': true,
+          'wallet': true, 'quietStart': null, 'quietEnd': null,
+          'utcOffsetMinutes': 0,
+        }},
+      ));
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+    ], child: const MaterialApp(home: NotificationPreferencesScreen())));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Preferences'));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(NotificationPreferencesScreen)));
+    (container.read(sessionProvider.notifier) as _Session)
+        .reauthenticateSameAccount();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Alert from the new authorization'), findsOneWidget);
+    // Even if the old server response succeeds, its authorization was revoked.
+    (await oldResponse.future).resolve(Response<Map<String, dynamic>>(
+      requestOptions: RequestOptions(path: '/agent/notifications/history'),
+      statusCode: 200, data: {'items': [
+        {'id': 'stale', 'category': 'messages',
+          'title': 'Private alert from earlier session',
+          'createdAt': '2026-10-25T12:00:00Z'},
+      ]},
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Private alert from earlier session'), findsNothing);
+    expect(find.text('Alert from the new authorization'), findsOneWidget);
+    expect(find.text('Choose your updates'), findsNothing);
+    expect(historyCalls, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rotating a token in the same authorization epoch preserves visible Activity',
+      (tester) async {
+    var historyCalls = 0;
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.path.endsWith('/history')) {
+        historyCalls++;
+        handler.resolve(Response<Map<String, dynamic>>(
+          requestOptions: options, statusCode: 200,
+          data: {'items': [
+            {'id': 'safe', 'category': 'messages',
+              'title': 'Retained same-session alert',
+              'createdAt': '2026-10-25T12:00:00Z'},
+          ]},
+        ));
+        return;
+      }
+      handler.resolve(Response<Map<String, dynamic>>(
+        requestOptions: options, statusCode: 200,
+        data: {'preferences': {
+          'messages': true, 'calls': true, 'status': true,
+          'wallet': true, 'quietStart': null, 'quietEnd': null,
+          'utcOffsetMinutes': 0,
+        }},
+      ));
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+    ], child: const MaterialApp(home: NotificationPreferencesScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('Retained same-session alert'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(NotificationPreferencesScreen)));
+    (container.read(sessionProvider.notifier) as _Session)
+        .rotateTokenWithinEpoch();
+    await tester.pumpAndSettle();
+    expect(find.text('Retained same-session alert'), findsOneWidget);
+    expect(historyCalls, 1);
   });
 }

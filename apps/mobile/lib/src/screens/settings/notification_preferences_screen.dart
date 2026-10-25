@@ -120,6 +120,7 @@ class NotificationPreferencesScreen extends ConsumerStatefulWidget {
 class _NotificationPreferencesScreenState
     extends ConsumerState<NotificationPreferencesScreen> {
   String? _owner;
+  int? _ownerEpoch;
   NotificationPreferences? _prefs;
   List<NotificationHistoryRow> _history = [];
   bool _loading = false, _saving = false, _historyLoading = false;
@@ -137,11 +138,14 @@ class _NotificationPreferencesScreenState
 
   void _bind(SessionState session) {
     final account = session is SessionSignedIn ? session.user.id : null;
-    if (account == _owner) return;
+    final epoch = account == null ? null
+        : ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (account == _owner && epoch == _ownerEpoch) return;
     ++_generation;
     ++_preferencesRequest;
     ++_historyRequest;
     _owner = account;
+    _ownerEpoch = epoch;
     _prefs = null;
     _history = [];
     _error = _historyError = null;
@@ -153,7 +157,10 @@ class _NotificationPreferencesScreenState
   }
 
   bool _same(int ticket, String owner) {
-    if (!mounted || ticket != _generation || _owner != owner) return false;
+    if (!mounted || ticket != _generation || _owner != owner ||
+        _ownerEpoch != ref.read(sessionProvider.notifier).authorizationEpoch) {
+      return false;
+    }
     final active = ref.read(sessionProvider);
     return active is SessionSignedIn && active.user.id == owner;
   }
@@ -255,14 +262,16 @@ class _NotificationPreferencesScreenState
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final account = session is SessionSignedIn ? session.user.id : null;
-    if (_owner != account) {
+    final epoch = account == null ? null
+        : ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (_owner != account || _ownerEpoch != epoch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) { setState(() => _bind(ref.read(sessionProvider))); }
       });
     }
     final colors = context.masanawa;
     return DefaultTabController(
-      key: ValueKey(account),
+      key: ValueKey('$account-$epoch'),
       length: 2,
       child: Scaffold(
         backgroundColor: colors.surfaceBg,
@@ -272,7 +281,7 @@ class _NotificationPreferencesScreenState
             Tab(text: 'Activity'), Tab(text: 'Preferences'),
           ]),
         ),
-        body: account == null || account != _owner
+        body: account == null || account != _owner || _ownerEpoch != epoch
           ? const Center(child: Text('Sign in to manage notifications.'))
           : TabBarView(children: [
               RefreshIndicator(onRefresh: _refreshHistory,
