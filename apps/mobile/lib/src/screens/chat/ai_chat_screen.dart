@@ -665,6 +665,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
   // ---- Attachments ---------------------------------------------------------
 
+  // Masana conversations support only text, photographs and voice/audio.
+  // Historic attachment rendering remains read-only for existing records.
   void _openAttachSheet() {
     FocusScope.of(context).unfocus();
     final u = context.masanawa;
@@ -675,124 +677,51 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 16,
-              alignment: WrapAlignment.center,
-              children: [
-                _AttachOption(
-                  icon: Icons.insert_drive_file_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramPurple, MasanawaFeatureColors.instagramViolet],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Document',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickDocument();
-                  },
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 16,
+            alignment: WrapAlignment.center,
+            children: [
+              _AttachOption(
+                icon: Icons.camera_alt_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
                 ),
-                _AttachOption(
-                  icon: Icons.camera_alt_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Camera',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickImage(ImageSource.camera);
-                  },
+                label: 'Camera',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              _AttachOption(
+                icon: Icons.photo_library_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
                 ),
-                _AttachOption(
-                  icon: Icons.photo_library_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Gallery',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickMultipleImages();
-                  },
+                label: 'Gallery',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickMultipleImages();
+                },
+              ),
+              _AttachOption(
+                icon: Icons.headphones_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
                 ),
-                _AttachOption(
-                  icon: Icons.headphones_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Audio',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickAudio();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.videocam_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.cyan, MasanawaFeatureColors.deepCyan],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Video',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickVideo();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.location_on_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.emerald, MasanawaFeatureColors.brightEmerald],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Location',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _shareLocation();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.person_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.teal, MasanawaFeatureColors.brightTeal],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Contact',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _shareContact();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.poll_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.amber, MasanawaFeatureColors.deepAmber],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Poll',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _createPoll();
-                  },
-                ),
-              ],
-            ),
+                label: 'Audio',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickAudio();
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1411,9 +1340,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 if (!context.mounted) return;
                 if (value == 'activity') widget.onOpenActivity?.call();
                 if (value == 'profile') _openMasanaProfile(agent);
-                if (value == 'room' && agent.roomId != null) {
-                  context.push('/rooms/${Uri.encodeComponent(agent.roomId!)}');
-                }
                 if (value == 'clear') _confirmClear(agent);
                 if (value == 'new') await ctl.newContext(widget.characterId);
                 if (value == 'pin') ctl.togglePin(widget.characterId);
@@ -1424,11 +1350,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               },
               itemBuilder: (_) => [
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
-                if (agent.roomId != null)
-                  PopupMenuItem(
-                    value: 'room',
-                    child: Text('Open ${agent.displayName} Room'),
-                  ),
                 if (widget.embeddedInShell) ...const [
                   PopupMenuItem(value: 'activity', child: Text('Activity')),
                   PopupMenuItem(value: 'profile', child: Text('Profile')),
