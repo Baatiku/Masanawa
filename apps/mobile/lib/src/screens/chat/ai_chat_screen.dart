@@ -2473,9 +2473,31 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
     return Scaffold(
       key: const ValueKey('masanawa-live-call-screen'),
       backgroundColor: u.surfaceBg,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: FilledButton.icon(
+            key: const ValueKey('live-call-end-action'),
+            style: FilledButton.styleFrom(
+              backgroundColor: u.emergency,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(192, 54),
+              shape: const StadiumBorder(),
+            ),
+            onPressed: () async {
+              widget.session.endReason ??= CallEndReason.userEnded;
+              await widget.session.close();
+              if (context.mounted) Navigator.of(context).pop();
+            },
+            icon: const Icon(Icons.call_end_rounded),
+            label: const Text('End call'),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
-          final compact = constraints.maxHeight < 560;
+          final compact = MediaQuery.sizeOf(context).height < 560;
           final portraitSize = compact ? 116.0
               : constraints.maxWidth < 360 ? 144.0 : 160.0;
           final verticalPadding = compact ? 16.0 : 24.0;
@@ -2569,23 +2591,6 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                       },
                     ),
                   ],
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  key: const ValueKey('live-call-end-action'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: u.emergency,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(192, 54),
-                    shape: const StadiumBorder(),
-                  ),
-                  onPressed: () async {
-                    widget.session.endReason ??= CallEndReason.userEnded;
-                    await widget.session.close();
-                    if (context.mounted) Navigator.of(context).pop();
-                  },
-                  icon: const Icon(Icons.call_end_rounded),
-                  label: const Text('End call'),
                 ),
               ],
             );

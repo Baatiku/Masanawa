@@ -63,9 +63,9 @@ void main() {
     expect(tester.getSize(find.byKey(
       const ValueKey('live-call-end-action'))).height,
       greaterThanOrEqualTo(54));
-    await tester.drag(find.byType(SingleChildScrollView),
-      const Offset(0, -400));
-    await tester.pump(const Duration(milliseconds: 250));
+    // End remains in the safe-area footer even when the call stage scrolls.
+    expect(tester.getCenter(find.byKey(const ValueKey('live-call-end-action'))).dy,
+      lessThan(600));
     await tester.tap(find.text('End call'));
     await tester.pump(const Duration(milliseconds:400));
     expect(screen,findsNothing);expect(find.text('Open call'),findsOneWidget);
