@@ -2475,23 +2475,26 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
       backgroundColor: u.surfaceBg,
       bottomNavigationBar: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: FilledButton.icon(
-            key: const ValueKey('live-call-end-action'),
-            style: FilledButton.styleFrom(
-              backgroundColor: u.emergency,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(192, 54),
-              shape: const StadiumBorder(),
+        child: SizedBox(
+          height: 76,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+            child: FilledButton.icon(
+              key: const ValueKey('live-call-end-action'),
+              style: FilledButton.styleFrom(
+                backgroundColor: u.emergency,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(192, 54),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: () async {
+                widget.session.endReason ??= CallEndReason.userEnded;
+                await widget.session.close();
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              icon: const Icon(Icons.call_end_rounded),
+              label: const Text('End call'),
             ),
-            onPressed: () async {
-              widget.session.endReason ??= CallEndReason.userEnded;
-              await widget.session.close();
-              if (context.mounted) Navigator.of(context).pop();
-            },
-            icon: const Icon(Icons.call_end_rounded),
-            label: const Text('End call'),
           ),
         ),
       ),
