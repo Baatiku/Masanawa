@@ -125,6 +125,7 @@ class _NotificationPreferencesScreenState
   bool _loading = false, _saving = false, _historyLoading = false;
   String? _error, _historyError;
   int _generation = 0;
+  int _preferencesRequest = 0, _historyRequest = 0;
 
   @override
   void initState() {
@@ -138,6 +139,8 @@ class _NotificationPreferencesScreenState
     final account = session is SessionSignedIn ? session.user.id : null;
     if (account == _owner) return;
     ++_generation;
+    ++_preferencesRequest;
+    ++_historyRequest;
     _owner = account;
     _prefs = null;
     _history = [];
@@ -157,21 +160,24 @@ class _NotificationPreferencesScreenState
 
   Future<void> _refresh() async {
     final owner = _owner;
-    if (owner == null) return;
-    final ticket = ++_generation;
+    if (owner == null || _saving) return;
+    final ticket = _generation;
+    final request = ++_preferencesRequest;
     setState(() { _loading = true; _error = null; });
     try {
       final result = await ref.read(apiClientProvider).dio
           .get<Map<String, dynamic>>('/agent/notifications/preferences');
       final value = NotificationPreferences.read(result.data?['preferences']);
-      if (!_same(ticket, owner)) return;
+      if (!_same(ticket, owner) || request != _preferencesRequest) return;
       setState(() => _prefs = value);
     } catch (_) {
-      if (_same(ticket, owner)) {
+      if (_same(ticket, owner) && request == _preferencesRequest) {
         setState(() => _error = 'Could not load notification settings. Check your connection and retry.');
       }
     } finally {
-      if (_same(ticket, owner)) setState(() => _loading = false);
+      if (_same(ticket, owner) && request == _preferencesRequest) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -179,20 +185,23 @@ class _NotificationPreferencesScreenState
     final owner = _owner;
     if (owner == null || _saving || _prefs == null) return;
     final ticket = _generation;
-    setState(() { _saving = true; _error = null; });
+    final request = ++_preferencesRequest;
+    setState(() { _saving = true; _loading = false; _error = null; });
     try {
       final response = await ref.read(apiClientProvider).dio
           .put<Map<String, dynamic>>('/agent/notifications/preferences',
             data: {'preferences': requested.toJson()});
       final confirmed = NotificationPreferences.read(response.data?['preferences']);
-      if (!_same(ticket, owner)) return;
+      if (!_same(ticket, owner) || request != _preferencesRequest) return;
       setState(() => _prefs = confirmed);
     } catch (_) {
-      if (_same(ticket, owner)) setState(() {
+      if (_same(ticket, owner) && request == _preferencesRequest) setState(() {
         _error = 'Could not save notification preferences. Try again.';
       });
     } finally {
-      if (_same(ticket, owner)) setState(() => _saving = false);
+      if (_same(ticket, owner) && request == _preferencesRequest) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -200,6 +209,7 @@ class _NotificationPreferencesScreenState
     final owner = _owner;
     if (owner == null) return;
     final ticket = _generation;
+    final request = ++_historyRequest;
     setState(() { _historyLoading = true; _historyError = null; });
     try {
       final result = await ref.read(apiClientProvider).dio
@@ -211,14 +221,16 @@ class _NotificationPreferencesScreenState
       final items = raw.map(NotificationHistoryRow.read)
           .where((event) => notificationCategories.containsKey(event.category))
           .toList();
-      if (!_same(ticket, owner)) return;
+      if (!_same(ticket, owner) || request != _historyRequest) return;
       setState(() => _history = items);
     } catch (_) {
-      if (_same(ticket, owner)) setState(() {
+      if (_same(ticket, owner) && request == _historyRequest) setState(() {
         _historyError = 'Could not load alerts. Pull down to retry.';
       });
     } finally {
-      if (_same(ticket, owner)) setState(() => _historyLoading = false);
+      if (_same(ticket, owner) && request == _historyRequest) {
+        setState(() => _historyLoading = false);
+      }
     }
   }
 
@@ -268,7 +280,7 @@ class _NotificationPreferencesScreenState
                 ? ListView(children: const [
                     ListTile(title: Text('Loading recent alerts…')),
                   ])
-                : _historyError != null
+                : _historyError != null && _history.isEmpty
                 ? ListView(children: [
                     ListTile(title: Text(_historyError!)),
                     ListTile(title: const Text('Retry'),
@@ -282,15 +294,27 @@ class _NotificationPreferencesScreenState
                       child: Text('No recent alerts yet.'))),
                   ])
                 : ListView.separated(
-                  itemCount: _history.length,
+                  itemCount: _history.length + (_historyError == null ? 0 : 1),
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
-                    final event = _history[i];
+                    if (_historyError != null && i == 0) {
+                      return ListTile(
+                        leading: Icon(Icons.refresh, color: colors.brand),
+                        title: Text(_historyError!),
+                        subtitle: const Text('Recent alerts remain available'),
+                        onTap: _refreshHistory,
+                      );
+                    }
+                    final event = _history[i - (_historyError == null ? 0 : 1)];
+                    final date = MaterialLocalizations.of(context)
+                        .formatMediumDate(event.createdAt);
+                    final time = TimeOfDay.fromDateTime(event.createdAt)
+                        .format(context);
                     return ListTile(
                       leading: Icon(notificationCategories[event.category]!.$2,
                           color: colors.brand),
                       title: Text(event.title),
-                      subtitle: Text('${notificationCategories[event.category]!.$1} · ${event.createdAt}'),
+                      subtitle: Text('${notificationCategories[event.category]!.$1} · $date · $time'),
                       trailing: event.link == null ? null : const Icon(Icons.chevron_right),
                       onTap: event.link == null ? null : () {
                         final target = shellDeepLinkRoute(event.link!);
