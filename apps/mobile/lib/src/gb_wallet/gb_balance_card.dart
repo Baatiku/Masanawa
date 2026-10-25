@@ -23,6 +23,14 @@ class GbWalletBalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final theme = Theme.of(context);
+    final addData = TextButton.icon(
+      key: const ValueKey('wallet-card-add-data'),
+      onPressed: () => context.push('/wallet/add'),
+      icon: const Icon(Icons.add_rounded, size: 18),
+      label: const Text('Add data'),
+      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+    );
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return Container(
       key: const ValueKey('gb-wallet-balance-card'),
       decoration: BoxDecoration(
@@ -60,18 +68,11 @@ class GbWalletBalanceCard extends StatelessWidget {
                     color: colors.brand,
                   ),
                 ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                key: const ValueKey('wallet-card-add-data'),
-                onPressed: () => context.push('/wallet/add'),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add data'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
+              if (!largeText) ...[const SizedBox(width: 8), addData],
             ],
           ),
+          if (largeText)
+            Align(alignment: AlignmentDirectional.centerEnd, child: addData),
           const SizedBox(height: 6),
           if (balance == null)
             Padding(

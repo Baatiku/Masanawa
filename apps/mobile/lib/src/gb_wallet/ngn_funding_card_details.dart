@@ -32,7 +32,12 @@ class NgnFundingCardDetails extends ConsumerWidget {
         const Divider(height: 16),
         Row(
           children: [
-            Text('NGN balance', style: Theme.of(context).textTheme.labelMedium),
+            Expanded(
+              child: Text(
+                'NGN balance',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
