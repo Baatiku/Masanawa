@@ -42,7 +42,8 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
     reply.header("cache-control","no-store");
     try{
       const user=await actor(request.headers.authorization);
-      return await service.quote(user,request.body.username,request.body.amountMb);
+      const body=request.body as {username:string;amountMb:number};
+      return await service.quote(user,body.username,body.amountMb);
     }catch(error){return errorResponse(error,reply);}
   });
   app.post("/v1/gb/wallet/send/confirm",{
@@ -54,7 +55,8 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
     reply.header("cache-control","no-store");
     try{
       const user=await actor(request.headers.authorization);
-      return {receipt:await service.confirm(user,request.body.reviewToken)};
+      const body=request.body as {reviewToken:string;reviewAccepted:true};
+      return {receipt:await service.confirm(user,body.reviewToken)};
     }catch(error){return errorResponse(error,reply);}
   });
 }
