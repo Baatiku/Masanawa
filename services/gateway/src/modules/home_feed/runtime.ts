@@ -14,6 +14,8 @@ export interface StatusRuntime {
  /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
+ /** Presence false entirely removes fan publishing and edit/remove routes. */
+ allowHumanPublishing?:boolean;
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
 }
 
@@ -60,7 +62,8 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
    // unserved review queue. A trusted server policy can explicitly quarantine
    // new-account comments without accepting a client-provided role/age flag.
    isNewAccount:async request=>options.isNewAccount
-     ? options.isNewAccount(await resolve(request)) : false,enabled});
+     ? options.isNewAccount(await resolve(request)) : false,
+   allowHumanPublishing:options.allowHumanPublishing,enabled});
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
  });
