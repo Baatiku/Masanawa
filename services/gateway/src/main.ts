@@ -1,3 +1,4 @@
+import type { Pool } from "@masanawa/postgres";
 import {
   projectVerifiedWholeGbBundles,
   type ApprovedWholeGbBundle,
@@ -8,9 +9,7 @@ import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
-import {createRoomCommunityService} from "./room_community/index.js";
 import {createCreatorCompletionService} from "./creator_agents/completion.js";
-import {createPgMasanaCreatorDirectory} from './creator_agents/public_directory.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import {
@@ -21,7 +20,7 @@ import {
   createPostgresGbWalletRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
-import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
+import {createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -294,8 +293,8 @@ export interface ServiceDatabaseDependency {
     published: PgFeedMediaAuthorization;
   };
   readonly videos?: ReturnType<typeof createPostgresVideoStore>;
-  /** Reuses the same canonical platform Pool for Rooms and C10. */
-  readonly featurePool?: Parameters<typeof createRoomCommunityService>[0]["pool"];
+  /** Shared PostgreSQL Pool for retained Masana, Status and MB functionality. */
+  readonly featurePool?: Pool;
   readonly callHistory?: CallHistoryRepository & CallHistoryRecorder;
   readonly readinessCheck: ReadinessCheck;
   readonly platformAgentIdentity?: PlatformAgentIdentityProvisioner;
@@ -1642,9 +1641,7 @@ export async function startGatewayService(
             ? { activity: database.mobileActivity }
             : {}),
           ...(database.featurePool ? {
-            rooms: createPgAgentRoomDirectory(database.featurePool),
             identities: createPgAgentMasanaIdentityReader(database.featurePool),
-            creators: createPgMasanaCreatorDirectory(database.featurePool),
           } : {}),
         })
       : undefined);
@@ -2299,13 +2296,6 @@ export async function startGatewayService(
             } },
       }),
     } : undefined);
-  const roomCommunity: GatewayAppOptions["roomCommunity"] = options.appOptions?.roomCommunity ??
-    (featurePool && sessions && featureTenant ? createRoomCommunityService({
-      pool: featurePool,
-      authorize: ({authorizationHeader}) => resolveFeatureFan(authorizationHeader),
-      isApprovedMasana: (tenant: string, character: string) =>
-        (database.status?.eligibility ?? new PgStatusEligibility(featurePool)).author(tenant, character),
-    }) : undefined);
   const creatorCompletion: GatewayAppOptions["creatorCompletion"] = options.appOptions?.creatorCompletion ??
     (featurePool && sessions && featureTenant ? {
       auth: {fan: resolveFeatureFan},

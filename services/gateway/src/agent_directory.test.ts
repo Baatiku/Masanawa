@@ -84,6 +84,9 @@ describe("mobile agent directory", () => {
       },
     ]);
     expect(entries[0]).not.toHaveProperty("skillVersionIds");
+    expect(entries[0]).not.toHaveProperty("roomId");
+    expect(entries[0]).not.toHaveProperty("creatorHandle");
+    expect(entries[0]).not.toHaveProperty("creatorName");
   });
 
   it("starts independent directory enrichment reads concurrently", async () => {
