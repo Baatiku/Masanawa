@@ -275,6 +275,13 @@
       "description": "Production configuration for MASANAWA_BILLING_REDIRECT_URL."
     },
     {
+      "name": "BILLSTACK_SECRET_KEY",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Existing Railway Billstack merchant secret; fallback when MASANAWA_BILLSTACK_SECRET_KEY is absent. Never expose to mobile. Funding remains gated by verified applicant and settlement ports."
+    },
+    {
       "name": "MASANAWA_BILLSTACK_SECRET_KEY",
       "owner": "gateway/gb-wallet",
       "classification": "secret",

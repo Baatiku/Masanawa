@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../state/session_state.dart';
 import 'ngn_wallet.dart';
@@ -30,22 +29,34 @@ class NgnFundingCardDetails extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(height: 24),
-        Text('NGN balance', style: Theme.of(context).textTheme.labelMedium),
-        Text(
-          cash?.valueOrNull == null
-              ? (cash?.isLoading == true
-                    ? 'Checking NGN balance…'
-                    : 'NGN balance unavailable')
-              : formatNgn(cash!.valueOrNull!.balanceKobo),
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w700),
+        const Divider(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'NGN balance',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                cash?.valueOrNull == null
+                    ? (cash?.isLoading == true ? 'Checking…' : 'Unavailable')
+                    : formatNgn(cash!.valueOrNull!.balanceKobo),
+                textAlign: TextAlign.end,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
         if (cash?.valueOrNull?.frozen == true)
           const Text('NGN wallet restricted'),
         if ((cash?.valueOrNull?.debtKobo ?? 0) > 0)
           Text('Reconciliation due: ${formatNgn(cash!.valueOrNull!.debtKobo)}'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (account?.state == 'assigned') ...[
           Text(account!.bank!, style: Theme.of(context).textTheme.labelMedium),
           Row(
@@ -87,13 +98,6 @@ class NgnFundingCardDetails extends ConsumerWidget {
             },
             child: const Text('Retry wallet details'),
           ),
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          key: const ValueKey('wallet-card-add-data'),
-          onPressed: owner == null ? null : () => context.push('/wallet/add'),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add data'),
-        ),
       ],
     );
   }
