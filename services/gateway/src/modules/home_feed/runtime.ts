@@ -63,7 +63,8 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
    // new-account comments without accepting a client-provided role/age flag.
    isNewAccount:async request=>options.isNewAccount
      ? options.isNewAccount(await resolve(request)) : false,
-   allowHumanPublishing:options.allowHumanPublishing,enabled});
+   ...(options.allowHumanPublishing === undefined
+     ? {} : { allowHumanPublishing: options.allowHumanPublishing }),enabled});
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
  });
