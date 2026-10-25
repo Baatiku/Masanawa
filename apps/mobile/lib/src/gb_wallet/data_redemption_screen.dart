@@ -7,6 +7,7 @@ import '../core/providers.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_data_catalogue.dart';
+import 'gb_data_choice_controls.dart';
 import 'gb_data_purchase_panel.dart';
 import 'gb_wallet_summary.dart';
 
@@ -25,6 +26,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   GbDataOwner? _owner;
   String? _network;
   bool _manualNetwork = false;
+  GbDataValidityPeriod? _validity;
   String? _bundleId;
   GbReadOnlyQuote? _quote;
   String? _error;
@@ -133,6 +135,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _phone.clear();
       _network = null;
       _manualNetwork = false;
+      _validity = null;
       _bundleId = null;
       _purchaseLocked = false;
       _owner = owner;
@@ -141,8 +144,8 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     final catalogue = owner == null
         ? null : ref.watch(gbDataCatalogueProvider(owner));
     final bundles = catalogue?.valueOrNull ?? const <GbVerifiedBundle>[];
-    final visible = bundles.where((bundle) =>
-        _network == null || bundle.network == _network).toList();
+    final visible = bundles.where((bundle) => gbBundleMatchesSelection(
+      bundle, network: _network, period: _validity)).toList();
     GbVerifiedBundle? selected;
     for (final bundle in visible) {
       if (bundle.id == _bundleId) selected = bundle;
@@ -173,6 +176,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               _bundleId = null;
               _manualNetwork = false;
               _network = guessGbNetworkForNigerianPhone(value);
+              _validity = null;
             }),
             decoration: InputDecoration(
               labelText: 'Mobile number',
@@ -200,28 +204,35 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           Text('Network', style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              for (final value in <String?>[null, ...gbDataNetworks])
-                ChoiceChip(
-                  label: Text(value ?? 'All'),
-                  selected: value == _network,
-                  selectedColor: colors.brand.withValues(alpha: .15),
-                  side: BorderSide(color: value == _network
-                      ? colors.brand : colors.structuralBorder),
-                  onSelected: owner == null || _purchaseLocked ? null : (_) {
-                    setState(() {
-                      _network = value;
-                      _manualNetwork = true;
-                      _bundleId = null;
-                      _clearQuote();
-                    });
-                  },
-                ),
-            ],
+          GbDataNetworkChoices(
+            network: _network,
+            enabled: owner != null && !_purchaseLocked,
+            onChanged: (value) => setState(() {
+              _network = value;
+              _manualNetwork = true;
+              _validity = null;
+              _bundleId = null;
+              _clearQuote();
+            }),
           ),
+          if (_network != null) ...[
+            const SizedBox(height: 14),
+            Text('Validity', style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            GbDataValidityChoices(
+              period: _validity,
+              enabled: owner != null && !_purchaseLocked,
+              onChanged: (choice) {
+                if (choice == _validity) return;
+                setState(() {
+                  _validity = choice;
+                  _bundleId = null;
+                  _clearQuote();
+                });
+              },
+            ),
+          ],
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: Text('Available bundles',
@@ -230,7 +241,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             if (owner != null)
               IconButton(
                 tooltip: 'Refresh verified data bundles',
-                onPressed: () => _reload(owner),
+                onPressed: _purchaseLocked ? null : () => _reload(owner),
                 icon: const Icon(Icons.refresh),
               ),
           ]),
@@ -251,8 +262,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               !(catalogue?.hasError ?? false) && visible.isEmpty)
             _DataEmptyState(
               title: _network == null
-                  ? 'No verified GB bundles available'
-                  : 'No $_network bundles available',
+                  ? 'Choose a network to see verified bundles'
+                  : _validity == null
+                  ? 'No $_network bundles available'
+                  : 'No $_network bundles for this validity',
               icon: Icons.sim_card_outlined,
               onRetry: () => _reload(owner),
             ),
