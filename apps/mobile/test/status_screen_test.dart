@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/l10n/app_localizations.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
+import 'package:masanawa/src/features/home_feed/status_post_author_header.dart';
 import 'package:masanawa/src/screens/status/status_screen.dart';
 import 'package:masanawa/src/shell/five_tab_shell.dart';
 import 'package:masanawa/src/state/session_state.dart';
@@ -88,9 +89,12 @@ void main() {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
-    // Locale formatting may be month-first or day-first; the approved
-    // publication year must still be visible in the author header.
-    expect(find.textContaining('2026'), findsOneWidget);
+    // The date string is locale-formatted and may omit the year. The shared
+    // header must receive the real post timestamp, not a fabricated label.
+    final authorHeader = tester.widget<StatusPostAuthorHeader>(
+      find.byType(StatusPostAuthorHeader).first,
+    );
+    expect(authorHeader.post.publishedAt, DateTime.utc(2026, 10, 13));
     expect(find.text('New status'), findsNothing);
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
