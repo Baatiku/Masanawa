@@ -1,17 +1,11 @@
-import '../screens/wallet/wallet_payment_entry_screen.dart';
-import '../human_chat/human_chat.dart';
-import '../human_calls/human_calls.dart';
+import '../gb_wallet/recharge_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
 import '../calls/incoming_call_coordinator.dart';
-import '../calls/incoming_call_screen.dart';
 import '../features/share_intake/share_intake_screen.dart';
-import '../features/notification_reply/notification_reply_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../finance/crypto_wallet_screen.dart';
-import '../screens/billing/billing_screen.dart';
 import '../screens/chat/ai_chat_screen.dart';
 import '../screens/onboarding/name_screen.dart';
 import '../screens/onboarding/otp_screen.dart';
@@ -24,11 +18,9 @@ import '../core/startup_metrics.dart';
 import '../screens/chat/masana_list_screen.dart';
 import '../screens/search/unified_search_screen.dart';
 import '../screens/search/resource_link_screens.dart';
-import '../screens/rooms/rooms_screen.dart' show MasanaRoomDetailScreen;
 import '../screens/twin/shell_tab.dart';
 import '../shell/five_tab_shell.dart';
 import '../shell/startup_gate.dart';
-import '../screens/wallet/wallet_screen.dart';
 import '../state/session_state.dart';
 
 /// The five canonical root destinations. These are navigation indices only,
@@ -39,6 +31,7 @@ int shellRootTabIndex(String? tab) => MasanawaRootTab.fromQuery(tab).index;
 String? legacyShellDestination(String? tab) => switch (tab) {
   'create' => '/home?tab=status',
   'activity' => '/home?tab=status',
+  'rooms' => '/home?tab=status',
   'agents' => '/home?tab=chats',
   'wallet' => '/home?tab=wallet',
   'talk' => '/home?tab=status',
@@ -131,7 +124,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path.startsWith('/calls/incoming/') ||
           path.startsWith('/status/') ||
           path.startsWith('/masana/') ||
-          path.startsWith('/wallet/transactions/') ||
+          path.startsWith('/wallet/') ||
           path == '/wallet/pay' ||
           path == '/home' ||
           path == '/activity' ||
@@ -214,33 +207,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             PersonProfileScreen(handle: state.pathParameters['handle']!),
       ),
       GoRoute(path: '/persona/:publicId', redirect: (_, __) => '/masana'),
-      GoRoute(path:'/wallet/pay',builder:(_,state)=>WalletPaymentEntryScreen(location:state.uri.hasQuery?state.uri:null)),
-      GoRoute(
-        path: '/wallet/transactions/:id',
-        builder: (context, state) => WalletScreen(
-          initialTransactionId: state.pathParameters['id'],
-          onBuyBills: () => context.push('/billing'),
-          onOpenCrypto: () => context.push('/crypto'),
-        ),
-      ),
-      GoRoute(
-        path: '/wallet',
-        builder: (context, _) => WalletScreen(
-          onBuyBills: () => context.push('/billing'),
-          onOpenCrypto: () => context.push('/crypto'),
-        ),
-      ),
-      GoRoute(
-        path: '/calls/incoming/:callId',
-        builder: (context, state) =>
-            IncomingCallScreen(callId: state.pathParameters['callId']!),
-      ),
+      // Legacy finance links cannot mount old currency, custody or bill
+      // screens during the MB-ledger cutover.
+      GoRoute(path: '/wallet/pay', redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path: '/wallet/transactions/:id',
+        redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path: '/wallet/add',
+        builder: (_, __) => const RechargePackagesScreen()),
+      GoRoute(path: '/calls/incoming/:callId',
+        redirect: (_, __) => '/home?tab=calls'),
       GoRoute(path: '/chats', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/share', builder: (_, __) => const ShareIntakeScreen()),
-      GoRoute(
-        path: '/human/quick-reply',
-        builder: (_, __) => const HumanNotificationReplyScreen(),
-      ),
+      GoRoute(path: '/human/quick-reply',
+        redirect: (_, __) => '/home?tab=chats'),
       GoRoute(
         path: '/chat/:id',
         builder: (context, state) {
@@ -271,33 +251,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             StatusResourceLinkScreen(postId: state.pathParameters['postId']!),
       ),
-      GoRoute(
-        path: '/rooms/:id',
-        builder: (_, state) =>
-            MasanaRoomDetailScreen(roomId: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: '/human/chat/:id',
-        builder: (_, state) =>
-            HumanChatScreen(conversationId: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: '/human/call/:id',
-        builder: (_, state) =>
-            HumanCallScreen(callId: state.pathParameters['id']!),
-      ),
-      GoRoute(path: '/privacy', builder: (_, _) => const HumanPrivacyScreen()),
-      GoRoute(
-        path: '/human/requests',
-        builder: (_, _) => const HumanInboxScreen(filter: 'requests'),
-      ),
+      GoRoute(path: '/rooms/:id',
+        redirect: (_, __) => '/home?tab=status'),
+      GoRoute(path: '/human/chat/:id',
+        redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(path: '/human/call/:id',
+        redirect: (_, __) => '/home?tab=calls'),
+      GoRoute(path: '/privacy', redirect: (_, __) => '/settings'),
+      GoRoute(path: '/human/requests',
+        redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
-      GoRoute(
-        path: '/billing',
-        builder: (_, state) =>
-            BillingScreen(initialService: state.uri.queryParameters['service']),
-      ),
-      GoRoute(path: '/crypto', builder: (_, _) => const CryptoWalletScreen()),
+      GoRoute(path: '/billing', redirect: (_, __) => '/home?tab=data'),
+      GoRoute(path: '/crypto', redirect: (_, __) => '/home?tab=wallet'),
       GoRoute(path: '/profile', builder: (_, _) => const EditProfileScreen()),
     ],
   );
