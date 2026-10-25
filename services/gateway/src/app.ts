@@ -138,6 +138,8 @@ export interface ReadinessCheck {
 }
 
 export interface GatewayAppOptions {
+  /** Staged product-gate; enable only after all retained MB routes qualify. */
+  readonly productScope?: "legacy" | "masana-lite";
   readonly status?: StatusRuntime;
   /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
   readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
@@ -403,6 +405,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     requestTimeout: 30_000,
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  const legacyProduct = options.productScope !== "masana-lite";
   const now = options.now ?? nowInstant;
   const checks = options.readinessChecks ?? [];
 
@@ -1063,7 +1066,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
 
 
-  if (options.commerceFulfillment) {
+  if (legacyProduct && options.commerceFulfillment) {
     const commerceFulfillment = options.commerceFulfillment;
     app.post(
       "/fulfillments",
@@ -1109,7 +1112,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (options.commerceCatalog) {
+  if (legacyProduct && options.commerceCatalog) {
     const commerceCatalog = options.commerceCatalog;
     const OfferViewSchema = Type.Object(
       {
@@ -1189,7 +1192,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (options.creatorSkills) {
+  if (legacyProduct && options.creatorSkills) {
     const creatorSkills = options.creatorSkills;
     const CreatorSkillSchema = Type.Object(
       {
@@ -1246,7 +1249,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (options.creatorEconomy) {
+  if (legacyProduct && options.creatorEconomy) {
     const creatorEconomy = options.creatorEconomy;
     const EconomyResponse = Type.Object(
       {
@@ -1288,7 +1291,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (options.creatorClone) {
+  if (legacyProduct && options.creatorClone) {
     const creatorClone = options.creatorClone;
     app.post(
       "/creator/clone",
@@ -1561,7 +1564,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
-  if (options.financial) {
+  if (legacyProduct && options.financial) {
     const financial = options.financial;
     const auth = (request: { headers: { authorization?: string | undefined } }) =>
       request.headers.authorization;
@@ -1810,21 +1813,21 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.status) {
     app.register(async scope => { await registerStatusRuntime(scope, options.status!); });
   }
-  if (options.videos) {
+  if (legacyProduct && options.videos) {
     app.register(async scope => { registerExternalVideoRoutes(scope, options.videos!); });
   }
-  if (options.videoSources) {
+  if (legacyProduct && options.videoSources) {
     app.register(async scope => { registerYouTubeSourceAdminRoutes(scope, options.videoSources!); });
   }
   if (options.masana) registerMasanaRoutes(app, options.masana);
-  if (options.roomCommunity) registerRoomCommunityRoutes(app, options.roomCommunity);
-  if (options.creatorCompletion) registerCreatorCompletionRoutes(app, options.creatorCompletion);
-  if (options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
-  if (options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
+  if (legacyProduct && options.roomCommunity) registerRoomCommunityRoutes(app, options.roomCommunity);
+  if (legacyProduct && options.creatorCompletion) registerCreatorCompletionRoutes(app, options.creatorCompletion);
+  if (legacyProduct && options.creatorAgents) registerCreatorAgentRoutes(app, options.creatorAgents);
+  if (legacyProduct && options.creatorPolicy) registerCreatorPolicyRoutes(app, options.creatorPolicy);
   if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
   if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
-  if (options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
-  if (options.humanCommunication) registerHumanCommunicationRoutes(app, options.humanCommunication);
+  if (legacyProduct && options.groupCalls) registerGroupCallRoutes(app, options.groupCalls);
+  if (legacyProduct && options.humanCommunication) registerHumanCommunicationRoutes(app, options.humanCommunication);
   if (options.incomingCalls) registerIncomingCallRoutes(app, options.incomingCalls);
   if (options.privateChatMedia) {
     registerPrivateChatMediaRoutes(app, options.privateChatMedia);
@@ -1839,55 +1842,55 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       ? { mobileNotifications: options.mobileNotifications } : {}),
   });
 
-  if (options.talks) {
+  if (legacyProduct && options.talks) {
     registerTalkRoutes(app, options.talks);
   }
-  if (options.talkReplay) {
+  if (legacyProduct && options.talkReplay) {
     registerTalkReplayRoutes(app, options.talkReplay, {
       includeMyTalks: !options.talkLibrary,
     });
   }
-  if (options.talkModeration) {
+  if (legacyProduct && options.talkModeration) {
     registerTalkModerationRoutes(app, options.talkModeration);
   }
-  if (options.talkAiSeats) {
+  if (legacyProduct && options.talkAiSeats) {
     registerTalkAiSeatRoutes(app, options.talkAiSeats);
   }
-  if (options.talkLive) {
+  if (legacyProduct && options.talkLive) {
     registerTalkLiveRoutes(app, options.talkLive);
   }
-  if (options.talkProfiles) {
+  if (legacyProduct && options.talkProfiles) {
     registerTalkProfileRoutes(app, options.talkProfiles);
   }
-  if (options.talkActivity) {
+  if (legacyProduct && options.talkActivity) {
     registerTalkActivityRoutes(app, options.talkActivity);
   }
-  if (options.talkSearch) {
+  if (legacyProduct && options.talkSearch) {
     registerTalkSearchRoutes(app, options.talkSearch);
   }
-  if (options.talkLibrary) {
+  if (legacyProduct && options.talkLibrary) {
     registerTalkLibraryRoutes(app, options.talkLibrary);
   }
-  if (options.talkGifts) {
+  if (legacyProduct && options.talkGifts) {
     registerTalkGiftRoutes(app, options.talkGifts);
   }
-  if (options.talkPolls) {
+  if (legacyProduct && options.talkPolls) {
     registerTalkPollRoutes(app, options.talkPolls);
   }
-  if (options.talkSafety) {
+  if (legacyProduct && options.talkSafety) {
     registerTalkSafetyRoutes(app, options.talkSafety);
   }
-  if (options.directTwin) {
+  if (legacyProduct && options.directTwin) {
     registerDirectTwinRoutes(app, options.directTwin);
   }
 
-  if (options.msnwBilling) {
+  if (legacyProduct && options.msnwBilling) {
     registerMsnwBillingRoutes(app, options.msnwBilling);
   }
-  if (options.msnwConversion) {
+  if (legacyProduct && options.msnwConversion) {
     registerMsnwUsdtConversionRoutes(app, options.msnwConversion);
   }
-  registerBillingRoutes(app, {
+  if (legacyProduct) registerBillingRoutes(app, {
     ...(options.billingCheckout ? { billingCheckout: options.billingCheckout } : {}),
     ...(options.billingFinancial ? { billingFinancial: options.billingFinancial } : {}),
     ...(options.billingWallet ? { billingWallet: options.billingWallet } : {}),
@@ -1901,30 +1904,30 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerLinkedWhatsAppAdminRoutes(app, options.linkedWhatsApp);
   }
 
-  if (options.msnBalance) {
+  if (legacyProduct && options.msnBalance) {
     registerMsnBalanceRoutes(app, options.msnBalance);
   }
-  if (options.msnFunding) {
+  if (legacyProduct && options.msnFunding) {
     registerMsnFundingStatusRoutes(app, options.msnFunding);
   }
-  if (options.msnwPaystackDva) {
+  if (legacyProduct && options.msnwPaystackDva) {
     registerMsnwPaystackDvaRoutes(app, options.msnwPaystackDva);
   }
-  if (options.msnwPaystackEnrollment) {
+  if (legacyProduct && options.msnwPaystackEnrollment) {
     registerMsnwPaystackEnrollmentRoutes(app, options.msnwPaystackEnrollment);
   }
-  if (options.msnwOnchainBalance) {
+  if (legacyProduct && options.msnwOnchainBalance) {
     registerMsnwOnchainBalanceRoutes(app, options.msnwOnchainBalance);
   }
-  if (options.msnwPaystackFiat) {
+  if (legacyProduct && options.msnwPaystackFiat) {
     registerMsnwPaystackFiatRoutes(app, options.msnwPaystackFiat);
   }
-  if (options.msnwCustody) {
+  if (legacyProduct && options.msnwCustody) {
     registerMsnwCustodyRoutes(app, options.msnwCustody);
   }
-  if (options.p2p) registerP2pRoutes(app, options.p2p);
+  if (legacyProduct && options.p2p) registerP2pRoutes(app, options.p2p);
 
-  if (options.twinProduction) {
+  if (legacyProduct && options.twinProduction) {
     const twin = options.twinProduction;
     registerTwinProfileRoutes(app, twin.twinProfile);
     registerTwinDirectoryRoutes(app, twin.twinDirectory);
