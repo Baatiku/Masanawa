@@ -1,0 +1,87 @@
+import 'package:flutter/material.dart';
+
+import '../theme/masanawa_theme.dart';
+import 'gb_wallet_summary.dart';
+
+/// The same server-authoritative available-MB display on Wallet and Send.
+/// Restricted welcome and reserved MB never enter the Sendable figure.
+class GbWalletBalanceCard extends StatelessWidget {
+  const GbWalletBalanceCard({
+    super.key,
+    required this.balance,
+    required this.loading,
+    this.showSendable = false,
+  });
+
+  final GbWalletBalance? balance;
+  final bool loading;
+  final bool showSendable;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.masanawa;
+    final theme = Theme.of(context);
+    return Container(
+      key: const ValueKey('gb-wallet-balance-card'),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.brand.withValues(alpha: .35)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Icon(Icons.account_balance_wallet_rounded,
+                size: 20, color: colors.brand),
+            const SizedBox(width: 8),
+            Text('Data balance', style: theme.textTheme.labelLarge?.copyWith(
+              color: colors.textPrimary, fontWeight: FontWeight.w600,
+            )),
+            const Spacer(),
+            if (loading)
+              SizedBox(height: 16, width: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2, color: colors.brand)),
+          ]),
+          const SizedBox(height: 6),
+          if (balance == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Center(child: Text(
+                loading ? 'Checking balance…' : 'Balance unavailable',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colors.textPrimary, fontWeight: FontWeight.w600,
+                ),
+              )),
+            )
+          else ...[
+            Text('${decimalGb(balance!.availableMb)} GB',
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w800, color: colors.textPrimary)),
+            Text('${groupedMb(balance!.availableMb)} MB',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.textMuted)),
+            if (showSendable) ...[
+              const SizedBox(height: 8),
+              Text('Sendable: ${groupedMb(
+                balance!.frozen ? 0 : balance!.purchasedAvailableMb,
+              )} MB purchased',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colors.textPrimary, fontWeight: FontWeight.w700)),
+              if (balance!.welcomeAvailableMb > 0 || balance!.reservedMb > 0)
+                Text('Welcome and reserved MB cannot be sent',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.textMuted)),
+              if (balance!.frozen)
+                Text('Wallet restricted',
+                  style: TextStyle(color: theme.colorScheme.error)),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}

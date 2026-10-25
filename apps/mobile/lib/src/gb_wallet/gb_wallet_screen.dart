@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import 'gb_balance_card.dart';
 import 'gb_wallet_summary.dart';
 
 /// Single authoritative MB wallet. The compact card never displays a
@@ -49,64 +50,7 @@ class GbWalletScreen extends ConsumerWidget {
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700)),
           ),
-          Container(
-            key: const ValueKey('gb-wallet-balance-card'),
-            decoration: BoxDecoration(
-              color: colors.surfaceMuted,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: colors.brand.withValues(alpha: .35)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  Icon(Icons.account_balance_wallet_rounded,
-                      size: 20, color: colors.brand),
-                  const SizedBox(width: 8),
-                  Text('Data balance',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  const Spacer(),
-                  if (loading)
-                    SizedBox(
-                      height: 16, width: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2, color: colors.brand),
-                    ),
-                ]),
-                const SizedBox(height: 6),
-                if (balance == null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Center(
-                      child: Text(
-                        loading ? 'Checking balance…' : 'Balance unavailable',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  )
-                else ...[
-                  Text(
-                    '${decimalGb(balance.availableMb)} GB',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  Text('${groupedMb(balance.availableMb)} MB',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.textMuted)),
-                ],
-              ],
-            ),
-          ),
+          GbWalletBalanceCard(balance: balance, loading: loading),
           if (balance == null && !loading)
             Center(
               child: Padding(

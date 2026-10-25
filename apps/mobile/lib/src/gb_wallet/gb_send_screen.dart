@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers.dart';
 import '../state/session_state.dart';
+import 'gb_balance_card.dart';
 import 'gb_wallet_summary.dart';
 
 /// Server-bound signed review. The phone alone never authorizes or identifies
@@ -101,6 +102,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   CancelToken? _cancel;
   bool _busy = false;
   String? _error;
+  String? _quickSelection;
   int _request = 0;
 
   @override
@@ -145,6 +147,9 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   Future<void> _review(GbWalletOwner owner) async {
     final amount = _amount;
     if (amount == null || !_validHandle || !_isOwner(owner) || _busy) return;
+    final balance = ref.read(gbWalletSummaryProvider(owner)).valueOrNull;
+    if (balance == null || balance.frozen ||
+        amount > balance.purchasedAvailableMb) return;
     final cancel = CancelToken();
     _cancel = cancel;
     final sequence = ++_request;
@@ -236,16 +241,35 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       _clearReview();
       _username.clear();
       _mb.clear();
+      _quickSelection = null;
       _owner = owner;
     }
+    final balanceState = owner == null
+        ? null : ref.watch(gbWalletSummaryProvider(owner));
+    final balance = balanceState?.valueOrNull;
+    final loadingBalance = balanceState?.isLoading ?? false;
+    final sendableMb = balance == null || balance.frozen
+        ? null : balance.purchasedAvailableMb;
+    final maxSendMb = sendableMb == null ? null
+        : sendableMb > 1000000000 ? 1000000000 : sendableMb;
+    final chosenMb = _amount;
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Send MB')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Send only purchased MB to a verified Masanawa user. '
-              'Welcome MB cannot be sent. Nothing moves until you confirm.'),
+          GbWalletBalanceCard(
+            balance: balance, loading: loadingBalance, showSendable: true),
+          if (balance == null && !loadingBalance && owner != null)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => ref.invalidate(gbWalletSummaryProvider(owner)),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry balance'),
+              ),
+            ),
           const SizedBox(height: 18),
           TextField(
             controller: _username,
@@ -258,17 +282,69 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            key: const ValueKey('send-quick-amounts'),
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final entry in const <int, String>{
+                100: '100 MB', 500: '500 MB', 1000: '1 GB',
+                5000: '5 GB', 10000: '10 GB',
+              }.entries)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 6),
+                  child: ChoiceChip(
+                    key: ValueKey('send-quick-${entry.key}'),
+                    label: Text(entry.value),
+                    selected: _quickSelection == '${entry.key}',
+                    onSelected: owner == null || _busy || _quote != null ||
+                        sendableMb == null || entry.key > sendableMb
+                        ? null : (_) => setState(() {
+                            _mb.text = entry.key.toString();
+                            _quickSelection = '${entry.key}';
+                            _clearReview();
+                          }),
+                  ),
+                ),
+              ChoiceChip(
+                key: const ValueKey('send-quick-max'),
+                label: const Text('Max'),
+                selected: _quickSelection == 'max',
+                onSelected: owner == null || _busy || _quote != null ||
+                    maxSendMb == null || maxSendMb < 1
+                    ? null : (_) => setState(() {
+                        _mb.text = maxSendMb.toString();
+                        _quickSelection = 'max';
+                        _clearReview();
+                      }),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 12),
           TextField(
+            key: const ValueKey('send-custom-mb'),
             controller: _mb,
             enabled: owner != null && !_busy && _quote == null,
             keyboardType: TextInputType.number,
-            onChanged: (_) => setState(_clearReview),
+            onChanged: (_) => setState(() {
+              _quickSelection = null;
+              _clearReview();
+            }),
             decoration: const InputDecoration(
-              labelText: 'Whole MB to send',
-              hintText: '1000',
+              labelText: 'Custom amount (whole MB)',
+              hintText: 'Enter MB',
               border: OutlineInputBorder(),
             ),
           ),
+          if (chosenMb != null && sendableMb != null &&
+              chosenMb > sendableMb)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Amount exceeds sendable purchased MB',
+                style: TextStyle(color: theme.colorScheme.error)),
+            ),
           if (_busy) const LinearProgressIndicator(),
           if (_error != null) Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -280,7 +356,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
             const Text('Sign in before transferring MB.')
           else if (_quote == null && _receipt == null)
             FilledButton.icon(
-              onPressed: _validHandle && _amount != null && !_busy
+              onPressed: _validHandle && chosenMb != null && !_busy &&
+                  sendableMb != null && chosenMb <= sendableMb
                   ? () => _review(owner) : null,
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Review recipient and amount'),
