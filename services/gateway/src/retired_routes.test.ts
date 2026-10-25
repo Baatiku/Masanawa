@@ -9,7 +9,7 @@ describe('permanent customer API retirement', () => {
     const app = createGatewayApp({
       productScope: 'legacy',
       creatorClone: {} as never,
-      p2p: {} as never, videos: {} as never,
+      p2p: {} as never,
       msnFunding: {} as never, msnwBilling: {} as never,
       msnwCustody: {} as never, msnwConversion: {} as never,
       commerceCatalog: {} as never, billingCheckout: {} as never,

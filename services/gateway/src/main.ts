@@ -9,13 +9,11 @@ import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
-import {createCreatorCompletionService} from "./creator_agents/completion.js";
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService } from "@masanawa/feed";
 import {
   createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
-  PgFeedMediaAuthorization, createPostgresVideoStore,
-  createPostgresYouTubeSourceAdminStore,
+  PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
@@ -27,7 +25,6 @@ import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
 import type { StatusRuntime } from "./modules/home_feed/runtime.js";
-import { VideoAdmissionError } from "./modules/external_videos/service.js";
 import { pathToFileURL } from "node:url";
 import type {
   AgentPresentationRepository,
@@ -65,7 +62,6 @@ import type {
 } from "@masanawa/commerce";
 import {
   parseCanonicalId,
-  createCanonicalId,
   readRequiredEnv,
   type TenantId,
 } from "@masanawa/contracts";
@@ -96,9 +92,6 @@ import {
   type CreatorCloneAuthorizer,
 } from "./creator_clone.js";
 import { createCreatorEconomyService } from "./creator_economy.js";
-import { createGeminiCreatorGenerator, CreatorGenerationError } from "./creator_agents/generator.js";
-import { createPostgresCreatorAgentService, type CreatorPool } from "./creator_agents/store.js";
-import { createCreatorPolicyService } from "./creator_agents/policy.js";
 import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
 import { createPgCreatorVoiceReader } from "./creator_agents/voice.js";
 import { createCreatorSkillService } from "./creator_skills.js";
@@ -292,7 +285,6 @@ export interface ServiceDatabaseDependency {
     eligibility: PgStatusEligibility;
     published: PgFeedMediaAuthorization;
   };
-  readonly videos?: ReturnType<typeof createPostgresVideoStore>;
   /** Shared PostgreSQL Pool for retained Masana, Status and MB functionality. */
   readonly featurePool?: Pool;
   readonly callHistory?: CallHistoryRepository & CallHistoryRecorder;
@@ -427,7 +419,6 @@ function createDefaultDatabaseDependency(
       eligibility: new PgStatusEligibility(database.pool),
       published: new PgFeedMediaAuthorization(database.pool),
     },
-    videos: createPostgresVideoStore(database.pool),
     initializePlatformPolicy: (tenantId: TenantId, revision: string) =>
       withTransaction(database.pool, async client => {
         // The first deployment has no existing identity tenant. Provision only
@@ -2208,62 +2199,7 @@ export async function startGatewayService(
     await database.close().catch(() => undefined);
     throw error;
   }
-  const videos: GatewayAppOptions["videos"] = options.appOptions?.videos ??
-    (sessions && database.videos ? {
-      store:database.videos,
-      resolvePrincipal: async request => {
-        let session: Awaited<ReturnType<typeof sessions.authorize>>;
-        try {
-          session = await sessions.authorize({
-            authorizationHeader:request.headers.authorization,
-          });
-        } catch {
-          throw new VideoAdmissionError(401,"authentication_required","Sign in to view videos");
-        }
-        if (!session?.tenantId || !session.userId) {
-          throw new VideoAdmissionError(401,"authentication_required","Sign in to view videos");
-        }
-        return {
-          tenantId:session.tenantId,
-          actorId:session.userId,
-          staffRoles:editors.has(session.userId) ? ["content_editor"] : [],
-        };
-      },
-    } : undefined);
-
-
-  // Sources are persisted with the existing external_videos tables and audited
-  // in events.audit_events. The same server-owned editorial resolver authorizes
-  // both manual video review and channel management.
-  const videoSources: GatewayAppOptions["videoSources"] =
-    options.appOptions?.videoSources ??
-    (database.featurePool && videos ? {
-      store: createPostgresYouTubeSourceAdminStore(
-        database.featurePool,
-        async (client, entry) => {
-          await client.query(`
-            INSERT INTO events.audit_events
-              (audit_event_id,tenant_id,event_type,schema_version,
-               aggregate_type,aggregate_id,occurred_at,actor,authority_ref,
-               correlation_id,sensitivity,payload)
-            VALUES ($1,$2,$3,1,'external_video_source',$4,
-                    clock_timestamp(),$5::jsonb,NULL,$6,'internal',$7::jsonb)
-          `, [
-            createCanonicalId("audit-event"),
-            entry.tenantId,
-            "external_videos.source." + entry.action,
-            entry.sourceId,
-            JSON.stringify({kind:"staff",id:entry.actorId}),
-            createCanonicalId("correlation"),
-            JSON.stringify({action:entry.action}),
-          ]);
-        },
-      ),
-      resolvePrincipal: videos.resolvePrincipal,
-    } : undefined);
-
-  // One canonical signed-in fan and tenant authority, shared with Status and
-  // Videos. Feature flags default OFF; no Room paid/subscription activation.
+  // One signed-in fan and tenant authority for retained Status, Masana and MB services.
   const featurePool = database.featurePool;
   const featureTenant = platformTenantId;
   const resolveFeatureFan = async (authorizationHeader: string | undefined) => {
@@ -2274,54 +2210,6 @@ export async function startGatewayService(
       throw new CustomerAuthError("FORBIDDEN", 403);
     return { tenantId: session.tenantId, userId: session.userId };
   };
-  // Creator agent routes use the same tenant-scoped session and PostgreSQL pool.
-  // Publishing is limited to a lifetime first-free character until an atomic,
-  // authorized MSNW fee-capture adapter is composed for additional characters.
-  const creatorKey = env.MASANAWA_GEMINI_API_KEY?.trim() ||
-    env.MASANAWA_ALPHA_GEMINI_API_KEY?.trim();
-  const creatorAgents: GatewayAppOptions["creatorAgents"] =
-    options.appOptions?.creatorAgents ??
-    (featurePool && sessions && featureTenant ? {
-      auth: { fan: resolveFeatureFan },
-      service: createPostgresCreatorAgentService({
-        pool: featurePool as unknown as CreatorPool,
-        generator: creatorKey
-          ? createGeminiCreatorGenerator({
-              apiKey: creatorKey,
-              model: env.MASANAWA_CREATOR_GENERATION_MODEL?.trim() ||
-                env.MASANAWA_GEMINI_MODEL?.trim() || "gemini-2.5-flash",
-            })
-          : { async generate(): Promise<never> {
-              throw new CreatorGenerationError("creator.gemini_unconfigured");
-            } },
-      }),
-    } : undefined);
-  const creatorCompletion: GatewayAppOptions["creatorCompletion"] = options.appOptions?.creatorCompletion ??
-    (featurePool && sessions && featureTenant ? {
-      auth: {fan: resolveFeatureFan},
-      service: createCreatorCompletionService({
-        pool: featurePool as unknown as CreatorPool,
-        ...(mediaConfiguration?.objects.putObject && mediaConfiguration.objects.deleteObject ? {
-          images: {
-            putObject: mediaConfiguration.objects.putObject,
-            statObject: mediaConfiguration.objects.statObject,
-            deleteObject: mediaConfiguration.objects.deleteObject,
-            presignGet: mediaConfiguration.objects.presignGet,
-          },
-          approvedDownloadOrigins: mediaConfiguration.approvedDownloadOrigins,
-        } : {}),
-      }),
-    } : undefined);
-  const creatorPolicy: GatewayAppOptions["creatorPolicy"] = options.appOptions?.creatorPolicy ??
-    (featurePool && sessions && featureTenant ? {
-      service: createCreatorPolicyService(featurePool as unknown as CreatorPool),
-      fan: resolveFeatureFan,
-      staff: async(header:string|undefined)=>{
-        const actor=await resolveFeatureFan(header);
-        if(!editors.has(actor.userId))throw new CustomerAuthError("FORBIDDEN",403);
-        return actor;
-      },
-    } : undefined);
   const masana: GatewayAppOptions["masana"] = options.appOptions?.masana ??
     (featurePool && sessions && featureTenant ? {
       auth:{
@@ -2402,12 +2290,7 @@ export async function startGatewayService(
       })();
     app = appFactory({
       ...(status ? {status} : {}),
-      ...(videos ? {videos} : {}),
-      ...(videoSources ? {videoSources} : {}),
       ...(masana ? {masana} : {}),
-      ...(creatorAgents ? {creatorAgents} : {}),
-      ...(creatorCompletion ? {creatorCompletion} : {}),
-      ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       productScope,
