@@ -45,17 +45,26 @@ class AccountBoundFeedApi extends DioFeedApi {
   @override
   Future<void> removeSaved(SavedStatusItem item) =>
       _checked(() => super.removeSaved(item));
+  // A retired human-authored or video post must never be published in the
+  // consumer Status surface, even if an older Gateway still returns it.
+  FeedPage _approvedMasanaOnly(FeedPage page) => FeedPage(
+    page.items.where((post) =>
+      post.authorType == 'masana' &&
+      const {'text', 'image', 'audio'}.contains(post.kind)).toList(),
+    page.nextCursor,
+  );
+
   @override
   Future<FeedPage> list({required String mode, String? cursor}) =>
-      _checked(() => super.list(mode: mode, cursor: cursor));
+      _checked(() async => _approvedMasanaOnly(
+        await super.list(mode: mode, cursor: cursor)));
   @override
   Future<FeedPage> searchPosts({
     required String mode,
     required String query,
     String? cursor,
-  }) => _checked(
-    () => super.searchPosts(mode: mode, query: query, cursor: cursor),
-  );
+  }) => _checked(() async => _approvedMasanaOnly(
+    await super.searchPosts(mode: mode, query: query, cursor: cursor)));
   @override
   Future<void> like(String id, bool enabled) =>
       _checked(() => super.like(id, enabled));
@@ -72,7 +81,14 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<List<FeedComment>> comments(String id) =>
       _checked(() => super.comments(id));
   @override
-  Future<FeedPost> detail(String id) => _checked(() => super.detail(id));
+  Future<FeedPost> detail(String id) => _checked(() async {
+    final post = await super.detail(id);
+    if (post.authorType != 'masana' ||
+        !const {'text', 'image', 'audio'}.contains(post.kind)) {
+      throw StateError('This Status post is no longer available');
+    }
+    return post;
+  });
   @override
   Future<List<FeedComment>> thread(String id, String sort) =>
       _checked(() => super.thread(id, sort));
