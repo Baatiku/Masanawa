@@ -470,6 +470,8 @@ class SavedStatusPage {
           // bookmarks sharing the same paginated response.
           .where((item) => item['kind'] != 'video')
           .map(SavedStatusItem.fromJson)
+          .where((item) => item.post?.authorType == 'masana' &&
+              const {'text', 'image', 'audio'}.contains(item.post?.kind))
           .toList(growable: false),
       next as String?,
     );
