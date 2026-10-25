@@ -321,12 +321,33 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     });
     try {
       await (widget.api as ReactionFeedApi).react(post.id, kind);
-      // Verify the authoritative counters after concurrent reaction writes.
+      // The PUT has succeeded at this point. A later detail GET can be stale
+      // or temporarily unavailable; it must never turn a committed reaction
+      // into an apparent failed write (a retry could then remove it).
       if (widget.api is DioFeedApi) {
-        final projected = await (widget.api as DioFeedApi).detail(post.id);
-        if (!mounted || version != generation) return;
-        final now = items.indexWhere((row) => row.id == post.id);
-        if (now >= 0) setState(() => items[now] = projected);
+        try {
+          final projected = await (widget.api as DioFeedApi).detail(post.id);
+          if (!mounted || version != generation) return;
+          // A cached/replica read may still describe the pre-write selection.
+          // Preserve our accepted choice until an authoritative refresh catches
+          // up, while keeping counters provisional and plainly labeled.
+          if (projected.currentReaction == kind) {
+            final now = items.indexWhere((row) => row.id == post.id);
+            if (now >= 0) setState(() => items[now] = projected);
+          } else {
+            _reactionReadbackDelayed();
+          }
+        } catch (e) {
+          if (!mounted || version != generation) return;
+          if (accessLost(e)) {
+            setState(() {
+              clearProjection();
+              error = e.toString();
+            });
+            return;
+          }
+          _reactionReadbackDelayed();
+        }
       }
     } catch (e) {
       if (!mounted || version != generation) return;
@@ -354,6 +375,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         setState(() => pendingActions.remove(post.id));
       }
     }
+  }
+
+  void _reactionReadbackDelayed() {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t(
+        'Reaction saved. Counts may be out of date; pull to refresh.',
+        'An ajiye martani. Watakila adadin bai sabunta ba; ja ƙasa don sabuntawa.',
+      )),
+    ));
   }
 
   Future<void> openPost(FeedPost post) async {
