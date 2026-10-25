@@ -2473,10 +2473,45 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
     return Scaffold(
       key: const ValueKey('masanawa-live-call-screen'),
       backgroundColor: u.surfaceBg,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 76,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+            child: FilledButton.icon(
+              key: const ValueKey('live-call-end-action'),
+              style: FilledButton.styleFrom(
+                backgroundColor: u.emergency,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(192, 54),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: () async {
+                widget.session.endReason ??= CallEndReason.userEnded;
+                await widget.session.close();
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              icon: const Icon(Icons.call_end_rounded),
+              label: const Text('End call'),
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 34, 24, 30),
-          child: StreamBuilder<LiveVoiceState>(
+        child: LayoutBuilder(builder: (context, constraints) {
+          final compact = MediaQuery.sizeOf(context).height < 560;
+          final portraitSize = compact ? 116.0
+              : constraints.maxWidth < 360 ? 144.0 : 160.0;
+          final verticalPadding = compact ? 16.0 : 24.0;
+          final minContentHeight = constraints.maxHeight > 2 * verticalPadding
+              ? constraints.maxHeight - 2 * verticalPadding : 0.0;
+          return SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: 20, vertical: verticalPadding),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minContentHeight),
+              child: StreamBuilder<LiveVoiceState>(
           stream: widget.session.states,
           initialData: LiveVoiceState.connecting,
           builder: (context, snapshot) {
@@ -2485,17 +2520,20 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
               mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                MasanaPortraitAvatar(agent: widget.agent, size: 76),
-                const SizedBox(height: 14),
+                MasanaPortraitAvatar(
+                  key: const ValueKey('live-call-masana-portrait'),
+                  agent: widget.agent, size: portraitSize),
+                const SizedBox(height: 18),
                 Text(
                   widget.agent.displayName,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: u.textPrimary,
-                    fontSize: 21,
+                    fontSize: 24,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 7),
                 Semantics(
                   liveRegion: true,
                   child: Text(
@@ -2503,12 +2541,17 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: _error == null ? u.textMuted : u.emergency,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
                 if (_connected) ...[
                   const SizedBox(height:12),
-                  Text('${_elapsed.elapsed.inMinutes.toString().padLeft(2,'0')}:${(_elapsed.elapsed.inSeconds%60).toString().padLeft(2,'0')}', semanticsLabel:'Call duration'),
+                  Text('${_elapsed.elapsed.inMinutes.toString().padLeft(2,'0')}:${(_elapsed.elapsed.inSeconds%60).toString().padLeft(2,'0')}',
+                    semanticsLabel:'Connected call duration ${_elapsed.elapsed.inMinutes} minutes ${_elapsed.elapsed.inSeconds % 60} seconds',
+                    style: TextStyle(color:u.textPrimary, fontSize:20,
+                      fontWeight:FontWeight.w600, letterSpacing:1)),
                 ],
                 if (widget.session.audioInterrupted)
                   TextButton.icon(onPressed:widget.session.resumeAudio,icon:const Icon(Icons.play_arrow),label:const Text('Resume audio')),
@@ -2524,9 +2567,11 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                   if(_recording!.recording)Text('Recording · saved on this device',style:TextStyle(color:u.emergency)),
                   if(_recording!.error!=null)Text(_recording!.error!,textAlign:TextAlign.center),
                 ],
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                const SizedBox(height: 30),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 32,
+                  runSpacing: 16,
                   children: [
                     _CallControl(
                       label: _muted ? 'Unmute' : 'Mute',
@@ -2538,7 +2583,6 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                         if (mounted) setState(() => _muted = next);
                       },
                     ),
-                    const SizedBox(width: 24),
                     _CallControl(
                       label: _speaker ? 'Speaker' : 'Earpiece',
                       icon: _speaker ? Icons.volume_up : Icons.hearing,
@@ -2549,26 +2593,17 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                         if (mounted) setState(() => _speaker = next);
                       },
                     ),
-                    const SizedBox(width: 24),
-                    _CallControl(
-                      label: 'End',
-                      icon: Icons.call_end,
-                      danger: true,
-                      onTap: () async {
-                        widget.session.endReason??=CallEndReason.userEnded;
-                        await widget.session.close();
-                        if (context.mounted) Navigator.of(context).pop();
-                      },
-                    ),
                   ],
                 ),
               ],
             );
           },
-        ),
+              ),
+            ),
+          );
+        }),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -2578,18 +2613,16 @@ class _CallControl extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.selected = false,
-    this.danger = false,
   });
   final String label;
   final IconData icon;
   final VoidCallback onTap;
   final bool selected;
-  final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    final color = danger ? u.emergency : (selected ? u.brand : u.surfaceMuted);
+    final color = selected ? u.brand : u.surfaceMuted;
     return Column(
       children: [
         Material(
@@ -2598,14 +2631,17 @@ class _CallControl extends StatelessWidget {
           child: IconButton(
             tooltip: label,
             onPressed: onTap,
+            iconSize: 26,
+            constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
             icon: Icon(
               icon,
-              color: danger || selected ? Colors.white : u.textPrimary,
+              color: selected ? Colors.white : u.textPrimary,
             ),
           ),
         ),
         const SizedBox(height: 5),
-        Text(label, style: TextStyle(color: u.textMuted, fontSize: 11)),
+        Text(label, style: TextStyle(color: u.textMuted, fontSize: 13,
+          fontWeight: FontWeight.w500)),
       ],
     );
   }

@@ -49,7 +49,17 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/mobile-tests.log" || result=$?
+          # Flutter's expanded reporter can print non-BMP characters from
+          # multilingual/emoji fixtures. Some hosted Actions runners crash
+          # while logging these characters before emitting test diagnostics.
+          # Escape only the console stream; keep Flutter's exact exit status.
+          flutter test --reporter expanded 2>&1 | python3 -u -c '
+          import sys
+          for line in sys.stdin.buffer:
+              safe = line.decode("utf-8", "backslashreplace").encode("ascii", "backslashreplace").decode("ascii")
+              sys.stdout.write(safe)
+              sys.stdout.flush()
+          ' | tee "$RUNNER_TEMP/mobile-tests.log" || result=$?
           if [ "${result:-0}" -ne 0 ]; then
             # Job logs can be unavailable through the Actions API. Surface the
             # failing test identities as check annotations for bounded repair.
