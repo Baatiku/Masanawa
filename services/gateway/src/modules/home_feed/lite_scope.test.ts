@@ -35,9 +35,11 @@ describe("reduced product Status route boundary", () => {
       ["PATCH",path],
       ["DELETE",path],
     ] as const) {
-      const response=await app.inject({method,url,payload:method==="DELETE"?undefined:{
-        body:"Hello",audience:"public",expectedBody:"Old",
-      }});
+      const response=await app.inject({method,url,
+        ...(method==="DELETE" ? {} : { payload:{
+          body:"Hello",audience:"public",expectedBody:"Old",
+        }}),
+      });
       expect(response.statusCode).toBe(404);
     }
     expect(feed.publishHumanText).not.toHaveBeenCalled();
