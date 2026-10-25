@@ -64,6 +64,12 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  it("fails closed on unverified funding while retaining assigned-account readback",async()=>{
   const f=setup({ready:()=>false});
   const headers={authorization:"Bearer session"};
+  const getProbe=await f.app.inject({method:"GET",url:"/webhooks/billstack/gb"});
+  const headProbe=await f.app.inject({method:"HEAD",url:"/webhooks/billstack/gb"});
+  expect(getProbe.statusCode).toBe(200);
+  expect(getProbe.json()).toEqual({reachable:true});
+  expect(headProbe.statusCode).toBe(200);
+  expect(headProbe.body).toBe("");
   const result=await f.app.inject({url:"/v1/gb/wallet/virtual-account",headers});
   expect(result.json().fundingEnabled).toBe(false);
   expect((await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(503);

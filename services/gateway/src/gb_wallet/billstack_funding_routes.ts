@@ -113,6 +113,13 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   scope.removeContentTypeParser("application/json");
   scope.addContentTypeParser("application/json",{parseAs:"buffer",bodyLimit:65536},
     (_request,body,done)=>done(null,body));
+  // Billstack checks reachability with HEAD before it sends a payment POST.
+  // Fastify exposes HEAD for this GET route. This acknowledges only that the
+  // endpoint exists; it must never acknowledge a payment or imply funding is on.
+  scope.get("/webhooks/billstack/gb",async(_request,reply)=>{
+    reply.header("cache-control","no-store");
+    return {reachable:true};
+  });
   scope.post("/webhooks/billstack/gb",async(request,reply)=>{
     reply.header("cache-control","no-store");
     try{
