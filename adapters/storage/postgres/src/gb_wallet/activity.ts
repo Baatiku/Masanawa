@@ -29,6 +29,15 @@ type Row = {
   status: string;
   created_at: string;
 };
+type SummaryRow = {unit:string;received:string;spent:string};
+
+export interface GbActivityPeriodTotals {
+  readonly periodDays: 7 | 30;
+  readonly fromAt: string;
+  readonly toAt: string;
+  readonly MB: Readonly<{received:number;spent:number;net:number}>;
+  readonly NGN: Readonly<{received:number;spent:number;net:number}>;
+}
 
 const validActor = (v: string) =>
   /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/.test(v);
@@ -54,6 +63,53 @@ function project(row: Row): GbActivityEntry {
 /** Read-only projection of immutable NEW ledgers. Do not join Credits/MSNW. */
 export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
   return Object.freeze({
+    async summary(actor:GbActivityActor,days:7|30,
+      now:Date=new Date()):Promise<GbActivityPeriodTotals> {
+      if(!validActor(actor.tenantId)||!validActor(actor.userId)||
+         (days!==7&&days!==30)||!Number.isFinite(now.getTime()))
+        throw new TypeError("invalid_activity_summary");
+      const toAt=now.toISOString();
+      const fromAt=new Date(now.getTime()-days*86400000).toISOString();
+      const result=await db.query<SummaryRow>(`
+        WITH posted AS (
+          SELECT 'MB'::text AS unit,
+            (CASE WHEN m.to_kind='human' AND m.to_id=$2
+              THEN m.amount_mb ELSE -m.amount_mb END) AS amount,
+            m.created_at
+          FROM gb_wallet.movements m
+          JOIN gb_wallet.operations o ON o.tenant_id=m.tenant_id
+            AND o.operation_id=m.operation_id
+          WHERE m.tenant_id=$1 AND (
+            (m.from_kind='human' AND m.from_id=$2) OR
+            (m.to_kind='human' AND m.to_id=$2))
+          UNION ALL
+          SELECT 'NGN'::text AS unit,n.delta_kobo AS amount,n.created_at
+          FROM gb_wallet.ngn_entries n
+          WHERE n.tenant_id=$1 AND n.account_id=$2
+        )
+        SELECT unit,
+          COALESCE(SUM(CASE WHEN amount>0 THEN amount ELSE 0 END),0)::text AS received,
+          COALESCE(SUM(CASE WHEN amount<0 THEN -amount ELSE 0 END),0)::text AS spent
+        FROM posted
+        WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz
+        GROUP BY unit
+      `,[actor.tenantId,actor.userId,fromAt,toAt]);
+      const totals={MB:{received:0,spent:0,net:0},NGN:{received:0,spent:0,net:0}};
+      const seen=new Set<string>();
+      for(const row of result.rows){
+        if((row.unit!=="MB"&&row.unit!=="NGN")||seen.has(row.unit))
+          throw new TypeError("invalid_activity_summary_row");
+        seen.add(row.unit);
+        const received=Number(row.received),spent=Number(row.spent);
+        const net=received-spent;
+        if(!Number.isSafeInteger(received)||received<0||
+           !Number.isSafeInteger(spent)||spent<0||!Number.isSafeInteger(net))
+          throw new TypeError("invalid_activity_summary_amount");
+        totals[row.unit]={received,spent,net};
+      }
+      return Object.freeze({periodDays:days,fromAt,toAt,
+        MB:Object.freeze(totals.MB),NGN:Object.freeze(totals.NGN)});
+    },
     async list(actor: GbActivityActor, limit: number,
         cursor: GbActivityCursor | null,
         unit: GbActivityUnitFilter="all"): Promise<readonly GbActivityEntry[]> {
