@@ -63,7 +63,7 @@ void main() {
   test('chat composer no longer offers video, document, location, poll', () {
     final chat = _source('screens/chat/ai_chat_screen.dart');
     final begin = chat.indexOf('void _openAttachSheet()');
-    final end = chat.indexOf('Future<void> _shareLocation()', begin);
+    final end = chat.indexOf('Future<void> _pickAudio()', begin);
     expect(begin, greaterThanOrEqualTo(0));
     expect(end, greaterThan(begin));
     final sheet = chat.substring(begin, end);
