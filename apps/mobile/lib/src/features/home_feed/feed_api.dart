@@ -266,7 +266,6 @@ class DioFeedApi
         FeedApi,
         SearchFeedApi,
         ReactionFeedApi,
-        SavedStatusLibraryApi,
         SavedStatusLibraryApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
