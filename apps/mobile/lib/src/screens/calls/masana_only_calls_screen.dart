@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
+import '../../calls/call_details_screen.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/masana_voice_route.dart';
 import '../../agents/masana_portrait_avatar.dart';
@@ -100,7 +101,7 @@ class _PrivateMasanaCallHistoryState
   String _query = '';
   List<CallHistoryItem> _history = [];
   String? _next;
-  bool _loading = true, _failed = false;
+  bool _loading = true, _failed = false, _pageFailed = false;
 
   bool get _isCurrent {
     final state = ref.read(sessionProvider);
@@ -149,6 +150,7 @@ class _PrivateMasanaCallHistoryState
       _history = [];
       _next = null;
       _failed = false;
+      _pageFailed = false;
       _loading = true;
     });
     if (_query.length > 80) {
@@ -161,6 +163,7 @@ class _PrivateMasanaCallHistoryState
 
   Future<void> _load({required bool reset}) async {
     if (!_isCurrent || (!reset && (_loading || _next == null))) return;
+    final after = reset ? null : _next;
     _cancel?.cancel();
     final token = CancelToken();
     _cancel = token;
@@ -168,10 +171,11 @@ class _PrivateMasanaCallHistoryState
     setState(() {
       _loading = true;
       _failed = false;
+      _pageFailed = false;
     });
     try {
       final page = await ref.read(callHistoryTransportProvider).loadPage(
-        cursor: reset ? null : _next,
+        cursor: after,
         query: _query,
         cancelToken: token,
       );
@@ -182,15 +186,27 @@ class _PrivateMasanaCallHistoryState
         _history = [
           if (!reset) ..._history,
           ...incoming,
-        ].where((call) => found.add(call.callId)).toList(growable: false);
-        _next = page.nextCursor;
+        ].where((call) => found.add(call.callId)).toList(growable: false)
+          ..sort((a, b) {
+            final chronology = b.createdAt.compareTo(a.createdAt);
+            return chronology == 0
+                ? a.callId.compareTo(b.callId) : chronology;
+          });
+        _next = page.calls.isEmpty || page.nextCursor == after
+            ? null : page.nextCursor;
         _loading = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted || generation != _generation || !_isCurrent) return;
       setState(() {
         _loading = false;
-        _failed = true;
+        if (error is DioException &&
+            const [401, 403, 410].contains(error.response?.statusCode)) {
+          _history = [];
+          _next = null;
+        }
+        _failed = reset || _history.isEmpty;
+        _pageFailed = !reset && _history.isNotEmpty;
       });
     }
   }
@@ -198,6 +214,73 @@ class _PrivateMasanaCallHistoryState
   String _date(DateTime time) {
     final local = time.toLocal();
     return MaterialLocalizations.of(context).formatMediumDate(local);
+  }
+
+  String _time(DateTime time) => MaterialLocalizations.of(context)
+      .formatTimeOfDay(TimeOfDay.fromDateTime(time.toLocal()));
+
+  List<Widget> _historyRows() {
+    final entries = <Widget>[];
+    final directory = ref.watch(agentDirectoryProvider);
+    String? previousDay;
+    for (final call in _history) {
+      final local = call.createdAt.toLocal();
+      final day = '${local.year}-${local.month}-${local.day}';
+      if (day != previousDay) {
+        entries.add(Padding(
+          key: ValueKey('masana-call-day-$day'),
+          padding: const EdgeInsetsDirectional.fromSTEB(4, 16, 4, 6),
+          child: Text(_date(call.createdAt),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700)),
+        ));
+        previousDay = day;
+      }
+      entries.add(ListTile(
+        key: ValueKey('masana-call-${call.callId}'),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+        leading: MasanaPortraitAvatar(
+          characterId: call.characterId,
+          agent: directory.find(call.characterId),
+          displayName: call.displayName,
+          size: 48,
+        ),
+        title: Text(call.displayName,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Row(children: [
+          Icon(call.missed
+              ? Icons.call_missed_outgoing_rounded : Icons.call_made_rounded,
+            size: 15,
+            color: call.missed
+                ? Theme.of(context).colorScheme.error
+                : context.masanawa.brand),
+          const SizedBox(width: 5),
+          Expanded(child: Text('${call.outcomeLabel} · ${_time(call.createdAt)}',
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ]),
+        onTap: () {
+          if (!_isCurrent) return;
+          Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => CallDetailsScreen(
+              ownerId: widget.accountId, initial: call),
+          ));
+        },
+        trailing: IconButton(
+          tooltip: 'Call ${call.displayName}',
+          icon: Icon(Icons.call_rounded, color: context.masanawa.brand),
+          onPressed: directory.find(call.characterId) == null
+              ? null : () {
+                  if (_isCurrent) {
+                    context.push(masanaLiveVoiceRoute(call.characterId));
+                  }
+                },
+        ),
+      ));
+      entries.add(Divider(height: 1, indent: 65,
+        color: context.masanawa.structuralBorder));
+    }
+    return entries;
   }
 
   @override
@@ -258,46 +341,7 @@ class _PrivateMasanaCallHistoryState
                     style: Theme.of(context).textTheme.titleMedium),
               ]),
             ),
-          for (final call in _history) ...[
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 4, vertical: 5),
-              leading: MasanaPortraitAvatar(
-                characterId: call.characterId,
-                agent: ref.watch(agentDirectoryProvider).find(call.characterId),
-                displayName: call.displayName,
-                size: 48,
-              ),
-              title: Text(call.displayName,
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Row(children: [
-                Icon(
-                  call.missed
-                      ? Icons.call_missed_outgoing_rounded
-                      : Icons.call_made_rounded,
-                  size: 15,
-                  color: call.missed
-                      ? Theme.of(context).colorScheme.error
-                      : context.masanawa.brand,
-                ),
-                const SizedBox(width: 5),
-                Expanded(child: Text(
-                  '${call.outcomeLabel} · ${_date(call.createdAt)}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ]),
-              trailing: IconButton(
-                tooltip: 'Call ${call.displayName}',
-                icon: Icon(Icons.call_rounded, color: context.masanawa.brand),
-                onPressed: ref.read(agentDirectoryProvider)
-                        .find(call.characterId) == null
-                    ? null
-                    : () => context.push(masanaLiveVoiceRoute(call.characterId)),
-              ),
-            ),
-            Divider(height: 1, indent: 65,
-              color: context.masanawa.structuralBorder),
-          ],
+          ..._historyRows(),
           if (_failed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 40),
@@ -316,7 +360,8 @@ class _PrivateMasanaCallHistoryState
           if (!_loading && !_failed && _next != null)
             OutlinedButton(
               onPressed: () => _load(reset: false),
-              child: const Text('Load more'),
+              child: Text(_pageFailed ? 'Could not load older calls · Retry'
+                  : 'Load more'),
             ),
         ],
       ),
