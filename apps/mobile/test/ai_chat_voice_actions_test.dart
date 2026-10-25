@@ -22,10 +22,11 @@ class _Native extends Mock implements AudioRecorder {}
 class _Recorder extends VoiceNoteRecorder {
  _Recorder():super(recorder:_Native());
  var retained=false;
+ int cancelled=0,closed=0;
  @override Future<void> start({bool Function()? isOwnerCurrent}) async {state=VoiceNoteState.recording;notifyListeners();}
  @override Future<ChatAttachment?> stop() async {state=VoiceNoteState.ready;note=const ChatAttachment(kind:'voice',path:'/private/note.m4a',durationMs:1000,sizeBytes:42);notifyListeners();return note;}
- @override Future<void> cancel() async {state=VoiceNoteState.idle;notifyListeners();}
- @override Future<void> close() async {}
+ @override Future<void> cancel() async {cancelled++;state=VoiceNoteState.idle;notifyListeners();}
+ @override Future<void> close() async {closed++;}
  @override void retain(){retained=true;}
 }
 class _Chats extends AiChatController {
@@ -52,6 +53,12 @@ const _user=AuthUser(id:'account-a',name:'Fan',locale:'en',status:'ACTIVE',role:
 const _tokens=AuthTokens(accessToken:'test',refreshToken:'test-refresh',accessExpiresIn:3600,user:_user);
 class _Session extends SessionController {
  @override SessionState build()=>const SessionSignedIn(_user,_tokens);
+}
+class _EpochSession extends _Session {
+ int epoch=0;
+ @override int get authorizationEpoch=>epoch;
+ void refreshToken()=>state=SessionSignedIn(_user,_tokens);
+ void reauthenticate(){epoch++;state=SessionSignedIn(_user,_tokens);}
 }
 class _Wallet extends WalletController {
  @override Future<WalletView?> build() async=>null;
@@ -100,6 +107,30 @@ void main() {
   expect(find.bySemanticsLabel('Send voice note'),findsNothing);
   expect(recorder.retained,isTrue);
   chats.response!.complete();await tester.pumpAndSettle();
+ });
+ testWidgets('same-user reauthentication releases recorder; token rotation does not', (tester) async {
+  final session=_EpochSession(),chats=_Chats(),recorder=_Recorder();
+  await tester.pumpWidget(ProviderScope(overrides:[
+    aiChatProvider.overrideWith(()=>chats),
+    agentDirectoryProvider.overrideWith(_Directory.new),
+    sessionProvider.overrideWith(()=>session),
+    walletProvider.overrideWith(_Wallet.new),
+    voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder),
+  ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+    home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Record voice note'));
+  await tester.pumpAndSettle();
+  expect(recorder.state,VoiceNoteState.recording);
+  session.refreshToken();await tester.pumpAndSettle();
+  expect(recorder.cancelled,0);
+  session.reauthenticate();await tester.pumpAndSettle();
+  expect(recorder.cancelled,1);
+  expect(recorder.closed,1);
+  expect(recorder.state,VoiceNoteState.idle);
+  expect(chats.sent,isEmpty);
+  expect(find.bySemanticsLabel('Send voice note'),findsNothing);
+  expect(tester.takeException(),isNull);
  });
  testWidgets('chat search uses the available header width and closes with its back arrow', (tester) async {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));

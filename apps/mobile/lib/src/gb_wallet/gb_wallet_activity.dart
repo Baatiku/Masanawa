@@ -51,11 +51,48 @@ class GbActivityPage {
   }
 }
 
+class GbActivityAmounts {
+  const GbActivityAmounts(this.received,this.spent,this.net);
+  final int received,spent,net;
+  factory GbActivityAmounts.read(Object? raw) {
+    if(raw is! Map)throw const FormatException('Invalid posted totals');
+    final received=raw['received'],spent=raw['spent'],net=raw['net'];
+    if(received is! int||spent is! int||net is! int||received<0||spent<0||
+       net!=received-spent)throw const FormatException('Invalid posted units');
+    return GbActivityAmounts(received,spent,net);
+  }
+}
+
+class GbActivityPeriodSummary {
+  const GbActivityPeriodSummary({required this.days,required this.fromAt,
+    required this.toAt,required this.mb,required this.ngn});
+  final int days;
+  final DateTime fromAt,toAt;
+  final GbActivityAmounts mb,ngn;
+
+  factory GbActivityPeriodSummary.read(Object? raw,int expectedDays) {
+    if(raw is! Map||raw['periodDays']!=expectedDays||
+       (expectedDays!=7&&expectedDays!=30))
+      throw const FormatException('Unverified activity period');
+    final from=raw['fromAt'],to=raw['toAt'];
+    final fromAt=from is String?DateTime.tryParse(from):null;
+    final toAt=to is String?DateTime.tryParse(to):null;
+    if(fromAt==null||toAt==null||!fromAt.isUtc||!toAt.isUtc||
+       !toAt.isAfter(fromAt)||
+       toAt.difference(fromAt)!=Duration(days:expectedDays))
+      throw const FormatException('Invalid activity window');
+    return GbActivityPeriodSummary(days:expectedDays,fromAt:fromAt,toAt:toAt,
+      mb:GbActivityAmounts.read(raw['MB']),ngn:GbActivityAmounts.read(raw['NGN']));
+  }
+}
+
 abstract class GbActivityTransport {
   Future<GbActivityPage> page({required int limit,String? cursor,
     String unit='all',
     CancelToken? cancellation});
   Future<GbActivityItem> detail({required String entryId,
+    CancelToken? cancellation});
+  Future<GbActivityPeriodSummary> summary({required int days,
     CancelToken? cancellation});
 }
 
@@ -96,6 +133,16 @@ class DioGbActivityTransport implements GbActivityTransport {
     if(item.id!=entryId)throw const FormatException('Mismatched transaction');
     return item;
   }
+
+  @override
+  Future<GbActivityPeriodSummary> summary({required int days,
+    CancelToken? cancellation}) async {
+    if(days!=7&&days!=30)throw const FormatException('Invalid activity period');
+    final response=await dio.get<Object?>('/v1/gb/wallet/activity/summary',
+      queryParameters:{'days':days},cancelToken:cancellation,
+      options:Options(headers:const {'Cache-Control':'no-store'}));
+    return GbActivityPeriodSummary.read(response.data,days);
+  }
 }
 
 final gbActivityTransportProvider=Provider<GbActivityTransport>((ref)=>
@@ -135,4 +182,22 @@ final gbActivityDetailProvider=FutureProvider.autoDispose.family<GbActivityItem,
       entryId:request.entryId,cancellation:cancel);
     if(!sameOwner())throw StateError('account_changed');
     return item;
+  });
+
+typedef GbActivitySummaryRequest=({GbWalletOwner owner,int days});
+final gbActivitySummaryProvider=FutureProvider.autoDispose.family<GbActivityPeriodSummary,GbActivitySummaryRequest>(
+  (ref,request) async {
+    final session=ref.read(sessionProvider);
+    bool sameOwner(){
+      final active=ref.read(sessionProvider);
+      return active is SessionSignedIn && active.user.id==request.owner.accountId &&
+        ref.read(sessionProvider.notifier).authorizationEpoch==
+          request.owner.authorizationEpoch;
+    }
+    if(session is! SessionSignedIn||!sameOwner())throw StateError('account_changed');
+    final cancel=CancelToken();ref.onDispose(cancel.cancel);
+    final result=await ref.watch(gbActivityTransportProvider).summary(
+      days:request.days,cancellation:cancel);
+    if(!sameOwner())throw StateError('account_changed');
+    return result;
   });

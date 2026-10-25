@@ -11,12 +11,35 @@ function fixture() {
   const authorize=vi.fn(async()=>owner);
   const list=vi.fn(async()=>[item(2),item(1)]);
   const find=vi.fn(async()=>item(2) as ReturnType<typeof item> | null);
-  registerGbWalletActivityRoutes(app,{authorize,list,find});
-  return {app,authorize,list,find};
+  const summary=vi.fn(async(_actor:typeof owner,days:7|30)=>({periodDays:days,
+    fromAt:"2026-10-18T00:00:00.000Z",toAt:"2026-10-25T00:00:00.000Z",
+    MB:{received:1000,spent:500,net:500},
+    NGN:{received:500050,spent:100,net:499950}}));
+  registerGbWalletActivityRoutes(app,{authorize,list,find,summary});
+  return {app,authorize,list,find,summary};
 }
 const headers={authorization:"Bearer scoped"};
 
 describe("account-fenced MB/NGN Activity HTTP",()=>{
+  it("returns separately scoped immutable 7/30 day totals without summing currencies",async()=>{
+    const f=fixture();
+    try {
+      f.authorize.mockRejectedValueOnce(new Error("unauthorized"));
+      const missing=await f.app.inject({method:"GET",url:"/v1/gb/wallet/activity/summary"});
+      expect(missing.statusCode).toBe(401);
+      const headers={authorization:"Bearer scoped"};
+      const total=await f.app.inject({method:"GET",url:"/v1/gb/wallet/activity/summary?days=30&userId=other",headers});
+      expect(total.statusCode).toBe(200);
+      expect(total.headers["cache-control"]).toBe("no-store");
+      expect(total.json().MB.net).toBe(500);
+      expect(total.json().NGN.net).toBe(499950);
+      expect(f.summary).toHaveBeenCalledWith(owner,30);
+      expect((await f.app.inject({method:"GET",url:"/v1/gb/wallet/activity/summary?days=0",headers})).statusCode).toBe(422);
+      f.summary.mockRejectedValueOnce(new Error("db_unavailable"));
+      const failed=await f.app.inject({method:"GET",url:"/v1/gb/wallet/activity/summary",headers});
+      expect(failed.statusCode).toBe(503);
+    }finally{await f.app.close();}
+  });
   it("rejects missing sessions before private reads",async()=>{
     const f=fixture();
     f.authorize.mockRejectedValue(new Error("unauthorized"));

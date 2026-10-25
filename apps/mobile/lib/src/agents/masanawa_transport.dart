@@ -392,7 +392,6 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     try {
       if (onTextDelta != null) {
         var streamedText = '';
-        var receivedServerOutput = false;
         Map<String, dynamic>? done;
         try {
           await for (final event in _client.postStream(
@@ -402,11 +401,6 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
             requestId: requestId,
           )) {
             final type = event['type'];
-            // Any audio, text or completed response may already have executed
-            // provider work. It must never be replayed as a new fallback turn.
-            if (type == 'delta' || type == 'audio' || type == 'audio-transcript' || type == 'done' || type == 'error') {
-              receivedServerOutput = true;
-            }
             if (type == 'delta') {
               final delta = event['text'];
               if (delta is String && delta.isNotEmpty) {
@@ -434,13 +428,17 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
               return _turnResultFromData(done, reply: reply);
             }
           }
-          if (receivedServerOutput) throw const ApiException('Incomplete agent stream. Check message status before retrying.');
-        } catch (error) {
-          // Never replay a turn after server-generated text/audio began: a
-          // fallback POST could execute the same task and charge twice.
-          if (receivedServerOutput || token.isCancelled) rethrow;
-          // Before the first streamed delta the legacy turn endpoint remains
-          // an interoperability fallback for older Gateway deployments.
+          // Even a 200 with no events/terminal completion may have executed
+          // provider work. Recovery must read the ORIGINAL turn status, not
+          // resubmit on a different endpoint.
+          throw const ApiException('Incomplete agent stream. Check message status before retrying.');
+        } on ApiException catch (error) {
+          // Only an explicit route-not-registered response proves that the
+          // stream endpoint never accepted an inference operation. Unknown
+          // 401/500/timeout/empty stream outcomes MUST NOT use legacy POST.
+          if (token.isCancelled || ![404, 405].contains(error.statusCode)) {
+            rethrow;
+          }
         }
       }
 
@@ -508,6 +506,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     _turnTokens[binding.characterId]=token;
     var outputStarted=false;
     var transcript='';
+    var streamedText='';
     final audio=BytesBuilder(copy:false);
     var invalidAudio = false;
     Map<String,dynamic>? done;
@@ -518,7 +517,12 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
           final type=event['type'];
           if(const ['delta','audio','audio-transcript','done','error'].contains(type))outputStarted=true;
           if(type=='error')throw const ApiException('The reply was interrupted. Check message status before retrying.');
-          if(type=='delta' && event['text'] is String)onTextDelta?.call(event['text'] as String);
+          if(type=='delta' && event['text'] is String){
+            final text=event['text'] as String;
+            if(streamedText.length+text.length>32000)throw const ApiException('Invalid streamed reply');
+            streamedText+=text;
+            onTextDelta?.call(text);
+          }
           if(type=='audio-transcript' && event['text'] is String){
             final text=event['text'] as String;
             if(transcript.length+text.length>32000)throw const ApiException('Invalid voice transcript');
@@ -542,16 +546,32 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
         if(!outputStarted && !token.isCancelled && [404,405].contains(error.statusCode))return await legacy();
         rethrow;
       }
-      if(done==null || done['reply'] is! String || (done['reply'] as String).isEmpty){
+      if(done==null){
         throw const ApiException('Incomplete agent stream. Check message status before retrying.');
       }
-      final result=_turnResultFromData(done,reply:done['reply'] as String);
+      // A recorded-note reply can finish with spoken transcript events or
+      // streamed text and no duplicated final reply field. Preserve meaningful
+      // text only after the explicit terminal done, never on an early EOF.
+      final finalReply=done['reply'];
+      final finalTranscript=done['audioTranscript'];
+      final reply=finalReply is String && finalReply.trim().isNotEmpty
+          ? finalReply : finalTranscript is String && finalTranscript.trim().isNotEmpty
+          ? finalTranscript : transcript.trim().isNotEmpty
+          ? transcript : streamedText;
+      if(reply.trim().isEmpty){
+        throw const ApiException('Incomplete agent stream. Check message status before retrying.');
+      }
+      final result=_turnResultFromData(done,reply:reply);
       final streamedAudio=audio.takeBytes();
       return AgentTurnResult(text:result.text,parts:result.parts,agentRunId:result.agentRunId,
         audioBytes:result.audioBytes ?? (streamedAudio.isNotEmpty ? streamedAudio : null),
         audioMimeType:result.audioMimeType ?? (streamedAudio.isNotEmpty ? 'audio/l16;rate=24000' : null),
         audioDurationMs:result.audioDurationMs,
-        audioTranscript:result.audioTranscript);
+        // A complete final text reply does not imply a finalized audio ASR.
+        // Preserve the pre-existing optional-field contract in that case.
+        audioTranscript:result.audioTranscript ??
+            ((finalReply is! String || finalReply.trim().isEmpty) &&
+                    transcript.isNotEmpty ? transcript : null));
     } finally {
       if(identical(_turnTokens[binding.characterId],token))_turnTokens.remove(binding.characterId);
     }

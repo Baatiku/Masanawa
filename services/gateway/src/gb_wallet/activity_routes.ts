@@ -14,6 +14,13 @@ export interface GbActivityItem {
   readonly createdAt: string;
 }
 export type GbActivityUnitFilter = "all" | "MB" | "NGN";
+export interface GbActivityPeriodSummary {
+  readonly periodDays: 7 | 30;
+  readonly fromAt: string;
+  readonly toAt: string;
+  readonly MB: Readonly<{received:number;spent:number;net:number}>;
+  readonly NGN: Readonly<{received:number;spent:number;net:number}>;
+}
 export interface GbActivityPorts {
   readonly authorize: (header: string | undefined) => Promise<GbActivityScope>;
   readonly list: (actor: GbActivityScope, limit: number,
@@ -22,6 +29,8 @@ export interface GbActivityPorts {
       Promise<readonly GbActivityItem[]>;
   readonly find: (actor: GbActivityScope, entryId: string) =>
     Promise<GbActivityItem | null>;
+  readonly summary: (actor: GbActivityScope, days: 7 | 30) =>
+    Promise<GbActivityPeriodSummary>;
 }
 
 type PageCursor = {v:1; tenant:string; user:string; at:string; id:string; unit:GbActivityUnitFilter};
@@ -50,6 +59,20 @@ function pack(item: GbActivityItem, actor: GbActivityScope, unit:GbActivityUnitF
 
 /** Read-only, no-store projection. Never invent activity for unavailable ledgers. */
 export function registerGbWalletActivityRoutes(app: FastifyInstance, ports: GbActivityPorts) {
+  app.get("/v1/gb/wallet/activity/summary",async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    let actor:GbActivityScope;
+    try{
+      actor=await ports.authorize(request.headers.authorization);
+      if(!actor?.tenantId||!actor.userId)throw new Error("unauthorized");
+    }catch{return reply.code(401).send({error:{code:"activity_unauthorized"}});}
+    const query=request.query as Record<string,unknown>;
+    const period=query.days??"7";
+    if(period!=="7"&&period!=="30")
+      return reply.code(422).send({error:{code:"invalid_activity_period"}});
+    try{return await ports.summary(actor,period==="7"?7:30);}
+    catch{return reply.code(503).send({error:{code:"activity_ledger_unavailable"}});}
+  });
   app.get("/v1/gb/wallet/activity", async (request, reply) => {
     reply.header("cache-control", "no-store");
     let actor: GbActivityScope;
