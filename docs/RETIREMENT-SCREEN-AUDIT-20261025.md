@@ -39,3 +39,20 @@ A dedicated batch removes the old HTTP `/home` Rooms showcase, deletes three obs
 ## Final Flutter Rooms and Videos feature package sweep — 25 October
 
 The last unreferenced `lib/src/features/videos/video_embed_policy.dart` is removed after confirming the active Status feed, media, detail and root screens import no legacy video-player component. The obsolete `lib/src/features/rooms` feature directory was already absent from main. A source-level regression test now fails if either feature directory reappears. The supported Status photo/audio media reader stays in place, and the historical server SQL schema and finance records are not affected. This is not proof of production-device performance or of full backend video/creator source retirement.
+
+## Follow-up batch — retired P2P bootstrap and owner-requested APK
+
+The Gateway still composed dormant P2P custody escrow, evidence storage and
+verified bank-step-up services before passing them through options to the
+five-tab application, even though P2P routes were no longer registered.
+Remove that construction and the legacy Credit Send deployment toggle from
+`services/gateway/src/main.ts`; retain historical P2P/credit journal schemas,
+data, account exports and original financial reconciliation callbacks.
+An architecture regression test prevents this runtime bootstrap returning.
+This does **not** assert that all historical P2P source is safe to delete.
+
+On explicit owner request, an isolated, one-shot GitHub Actions push workflow
+builds an Android release-mode **test APK** from the merged main commit with
+source SHA, SHA-256 and signing evidence, then runs Flutter analyze/tests.
+This build is only for owner testing; provider, ledger and real-device financial
+qualification remain separate. The optional fixed-IP relay remains on hold.
