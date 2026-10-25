@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
+import 'status_post_author_header.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
 /// AF00 owns root/deep-link registration. This screen never exposes fan publishing.
@@ -8,7 +10,8 @@ class FeedPostDetailScreen extends StatefulWidget {
   const FeedPostDetailScreen({super.key,required this.initialPost,
     required this.accountKey,required this.loadPost,required this.loadThread,
     this.loadMoreThread,
-    required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,this.onReport,
+    required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,
+    this.authorDirectory = const {},
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
@@ -17,7 +20,8 @@ class FeedPostDetailScreen extends StatefulWidget {
   /// Optional server-backed continuation; omitted for offline/test-only feeds.
   final Future<List<FeedComment>> Function(String,String,String) ? loadMoreThread;
   final Future<void> Function(String,String,String,String?) sendComment;
-  final ValueChanged<String>? onMasanaProfile,onHumanProfile,onMedia,onReport;
+  final ValueChanged<String>? onMasanaProfile,onHumanProfile,onMedia;
+  final Map<String, AgentDirectoryEntry> authorDirectory;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
 }
@@ -174,24 +178,22 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
           Expanded(child:Center(child:Text(t('Post not available','Babu labarin'))))
         else Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(children:[
           Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            TextButton.icon(onPressed:p.isHuman
-              ? (p.authorHandle==null||widget.onHumanProfile==null?null:
-                  ()=>widget.onHumanProfile!(p.authorHandle!))
-              : (widget.onMasanaProfile==null?null:
-                  ()=>widget.onMasanaProfile!(p.authorMasanaId)),
-              icon:Icon(p.isHuman?Icons.person_outline:Icons.smart_toy_outlined),
-              label:Text(p.displayAuthor)),
+            StatusPostAuthorHeader(
+              post:p,
+              agent:widget.authorDirectory[p.authorMasanaId],
+              onProfile:p.isHuman
+                ? (p.authorHandle==null||widget.onHumanProfile==null?null:
+                    ()=>widget.onHumanProfile!(p.authorHandle!))
+                : (widget.onMasanaProfile==null?null:
+                    ()=>widget.onMasanaProfile!(p.authorMasanaId)),
+            ),
+            const SizedBox(height:12),
             Text(p.body,style:Theme.of(context).textTheme.bodyLarge),
             for(final media in p.mediaIds)ListTile(leading:Icon(p.kind=='audio'?
               Icons.play_circle_outline:Icons.image_outlined),
               title:Text(p.kind=='audio'?t('Play audio','Kunna sauti'):t('View image','Duba hoto')),
               onTap:widget.onMedia==null?null:()=>widget.onMedia!(media)),
-            Row(children:[
-              Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
-              const Spacer(),
-              IconButton(tooltip:t('Report','Kai rahoto'),onPressed:widget.onReport==null?null:
-                ()=>widget.onReport!(p.id),icon:const Icon(Icons.flag_outlined))
-            ]),
+            Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
             Row(children:[
               ChoiceChip(label:Text(t('Newest','Sabbi')),selected:sort=='newest',
                 onSelected:(_){setState(()=>sort='newest');refresh();}),

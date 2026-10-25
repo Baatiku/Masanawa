@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
+import 'status_post_author_header.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
 /// The app never retains a cross-account/offline copy of these items.
@@ -12,12 +14,14 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     required this.accountKey,
     required this.isAccountCurrent,
     required this.openPost,
+    this.authorDirectory = const {},
   });
 
   final SavedStatusLibraryApi api;
   final String accountKey;
   final bool Function() isAccountCurrent;
   final Future<void> Function(FeedPost) openPost;
+  final Map<String, AgentDirectoryEntry> authorDirectory;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -264,8 +268,6 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                 : const SizedBox.shrink();
                           }
                           final item = items[index];
-                          final title =
-                              item.post?.displayAuthor ?? 'Saved post';
                           final description = item.post?.body ?? '';
                           final canOpen = item.isPost;
                           return Card(
@@ -275,31 +277,31 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                               vertical: 5,
                             ),
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                ListTile(
-                                  leading: Icon(Icons.article_outlined),
-                                  title: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                if (item.post != null)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                                    child: StatusPostAuthorHeader(
+                                      post: item.post!,
+                                      agent: widget.authorDirectory[
+                                          item.post!.authorMasanaId],
+                                    ),
                                   ),
-                                  subtitle: Text(
-                                    description,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                InkWell(
                                   onTap: canOpen ? () => open(item) : null,
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: Text(description, maxLines: 4,
+                                        overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ),
                                 ),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    TextButton(
-                                      onPressed:
-                                          canOpen && !pending.contains(item.id)
-                                          ? () => open(item)
-                                          : null,
-                                      child: Text('Open post'),
-                                    ),
                                     TextButton.icon(
                                       onPressed: pending.contains(item.id)
                                           ? null

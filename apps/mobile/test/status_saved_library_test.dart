@@ -107,7 +107,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open post').first);
+    await tester.tap(find.text('Hello Status').first);
     await tester.pumpAndSettle();
     expect(find.text('Hello Status'), findsOneWidget);
     active.value = false;
@@ -207,7 +207,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Hello Status'), findsOneWidget);
     expect(find.text('Approved original'), findsOneWidget);
-    await tester.tap(find.text('Open post').first);
+    await tester.tap(find.text('Hello Status').first);
     await tester.pumpAndSettle();
     expect(opened, contains(_postId));
     await tester.tap(find.text('Remove').first);
@@ -265,7 +265,7 @@ void main() {
     expect(find.text('Hello Status'), findsOneWidget);
     expect(find.text('Approved original'), findsOneWidget);
     expect(find.text('Watch video'), findsNothing);
-    expect(find.text('Open post'), findsNWidgets(2));
+    expect(find.text('Open post'), findsNothing);
   });
 
   testWidgets('account replacement discards an outstanding private read', (

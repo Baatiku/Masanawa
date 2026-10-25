@@ -1,9 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'feed_inline_media_card.dart';
+import 'status_post_author_header.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'saved_status_library_screen.dart';
@@ -17,7 +20,7 @@ class MasanaFeedScreen extends StatefulWidget {
     this.onMasanaProfile,
     this.onHumanProfile,
     this.onOpenMedia,
-    this.onReport,
+    this.authorDirectory = const {},
     this.enabled = true,
     this.audioPlaybackAvailable = false,
     this.authorScoped = false,
@@ -33,7 +36,7 @@ class MasanaFeedScreen extends StatefulWidget {
   final String accountKey;
   final ValueChanged<String>? onMasanaProfile, onHumanProfile;
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
-  final ValueChanged<String>? onReport;
+  final Map<String, AgentDirectoryEntry> authorDirectory;
   final bool enabled;
 
   /// Session owner installs a reactive guard on each pushed page. Switching
@@ -381,7 +384,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             onMedia: widget.onOpenMedia == null
                 ? null
                 : (id) => widget.onOpenMedia!(post, id),
-            onReport: widget.onReport,
+            authorDirectory: widget.authorDirectory,
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
@@ -401,6 +404,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           final saved = SavedStatusLibraryScreen(
             api: widget.api as SavedStatusLibraryApi,
             accountKey: account,
+            authorDirectory: widget.authorDirectory,
             isAccountCurrent: () =>
                 mounted && widget.enabled && widget.accountKey == account,
             openPost: (post) async {
@@ -424,6 +428,62 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     // Use the complete thread page so typing, scrolling and keyboard focus
     // are not lost in a height-constrained modal.
     openPost(post);
+  }
+
+  Future<void> sharePost(FeedPost post) async {
+    if (!widget.enabled || widget.accountKey.isEmpty) return;
+    try {
+      // A user-initiated public text excerpt. Do not export signed media URLs
+      // or invent a shareable deep link for a post that may lose visibility.
+      await SharePlus.instance.share(ShareParams(
+        text: '${post.displayAuthor}\n\n${post.body}',
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t('Sharing unavailable.', 'Ba a samun hanyar rabawa.')),
+      ));
+    }
+  }
+
+  Future<void> showReactions(BuildContext anchor, FeedPost post) async {
+    if (pendingActions.contains(post.id) || widget.api is! ReactionFeedApi) {
+      return;
+    }
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final target = anchor.findRenderObject() as RenderBox?;
+    if (overlay == null || target == null) return;
+    final origin = target.localToGlobal(Offset.zero, ancestor: overlay);
+    final rect = Rect.fromLTWH(origin.dx, origin.dy, target.size.width,
+        target.size.height);
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
+      items: [
+        PopupMenuItem<String>(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Builder(builder: (menuContext) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final kind in const ['like', 'love', 'care'])
+                TextButton(
+                  onPressed: () => Navigator.pop(menuContext, kind),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(FeedPost.reactionEmoji[kind]!,
+                          style: const TextStyle(fontSize: 23)),
+                      Text(kind[0].toUpperCase() + kind.substring(1)),
+                    ],
+                  ),
+                ),
+            ],
+          )),
+        ),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    await react(post, choice == post.currentReaction ? null : choice);
   }
 
   @override
@@ -585,86 +645,57 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                       return Card(
                         key: ValueKey(post.id),
                         margin: const EdgeInsets.symmetric(
-                          vertical: 5,
-                          horizontal: 8,
+                          vertical: 6,
+                          horizontal: 10,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => openPost(post),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 20,
-                                    child: Icon(
-                                      post.isHuman
-                                          ? Icons.person_outline
-                                          : Icons.smart_toy_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: TextButton(
-                                      onPressed: post.isHuman
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: StatusPostAuthorHeader(
+                                      post: post,
+                                      agent: widget.authorDirectory[post.authorMasanaId],
+                                      onProfile: post.isHuman
                                           ? (post.authorHandle == null ||
-                                                    widget.onHumanProfile ==
-                                                        null
-                                                ? null
-                                                : () => widget.onHumanProfile!(
+                                                    widget.onHumanProfile == null
+                                              ? null
+                                              : () => widget.onHumanProfile!(
                                                     post.authorHandle!,
                                                   ))
                                           : (widget.onMasanaProfile == null
-                                                ? null
-                                                : () => widget.onMasanaProfile!(
+                                              ? null
+                                              : () => widget.onMasanaProfile!(
                                                     post.authorMasanaId,
                                                   )),
-                                      child: Align(
-                                        alignment:
-                                            AlignmentDirectional.centerStart,
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              post.displayAuthor,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            Text(
-                                              post.isHuman
-                                                  ? 'Member'
-                                                  : 'Status',
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.labelSmall,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                    )),
+                                    IconButton(
+                                      tooltip: post.saved
+                                          ? t('Remove saved post', 'Cire ajiya')
+                                          : t('Save post', 'Ajiye labari'),
+                                      onPressed: pendingActions.contains(post.id)
+                                          ? null
+                                          : () => action(post, like: false),
+                                      icon: Icon(post.saved
+                                          ? Icons.bookmark_rounded
+                                          : Icons.bookmark_border_rounded),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text(
-                                  '${post.publishedAt.toLocal().year}-${post.publishedAt.toLocal().month.toString().padLeft(2, '0')}-${post.publishedAt.toLocal().day.toString().padLeft(2, '0')}',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                  ],
                                 ),
                               ),
                               if (post.body.isNotEmpty)
-                                Text(
-                                  post.body,
-                                  style: Theme.of(context).textTheme.bodyLarge,
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                                  child: Text(
+                                    post.body,
+                                    style: Theme.of(context).textTheme.bodyLarge,
+                                  ),
                                 ),
-                              Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: TextButton(
-                                  onPressed: () => openPost(post),
-                                  child: Text(t('Open post', 'Bude labari')),
-                                ),
-                              ),
                               if (post.kind == 'image' &&
                                   post.mediaIds.isNotEmpty &&
                                   widget.mediaApi != null)
@@ -742,100 +773,67 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     ).textTheme.bodySmall,
                                   ),
                                 ),
-                              Wrap(
-                                spacing: 4,
-                                children: [
-                                  TextButton.icon(
-                                    onPressed: pendingActions.contains(post.id)
-                                        ? null
-                                        : () => action(post, like: true),
-                                    icon: Icon(
-                                      post.liked
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
+                              const Divider(height: 1),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5),
+                                child: LayoutBuilder(builder: (context, constraints) {
+                                  final compact = constraints.maxWidth < 290 ||
+                                      MediaQuery.textScalerOf(context).scale(14) > 20;
+                                  final pending = pendingActions.contains(post.id);
+                                  Widget actionButton(String label, IconData icon,
+                                      VoidCallback? onPressed) => Expanded(
+                                    child: TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                                        minimumSize: const Size(0, 48),
+                                      ),
+                                      onPressed: onPressed,
+                                      icon: Icon(icon, size: 20),
+                                      label: compact
+                                          ? const SizedBox.shrink()
+                                          : Text(label, maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
                                     ),
-                                    label: Text('${post.likeCount}'),
-                                  ),
-                                  if (widget.api is ReactionFeedApi)
-                                    PopupMenuButton<String>(
-                                      tooltip: t(
-                                        'React to post',
-                                        'Martani ga labari',
-                                      ),
-                                      enabled: !pendingActions.contains(
-                                        post.id,
-                                      ),
-                                      icon: const Icon(
-                                        Icons.add_reaction_outlined,
-                                      ),
-                                      onSelected: (kind) => react(
-                                        post,
-                                        kind == 'clear' ||
-                                                kind == post.currentReaction
-                                            ? null
-                                            : kind,
-                                      ),
-                                      itemBuilder: (_) => [
-                                        for (final kind
-                                            in FeedPost.reactionKinds)
-                                          PopupMenuItem<String>(
-                                            value: kind,
-                                            child: Row(
-                                              children: [
-                                                Text(
-                                                  (FeedPost.reactionEmoji[kind] ??
-                                                          '') +
-                                                      '  ' +
-                                                      kind[0].toUpperCase() +
-                                                      kind.substring(1),
-                                                ),
-                                                if (kind ==
-                                                    post.currentReaction)
-                                                  const Icon(
-                                                    Icons.check,
-                                                    size: 18,
-                                                  ),
-                                              ],
-                                            ),
+                                  );
+                                  return Row(children: [
+                                    Builder(builder: (anchor) => Expanded(
+                                      child: GestureDetector(
+                                        onLongPress: widget.api is ReactionFeedApi && !pending
+                                            ? () => showReactions(anchor, post)
+                                            : null,
+                                        child: TextButton.icon(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                                            minimumSize: const Size(0, 48),
                                           ),
-                                        if (post.currentReaction != null)
-                                          PopupMenuItem<String>(
-                                            value: 'clear',
-                                            child: Text(
-                                              t(
-                                                'Remove reaction',
-                                                'Cire martani',
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  TextButton.icon(
-                                    onPressed: () => openComments(post),
-                                    icon: const Icon(
-                                      Icons.mode_comment_outlined,
-                                    ),
-                                    label: Text('${post.commentCount}'),
-                                  ),
-                                  IconButton(
-                                    tooltip: t('Save', 'Ajiye'),
-                                    onPressed: pendingActions.contains(post.id)
-                                        ? null
-                                        : () => action(post, like: false),
-                                    icon: Icon(
-                                      post.saved
-                                          ? Icons.bookmark
-                                          : Icons.bookmark_border,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: t('Report', 'Kai rahoto'),
-                                    onPressed: widget.onReport == null
-                                        ? null
-                                        : () => widget.onReport!(post.id),
-                                    icon: const Icon(Icons.flag_outlined),
-                                  ),
-                                ],
+                                          onPressed: pending ? null
+                                              : () => action(post, like: true),
+                                          icon: Icon(post.currentReaction == 'like'
+                                              ? Icons.thumb_up_rounded
+                                              : Icons.thumb_up_outlined, size: 20),
+                                          label: compact ? const SizedBox.shrink()
+                                              : Text(t('Like', 'So'), maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ),
+                                    )),
+                                    if (widget.api is ReactionFeedApi)
+                                      Builder(builder: (anchor) => IconButton(
+                                        tooltip: t('React to post', 'Martani ga labari'),
+                                        onPressed: pending ? null
+                                            : () => showReactions(anchor, post),
+                                        icon: const Icon(Icons.add_reaction_outlined, size: 20),
+                                        constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
+                                        padding: EdgeInsets.zero,
+                                      )),
+                                    actionButton(t('Comment', 'Sharhi'),
+                                        Icons.mode_comment_outlined,
+                                        () => openComments(post)),
+                                    actionButton(t('Share', 'Raba'),
+                                        Icons.share_outlined,
+                                        () => sharePost(post)),
+                                  ]);
+                                }),
                               ),
                             ],
                           ),
