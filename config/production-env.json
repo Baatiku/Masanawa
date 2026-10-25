@@ -2,13 +2,6 @@
   "schemaVersion": 1,
   "variables": [
     {
-      "name": "MASANAWA_CREATOR_GENERATION_MODEL",
-      "owner": "gateway/creator-agents",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional creator profile generation model; falls back to MASANAWA_GEMINI_MODEL, then gemini-2.5-flash."
-    },
-    {
       "name": "CREDENTIAL_ENCRYPTION_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",
@@ -289,6 +282,13 @@
       "description": "Production configuration for MASANAWA_BOOTSTRAP_PLATFORM_AGENTS."
     },
     {
+      "name": "MASANAWA_CREATOR_GENERATION_MODEL",
+      "owner": "gateway/creator-agents",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional creator profile generation model; falls back to MASANAWA_GEMINI_MODEL, then gemini-2.5-flash."
+    },
+    {
       "name": "MASANAWA_DATABASE_URL",
       "owner": "security/bootstrap",
       "classification": "secret",
@@ -338,6 +338,20 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Gateway listen port override."
+    },
+    {
+      "name": "MASANAWA_GB_DATA_APPROVALS_JSON",
+      "owner": "gateway/gb-data",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional operator-reviewed JSON allowlist of Flutterwave biller/item IDs, exact verified whole-GB allowance, network, validity, NGN amount, evidence and expiry. Required only when GB data catalogue is explicitly enabled. Never a provider credential."
+    },
+    {
+      "name": "MASANAWA_GB_DATA_CATALOG_ENABLED",
+      "owner": "gateway/gb-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Disabled by default. Set true only after verified operator mapping and credentialed live Flutterwave Bills read are configured in Masana-lite scope; does not enable purchases."
     },
     {
       "name": "MASANAWA_GEMINI_API_KEY",
@@ -522,11 +536,25 @@
       "description": "Canonical platform tenant identity."
     },
     {
+      "name": "MASANAWA_PRODUCT_SCOPE",
+      "owner": "gateway/product",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit staged route policy: legacy (default) or masana-lite (retires human, group, P2P, crypto and non-data billing endpoints); rollout requires separate compatibility verification."
+    },
+    {
       "name": "MASANAWA_PUBLIC_BASE_URL",
       "owner": "gateway",
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
+    },
+    {
+      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
       "name": "MASANAWA_ROOMS_MEMBERSHIP_ENABLED",
@@ -537,13 +565,6 @@
     },
     {
       "name": "MASANAWA_ROOMS_TEACHER_WORKER_ID",
-      "owner": "services/worker",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
-      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
       "owner": "services/worker",
       "classification": "public",
       "requiredIn": [],
@@ -874,13 +895,6 @@
       "description": "Production configuration for NOWPAYMENTS_API_KEY."
     },
     {
-      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
-    },
-    {
       "name": "NOWPAYMENTS_CONVERSION_ENABLED",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -893,6 +907,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_CONVERSION_PROVIDER_CODES."
+    },
+    {
+      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_CUSTODY_ENABLED",
@@ -944,13 +965,6 @@
       "description": "Production configuration for NOWPAYMENTS_IPN_SECRET."
     },
     {
-      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
-    },
-    {
       "name": "NOWPAYMENTS_PAYOUT_2FA_READY",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -998,6 +1012,13 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_PAYOUT_VERIFICATION_CODE."
+    },
+    {
+      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_RELAY_URL",
