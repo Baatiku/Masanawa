@@ -30,7 +30,7 @@ void main() {
         isNull);
     await tester.enterText(find.byType(TextField), 'not a phone');
     await tester.pump();
-    expect(find.text('Enter a valid mobile number'), findsOneWidget);
+    expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
