@@ -217,7 +217,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               prefixIcon: const Icon(Icons.phone_android_outlined),
               isDense: true,
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: colors.brand, width: 2),
+                borderSide: BorderSide(color: colors.brandStrong, width: 2),
                 borderRadius: BorderRadius.circular(13),
               ),
               errorText: phone.isNotEmpty && !validPhone
@@ -327,7 +327,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Bundle review', style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700, color: colors.brand)),
+                    fontWeight: FontWeight.w700, color: colors.brandStrong)),
                   Text('${_quote!.bundle.network} · '
                       '${_quote!.bundle.allowanceGb} GB'),
                   Text('Cost: ${groupedMb(_quote!.bundle.costMb)} MB'),
@@ -419,7 +419,7 @@ class _SelectableDataBundle extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: selected ? colors.brand : colors.structuralBorder,
+            color: selected ? colors.brandStrong : colors.structuralBorder,
             width: selected ? 2 : 1,
           ),
         ),
@@ -440,7 +440,7 @@ class _SelectableDataBundle extends StatelessWidget {
                       ? Icons.check_circle_rounded
                       : Icons.circle_outlined,
                     size: 16,
-                    color: selected ? colors.brand : colors.structuralBorder),
+                    color: selected ? colors.brandStrong : colors.structuralBorder),
                 ]),
                 const SizedBox(height: 7),
                 Text('${bundle.validityDays} ${bundle.validityDays == 1 ? 'day' : 'days'}',
@@ -449,7 +449,7 @@ class _SelectableDataBundle extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text('${groupedMb(bundle.costMb)} MB', textAlign: TextAlign.center,
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700, color: colors.brand)),
+                    fontWeight: FontWeight.w700, color: colors.brandStrong)),
               ],
             ),
           ),
