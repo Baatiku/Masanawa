@@ -184,6 +184,9 @@ void main() {
     await tester.tap(find.text('Retry transaction'));
     await tester.pump();
     (container.read(sessionProvider.notifier) as _Session).switchAccount();
+    // The new account cannot read the old actor's entry. A resolved old HTTP
+    // request is still delivered below to exercise the epoch guard.
+    fake.fail=true;
     await tester.pump();
     fake.pendingDetail!.complete(item('mb:1',150));
     await tester.pumpAndSettle();
