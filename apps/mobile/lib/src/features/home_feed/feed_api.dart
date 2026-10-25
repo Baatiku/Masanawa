@@ -1,7 +1,5 @@
 import 'package:dio/dio.dart';
 
-import '../videos/video_models.dart';
-
 /// Typed Status authors preserve the legacy Masana projection without
 /// misrouting human posts to Masana profiles.
 class FeedPost {
@@ -246,21 +244,6 @@ abstract class FeedApi {
   Future<List<FeedComment>> comments(String postId);
 }
 
-abstract class HumanStatusPublisher {
-  /// Public text only; the Gateway derives human owner from the current session.
-  Future<FeedPost> publishHumanText(String body, String idempotencyKey);
-}
-
-/// Own human posts only; Gateway independently verifies ownership and visibility.
-abstract class HumanPostManager {
-  Future<FeedPost> editHumanText(
-    String postId,
-    String expectedBody,
-    String body,
-  );
-  Future<void> removeHumanPost(String postId);
-}
-
 abstract class ReactionFeedApi {
   /// One authoritative reaction per signed-in user and post; null clears it.
   Future<void> react(String postId, String? kind);
@@ -278,13 +261,7 @@ abstract class SearchFeedApi {
 
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
 class DioFeedApi
-    implements
-        FeedApi,
-        SearchFeedApi,
-        ReactionFeedApi,
-        HumanStatusPublisher,
-        SavedStatusLibraryApi,
-        HumanPostManager {
+    implements FeedApi, SearchFeedApi, ReactionFeedApi, SavedStatusLibraryApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -350,38 +327,6 @@ class DioFeedApi
   }
 
   @override
-  Future<FeedPost> publishHumanText(String body, String idempotencyKey) async {
-    final r = await _dio.post<Map<String, dynamic>>(
-      '/v1/posts/human',
-      data: {'body': body, 'audience': 'public'},
-      options: await _options(key: idempotencyKey, authRequired: true),
-    );
-    return FeedPost.fromJson(r.data ?? const <String, dynamic>{});
-  }
-
-  @override
-  Future<FeedPost> editHumanText(
-    String id,
-    String expectedBody,
-    String body,
-  ) async {
-    final result = await _dio.patch<Map<String, dynamic>>(
-      '/v1/posts/' + Uri.encodeComponent(id) + '/human',
-      data: {'expectedBody': expectedBody, 'body': body},
-      options: await _options(authRequired: true),
-    );
-    return FeedPost.fromJson(result.data ?? const <String, dynamic>{});
-  }
-
-  @override
-  Future<void> removeHumanPost(String id) async {
-    await _dio.delete<void>(
-      '/v1/posts/' + Uri.encodeComponent(id) + '/human',
-      options: await _options(authRequired: true),
-    );
-  }
-
-  @override
   Future<void> save(String id, bool enabled) async {
     await _dio.put<void>(
       '/v1/posts/${Uri.encodeComponent(id)}/save',
@@ -421,19 +366,7 @@ class DioFeedApi
   }
 
   @override
-  Future<void> removeSaved(SavedStatusItem item) async {
-    if (item.isPost) {
-      await save(item.id, false);
-    } else if (item.video != null) {
-      await _dio.put<void>(
-        '/v1/videos/${Uri.encodeComponent(item.id)}/save',
-        data: {'enabled': false},
-        options: await _options(authRequired: true),
-      );
-    } else {
-      throw const FormatException('Unsupported saved item');
-    }
-  }
+  Future<void> removeSaved(SavedStatusItem item) => save(item.id, false);
 
   /// Reuse J06's authenticated Dio; never construct a second transport or session.
   Future<FeedPost> detail(String id) async {
@@ -479,20 +412,12 @@ class DioFeedApi
   }
 }
 
-/// The existing /v1/saved library combines tenant-authorized Status posts
-/// and currently approved provider videos. A missing/invalid projection fails
-/// closed instead of displaying fabricated or stale media.
+/// Account-scoped saved platform Masana posts. Retired bookmarks never mount media.
 class SavedStatusItem {
-  const SavedStatusItem({
-    required this.id,
-    required this.savedAt,
-    this.post,
-    this.video,
-  });
+  const SavedStatusItem({required this.id, required this.savedAt, this.post});
   final String id;
   final DateTime savedAt;
   final FeedPost? post;
-  final ExternalVideo? video;
   bool get isPost => post != null;
 
   factory SavedStatusItem.fromJson(Map<String, dynamic> data) {
@@ -511,13 +436,6 @@ class SavedStatusItem {
       if (post.id != id) throw const FormatException('Mismatched saved post');
       return SavedStatusItem(id: id, savedAt: at, post: post);
     }
-    if (kind == 'video' && data['video'] is Map) {
-      final video = ExternalVideo.fromJson(
-        Map<String, dynamic>.from(data['video'] as Map),
-      );
-      if (video.id != id) throw const FormatException('Mismatched saved video');
-      return SavedStatusItem(id: id, savedAt: at, video: video);
-    }
     throw const FormatException('Unsupported saved item');
   }
 }
@@ -534,6 +452,13 @@ class SavedStatusPage {
     }
     return SavedStatusPage(
       raw
+          .where((item) {
+            if (item is! Map) return true;
+            if (item['kind'] == 'video') return false;
+            final post = item['post'];
+            final author = post is Map ? post['author'] : null;
+            return author is! Map || author['type'] != 'human';
+          })
           .map(
             (item) => SavedStatusItem.fromJson(
               Map<String, dynamic>.from(item as Map),

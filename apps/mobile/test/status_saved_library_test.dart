@@ -9,7 +9,7 @@ import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
 import 'package:masanawa/src/features/home_feed/saved_status_library_screen.dart';
 
 const _postId = '381026c2-9d56-47b1-b73d-1784e24e41e2';
-const _videoId = 'd2e54732-156c-47de-992d-bcc7a913579f';
+const _secondPostId = 'd2e54732-156c-47de-992d-bcc7a913579f';
 
 Map<String, dynamic> savedPost() => {
   'kind': 'post',
@@ -18,7 +18,7 @@ Map<String, dynamic> savedPost() => {
   'post': {
     'id': _postId,
     'author': {
-      'type': 'human',
+      'type': 'masana',
       'id': 'fan',
       'handle': 'amina',
       'displayName': 'Amina',
@@ -33,25 +33,20 @@ Map<String, dynamic> savedPost() => {
     'viewerSaved': true,
   },
 };
-Map<String, dynamic> savedVideo() => {
-  'kind': 'video',
-  'id': _videoId,
-  'savedAt': '2026-10-23T09:00:00Z',
-  'video': {
-    'id': _videoId,
-    'provider': 'youtube',
-    'sourceUrl': 'https://www.youtube.com/watch?v=U2F7id123ab',
-    'title': 'Approved original',
-    'channelName': 'Publisher',
-    'reviewState': 'approved',
-    'verifiedAt': '2026-10-23T08:00:00Z',
+Map<String, dynamic> savedSecondPost() => {
+  ...savedPost(),
+  'id': _secondPostId,
+  'post': {
+    ...(savedPost()['post'] as Map),
+    'id': _secondPostId,
+    'body': 'Approved original',
   },
 };
 
 class SavedStub implements SavedStatusLibraryApi {
   SavedStatusPage page = SavedStatusPage([
     SavedStatusItem.fromJson(savedPost()),
-    SavedStatusItem.fromJson(savedVideo()),
+    SavedStatusItem.fromJson(savedSecondPost()),
   ], null);
   Future<SavedStatusPage> Function(String?)? loader;
   Future<void> Function(SavedStatusItem)? remover;
@@ -90,18 +85,29 @@ class FeedStub extends SavedStub implements FeedApi {
 }
 
 void main() {
-  testWidgets('pushed post detail is replaced on live account revocation', (tester) async {
+  testWidgets('pushed post detail is replaced on live account revocation', (
+    tester,
+  ) async {
     final active = ValueNotifier<bool>(true);
     Widget guard(Widget content) => ValueListenableBuilder<bool>(
       valueListenable: active,
-      builder: (_, allowed, __) => allowed ? content : const Scaffold(
-        body: Center(child: Text('Account access changed'))),
+      builder: (_, allowed, __) => allowed
+          ? content
+          : const Scaffold(body: Center(child: Text('Account access changed'))),
     );
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
-      api: FeedStub(), accountKey: 'fan', wrapAccountRoute: guard,
-    ))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MasanaFeedScreen(
+            api: FeedStub(),
+            accountKey: 'fan',
+            wrapAccountRoute: guard,
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open post'));
+    await tester.tap(find.text('Open post').first);
     await tester.pumpAndSettle();
     expect(find.text('Hello Status'), findsOneWidget);
     active.value = false;
@@ -115,48 +121,75 @@ void main() {
     active.dispose();
   });
 
-  testWidgets('pushed Saved library does not leak old account posts on switch', (tester) async {
-    final active = ValueNotifier<bool>(true);
-    Widget guard(Widget content) => ValueListenableBuilder<bool>(
-      valueListenable: active,
-      builder: (_, allowed, __) => allowed ? content : const Scaffold(
-        body: Center(child: Text('Account access changed'))),
-    );
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
-      api: FeedStub(), accountKey: 'fan', wrapAccountRoute: guard,
-    ))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Saved'));
-    await tester.pumpAndSettle();
-    expect(find.text('Approved original'), findsOneWidget);
-    active.value = false;
-    await tester.pumpAndSettle();
-    expect(find.text('Approved original'), findsNothing);
-    expect(find.text('Hello Status'), findsNothing);
-    expect(find.text('Account access changed'), findsOneWidget);
-    expect(find.byType(SavedStatusLibraryScreen), findsNothing);
-    active.dispose();
-  });
+  testWidgets(
+    'pushed Saved library does not leak old account posts on switch',
+    (tester) async {
+      final active = ValueNotifier<bool>(true);
+      Widget guard(Widget content) => ValueListenableBuilder<bool>(
+        valueListenable: active,
+        builder: (_, allowed, __) => allowed
+            ? content
+            : const Scaffold(
+                body: Center(child: Text('Account access changed')),
+              ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MasanaFeedScreen(
+              api: FeedStub(),
+              accountKey: 'fan',
+              wrapAccountRoute: guard,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Saved'));
+      await tester.pumpAndSettle();
+      expect(find.text('Approved original'), findsOneWidget);
+      active.value = false;
+      await tester.pumpAndSettle();
+      expect(find.text('Approved original'), findsNothing);
+      expect(find.text('Hello Status'), findsNothing);
+      expect(find.text('Account access changed'), findsOneWidget);
+      expect(find.byType(SavedStatusLibraryScreen), findsNothing);
+      active.dispose();
+    },
+  );
 
-  test('mixed collection validates author and approved video projection', () {
+  test('saved collection excludes retired video and human bookmarks', () {
+    final human = savedPost();
+    human['post'] = {
+      ...(human['post'] as Map),
+      'author': {'type': 'human', 'id': 'fan', 'handle': 'amina'},
+    };
     final page = SavedStatusPage.fromJson({
-      'items': [savedPost(), savedVideo()],
+      'items': [
+        savedPost(),
+        {'kind': 'video'},
+        human,
+      ],
       'nextCursor': 'opaque',
     });
-    expect(page.items, hasLength(2));
-    expect(page.items.first.post!.displayAuthor, 'Amina');
-    expect(page.items.last.video!.provider, 'youtube');
+    expect(page.items, hasLength(1));
+    expect(page.items.single.post!.displayAuthor, 'Amina');
     expect(page.nextCursor, 'opaque');
-    final invalid = savedVideo();
-    invalid['video'] = {...(invalid['video'] as Map), 'reviewState': 'pending'};
-    expect(() => SavedStatusItem.fromJson(invalid), throwsFormatException);
     expect(
-      () => SavedStatusItem.fromJson({...savedPost(), 'id': _videoId}),
+      () => SavedStatusItem.fromJson({
+        'kind': 'video',
+        'id': _secondPostId,
+        'savedAt': '2026-10-23T09:00:00Z',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => SavedStatusItem.fromJson({...savedPost(), 'id': _secondPostId}),
       throwsFormatException,
     );
   });
 
-  testWidgets('saved library reads, opens both kinds and confirms removal', (
+  testWidgets('saved library reads platform posts and confirms removal', (
     tester,
   ) async {
     final api = SavedStub();
@@ -168,20 +201,15 @@ void main() {
           accountKey: 'fan',
           isAccountCurrent: () => true,
           openPost: (post) async => opened.add(post.id),
-          openVideo: (video) async => opened.add(video.id),
         ),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Hello Status'), findsOneWidget);
     expect(find.text('Approved original'), findsOneWidget);
-    await tester.tap(find.text('Open post'));
+    await tester.tap(find.text('Open post').first);
     await tester.pumpAndSettle();
     expect(opened, contains(_postId));
-    await tester.tap(find.text('Watch video'));
-    await tester.pumpAndSettle();
-    expect(opened, contains(_videoId));
-
     await tester.tap(find.text('Remove').first);
     await tester.pumpAndSettle();
     expect(api.removals, isEmpty);
@@ -213,7 +241,7 @@ void main() {
         return Future.value(
           SavedStatusPage([
             SavedStatusItem.fromJson(savedPost()),
-            SavedStatusItem.fromJson(savedVideo()),
+            SavedStatusItem.fromJson(savedSecondPost()),
           ], null),
         );
       }
@@ -236,13 +264,8 @@ void main() {
     expect(api.cursors, [null, 'opaque-page']);
     expect(find.text('Hello Status'), findsOneWidget);
     expect(find.text('Approved original'), findsOneWidget);
-    expect(find.text('Watch video'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Watch video'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('Watch video'), findsNothing);
+    expect(find.text('Open post'), findsNWidgets(2));
   });
 
   testWidgets('account replacement discards an outstanding private read', (

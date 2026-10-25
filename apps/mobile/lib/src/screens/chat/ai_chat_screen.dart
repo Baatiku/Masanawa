@@ -17,7 +17,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mime/mime.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 
@@ -3870,6 +3869,7 @@ class _AttachmentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (attachment.kind == 'video') return const Text('Retired video attachment');
     if (attachment.path.startsWith('masanawa-remote|')) {
       return _RemoteChatMediaTile(attachment: attachment);
     }
@@ -3883,8 +3883,6 @@ class _AttachmentView extends StatelessWidget {
       case 'voice':
       case 'audio':
         return _VoiceBubble(attachment: attachment);
-      case 'video':
-        return _VideoAttachment(attachment: attachment);
       default:
         return _DocTile(attachment: attachment);
     }
@@ -4087,98 +4085,6 @@ class _ImageGalleryViewerState extends State<_ImageGalleryViewer> {
           ),
         ),
       );
-}
-
-class _VideoAttachment extends StatefulWidget {
-  const _VideoAttachment({required this.attachment});
-  final ChatAttachment attachment;
-
-  @override
-  State<_VideoAttachment> createState() => _VideoAttachmentState();
-}
-
-class _VideoAttachmentState extends State<_VideoAttachment> {
-  VideoPlayerController? _controller;
-  bool _failed = false;
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _toggle() async {
-    if (LiveCallForeground.active) return;
-    try {
-      final controller = _controller ??= VideoPlayerController.file(
-        File(widget.attachment.path),
-      );
-      if (!controller.value.isInitialized) {
-        await controller.initialize();
-      }
-      if (controller.value.isPlaying) {
-        await controller.pause();
-      } else {
-        await controller.play();
-      }
-      if (mounted) setState(() {});
-    } catch (_) {
-      if (mounted) setState(() => _failed = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final u = context.masanawa;
-    final controller = _controller;
-    final initialized = controller?.value.isInitialized ?? false;
-    return GestureDetector(
-      onTap: _toggle,
-      child: Container(
-        width: 230,
-        height: 140,
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (initialized)
-              FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: controller!.value.size.width,
-                  height: controller.value.size.height,
-                  child: VideoPlayer(controller),
-                ),
-              )
-            else
-              Center(
-                child: _failed
-                    ? const Icon(Icons.error_outline, color: Colors.white)
-                    : Icon(
-                        Icons.play_circle_fill,
-                        color: u.surfaceCard,
-                        size: 48,
-                      ),
-              ),
-            if (initialized)
-              Center(
-                child: Icon(
-                  controller!.value.isPlaying
-                      ? Icons.pause_circle_filled
-                      : Icons.play_circle_fill,
-                  color: Colors.white70,
-                  size: 46,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _DocTile extends StatelessWidget {

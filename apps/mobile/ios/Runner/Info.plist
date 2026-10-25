@@ -44,7 +44,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Masanawa needs microphone access so you can speak in live Talks and record voice messages.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Masanawa accesses photos you choose to share or scan for payment-request QR codes.</string>
+	<string>Masanawa accesses photos you choose for a Masana conversation.</string>
 	<!-- Location intentionally omitted: no shell route uses it (matches Android).
 	     Re-add NSLocation* keys only with an agent DeviceCapability + runtime prompt. -->
 		<key>UIApplicationSceneManifest</key>
