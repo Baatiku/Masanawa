@@ -1,11 +1,11 @@
 import {randomUUID} from "node:crypto";
 import type {FastifyInstance} from "fastify";
-import {verifyBillstackWebhook,type BillstackReceivedPayment} from "./billstack_provider.js";
+import {verifyBillstackWebhook,type BillstackReceivedPayment,type BillstackBankId} from "./billstack_provider.js";
 
 export interface BillstackFundingActor {tenantId:string;userId:string}
 export interface BillstackAccount {
  state:"pending"|"assigned"|"suspended";
- reference:string;accountNumber:string|null;accountName:string|null;bankName:string|null;bankId:"9PSB";
+ reference:string;accountNumber:string|null;accountName:string|null;bankName:string|null;bankId:BillstackBankId;
 }
 export interface BillstackFundingPorts {
  authorize:(header:string|undefined)=>Promise<BillstackFundingActor>;
@@ -17,9 +17,9 @@ export interface BillstackFundingPorts {
  completeApplicant?:(actor:BillstackFundingActor,details:{firstName:string;lastName:string;contactPhone:string})=>Promise<void>;
  start:(actor:BillstackFundingActor,reference:string)=>Promise<{account:BillstackAccount;created:boolean}>;
  create:(input:{reference:string;email:string;phone:string;firstName:string;lastName:string})=>
-   Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB"}>;
+   Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:BillstackBankId}>;
  finalize:(actor:BillstackFundingActor,reference:string,account:{
-  reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB";
+  reference:string;accountNumber:string;accountName:string;bankName:string;bankId:BillstackBankId;
  })=>Promise<BillstackAccount>;
  credit:(payment:BillstackReceivedPayment)=>Promise<{
   state:"credited"|"duplicate";creditedKobo:number;eventId:string;
@@ -39,7 +39,7 @@ const safe=(account:BillstackAccount|null)=>{
  // Never invent transfer instructions when provider response is pending.
  if(account.state!=="assigned")return {state:account.state};
  if(!account.accountNumber||!account.accountName||!account.bankName)throw new Error("billstack.account_not_ready");
- return {state:"assigned" as const, bankId:"9PSB" as const,bankName:account.bankName,
+ return {state:"assigned" as const, bankId:account.bankId,bankName:account.bankName,
   accountNumber:account.accountNumber,accountName:account.accountName};
 };
 export function registerBillstackFundingRoutes(app:FastifyInstance,ports:BillstackFundingPorts) {

@@ -4,7 +4,7 @@ import { withTransaction } from "../transaction.js";
 export type GbBillstackActor = Readonly<{tenantId:string;userId:string}>;
 export type GbBillstackAccount = Readonly<{
   state:"pending"|"assigned"|"suspended";
-  reference:string;accountNumber:string|null;accountName:string|null;bankName:string|null;bankId:"9PSB";
+  reference:string;accountNumber:string|null;accountName:string|null;bankName:string|null;bankId:"9PSB"|"PALMPAY";
 }>;
 export type GbBillstackApplicant = Readonly<{
   reference:string;email:string;phone:string;firstName:string;lastName:string;
@@ -28,10 +28,11 @@ function mapped(row:Record<string,unknown>):GbBillstackAccount {
   if(state!=="pending"&&state!=="assigned"&&state!=="suspended")throw new Error("billstack.invalid_account_state");
   const accountNumber=row.account_number==null?null:String(row.account_number);
   if(state==="assigned"&&(!accountNumber||!(/^\d{10}$/.test(accountNumber))))throw new Error("billstack.invalid_account");
+  if(row.bank_id!=="9PSB"&&row.bank_id!=="PALMPAY")throw new Error("billstack.invalid_bank");
   return {
     state, reference:String(row.merchant_reference),
     accountNumber,accountName:row.account_name==null?null:String(row.account_name),
-    bankName:row.bank_name==null?null:String(row.bank_name), bankId:"9PSB",
+    bankName:row.bank_name==null?null:String(row.bank_name), bankId:row.bank_id,
   };
 }
 async function retryFunding<T>(run:()=>Promise<T>):Promise<T>{
@@ -45,7 +46,7 @@ export function createGbBillstackRepository(pool:Pool) {
     async read(actor:GbBillstackActor):Promise<GbBillstackAccount|null> {
       validate(actor);
       const rows=await pool.query(
-        "SELECT merchant_reference,account_number,account_name,bank_name,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2",
+        "SELECT merchant_reference,account_number,account_name,bank_name,bank_id,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2",
         [actor.tenantId,actor.userId],
       );
       return rows.rows[0]?mapped(rows.rows[0]):null;
@@ -55,7 +56,7 @@ export function createGbBillstackRepository(pool:Pool) {
       validate(actor);if(!id(reference))throw new TypeError("Invalid account reference");
       return withTransaction(pool,async client=>{
         const current=await client.query(
-          "SELECT merchant_reference,account_number,account_name,bank_name,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2 FOR UPDATE",
+          "SELECT merchant_reference,account_number,account_name,bank_name,bank_id,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2 FOR UPDATE",
           [actor.tenantId,actor.userId],
         );
         if(current.rows[0])return {account:mapped(current.rows[0]),created:false};
@@ -64,12 +65,12 @@ export function createGbBillstackRepository(pool:Pool) {
           [actor.tenantId,actor.userId],
         );
         const inserted=await client.query(
-          "INSERT INTO gb_wallet.billstack_accounts(tenant_id,account_id,merchant_reference) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING merchant_reference,account_number,account_name,bank_name,status",
+          "INSERT INTO gb_wallet.billstack_accounts(tenant_id,account_id,merchant_reference) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING merchant_reference,account_number,account_name,bank_name,bank_id,status",
           [actor.tenantId,actor.userId,reference],
         );
         if(inserted.rows[0])return {account:mapped(inserted.rows[0]),created:true};
         const same=await client.query(
-          "SELECT merchant_reference,account_number,account_name,bank_name,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2",
+          "SELECT merchant_reference,account_number,account_name,bank_name,bank_id,status FROM gb_wallet.billstack_accounts WHERE tenant_id=$1 AND account_id=$2",
           [actor.tenantId,actor.userId],
         );
         if(same.rows[0])return {account:mapped(same.rows[0]),created:false};
@@ -77,17 +78,17 @@ export function createGbBillstackRepository(pool:Pool) {
       });
     },
     async finalize(actor:GbBillstackActor,merchantReference:string,output:{
-      reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB";
+      reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB"|"PALMPAY";
     }):Promise<GbBillstackAccount> {
-      validate(actor);if(!id(merchantReference)||output.bankId!=="9PSB"||
+      validate(actor);if(!id(merchantReference)||!(["9PSB","PALMPAY"].includes(output.bankId))||
         !/^\d{10}$/.test(output.accountNumber))throw new TypeError("Invalid provider confirmation");
       const result=await pool.query(
         ["UPDATE gb_wallet.billstack_accounts SET provider_reference=$4,account_number=$5,",
-         "account_name=$6,bank_name=$7,status='assigned',assigned_at=now()",
+         "account_name=$6,bank_name=$7,bank_id=$8,status='assigned',assigned_at=now()",
          "WHERE tenant_id=$1 AND account_id=$2 AND merchant_reference=$3 AND status='pending'",
-         "RETURNING merchant_reference,account_number,account_name,bank_name,status"].join(" "),
+         "RETURNING merchant_reference,account_number,account_name,bank_name,bank_id,status"].join(" "),
         [actor.tenantId,actor.userId,merchantReference,output.reference,
-         output.accountNumber,output.accountName,output.bankName],
+         output.accountNumber,output.accountName,output.bankName,output.bankId],
       );
       if(!result.rows[0])throw new Error("billstack.assignment_not_confirmed");
       return mapped(result.rows[0]);

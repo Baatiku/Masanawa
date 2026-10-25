@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 const endpoint = "https://api.billstack.co/v2/thirdparty/generateVirtualAccount/";
 export interface BillstackReservedAccount {
-  reference: string; accountNumber: string; accountName: string; bankName: string; bankId: "9PSB";
+  reference: string; accountNumber: string; accountName: string; bankName: string; bankId: BillstackBankId;
 }
+export type BillstackBankId = "9PSB" | "PALMPAY";
 export interface BillstackAccountApplicant {
   reference: string; email: string; phone: string; firstName: string; lastName: string;
 }
@@ -21,8 +22,10 @@ function text(x:unknown, min=1,max=160):string {
   return x;
 }
 /** Official v2 reserved account contract; current website also advertises one-time checkout accounts. */
-export function createBillstack9PsbClient(input:{secretKey:string; fetcher?:Fetcher}) {
+export function createBillstackReservedAccountClient(input:{secretKey:string; bankId?:BillstackBankId; fetcher?:Fetcher}) {
   if(typeof input.secretKey!=="string"||input.secretKey.trim().length<12) throw new TypeError("Missing Billstack server secret");
+  const bankId=input.bankId??"9PSB";
+  if(bankId!=="9PSB"&&bankId!=="PALMPAY")throw new TypeError("Unsupported Billstack bank");
   const fetcher=input.fetcher??fetch;
   return {
     async reserve(applicant:BillstackAccountApplicant):Promise<BillstackReservedAccount> {
@@ -38,7 +41,7 @@ export function createBillstack9PsbClient(input:{secretKey:string; fetcher?:Fetc
         response=await fetcher(endpoint,{
           method:"POST",
           headers:{authorization:"Bearer "+input.secretKey,"content-type":"application/json",accept:"application/json"},
-          body:JSON.stringify({...applicant,bank:"9PSB"}),
+          body:JSON.stringify({...applicant,bank:bankId}),
           signal:AbortSignal.timeout(15000),redirect:"error",
         });
       } catch { throw new BillstackProviderError("outcome_unknown"); }
@@ -50,13 +53,13 @@ export function createBillstack9PsbClient(input:{secretKey:string; fetcher?:Fetc
       const data=object(envelope.data);
       if(!Array.isArray(data.account)||data.account.length!==1)throw new BillstackProviderError("invalid_response");
       const account=object(data.account[0]);
-      if(text(account.bank_id)!=="9PSB")throw new BillstackProviderError("wrong_bank");
+      if(text(account.bank_id)!==bankId)throw new BillstackProviderError("wrong_bank");
       const accountNumber=text(account.account_number,10,10);
       if(!/^\d{10}$/.test(accountNumber))throw new BillstackProviderError("invalid_response");
       return {
         reference:text(data.reference,1,160),accountNumber,
         accountName:text(account.account_name,1,160),
-        bankName:text(account.bank_name,1,120),bankId:"9PSB" as const,
+        bankName:text(account.bank_name,1,120),bankId,
       };
     },
   };
