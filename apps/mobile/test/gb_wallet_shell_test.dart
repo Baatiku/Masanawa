@@ -49,8 +49,10 @@ void main() {
     expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(find.text('Send'), findsOneWidget);
     expect(find.text('Request'), findsOneWidget);
+    await tester.ensureVisible(find.text('Quick actions'));
+    await tester.pump();
     final redeem = tester.getCenter(find.text('Redeem'));
-    final add = tester.getCenter(find.text('Add data'));
+    final add = tester.getCenter(find.text('Add data').last);
     final request = tester.getCenter(find.text('Request'));
     final send = tester.getCenter(find.text('Send'));
     expect(redeem.dy, add.dy);
@@ -135,9 +137,13 @@ void main() {
       child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
     ));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byType(DropdownButtonFormField<String>), 150, scrollable: find.byType(Scrollable).first);
     expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
     expect(find.text('2 GB'), findsNothing);
     await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Monthly'));
+    await tester.tap(find.text('Monthly'));
     await tester.pump();
     expect(find.text('2 GB'), findsOneWidget);
     expect(find.textContaining('2,000 MB'), findsOneWidget);
@@ -145,6 +151,7 @@ void main() {
       find.widgetWithText(FilledButton, 'Review bundle'));
     expect(action.onPressed, isNull);
     expect(find.textContaining('Suggested: MTN'), findsOneWidget);
+    await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
     await tester.pump();
     expect(tester.widget<FilledButton>(
@@ -168,13 +175,18 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Review bundle'), 150, scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
         isNull);
+    await tester.scrollUntilVisible(find.byType(TextField), -150, scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.byType(TextField), 'not a phone');
     await tester.pump();
     expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
-    await tester.tap(find.text('MTN'));
-    await tester.pump();
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MTN').last);
+    await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -198,8 +210,14 @@ void main() {
       child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
     ));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byType(DropdownButtonFormField<String>), 150, scrollable: find.byType(Scrollable).first);
     expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('data-network-AIRTEL')));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Airtel').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Monthly'));
+    await tester.tap(find.text('Monthly'));
     await tester.pump();
     expect(find.text('3 GB'), findsOneWidget);
     expect(find.text('2 GB'), findsNothing);
@@ -207,15 +225,13 @@ void main() {
     // must retain the user's explicit Airtel choice across both edits.
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pump();
-    expect(tester.widget<ChoiceChip>(find.byKey(
-      const ValueKey('data-network-AIRTEL'))).selected, isTrue);
+    expect(find.text('Airtel'), findsOneWidget);
     expect(find.text('3 GB'), findsOneWidget);
     expect(find.text('2 GB'), findsNothing);
     expect(find.textContaining('Suggested: MTN'), findsNothing);
     await tester.enterText(find.byType(TextField), '08031234568');
     await tester.pump();
-    expect(tester.widget<ChoiceChip>(find.byKey(
-      const ValueKey('data-network-AIRTEL'))).selected, isTrue);
+    expect(find.text('Airtel'), findsOneWidget);
     expect(find.text('3 GB'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

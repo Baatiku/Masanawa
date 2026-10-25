@@ -1110,6 +1110,20 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_NGN_EXCHANGE_ENABLED",
+      "owner": "gateway/ngn-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Enable only after new separate NGN ledger migration, signed review/atomic purchased-MB exchange, approved quantity rates, fulfillment cost/margin/fees and limits are qualified. Does not enable deposits."
+    },
+    {
+      "name": "MASANAWA_NGN_FUNDING_VERIFIED",
+      "owner": "gateway/ngn-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Independent qualification gate for Billstack new NGN deposits and account allocation. Requires authenticated provider final-state/receiving account/amount evidence, verified webhook contract, cutoff/deduplication/reversal and operational reconciliation. Never infer verification from possession of a key."
     }
   ]
 }

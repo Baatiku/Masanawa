@@ -1,22 +1,21 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:go_router/go_router.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
-import '../theme/masanawa_theme.dart';
+import 'gb_wallet_summary.dart';
+import 'ngn_wallet.dart';
+import 'ngn_exchange_review.dart';
 
 class _Package {
-  const _Package(this.gb, this.mb, this.kobo);
-  final int gb;
-  final int mb;
-  final int kobo;
+  const _Package(this.gb, this.kobo);
+  final int gb, kobo;
 }
 
 class RechargePackagesScreen extends ConsumerStatefulWidget {
   const RechargePackagesScreen({super.key});
-
   @override
   ConsumerState<RechargePackagesScreen> createState() =>
       _RechargePackagesScreenState();
@@ -24,350 +23,404 @@ class RechargePackagesScreen extends ConsumerStatefulWidget {
 
 class _RechargePackagesScreenState
     extends ConsumerState<RechargePackagesScreen> {
-  String? _owner;
-  int? _ownerEpoch;
-  String? _version;
+  final _custom = TextEditingController();
+  GbWalletOwner? _owner;
   List<_Package> _packages = [];
-  bool _loading = true;
-  String? _error;
-  int? _selectedGb;
-  bool _accountLoading = false;
-  bool _accountCreating = false;
-  String? _bankAccountNumber;
-  String? _bankAccountName;
-  String? _bankName;
-  String? _accountState;
-  String? _accountError;
+  String? _version, _error;
+  int? _selected;
+  bool _loading = false,
+      _busy = false,
+      _enabled = false,
+      _uncertain = false,
+      _completed = false,
+      _storeReady = false;
+  bool _canReplay = false;
+  NgnExchangeReview? _review;
+  CancelToken? _cancel;
+  int _generation = 0;
+  bool _current(GbWalletOwner owner, int generation) {
+    final s = ref.read(sessionProvider);
+    return mounted &&
+        generation == _generation &&
+        s is SessionSignedIn &&
+        s.user.id == owner.accountId &&
+        ref.read(sessionProvider.notifier).authorizationEpoch ==
+            owner.authorizationEpoch;
+  }
 
   @override
-  void initState() {
-    super.initState();
-    Future<void>.microtask(() async {
-      await _refresh();
-      await _loadBankAccount();
-    });
+  void dispose() {
+    _generation++;
+    _cancel?.cancel();
+    _custom.dispose();
+    super.dispose();
   }
 
-  Future<void> _refresh() async {
-    final session = ref.read(sessionProvider);
-    if (session is! SessionSignedIn) return;
-    final owner = session.user.id;
-    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+  Future<void> _load(GbWalletOwner owner) async {
+    final generation = ++_generation;
+    _cancel?.cancel();
+    final cancel = CancelToken();
+    _cancel = cancel;
     setState(() {
-      _owner = owner;
-      _ownerEpoch = ownerEpoch;
-      _bankAccountNumber = null;
-      _bankAccountName = null;
-      _bankName = null;
-      _accountState = null;
       _loading = true;
       _error = null;
-      _packages = [];
-      _version = null;
-      _selectedGb = null;
     });
     try {
-      final response = await ref.read(apiClientProvider).dio.get<Object?>(
-        '/v1/gb/recharge/packages',
-      );
-      final result = response.data;
-      if (result is! Map<String, dynamic> ||
-          result['version'] is! String ||
-          result['packages'] is! List) {
-        throw const FormatException('Unrecognized package response');
-      }
-      final fetched = <_Package>[];
-      for (final entry in result['packages'] as List) {
-        if (entry is! Map<String, dynamic>) {
-          throw const FormatException('Unrecognized package entry');
-        }
-        final gb = entry['sizeGb'];
-        final mb = entry['expectedMb'];
-        final kobo = entry['totalKobo'];
-        if (gb is! int || mb is! int || kobo is! int ||
-            gb <= 0 || mb != gb * 1000 || kobo <= 0) {
-          throw const FormatException('Invalid package amount');
-        }
-        fetched.add(_Package(gb, mb, kobo));
-      }
-      if (!mounted || !_stillOwner(owner, ownerEpoch)) return;
+      final pending = await ref
+          .read(ngnPendingStoreProvider)
+          .read(owner.accountId);
+      if (!_current(owner, generation)) return;
       setState(() {
-        _packages = fetched;
-        _version = result['version'] as String;
-        _loading = false;
+        _storeReady = true;
+        if (pending != null) {
+          _review = pending;
+          _uncertain = true;
+        }
       });
-    } on DioException catch (_) {
-      if (!mounted || !_stillOwner(owner, ownerEpoch)) return;
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .get<Object?>(
+            '/v1/gb/wallet/exchange/packages',
+            cancelToken: cancel,
+            options: Options(headers: const {'Cache-Control': 'no-store'}),
+          );
+      final raw = response.data;
+      if (raw is! Map<String, dynamic> ||
+          raw['version'] is! String ||
+          raw['packages'] is! List ||
+          raw['exchangeEnabled'] is! bool) {
+        throw const FormatException('Invalid packages');
+      }
+      final packages = <_Package>[];
+      for (final item in raw['packages'] as List) {
+        if (item is! Map<String, dynamic> ||
+            item['sizeGb'] is! int ||
+            item['totalKobo'] is! int ||
+            (item['sizeGb'] as int) < 1 ||
+            (item['sizeGb'] as int) > 2000 ||
+            (item['totalKobo'] as int) <= 0 ||
+            item['expectedMb'] != (item['sizeGb'] as int) * 1000) {
+          throw const FormatException('Invalid package');
+        }
+        packages.add(_Package(item['sizeGb'] as int, item['totalKobo'] as int));
+      }
+      if (!_current(owner, generation)) return;
       setState(() {
+        _version = raw['version'] as String;
+        _packages = packages;
+        _enabled = raw['exchangeEnabled'] as bool;
         _loading = false;
-        _error = 'Packages unavailable';
       });
     } catch (_) {
-      if (!mounted || !_stillOwner(owner, ownerEpoch)) return;
+      if (!_current(owner, generation)) return;
       setState(() {
         _loading = false;
-        _error = 'Packages unavailable';
+        _error = 'Packages unavailable. Retry to check your original request.';
       });
     }
   }
 
-  Future<void> _loadBankAccount() async {
-    final session = ref.read(sessionProvider);
-    if (session is! SessionSignedIn) return;
-    final owner=session.user.id;
-    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-    if (!mounted) return;
+  Future<void> _quote() async {
+    final owner = _owner, gb = _selected;
+    if (owner == null || gb == null || _busy || _uncertain || !_storeReady)
+      return;
+    final generation = ++_generation;
     setState(() {
-      _accountLoading=true;
-      _accountError=null;
-      _bankAccountNumber=null;_bankAccountName=null;_bankName=null;
-      _accountState=null;
+      _busy = true;
+      _error = null;
     });
     try {
-      final reply=await ref.read(apiClientProvider).dio.get<Object?>(
-        '/v1/gb/wallet/virtual-account',
+      final r = await ref
+          .read(apiClientProvider)
+          .dio
+          .post<Object?>(
+            '/v1/gb/wallet/exchange/quote',
+            data: {'sizeGb': gb},
+            options: Options(headers: const {'Cache-Control': 'no-store'}),
+          );
+      final review = NgnExchangeReview.fromJson(
+        r.data,
+        expectedGb: gb,
+        expectedVersion: _version,
       );
-      if(reply.data is! Map<String,dynamic>)throw const FormatException('Invalid account response');
-      _applyAccountReply((reply.data as Map<String,dynamic>)['account'],owner,ownerEpoch);
-    }catch(_){
-      if(!mounted||!_stillOwner(owner, ownerEpoch))return;
-      setState((){
-        _accountError='Bank details unavailable';
-        _accountLoading=false;
+      if (!_current(owner, generation)) return;
+      setState(() => _review = review);
+    } catch (_) {
+      if (!_current(owner, generation)) return;
+      setState(
+        () => _error =
+            'Could not review this package. Your balance has not been exchanged.',
+      );
+    } finally {
+      if (_current(owner, generation)) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirm({bool recover = false, bool replay = false}) async {
+    final owner = _owner, review = _review;
+    if (owner == null || review == null || _busy) return;
+    final generation = ++_generation;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final api = ref.read(apiClientProvider).dio;
+      if (recover) {
+        final r = await api.get<Object?>(
+          '/v1/gb/wallet/exchange/${review.operationId}',
+          options: Options(headers: const {'Cache-Control': 'no-store'}),
+        );
+        review.verifyReceipt(r.data);
+      } else {
+        if (_uncertain && !replay) return;
+        // Do not dispatch a financial write unless recovery survives app exit.
+        await ref.read(ngnPendingStoreProvider).write(owner.accountId, review);
+        if (!_current(owner, generation)) return;
+        setState(() => _uncertain = true);
+        final r = await api.post<Object?>(
+          '/v1/gb/wallet/exchange/confirm',
+          data: {'reviewToken': review.token, 'reviewAccepted': true},
+          options: Options(headers: const {'Cache-Control': 'no-store'}),
+        );
+        review.verifyReceipt(r.data);
+      }
+      if (!_current(owner, generation)) return;
+      await ref.read(ngnPendingStoreProvider).clear(owner.accountId);
+      if (!_current(owner, generation)) return;
+      setState(() {
+        _completed = true;
+        _uncertain = false;
       });
-    }
-  }
-
-  void _applyAccountReply(Object? account, String owner, int ownerEpoch) {
-    if(account is! Map<String,dynamic>)throw const FormatException('Invalid account');
-    final state=account['state'];
-    if(state is! String || !['unassigned','pending','assigned','suspended'].contains(state)) {
-      throw const FormatException('Unknown bank account status');
-    }
-    String? number,name,bank;
-    if(state=='assigned'){
-      if(account['bankId']!='9PSB' ||
-        account['accountNumber'] is! String ||
-        !RegExp(r'^\d{10}$').hasMatch(account['accountNumber'] as String) ||
-        account['accountName'] is! String ||
-        account['bankName'] is! String)throw const FormatException('Unverified 9PSB account');
-      number=account['accountNumber'] as String;
-      name=account['accountName'] as String;
-      bank=account['bankName'] as String;
-    }
-    if(!mounted||!_stillOwner(owner, ownerEpoch))return;
-    setState((){
-      _accountState=state;_bankAccountNumber=number;
-      _bankAccountName=name;_bankName=bank;
-      _accountLoading=false;_accountError=null;
-    });
-  }
-
-  Future<void> _assignBankAccount() async {
-    final session=ref.read(sessionProvider);
-    if(session is! SessionSignedIn||_accountCreating)return;
-    final owner=session.user.id;
-    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-    setState((){_accountCreating=true;_accountError=null;});
-    try {
-      final reply=await ref.read(apiClientProvider).dio.post<Object?>(
-        '/v1/gb/wallet/virtual-account',
+      ref.invalidate(ngnWalletBalanceProvider(owner));
+      ref.invalidate(gbWalletSummaryProvider(owner));
+    } on DioException catch (error) {
+      if (!_current(owner, generation)) return;
+      if (error.response?.statusCode == 410 ||
+          (!recover &&
+              !replay &&
+              [403, 409].contains(error.response?.statusCode))) {
+        try {
+          await ref.read(ngnPendingStoreProvider).clear(owner.accountId);
+        } catch (_) {
+          if (_current(owner, generation))
+            setState(
+              () => _error =
+                  'Could not update local recovery. Check the original request again.',
+            );
+          return;
+        }
+        if (!_current(owner, generation)) return;
+        setState(() {
+          _uncertain = false;
+          _review = null;
+          _canReplay = false;
+          _error =
+              'Exchange not completed. Refresh your balance and review again.';
+        });
+        ref.invalidate(ngnWalletBalanceProvider(owner));
+      } else {
+        setState(() {
+          _canReplay = recover && error.response?.statusCode == 404;
+          _error =
+              'Exchange not confirmed. Check or retry only the original request.';
+        });
+      }
+    } catch (_) {
+      if (!_current(owner, generation)) return;
+      setState(
+        () => _error = _uncertain
+            ? 'Exchange not confirmed. Check the original receipt before buying another package.'
+            : 'Could not safely save this request. Nothing was submitted.',
       );
-      if(reply.data is! Map<String,dynamic>)throw const FormatException('Invalid bank assignment');
-      _applyAccountReply((reply.data as Map<String,dynamic>)['account'],owner,ownerEpoch);
-    }catch(_){
-      if(!mounted||!_stillOwner(owner, ownerEpoch))return;
-      setState((){_accountError='Account assignment unavailable';});
-    }finally {
-      if(mounted&&_stillOwner(owner, ownerEpoch))setState(()=>_accountCreating=false);
+    } finally {
+      if (_current(owner, generation)) setState(() => _busy = false);
     }
-  }
-
-  Widget _bankAccountSection() {
-    final colors = context.masanawa;
-    return Card(
-      color: colors.surfaceMuted,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colors.structuralBorder)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:CrossAxisAlignment.stretch,
-          children:[
-            Row(children: [
-              Icon(Icons.account_balance_outlined, color: colors.brand),
-              const SizedBox(width: 8),
-              Expanded(child: Text('9PSB account',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700))),
-            ]),
-            const SizedBox(height:12),
-            if(_accountLoading||_accountCreating)const LinearProgressIndicator(),
-            if(_accountError!=null)...[
-              Text(_accountError!),
-              OutlinedButton(onPressed:_loadBankAccount,child:const Text('Retry bank details')),
-            ],
-            if(_accountState=='assigned'&&_bankAccountNumber!=null)...[
-              Text(_bankName??'9PSB Bank'),
-              Text(_bankAccountName??'',style:Theme.of(context).textTheme.titleSmall),
-              SelectableText(_bankAccountNumber!,style:Theme.of(context).textTheme.headlineSmall),
-              OutlinedButton.icon(
-                onPressed:()=>Clipboard.setData(ClipboardData(text:_bankAccountNumber!)),
-                icon:const Icon(Icons.copy_outlined),
-                label:const Text('Copy account number'),
-              ),
-              const Text('Verified deposits only', textAlign: TextAlign.center),
-            ]else if(_accountState=='pending')...[
-              const Text('Account pending'),
-              OutlinedButton(onPressed:_loadBankAccount,child:const Text('Check assignment')),
-            ]else if(_accountState=='suspended')
-              const Text('Funding unavailable')
-            else if(_accountState=='unassigned')
-              FilledButton(
-                onPressed:_accountCreating?null:_assignBankAccount,
-                child:const Text('Get my 9PSB account'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _stillOwner(String owner, int ownerEpoch) {
-    final current = ref.read(sessionProvider);
-    return current is SessionSignedIn && current.user.id == owner &&
-        ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
-  }
-
-  String _ngn(int kobo) {
-    final whole = (kobo ~/ 100).toString();
-    final grouped = whole.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (_) => ',',
-    );
-    final cents = kobo % 100;
-    return '₦$grouped${cents == 0 ? '' : '.${cents.toString().padLeft(2, '0')}'}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final signed = ref.watch(sessionProvider);
-    if (signed is! SessionSignedIn) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Add data')),
-        body: const Center(child: Text('Sign in to see recharge packages.')),
-      );
+    final session = ref.watch(sessionProvider);
+    final owner = session is SessionSignedIn
+        ? (
+            accountId: session.user.id,
+            authorizationEpoch: ref
+                .read(sessionProvider.notifier)
+                .authorizationEpoch,
+          )
+        : null;
+    if (_owner != owner) {
+      _generation++;
+      _cancel?.cancel();
+      _owner = owner;
+      _packages = [];
+      _review = null;
+      _custom.clear();
+      _selected = null;
+      _version = null;
+      _error = null;
+      _loading = owner != null;
+      _busy = false;
+      _enabled = false;
+      _uncertain = false;
+      _completed = false;
+      _storeReady = false;
+      _canReplay = false;
+      if (owner != null)
+        Future.microtask(() {
+          if (mounted && _owner == owner) _load(owner);
+        });
     }
-    if (_owner != signed.user.id ||
-        _ownerEpoch != ref.read(sessionProvider.notifier).authorizationEpoch) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        await _refresh();
-        if (mounted) await _loadBankAccount();
-      });
-      return Scaffold(
-        appBar: AppBar(title: const Text('Add data')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
+    final cash = owner == null
+        ? null
+        : ref.watch(ngnWalletBalanceProvider(owner));
+    final review = _review;
     return Scaffold(
-      appBar: AppBar(title: const Text('Add data')),
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.wifi_off_rounded, size: 36,
-                          color: context.masanawa.textMuted),
-                        const SizedBox(height: 10),
-                        Text(_error!, textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleMedium),
-                        TextButton(onPressed: _refresh,
-                          child: const Text('Try again')),
-                      ],
-                    ),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      Text('Available packages',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 14),
-                      for (final entry in _packages)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: _selectedGb == entry.gb
-                                    ? context.masanawa.brand
-                                    : context.masanawa.structuralBorder,
-                                width: _selectedGb == entry.gb ? 1.5 : 1,
-                              ),
-                            ),
-                            child: RadioListTile<int>(
-                              key: ValueKey('gb-package-${entry.gb}'),
-                              value: entry.gb,
-                              groupValue: _selectedGb,
-                              activeColor: context.masanawa.brand,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                              title: Row(children: [
-                                CircleAvatar(
-                                  backgroundColor: context.masanawa.brand
-                                      .withValues(alpha: .12),
-                                  child: Icon(Icons.data_usage_rounded,
-                                    color: context.masanawa.brand, size: 21)),
-                                const SizedBox(width: 10),
-                                Expanded(child: Text('${entry.gb} GB',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800))),
-                                Text(_ngn(entry.kobo),
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(fontWeight: FontWeight.w700)),
-                              ]),
-                              subtitle: Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                  start: 50, top: 4),
-                                child: Text('${entry.mb} MB',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: context.masanawa.textMuted)),
-                              ),
-                              onChanged: (gb) =>
-                                  setState(() => _selectedGb = gb),
-                            ),
-                          ),
-                        ),
-                      if (_packages.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(25),
-                          child: Center(child: Text('No packages available')),
-                        ),
-                      if (_selectedGb != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Center(
-                            child: Text('Bank transfer price guide',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                color: context.masanawa.textMuted))),
-                        ),
-                      const SizedBox(height:12),
-                      _bankAccountSection(),
-                      const SizedBox(height: 8),
-                      if (_version != null)
-                        Text('Rate ${_version!}',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.labelSmall),
-                    ],
+      appBar: AppBar(
+        title: Text(
+          review == null
+              ? 'Add data'
+              : _completed
+              ? 'Data added'
+              : 'Review exchange',
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (owner == null)
+            const Text('Sign in to add data.')
+          else ...[
+            Text('NGN balance', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              cash?.valueOrNull == null
+                  ? 'Balance unavailable'
+                  : formatNgn(cash!.valueOrNull!.balanceKobo),
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 12),
+            if (_loading || _busy) const LinearProgressIndicator(),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            if (review == null) ...[
+              Text(
+                'Choose a package',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              if (!_enabled && !_loading)
+                const Text('Package exchange is currently unavailable.'),
+              for (final p in _packages)
+                RadioListTile<int>(
+                  key: ValueKey('gb-package-${p.gb}'),
+                  value: p.gb,
+                  groupValue: _selected,
+                  title: Text('${p.gb} GB'),
+                  subtitle: Text(
+                    '${formatNgn(p.kobo)} · ${groupedMb(p.gb * 1000)} MB',
                   ),
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() {
+                          _selected = v;
+                          _custom.clear();
+                        }),
+                ),
+              TextField(
+                controller: _custom,
+                enabled: !_busy,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Custom quantity (GB)',
+                  helperText: '1–2,000 whole GB',
+                ),
+                onChanged: (v) => setState(() {
+                  final n = int.tryParse(v);
+                  _selected = n != null && n >= 1 && n <= 2000 ? n : null;
+                }),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed:
+                    _enabled &&
+                        !_loading &&
+                        !_busy &&
+                        _storeReady &&
+                        _selected != null
+                    ? _quote
+                    : null,
+                child: const Text('Continue'),
+              ),
+              TextButton(
+                onPressed: _busy ? null : () => _load(owner),
+                child: const Text('Refresh packages'),
+              ),
+            ] else ...[
+              Text(
+                '${review.sizeGb} GB',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              Text('${groupedMb(review.amountMb)} MB added to purchased data'),
+              const SizedBox(height: 10),
+              Text('NGN cost: ${formatNgn(review.amountKobo)}'),
+                const SizedBox(height: 10),
+              if (_completed) ...[
+                const Text('Exchange completed'),
+                SelectableText('Receipt: ${review.operationId}'),
+                FilledButton(
+                  onPressed: () => setState(() {
+                    _review = null;
+                    _completed = false;
+                  }),
+                  child: const Text('Choose another package'),
+                ),
+              ] else if (_uncertain) ...[
+                SelectableText('Reference: ${review.operationId}'),
+                FilledButton(
+                  onPressed: _busy ? null : () => _confirm(recover: true),
+                  child: const Text('Check original exchange'),
+                ),
+                if (_canReplay)
+                  OutlinedButton(
+                    onPressed: _busy ? null : () => _confirm(replay: true),
+                    child: const Text('Retry same exchange'),
+                  ),
+              ] else ...[
+                FilledButton(
+                  onPressed:
+                      _busy ||
+                          (cash?.valueOrNull?.balanceKobo ?? 0) <
+                              review.amountKobo ||
+                          cash?.valueOrNull?.frozen == true ||
+                          !review.expiresAt.isAfter(DateTime.now().toUtc())
+                      ? null
+                      : _confirm,
+                  child: const Text('Confirm exchange'),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() => _review = null),
+                  child: const Text('Change package'),
+                ),
+              ],
+            ],
+            if (!_uncertain && !_busy)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await context.push('/wallet/fund');
+                  if (mounted && _owner == owner)
+                    ref.invalidate(ngnWalletBalanceProvider(owner));
+                },
+                icon: const Icon(Icons.account_balance_outlined),
+                label: const Text('Fund NGN wallet'),
+              ),
+          ],
+        ],
       ),
     );
   }
