@@ -1,4 +1,5 @@
 import '../gb_wallet/recharge_screen.dart';
+import '../gb_wallet/gb_send_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
