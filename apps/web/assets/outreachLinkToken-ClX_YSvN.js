@@ -1,1 +1,0 @@
-const e=r=>/^[A-Za-z2-9]{8}$/.test(String(r||""));function a(r){try{const t=new URLSearchParams(String(r||"")).get("rc");return e(t)?t:null}catch(t){return null}}function c(r){const t=new URLSearchParams(String(r||""));t.delete("rc");const n=t.toString();return n?"?".concat(n):""}export{e as i,c as s,a as t};

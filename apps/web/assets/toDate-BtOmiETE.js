@@ -1,1 +1,0 @@
-const c=6048e5,r=864e5,i=6e4,e=525600,u=43200,f=1440,t=Symbol.for("constructDateFrom");function s(n,o){return typeof n=="function"?n(o):n&&typeof n=="object"&&t in n?n[t](o):n instanceof Date?new n.constructor(o):new Date(o)}function m(n,o){return s(o||n,n)}export{c as a,f as b,s as c,u as d,e,i as f,r as m,m as t};
