@@ -112,6 +112,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   LiveVoiceSession? _inlineVoiceSession;
   LiveVoiceSession? _modalVoiceSession;
   ProviderSubscription<SessionState>? _voiceAccountSubscription;
+  int _voiceAuthorizationEpoch = 0;
   StreamSubscription<LiveVoiceState>? _inlineVoiceStateSub;
   PaidVoiceAdmission? _inlinePaidAdmission;
   PaidVoiceController? _inlinePaidController;
@@ -217,19 +218,27 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _voiceAuthorizationEpoch =
+        ref.read(sessionProvider.notifier).authorizationEpoch;
     _voiceAccountSubscription = ref.listenManual(sessionProvider, (
       previous,
       next,
     ) {
       final previousId = previous is SessionSignedIn ? previous.user.id : null;
       final nextId = next is SessionSignedIn ? next.user.id : null;
-      if (previousId != nextId) {
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      final replaced = previousId != nextId || epoch != _voiceAuthorizationEpoch;
+      _voiceAuthorizationEpoch = epoch;
+      if (replaced) {
         _stopVoiceSequence();
         unawaited(_activeVoiceBubble?._pauseFromAnotherBubble() ?? Future<void>.value());
         _inlineVoiceSession?.endReason=CallEndReason.accountChanged;
         _modalVoiceSession?.endReason=CallEndReason.accountChanged;
         _pendingVoiceAutoplay = null;
-        unawaited(_inlineVoiceSession?.close() ?? Future<void>.value());
+        // A same-ID logout/relogin is still a new microphone authorization.
+        // Release the old recorder and reconcile any live admission once.
+        unawaited(_cancelInlineRecording());
+        unawaited(_disposeInlineVoice());
         unawaited(_modalVoiceSession?.close() ?? Future<void>.value());
       }
     });
@@ -505,12 +514,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final session = ref.read(sessionProvider);
     if (session is! SessionSignedIn || session.user.id.isEmpty) return;
     final accountId = session.user.id;
+    final authorizationEpoch =
+        ref.read(sessionProvider.notifier).authorizationEpoch;
     FocusScope.of(context).unfocus();
 
     bool sameAccount() {
       if (!mounted) return false;
       final active = ref.read(sessionProvider);
-      return active is SessionSignedIn && active.user.id == accountId;
+      return active is SessionSignedIn && active.user.id == accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch == authorizationEpoch;
     }
 
     final recorder = ref.read(voiceNoteRecorderFactoryProvider)();
@@ -587,10 +599,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       return;
     }
     final accountId = session.user.id;
+    final authorizationEpoch =
+        ref.read(sessionProvider.notifier).authorizationEpoch;
     bool sameAccount() {
       if (!mounted) return false;
       final active = ref.read(sessionProvider);
-      return active is SessionSignedIn && active.user.id == accountId;
+      return active is SessionSignedIn && active.user.id == accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch == authorizationEpoch;
     }
     if (!sameAccount() ||
         ref.read(aiChatProvider).sendingIn.contains(widget.characterId)) {
@@ -1858,12 +1873,16 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final reporter = ref.read(callLifecycleReporterProvider);
     final owner = reporter.captureOwner();
     if (owner == null) return;
+    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool stillOwner() => mounted &&
+        reporter.captureOwner()?.accountId == owner.accountId &&
+        ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
     final paidController = _capturePaidController(owner, reporter);
     final walletController = ref.read(walletProvider.notifier);
     final admissionResult = await _admitInlineVoice(agent, controller: paidController);
     final paidAdmission = admissionResult.$2;
     if (!admissionResult.$1) return;
-    if (!mounted || reporter.captureOwner()?.accountId != owner.accountId) {
+    if (!stillOwner()) {
       if (paidAdmission != null) {
         await paidController.complete(admissionId: paidAdmission.admissionId,
             outcome: 'interrupted').catchError((_) {});
@@ -1881,7 +1900,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         state: 'on_call',
         durationMs: 5 * 60 * 1000,
       );
-      if (!mounted || reporter.captureOwner()?.accountId != owner.accountId) {
+      if (!stillOwner()) {
         throw StateError('Call account changed before grant issuance');
       }
       final grant = shellTransport is MasanawaAgentTransport
@@ -1890,7 +1909,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           : await shellTransport.mintLiveVoiceGrant(agent.characterId,
               admissionId: paidAdmission?.admissionId, purpose: 'conversation');
       history = reporter.bind(owner, grant.callId);
-      if (!mounted || reporter.captureOwner()?.accountId != owner.accountId) {
+      if (!stillOwner()) {
         await history.closed();
         throw StateError('Voice screen closed before session start');
       }
@@ -1899,7 +1918,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         characterName: agent.displayName,
         renewConnectionGrant: () async {
           final active = reporter.captureOwner();
-          if (!mounted || active?.accountId != owner.accountId ||
+          if (!stillOwner() || active?.accountId != owner.accountId ||
               (paidAdmission != null &&
                !DateTime.now().isBefore(paidAdmission.expiresAt))) {
             throw StateError('The original call admission is no longer active.');
@@ -2054,6 +2073,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final reporter = ref.read(callLifecycleReporterProvider);
     final owner = reporter.captureOwner();
     if (owner == null) return;
+    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool stillOwner() => mounted &&
+        reporter.captureOwner()?.accountId == owner.accountId &&
+        ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
     final shellTransport = transport as AgentShellTransport;
     // Personal Twins are retired: every non-support Masana goes through
     // paid admission, preserving billing behavior.
@@ -2069,10 +2092,19 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         characterId: agent.characterId,
         expectedSeconds: 5 * 60,
       );
-      if (quote != null) {
-        estimatedSeconds = quote.estimatedSeconds;
-        if (!mounted) return;
-        if (!quote.isTrial) {
+      // The retired Credits rail cannot qualify a Masanawa MB reservation.
+      // A missing quote must never fall through into an unreserved paid call.
+      if (quote == null || !stillOwner()) {
+        if (stillOwner()) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not reserve this voice call.'),
+          ));
+        }
+        return;
+      }
+      estimatedSeconds = quote.estimatedSeconds;
+      if (!stillOwner()) return;
+      if (!quote.isTrial) {
           final accepted = await showDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
@@ -2093,16 +2125,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             ),
           );
           if (accepted != true) return;
+      }
+      paidAdmission = await controller.accept(characterId: agent.characterId);
+      if (paidAdmission == null || !stillOwner()) {
+        if (paidAdmission != null) {
+          await controller.complete(
+            admissionId: paidAdmission.admissionId, outcome: 'interrupted',
+          ).catchError((_) {});
         }
-        paidAdmission = await controller.accept(characterId: agent.characterId);
-        if (paidAdmission == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not reserve this voice call.')),
-            );
-          }
-          return;
+        if (stillOwner()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not reserve this voice call.')),
+          );
         }
+        return;
       }
     }
 
@@ -2117,7 +2153,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         durationMs: 5 * 60 * 1000,
       );
       unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
-      if (!mounted || reporter.captureOwner()?.accountId != owner.accountId) {
+      if (!stillOwner()) {
         throw StateError('Call account changed before grant issuance');
       }
       final grant = shellTransport is MasanawaAgentTransport
@@ -2126,7 +2162,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           : await shellTransport.mintLiveVoiceGrant(agent.characterId,
               admissionId: paidAdmission?.admissionId);
       history = reporter.bind(owner, grant.callId);
-      if (!mounted || reporter.captureOwner()?.accountId != owner.accountId) {
+      if (!stillOwner()) {
         await history.closed();
         throw StateError('Voice screen closed before call start');
       }
@@ -2135,7 +2171,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         characterName: agent.displayName,
         renewConnectionGrant: () async {
           final active = reporter.captureOwner();
-          if (!mounted || active?.accountId != owner.accountId ||
+          if (!stillOwner() || active?.accountId != owner.accountId ||
               (paidAdmission != null &&
                !DateTime.now().isBefore(paidAdmission.expiresAt))) {
             throw StateError('The original call admission is no longer active.');
@@ -2173,7 +2209,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           isRecordingOwnerCurrent: () {
             if (!mounted) return false;
             final current = ref.read(sessionProvider);
-            return current is SessionSignedIn && current.user.id == owner.accountId;
+            return current is SessionSignedIn && current.user.id == owner.accountId &&
+                ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
           },
           maxDuration: paidAdmission == null
               ? null

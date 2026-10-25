@@ -5,7 +5,7 @@ import type { AgentConversationAuthorizer } from "./agent_conversation_contract.
 import type { PlatformAgentProfileRepository } from "@masanawa/agents";
 import type { LiveVoiceTokenService } from "./agent_shell_contract.js";
 import { parseCanonicalId } from "@masanawa/contracts";
-import { geminiFailure } from "./gemini_failure.js";
+import { geminiFailure, GeminiProviderError } from "./gemini_failure.js";
 import {
   CallHistoryError,
   type CallHistoryRecorder,
@@ -65,11 +65,25 @@ export function createGeminiLiveTokenService(input: {
           "authority.policy_unavailable",
           "authority.stale_policy",
           "authority.revoked",
+          "agent.provider_unavailable",
+          "calls.paid_admission_unavailable",
+          "calls.masana_unavailable",
+          "calls.incoming_unavailable",
         ].includes(error.code)
           ? error.code
           : "unknown";
       console.error(
-        JSON.stringify({ event: "agent.live_token_failed", stage, code }),
+        JSON.stringify({
+          event: "agent.live_token_failed",
+          stage,
+          code,
+          ...(error instanceof GeminiProviderError &&
+          Number.isInteger(error.providerStatus) &&
+          error.providerStatus >= 400 &&
+          error.providerStatus <= 599
+            ? { status: error.providerStatus }
+            : {}),
+        }),
       );
       throw error;
     }
@@ -97,14 +111,14 @@ export function createGeminiLiveTokenService(input: {
         }),
       );
       const profile = input.platformProfiles
-        ? await input.platformProfiles.readForCharacter({
+        ? await observe("masana-profile", () => input.platformProfiles!.readForCharacter({
             tenantId: admission.scope.tenantId,
             characterId,
-          })
+          }))
         : null;
-      const creatorVoice = profile ? null : await input.creatorVoiceReader?.readPublished({
+      const creatorVoice = profile ? null : await observe("published-voice", async () => input.creatorVoiceReader?.readPublished({
         tenantId:admission.scope.tenantId,characterId,
-      }) ?? null;
+      }) ?? null);
       const selectedVoiceName =
         profile?.voiceProvider.toLowerCase() === "gemini" &&
         profile.voiceName.trim()
@@ -129,7 +143,7 @@ export function createGeminiLiveTokenService(input: {
       let issuanceStarted = false;
       let awaitingProviderResponse = true;
       try {
-        const response = await fetchImpl(
+        const response = await observe("provider-transport", () => fetchImpl(
           "https://generativelanguage.googleapis.com/v1beta/auth_tokens",
           {
             method: "POST",
@@ -157,23 +171,22 @@ export function createGeminiLiveTokenService(input: {
               },
             }),
           },
-        );
+        ));
         awaitingProviderResponse = false;
         issuanceStarted = response.ok;
         if (!response.ok) {
-          throw await geminiFailure(response,"live-token");
+          await observe("provider-rejection", async () => {
+            throw await geminiFailure(response,"live-token");
+          });
         }
-        const payload = (await response.json()) as { name?: unknown };
-        if (typeof payload.name !== "string" || payload.name.length < 16) {
-          console.error(
-            JSON.stringify({
-              event: "agent.live_token_failed",
-              stage: "provider-response",
-              status: response.status,
-            }),
-          );
-          throw new Error("Gemini Live token provisioning returned no token");
-        }
+        const payload = await observe("provider-response", async () => {
+          const body = (await response.json()) as { name?: unknown } | null;
+          const name = body?.name;
+          if (typeof name !== "string" || name.length < 16) {
+            throw new Error("Gemini Live token provisioning returned no token");
+          }
+          return { name };
+        });
         await observe("token-issued", async () =>
           input.paidVoiceAdmission?.tokenIssued({
             tenantId: admission.scope.tenantId,
@@ -185,20 +198,20 @@ export function createGeminiLiveTokenService(input: {
         if (request.historyCallId && !input.callHistory?.attachIssued)
           throw new CallHistoryError("calls.incoming_unavailable", 409);
         const callId = input.callHistory
-          ? request.historyCallId
-            ? await input.callHistory.attachIssued!({
+          ? await observe("call-history", () => request.historyCallId
+            ? input.callHistory!.attachIssued!({
                 tenantId: admission.scope.tenantId,
                 userId: admission.scope.userId,
                 characterId,
                 callId: request.historyCallId,
                 expiresAt: expiresAt.toISOString(),
               })
-            : await input.callHistory.recordIssued({
+            : input.callHistory!.recordIssued({
                 tenantId: admission.scope.tenantId,
                 userId: admission.scope.userId,
                 characterId,
                 expiresAt: expiresAt.toISOString(),
-              })
+              }))
           : undefined;
         return Object.freeze({
           ...(callId ? { callId } : {}),

@@ -315,20 +315,39 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     final index = items.indexWhere((row) => row.id == post.id);
     if (index < 0) return;
     final version = generation;
-    var accepted = false;
     setState(() {
       pendingActions.add(post.id);
       items[index] = post.withReaction(kind);
     });
     try {
       await (widget.api as ReactionFeedApi).react(post.id, kind);
-      accepted = true;
-      // Verify the authoritative counters after concurrent reaction writes.
+      // The PUT has succeeded at this point. A later detail GET can be stale
+      // or temporarily unavailable; it must never turn a committed reaction
+      // into an apparent failed write (a retry could then remove it).
       if (widget.api is DioFeedApi) {
-        final projected = await (widget.api as DioFeedApi).detail(post.id);
-        if (!mounted || version != generation) return;
-        final now = items.indexWhere((row) => row.id == post.id);
-        if (now >= 0) setState(() => items[now] = projected);
+        try {
+          final projected = await (widget.api as DioFeedApi).detail(post.id);
+          if (!mounted || version != generation) return;
+          // A cached/replica read may still describe the pre-write selection.
+          // Preserve our accepted choice until an authoritative refresh catches
+          // up, while keeping counters provisional and plainly labeled.
+          if (projected.currentReaction == kind) {
+            final now = items.indexWhere((row) => row.id == post.id);
+            if (now >= 0) setState(() => items[now] = projected);
+          } else {
+            _reactionReadbackDelayed();
+          }
+        } catch (e) {
+          if (!mounted || version != generation) return;
+          if (accessLost(e)) {
+            setState(() {
+              clearProjection();
+              error = e.toString();
+            });
+            return;
+          }
+          _reactionReadbackDelayed();
+        }
       }
     } catch (e) {
       if (!mounted || version != generation) return;
@@ -339,20 +358,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         });
         return;
       }
-      // The write completed before the count readback failed. Do not tell the
-      // user the reaction was undone: the authoritative total is merely stale.
-      if (!accepted) {
-        final now = items.indexWhere((row) => row.id == post.id);
-        if (now >= 0) setState(() => items[now] = post);
-      }
+      final now = items.indexWhere((row) => row.id == post.id);
+      if (now >= 0) setState(() => items[now] = post);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            accepted
-              ? t('Reaction saved. Refresh to verify counts.',
-                  'An adana martani. Sake sabunta don tabbatar da adadi.')
-              : t('Reaction not confirmed. Refresh or retry.',
-                  'Ba a tabbatar da martani ba. Sake gwadawa.'),
+            t(
+              'Reaction not confirmed. Refresh or retry.',
+              'Ba a tabbatar da martani ba. Sake gwadawa.',
+            ),
           ),
         ),
       );
@@ -361,6 +375,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         setState(() => pendingActions.remove(post.id));
       }
     }
+  }
+
+  void _reactionReadbackDelayed() {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t(
+        'Reaction saved. Counts may be out of date; pull to refresh.',
+        'An ajiye martani. Watakila adadin bai sabunta ba; ja ƙasa don sabuntawa.',
+      )),
+    ));
   }
 
   Future<void> openPost(FeedPost post) async {

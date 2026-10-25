@@ -170,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(writes,1);
     expect(find.text('❤️ 1'),findsOneWidget);
-    expect(find.text('Reaction saved. Refresh to verify counts.'),
+    expect(find.text('Reaction saved. Counts may be out of date; pull to refresh.'),
       findsOneWidget);
     expect(find.text('Reaction not confirmed. Refresh or retry.'),findsNothing);
     expect(tester.takeException(),isNull);
