@@ -48,7 +48,7 @@ class GbVerifiedBundle {
         providerAmount is! String ||
         !RegExp(r'^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?$')
             .hasMatch(providerAmount) ||
-        providerAmount == '0' || providerAmount == '0.00' ||
+        !RegExp(r'[1-9]').hasMatch(providerAmount) ||
         expires == null || !expires.isUtc ||
         !expires.isAfter(DateTime.now().toUtc())) {
       throw const FormatException('Unverified or expired GB bundle');
@@ -99,6 +99,8 @@ class GbReadOnlyQuote {
         raw['feeMb'] != 0 ||
         expiry == null || !expiry.isUtc ||
         !expiry.isAfter(DateTime.now().toUtc()) ||
+        expiry.isAfter(DateTime.now().toUtc().add(
+          const Duration(seconds: 150))) ||
         expiry.isAfter(selected.expiresAt)) {
       throw const FormatException('Inconsistent GB quote; refresh bundles');
     }
