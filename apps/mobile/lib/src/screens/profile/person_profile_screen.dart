@@ -1,7 +1,5 @@
 import 'package:flutter/services.dart';
 
-import '../../human_chat/human_chat.dart';
-import '../../human_calls/human_calls.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,21 +12,6 @@ import '../../ui/components/masanawa_profile_skeleton.dart';
 
 import 'package:go_router/go_router.dart';
 
-import '../../state/agent_directory_state.dart';
-import '../../agents/masana_portrait_avatar.dart';
-import 'my_masana_screen.dart';
-
-final _profileRoomsProvider = FutureProvider.autoDispose
-    .family<List<HumanJson>, String>((ref, handle) async {
-      final transport = ref.watch(humanCommunicationTransportProvider);
-      final response = await transport.request(
-        'GET',
-        '/profiles/${Uri.encodeComponent(handle)}/rooms',
-      );
-      return (response['items'] as List)
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
-    });
 
 class PersonProfileScreen extends ConsumerStatefulWidget {
   const PersonProfileScreen({super.key, required this.handle});
@@ -57,13 +40,9 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   Future<void> _refresh() async {
     ref.invalidate(humanProfileProvider(widget.handle));
     try {
-      await Future.wait<void>([
-        ref.read(humanProfileProvider(widget.handle).future).then((_) {}),
-        if (ref.read(sessionProvider) is SessionSignedIn)
-          ref.read(agentDirectoryProvider.notifier).refresh(),
-      ]);
+      await ref.read(humanProfileProvider(widget.handle).future);
     } catch (_) {
-      // The profile and directory render their own error/retry state.
+      // The profile screen retains its existing retry state.
     }
   }
 
@@ -133,7 +112,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   }
 }
 
-class _PersonProfileBody extends ConsumerWidget {
+class _PersonProfileBody extends StatelessWidget {
   const _PersonProfileBody({
     required this.profile,
     required this.followBusy,
@@ -147,17 +126,9 @@ class _PersonProfileBody extends ConsumerWidget {
   final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final u = context.masanawa;
     final avatar = profile.avatarUrl?.trim();
-    final signedIn = ref.watch(sessionProvider) is SessionSignedIn;
-    final directory = signedIn ? ref.watch(agentDirectoryProvider) : null;
-    final agents =
-        directory?.agents
-            .where((agent) => agent.creatorHandle == profile.handle)
-            .toList() ??
-        [];
-
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: AppBar(
@@ -226,27 +197,6 @@ class _PersonProfileBody extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          if (profile.isLive) ...[
-                            const SizedBox(width: 7),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: u.emergency.withValues(alpha: .12),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                'LIVE',
-                                style: TextStyle(
-                                  color: u.emergency,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -300,15 +250,6 @@ class _PersonProfileBody extends ConsumerWidget {
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit profile'),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const MyMasanaScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.auto_awesome_outlined),
-                    label: const Text('My Masana'),
-                  ),
                 ],
               )
             else
@@ -318,18 +259,6 @@ class _PersonProfileBody extends ConsumerWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    FilledButton.icon(
-                      onPressed: () =>
-                          humanConversationStart(context, ref, profile.handle),
-                      icon: const Icon(Icons.chat_outlined),
-                      label: const Text('Message'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () =>
-                          humanCallStart(context, ref, profile.handle),
-                      icon: const Icon(Icons.call_outlined),
-                      label: const Text('Call'),
-                    ),
                     OutlinedButton(
                       key: const ValueKey('person-profile-follow'),
                       onPressed: followBusy ? null : onFollow,
@@ -344,70 +273,6 @@ class _PersonProfileBody extends ConsumerWidget {
                   ],
                 ),
               ),
-            if (agents.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Text('Masana', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              for (final agent in agents)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: MasanaPortraitAvatar(agent: agent),
-                  title: Text(agent.displayName),
-                  subtitle: Text(
-                    agent.roleLabel,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(
-                    '/masana/${Uri.encodeComponent(agent.characterId)}',
-                  ),
-                ),
-            ],
-            if (signedIn)
-              ref
-                  .watch(_profileRoomsProvider(profile.handle))
-                  .when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => TextButton(
-                      onPressed: () =>
-                          ref.invalidate(_profileRoomsProvider(profile.handle)),
-                      child: const Text('Retry shared Rooms'),
-                    ),
-                    data: (rooms) => rooms.isEmpty
-                        ? const SizedBox.shrink()
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 20),
-                              Text(
-                                'Rooms',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              for (final room in rooms)
-                                ListTile(
-                                  leading: const Icon(Icons.forum_outlined),
-                                  title: Text(room['name'] as String),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => context.push(
-                                    '/rooms/${Uri.encodeComponent(room['id'] as String)}',
-                                  ),
-                                ),
-                            ],
-                          ),
-                  ),
-            if (directory?.error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Could not refresh public Masana.',
-                style: TextStyle(color: u.textMuted),
-              ),
-              TextButton(
-                onPressed: () =>
-                    ref.read(agentDirectoryProvider.notifier).refresh(),
-                child: const Text('Try again'),
-              ),
-            ],
           ],
         ),
       ),
