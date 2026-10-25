@@ -56,3 +56,15 @@ builds an Android release-mode **test APK** from the merged main commit with
 source SHA, SHA-256 and signing evidence, then runs Flutter analyze/tests.
 This build is only for owner testing; provider, ledger and real-device financial
 qualification remain separate. The optional fixed-IP relay remains on hold.
+
+## MSNW customer-surface bootstrap retirement
+
+Removed old MSN balance/funding readback, ERC20 MSNW balance/custody and
+Paystack DVA creation from the production Gateway bootstrap. None of these
+were registered by the five-tab route host; their construction on startup
+was redundant and could revive obsolete service dependencies. Existing
+signed Paystack/Flutterwave/NowPayments historical callbacks remain
+registered, and **no applied migration or stored financial record is touched**.
+Source-level regression tests prevent the retired constructors returning.
+This does not yet remove their historical implementations or close all
+runtime/service dependencies.
