@@ -83,8 +83,6 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       _remoteQuery,
     ]);
     final offline = !ref.watch(aiChatProvider).online;
-    final waitingForSearch = !offline && _query.isNotEmpty &&
-        _query.length <= 80 && _remoteQuery != _query;
     final server = !offline && _remoteQuery.isNotEmpty &&
             _remoteQuery == _query
         ? ref.watch(_serverSearch(serverKey))
@@ -212,8 +210,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               physics: const AlwaysScrollableScrollPhysics(),
               key: const PageStorageKey('unified-inbox'),
               children: [
-                if (rows.isEmpty && !waitingForSearch &&
-                    server?.isLoading != true)
+                if (rows.isEmpty && server?.isLoading != true)
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Column(
@@ -235,7 +232,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     ),
                   ),
                 for (final row in rows) row.row,
-                if (waitingForSearch || server?.isLoading == true)
+                if (server?.isLoading == true)
                   const LinearProgressIndicator(minHeight: 2,
                     semanticsLabel: 'Searching server conversations'),
                 if (server?.hasError == true)
