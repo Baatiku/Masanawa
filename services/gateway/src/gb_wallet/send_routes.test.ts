@@ -11,6 +11,8 @@ const target={userId:"recipient-b",username:"bello.user",displayName:"Bello",act
 function setup(overrides:Partial<GbSendPorts>={}) {
   const transfer=vi.fn(async({operationId,amountMb}:{operationId:string;amountMb:number})=>
     ({operationId,amountMb,state:"completed" as const}));
+  const readTransfer=vi.fn(async(_actor:unknown,operationId:string)=>
+    ({operationId,amountMb:200,state:"completed" as const}));
   const ports:GbSendPorts={
     authorize:async header=>{
       if(header!=="Bearer current")throw new GbSendError(401,"unauthorized");
@@ -19,6 +21,7 @@ function setup(overrides:Partial<GbSendPorts>={}) {
     resolveRecipient:async()=>target,
     balance:async()=>({purchasedMb:1000,welcomeMb:500,reservedPurchasedMb:0,reservedWelcomeMb:0,frozen:false}),
     transfer:transfer as GbSendPorts["transfer"],
+    readTransfer,
     reviewSecret:secret,
     now:()=>new Date("2026-10-25T00:00:00Z"),
     nonce:()=>"12345678901234567890123456789012",
@@ -26,9 +29,24 @@ function setup(overrides:Partial<GbSendPorts>={}) {
   };
   const app=Fastify({logger:false});apps.push(app);
   registerGbSendReviewRoutes(app,ports);
-  return {app,transfer};
+  return {app,transfer,readTransfer};
 }
 describe("exact whole-MB internal Send review",()=>{
+  it("reads the original operation as the debit actor only without POST replay",async()=>{
+    const {app,transfer,readTransfer}=setup();
+    const id="send_12345678901234567890123456789012";
+    expect((await app.inject({method:"GET",url:`/v1/gb/wallet/send/receipt/${id}`})).statusCode).toBe(401);
+    const headers={authorization:"Bearer current"};
+    const read=await app.inject({method:"GET",url:`/v1/gb/wallet/send/receipt/${id}`,headers});
+    expect(read.statusCode).toBe(200);
+    expect(read.headers["cache-control"]).toBe("no-store");
+    expect(read.json().receipt).toEqual({operationId:id,amountMb:200,state:"completed"});
+    expect(readTransfer).toHaveBeenCalledWith(actor,id);
+    expect(transfer).not.toHaveBeenCalled();
+    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/send/receipt/bad",headers})).statusCode).toBe(422);
+    readTransfer.mockResolvedValueOnce(null as never);
+    expect((await app.inject({method:"GET",url:`/v1/gb/wallet/send/receipt/${id}`,headers})).statusCode).toBe(404);
+  });
   it("exposes only an authenticated, active exact-handle identity preview",async()=>{
     const resolution=vi.fn(async()=>target);
     const {app,transfer}=setup({resolveRecipient:resolution});

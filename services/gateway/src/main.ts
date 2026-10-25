@@ -1721,6 +1721,7 @@ export async function startGatewayService(
           },
           balance: createPostgresGbWalletRepository(featurePool).read,
           transfer: createPostgresGbWalletRepository(featurePool).transfer,
+          readTransfer: createPostgresGbWalletRepository(featurePool).readTransfer,
           reviewSecret: mbSendReviewSecret,
         }
       : undefined);

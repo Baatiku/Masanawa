@@ -249,6 +249,28 @@ export function createPostgresGbWalletRepository(pool: Pool) {
         return { operationId:input.operationId, amountMb:amount, state:"completed" as const };
       }, { isolation:"serializable" }));
     },
+    /** Original-key confirmed Send readback. A missing row is UNKNOWN, not a
+     * failed transfer. Ownership is constrained to the debit actor. */
+    async readTransfer(actor:GbAccountKey,operationId:string):Promise<GbReceipt|null> {
+      assertKey(actor.tenantId,"tenant");
+      assertKey(actor.userId,"actor");
+      if(!/^send_[A-Za-z0-9_-]{22,128}$/.test(operationId))
+        throw new TypeError("Invalid Send operation ID");
+      const result=await pool.query<{
+        operation_id:string;amount_mb:string;state:string;
+      }>(`
+        SELECT operation_id,amount_mb::text,state
+        FROM gb_wallet.operations
+        WHERE tenant_id=$1 AND actor_id=$2 AND operation_id=$3
+          AND operation_kind='send'
+        LIMIT 1
+      `,[actor.tenantId,actor.userId,operationId]);
+      const row=result.rows[0];
+      if(!row)return null;
+      if(row.state!=="completed")throw new Error("gb.wallet.send_not_confirmed");
+      return Object.freeze({operationId:row.operation_id,
+        amountMb:bigintMb(row.amount_mb),state:"completed" as const});
+    },
   };
 }
 

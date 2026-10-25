@@ -33,6 +33,21 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
     }
     return identity;
   };
+  app.get("/v1/gb/wallet/send/receipt/:operationId",async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    try{
+      const user=await actor(request.headers.authorization);
+      const operationId=(request.params as {operationId?:unknown}).operationId;
+      if(typeof operationId!=="string"||
+         !/^send_[A-Za-z0-9_-]{22,128}$/.test(operationId))
+        return reply.code(422).send({error:{code:"invalid_send_operation"}});
+      const receipt=await ports.readTransfer(user,operationId);
+      if(!receipt)return reply.code(404).send({error:{code:"send_not_confirmed"}});
+      if(receipt.operationId!==operationId||receipt.state!=="completed")
+        return reply.code(503).send({error:{code:"send_unavailable"}});
+      return {receipt};
+    }catch(error){return errorResponse(error,reply);}
+  });
   // An exact public handle is required: never enumerate profiles by display
   // name, phone, partial prefix or private contact list. The same active,
   // self-excluding and bilateral-blocked resolver backs signed Send review.

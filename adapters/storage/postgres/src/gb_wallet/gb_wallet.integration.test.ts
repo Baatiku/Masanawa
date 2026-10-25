@@ -70,10 +70,13 @@ describeDatabase("isolated GB wallet serializable accounting", () => {
        VALUES($1,'human',$2,1000)`,
       [user.tenantId,user.userId],
     );
-    const first={...user,recipientId,operationId:createCanonicalId("operation"),
+    const first={...user,recipientId,operationId:"send_12345678901234567890123456789012",
       idempotencyKey:"same-call",amountMb:700};
     const duplicates=await Promise.all([repo().transfer(first),repo().transfer(first)]);
     expect(duplicates[0]).toEqual(duplicates[1]);
+    expect(await repo().readTransfer(user,first.operationId)).toEqual(duplicates[0]);
+    expect(await repo().readTransfer({...user,userId:recipientId},first.operationId)).toBeNull();
+    expect(await repo().readTransfer({...user,tenantId:createCanonicalId("tenant")},first.operationId)).toBeNull();
     expect(await repo().read(user)).toMatchObject({purchasedMb:300,welcomeMb:0});
     expect(await repo().read({...user,userId:recipientId}))
       .toMatchObject({purchasedMb:700});
