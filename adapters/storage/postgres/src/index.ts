@@ -52,3 +52,5 @@ export * from "./gb_wallet/reservations.js";
 export * from "./gb_wallet/data_journal.js";
 
 export {createGbBillstackRepository} from "./gb_wallet/billstack_repository.js";
+
+export * from "./gb_wallet/call_admissions.js";
