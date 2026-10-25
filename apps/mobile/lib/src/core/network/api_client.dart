@@ -275,11 +275,13 @@ class ApiClient {
   }
 
   Future<AuthTokens> otpVerify(String code,
-      {String? phone, String? email, String? name, String? deviceId}) async {
+      {String? phone, String? email, String? name, String? firstName,
+        String? lastName, String? contactPhone, String? deviceId}) async {
     final data = await _post(
       '/auth/verify',
       {
-        ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name)
+        ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name,
+          firstName:firstName,lastName:lastName,contactPhone:contactPhone)
           .toJson(),
         if(deviceId!=null)'deviceId':deviceId,
       },

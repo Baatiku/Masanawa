@@ -1734,8 +1734,20 @@ export async function startGatewayService(
       return {
         authorize:async(header:string|undefined)=>resolveFeatureFan(header),
         // Profile text alone does not prove verified contact/eligibility.
-        applicant:options.appOptions?.billstackVerifiedApplicant ?? (async()=>{
-          throw new Error("billstack.verified_applicant_unqualified");
+        applicant:options.appOptions?.billstackVerifiedApplicant ?? (async(actor,reference)=>{
+          const rows=await featurePool.query(
+            `SELECT email,first_name,last_name,contact_phone
+             FROM security.platform_user_profiles
+             WHERE tenant_id=$1 AND user_id=$2 AND email IS NOT NULL
+               AND first_name IS NOT NULL AND last_name IS NOT NULL
+               AND contact_phone IS NOT NULL`,
+            [actor.tenantId,actor.userId]);
+          const row=rows.rows[0] as {email?:string;first_name?:string;
+            last_name?:string;contact_phone?:string}|undefined;
+          if(!row?.email||!row.first_name||!row.last_name||!row.contact_phone)
+            throw new Error("billstack.incomplete_applicant");
+          return {reference,email:row.email,firstName:row.first_name,
+            lastName:row.last_name,phone:row.contact_phone};
         }),
         read:storage.read,
         start:storage.start,
@@ -1748,6 +1760,7 @@ export async function startGatewayService(
         }),
         ready:()=>env.MASANAWA_NGN_FUNDING_VERIFIED==="true" &&
           typeof options.appOptions?.billstackSettlementVerifier==="function",
+        canAssign:()=>true,
         webhookSecret:billstackSecret,
       };
     })() : undefined);

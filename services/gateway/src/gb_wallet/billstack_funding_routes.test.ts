@@ -71,6 +71,19 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   expect(f.create).not.toHaveBeenCalled();expect(f.credit).not.toHaveBeenCalled();
  });
 
+ it("can allocate a verified applicant account before settlement credit is enabled",async()=>{
+  const f=setup({ready:()=>false,canAssign:()=>true});
+  const headers={authorization:"Bearer session"};
+  const assigned=await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers});
+  expect(assigned.statusCode).toBe(200);
+  expect(assigned.json().account).toMatchObject({state:"assigned",accountNumber:"0000000100"});
+  expect(f.create).toHaveBeenCalledOnce();
+  const unsigned=await f.app.inject({method:"POST",url:"/webhooks/billstack/gb",
+    headers:{"content-type":"application/json"},payload:"{}"});
+  expect(unsigned.statusCode).toBe(503);
+  expect(f.credit).not.toHaveBeenCalled();
+ });
+
  it("rejects independent settlement mismatch even with a valid webhook signature",async()=>{
   const f=setup({verifySettlement:async payment=>({...payment,amountKobo:payment.amountKobo+1})});
   const timestamp="1792886400";

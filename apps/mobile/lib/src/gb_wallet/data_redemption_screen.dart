@@ -137,8 +137,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
         : null;
     if (_owner != owner) {
       _clearQuote();
-      _phone.clear();
-      _network = null;
+      _phone.text = session is SessionSignedIn
+          ? (session.user.contactPhone ?? '') : '';
+      _network = guessGbNetworkForNigerianPhone(_phone.text);
       _manualNetwork = false;
       _validity = GbDataValidityPeriod.daily;
       _bundleId = null;

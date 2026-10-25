@@ -23,6 +23,7 @@ class _Session extends SessionController {
     final person = AuthUser(
       id: id,
       name: id,
+      contactPhone: id == 'fan' ? '08031234567' : null,
       locale: 'en',
       status: 'ACTIVE',
       role: 'USER',
@@ -189,6 +190,21 @@ class _Fixture {
 }
 
 void main() {
+  testWidgets(
+    'Data prefills the account contact and permits another recipient',
+    (tester) async {
+      final f = _Fixture();
+      await tester.pumpWidget(
+        f.app(const Scaffold(body: DataRedemptionScreen())),
+      );
+      await tester.pumpAndSettle();
+      final phone = find.byType(TextField);
+      expect(tester.widget<TextField>(phone).controller!.text, '08031234567');
+      await tester.enterText(phone, '09012345678');
+      expect(tester.widget<TextField>(phone).controller!.text, '09012345678');
+      expect(tester.takeException(), isNull);
+    },
+  );
   test(
     'integer kobo and cash/account parsing refuse invented units and bank info',
     () {

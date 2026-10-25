@@ -10,6 +10,9 @@ export interface PlatformAuthProfile {
   readonly username?: string;
   readonly email: string | null;
   readonly phone: string | null;
+  readonly contactPhone?: string | null;
+  readonly firstName?: string | null;
+  readonly lastName?: string | null;
   readonly locale: string;
   readonly createdAt: string;
   readonly accountState?: "active" | "restricted" | "suspended" | "recovery";
@@ -56,6 +59,7 @@ export interface PlatformSessionRepository {
   }>): Promise<PlatformAuthProfile | null>;
   createProfile(input: Readonly<{
     tenantId: TenantId; channel: PlatformAuthChannel; identifier: string; name: string; locale: string; createdAt: string;
+    firstName?: string; lastName?: string; contactPhone?: string;
   }>): Promise<PlatformAuthProfile>;
   setPasswordCredential(input: Readonly<{
     tenantId: TenantId; userId: UserId; passwordHash: string; createdAt: string;

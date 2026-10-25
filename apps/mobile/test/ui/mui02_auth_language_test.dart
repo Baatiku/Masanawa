@@ -131,6 +131,9 @@ class _ExpiredOtpClient extends _TestAuthClient {
     String? phone,
     String? email,
     String? name,
+    String? firstName,
+    String? lastName,
+    String? contactPhone,
     String? deviceId,
   }) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
@@ -175,7 +178,7 @@ void main() {
       client.calls.last.complete([OtpChannel.email]);
       await tester.pump();
       expect(find.text('Email'), findsWidgets);
-      expect(find.text('Phone'), findsOneWidget);
+      expect(find.text('Phone'), findsNothing);
     },
   );
 
@@ -226,9 +229,7 @@ void main() {
     }
   }
 
-  testWidgets('phone country stays selected after switching email and phone', (
-    tester,
-  ) async {
+  testWidgets('email login does not offer phone signup', (tester) async {
     final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
     await preference.load();
     final router = _router('/phone-login');
@@ -244,21 +245,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Phone'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('phone-country-picker')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('phone-country-GH')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '0241234567');
-    await tester.pump();
-    expect(find.text('+233'), findsOneWidget);
-    await tester.tap(find.text('Email'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Phone'));
-    await tester.pumpAndSettle();
-    expect(find.text('+233'), findsOneWidget);
-    expect(find.text('+234'), findsNothing);
+    expect(find.text('Phone'), findsNothing);
+    expect(find.byKey(const Key('phone-country-picker')), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -280,7 +269,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Ada Obi');
+    await tester.enterText(find.byType(TextField).at(0), 'Ada');
+    await tester.enterText(find.byType(TextField).at(1), 'Obi');
+    await tester.enterText(find.byType(TextField).at(2), '08012345678');
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.byType(OtpScreen), findsOneWidget);
@@ -315,9 +306,9 @@ void main() {
     expect(preference.localeOverride, const Locale('fr'));
     expect(find.text('Langue de l’application'), findsOneWidget);
 
-    router.go('/password');
+    router.go('/otp');
     await tester.pumpAndSettle();
-    expect(find.byType(PasswordScreen), findsOneWidget);
+    expect(find.byType(OtpScreen), findsOneWidget);
     expect(find.text('Langue de l’application'), findsOneWidget);
     expect(
       tester.getCenter(find.byKey(const Key('language-picker'))).dx,

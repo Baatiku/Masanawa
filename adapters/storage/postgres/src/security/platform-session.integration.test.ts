@@ -61,6 +61,7 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
         channel: "email",
         identifier: `customer-${tenantId.slice(-8)}@example.com`,
         name: "Customer",
+        firstName:"Amina",lastName:"Okafor",contactPhone:"08012345678",
         locale: "en-NG",
         createdAt,
       }),
@@ -75,6 +76,8 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
     ]);
 
     expect(left.userId).toBe(right.userId);
+    expect(left).toMatchObject({email:left.email,phone:null,
+      firstName:"Amina",lastName:"Okafor",contactPhone:"08012345678"});
     expect(left.username).toMatch(/^customer_[a-f0-9]{16}$/u);
     expect(right.username).toBe(left.username);
     const another = await repository.createProfile({tenantId,channel:"email",

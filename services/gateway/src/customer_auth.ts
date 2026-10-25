@@ -84,6 +84,9 @@ export interface CustomerAuthService {
     email?: string;
     code: string;
     name?: string;
+    firstName?: string;
+    lastName?: string;
+    contactPhone?: string;
     deviceId?: string;
     clientLabel?: string;
   }>): Promise<AuthTokensView>;
@@ -135,6 +138,7 @@ export interface AuthUserView {
   readonly name: string;
   readonly username?: string;
   readonly phone: string | null;
+  readonly contactPhone?: string | null;
   readonly email: string | null;
   readonly locale: string;
   readonly status:"ACTIVE"|"RESTRICTED"|"RECOVERY";
@@ -158,6 +162,7 @@ function authUser(profile: PlatformAuthProfile, isNewUser: boolean): AuthUserVie
     name: profile.name,
     ...(profile.username ? {username:profile.username} : {}),
     phone: profile.phone,
+    contactPhone: profile.contactPhone ?? null,
     email: profile.email,
     locale: profile.locale,
     status: profile.accountState==="restricted"?"RESTRICTED" as const:
@@ -414,8 +419,16 @@ export function createCustomerAuthService(input: Readonly<{
         identifier: normalized.identifier,
         observedAt: verifiedAt,
       });
-      const name = request.name?.trim();
+      const firstName=request.firstName?.trim();
+      const lastName=request.lastName?.trim();
+      const contactPhone=request.contactPhone?.replace(/[\s()-]/gu,"");
+      const name=firstName&&lastName?`${firstName} ${lastName}`:request.name?.trim();
       if (!profile && !name) throw new CustomerAuthError("NAME_REQUIRED_ON_SIGNUP", 400);
+      if (!profile && normalized.channel==="email" &&
+        (!firstName || !lastName || !/^[\p{L}\p{M} .'-]{1,80}$/u.test(firstName) ||
+         !/^[\p{L}\p{M} .'-]{1,80}$/u.test(lastName) ||
+         !contactPhone || !/^0(?:70|80|81|90|91)\d{8}$/u.test(contactPhone)))
+        throw new CustomerAuthError("SIGNUP_DETAILS_REQUIRED",400);
 
       // Consume atomically only when this request can actually complete sign-in.
       const consumed = await input.repository.consumeOtpChallenge({
@@ -441,6 +454,7 @@ export function createCustomerAuthService(input: Readonly<{
           channel: normalized.channel,
           identifier: normalized.identifier,
           name: name!,
+          ...(firstName&&lastName&&contactPhone?{firstName,lastName,contactPhone}:{}),
           locale: "en-NG",
           createdAt: verifiedAt,
         });

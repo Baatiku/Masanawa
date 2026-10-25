@@ -48,19 +48,24 @@ class OtpSendResponse {
 }
 
 class OtpVerifyRequest {
-  const OtpVerifyRequest({this.phone, this.email, required this.code, this.name})
+  const OtpVerifyRequest({this.phone, this.email, required this.code, this.name,
+    this.firstName, this.lastName, this.contactPhone})
       : assert(phone != null || email != null, 'Provide exactly one of phone or email');
 
   final String? phone;
   final String? email;
   final String code;
   final String? name;
+  final String? firstName, lastName, contactPhone;
 
   Map<String, dynamic> toJson() => {
         if (phone != null) 'phone': phone,
         if (email != null) 'email': email,
         'code': code,
         if (name != null) 'name': name,
+        if (firstName != null) 'firstName': firstName,
+        if (lastName != null) 'lastName': lastName,
+        if (contactPhone != null) 'contactPhone': contactPhone,
       };
 }
 
@@ -127,6 +132,7 @@ class AuthUser {
     required this.id,
     required this.name,
     this.phone,
+    this.contactPhone,
     this.email,
     required this.locale,
     required this.status,
@@ -141,6 +147,7 @@ class AuthUser {
         id: json['id'] as String,
         name: json['name'] as String,
         phone: json['phone'] as String?,
+        contactPhone: json['contactPhone'] as String?,
         email: json['email'] as String?,
         locale: json['locale'] as String,
         status: json['status'] as String,
@@ -154,6 +161,7 @@ class AuthUser {
   final String id;
   final String name;
   final String? phone;
+  final String? contactPhone;
   final String? email;
   final String locale;
   final String status;
@@ -170,6 +178,7 @@ class AuthUser {
         'id': id,
         'name': name,
         'phone': phone,
+        'contactPhone': contactPhone,
         'email': email,
         'locale': locale,
         'status': status,

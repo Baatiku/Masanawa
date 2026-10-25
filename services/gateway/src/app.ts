@@ -465,6 +465,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
               code: Type.String({ minLength: 6, maxLength: 6 }),
               name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+              firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              contactPhone: Type.Optional(Type.String({ minLength: 11, maxLength: 24 })),
               deviceId: Type.Optional(Type.String({minLength:32,maxLength:32})),
             },
             { additionalProperties: false },
@@ -484,6 +487,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             ...(request.body.name === undefined
               ? {}
               : { name: request.body.name }),
+            ...(request.body.firstName === undefined ? {} : {firstName:request.body.firstName}),
+            ...(request.body.lastName === undefined ? {} : {lastName:request.body.lastName}),
+            ...(request.body.contactPhone === undefined ? {} : {contactPhone:request.body.contactPhone}),
             ...(request.body.deviceId===undefined?{}:{deviceId:request.body.deviceId}),
             clientLabel:authClientLabel({
               platformHeader:request.headers["x-masanawa-client-platform"],
