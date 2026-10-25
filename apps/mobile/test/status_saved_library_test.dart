@@ -395,7 +395,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Saved Status'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Saved Status'), findsOneWidget);
+    // Saved opens a dedicated route; its root-header action is now offstage.
+    expect(find.byTooltip('Saved Status'), findsNothing);
     expect(find.text('Hello Status'), findsWidgets);
     expect(find.text('Approved original'), findsOneWidget);
   });
