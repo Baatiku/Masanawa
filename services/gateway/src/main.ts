@@ -5,6 +5,10 @@ import {
 } from "./gb_data/data_catalogue.js";
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import type { GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
+import { createBillstack9PsbClient } from "./gb_wallet/billstack_provider.js";
+import type { BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
+import { DEFAULT_RECHARGE_RATE_BOOK } from "./gb_wallet/pricing.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
 import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
@@ -19,6 +23,9 @@ import {
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
   createPostgresGbRequestRepository,
+  createGbUsageReservations,
+  createGbDataJournal,
+  createGbBillstackRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
@@ -2282,6 +2289,40 @@ export async function startGatewayService(
          resolveRecipient: gbSendReview.resolveRecipient,
          store: createPostgresGbRequestRepository(featurePool)}
       : undefined);
+  // Funding instructions appear only after provider-verified 9PSB assignment.
+  const billstackSecret = env.MASANAWA_BILLSTACK_SECRET_KEY?.trim();
+  const billstackFunding: BillstackFundingPorts | undefined =
+    options.appOptions?.billstackFunding ??
+    (billstackSecret && featurePool && sessions && featureTenant ? (() => {
+      const storage = createGbBillstackRepository(featurePool);
+      const provider = createBillstack9PsbClient({secretKey:billstackSecret});
+      return {
+        authorize:async(header:string|undefined)=>resolveFeatureFan(header),
+        applicant:async(actor:{tenantId:string;userId:string},reference:string)=>{
+          const result=await featurePool.query<{
+            display_name:string;email:string|null;phone:string|null;
+          }>("SELECT display_name,email,phone FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2",
+            [actor.tenantId,actor.userId]);
+          const profile=result.rows[0];
+          if(!profile?.email || !profile.phone) {
+            throw new Error("billstack.verified_contact_required");
+          }
+          const phone=profile.phone.trim().replace(/^\\+234/,"0");
+          const names=profile.display_name.trim().split(/\\s+/);
+          return {reference,email:profile.email.trim(),phone,
+            firstName:names[0]??"",lastName:names.slice(1).join(" ") || (names[0] ?? "")};
+        },
+        read:storage.read,
+        start:storage.start,
+        create:provider.reserve,
+        finalize:storage.finalize,
+        credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0],
+          quote:Parameters<typeof storage.applyVerifiedPayment>[1])=>
+          storage.applyVerifiedPayment(payment,quote),
+        webhookSecret:billstackSecret,
+        rateBook:DEFAULT_RECHARGE_RATE_BOOK,
+      };
+    })() : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2336,6 +2377,32 @@ export async function startGatewayService(
           liveItems: createLiveFlutterwaveGbDataItems(flutterwaveBills),
         };
       })();
+    const gbDataPurchases: GbDataPurchaseRoutes | undefined =
+      options.appOptions?.gbDataPurchases ?? (() => {
+        if (env.MASANAWA_GB_DATA_PURCHASE_ENABLED !== "true") return undefined;
+        if (!gbDataCatalogue || !flutterwaveBills || !featurePool ||
+            !sessions || !featureTenant) {
+          throw new TypeError("GB Data purchase enabled without approved live catalogue, credentialed provider and durable MB ledger");
+        }
+        const reservations=createGbUsageReservations(featurePool);
+        const journal=createGbDataJournal(featurePool);
+        return {
+          authorize:gbDataCatalogue.authorize,
+          service:{
+            approved:gbDataCatalogue.approved,
+            liveItems:gbDataCatalogue.liveItems,
+            reserve:reservations.reserve,
+            capture:reservations.capture,
+            release:reservations.release,
+            claim:journal.claim,
+            read:journal.read,
+            resolve:journal.resolve,
+            pay:(input:Parameters<typeof flutterwaveBills.createPayment>[0])=>
+              flutterwaveBills.createPayment(input),
+            status:(reference:string)=>flutterwaveBills.getStatus(reference),
+          },
+        };
+      })();
     app = appFactory({
       ...(status ? {status} : {}),
       ...(masana ? {masana} : {}),
@@ -2343,6 +2410,8 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       productScope,
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
+      ...(gbDataPurchases ? { gbDataPurchases } : {}),
+      ...(billstackFunding ? { billstackFunding } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
       ...(sessions ? { mobileDiagnostics: {

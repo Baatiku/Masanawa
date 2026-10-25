@@ -8,6 +8,8 @@ import {
   type RechargeRateBook,
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import { registerGbDataPurchaseRoutes, type GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
+import { registerBillstackFundingRoutes, type BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import { registerGbSendReviewRoutes } from "./gb_wallet/send_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
@@ -164,6 +166,8 @@ export interface GatewayAppOptions {
   readonly gbRequests?: GbRequestPorts;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
+  readonly gbDataPurchases?: GbDataPurchaseRoutes;
+  readonly billstackFunding?: BillstackFundingPorts;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -405,6 +409,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
+  if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
+  if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
