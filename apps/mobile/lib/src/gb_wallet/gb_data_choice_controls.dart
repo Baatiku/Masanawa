@@ -52,6 +52,7 @@ class GbDataValidityChoices extends StatelessWidget {
       ])
         ChoiceChip(
           key: ValueKey('data-validity-${choice?.name ?? 'all'}'),
+          checkmarkColor: Theme.of(context).colorScheme.onSurface,
           label: Text(switch (choice) {
             null => 'All durations',
             GbDataValidityPeriod.daily => 'Daily',
