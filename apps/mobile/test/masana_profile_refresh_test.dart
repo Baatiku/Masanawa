@@ -95,7 +95,10 @@ void main() {
     await tester.pump();
     pending.complete(Response(requestOptions: RequestOptions(path: '/follow'),
       statusCode: 200, data: {'following': true}));
-    await tester.pumpAndSettle();
+    // The deliberately delayed Follow transport can retain in-flight network
+    // retry animations; only the new authorization projection is under test.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Session changed. Reopen this profile.'), findsOneWidget);
     expect(find.text('Following'), findsNothing);
     expect(tester.takeException(), isNull);
