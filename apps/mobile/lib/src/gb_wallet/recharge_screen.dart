@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,11 +29,21 @@ class _RechargePackagesScreenState
   bool _loading = true;
   String? _error;
   int? _selectedGb;
+  bool _accountLoading = false;
+  bool _accountCreating = false;
+  String? _bankAccountNumber;
+  String? _bankAccountName;
+  String? _bankName;
+  String? _accountState;
+  String? _accountError;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(_refresh);
+    Future<void>.microtask(() async {
+      await _refresh();
+      await _loadBankAccount();
+    });
   }
 
   Future<void> _refresh() async {
@@ -90,6 +101,116 @@ class _RechargePackagesScreenState
         _error = 'Package information is temporarily unavailable.';
       });
     }
+  }
+
+  Future<void> _loadBankAccount() async {
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final owner=session.user.id;
+    if (!mounted) return;
+    setState(() {
+      _accountLoading=true;
+      _accountError=null;
+      _bankAccountNumber=null;_bankAccountName=null;_bankName=null;
+      _accountState=null;
+    });
+    try {
+      final reply=await ref.read(apiClientProvider).dio.get<Object?>(
+        '/v1/gb/wallet/virtual-account',
+      );
+      if(reply.data is! Map<String,dynamic>)throw const FormatException('Invalid account response');
+      _applyAccountReply((reply.data as Map<String,dynamic>)['account'],owner);
+    }catch(_){
+      if(!mounted||!_stillOwner(owner))return;
+      setState((){
+        _accountError='The bank account could not be verified. Retry when connected.';
+        _accountLoading=false;
+      });
+    }
+  }
+
+  void _applyAccountReply(Object? account, String owner) {
+    if(account is! Map<String,dynamic>)throw const FormatException('Invalid account');
+    final state=account['state'];
+    if(state is! String || !['unassigned','pending','assigned','suspended'].contains(state)) {
+      throw const FormatException('Unknown bank account status');
+    }
+    String? number,name,bank;
+    if(state=='assigned'){
+      if(account['bankId']!='9PSB' ||
+        account['accountNumber'] is! String ||
+        !RegExp(r'^\d{10}$').hasMatch(account['accountNumber'] as String) ||
+        account['accountName'] is! String ||
+        account['bankName'] is! String)throw const FormatException('Unverified 9PSB account');
+      number=account['accountNumber'] as String;
+      name=account['accountName'] as String;
+      bank=account['bankName'] as String;
+    }
+    if(!mounted||!_stillOwner(owner))return;
+    setState((){
+      _accountState=state;_bankAccountNumber=number;
+      _bankAccountName=name;_bankName=bank;
+      _accountLoading=false;_accountError=null;
+    });
+  }
+
+  Future<void> _assignBankAccount() async {
+    final session=ref.read(sessionProvider);
+    if(session is! SessionSignedIn||_accountCreating)return;
+    final owner=session.user.id;
+    setState((){_accountCreating=true;_accountError=null;});
+    try {
+      final reply=await ref.read(apiClientProvider).dio.post<Object?>(
+        '/v1/gb/wallet/virtual-account',
+      );
+      if(reply.data is! Map<String,dynamic>)throw const FormatException('Invalid bank assignment');
+      _applyAccountReply((reply.data as Map<String,dynamic>)['account'],owner);
+    }catch(_){
+      if(!mounted||!_stillOwner(owner))return;
+      setState((){_accountError='Bank assignment is pending or unavailable. Do not transfer money yet.';});
+    }finally {
+      if(mounted&&_stillOwner(owner))setState(()=>_accountCreating=false);
+    }
+  }
+
+  Widget _bankAccountSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:CrossAxisAlignment.stretch,
+          children:[
+            Text('9 Payment Service Bank (9PSB)',style:Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height:12),
+            if(_accountLoading||_accountCreating)const LinearProgressIndicator(),
+            if(_accountError!=null)...[
+              Text(_accountError!),
+              OutlinedButton(onPressed:_loadBankAccount,child:const Text('Retry bank details')),
+            ],
+            if(_accountState=='assigned'&&_bankAccountNumber!=null)...[
+              Text(_bankName??'9PSB Bank'),
+              Text(_bankAccountName??'',style:Theme.of(context).textTheme.titleSmall),
+              SelectableText(_bankAccountNumber!,style:Theme.of(context).textTheme.headlineSmall),
+              OutlinedButton.icon(
+                onPressed:()=>Clipboard.setData(ClipboardData(text:_bankAccountNumber!)),
+                icon:const Icon(Icons.copy_outlined),
+                label:const Text('Copy account number'),
+              ),
+              const Text('Transfer only after confirming this is your assigned bank account. Your purchased MB will appear after server-verified payment confirmation.'),
+            ]else if(_accountState=='pending')...[
+              const Text('Account assignment is pending verification. Do not transfer yet.'),
+              OutlinedButton(onPressed:_loadBankAccount,child:const Text('Check assignment')),
+            ]else if(_accountState=='suspended')
+              const Text('Funding is unavailable on this account. Contact support.')
+            else if(_accountState=='unassigned')
+              FilledButton(
+                onPressed:_accountCreating?null:_assignBankAccount,
+                child:const Text('Get my 9PSB account'),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   bool _stillOwner(String owner) {
@@ -169,8 +290,9 @@ class _RechargePackagesScreenState
                         ),
                       const SizedBox(height: 12),
                       if (_selectedGb != null)
-                        const Text('Funding bank details are not yet available. '
-                            'Do not transfer until an account is assigned to you.'),
+                        const Text('The selected package is a price guide. The verified transferred amount determines credited MB.'),
+                      const SizedBox(height:12),
+                      _bankAccountSection(),
                       const SizedBox(height: 8),
                       Text('Price version: ${_version ?? 'unavailable'}',
                           style: Theme.of(context).textTheme.bodySmall),
