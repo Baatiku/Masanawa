@@ -2745,6 +2745,21 @@ export async function startGatewayService(
           paystackSecretKey: env.PAYSTACK_SECRET_KEY,
         })
       : undefined;
+    // Explicit rollout selection activates the staged reduced-product
+    // route fence. Unknown values are configuration errors, not permission
+    // to silently keep retired public financial and human endpoints open.
+    const rawProductScope = env.MASANAWA_PRODUCT_SCOPE?.trim();
+    if (rawProductScope && rawProductScope !== "legacy" &&
+        rawProductScope !== "masana-lite") {
+      throw new TypeError("MASANAWA_PRODUCT_SCOPE must be legacy or masana-lite");
+    }
+    const productScope = options.appOptions?.productScope ??
+      (rawProductScope === "masana-lite" ? "masana-lite" : "legacy");
+    if (env.MASANAWA_GB_DATA_CATALOG_ENABLED === "true" &&
+        productScope !== "masana-lite") {
+      throw new TypeError("GB data routes may be enabled only in the reduced product scope");
+    }
+
     // Read-only data discovery is off by default. Server/operator-reviewed
     // exact bundle mapping plus the existing credentialed Flutterwave adapter
     // are both required; old bill purchases remain excluded in lite mode.
@@ -2784,6 +2799,7 @@ export async function startGatewayService(
       ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
+      productScope,
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
