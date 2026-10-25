@@ -3,7 +3,6 @@ import '../../finance/identity_details_screen.dart';
 import '../settings/account_security_screen.dart';
 import '../settings/account_data_screen.dart';
 import '../settings/notification_preferences_screen.dart';
-import 'my_masana_screen.dart';
 import 'person_profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -433,7 +432,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       const Text('Private details and controls. These do not appear on your public profile.'),
                       const SizedBox(height: 8),
                       for (final entry in <(String, IconData, Widget)>[
-                        ('My Masana', Icons.auto_awesome_outlined, const MyMasanaScreen()),
                         ('Identity details', Icons.verified_user_outlined, const IdentityDetailsScreen()),
                         ('Account security', Icons.lock_outline, const AccountSecurityScreen()),
                         ('Notifications', Icons.notifications_outlined, const NotificationPreferencesScreen()),
