@@ -94,6 +94,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
   bool _incoming = true;
   String? _error;
   String? _createKey;
+  String? _quickSelection;
 
   @override
   void dispose() {
@@ -121,6 +122,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
     _busy = false;
     _incoming = true;
     _createKey = null;
+    _quickSelection = null;
     _recipient.clear();
     _amount.clear();
     _owner = owner;
@@ -218,6 +220,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
         _recipient.clear();
         _amount.clear();
         _createKey = null;
+        _quickSelection = null;
         _incoming = false;
       });
       await _load(owner);
@@ -342,25 +345,62 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
               },
               decoration: const InputDecoration(
                 isDense: true,
-                labelText: 'From @username',
+                labelText: 'Request from @username',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 10),
+            Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            SingleChildScrollView(
+              key: const ValueKey('request-quick-amounts'),
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final entry in const <int, String>{
+                  100: '100 MB', 500: '500 MB', 1000: '1 GB',
+                  5000: '5 GB', 10000: '10 GB',
+                }.entries)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: ChoiceChip(
+                      key: ValueKey('request-quick-${entry.key}'),
+                      label: Text(entry.value),
+                      selected: _quickSelection == '${entry.key}',
+                      onSelected: owner == null || _busy ? null : (_) {
+                        setState(() {
+                          if (_amount.text.trim() != entry.key.toString()) {
+                            _amount.text = entry.key.toString();
+                            _createKey = null;
+                          }
+                          _quickSelection = '${entry.key}';
+                        });
+                      },
+                    ),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 10),
             TextField(
+              key: const ValueKey('request-custom-mb'),
               controller: _amount,
               enabled: owner != null && !_busy,
               keyboardType: TextInputType.number,
               onChanged: (_) {
                 _createKey = null;
+                _quickSelection = null;
                 setState(() {});
               },
               decoration: const InputDecoration(
                 isDense: true,
-                labelText: 'Amount in MB',
+                labelText: 'Custom amount (whole MB)',
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 6),
+            Text('They decide whether to pay. No MB is charged now.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.textMuted)),
             const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: owner != null && !_busy && _validHandle &&
@@ -393,6 +433,10 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
                 onSelected: (_) => setState(() => _incoming = false),
               ),
             ]),
+            Text(_incoming ? 'Requests you can choose to pay' :
+                'Requests you asked others to pay',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.textMuted)),
             if (_loading || _busy) const LinearProgressIndicator(),
             if (_error != null)
               Center(child: Padding(
