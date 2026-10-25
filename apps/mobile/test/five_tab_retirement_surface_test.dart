@@ -79,6 +79,11 @@ void main() {
     expect(chat, isNot(contains("value: 'room'")));
   });
 
+  test('retired Rooms and Videos feature packages contain no source files', () {
+    expect(Directory('lib/src/features/rooms').existsSync(), isFalse);
+    expect(Directory('lib/src/features/videos').existsSync(), isFalse);
+  });
+
   test('notification controls only offer active categories', () {
     final notifications =
         _source('screens/settings/notification_preferences_screen.dart');
