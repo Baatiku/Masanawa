@@ -114,3 +114,7 @@ Chats uses one list with search and no All/Unread/Archived chips. Existing archi
 ### Internal MB call accounting foundation (UX-R02/R06 partial)
 
 The call admission journal reserves an owner/character-bound MB budget and accepts connected-time proof only from internal trusted server relay code. Failed/ringing/setup calls release the hold, reconnect excludes downtime, and expired-lease recovery captures only saved proof. Public call screens, routes and legacy admission are not switched by this foundation batch; they remain open repair work. No client duration, mock success or unreserved fallback may be introduced during integration. See `MB-CALL-ADMISSION-AUTHORITY-20261025.md` for boundaries and required relay/mobile/recovery work.
+
+### Protected MB call review and admission contract (not yet composed in main)
+
+The retained call flow will request a bounded MB review, display Masana and maximum connected seconds/MB, then create the hold only after explicit signed acceptance. Reviews expire and changes invalidate consent. Original admission readback resolves timeout/pending/ended states without another reservation. Private receipts stay readable during customer recovery restrictions while new spending is denied. No phone/user-selected actor or client duration is accepted. The optional Gateway call routes require trusted relay/recovery readiness; current production main and mobile remain unswitched by this service-only batch.

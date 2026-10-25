@@ -35,6 +35,8 @@ const project=(r:Row):GbCallAdmission=>({
  */
 export function createGbCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
   const wallet=createGbUsageReservations(pool);
+  const originalId=(actor:GbCallActor,key:string)=>'call_'+createHash('sha256')
+    .update(JSON.stringify([actor.tenantId,actor.userId,key])).digest('hex').slice(0,48);
   const readRow=async(actor:GbCallActor,id:string):Promise<Row|null>=>{
     actorKey(actor);if(!valid(id))fail('invalid_admission',422);
     const result=await pool.query<Row>(`SELECT * FROM gb_wallet.call_admissions
@@ -98,14 +100,17 @@ export function createGbCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
     }));
   };
   return {
+    async readOriginal(actor:GbCallActor,key:string){
+      if(!/^[A-Za-z0-9_-]{8,128}$/.test(key))fail('invalid_admission',422);
+      const row=await readRow(actor,originalId(actor,key));return row?project(row):null;
+    },
     async read(actor:GbCallActor,id:string){const r=await readRow(actor,id);return r?project(r):null;},
     async admit(actor:GbCallActor,input:{characterId:string;budgetMb:number;idempotencyKey:string}){
       actorKey(actor);
       if(!valid(input.characterId)||!Number.isSafeInteger(input.budgetMb)||
          input.budgetMb<1||input.budgetMb>3600||
          !/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey))fail('invalid_admission',422);
-      const id='call_'+createHash('sha256').update(JSON.stringify([
-        actor.tenantId,actor.userId,input.idempotencyKey])).digest('hex').slice(0,48);
+      const id=originalId(actor,input.idempotencyKey);
       const hash=createHash('sha256').update(JSON.stringify([
         input.characterId,input.budgetMb])).digest('hex');
       await pool.query(`INSERT INTO gb_wallet.call_admissions
