@@ -1,0 +1,64 @@
+name: Owner test APK — final five-tab Wallet and Data UI
+
+# One-shot build from the verified merge containing this new workflow file.
+# Its own file path is the only trigger; later app pushes do not build APKs.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/five-tab-final-owner-apk-20261025.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/android-gradle-repositories
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.47.7"
+          cache: true
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Build requested test APK
+        run: >-
+          flutter build apk --release
+          --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+          --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+      - name: Record exact source and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUTPUT=build/app/outputs/flutter-apk
+          test -s "$OUTPUT/app-release.apk"
+          (cd "$OUTPUT" && sha256sum app-release.apk > app-release.apk.sha256)
+          printf 'commit=%s\nworkflow=%s\nusage=owner testing only; requires deployed signed money provider configuration and server qualification\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" > "$OUTPUT/test-build-evidence.txt"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$OUTPUT/app-release.apk" \
+              > "$OUTPUT/android-signing-evidence.txt"
+          fi
+      - name: Upload test APK and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: masanawa-final-five-tab-test-apk-20261025
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/mobile/build/app/outputs/flutter-apk/test-build-evidence.txt
+            apps/mobile/build/app/outputs/flutter-apk/android-signing-evidence.txt
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Run Flutter tests
+        run: flutter test --reporter expanded
