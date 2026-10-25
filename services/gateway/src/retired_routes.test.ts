@@ -8,7 +8,7 @@ describe('permanent customer API retirement', () => {
   it('old scope settings and injected services cannot restore retired routes', async () => {
     const app = createGatewayApp({
       productScope: 'legacy',
-      roomCommunity: {} as never, creatorClone: {} as never,
+      creatorClone: {} as never,
       p2p: {} as never, videos: {} as never,
       msnFunding: {} as never, msnwBilling: {} as never,
       msnwCustody: {} as never, msnwConversion: {} as never,

@@ -9,7 +9,6 @@ import {
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
-import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
@@ -100,7 +99,6 @@ export interface GatewayAppOptions {
   /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
   readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
   /** Owner-scoped creator Masana service. May return provider unavailable, never mock success. */
-  readonly roomCommunity?: Parameters<typeof registerRoomCommunityRoutes>[1];
   readonly creatorCompletion?: Parameters<typeof registerCreatorCompletionRoutes>[1];
   readonly creatorAgents?: Parameters<typeof registerCreatorAgentRoutes>[1];
   readonly creatorPolicy?: Parameters<typeof registerCreatorPolicyRoutes>[1];

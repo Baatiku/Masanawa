@@ -9,7 +9,6 @@ describe("permanent reduced-product routes", () => {
     const options:GatewayAppOptions={
       productScope:"masana-lite",
       creatorClone:{} as NonNullable<GatewayAppOptions["creatorClone"]>,
-      roomCommunity:{} as NonNullable<GatewayAppOptions["roomCommunity"]>,
       p2p:{} as NonNullable<GatewayAppOptions["p2p"]>,
     };
     const app=createGatewayApp(options);
@@ -17,6 +16,9 @@ describe("permanent reduced-product routes", () => {
     await app.ready();
     const response=await app.inject({method:"POST",url:"/creator/clone",payload:{}});
     expect(response.statusCode).toBe(404);
+    for (const url of ["/v1/rooms", "/v1/rooms/discover", "/v1/rooms/room_12345678/community"]) {
+      expect((await app.inject({method:"GET",url})).statusCode, url).toBe(404);
+    }
     const gb=await app.inject({method:"GET",url:"/v1/gb/recharge/packages"});
     expect(gb.statusCode).toBe(200);
     expect(gb.json().packages).toHaveLength(6);
