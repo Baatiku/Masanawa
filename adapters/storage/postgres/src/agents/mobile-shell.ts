@@ -366,7 +366,7 @@ export function createPostgresMobilePushRepository(pool: Pool): MobilePushReposi
     },
     async listNotices(scope: Parameters<MobilePushRepository["listNotices"]>[0]) {
       const result = await pool.query(
-        `SELECT event_id,category,title,deep_link,created_at
+        `SELECT event_id,category,title,deep_link,created_at,read_at
            FROM agents.mobile_notification_history
           WHERE tenant_id=$1 AND user_id=$2
           ORDER BY created_at DESC,event_id DESC LIMIT 100`,
@@ -378,7 +378,19 @@ export function createPostgresMobilePushRepository(pool: Pool): MobilePushReposi
         title: row.title,
         deepLink: row.deep_link,
         createdAt: new Date(row.created_at).toISOString(),
+        readAt: row.read_at == null ? null : new Date(row.read_at).toISOString(),
       })));
+    },
+    async markNoticeRead(input: Parameters<MobilePushRepository["markNoticeRead"]>[0]) {
+      const result = await pool.query<{ read_at: Date }>(
+        `UPDATE agents.mobile_notification_history
+            SET read_at=COALESCE(read_at,clock_timestamp())
+          WHERE tenant_id=$1 AND user_id=$2 AND event_id=$3
+          RETURNING read_at`,
+        [input.tenantId,input.userId,input.eventId],
+      );
+      return result.rows[0] == null ? null :
+        new Date(result.rows[0].read_at).toISOString();
     },
     async register(input: Parameters<MobilePushRepository["register"]>[0]) {
       if (

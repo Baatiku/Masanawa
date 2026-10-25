@@ -34,14 +34,19 @@ describe("notification settings admission", () => {
     const readPreferences = vi.fn(async () => defaults);
     const writePreferences = vi.fn(async () => defaults);
     const listNotices = vi.fn(async () => []);
+    const markNoticeRead = vi.fn(async () => "2026-10-25T22:00:00.000Z");
     const service = createAccountNotificationService({
       authorizer: { authorize } as unknown as AgentDirectoryAuthorizer,
-      repository: { readPreferences, writePreferences, listNotices } as unknown as MobilePushRepository,
+      repository: { readPreferences, writePreferences, listNotices, markNoticeRead } as unknown as MobilePushRepository,
     });
     await expect(service.preferences("Bearer different")).rejects.toThrow();
     await service.preferences("Bearer token-for-owner");
     await service.update("Bearer token-for-owner", defaults);
     await service.history("Bearer token-for-owner");
+    await expect(service.markRead("Bearer different", "event_1")).rejects.toThrow();
+    await expect(service.markRead("Bearer token-for-owner", "")).rejects.toThrow();
+    await expect(service.markRead("Bearer token-for-owner", "event_1"))
+      .resolves.toBe("2026-10-25T22:00:00.000Z");
     expect(readPreferences).toHaveBeenCalledWith({
       tenantId: "tenant_abc", userId: "user_owner",
     });
@@ -51,6 +56,10 @@ describe("notification settings admission", () => {
     });
     expect(listNotices).toHaveBeenCalledWith({
       tenantId: "tenant_abc", userId: "user_owner",
+    });
+    expect(markNoticeRead).toHaveBeenCalledTimes(1);
+    expect(markNoticeRead).toHaveBeenCalledWith({
+      tenantId: "tenant_abc", userId: "user_owner", eventId: "event_1",
     });
     expect(authorize).toHaveBeenCalledWith({
       authorizationHeader: "Bearer token-for-owner",

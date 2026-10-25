@@ -81,10 +81,14 @@ class NotificationPreferences {
 
 class NotificationHistoryRow {
   const NotificationHistoryRow(this.id, this.category, this.title,
-      this.createdAt, this.link);
+      this.createdAt, this.link, this.readAt);
   final String id, category, title;
   final DateTime createdAt;
   final Uri? link;
+  final DateTime? readAt;
+
+  NotificationHistoryRow markedRead(DateTime timestamp) =>
+      NotificationHistoryRow(id, category, title, createdAt, link, timestamp);
 
   factory NotificationHistoryRow.read(Object? raw) {
     if (raw is! Map) throw const FormatException('Invalid notification');
@@ -102,9 +106,15 @@ class NotificationHistoryRow {
     if (date == null) throw const FormatException('Invalid notification date');
     final rawLink = data['deepLink'];
     final link = rawLink is String ? Uri.tryParse(rawLink) : null;
+    final rawReadAt = data['readAt'];
+    final readAt = rawReadAt is String ? DateTime.tryParse(rawReadAt) : null;
+    if (rawReadAt != null && readAt == null) {
+      throw const FormatException('Invalid notification read acknowledgement');
+    }
     return NotificationHistoryRow(id, category as String, title,
         date.toLocal(),
-        link != null && shellDeepLinkRoute(link) != null ? link : null);
+        link != null && shellDeepLinkRoute(link) != null ? link : null,
+        readAt?.toLocal());
   }
 }
 
@@ -123,6 +133,7 @@ class _NotificationPreferencesScreenState
   int? _ownerEpoch;
   NotificationPreferences? _prefs;
   List<NotificationHistoryRow> _history = [];
+  final Set<String> _reading = {}, _readErrors = {};
   bool _loading = false, _saving = false, _historyLoading = false;
   String? _error, _historyError;
   int _generation = 0;
@@ -148,6 +159,8 @@ class _NotificationPreferencesScreenState
     _ownerEpoch = epoch;
     _prefs = null;
     _history = [];
+    _reading.clear();
+    _readErrors.clear();
     _error = _historyError = null;
     _loading = _historyLoading = _saving = false;
     if (account != null) {
@@ -241,6 +254,38 @@ class _NotificationPreferencesScreenState
     }
   }
 
+  Future<void> _markRead(NotificationHistoryRow event) async {
+    final owner = _owner;
+    if (owner == null || event.readAt != null || !_reading.add(event.id)) return;
+    final ticket = _generation;
+    setState(() => _readErrors.remove(event.id));
+    try {
+      final result = await ref.read(apiClientProvider).dio
+          .put<Map<String, dynamic>>(
+            '/agent/notifications/history/${Uri.encodeComponent(event.id)}/read');
+      final raw = result.data?['readAt'];
+      final timestamp = raw is String ? DateTime.tryParse(raw) : null;
+      if (timestamp == null) {
+        throw const FormatException('Missing read acknowledgement');
+      }
+      if (!_same(ticket, owner)) return;
+      // A slower history GET must not revert a newer server-confirmed read.
+      ++_historyRequest;
+      setState(() {
+        _historyLoading = false;
+        _history = [
+          for (final item in _history)
+            item.id == event.id ? item.markedRead(timestamp.toLocal()) : item,
+        ];
+        _readErrors.remove(event.id);
+      });
+    } catch (_) {
+      if (_same(ticket, owner)) setState(() => _readErrors.add(event.id));
+    } finally {
+      if (_same(ticket, owner)) setState(() => _reading.remove(event.id));
+    }
+  }
+
   TimeOfDay _clock(int minute) =>
       TimeOfDay(hour: minute ~/ 60, minute: minute % 60);
   int _minute(TimeOfDay time) => time.hour * 60 + time.minute;
@@ -321,11 +366,25 @@ class _NotificationPreferencesScreenState
                         .format(context);
                     return ListTile(
                       leading: Icon(notificationCategories[event.category]!.$2,
-                          color: colors.brand),
+                          color: event.readAt == null ? colors.brand :
+                              Theme.of(context).colorScheme.outline),
                       title: Text(event.title),
-                      subtitle: Text('${notificationCategories[event.category]!.$1} · $date · $time'),
-                      trailing: event.link == null ? null : const Icon(Icons.chevron_right),
-                      onTap: event.link == null ? null : () {
+                      subtitle: Text('${notificationCategories[event.category]!.$1} · $date · $time'
+                        '${_readErrors.contains(event.id) ? ' · Read failed — retry' : ''}'),
+                      trailing: event.readAt != null
+                          ? const Icon(Icons.done_all, semanticLabel: 'Read')
+                          : IconButton(
+                              tooltip: _readErrors.contains(event.id)
+                                  ? 'Retry mark as read' : 'Mark as read',
+                              onPressed: _reading.contains(event.id)
+                                  ? null : () => unawaited(_markRead(event)),
+                              icon: _reading.contains(event.id)
+                                  ? const Icon(Icons.hourglass_empty)
+                                  : Icon(_readErrors.contains(event.id)
+                                      ? Icons.refresh : Icons.circle_outlined)),
+                      onTap: () {
+                        unawaited(_markRead(event));
+                        if (event.link == null) return;
                         final target = shellDeepLinkRoute(event.link!);
                         if (target != null) context.push(target);
                       },
