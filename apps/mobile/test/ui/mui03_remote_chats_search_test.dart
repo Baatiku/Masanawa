@@ -21,6 +21,9 @@ const fan = AuthUser(
 );
 
 class TestSession extends SessionController {
+  int epoch = 0;
+  @override
+  int get authorizationEpoch => epoch;
   @override
   SessionState build() => const SessionSignedIn(fan, AuthTokens(
     accessToken: 'old-fan-token', refreshToken: 'r', accessExpiresIn: 600,
@@ -35,6 +38,19 @@ class TestSession extends SessionController {
     state = const SessionSignedIn(another, AuthTokens(
       accessToken: 'new-fan-token', refreshToken: 'r2',
       accessExpiresIn: 600, user: another,
+    ));
+  }
+  void sameUserReauthentication() {
+    epoch++;
+    state = SessionSignedIn(fan, const AuthTokens(
+      accessToken: 'old-fan-token', refreshToken: 'r',
+      accessExpiresIn: 600, user: fan,
+    ));
+  }
+  void tokenRotation() {
+    state = SessionSignedIn(fan, const AuthTokens(
+      accessToken: 'rotated-fan-token', refreshToken: 'r',
+      accessExpiresIn: 600, user: fan,
     ));
   }
 }
@@ -78,6 +94,7 @@ class FakeInbox implements MasanaInboxSearchAccess {
   final responses = <String, List<MasanaInboxSearchItem>>{};
   final pages = <String, MasanaInboxPage>{};
   final pageCursors = <String?>[];
+  Completer<MasanaInboxPage>? pendingOlderPage;
   bool disabled = false;
   final remote = const MasanaInboxSearchItem(
     characterId: 'character_00000000-0000-0000-0000-000000000099',
@@ -107,6 +124,9 @@ class FakeInbox implements MasanaInboxSearchAccess {
       );
     }
     final wait = pending[query];
+    if (cursor != null && pendingOlderPage != null) {
+      return pendingOlderPage!.future;
+    }
     if (cursor != null && pages.containsKey(cursor)) return pages[cursor]!;
     if (wait != null) return MasanaInboxPage(items:await wait.future,nextCursor:null);
     if (responses.containsKey(query))
@@ -132,8 +152,9 @@ class FakeInbox implements MasanaInboxSearchAccess {
 }
 
 void main() {
-  Future<ProviderContainer> mount(WidgetTester tester, FakeInbox inbox) async {
-    tester.view.physicalSize = const Size(390, 820);
+  Future<ProviderContainer> mount(WidgetTester tester, FakeInbox inbox,
+      {bool narrowRtl = false}) async {
+    tester.view.physicalSize = narrowRtl ? const Size(320, 820) : const Size(390, 820);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -155,6 +176,11 @@ void main() {
       child: MaterialApp.router(
         theme: buildMasanawaTheme(brightness:Brightness.light),
         routerConfig: router,
+        builder: narrowRtl ? (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(2)),
+          child: Directionality(textDirection: TextDirection.rtl, child: child!),
+        ) : null,
       ),
     ));
     await tester.pumpAndSettle();
@@ -198,6 +224,70 @@ void main() {
     old.complete(const []);
     await tester.pump();
     expect(find.text('Astronomy Masana'), findsOneWidget);
+  });
+
+  testWidgets('same-user fresh login discards remote results and epoch cache',
+      (tester) async {
+    final inbox = FakeInbox();
+    final container = await mount(tester, inbox, narrowRtl: true);
+    await tester.enterText(find.byType(TextField), 'astronomy');
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump();
+    expect(find.text('Astronomy Masana'), findsOneWidget);
+    expect(inbox.calls, ['old-fan-token:astronomy']);
+    (container.read(sessionProvider.notifier) as TestSession)
+        .sameUserReauthentication();
+    await tester.pumpAndSettle();
+    expect(find.text('Astronomy Masana'), findsNothing);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty);
+    expect(find.byTooltip('Retry loading conversations'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'astronomy');
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump();
+    expect(inbox.calls, hasLength(2));
+    expect(find.text('Astronomy Masana'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('old pending page cannot contaminate a new same-ID login',
+      (tester) async {
+    final inbox = FakeInbox();
+    inbox.responses['astronomy'] = [inbox.remote];
+    inbox.pages['first'] = const MasanaInboxPage(items: [], nextCursor: null);
+    inbox.pendingOlderPage = Completer<MasanaInboxPage>();
+    final container = await mount(tester, inbox);
+    await tester.enterText(find.byType(TextField), 'astronomy');
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump();
+    await tester.tap(find.text('Load more conversations'));
+    await tester.pump();
+    expect(find.bySemanticsLabel('Loading more conversations'), findsOneWidget);
+    (container.read(sessionProvider.notifier) as TestSession)
+        .sameUserReauthentication();
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Loading more conversations'), findsNothing);
+    inbox.pendingOlderPage!.complete(MasanaInboxPage(items: [inbox.remote],
+        nextCursor: null));
+    await tester.pump();
+    expect(find.text('Astronomy Masana'), findsNothing);
+    expect(find.text('Load more conversations'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('routine token rotation keeps the search draft', (tester) async {
+    final inbox = FakeInbox();
+    final container = await mount(tester, inbox);
+    await tester.enterText(find.byType(TextField), 'astronomy');
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump();
+    (container.read(sessionProvider.notifier) as TestSession).tokenRotation();
+    await tester.pump();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'astronomy');
+    expect(inbox.calls, contains('rotated-fan-token:astronomy'));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('server-only search hit reuses cached thread and deduplicates replay', (tester) async {
