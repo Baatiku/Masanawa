@@ -4,6 +4,7 @@ import {
 } from "./gb_data/data_catalogue.js";
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
@@ -19,6 +20,7 @@ import {
   PgFeedMediaAuthorization, createPostgresVideoStore,
   createPostgresYouTubeSourceAdminStore,
   createMasanaInboxRepository,
+  createPostgresGbWalletRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentRoomDirectory,createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
@@ -2711,6 +2713,11 @@ export async function startGatewayService(
       validateProfile:validateMasanaProfile,
       ...createApprovedMasanaMediaPort(featurePool,mediaConfiguration),
     } : undefined);
+  const gbWalletSummary: GbWalletSummaryPorts | undefined = options.appOptions?.gbWalletSummary ??
+    (featurePool && sessions && featureTenant ? {
+      authorize: async (header: string | undefined) => resolveFeatureFan(header),
+      read: createPostgresGbWalletRepository(featurePool).read,
+    } : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2952,6 +2959,7 @@ export async function startGatewayService(
       walletCreditSendEnabled: env.MASANAWA_WALLET_CREDIT_SEND_ENABLED === "true" && !!twinProduction,
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
+      ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(humanCommunication ? { humanCommunication } : {}),
       ...(incomingCalls ? { incomingCalls } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
