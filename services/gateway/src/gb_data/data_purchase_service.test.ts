@@ -11,7 +11,11 @@ describe("original-reference Flutterwave whole-GB redemption",()=>{
  it("reserves purchased MB first, dispatches once, captures only GET-confirmed matching status",async()=>{
   let journal:DataRedemptionRow|null=null;
   const events:string[]=[];
-  const pay=vi.fn(async (_v:unknown)=>({status:"pending" as const}));
+  const pay=vi.fn(async (v:{reference:string})=>({
+    reference:v.reference,providerReference:"provider-pending",status:"pending" as const,
+    amount:"500",currency:"NGN" as const,customerId:"+2348012345678",
+    itemCode:"DT001",product:null,productName:null,extra:null,
+  }));
   const ports={
     approved:async()=>approved,liveItems:async()=>live,
     reserve:async()=>{events.push("reserve");},
@@ -49,7 +53,7 @@ describe("original-reference Flutterwave whole-GB redemption",()=>{
    resolve:async()=>{},pay:async()=>{throw Error("unknown");},
    status:async id=>({reference:id,providerReference:"provider-ref",status:"successful",
     amount:"499.00",currency:"NGN",customerId:"+2348012345678",
-    product:null,productName:null,extra:null}),
+    itemCode:"DT001",product:null,productName:null,extra:null}),
   };
   const v=await createDataRedemptionService(port).reconcile({tenantId:"tenant",userId:"fan"},"data_transaction");
   expect(v.state).toBe("pending");
