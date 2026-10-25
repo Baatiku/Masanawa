@@ -1,0 +1,84 @@
+name: Retained Status, MB Ledger and Historical Escrow PostgreSQL
+on:
+  pull_request:
+    paths:
+      - "services/gateway/src/app.ts"
+      - "services/gateway/src/modules/home_feed/**"
+      - "services/gateway/src/modules/masana_chat/**"
+      - "services/gateway/src/gb_wallet/**"
+      - "adapters/storage/postgres/src/home_feed/**"
+      - "adapters/storage/postgres/src/gb_wallet/**"
+      - "adapters/storage/postgres/src/commerce/**"
+      - "packages/commerce/migrations/**"
+      - "packages/feed/**"
+      - ".github/workflows/retained-status-postgres.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/gateway/src/app.ts"
+      - "services/gateway/src/modules/home_feed/**"
+      - "services/gateway/src/modules/masana_chat/**"
+      - "services/gateway/src/gb_wallet/**"
+      - "adapters/storage/postgres/src/home_feed/**"
+      - "adapters/storage/postgres/src/gb_wallet/**"
+      - "adapters/storage/postgres/src/commerce/**"
+      - "packages/commerce/migrations/**"
+      - "packages/feed/**"
+      - ".github/workflows/retained-status-postgres.yml"
+permissions:
+  contents: read
+jobs:
+  retained-pg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18
+        env:
+          POSTGRES_DB: masanawa_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d masanawa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MASANAWA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/masanawa_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.8.2"
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build and typecheck active Gateway
+        run: |
+          pnpm --filter @masanawa/gateway-service... build
+          pnpm --filter @masanawa/gateway-service typecheck
+      - name: Masana-only Status, chat, wallet and retired route contracts
+        run: >-
+          pnpm exec vitest run --no-file-parallelism
+          services/gateway/src/home_projection_route.test.ts
+          services/gateway/src/gb_wallet/product_scope.test.ts
+          services/gateway/src/modules/home_feed/lite_scope.test.ts
+          services/gateway/src/modules/home_feed/composition.test.ts
+          services/gateway/src/modules/home_feed/media_runtime.test.ts
+          services/gateway/src/modules/masana_chat/af00_composition.test.ts
+      - name: PostgreSQL 18 Status and integer-MB ledger
+        run: >-
+          pnpm exec vitest run --no-file-parallelism
+          adapters/storage/postgres/src/home_feed/af00_migrations.integration.test.ts
+          adapters/storage/postgres/src/home_feed/feed.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/gb_wallet.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/reservations.integration.test.ts
+      - name: Preserve historic custody and P2P escrow liabilities
+        run: >-
+          pnpm exec vitest run --no-file-parallelism
+          adapters/storage/postgres/src/commerce/msnw-p2p.integration.test.ts

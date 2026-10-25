@@ -70,3 +70,7 @@ In the active product **remove** human messaging/calls, Rooms, videos, human con
 - CI/Flutter/real PG, phones, provider qualification and production rollout must be performed before calling this refactor complete.
 
 Only this roadmap is the active checklist. Original phase tasks and prior 177-screen/820-item scope no longer describe the new target, but remain inspectable through Git history, preserving historical provenance.
+
+## Retired Home HTTP and legacy CI qualification — 25 October
+
+The historical Gateway `GET /home` response previously returned fixed Rooms cards although the five-tab app no longer uses those Rooms. Retire that server endpoint and its Rooms/assistants schema; keep `/agent/directory` for authenticated Masana selection. Delete retired MSNW-P2P/Rooms/Status-video-only CI definitions and replace them with a PostgreSQL-backed retained Status, MB wallet and historical escrow compatibility gate. Keep historical escrow data, reconciliation workers, forward migrations and signed callback handling. Update Masana roster and communication regression workflows to avoid obsolete Rooms, human-call and human-contact test targets. No APK, real-provider acceptance, hosted fixed-IP relay, or applied schema mutation is part of this batch. Exact-head hosted CI remains the merge gate.
