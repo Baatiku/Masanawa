@@ -23,6 +23,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   final _phone = TextEditingController();
   GbDataOwner? _owner;
   String? _network;
+  bool _manualNetwork = false;
   String? _bundleId;
   GbReadOnlyQuote? _quote;
   String? _error;
@@ -128,6 +129,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _clearQuote();
       _phone.clear();
       _network = null;
+      _manualNetwork = false;
       _bundleId = null;
       _owner = owner;
     }
@@ -162,7 +164,12 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             controller: _phone,
             enabled: owner != null,
             keyboardType: TextInputType.phone,
-            onChanged: (_) => setState(_clearQuote),
+            onChanged: (value) => setState(() {
+              _clearQuote();
+              _bundleId = null;
+              _manualNetwork = false;
+              _network = guessGbNetworkForNigerianPhone(value);
+            }),
             decoration: InputDecoration(
               labelText: 'Mobile number',
               hintText: '08012345678',
@@ -178,6 +185,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 borderRadius: BorderRadius.circular(13)),
             ),
           ),
+          if (validPhone && _network != null && !_manualNetwork)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Suggested: ${_network!} · Check if ported',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colors.textMuted)),
+            ),
           const SizedBox(height: 18),
           Text('Network', style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700)),
@@ -196,6 +210,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   onSelected: owner == null ? null : (_) {
                     setState(() {
                       _network = value;
+                      _manualNetwork = true;
                       _bundleId = null;
                       _clearQuote();
                     });
@@ -237,47 +252,30 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               icon: Icons.sim_card_outlined,
               onRetry: () => _reload(owner),
             ),
-          for (final bundle in visible)
-            Card(
-              key: ValueKey('verified-data-bundle-${bundle.id}'),
-              margin: const EdgeInsets.only(bottom: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(
-                  color: bundle.id == _bundleId
-                      ? colors.brand : colors.structuralBorder,
-                  width: bundle.id == _bundleId ? 1.5 : 1,
-                ),
-              ),
-              child: RadioListTile<String>(
-                value: bundle.id,
-                groupValue: _bundleId,
-                activeColor: colors.brand,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 4),
-                title: Row(children: [
-                  Icon(Icons.sim_card_outlined, color: colors.brand, size: 22),
-                  const SizedBox(width: 9),
-                  Expanded(child: Text('${bundle.allowanceGb} GB',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800))),
-                  Text(bundle.network,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: colors.brand, fontWeight: FontWeight.w700)),
-                ]),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(left: 31, top: 3),
-                  child: Text('${groupedMb(bundle.costMb)} MB  ·  '
-                      '${bundle.validityDays} days',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.textMuted)),
-                ),
-                onChanged: (value) => setState(() {
-                  _bundleId = value;
-                  _clearQuote();
-                }),
-              ),
-            ),
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 370 ? 2 : 1;
+            final tileWidth =
+                (constraints.maxWidth - (columns - 1) * 10) / columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final bundle in visible)
+                  SizedBox(
+                    width: tileWidth,
+                    child: _SelectableDataBundle(
+                      key: ValueKey('verified-data-bundle-${bundle.id}'),
+                      bundle: bundle,
+                      selected: _bundleId == bundle.id,
+                      onSelect: () => setState(() {
+                        _bundleId = bundle.id;
+                        _clearQuote();
+                      }),
+                    ),
+                  ),
+              ],
+            );
+          }),
           const SizedBox(height: 12),
           if (_loadingQuote) const LinearProgressIndicator(minHeight: 3),
           if (_error != null)
@@ -348,4 +346,69 @@ class _DataEmptyState extends StatelessWidget {
         TextButton(onPressed: onRetry, child: const Text('Try again')),
     ]),
   );
+}
+
+class _SelectableDataBundle extends StatelessWidget {
+  const _SelectableDataBundle({
+    super.key,
+    required this.bundle,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final GbVerifiedBundle bundle;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.masanawa;
+    final theme = Theme.of(context);
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '${bundle.network}, ${bundle.allowanceGb} GB, '
+          '${bundle.costMb} MB, ${bundle.validityDays} days',
+      child: Material(
+        color: selected ? colors.surfaceMuted : colors.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? colors.brand : colors.structuralBorder,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onSelect,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text('${bundle.allowanceGb} GB',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800))),
+                  Icon(selected
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                    size: 20,
+                    color: selected ? colors.brand : colors.structuralBorder),
+                ]),
+                const SizedBox(height: 7),
+                Text('${bundle.validityDays} days',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.textMuted)),
+                const SizedBox(height: 12),
+                Text('${groupedMb(bundle.costMb)} MB',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700, color: colors.brand)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
