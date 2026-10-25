@@ -5,6 +5,7 @@ import {
   validateRechargeRateBook,
   type RechargeRateBook,
 } from "./gb_wallet/pricing.js";
+import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import {registerRoomCommunityRoutes} from "./room_community/index.js";
 import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerHumanCommunicationRoutes, type HumanCommunicationService } from "./human_communication/index.js";
@@ -230,6 +231,8 @@ export interface GatewayAppOptions {
   readonly p2p?: P2pRoutesDependencies;
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
+  /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
+  readonly gbDataCatalogue?: GbDataCataloguePorts;
 
   /** Operator-verified legacy Credit Send; never inferred from Wallet mount. */
   readonly walletCreditSendEnabled?: boolean;
@@ -509,6 +512,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     previewOnly: true as const,
     ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
   }));
+
+  if (options.gbDataCatalogue) {
+    registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
+  }
 
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
