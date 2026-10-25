@@ -25,9 +25,11 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
   late bool _following;
   bool _followPending = false;
   String? _owner;
+  int? _ownerEpoch;
   bool get _sameAccount {
     final session = ref.read(sessionProvider);
-    return mounted && session is SessionSignedIn && session.user.id == _owner;
+    return mounted && session is SessionSignedIn && session.user.id == _owner &&
+        ref.read(sessionProvider.notifier).authorizationEpoch == _ownerEpoch;
   }
 
   @override
@@ -36,6 +38,8 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
     _following = widget.agent.following;
     final session = ref.read(sessionProvider);
     _owner = session is SessionSignedIn ? session.user.id : null;
+    _ownerEpoch = _owner == null ? null :
+        ref.read(sessionProvider.notifier).authorizationEpoch;
   }
 
   Future<void> _toggleFollow() async {
@@ -64,12 +68,13 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
   }
 
   Future<void> _openOfficialChannel(AgentSocialChannel channel) async {
+    if (!_sameAccount) return;
     try {
       final opened = await launchUrl(
         Uri.parse(channel.url), mode: LaunchMode.externalApplication);
       if (!opened) throw StateError('No app for this link');
     } catch (_) {
-      if (mounted) {
+      if (_sameAccount) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Could not open that official channel.'),
         ));
@@ -89,6 +94,7 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
   };
 
   void _openChat({String? starter}) {
+    if (!_sameAccount) return;
     final id = widget.agent.characterId;
     ref.read(aiChatProvider.notifier).seedGreeting(id, widget.agent.greeting);
     if (starter != null) ref.read(aiChatProvider.notifier).setDraft(id, starter);
@@ -97,14 +103,17 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final agent = ref.watch(agentDirectoryProvider.select(
-      (directory) => directory.find(widget.agent.characterId),
-    )) ?? widget.agent;
+    final directory = ref.watch(agentDirectoryProvider);
+    final current = directory.find(widget.agent.characterId);
+    final agent = current ?? widget.agent;
     final colors = context.masanawa;
     final session = ref.watch(sessionProvider);
-    if (session is! SessionSignedIn || session.user.id != _owner) {
+    if (session is! SessionSignedIn || session.user.id != _owner ||
+        ref.read(sessionProvider.notifier).authorizationEpoch != _ownerEpoch) {
       return Scaffold(appBar: AppBar(title: const Text('Masana profile')),
-        body: const Center(child: Text('Sign in to view this profile.')));
+        body: Center(child: Text(session is SessionSignedIn
+          ? 'Session changed. Reopen this profile.'
+          : 'Sign in to view this profile.')));
     }
     ref.listen(agentDirectoryProvider, (previous, next) {
       if (_followPending || !_sameAccount) return;
@@ -131,6 +140,29 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
           const SizedBox(height: 6),
           Text(agent.presenceLabel, textAlign: TextAlign.center,
               style: TextStyle(color: colors.textMuted)),
+          if (directory.error != null || current == null) ...[
+            const SizedBox(height: 12),
+            Card(child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.info_outline, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(directory.loading
+                      ? 'Verifying current Masana profile details…'
+                      : 'Showing the last approved profile details. Live metadata could not be verified.')),
+                  ]),
+                  if (!directory.loading)
+                    Align(alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton.icon(
+                        onPressed: () => ref.read(agentDirectoryProvider.notifier).refresh(),
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Retry profile details'))),
+                ],
+              ),
+            )),
+          ],
           const SizedBox(height: 16),
           Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8,
             children: [
