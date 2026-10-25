@@ -52,6 +52,31 @@ describe("C10 tenant-private canonical chat inbox", () => {
     expect(sql).toContain("u.state='active'");
     expect(values).toEqual(["tenant-a","fan-a","teacher"]);
   });
+  it("pages by confirmed message chronology, not pinned rank, and scopes cursor predicates",async()=>{
+    const {inbox,query}=repository();
+    await inbox.list(scope,"teacher",{limit:16,cursor:{
+      lastActivityAt:"2026-10-11T12:00:00.000Z",characterId:character,
+    }});
+    const [sql,values]=query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("COALESCE(t.updated_at,l.session_at) < $4::timestamptz");
+    expect(sql).toContain("l.character_id > $5");
+    expect(sql).toContain("ORDER BY COALESCE(t.updated_at,l.session_at) DESC, l.character_id");
+    expect(sql).not.toContain("ORDER BY COALESCE(p.pinned,false)");
+    expect(sql).toContain("LIMIT $6");
+    expect(values).toEqual(["tenant-a","fan-a","teacher","2026-10-11T12:00:00.000Z",character,16]);
+    query.mockClear();
+    await inbox.list(scope,"",{limit:2,cursor:null});
+    expect((query.mock.calls[0] as unknown as [string,unknown[]])[1])
+      .toEqual(["tenant-a","fan-a","",null,null,2]);
+  });
+  it("rejects bad page and cursor before touching the database",async()=>{
+    const {inbox,query}=repository();
+    await expect(inbox.list(scope,"",{limit:0,cursor:null})).rejects.toThrow();
+    await expect(inbox.list(scope,"",{limit:32,cursor:null})).rejects.toThrow();
+    await expect(inbox.list(scope,"",{limit:2,cursor:{
+      lastActivityAt:"NaN",characterId:character}})).rejects.toThrow();
+    expect(query).not.toHaveBeenCalled();
+  });
   it("keeps Gwani in its dedicated tab, not C10 list or pin/read", async () => {
     const {inbox,query}=repository([{revision:"1"}]);
     await inbox.list(scope);

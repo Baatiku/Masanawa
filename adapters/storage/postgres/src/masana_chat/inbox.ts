@@ -15,6 +15,10 @@ export interface FanInboxItem {
   readonly unreadCount: number;
   readonly revision: number;
 }
+export interface FanInboxPageOptions {
+  readonly limit: number;
+  readonly cursor: { readonly lastActivityAt: string; readonly characterId: string } | null;
+}
 type Row = Record<string, unknown>;
 const eligibleSession = `EXISTS (
   SELECT 1 FROM agents.character_sessions s
@@ -69,9 +73,13 @@ export function createMasanaInboxRepository(
               WHERE h.tenant_id=t.tenant_id AND h.fan_user_id=t.user_id
                 AND h.character_id=t.character_id AND h.request_id=t.request_id)` : "";
   return Object.freeze({
-    async list(scope: FanInboxScope, query = ""): Promise<readonly FanInboxItem[]> {
+    async list(scope: FanInboxScope, query = "", page?: FanInboxPageOptions): Promise<readonly FanInboxItem[]> {
       boundedScope(scope);
       if (query.length > 80) throw new TypeError("invalid_inbox_query");
+      if (page && (!Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 31 ||
+          (page.cursor !== null && (!/^character_[0-9a-f-]{36}$/i.test(page.cursor.characterId) ||
+            !Number.isFinite(Date.parse(page.cursor.lastActivityAt))))))
+        throw new TypeError("invalid_inbox_page");
       const result = await db.query<Row>(`
         WITH latest AS (
           SELECT DISTINCT ON (s.character_id)
@@ -118,10 +126,16 @@ ${previewHideFence}
         WHERE lower(r.profile->>'handle') <> 'gwani'
           AND ($3='' OR position(lower($3) in
             lower(COALESCE(r.profile->>'displayName','') || ' ' || COALESCE(r.profile->>'profession','')))>0)
-        ORDER BY COALESCE(p.pinned,false) DESC,
-          COALESCE(t.updated_at,l.session_at) DESC, l.character_id
-        LIMIT 50
-      `, [scope.tenantId, scope.fanUserId, query.trim()]);
+          ${page ? `AND ($4::timestamptz IS NULL OR
+            COALESCE(t.updated_at,l.session_at) < $4::timestamptz OR
+            (COALESCE(t.updated_at,l.session_at) = $4::timestamptz
+              AND l.character_id > $5))` : ""}
+        ORDER BY COALESCE(t.updated_at,l.session_at) DESC, l.character_id
+        LIMIT ${page ? "$6" : "50"}
+      `, page
+        ? [scope.tenantId, scope.fanUserId, query.trim(),
+            page.cursor?.lastActivityAt ?? null, page.cursor?.characterId ?? null, page.limit]
+        : [scope.tenantId, scope.fanUserId, query.trim()]);
       return result.rows.map(mapped);
     },
     /** CAS pin update: revision 0 means the preference does not yet exist. */
