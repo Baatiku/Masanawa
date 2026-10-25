@@ -80,7 +80,7 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     }
 
     return Scaffold(
-      appBar: _index == 1 || _index == 2
+      appBar: _index == 2 || _index == 4
           ? masanawaMainHeader(context, actions: [
               // Status has no scoped post search yet; the old /search route
               // opens the Masana directory and must not masquerade as Status search.
