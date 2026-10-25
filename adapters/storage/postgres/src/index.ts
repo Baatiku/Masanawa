@@ -56,3 +56,5 @@ export {createMasanaPostgresStore} from './masana/repository.js';
 
 export * from "./gb_wallet/repository.js";
 export * from "./gb_wallet/reservations.js";
+
+export {createGbDataJournal} from "./gb_wallet/data_journal.js";
