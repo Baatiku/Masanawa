@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers.dart';
 import '../state/session_state.dart';
+import '../theme/masanawa_theme.dart';
 import 'gb_data_catalogue.dart';
 import 'gb_wallet_summary.dart';
 
@@ -145,6 +146,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     final canQuote = owner != null && selected != null && validPhone &&
         !_loadingQuote && !(catalogue?.isLoading ?? false);
     final theme = Theme.of(context);
+    final colors = context.masanawa;
     return RefreshIndicator(
       onRefresh: owner == null ? () async {} : () => _reload(owner),
       child: ListView(
@@ -152,27 +154,33 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Redeem mobile data', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text('Explore approved whole-GB bundles for any Nigerian SIM. '
-              'A verified quote is not a payment.'),
-          const SizedBox(height: 16),
+          Text('Data bundles',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700)),
+          const SizedBox(height: 14),
           TextField(
             controller: _phone,
             enabled: owner != null,
             keyboardType: TextInputType.phone,
             onChanged: (_) => setState(_clearQuote),
             decoration: InputDecoration(
-              labelText: 'Recipient phone number',
-              hintText: '08012345678 or +2348012345678',
-              helperText: 'Data can go to another person’s SIM.',
+              labelText: 'Mobile number',
+              hintText: '08012345678',
+              prefixIcon: const Icon(Icons.phone_android_outlined),
+              isDense: true,
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: colors.brand, width: 2),
+                borderRadius: BorderRadius.circular(13),
+              ),
               errorText: phone.isNotEmpty && !validPhone
                   ? 'Enter a valid Nigerian mobile number' : null,
-              border: const OutlineInputBorder(),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(13)),
             ),
           ),
-          const SizedBox(height: 16),
-          Text('Network', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 18),
+          Text('Network', style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
@@ -182,6 +190,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 ChoiceChip(
                   label: Text(value ?? 'All'),
                   selected: value == _network,
+                  selectedColor: colors.brand.withValues(alpha: .15),
+                  side: BorderSide(color: value == _network
+                      ? colors.brand : colors.structuralBorder),
                   onSelected: owner == null ? null : (_) {
                     setState(() {
                       _network = value;
@@ -194,8 +205,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           ),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: Text('Verified bundles',
-                style: theme.textTheme.titleMedium)),
+            Expanded(child: Text('Available bundles',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700))),
             if (owner != null)
               IconButton(
                 tooltip: 'Refresh verified data bundles',
@@ -206,37 +218,60 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           if (catalogue?.isLoading ?? false)
             const LinearProgressIndicator(minHeight: 3),
           if (catalogue?.hasError ?? false)
-            Card(child: ListTile(
-              title: const Text('Could not load verified bundles'),
-              subtitle: const Text('Check your connection and retry.'),
-              trailing: owner == null ? null : TextButton(
-                onPressed: () => _reload(owner),
-                child: const Text('Retry'),
-              ),
-            )),
+            _DataEmptyState(
+              title: 'Bundles unavailable',
+              icon: Icons.wifi_off_rounded,
+              onRetry: owner == null ? null : () => _reload(owner),
+            ),
           if (owner == null)
-            const Card(child: ListTile(
-              title: Text('No verified GB bundles available'),
-              subtitle: Text('Sign in to check approved mobile data items.'),
-            ))
+            const _DataEmptyState(
+              title: 'No verified GB bundles available',
+              icon: Icons.sim_card_outlined,
+            )
           else if (!(catalogue?.isLoading ?? false) &&
               !(catalogue?.hasError ?? false) && visible.isEmpty)
-            Card(child: ListTile(
-              leading: const Icon(Icons.sim_card_outlined),
-              title: const Text('No verified GB bundles available'),
-              subtitle: Text(_network == null
-                  ? 'No approved provider bundles currently available.'
-                  : 'No approved $_network bundles. Select another network.'),
-            )),
+            _DataEmptyState(
+              title: _network == null
+                  ? 'No verified GB bundles available'
+                  : 'No $_network bundles available',
+              icon: Icons.sim_card_outlined,
+              onRetry: () => _reload(owner),
+            ),
           for (final bundle in visible)
             Card(
               key: ValueKey('verified-data-bundle-${bundle.id}'),
+              margin: const EdgeInsets.only(bottom: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: bundle.id == _bundleId
+                      ? colors.brand : colors.structuralBorder,
+                  width: bundle.id == _bundleId ? 1.5 : 1,
+                ),
+              ),
               child: RadioListTile<String>(
                 value: bundle.id,
                 groupValue: _bundleId,
-                title: Text('${bundle.network} · ${bundle.allowanceGb} GB'),
-                subtitle: Text('${groupedMb(bundle.costMb)} MB · '
-                    '${bundle.validityDays} days validity'),
+                activeColor: colors.brand,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 4),
+                title: Row(children: [
+                  Icon(Icons.sim_card_outlined, color: colors.brand, size: 22),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text('${bundle.allowanceGb} GB',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800))),
+                  Text(bundle.network,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colors.brand, fontWeight: FontWeight.w700)),
+                ]),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(left: 31, top: 3),
+                  child: Text('${groupedMb(bundle.costMb)} MB  ·  '
+                      '${bundle.validityDays} days',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.textMuted)),
+                ),
                 onChanged: (value) => setState(() {
                   _bundleId = value;
                   _clearQuote();
@@ -246,14 +281,19 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           const SizedBox(height: 12),
           if (_loadingQuote) const LinearProgressIndicator(minHeight: 3),
           if (_error != null)
-            Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+            Center(child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(_error!, textAlign: TextAlign.center,
+                style: TextStyle(color: theme.colorScheme.error)),
+            )),
           if (_quote != null)
             Card(child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Verified quote', style: theme.textTheme.titleMedium),
+                  Text('Bundle review', style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700, color: colors.brand)),
                   Text('${_quote!.bundle.network} · '
                       '${_quote!.bundle.allowanceGb} GB'),
                   Text('Cost: ${groupedMb(_quote!.bundle.costMb)} MB'),
@@ -261,7 +301,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   Text('Validity: ${_quote!.bundle.validityDays} days'),
                   const Text('Fee: 0 MB'),
                   const SizedBox(height: 6),
-                  const Text('Preview only — no MB reserved or debited.'),
+                  const Text('Preview · Not purchased'),
                 ],
               ),
             )),
@@ -272,12 +312,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             label: const Text('Review verified bundle'),
           ),
           const SizedBox(height: 8),
-          const ListTile(
-            leading: Icon(Icons.lock_outline),
-            title: Text('Purchase requires verified delivery'),
-            subtitle: Text('Purchases stay unavailable until MB reservation '
-                'and the provider delivery-confirmation endpoint are enabled.'),
-          ),
+          Center(child: Text('Purchase unavailable',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.textMuted))),
           TextButton(
             onPressed: () => context.go('/home?tab=wallet'),
             child: const Text('Back to Wallet'),
@@ -286,4 +323,29 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       ),
     );
   }
+}
+
+// Network failures are shown without provider diagnostics or long paragraphs.
+class _DataEmptyState extends StatelessWidget {
+  const _DataEmptyState({
+    required this.title,
+    required this.icon,
+    this.onRetry,
+  });
+  final String title;
+  final IconData icon;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 28),
+    child: Column(children: [
+      Icon(icon, size: 36, color: context.masanawa.textMuted),
+      const SizedBox(height: 9),
+      Text(title, textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.titleSmall),
+      if (onRetry != null)
+        TextButton(onPressed: onRetry, child: const Text('Try again')),
+    ]),
+  );
 }
