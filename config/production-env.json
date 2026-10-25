@@ -286,7 +286,14 @@
       "owner": "gateway/gb-wallet",
       "classification": "secret",
       "requiredIn": [],
-      "description": "Private Billstack reserved-collection merchant signing/creation authority. Routes remain unavailable without real operator-provisioned credentials and verified 9PSB provider event contract; never a mobile setting."
+      "description": "Private Billstack reserved-collection merchant signing/creation authority. Deposit credit remains gated by independent settlement and reversal verification; never a mobile setting."
+    },
+    {
+      "name": "MASANAWA_BILLSTACK_BANK_ID",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional bank for new Billstack reserved-account requests: 9PSB (default) or PALMPAY. Existing assigned accounts retain their provider-confirmed bank."
     },
     {
       "name": "MASANAWA_BOOTSTRAP_PLATFORM_AGENTS",
