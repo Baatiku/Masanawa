@@ -1,6 +1,5 @@
 import '../gb_wallet/recharge_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
-import '../calls/incoming_call_coordinator.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -183,9 +182,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) {
           final index = shellRootTabIndex(state.uri.queryParameters['tab']);
           return StartupGate(
-            child: IncomingCallCoordinator(
-              child: FiveTabShell(initialIndex: index),
-            ),
+            child: FiveTabShell(initialIndex: index),
           );
         },
       ),
