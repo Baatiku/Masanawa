@@ -298,13 +298,6 @@
       "description": "Canonical PostgreSQL bootstrap connection secret for deployable services."
     },
     {
-      "name": "MASANAWA_DELETION_GATEWAY_URL",
-      "owner": "apps/web",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional feature configuration consumed by apps/web/src/app/api/delete-account/[action]/route.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
       "name": "MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON",
       "owner": "security/bootstrap",
       "classification": "secret",

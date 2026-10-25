@@ -1,1 +1,0 @@
-import{t as u,c}from"./toDate-BtOmiETE.js";function s(t,r){const n=+u(t)-+u(r);return n<0?-1:n>0?1:n}function a(t){return c(t,Date.now())}function f(t){return r=>{const o=(t?Math[t]:Math.trunc)(r);return o===0?0:o}}export{a,s as c,f as g};
