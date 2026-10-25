@@ -2406,7 +2406,6 @@ export async function startGatewayService(
       ...(videoSources ? {videoSources} : {}),
       ...(masana ? {masana} : {}),
       ...(creatorAgents ? {creatorAgents} : {}),
-      ...(roomCommunity ? {roomCommunity} : {}),
       ...(creatorCompletion ? {creatorCompletion} : {}),
       ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
