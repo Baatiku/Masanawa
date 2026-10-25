@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers.dart';
 import '../state/session_state.dart';
+import '../theme/masanawa_theme.dart';
 
 class _Package {
   const _Package(this.gb, this.mb, this.kobo);
@@ -99,13 +100,13 @@ class _RechargePackagesScreenState
       if (!mounted || !_stillOwner(owner, ownerEpoch)) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load current recharge packages.';
+        _error = 'Packages unavailable';
       });
     } catch (_) {
       if (!mounted || !_stillOwner(owner, ownerEpoch)) return;
       setState(() {
         _loading = false;
-        _error = 'Package information is temporarily unavailable.';
+        _error = 'Packages unavailable';
       });
     }
   }
@@ -131,7 +132,7 @@ class _RechargePackagesScreenState
     }catch(_){
       if(!mounted||!_stillOwner(owner, ownerEpoch))return;
       setState((){
-        _accountError='The bank account could not be verified. Retry when connected.';
+        _accountError='Bank details unavailable';
         _accountLoading=false;
       });
     }
@@ -176,20 +177,31 @@ class _RechargePackagesScreenState
       _applyAccountReply((reply.data as Map<String,dynamic>)['account'],owner,ownerEpoch);
     }catch(_){
       if(!mounted||!_stillOwner(owner, ownerEpoch))return;
-      setState((){_accountError='Bank assignment is pending or unavailable. Do not transfer money yet.';});
+      setState((){_accountError='Account assignment unavailable';});
     }finally {
       if(mounted&&_stillOwner(owner, ownerEpoch))setState(()=>_accountCreating=false);
     }
   }
 
   Widget _bankAccountSection() {
+    final colors = context.masanawa;
     return Card(
+      color: colors.surfaceMuted,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colors.structuralBorder)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:CrossAxisAlignment.stretch,
           children:[
-            Text('9 Payment Service Bank (9PSB)',style:Theme.of(context).textTheme.titleMedium),
+            Row(children: [
+              Icon(Icons.account_balance_outlined, color: colors.brand),
+              const SizedBox(width: 8),
+              Expanded(child: Text('9PSB account',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700))),
+            ]),
             const SizedBox(height:12),
             if(_accountLoading||_accountCreating)const LinearProgressIndicator(),
             if(_accountError!=null)...[
@@ -205,12 +217,12 @@ class _RechargePackagesScreenState
                 icon:const Icon(Icons.copy_outlined),
                 label:const Text('Copy account number'),
               ),
-              const Text('Transfer only after confirming this is your assigned bank account. Your purchased MB will appear after server-verified payment confirmation.'),
+              const Text('Verified deposits only', textAlign: TextAlign.center),
             ]else if(_accountState=='pending')...[
-              const Text('Account assignment is pending verification. Do not transfer yet.'),
+              const Text('Account pending'),
               OutlinedButton(onPressed:_loadBankAccount,child:const Text('Check assignment')),
             ]else if(_accountState=='suspended')
-              const Text('Funding is unavailable on this account. Contact support.')
+              const Text('Funding unavailable')
             else if(_accountState=='unassigned')
               FilledButton(
                 onPressed:_accountCreating?null:_assignBankAccount,
@@ -269,46 +281,91 @@ class _RechargePackagesScreenState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_error!),
-                        const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: _refresh,
-                          child: const Text('Retry'),
-                        ),
+                        Icon(Icons.wifi_off_rounded, size: 36,
+                          color: context.masanawa.textMuted),
+                        const SizedBox(height: 10),
+                        Text(_error!, textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium),
+                        TextButton(onPressed: _refresh,
+                          child: const Text('Try again')),
                       ],
                     ),
                   )
                 : ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      const Text('Choose a package to view the current bank '
-                          'transfer price. Actual verified transfer amount '
-                          'determines the MB credited.'),
-                      const SizedBox(height: 8),
+                      Text('Available packages',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 14),
                       for (final entry in _packages)
-                        Card(
-                          child: RadioListTile<int>(
-                            value: entry.gb,
-                            groupValue: _selectedGb,
-                            title: Text('${entry.gb} GB · ${_ngn(entry.kobo)}'),
-                            subtitle: Text('${entry.mb} MB · '
-                                '${_ngn(entry.kobo ~/ entry.gb)} per GB'),
-                            onChanged: (gb) => setState(() => _selectedGb = gb),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: _selectedGb == entry.gb
+                                    ? context.masanawa.brand
+                                    : context.masanawa.structuralBorder,
+                                width: _selectedGb == entry.gb ? 1.5 : 1,
+                              ),
+                            ),
+                            child: RadioListTile<int>(
+                              key: ValueKey('gb-package-${entry.gb}'),
+                              value: entry.gb,
+                              groupValue: _selectedGb,
+                              activeColor: context.masanawa.brand,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                              title: Row(children: [
+                                CircleAvatar(
+                                  backgroundColor: context.masanawa.brand
+                                      .withValues(alpha: .12),
+                                  child: Icon(Icons.data_usage_rounded,
+                                    color: context.masanawa.brand, size: 21)),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text('${entry.gb} GB',
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800))),
+                                Text(_ngn(entry.kobo),
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700)),
+                              ]),
+                              subtitle: Padding(
+                                padding: const EdgeInsetsDirectional.only(
+                                  start: 50, top: 4),
+                                child: Text('${entry.mb} MB',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: context.masanawa.textMuted)),
+                              ),
+                              onChanged: (gb) =>
+                                  setState(() => _selectedGb = gb),
+                            ),
                           ),
                         ),
                       if (_packages.isEmpty)
                         const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: Text('No packages available.')),
+                          padding: EdgeInsets.all(25),
+                          child: Center(child: Text('No packages available')),
                         ),
-                      const SizedBox(height: 12),
                       if (_selectedGb != null)
-                        const Text('The selected package is a price guide. The verified transferred amount determines credited MB.'),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Text('Bank transfer price guide',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: context.masanawa.textMuted))),
+                        ),
                       const SizedBox(height:12),
                       _bankAccountSection(),
                       const SizedBox(height: 8),
-                      Text('Price version: ${_version ?? 'unavailable'}',
-                          style: Theme.of(context).textTheme.bodySmall),
+                      if (_version != null)
+                        Text('Rate ${_version!}',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelSmall),
                     ],
                   ),
       ),
