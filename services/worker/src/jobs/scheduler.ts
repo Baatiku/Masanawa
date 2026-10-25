@@ -3,7 +3,7 @@
  * outbox remains the sole job authority; the timer does not store job state.
  * Failures never overlap with a running batch or prevent the next attempt.
  */
-export function createYouTubeOutboxScheduler(input: {
+export function createJobScheduler(input: {
   readonly runOnce: () => Promise<unknown>;
   readonly enabled: () => boolean;
   readonly intervalMs?: number;

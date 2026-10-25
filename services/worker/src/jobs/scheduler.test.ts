@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createYouTubeOutboxScheduler } from "./scheduler.js";
+import { createJobScheduler } from "./scheduler.js";
 
 describe("YouTube outbox scheduler", () => {
   it("never polls without an enabled provider", async () => {
     const runOnce = vi.fn(async () => undefined);
-    const scheduler = createYouTubeOutboxScheduler({runOnce, enabled: () => false});
+    const scheduler = createJobScheduler({runOnce, enabled: () => false});
     scheduler.start();
     expect(await scheduler.tick()).toBe("disabled");
     await scheduler.stop();
@@ -15,7 +15,7 @@ describe("YouTube outbox scheduler", () => {
     let finish!: () => void;
     const started = new Promise<void>(resolve => { finish = resolve; });
     const runOnce = vi.fn(() => started);
-    const scheduler = createYouTubeOutboxScheduler({
+    const scheduler = createJobScheduler({
       runOnce, enabled: () => true, intervalMs: 60_000,
     });
     scheduler.start();
@@ -34,7 +34,7 @@ describe("YouTube outbox scheduler", () => {
     const onError = vi.fn();
     const runOnce = vi.fn().mockRejectedValueOnce(new Error("provider-secret"))
       .mockResolvedValueOnce(undefined);
-    const scheduler = createYouTubeOutboxScheduler({runOnce, enabled: () => true, onError});
+    const scheduler = createJobScheduler({runOnce, enabled: () => true, onError});
     await expect(scheduler.tick()).rejects.toThrow();
     expect(await scheduler.tick()).toBe("processed");
     await scheduler.stop();
@@ -44,7 +44,7 @@ describe("YouTube outbox scheduler", () => {
   });
 
   it("rejects unsafe polling rates", () => {
-    expect(() => createYouTubeOutboxScheduler({
+    expect(() => createJobScheduler({
       runOnce: async () => undefined, enabled: () => true, intervalMs: 10,
     })).toThrow("youtube_poll_interval_invalid");
   });
@@ -54,7 +54,7 @@ describe("YouTube outbox scheduler", () => {
     const runOnce = vi.fn()
       .mockRejectedValueOnce(new Error("do not log secret"))
       .mockImplementationOnce(() => unfinished);
-    const scheduler = createYouTubeOutboxScheduler({
+    const scheduler = createJobScheduler({
       runOnce, enabled: () => true, intervalMs: 60_000,
     });
     expect(scheduler.health().enabled).toBe(false);
