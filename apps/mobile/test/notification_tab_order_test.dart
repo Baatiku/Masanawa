@@ -80,10 +80,13 @@ void main() {
       sessionProvider.overrideWith(_Session.new),
       apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
     ], child: const MaterialApp(home: NotificationPreferencesScreen())));
-    await tester.pumpAndSettle();
+    // One GET is intentionally pending; do not wait for its progress spinner.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Amina replied'), findsOneWidget);
     await tester.tap(find.text('Preferences'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Loading preferences…'), findsOneWidget);
     (await pendingPrefs.future).resolve(Response<Map<String, dynamic>>(
       requestOptions: RequestOptions(path: '/agent/notifications/preferences'),
