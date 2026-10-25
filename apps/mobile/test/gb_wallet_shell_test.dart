@@ -146,11 +146,15 @@ void main() {
   testWidgets('Data never offers unverified Flutterwave purchases',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
-      overrides: [sessionProvider.overrideWith(_SignedOut.new)],
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
+      ],
       child: const MaterialApp(home: Scaffold(
         body: DataRedemptionScreen(),
       )),
     ));
+    await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
