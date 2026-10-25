@@ -126,7 +126,6 @@ void main() {
 
   testWidgets('shared portrait speaks one safe identity label for photo and missing ID', (tester) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     const authoritative = AgentDirectoryEntry(
       characterId: 'character_one', characterVersionId:'version_1',
       displayName:'Approved Masana', roleLabel:'Medicine', about:'',
@@ -148,6 +147,7 @@ void main() {
     expect(images,hasLength(1),reason:'Mismatched IDs must not render an approved asset or URL');
     expect((images.single.image as AssetImage).assetName,
       'assets/masana/portraits/amina.webp');
+    semantics.dispose();
   });
 
 }
