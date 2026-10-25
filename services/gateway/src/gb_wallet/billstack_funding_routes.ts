@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import type {FastifyInstance} from "fastify";
-import {verifyBillstackWebhook,type BillstackReceivedPayment,type BillstackBankId} from "./billstack_provider.js";
+import {BillstackProviderError,verifyBillstackWebhook,type BillstackReceivedPayment,type BillstackBankId} from "./billstack_provider.js";
 
 export interface BillstackFundingActor {tenantId:string;userId:string}
 export interface BillstackAccount {
@@ -139,10 +139,15 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
         settlement.accountNumber!==verified.accountNumber || settlement.amountKobo!==verified.amountKobo ||
         !Number.isFinite(Date.parse(settlement.receivedAt)))throw new Error("provider_settlement_mismatch");
       const receipt=await ports.credit(settlement);
+      request.log.info({billstackResult:receipt.state},"Billstack notification processed");
       return {accepted:true,duplicate:receipt.state==="duplicate"};
-    }catch{
+    }catch(error){
       // Unknown event remains retryable; never acknowledge a forged or
       // unmatched event as credited. Never echo private signing data.
+      const code=error instanceof BillstackProviderError?error.code:
+        error instanceof Error&&/^(?:ngn|billstack)\.[a-z_]+$/.test(error.message)
+          ? error.message:"settlement_or_credit_failed";
+      request.log.warn({billstackCode:code},"Billstack notification rejected");
       reply.code(503);
       return {error:{code:"provider_notification_unverified"}};
     }

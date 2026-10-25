@@ -44,6 +44,13 @@ const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
   await expect(repo().deposit({...payment,amountKobo:1})).rejects.toThrow("ngn.deposit_conflict");
   await expect(repo().deposit({...payment,merchantReference:"different_ref"})).rejects.toThrow("ngn.account_mismatch");
  });
+ it("credits distinct signed-provider events for one account without an artificial trial cap",async()=>{
+  const {actor,payment}=await account(10_000_000);
+  expect(await repo().deposit(payment)).toMatchObject({state:"credited",creditedKobo:10_000_000});
+  expect(await repo().deposit({...payment,eventId:createCanonicalId("event"),amountKobo:20_000_000}))
+    .toMatchObject({state:"credited",creditedKobo:20_000_000});
+  expect((await repo().read(actor)).balanceKobo).toBe(30_000_000);
+ });
  it("atomically exchanges once with concurrent confirmations; immutable matching receipts",async()=>{
   const {actor,payment}=await account();await repo().deposit(payment);
   const request=exchange(actor);

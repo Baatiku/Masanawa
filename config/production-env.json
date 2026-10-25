@@ -1133,6 +1133,13 @@
       "description": "Default off. Enable only after new separate NGN ledger migration, signed review/atomic purchased-MB exchange, approved quantity rates, fulfillment cost/margin/fees and limits are qualified. Does not enable deposits."
     },
     {
+      "name": "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Owner-authorized live mode: a valid signed Billstack reserved-account notification credits its exact amount to the matched NGN ledger. This does not claim independent provider finality or reversal qualification; retain operational reconciliation."
+    },
+    {
       "name": "MASANAWA_NGN_FUNDING_VERIFIED",
       "owner": "gateway/ngn-wallet",
       "classification": "public",
