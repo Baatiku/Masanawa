@@ -23,6 +23,7 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
   credit,
   webhookSecret:secret,
   rateBook:DEFAULT_RECHARGE_RATE_BOOK,
+  now:()=>1792886400*1000,
   ...overrides,
  };
  const app=Fastify({logger:false});apps.push(app);registerBillstackFundingRoutes(app,p);
@@ -57,7 +58,8 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   expect(credit).not.toHaveBeenCalled();
   const valid=await app.inject({method:"POST",url:"/webhooks/billstack/gb",
     headers,payload});
-  // Override wall clock in production; fixture timestamp must be current.
-  expect([200,503]).toContain(valid.statusCode);
+  expect(valid.statusCode).toBe(200);
+  expect(credit).toHaveBeenCalledTimes(1);
+  expect(credit.mock.calls[0]?.[0]).toMatchObject({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000});
  });
 });
