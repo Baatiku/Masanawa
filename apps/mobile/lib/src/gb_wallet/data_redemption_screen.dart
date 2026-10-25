@@ -174,8 +174,11 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             onChanged: (value) => setState(() {
               _clearQuote();
               _bundleId = null;
-              _manualNetwork = false;
-              _network = guessGbNetworkForNigerianPhone(value);
+              // Number portability means a deliberate operator choice must
+              // survive later edits, even when the prefix suggests another.
+              if (!_manualNetwork) {
+                _network = guessGbNetworkForNigerianPhone(value);
+              }
               _validity = null;
             }),
             decoration: InputDecoration(
@@ -261,7 +264,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           else if (!(catalogue?.isLoading ?? false) &&
               !(catalogue?.hasError ?? false) && visible.isEmpty)
             _DataEmptyState(
-              title: _network == null
+              title: bundles.isEmpty
+                  ? 'No verified GB bundles available'
+                  : _network == null
                   ? 'Choose a network to see verified bundles'
                   : _validity == null
                   ? 'No $_network bundles available'

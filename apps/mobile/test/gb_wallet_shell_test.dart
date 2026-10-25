@@ -167,7 +167,7 @@ void main() {
       )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
+    expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
     await tester.enterText(find.byType(TextField), 'not a phone');
@@ -175,7 +175,48 @@ void main() {
     expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
     await tester.tap(find.text('MTN'));
     await tester.pump();
-    expect(find.text('No MTN bundles available'), findsOneWidget);
+    expect(find.text('No verified GB bundles available'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a ported-number manual operator choice survives phone edits',
+      (tester) async {
+    GbVerifiedBundle bundle(String id, String network, int gb) =>
+      GbVerifiedBundle(
+        id: id, version: 'approved-v1', network: network,
+        allowanceGb: gb, costMb: gb * 1000, validityDays: 30,
+        providerAmount: '1500.00', expiresAt: DateTime.utc(2099),
+      );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async => [
+          bundle('mtn-2gb', 'MTN', 2),
+          bundle('airtel-3gb', 'AIRTEL', 3),
+        ]),
+      ],
+      child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('data-network-AIRTEL')));
+    await tester.pump();
+    expect(find.text('3 GB'), findsOneWidget);
+    expect(find.text('2 GB'), findsNothing);
+    // The 0803 range originally belonged to MTN. A ported Airtel recipient
+    // must retain the user's explicit Airtel choice across both edits.
+    await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pump();
+    expect(tester.widget<ChoiceChip>(find.byKey(
+      const ValueKey('data-network-AIRTEL'))).selected, isTrue);
+    expect(find.text('3 GB'), findsOneWidget);
+    expect(find.text('2 GB'), findsNothing);
+    expect(find.textContaining('Suggested: MTN'), findsNothing);
+    await tester.enterText(find.byType(TextField), '08031234568');
+    await tester.pump();
+    expect(tester.widget<ChoiceChip>(find.byKey(
+      const ValueKey('data-network-AIRTEL'))).selected, isTrue);
+    expect(find.text('3 GB'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
