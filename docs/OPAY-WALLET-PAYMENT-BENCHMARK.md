@@ -1,6 +1,7 @@
 # Masanawa Wallet, Payments & Billing Architecture
 
-> **Current authority note (22 October 2026):** This is a *design inspiration*, not evidence of implemented Masanawa flows, KYC limits, regulated payment capability, approved biometrics or tested live provider. Canonical rules: 1 MSNW = ₦1 (`msnw-ngn-1-v1`), not ₦10 or USD 1; FX estimates require qualified rates and timestamps. Screens and status/permission journeys now follow `SCREEN-JOURNEYS.md`, and completion remains in `PRODUCT-ROADMAP-20261019.md`. OPay's decoded XML/smali informs visual structure but never authorizes copying code/assets or inferring backend payment security.
+> **Historical visual reference, superseded product scope:** The MSNW/crypto/airtime architecture below is not the active Masanawa product. Current authority is the integer-MB five-tab [roadmap](PRODUCT-ROADMAP-20261019.md) and [journeys](SCREEN-JOURNEYS.md). The owner-requested reinspection of decoded OPay phone/network, bundle and confirmation layouts is recorded in [the addendum audit](CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md); implementation uses the roadmap’s stable UX checklist. Decoded resources inform layout only, not provider capability or runtime payment verification.
+
 
 ## Adapted from OPay Simplicity & WhatsApp Design Language
 

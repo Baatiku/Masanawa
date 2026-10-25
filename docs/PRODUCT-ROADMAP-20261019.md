@@ -84,3 +84,91 @@ Retire eager construction and `GatewayAppOptions` wiring for user-created Masana
 The [Status/wallet audit and concrete plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md) records the new-window feedback and supersedes conflicting earlier UI/pricing proposals. **Planned, not implemented:** canonical Masana portraits; whole-card/detail interaction; horizontal Like/reactions with proper Like icon; remove feed flags; package chooser separate from bank instructions; proposed 10 GB at ₦500/GB with decreasing tiers through 2 TB; Send/Request balance/recipient/quick amounts; network-logo and validity-filtered Data; full wallet/call histories and branded PDF/image receipts. Positive whole-MB Send is allowed; redemption remains at least 1,000 MB and approved whole-GB bundles. Live price authority is unchanged pending implementation. Flutterwave docs/test qualification is blocked by current network access and redacted credential access; fixed-IP hosting remains on hold. No APK.
 
 Retirement evidence: #400 was already merged; #402 mobile, #403 worker, #404 route isolation, #405 mirrored web deletion and #406 mixed mobile cleanup are merged. [Backend source deletion](RETIREMENT-BACKEND-SOURCE-BATCH-20261025.md) follows; historical reconciliation dependency code and immutable migrations remain protected.
+
+## Owner UX and communication repair checklist
+
+**Active execution checklist for the combined owner feedback.** Source audit baseline: main `0c1dc595` (#421). Read [the original Status/wallet plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md) and [the Chats/calls/OPay addendum audit](CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md). These documents explain this single checklist; they are not competing task trackers. New requirements below supersede conflicting older screen order/filter/pricing proposals. **All implementation items remain unchecked until evidence is attached.** No APK; Flutterwave fixed-IP hosting remains on hold; separate Masanawa-App and historical financial records remain protected.
+
+Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, claimed files and base SHA here before overlapping implementation. Keep shared router/bootstrap/ledger/migrations under one integrator. On completion replace `Evidence: pending` with PR/commit and test outcomes, distinguishing source/mocked tests from real PG/provider/device checks. Do not tick an entire batch because a plan or one widget test merged. Merge each verified batch automatically under existing owner authorization.
+
+### P0 — Restore reliable chat, notes, calls and identity before polish
+
+- [ ] **UX-R01** Establish affected app/API/Gateway SHAs and compare the last verified working version; reproduce text, recorded note and call failures separately. Evidence: pending.
+- [ ] **UX-R02** Replace active mobile calls to retired `/agent/twin/voice/*` Credits admission with one-to-one Masana MB admission/settlement. Confirmed source mismatch and observed quote 404 are in the addendum; do not restore retired customer routes or bypass balances. Evidence: pending.
+- [ ] **UX-R03** Diagnose `/agent/live/token` 500s using redacted stage/error codes; verify canonical authorization/profile, configured provider/model/voice, token request and actual connection for support and non-support Masana. Keep approved voice identities. Evidence: pending.
+- [ ] **UX-R04** Restore text-chat terminal delivery: auth/session/stream/status/history, reconnect/retry and actionable error states. Distinguish SSE headers from successful completion and preserve original request identity. Evidence: pending.
+- [ ] **UX-R05** Restore recorded voice note end to end: permission/recording/file/MIME/upload/transcript/reply/playback; meaningful text remains when audio fails; bounded original-request recovery without duplicate messages. Evidence: pending.
+- [ ] **UX-R06** Connect authoritative reply/call MB reserve → confirmed outcome → settle/release; 1 MB/successful reply and started connected second, zero failed/setup/ringing charge, restricted welcome rules and restart/reconnect reconciliation. Historical Credits are not MB. Evidence: pending.
+- [ ] **UX-R07** Verify cancellation, logout/account switch, app pause/audio interruption, microphone release, temporary media cleanup and session fences across text/note/call. Evidence: pending.
+- [ ] **UX-R08** Add actual reduced-Gateway/mobile contract coverage so a retired route cannot pass mocked voice tests; run relevant TS/PG/Flutter checks and real authorized audio/device recovery. Record BLOCKED separately where unavailable. Evidence: pending.
+
+### Chats — One conversation list, ordered by message activity
+
+- [ ] **UX-C01** Remove All, Unread and Archived chips plus filter-only state/branches from the active inbox; keep conversation search and unread/read state. Evidence: pending.
+- [ ] **UX-C02** One thread per Masana, newest real sent/received message activity first with stable tie breaking; opening/closing a screen, drafts and failed retries do not promote old threads. Prevent pinned-first ordering from contradicting the requested default chronology. Evidence: pending.
+- [ ] **UX-C03** Merge received/server search/history results into the existing thread without duplicates; preserve scroll, search, retries, pagination and offline results. Define safe visibility/recovery of previously archived histories without deleting records or recreating the removed chip row. Evidence: pending.
+- [ ] **UX-C04** Update canonical journey and meaningful tests for no filter chips, chronology, late/replayed messages, close/reopen, archived compatibility, account switch and empty/error/offline states. Evidence: pending.
+
+### Portraits — Use the existing Masana pictures consistently
+
+- [ ] **UX-P01** Fix call-history rows that omit the matching directory entry when constructing the canonical avatar. Test an approved renamed Masana and correct image asset, including cached-directory loading. Evidence: pending.
+- [ ] **UX-P02** Verify all 26 approved portrait assets, server ID/portraitKey projection, media approval/ownership, serialized/cache metadata and account-safe refresh. Investigate missing keys before changing fallback rules; never match a canonical identity by mutable name. Evidence: pending.
+- [ ] **UX-P03** Reuse canonical portraits in Chats, picker, chat header, live call, call history/detail, Status header/detail and Saved. Preserve safe placeholder only for genuine missing/loading/revoked identity and visibly retry failed metadata. Evidence: pending.
+- [ ] **UX-P04** Verify actual rendered portraits and offline fallback on device, rename/cache migration and account switch; asset-existence tests alone do not finish this task. Evidence: pending.
+
+### Status — Primary visual redesign
+
+- [ ] **UX-S01** Shared polished card with canonical portrait/name/AI identity/time, readable body, coherent spacing and media hierarchy across feed/Saved/detail. Evidence: pending.
+- [ ] **UX-S02** Body/card tap opens detail; remove compulsory Open post button; avatar/name opens profile, image opens viewer, audio and nested actions operate independently and navigate once. Preserve list position. Evidence: pending.
+- [ ] **UX-S03** Proper thumbs-up Like, horizontal Like/Comment/Share actions, compact anchored horizontal Like/Love/Care choices; no vertical/bottom-docked picker or wrapping action stack. Preserve historic other reactions without rewriting records. Evidence: pending.
+- [ ] **UX-S04** Remove feed flag/report buttons, feed overflow/detail entry and unused callbacks; preserve required account/comment safety elsewhere. Evidence: pending.
+- [ ] **UX-S05** Reliable reaction/count/save/share/tip state, optimistic rollback, pending/retry/idempotency and account fences; explicit reviewed MB tips and user-initiated sharing. Evidence: pending.
+- [ ] **UX-S06** Multiple-image handling, text expansion, captions/accessibility, missing media, audio, loading/empty/offline/stale/deleted content and bounded refresh/pagination; warmth without fabricated activity. Evidence: pending.
+- [ ] **UX-S07** Golden/widget/navigation and real visual review at 320 dp, 200% text, RTL, contrast, screen reader, focus and reduced motion. Evidence: pending.
+
+### Wallet layout and OPay-inspired journey refinement
+
+- [ ] **UX-W01** Quick actions use the exact two-row layout: **Redeem | Add data**, then **Request | Send**. Match focus/semantic order and preserve destinations, 320 dp and large-font usability. Evidence: pending.
+- [ ] **UX-W02** Apply inspected `opay-decloned` phone/operator, bundle allowance/price/validity and separate review/result patterns using Masanawa branding. Implement the gap list in the addendum; keep MB/Data scope. Evidence: pending.
+- [ ] **UX-W03** Add data chooser contains packages/custom quantity and Continue; review and persistent bank-account instructions are separate routes. No bank details on the package chooser; preserve drafts/back, account-assignment errors and pending funding. Evidence: pending.
+- [ ] **UX-W04** Implement the proposed 10 GB at ₦500/GB starting tier and decreasing ladder through 1 TB/2 TB only through a versioned server authority after fulfillment-cost/fee/margin/limits checks. Earlier plan's intermediate rates are proposals, not active rates. Evidence: pending.
+- [ ] **UX-W05** Custom whole-GB quotes show exact total and actual deposit-derived MB; test tier crossings, over/underpayments, exact kobo/carry and delayed/reversed/deduplicated funding. Do not promise inconsistent quantities or reprice historical receipts. Evidence: pending.
+
+### Send and Request
+
+- [ ] **UX-T01** Send begins with the same authoritative wallet balance card; show available/sendable distinction, remove the unwanted descriptive paragraph and preserve actionable validation. Evidence: pending.
+- [ ] **UX-T02** Send quick amounts 100 MB/500 MB/1 GB/5 GB/10 GB plus custom amount and Max; allow every positive whole MB, including below 1 GB. Max excludes welcome/reserved/frozen funds and is revalidated on review/commit. Evidence: pending.
+- [ ] **UX-T03** Shared recipient lookup/selection with canonical avatar, name and unique @handle/stable ID; handle duplicate names, self-transfer, cancellation, debouncing and privacy without losing draft. Evidence: pending.
+- [ ] **UX-T04** Request gets quick amounts/custom input and clear requester/recipient roles; preserve incoming/sent, explicit reviewed Pay, cancel/decline/expiry, seven-day validity and single-payment enforcement. Evidence: pending.
+- [ ] **UX-T05** Preserve atomic MB movement, original operation IDs, no duplicate confirmation, account/recovery holds, stale quote handling and durable receipt/readback; verify real PG concurrency and client error/retry states. Evidence: pending.
+
+### Data redemption and provider verification
+
+- [ ] **UX-D01** Remove visible All networks choice; explicit MTN/Airtel/Glo/9mobile selection with approved logos and accessible labels. Portability-safe recipient/network handling; contact/recent-number convenience only with appropriate private/manual fallback. Evidence: pending.
+- [ ] **UX-D02** Daily/Weekly/Monthly filters scoped to the selected verified network; exact allowance/validity/MB price on adaptive bundle cards and clear loading/empty/stale/error states. Define provider-evidenced duration mapping and handle other valid durations explicitly. Evidence: pending.
+- [ ] **UX-D03** Separate recipient/bundle selection → review → explicit confirm → pending/result/receipt. Changes invalidate old quotes; Back preserves draft. Retain original-reference purchase lock and no automatic resubmission. Evidence: pending.
+- [ ] **UX-D04** Redemption is at least 1,000 MB and only approved exact-whole-GB bundles using purchased sendable MB; quote freshness, network/customer and budget verified on server. Wallet TB tiers do not invent network TB bundles. Evidence: pending.
+- [ ] **UX-D05** Obtain current official Flutterwave contract and authenticated test catalogue evidence using existing protected test credentials; qualify all four networks' IDs/allowance/validity. Current docs/API proxy 403 and redacted credential access remain explicitly BLOCKED; fixed-IP hosting stays on hold. Evidence: pending.
+- [ ] **UX-D06** Qualify supported test-mode delivery/readback/webhooks against the durable MB reserve/settlement journal: success/rejection/unknown/duplicate/restart/late result/reversal. No HTTP-200-only delivery claim, secret logging, paid test or live fallback. Evidence: pending.
+
+### Activity, receipts and complete call history
+
+- [ ] **UX-H01** Wallet Activity has polished recent rows and right-aligned See all; full paginated/filterable history with purpose/counterparty/status, period funding/spending and reconciled balances. Evidence: pending.
+- [ ] **UX-H02** Authoritative transaction detail and receipt cover funding/send/receive/request/tip/replies/calls/redeem/reservation/release/reversal; do not count release as income or mix old financial balances into MB. Evidence: pending.
+- [ ] **UX-H03** Branded PDF and PNG/image receipt preview/export/share with Masanawa logo, receipt/reference, exact MB/GB, status/time, relevant fees/funding NGN/rate version and privacy-safe counterparty. Original data authority, safe temp-file cleanup and account fences; optional scoped CSV history. Evidence: pending.
+- [ ] **UX-H04** Complete one-to-one Masana call timeline/detail: portrait, outcome, connected duration, reconciled MB usage/receipt, date groups/search/filter/pagination and correct redial. No invented charges from client timestamps or retired human/group routes. Evidence: pending.
+- [ ] **UX-H05** Verify empty/loading/offline/retry, filter totals, pending/reversed exports, PDF pagination/image readability, system-share cancellation, account change and privacy. Evidence: pending.
+
+### Call screen and Notifications
+
+- [ ] **UX-L01** Larger canonical live-call portrait (proposed 144–176 dp, responsive), clear name/state/connected timer and stronger labeled controls with distinct prominent End action. Evidence: pending.
+- [ ] **UX-L02** Mute/audio route/End states, microphone denial, interruption/resume, headset/Bluetooth/speaker, reconnect, accessible announcements, Masana-first greeting and ringback teardown work with the real session. Evidence: pending.
+- [ ] **UX-L03** End/Back/account switch releases microphone/audio focus/foreground service/tones/timers and reconciles usage once; responsive short/landscape/320 dp/200%-text/RTL and actual audible device acceptance. Evidence: pending.
+- [ ] **UX-N01** Notifications tabs and bodies are **Activity left/default, Preferences right**; correct deep links and account-change reset; changing labels alone is insufficient. Evidence: pending.
+- [ ] **UX-N02** Activity loading/empty/error/refresh/read/destination/account fences and retained-action categories; Preferences independent loading/save/retry, push permission/quiet hours and server readback. Preserve activity visibility when push is silenced or preference fetch fails. Evidence: pending.
+
+### Release and completion evidence
+
+- [ ] **UX-Q01** Implement/update canonical screen journeys before each screen batch; log base/head SHA, claimed files and dependencies so another window can resume without duplicating active work. Evidence: pending.
+- [ ] **UX-Q02** Run relevant TS/real PG/Flutter/accessibility tests, hosted exact-head CI and required real provider/device checks; retain explicit PASS_REAL/PASS_SIMULATED/NOT_RUN/BLOCKED outcomes. Merge every verified scoped batch automatically. Evidence: pending.
+- [ ] **UX-Q03** Final audit reconciles every stable UX ID, remaining retirement references and historical-record safeguards. No APK or fixed-IP infrastructure work under this request. Evidence: pending.

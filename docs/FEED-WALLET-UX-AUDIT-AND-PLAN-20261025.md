@@ -2,6 +2,8 @@
 
 Status: source audit complete; proposed UI and pricing below are **not implemented**. Owner feedback from the new-window session takes priority over earlier screen/pricing plans. Canonical task authority remains [the roadmap](PRODUCT-ROADMAP-20261019.md); update [journeys](SCREEN-JOURNEYS.md) before implementation. No APK. Flutterwave fixed-IP hosting remains on hold.
 
+Implementation tracking: use the single [canonical stable-ID checklist](PRODUCT-ROADMAP-20261019.md#owner-ux-and-communication-repair-checklist), including the owner’s subsequent Chats/calls/portrait/Notifications requirements in [the addendum audit](CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md). This document supplies design detail; it is not a separate completion tracker.
+
 ## Evidence and limits
 
 Audit baseline: latest fetched GitHub main `0be46268` (through PR #420), integrated with the backend retirement source batch. New main commits #407–#420 were discovered during the audit and the observations below were rechecked against them. PR #400 was already merged when checked; its final CI passed. Relevant source:
