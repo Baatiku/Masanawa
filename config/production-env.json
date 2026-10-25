@@ -275,6 +275,13 @@
       "description": "Production configuration for MASANAWA_BILLING_REDIRECT_URL."
     },
     {
+      "name": "MASANAWA_BILLSTACK_SECRET_KEY",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only Billstack reserved-account bearer and signed payment webhook HMAC secret, provisioned by merchant in Railway. Presence composes 9PSB account assignment in masana-lite scope; no client exposure and no bank display until provider confirmed."
+    },
+    {
       "name": "MASANAWA_BOOTSTRAP_PLATFORM_AGENTS",
       "owner": "gateway",
       "classification": "public",
