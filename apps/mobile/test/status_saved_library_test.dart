@@ -18,9 +18,8 @@ Map<String, dynamic> savedPost() => {
   'post': {
     'id': _postId,
     'author': {
-      'type': 'human',
-      'id': 'fan',
-      'handle': 'amina',
+      'type': 'masana',
+      'id': 'character_amina',
       'displayName': 'Amina',
     },
     'kind': 'text',
@@ -51,7 +50,6 @@ Map<String, dynamic> savedVideo() => {
 class SavedStub implements SavedStatusLibraryApi {
   SavedStatusPage page = SavedStatusPage([
     SavedStatusItem.fromJson(savedPost()),
-    SavedStatusItem.fromJson(savedVideo()),
   ], null);
   Future<SavedStatusPage> Function(String?)? loader;
   Future<void> Function(SavedStatusItem)? remover;
@@ -128,35 +126,31 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Saved'));
     await tester.pumpAndSettle();
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.text('Hello Status'), findsOneWidget);
     active.value = false;
     await tester.pumpAndSettle();
-    expect(find.text('Approved original'), findsNothing);
     expect(find.text('Hello Status'), findsNothing);
     expect(find.text('Account access changed'), findsOneWidget);
     expect(find.byType(SavedStatusLibraryScreen), findsNothing);
     active.dispose();
   });
 
-  test('mixed collection validates author and approved video projection', () {
+  test('saved list ignores retired video bookmarks but retains Masana posts', () {
     final page = SavedStatusPage.fromJson({
       'items': [savedPost(), savedVideo()],
       'nextCursor': 'opaque',
     });
-    expect(page.items, hasLength(2));
-    expect(page.items.first.post!.displayAuthor, 'Amina');
-    expect(page.items.last.video!.provider, 'youtube');
+    expect(page.items, hasLength(1));
+    expect(page.items.single.post!.displayAuthor, 'Amina');
     expect(page.nextCursor, 'opaque');
-    final invalid = savedVideo();
-    invalid['video'] = {...(invalid['video'] as Map), 'reviewState': 'pending'};
-    expect(() => SavedStatusItem.fromJson(invalid), throwsFormatException);
+    expect(() => SavedStatusItem.fromJson(savedVideo()), throwsFormatException);
     expect(
       () => SavedStatusItem.fromJson({...savedPost(), 'id': _videoId}),
       throwsFormatException,
     );
   });
 
-  testWidgets('saved library reads, opens both kinds and confirms removal', (
+  testWidgets('saved library reads, opens posts and confirms removal', (
     tester,
   ) async {
     final api = SavedStub();
@@ -168,20 +162,15 @@ void main() {
           accountKey: 'fan',
           isAccountCurrent: () => true,
           openPost: (post) async => opened.add(post.id),
-          openVideo: (video) async => opened.add(video.id),
         ),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Hello Status'), findsOneWidget);
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.text('Watch video'), findsNothing);
     await tester.tap(find.text('Open post'));
     await tester.pumpAndSettle();
     expect(opened, contains(_postId));
-    await tester.tap(find.text('Watch video'));
-    await tester.pumpAndSettle();
-    expect(opened, contains(_videoId));
-
     await tester.tap(find.text('Remove').first);
     await tester.pumpAndSettle();
     expect(api.removals, isEmpty);
@@ -194,7 +183,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.removals, [_postId]);
     expect(find.text('Hello Status'), findsNothing);
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.text('Watch video'), findsNothing);
   });
 
   testWidgets('pagination uses server cursor, dedupes and recovers failures', (
@@ -213,7 +202,6 @@ void main() {
         return Future.value(
           SavedStatusPage([
             SavedStatusItem.fromJson(savedPost()),
-            SavedStatusItem.fromJson(savedVideo()),
           ], null),
         );
       }
@@ -235,14 +223,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.cursors, [null, 'opaque-page']);
     expect(find.text('Hello Status'), findsOneWidget);
-    expect(find.text('Approved original'), findsOneWidget);
-    expect(find.text('Watch video'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Watch video'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('Watch video'), findsNothing);
   });
 
   testWidgets('account replacement discards an outstanding private read', (
@@ -277,7 +258,7 @@ void main() {
     pending.complete(old.page);
     await tester.pumpAndSettle();
     expect(next.cursors, [null]);
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.text('Hello Status'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -374,6 +355,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Hello Status'), findsWidgets);
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.text('Hello Status'), findsOneWidget);
   });
 }
