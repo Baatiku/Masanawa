@@ -250,18 +250,55 @@ class _NotificationPreferencesScreenState
     }
     final colors = context.masanawa;
     return DefaultTabController(
+      key: ValueKey(account),
       length: 2,
       child: Scaffold(
         backgroundColor: colors.surfaceBg,
         appBar: AppBar(
           title: const Text('Notifications'),
           bottom: const TabBar(tabs: [
-            Tab(text: 'Preferences'), Tab(text: 'Activity'),
+            Tab(text: 'Activity'), Tab(text: 'Preferences'),
           ]),
         ),
         body: account == null || account != _owner
           ? const Center(child: Text('Sign in to manage notifications.'))
           : TabBarView(children: [
+              RefreshIndicator(onRefresh: _refreshHistory,
+                child: _historyLoading && _history.isEmpty
+                ? ListView(children: const [
+                    ListTile(title: Text('Loading recent alerts…')),
+                  ])
+                : _historyError != null
+                ? ListView(children: [
+                    ListTile(title: Text(_historyError!)),
+                    ListTile(title: const Text('Retry'),
+                      onTap: _refreshHistory),
+                  ])
+                : _history.isEmpty
+                ? ListView(children: const [
+                    SizedBox(height: 64),
+                    Icon(Icons.notifications_none_outlined, size: 48),
+                    Center(child: Padding(padding: EdgeInsets.all(20),
+                      child: Text('No recent alerts yet.'))),
+                  ])
+                : ListView.separated(
+                  itemCount: _history.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final event = _history[i];
+                    return ListTile(
+                      leading: Icon(notificationCategories[event.category]!.$2,
+                          color: colors.brand),
+                      title: Text(event.title),
+                      subtitle: Text('${notificationCategories[event.category]!.$1} · ${event.createdAt}'),
+                      trailing: event.link == null ? null : const Icon(Icons.chevron_right),
+                      onTap: event.link == null ? null : () {
+                        final target = shellDeepLinkRoute(event.link!);
+                        if (target != null) context.push(target);
+                      },
+                    );
+                  },
+                )),
               RefreshIndicator(onRefresh: _refresh,
                 child: ListView(children: [
                   if (_loading || _saving) const LinearProgressIndicator(minHeight: 2),
@@ -320,42 +357,6 @@ class _NotificationPreferencesScreenState
                           'Updates appear in Activity even when push is silenced.')),
                   ],
                 ])),
-              RefreshIndicator(onRefresh: _refreshHistory,
-                child: _historyLoading && _history.isEmpty
-                ? ListView(children: const [
-                    ListTile(title: Text('Loading recent alerts…')),
-                  ])
-                : _historyError != null
-                ? ListView(children: [
-                    ListTile(title: Text(_historyError!)),
-                    ListTile(title: const Text('Retry'),
-                      onTap: _refreshHistory),
-                  ])
-                : _history.isEmpty
-                ? ListView(children: const [
-                    SizedBox(height: 64),
-                    Icon(Icons.notifications_none_outlined, size: 48),
-                    Center(child: Padding(padding: EdgeInsets.all(20),
-                      child: Text('No recent alerts yet.'))),
-                  ])
-                : ListView.separated(
-                  itemCount: _history.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final event = _history[i];
-                    return ListTile(
-                      leading: Icon(notificationCategories[event.category]!.$2,
-                          color: colors.brand),
-                      title: Text(event.title),
-                      subtitle: Text('${notificationCategories[event.category]!.$1} · ${event.createdAt}'),
-                      trailing: event.link == null ? null : const Icon(Icons.chevron_right),
-                      onTap: event.link == null ? null : () {
-                        final target = shellDeepLinkRoute(event.link!);
-                        if (target != null) context.push(target);
-                      },
-                    );
-                  },
-                )),
             ]),
       ),
     );

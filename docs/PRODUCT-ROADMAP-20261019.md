@@ -87,7 +87,7 @@ Retirement evidence: #400 was already merged; #402 mobile, #403 worker, #404 rou
 
 ## Owner UX and communication repair checklist
 
-**Active execution checklist for the combined owner feedback.** Source audit baseline: main `0c1dc595` (#421). Read [the original Status/wallet plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md) and [the Chats/calls/OPay addendum audit](CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md). These documents explain this single checklist; they are not competing task trackers. New requirements below supersede conflicting older screen order/filter/pricing proposals. **All implementation items remain unchecked until evidence is attached.** No APK; Flutterwave fixed-IP hosting remains on hold; separate Masanawa-App and historical financial records remain protected.
+**Active execution checklist for the combined owner feedback.** Source audit baseline: main `0c1dc595` (#421). Read [the original Status/wallet plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md) and [the Chats/calls/OPay addendum audit](CHAT-CALL-WALLET-ADDENDUM-AUDIT-20261025.md). These documents explain this single checklist; they are not competing task trackers. New requirements below supersede conflicting older screen order/filter/pricing proposals. **Check items only when implementation and relevant verification evidence are attached.** No APK; Flutterwave fixed-IP hosting remains on hold; separate Masanawa-App and historical financial records remain protected.
 
 Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, claimed files and base SHA here before overlapping implementation. Keep shared router/bootstrap/ledger/migrations under one integrator. On completion replace `Evidence: pending` with PR/commit and test outcomes, distinguishing source/mocked tests from real PG/provider/device checks. Do not tick an entire batch because a plan or one widget test merged. Merge each verified batch automatically under existing owner authorization.
 
@@ -111,7 +111,7 @@ Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, c
 
 ### Portraits — Use the existing Masana pictures consistently
 
-- [ ] **UX-P01** Fix call-history rows that omit the matching directory entry when constructing the canonical avatar. Test an approved renamed Masana and correct image asset, including cached-directory loading. Evidence: pending.
+- [x] **UX-P01** Fix call-history rows that omit the matching directory entry when constructing the canonical avatar. Test an approved renamed Masana and correct image asset, including cached-directory loading. Evidence: `fix/canonical-call-history-portrait`; 8 focused Flutter tests pass, including cached identity hydration, renamed portrait, 320 dp grid geometry, Activity/Preferences content and account-switch tab reset. Hosted CI is the merge gate; real portrait/device acceptance remains UX-P04.
 - [ ] **UX-P02** Verify all 26 approved portrait assets, server ID/portraitKey projection, media approval/ownership, serialized/cache metadata and account-safe refresh. Investigate missing keys before changing fallback rules; never match a canonical identity by mutable name. Evidence: pending.
 - [ ] **UX-P03** Reuse canonical portraits in Chats, picker, chat header, live call, call history/detail, Status header/detail and Saved. Preserve safe placeholder only for genuine missing/loading/revoked identity and visibly retry failed metadata. Evidence: pending.
 - [ ] **UX-P04** Verify actual rendered portraits and offline fallback on device, rename/cache migration and account switch; asset-existence tests alone do not finish this task. Evidence: pending.
@@ -128,7 +128,7 @@ Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, c
 
 ### Wallet layout and OPay-inspired journey refinement
 
-- [ ] **UX-W01** Quick actions use the exact two-row layout: **Redeem | Add data**, then **Request | Send**. Match focus/semantic order and preserve destinations, 320 dp and large-font usability. Evidence: pending.
+- [x] **UX-W01** Quick actions use the exact two-row layout: **Redeem | Add data**, then **Request | Send**. Match focus/semantic order and preserve destinations, 320 dp and large-font usability. Evidence: `fix/canonical-call-history-portrait`; 8 focused Flutter tests pass, including cached identity hydration, renamed portrait, 320 dp grid geometry, Activity/Preferences content and account-switch tab reset. Hosted CI is the merge gate; real portrait/device acceptance remains UX-P04.
 - [ ] **UX-W02** Apply inspected `opay-decloned` phone/operator, bundle allowance/price/validity and separate review/result patterns using Masanawa branding. Implement the gap list in the addendum; keep MB/Data scope. Evidence: pending.
 - [ ] **UX-W03** Add data chooser contains packages/custom quantity and Continue; review and persistent bank-account instructions are separate routes. No bank details on the package chooser; preserve drafts/back, account-assignment errors and pending funding. Evidence: pending.
 - [ ] **UX-W04** Implement the proposed 10 GB at ₦500/GB starting tier and decreasing ladder through 1 TB/2 TB only through a versioned server authority after fulfillment-cost/fee/margin/limits checks. Earlier plan's intermediate rates are proposals, not active rates. Evidence: pending.
@@ -164,7 +164,7 @@ Cross-window protocol: use stable IDs in branches/PRs; record the exact owner, c
 - [ ] **UX-L01** Larger canonical live-call portrait (proposed 144–176 dp, responsive), clear name/state/connected timer and stronger labeled controls with distinct prominent End action. Evidence: pending.
 - [ ] **UX-L02** Mute/audio route/End states, microphone denial, interruption/resume, headset/Bluetooth/speaker, reconnect, accessible announcements, Masana-first greeting and ringback teardown work with the real session. Evidence: pending.
 - [ ] **UX-L03** End/Back/account switch releases microphone/audio focus/foreground service/tones/timers and reconciles usage once; responsive short/landscape/320 dp/200%-text/RTL and actual audible device acceptance. Evidence: pending.
-- [ ] **UX-N01** Notifications tabs and bodies are **Activity left/default, Preferences right**; correct deep links and account-change reset; changing labels alone is insufficient. Evidence: pending.
+- [x] **UX-N01** Notifications tabs and bodies are **Activity left/default, Preferences right**; correct deep links and account-change reset; changing labels alone is insufficient. Evidence: `fix/canonical-call-history-portrait`; 8 focused Flutter tests pass, including cached identity hydration, renamed portrait, 320 dp grid geometry, Activity/Preferences content and account-switch tab reset. Hosted CI is the merge gate; real portrait/device acceptance remains UX-P04.
 - [ ] **UX-N02** Activity loading/empty/error/refresh/read/destination/account fences and retained-action categories; Preferences independent loading/save/retry, push permission/quiet hours and server readback. Preserve activity visibility when push is silenced or preference fetch fails. Evidence: pending.
 
 ### Release and completion evidence
