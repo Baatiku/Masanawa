@@ -43,13 +43,16 @@ void main() {
     expect(parentTaps, 0);
     expect(body().maxLines, isNull);
     expect(find.text('See less'), findsOneWidget);
+    await tester.ensureVisible(find.text('See less'));
     await tester.tap(find.text('See less'));
     await tester.pump();
     expect(body().maxLines, 5);
+    await tester.ensureVisible(find.text('See more'));
     await tester.tap(find.text('See more'));
     await tester.pump();
     await render('fan2', 'post1');
     expect(body().maxLines, 5);
+    await tester.ensureVisible(find.text('See more'));
     await tester.tap(find.text('See more'));
     await tester.pump();
     await render('fan2', 'post2');
