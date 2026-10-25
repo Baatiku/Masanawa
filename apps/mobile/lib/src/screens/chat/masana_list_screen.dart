@@ -1,3 +1,4 @@
+import '../../../l10n/app_localizations.dart';
 import '../../calls/masana_voice_route.dart';
 
 import 'package:flutter/material.dart';
