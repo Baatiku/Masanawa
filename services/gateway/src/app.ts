@@ -9,20 +9,13 @@ import {
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
-import {registerCreatorCompletionRoutes} from "./creator_agents/completion.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
 import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
-import type { AdminYouTubeSourceStore } from "./modules/youtube_websub/source_admin.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
 import {registerMasanaRoutes} from "./modules/masana/service.js";
-import {registerCreatorAgentRoutes} from "./creator_agents/routes.js";
-import {registerCreatorPolicyRoutes} from "./creator_agents/policy.js";
-import type { VideoStore } from "./modules/external_videos/service.js";
-import type { VideoPrincipal } from "./modules/external_videos/contract.js";
-import type { FastifyRequest } from "fastify";
 import Fastify from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
@@ -99,19 +92,8 @@ export interface GatewayAppOptions {
   /** Canonical approved Masana profiles and immutable editor-controlled revisions. */
   readonly masana?: Parameters<typeof registerMasanaRoutes>[1];
   /** Owner-scoped creator Masana service. May return provider unavailable, never mock success. */
-  readonly creatorCompletion?: Parameters<typeof registerCreatorCompletionRoutes>[1];
-  readonly creatorAgents?: Parameters<typeof registerCreatorAgentRoutes>[1];
-  readonly creatorPolicy?: Parameters<typeof registerCreatorPolicyRoutes>[1];
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
   readonly masanaInbox?: MasanaInboxRoutesDeps;
-  readonly videos?: {
-    store: VideoStore;
-    resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
-  };
-  readonly videoSources?: {
-    store: AdminYouTubeSourceStore;
-    resolvePrincipal: (request: FastifyRequest) => Promise<VideoPrincipal>;
-  };
   readonly callHistory?: CallHistoryService;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
