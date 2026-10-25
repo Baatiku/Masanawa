@@ -2738,7 +2738,7 @@ export async function startGatewayService(
           const phone=profile.phone.trim().replace(/^\+234/,"0");
           const names=profile.display_name.trim().split(/\s+/);
           return {reference,email:profile.email.trim(),phone,
-            firstName:names[0]??"",lastName:names.slice(1).join(" ")||names[0]??""};
+            firstName:names[0]??"",lastName:names.slice(1).join(" ") || (names[0] ?? "")};
         },
         read:storage.read,
         start:storage.start,
