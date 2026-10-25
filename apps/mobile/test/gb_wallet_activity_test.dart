@@ -158,12 +158,16 @@ void main() {
       ..responses[null]=GbActivityPage([item('mb:1',-200)],'next-page');
     await mount(tester,fake);
     fake.pending=Completer<GbActivityPage>();
+    await tester.dragUntilVisible(find.text('Load more activity'),
+      find.byType(ListView),const Offset(0,-140));
     await tester.tap(find.text('Load more activity'));
     await tester.pump();
     fake.responses[null]=GbActivityPage([
       item('ngn:deposit_new',500050,unit:'NGN',kind:'deposit')],null);
-    await tester.tap(find.text('Naira NGN'));
-    await tester.pumpAndSettle(const Duration(milliseconds:10));
+    await tester.dragUntilVisible(find.byKey(const ValueKey('activity-unit-NGN')),
+      find.byType(ListView),const Offset(0,150));
+    await tester.tap(find.byKey(const ValueKey('activity-unit-NGN')));
+    await tester.pump();
     fake.pending!.complete(GbActivityPage([item('mb:stale',999)],null));
     await tester.pumpAndSettle();
     expect(fake.units,contains('NGN'));
@@ -187,6 +191,9 @@ void main() {
     expect(find.text('−₦1,280.50'),findsOneWidget);
     expect(find.text('original_ngn:fund_1'),findsOneWidget);
     expect(find.text('Copy reference'),findsOneWidget);
+    await tester.dragUntilVisible(find.textContaining(
+      'not proof of external bank settlement'),find.byType(ListView),
+      const Offset(0,-150));
     expect(find.textContaining('not proof of external bank settlement'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
