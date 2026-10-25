@@ -4,7 +4,7 @@ import { FlutterwaveWebhookError } from "@masanawa/providers";
 import type { BillingCheckoutService } from "./billing_checkout.js";
 import type { BillingFinancialService } from "./financial_billing.js";
 import type { BillingWalletService } from "./billing_wallet.js";
-import { registerBillingRoutes } from "./billing_routes.js";
+import { registerHistoricalFinancialCallbacks } from "./historical_financial_callbacks.js";
 
 describe("Flutterwave webhook HTTP retry contract (R05)", () => {
   async function deliver(
@@ -13,7 +13,7 @@ describe("Flutterwave webhook HTTP retry contract (R05)", () => {
     wallet?: Pick<BillingWalletService, "receiveFundingWebhook">,
   ) {
     const app = Fastify();
-    registerBillingRoutes(app, {
+    registerHistoricalFinancialCallbacks(app, {
       billingFinancial: billing as BillingFinancialService,
       ...(wallet ? { billingWallet: wallet as BillingWalletService } : {}),
       ...(checkout

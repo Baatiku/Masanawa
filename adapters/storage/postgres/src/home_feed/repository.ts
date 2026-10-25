@@ -71,7 +71,7 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=false) {
+ async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
@@ -91,79 +91,10 @@ export class PgHomeFeedRepository {
     search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`,masanaOnly]);
   return rows.rows.map(item);
  }
- async find(tenant:string,viewer:string|null,id:string,masanaOnly=false){
+ async find(tenant:string,viewer:string|null,id:string,masanaOnly=true){
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}
    AND (NOT $4::boolean OR p.author_type='masana')`,[tenant,viewer,id,masanaOnly]);
   return rows.rows[0]?item(rows.rows[0]):null;
- }
- async publishHumanText(tenant:string,userId:string,v:{body:string;audience:'public';idempotencyKey:string}){
-  // Only active tenant-owned accounts with canonical public profiles may
-  // publish. Stable request keys never overwrite differently worded posts.
-  await this.pool.query(`INSERT INTO feed.posts
-    (tenant_id,author_type,author_user_id,author_masana_id,audience,kind,
-     body,media_ids,transcript,idempotency_key,published_by)
-    SELECT $1,'human',$2,NULL,'public','text',$3,ARRAY[]::text[],NULL,$4,$2
-    FROM identity.users u JOIN talks.public_profiles profile
-      ON profile.tenant_id=u.tenant_id AND profile.user_id=u.user_id
-    WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active'
-      AND profile.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
-      AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement enforcement
-        WHERE enforcement.tenant_id=u.tenant_id AND enforcement.target_kind='profile'
-          AND enforcement.target_id=profile.handle AND enforcement.visibility<>'public')
-    ON CONFLICT(tenant_id,published_by,idempotency_key) DO NOTHING`,
-    [tenant,userId,v.body,v.idempotencyKey]);
-  const saved=await this.pool.query(`SELECT id,author_type,author_user_id,
-    author_masana_id,audience,kind,body,media_ids,transcript FROM feed.posts
-    WHERE tenant_id=$1 AND published_by=$2 AND idempotency_key=$3`,
-    [tenant,userId,v.idempotencyKey]);
-  const row=saved.rows[0] as Row|undefined;
-  if(!row)throw Object.assign(new Error('human_profile_unavailable'),{status:403,code:'human_profile_unavailable'});
-  if(row.author_type!=='human'||row.author_user_id!==userId||
-    row.author_masana_id!==null||row.audience!=='public'||row.kind!=='text'||
-    row.body!==v.body||(row.media_ids as unknown[]).length!==0||row.transcript!==null)
-    throw Object.assign(new Error('idempotency_conflict'),{status:409,code:'idempotency_conflict'});
-  const projected=await this.find(tenant,userId,String(row.id));
-  if(!projected)throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
-  return projected;
- }
- async editHumanText(tenant:string,userId:string,id:string,expectedBody:string,body:string) {
-  // One atomic ownership + compare-and-swap update. Re-check canonical
-  // identity, profile moderation and block policy on both writes and replays.
-  const changed=await this.pool.query(`UPDATE feed.posts p SET body=$5,updated_at=now()
-   WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
-     AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
-     AND p.audience='public' AND p.body=$4 AND ${eligibleAuthor} RETURNING p.id`,
-    [tenant,userId,id,expectedBody,body]);
-  if(changed.rows.length===0) {
-   const current=await this.pool.query(`SELECT p.body FROM feed.posts p
-     WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
-       AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
-       AND p.audience='public' AND ${eligibleAuthor}`,[tenant,userId,id]);
-   if(current.rows.length===0)
-    throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
-   if(current.rows[0]?.body!==body)
-    throw Object.assign(new Error('post_edit_conflict'),{status:409,code:'post_edit_conflict'});
-   // Uncertain transport replay: this exact requested body is durable.
-  }
-  const projected=await this.find(tenant,userId,id);
-  if(!projected)throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
-  return projected;
- }
- async removeHumanPost(tenant:string,userId:string,id:string):Promise<{id:string;state:"removed"}>{
-  // Preserve immutable original author/reaction/comment identifiers for
-  // moderation and dispute audit; every normal reader requires published.
-  const changed=await this.pool.query(`UPDATE feed.posts p SET state='removed',updated_at=now()
-   WHERE p.tenant_id=$1 AND p.author_type='human' AND p.author_user_id=$2
-     AND p.id=$3::uuid AND p.state='published' AND p.kind='text'
-     AND ${eligibleAuthor} RETURNING p.id`,[tenant,userId,id]);
-  if(changed.rows.length===0) {
-   const old=await this.pool.query(`SELECT state FROM feed.posts
-     WHERE tenant_id=$1 AND author_type='human' AND author_user_id=$2
-     AND id=$3::uuid AND kind='text'`,[tenant,userId,id]);
-   if(old.rows[0]?.state!=='removed')
-    throw Object.assign(new Error('post_not_found'),{status:404,code:'post_not_found'});
-  }
-  return {id,state:'removed'};
  }
  async publish(tenant:string,publisher:string,v:{authorMasanaId:string;kind:string;body:string;media:readonly string[];transcript:string|null;idempotencyKey:string}){
   const added=await this.pool.query(`INSERT INTO feed.posts

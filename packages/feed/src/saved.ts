@@ -1,14 +1,13 @@
 import type {Actor} from "./index.js";
 
-export type SavedKind="post"|"video";
+export type SavedKind="post";
 export type SavedCursor={at:string;kind:SavedKind;id:string};
 export type SavedItem={
   kind:SavedKind; id:string; savedAt:string;
-  post?:Record<string,unknown>; video?:Record<string,unknown>;
+  post?:Record<string,unknown>;
 };
 export interface SavedRepository {
   list(tenantId:string,fanId:string,before:SavedCursor|null,limit:number):Promise<readonly SavedItem[]>;
-  setVideoSaved(tenantId:string,fanId:string,videoId:string,enabled:boolean):Promise<boolean>;
 }
 export class SavedError extends Error {
   constructor(readonly status:number,readonly code:string){super(code);}
@@ -27,7 +26,7 @@ function decode(value?:string):SavedCursor|null {
     const v:unknown=JSON.parse(Buffer.from(value,"base64url").toString("utf8"));
     if(!Array.isArray(v)||v.length!==3||typeof v[0]!=="string"||
       !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3,6}Z$/.test(v[0])||
-      !Number.isFinite(Date.parse(v[0]))||(v[1]!=="post"&&v[1]!=="video")||
+      !Number.isFinite(Date.parse(v[0]))||v[1]!=="post"||
       typeof v[2]!=="string"||!uuid.test(v[2]))throw Error("invalid");
     return {at:v[0],kind:v[1],id:v[2]};
   } catch {throw new SavedError(422,"invalid_cursor");}
@@ -41,13 +40,5 @@ export class SavedLibraryService {
     const last=items.at(-1);
     return {items,nextCursor:rows.length>20&&last?
       Buffer.from(JSON.stringify([last.savedAt,last.kind,last.id])).toString("base64url"):null};
-  }
-  async saveVideo(actor:Actor,videoId:string,enabled:boolean){
-    const {tenant,fan}=fanOnly(actor);
-    if(!uuid.test(videoId))throw new SavedError(422,"invalid_video_id");
-    if(typeof enabled!=="boolean")throw new SavedError(422,"invalid_saved_state");
-    const saved=await this.repository.setVideoSaved(tenant,fan,videoId,enabled);
-    if(enabled&&!saved)throw new SavedError(404,"approved_video_not_found");
-    return {saved};
   }
 }

@@ -14,7 +14,6 @@
     "@masanawa/contracts": "workspace:*",
     "@masanawa/commerce": "workspace:*",
     "@masanawa/feed": "workspace:*",
-    "@masanawa/rooms": "workspace:*",
     "@masanawa/identity": "workspace:*",
     "@masanawa/masana": "workspace:*",
     "@masanawa/mobile-push": "workspace:*",
@@ -28,14 +27,9 @@
     "@masanawa/skills": "workspace:*",
     "@masanawa/nowpayments": "workspace:*",
     "@masanawa/providers": "workspace:*",
-    "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "7.0.0-rc14",
-    "qrcode": "^1.5.4",
-    "pino": "^9.7.0",
     "sharp": "0.35.5"
   },
   "devDependencies": {
-    "vitest": "5.0.3",
-    "@types/qrcode": "^1.5.5"
+    "vitest": "5.0.3"
   }
 }

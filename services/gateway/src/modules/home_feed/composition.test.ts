@@ -25,7 +25,7 @@ describe("Status production composition source",()=>{
   expect((await app.inject("/v1/feed")).statusCode).toBe(401);
   const request={url:"/v1/feed",headers:{authorization:`Bearer msw_access_${"a".repeat(64)}`,"x-tenant-id":"foreign","x-user-id":"other"}};
   expect((await app.inject(request)).statusCode).toBe(200);
-  expect(f.list).toHaveBeenCalledWith("tenant_real","fan_real","for_you",null,21,undefined);
+  expect(f.list).toHaveBeenCalledWith("tenant_real","fan_real","for_you",null,21,undefined,undefined,true);
   f.list.mockRejectedValueOnce(new Error("private database internals"));
   const failure=await app.inject(request);expect(failure.statusCode).toBe(503);
   expect(failure.json()).toEqual({code:"status_unavailable"});

@@ -70,3 +70,9 @@ In the active product **remove** human messaging/calls, Rooms, videos, human con
 - CI/Flutter/real PG, phones, provider qualification and production rollout must be performed before calling this refactor complete.
 
 Only this roadmap is the active checklist. Original phase tasks and prior 177-screen/820-item scope no longer describe the new target, but remain inspectable through Git history, preserving historical provenance.
+
+## Latest owner UX direction — source audit and plan
+
+The [Status/wallet audit and concrete plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md) records the new-window feedback and supersedes conflicting earlier UI/pricing proposals. **Planned, not implemented:** canonical Masana portraits; whole-card/detail interaction; horizontal Like/reactions with proper Like icon; remove feed flags; package chooser separate from bank instructions; proposed 10 GB at ₦500/GB with decreasing tiers through 2 TB; Send/Request balance/recipient/quick amounts; network-logo and validity-filtered Data; full wallet/call histories and branded PDF/image receipts. Positive whole-MB Send is allowed; redemption remains at least 1,000 MB and approved whole-GB bundles. Live price authority is unchanged pending implementation. Flutterwave docs/test qualification is blocked by current network access and redacted credential access; fixed-IP hosting remains on hold. No APK.
+
+Retirement evidence: #400 was already merged; #402 mobile, #403 worker, #404 route isolation, #405 mirrored web deletion and #406 mixed mobile cleanup are merged. [Backend source deletion](RETIREMENT-BACKEND-SOURCE-BATCH-20261025.md) follows; historical reconciliation dependency code and immutable migrations remain protected.

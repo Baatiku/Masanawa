@@ -32,23 +32,15 @@ export * from "./commerce/billing-runtime.js";
 export * from "./commerce/twin-economy.js";
 export * from "./commerce/ngn-wallet.js";
 
-// Status and official provider video share the existing authenticated PG pool.
+// Retained Status uses the existing authenticated PostgreSQL pool.
+export { PgSavedLibraryRepository } from "./home_feed/saved_repository.js";
 export { PgHomeFeedRepository } from "./home_feed/repository.js";
 export { PgEditorialReviewRepository } from "./home_feed/review_repository.js";
 export { PgStatusEligibility } from "./home_feed/eligibility.js";
 export { PgFeedMediaAuthorization } from "./home_feed/media_authorization.js";
-export { createPostgresVideoStore } from "./external_videos/repository.js";
-export { createPostgresYouTubeSourceAdminStore } from "./external_videos/youtube_sources.js";
-export { createPgRoomsRepository } from "./rooms/repository.js";
-export { createPgRoomDiscussionRepository } from "./rooms/discussion.js";
-export { createPgRoomBookmarkStore } from "./rooms/bookmarks.js";
-export { createPgRoomMembershipRepository } from "./rooms/membership.js";
 export { createMasanaInboxRepository } from "./masana_chat/inbox.js";
 
-// Worker-only Room teacher queue uses the existing events.outbox journal.
-export { createPgTeacherQueue } from "./rooms/teacher_outbox.js";
-
-// Platform-owned 26 Masana profile/Room seed; tenant-scoped and additive.
+// Platform-owned 26 Masana profiles; tenant-scoped and additive.
 export {ensureMasanaCatalogProfiles,withCatalogProvisionLock} from "./masana/catalog_seed.js";
 
 // Canonical immutable Masana editorial revisions and staff audit.

@@ -1,4 +1,4 @@
-# Canonical Masanawa Rooms/AI-answer Worker, not the retired @nurain webhook proxy.
+# Canonical Masanawa AI-answer and reconciliation Worker, not the retired @nurain webhook proxy.
 # Build context is the monorepo root, as for the Gateway Dockerfile.
 FROM node:24-bookworm-slim
 
@@ -8,7 +8,6 @@ RUN corepack enable && corepack prepare pnpm@12.8.2 --activate
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.json vitest.config.ts ./
-COPY patches ./patches
 COPY packages ./packages
 COPY adapters ./adapters
 COPY infra ./infra

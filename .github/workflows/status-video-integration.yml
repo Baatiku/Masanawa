@@ -1,10 +1,10 @@
 name: Status Video Integration
 on:
   pull_request:
-    paths: ["services/gateway/**", "services/worker/package.json", "services/worker/src/jobs/rooms/**", "services/worker/src/jobs/home_feed/**", "adapters/storage/postgres/**", "packages/feed/**", ".github/workflows/status-video-integration.yml"]
+    paths: ["services/gateway/**", "services/worker/package.json", "services/worker/src/jobs/home_feed/**", "adapters/storage/postgres/**", "packages/feed/**", ".github/workflows/status-video-integration.yml"]
   push:
     branches: [main]
-    paths: ["services/gateway/**", "services/worker/package.json", "services/worker/src/jobs/rooms/**", "services/worker/src/jobs/home_feed/**", "adapters/storage/postgres/**", "packages/feed/**", ".github/workflows/status-video-integration.yml"]
+    paths: ["services/gateway/**", "services/worker/package.json", "services/worker/src/jobs/home_feed/**", "adapters/storage/postgres/**", "packages/feed/**", ".github/workflows/status-video-integration.yml"]
 permissions:
   contents: read
 jobs:
@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install workspace
         run: pnpm install --frozen-lockfile
-      - name: Focused Status, Video, Rooms and C10 tests
+      - name: Focused Status and Masana inbox tests
         run: >-
           pnpm exec vitest run
           services/gateway/src/modules/home_feed/media_runtime.test.ts
@@ -48,13 +48,9 @@ jobs:
           services/gateway/src/modules/home_feed/status_video_composition.test.ts
           services/gateway/src/modules/masana_chat/af00_composition.test.ts
           services/gateway/src/modules/masana_chat/inbox_routes.test.ts
-          services/gateway/src/modules/rooms/routes.test.ts
           adapters/storage/postgres/src/home_feed/af00_migrations.integration.test.ts
-          packages/rooms/src/index.test.ts
           services/gateway/src/modules/home_feed/runtime.test.ts
-          services/gateway/src/modules/external_videos/routes.test.ts
           adapters/storage/postgres/src/home_feed/eligibility.test.ts
-          adapters/storage/postgres/src/external_videos/repository.integration.test.ts
           packages/feed/src/index.test.ts
           services/worker/src/jobs/home_feed
       - name: Worker service typecheck

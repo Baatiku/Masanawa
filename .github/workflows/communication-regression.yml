@@ -89,7 +89,6 @@ jobs:
           services/gateway/src/agent_conversation_route.test.ts
           services/gateway/src/live_voice_token.test.ts
           services/gateway/src/paid_voice.test.ts
-          services/gateway/src/paid_voice_routes.test.ts
       - name: Real PostgreSQL call lifecycle, incoming grants and account-fenced history
         # Repository tests allocate and tear down disposable databases. Running
         # files concurrently can terminate another suite's pool (PG 57P01).

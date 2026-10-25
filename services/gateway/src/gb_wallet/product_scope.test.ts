@@ -8,9 +8,6 @@ describe("permanent reduced-product routes", () => {
   it("removes legacy creator, P2P and Rooms registration in staged Lite mode",async()=>{
     const options:GatewayAppOptions={
       productScope:"masana-lite",
-      creatorClone:{} as NonNullable<GatewayAppOptions["creatorClone"]>,
-      roomCommunity:{} as NonNullable<GatewayAppOptions["roomCommunity"]>,
-      p2p:{} as NonNullable<GatewayAppOptions["p2p"]>,
     };
     const app=createGatewayApp(options);
     open.push(app);

@@ -5,67 +5,6 @@ function mock(){
  return {list:vi.fn(async()=>[post]),find:vi.fn(async(t:string)=>t==="tenant"?post:null),publish:vi.fn(async()=>post),setLike:vi.fn(async()=>true),setSave:vi.fn(async()=>true),comment:vi.fn(async()=>({id:"comment",postId:post.id,body:"ok",state:"pending" as const,createdAt:"now"})),comments:vi.fn(async()=>[])} satisfies Repository;
 }
 const fan={kind:"fan" as const,tenantId:"tenant",id:"fan"};
-describe("ST1 human self-published public text",()=>{
- it("only fan may publish with server actor, stable key and trimmed content",async()=>{
-  const repo={...mock(),publishHumanText:vi.fn(async()=>post)};
-  const svc=new FeedService(repo,async()=>true);
-  await svc.publishHumanText(fan,{body:"  Hello world  ",audience:"public",idempotencyKey:"human-status-key001"});
-  expect(repo.publishHumanText).toHaveBeenCalledWith("tenant","fan",{
-    body:"Hello world",audience:"public",idempotencyKey:"human-status-key001"});
- });
- it("never accepts a forged staff/Masana post or a private audience silently made public",async()=>{
-  const repo={...mock(),publishHumanText:vi.fn(async()=>post)};
-  const svc=new FeedService(repo,async()=>true);
-  const req={body:"My own post",audience:"public" as const,idempotencyKey:"human-status-key001"};
-  await expect(svc.publishHumanText({...fan,kind:"staff"} as never,req)).rejects.toMatchObject({status:403});
-  await expect(svc.publishHumanText({...fan,kind:"masana"} as never,req)).rejects.toMatchObject({status:403});
-  await expect(svc.publishHumanText(fan,{...req,audience:"followers"} as never)).rejects.toMatchObject({status:422,code:"unsupported_audience"});
-  await expect(svc.publishHumanText(fan,{...req,body:"  "})).rejects.toMatchObject({status:422});
-  expect(repo.publishHumanText).not.toHaveBeenCalled();
- });
- it("does not fabricate success if the database writer is unavailable",async()=>{
-  const svc=new FeedService(mock(),async()=>true);
-  await expect(svc.publishHumanText(fan,{body:"Hello",audience:"public",idempotencyKey:"human-status-key001"}))
-    .rejects.toMatchObject({status:503,code:"human_publishing_unavailable"});
- });
-});
-describe("ST3 human edit/remove authority",()=>{
- it("accepts only fan identity, exact old body and UUID",async()=>{
-  const editHumanText=vi.fn(async()=>post),removeHumanPost=vi.fn(async()=>({id:post.id,state:"removed" as const}));
-  const service=new FeedService({...mock(),editHumanText,removeHumanPost},async()=>true);
-  await service.editHumanText(fan,post.id,"  Hello  ","  Updated post  ");
-  expect(editHumanText).toHaveBeenCalledWith("tenant","fan",post.id,"Hello","Updated post");
-  expect(await service.removeHumanPost(fan,post.id)).toEqual({id:post.id,state:"removed"});
-  expect(removeHumanPost).toHaveBeenCalledWith("tenant","fan",post.id);
-  await expect(service.editHumanText({...fan,kind:"staff"} as never,post.id,"Hello","X"))
-   .rejects.toMatchObject({status:403});
-  await expect(service.removeHumanPost({...fan,kind:"masana"} as never,post.id))
-   .rejects.toMatchObject({status:403});
-  await expect(service.editHumanText(fan,post.id,"Hello","  "))
-   .rejects.toMatchObject({status:422});
-  await expect(service.removeHumanPost(fan,"not-uuid"))
-   .rejects.toMatchObject({status:422,code:"invalid_post_id"});
-  expect(removeHumanPost).toHaveBeenCalledTimes(1);
- });
- it("fails closed without qualified repository",async()=>{
-  const service=new FeedService(mock(),async()=>true);
-  await expect(service.removeHumanPost(fan,post.id)).rejects.toMatchObject({status:503});
-  await expect(service.editHumanText(fan,post.id,"Hello","Updated"))
-   .rejects.toMatchObject({status:503});
- });
-});
-describe("ST4 owner-scoped My posts mode",()=>{
- it("requires viewer identity and refuses a conflicting Masana filter",async()=>{
-  const repo=mock(),service=new FeedService(repo,async()=>true);
-  await expect(service.list("tenant",null,"mine")).rejects.toMatchObject({
-   status:401,code:"authentication_required"});
-  await expect(service.list("tenant","fan","mine",undefined,"other_masana")).rejects.toMatchObject({
-   status:422,code:"unsupported_author_filter"});
-  const data=await service.list("tenant","fan","mine");
-  expect(data.items).toHaveLength(1);
-  expect(repo.list).toHaveBeenCalledWith("tenant","fan","mine",null,21,undefined);
- });
-});
 describe("ST2 server reaction contract",()=>{
  it("sets one typed reaction from trusted fan identity, including remove",async()=>{
   const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};
@@ -169,8 +108,7 @@ describe("J06 Masana-only Feed",()=>{
    const db=mock(),service=new FeedService(db,async()=>true);
    const result=await service.list("tenant","fan","for_you",undefined,"character_masana_Amina");
    expect(result.items).toHaveLength(1);
-   expect(db.list).toHaveBeenCalledWith(
-     "tenant","fan","for_you",null,21,"character_masana_Amina");
+   expect(db.list).toHaveBeenCalledWith("tenant","fan","for_you",null,21,"character_masana_Amina",undefined,true);
  });
  it("rejects invalid author IDs before repository access",async()=>{
    const db=mock(),service=new FeedService(db,async()=>true);
@@ -194,8 +132,7 @@ describe("ST4 scoped full-feed text search",()=>{
   expect(one.items).toHaveLength(20);
   expect(one.nextCursor).toBeTruthy();
   await service.list("tenant","fan","for_you",one.nextCursor!,undefined,"river");
-  expect(repo.list).toHaveBeenLastCalledWith("tenant","fan","for_you",
-    {at:rows[19]!.publishedAt,id:rows[19]!.id},21,undefined,"river");
+  expect(repo.list).toHaveBeenLastCalledWith("tenant","fan","for_you",{at:rows[19]!.publishedAt,id:rows[19]!.id},21,undefined,"river",true);
   for(const [term,mode] of [["rivers","for_you"],["river","following"]] as const) {
    await expect(service.list("tenant","fan",mode,one.nextCursor!,undefined,term))
      .rejects.toMatchObject({status:422,code:"invalid_cursor"});
@@ -227,14 +164,12 @@ describe("lite Masana-only persisted Status visibility",()=>{
   expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id,true);
  });
 
- it("keeps legacy Status read semantics until reduced scope activates",async()=>{
+ it("uses platform Masana filters by default",async()=>{
   const repo=mock();
   const service=new FeedService(repo,async()=>true);
   await service.list("tenant","fan","for_you");
   await service.detail("tenant","fan",post.id);
-  expect(repo.list).toHaveBeenCalledWith(
-    "tenant","fan","for_you",null,21,undefined,
-  );
-  expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id);
+  expect(repo.list).toHaveBeenCalledWith("tenant","fan","for_you",null,21,undefined,undefined,true);
+  expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id,true);
  });
 });
