@@ -79,6 +79,11 @@ class MasanaInboxPage {
 
 /// Injected for widget tests and pinned to the signed-in account's credential.
 abstract class MasanaInboxSearchAccess {
+  /// Kept for the global search surface, which only previews the first page.
+  Future<List<MasanaInboxSearchItem>> search({
+    required String bearer,
+    required String query,
+  });
   Future<MasanaInboxPage> searchPage({
     required String bearer,
     required String query,
@@ -119,6 +124,13 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
       receiveTimeout: const Duration(seconds: 10),
     );
   }
+
+  @override
+  Future<List<MasanaInboxSearchItem>> search({
+    required String bearer,
+    required String query,
+  }) async => (await searchPage(bearer: bearer, query: query,
+    limit: 20)).items;
 
   @override
   Future<MasanaInboxPage> searchPage({

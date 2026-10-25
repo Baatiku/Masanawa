@@ -87,6 +87,11 @@ class FakeInbox implements MasanaInboxSearchAccess {
   );
 
   @override
+  Future<List<MasanaInboxSearchItem>> search({
+    required String bearer, required String query,
+  }) async => (await searchPage(bearer: bearer, query: query)).items;
+
+  @override
   Future<MasanaInboxPage> searchPage({
     required String bearer, required String query, String? cursor,
     int limit = 15,
