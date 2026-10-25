@@ -20,7 +20,6 @@ import '../../theme/masanawa_theme.dart';
 import '../../tokens/masanawa_tokens.dart';
 import 'account_deletion_dialog.dart';
 import 'account_data_screen.dart';
-import '../profile/my_masana_screen.dart';
 import 'account_security_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'clear_device_chats_dialog.dart';
@@ -472,7 +471,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 leading: Icon(Icons.tune_outlined, color: u.brand),
                 title: const Text('Notification preferences & activity'),
                 subtitle: const Text(
-                  'Messages, calls, Rooms, Wallet, quiet hours and alert history',
+                  'Masana chats, calls, Status, Wallet, Data and quiet hours',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: user == null
@@ -547,13 +546,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 leading: Icon(Icons.info_outline, color: u.brand),
                 title: const Text('About Masanawa'),
-                subtitle: const Text('Chats, Status, Calls, Rooms and Wallet'),
+                subtitle: const Text('Chats, Status, Wallet, Calls and Data'),
                 onTap: () => showAboutDialog(
                   context: context,
                   applicationName: 'Masanawa',
                   children: const [
                     Text(
-                      'Chat with Masana personas, view their Status updates, make calls, explore Rooms and use Wallet services.',
+                      'Chat and make audio calls with Masana, follow their Status updates, manage MB in Wallet, and redeem mobile data.',
                     ),
                   ],
                 ),
@@ -575,21 +574,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     : () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const AccountSecurityScreen(),
-                        ),
-                      ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                key: const Key('settings-my-masana'),
-                leading: Icon(Icons.auto_awesome_outlined, color: u.brand),
-                title: const Text('My Masana'),
-                subtitle: const Text('Create and manage your AI professionals'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: user == null
-                    ? null
-                    : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const MyMasanaScreen(),
                         ),
                       ),
               ),
@@ -658,7 +642,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           Center(
             child: Text(
-              'Masanawa · Chats · Status · Wallet · Calls · Rooms',
+              'Masanawa · Chats · Status · Wallet · Calls · Data',
               style: TextStyle(color: u.textMuted, fontSize: 11),
             ),
           ),

@@ -14,15 +14,15 @@ const notificationCategories = <String, (String, IconData, String)>{
       'Replies and conversation updates'),
   'calls': ('Calls', Icons.call_outlined,
       'Incoming and missed Masana calls'),
-  'rooms': ('Room lessons', Icons.groups_outlined,
-      'Lessons, answers and Room activity'),
   'status': ('Status posts', Icons.auto_awesome_outlined,
       'New Masana posts and updates'),
   'wallet': ('Wallet events', Icons.account_balance_wallet_outlined,
-      'Verified transfers, deposits and withdrawals'),
-  'p2p': ('P2P orders', Icons.swap_horiz_outlined,
-      'Escrow, settlement and dispute updates'),
+      'MB transfers, verified deposits and data redemption'),
 };
+
+// Keep the old keys in the wire payload until Gateway preferences migrate.
+// They are never displayed as subscription options or clickable history.
+const _retiredNotificationKeys = <String>{'rooms', 'p2p'};
 
 class NotificationPreferences {
   const NotificationPreferences(this.categories, this.start, this.end,
@@ -40,6 +40,11 @@ class NotificationPreferences {
         throw const FormatException('Invalid category setting');
       }
       categories[key] = map[key] as bool;
+    }
+    // Disable retired categories in subsequent writes while accepting historical
+    // preference responses from older servers.
+    for (final key in _retiredNotificationKeys) {
+      categories[key] = false;
     }
     final start = map['quietStart'], end = map['quietEnd'];
     final offset = map['utcOffsetMinutes'];
@@ -87,7 +92,8 @@ class NotificationHistoryRow {
     final id = data['id'], category = data['category'],
         title = data['title'], created = data['createdAt'];
     if (id is! String || id.length > 160 ||
-        !notificationCategories.containsKey(category) ||
+        !(notificationCategories.containsKey(category) ||
+            _retiredNotificationKeys.contains(category)) ||
         title is! String || title.length > 120 ||
         created is! String) {
       throw const FormatException('Invalid notification');
@@ -202,7 +208,9 @@ class _NotificationPreferencesScreenState
       if (raw is! List || raw.length > 100) {
         throw const FormatException('Invalid notification history');
       }
-      final items = raw.map(NotificationHistoryRow.read).toList();
+      final items = raw.map(NotificationHistoryRow.read)
+          .where((event) => notificationCategories.containsKey(event.category))
+          .toList();
       if (!_same(ticket, owner)) return;
       setState(() => _history = items);
     } catch (_) {

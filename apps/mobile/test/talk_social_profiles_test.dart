@@ -149,7 +149,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Edit profile'), findsOneWidget);
-      expect(find.text('My Masana'), findsOneWidget);
+      expect(find.text('My Masana'), findsNothing);
       expect(find.byKey(const ValueKey('person-profile-follow')), findsNothing);
     },
   );
@@ -177,7 +177,7 @@ void main() {
 
       expect(find.text('Amina Twin'), findsNothing);
       expect(find.text('Public activity'), findsNothing);
-      expect(find.text('Message'), findsOneWidget);
+      expect(find.text('Message'), findsNothing);
     },
   );
 

@@ -137,7 +137,7 @@ jobs:
           test/human_chat_transport_test.dart
           test/human_chat_privacy_test.dart
           test/human_chat_inbox_paging_test.dart
-          test/human_contacts_test.dart
+          test/masana_call_picker_test.dart
       - name: Strict analysis of affected Flutter customer journeys
         run: >-
           flutter analyze --no-pub --no-fatal-infos

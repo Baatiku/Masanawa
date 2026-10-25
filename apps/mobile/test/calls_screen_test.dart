@@ -68,14 +68,6 @@ class _HumanHistory implements HumanCallsTransport {
   void cancel() {}
 }
 
-class _Contacts implements HumanContactsTransport {
-  @override
-  Future<HumanContactPage> load({String query = '', String? after}) async =>
-      const HumanContactPage(items: [
-        HumanContact(handle: 'amina', displayName: 'Amina Yusuf'),
-      ]);
-}
-
 Map<String, dynamic> humanPage(String id, String name,
         {String? nextCursor, String state = 'missed'}) => {
       'items': [
@@ -137,24 +129,6 @@ void main() {
     await tester.tap(find.text('Amina'));await tester.pumpAndSettle();
     expect(find.text('Call details'),findsOneWidget);expect(find.text('View profile'),findsOneWidget);expect(find.text('Call again'),findsOneWidget);
   });
-  testWidgets('New call chooses human contacts with immediate Call intent, not a new chat', (tester) async {
-    await _mount(tester, _Session(), _Transport((_) async => const CallHistoryPage(calls: [])), contacts: _Contacts());
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('New call'));
-    await tester.pumpAndSettle();
-    expect(find.text('Call a person'), findsOneWidget);
-    expect(find.text('Call a Masana'), findsOneWidget);
-    await tester.tap(find.text('Call a person'));
-    await tester.pumpAndSettle();
-    expect(find.text('New call'), findsOneWidget);
-    expect(find.text('Amina Yusuf'), findsOneWidget);
-    expect(find.text('Create Masana'), findsNothing);
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('New call'), findsOneWidget);
-    expect(find.text('Amina Yusuf'), findsNothing);
-  });
-
   testWidgets('account change while choosing a call cannot open old-account picker', (tester) async {
     final session = _Session();
     await _mount(tester, session, _Transport((_) async => const CallHistoryPage(calls: [])));

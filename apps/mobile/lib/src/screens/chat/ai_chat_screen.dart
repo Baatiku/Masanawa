@@ -665,6 +665,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
   // ---- Attachments ---------------------------------------------------------
 
+  // Masana conversations support only text, photographs and voice/audio.
+  // Historic attachment rendering remains read-only for existing records.
   void _openAttachSheet() {
     FocusScope.of(context).unfocus();
     final u = context.masanawa;
@@ -675,276 +677,52 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 16,
-              alignment: WrapAlignment.center,
-              children: [
-                _AttachOption(
-                  icon: Icons.insert_drive_file_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramPurple, MasanawaFeatureColors.instagramViolet],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Document',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickDocument();
-                  },
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 16,
+            alignment: WrapAlignment.center,
+            children: [
+              _AttachOption(
+                icon: Icons.camera_alt_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
                 ),
-                _AttachOption(
-                  icon: Icons.camera_alt_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Camera',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickImage(ImageSource.camera);
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.photo_library_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Gallery',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickMultipleImages();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.headphones_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Audio',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickAudio();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.videocam_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.cyan, MasanawaFeatureColors.deepCyan],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Video',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _pickVideo();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.location_on_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.emerald, MasanawaFeatureColors.brightEmerald],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Location',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _shareLocation();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.person_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.teal, MasanawaFeatureColors.brightTeal],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Contact',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _shareContact();
-                  },
-                ),
-                _AttachOption(
-                  icon: Icons.poll_rounded,
-                  gradient: const LinearGradient(
-                    colors: [MasanawaFeatureColors.amber, MasanawaFeatureColors.deepAmber],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  label: 'Poll',
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _createPoll();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _shareLocation() async {
-    // Do not guess a customer's GPS location or silently share their position.
-    // A user may voluntarily describe a place without granting device access.
-    final place = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        var value = '';
-        return StatefulBuilder(
-          builder: (context, rebuild) => AlertDialog(
-            title: const Text('Share a location'),
-            content: TextField(
-              autofocus: true,
-              maxLength: 200,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Place or address',
-                hintText: 'Enter the place you want to share',
-              ),
-              onChanged: (text) => rebuild(() => value = text.trim()),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: value.isEmpty
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(value),
-                child: const Text('Add to message'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (!mounted || place == null || place.isEmpty) return;
-    final text = '📍 Location: $place';
-    _input.text = _input.text.isEmpty ? text : '${_input.text}\n$text';
-    _input.selection = TextSelection.collapsed(offset: _input.text.length);
-  }
-
-  Future<void> _shareContact() async {
-    final directory = ref.read(agentDirectoryProvider);
-    final agents = directory.agents;
-    if (agents.isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: context.masanawa.surfaceCard,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: Text(
-                'Share Masana Contact',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: context.masanawa.textPrimary,
-                ),
-              ),
-            ),
-            for (final agent in agents)
-              ListTile(
-                leading: MasanaPortraitAvatar(agent: agent, size: 40),
-                title: Text(agent.displayName),
-                subtitle: Text(agent.roleLabel.isNotEmpty ? agent.roleLabel : 'Masana Guide'),
+                label: 'Camera',
                 onTap: () {
-                  Navigator.of(ctx).pop();
-                  final text = '👤 Masana: ${agent.displayName} (${agent.roleLabel})';
-                  _input.text = _input.text.isEmpty ? text : '${_input.text}\n$text';
-                  _input.selection = TextSelection.fromPosition(TextPosition(offset: _input.text.length));
+                  Navigator.of(sheetContext).pop();
+                  _pickImage(ImageSource.camera);
                 },
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _createPoll() async {
-    final questionCtrl = TextEditingController();
-    final opt1Ctrl = TextEditingController();
-    final opt2Ctrl = TextEditingController();
-    final u = context.masanawa;
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: u.surfaceCard,
-        title: const Text('Create Poll'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: questionCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Question',
-                  hintText: 'Ask a question…',
+              _AttachOption(
+                icon: Icons.photo_library_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
                 ),
+                label: 'Gallery',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickMultipleImages();
+                },
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: opt1Ctrl,
-                decoration: const InputDecoration(
-                  labelText: 'Option 1',
-                  hintText: 'First choice',
+              _AttachOption(
+                icon: Icons.headphones_rounded,
+                gradient: const LinearGradient(
+                  colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
                 ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: opt2Ctrl,
-                decoration: const InputDecoration(
-                  labelText: 'Option 2',
-                  hintText: 'Second choice',
-                ),
+                label: 'Audio',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickAudio();
+                },
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (questionCtrl.text.trim().isNotEmpty &&
-                  opt1Ctrl.text.trim().isNotEmpty &&
-                  opt2Ctrl.text.trim().isNotEmpty) {
-                Navigator.of(dialogCtx).pop(true);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
-    if (created == true) {
-      final q = questionCtrl.text.trim();
-      final o1 = opt1Ctrl.text.trim();
-      final o2 = opt2Ctrl.text.trim();
-      final pollText = '📊 Poll: $q\n• $o1\n• $o2';
-      _input.text = _input.text.isEmpty ? pollText : '${_input.text}\n$pollText';
-      _input.selection = TextSelection.fromPosition(TextPosition(offset: _input.text.length));
-    }
   }
 
   Future<void> _pickAudio() async {
@@ -967,32 +745,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       }
     } catch (_) {
       if (mounted) _pickerFailed('Audio picker');
-    }
-  }
-
-  Future<void> _pickDocument() async {
-    try {
-      final files = await FilePicker.pickFiles();
-      if (files.isEmpty) return;
-      final attachments = <ChatAttachment>[];
-      for (final file in files.take(6)) {
-        final path = file.path;
-        if (path == null || path.isEmpty) continue;
-        final size = await file.length() ?? 0;
-        attachments.add(
-          ChatAttachment(
-            kind: 'doc',
-            path: path,
-            name: file.name,
-            sizeBytes: size,
-          ),
-        );
-      }
-      if (attachments.isNotEmpty && mounted) {
-        _stageAttachments(attachments);
-      }
-    } catch (_) {
-      if (mounted) _pickerFailed('Documents');
     }
   }
 
@@ -1090,38 +842,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       if (mounted) _pickerFailed('Photos');
     }
   }
-
-  Future<void> _pickVideo() async {
-    try {
-      final picked = await _imagePicker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 3),
-      );
-      if (picked == null) return;
-      final size = await File(picked.path).length();
-      if (size > 8 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Video must be 8 MB or smaller.')),
-          );
-        }
-        return;
-      }
-      if (!mounted) return;
-      _stageAttachments([
-        ChatAttachment(
-          kind: 'video',
-          path: picked.path,
-          name: picked.name,
-          sizeBytes: size,
-        ),
-      ]);
-    } catch (_) {
-      if (mounted) _pickerFailed('Video');
-    }
-  }
-
-  // ---- Build ---------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -1411,9 +1131,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 if (!context.mounted) return;
                 if (value == 'activity') widget.onOpenActivity?.call();
                 if (value == 'profile') _openMasanaProfile(agent);
-                if (value == 'room' && agent.roomId != null) {
-                  context.push('/rooms/${Uri.encodeComponent(agent.roomId!)}');
-                }
                 if (value == 'clear') _confirmClear(agent);
                 if (value == 'new') await ctl.newContext(widget.characterId);
                 if (value == 'pin') ctl.togglePin(widget.characterId);
@@ -1424,11 +1141,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               },
               itemBuilder: (_) => [
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
-                if (agent.roomId != null)
-                  PopupMenuItem(
-                    value: 'room',
-                    child: Text('Open ${agent.displayName} Room'),
-                  ),
                 if (widget.embeddedInShell) ...const [
                   PopupMenuItem(value: 'activity', child: Text('Activity')),
                   PopupMenuItem(value: 'profile', child: Text('Profile')),
