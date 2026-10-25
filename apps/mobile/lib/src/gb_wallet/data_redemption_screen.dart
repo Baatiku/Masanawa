@@ -68,6 +68,12 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   }
 
   Future<void> _reload(GbDataOwner owner) async {
+    // A pull-to-refresh must never discard an uncertain, possibly charged
+    // payment or create a fresh idempotency key for the same original action.
+    if (_redeemKey != null) {
+      if (_redemptionId != null) await _checkRedemption(owner);
+      return;
+    }
     setState(() {
       _clearQuote();
       _bundleId = null;
@@ -527,6 +533,12 @@ class _SelectableDataBundle extends StatelessWidget {
         _redemptionState = result['state'] as String;
         _redeemBusy = false;
       });
+      if (_redemptionState == 'delivered') {
+        ref.invalidate(gbWalletSummaryProvider((
+          accountId: owner.accountId,
+          authorizationEpoch: owner.authorizationEpoch,
+        )));
+      }
     } catch (_) {
       if (!mounted || generation != _generation || !_isOwner(owner)) return;
       setState(() {
@@ -564,6 +576,12 @@ class _SelectableDataBundle extends StatelessWidget {
         _redemptionState = data['state'] as String;
         _redeemBusy = false;
       });
+      if (_redemptionState == 'delivered') {
+        ref.invalidate(gbWalletSummaryProvider((
+          accountId: owner.accountId,
+          authorizationEpoch: owner.authorizationEpoch,
+        )));
+      }
     } catch (_) {
       if (!mounted || generation != _generation || !_isOwner(owner)) return;
       setState(() {
