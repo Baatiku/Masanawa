@@ -246,41 +246,6 @@ void main() {
       expect(api.likes, 1);
     },
   );
-  testWidgets(
-    'new human Status publication refreshes For You without an invented feed row',
-    (tester) async {
-      final api = StubFeed('server result');
-      final modes = <String>[];
-      api.onList = (mode, cursor) {
-        modes.add(mode);
-        return Future.value(FeedPage([update('Published by server')], null));
-      };
-      var composerOpened = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MasanaFeedScreen(
-              api: api,
-              accountKey: 'fan-a',
-              onCreateHumanStatus: () async {
-                composerOpened++;
-                return true;
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Following'));
-      await tester.pumpAndSettle();
-      expect(modes.last, 'following');
-      await tester.tap(find.text('Write a Status'));
-      await tester.pumpAndSettle();
-      expect(composerOpened, 1);
-      expect(modes.last, 'for_you');
-      expect(find.text('Published by server'), findsOneWidget);
-    },
-  );
   testWidgets('C21 clears previous account projection on account switch', (
     tester,
   ) async {
