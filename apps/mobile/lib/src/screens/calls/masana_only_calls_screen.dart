@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
 import '../../calls/call_lifecycle_reporter.dart';
+import '../../calls/masana_voice_route.dart';
+import '../../agents/masana_portrait_avatar.dart';
+import '../chat/masana_list_screen.dart';
+import '../../state/agent_directory_state.dart';
 import '../../state/session_state.dart';
 import '../../ui/components/masanawa_main_header.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -14,25 +19,57 @@ import '../../theme/masanawa_theme.dart';
 /// Refactor-only Masana call history. Never mounts user-to-user, Rooms or
 /// group-call transports. This is intentionally not a paid-call entry point:
 /// it cannot rely on the retired Credits admission until MB admission exists.
-class MasanaOnlyCallsScreen extends ConsumerWidget {
+class MasanaOnlyCallsScreen extends ConsumerStatefulWidget {
   const MasanaOnlyCallsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MasanaOnlyCallsScreen> createState() =>
+      _MasanaOnlyCallsScreenState();
+}
+
+class _MasanaOnlyCallsScreenState extends ConsumerState<MasanaOnlyCallsScreen> {
+  bool _searchOpen = false;
+
+  void _openCallPicker() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) =>
+          const MasanaListScreen(callPicker: true)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(callLifecycleReporterProvider);
     final session = ref.watch(sessionProvider);
     return Scaffold(
       backgroundColor: context.masanawa.surfaceBg,
-      appBar: masanawaMainHeader(context),
+      appBar: masanawaMainHeader(context, actions: [
+        IconButton(
+          tooltip: _searchOpen ? 'Close calls search' : 'Search calls',
+          icon: Icon(_searchOpen ? Icons.close_rounded : Icons.search_rounded),
+          onPressed: () => setState(() => _searchOpen = !_searchOpen),
+        ),
+      ]),
       body: session is SessionSignedIn
           ? _PrivateMasanaCallHistory(
               key: ValueKey('masana-call-history-${session.user.id}'),
               accountId: session.user.id,
               credentials: session.tokens,
+              searchOpen: _searchOpen,
             )
           : session is SessionRestoring
               ? const MasanawaListSkeleton(semanticLabel: 'Restoring calls')
               : const Center(child: Text('Sign in to see your calls.')),
+      floatingActionButton: session is SessionSignedIn
+          ? FloatingActionButton(
+              key: const ValueKey('masana-new-call'),
+              tooltip: 'New call',
+              backgroundColor: context.masanawa.brand,
+              foregroundColor: context.masanawa.textPrimary,
+              onPressed: _openCallPicker,
+              child: const Icon(Icons.add_ic_call_rounded),
+            )
+          : null,
     );
   }
 }
@@ -42,10 +79,12 @@ class _PrivateMasanaCallHistory extends ConsumerStatefulWidget {
     super.key,
     required this.accountId,
     required this.credentials,
+    required this.searchOpen,
   });
 
   final String accountId;
   final Object credentials;
+  final bool searchOpen;
 
   @override
   ConsumerState<_PrivateMasanaCallHistory> createState() =>
@@ -79,6 +118,10 @@ class _PrivateMasanaCallHistoryState
   @override
   void didUpdateWidget(covariant _PrivateMasanaCallHistory oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchOpen && !widget.searchOpen) {
+      _search.clear();
+      _onQuery('');
+    }
     if (!identical(oldWidget.credentials, widget.credentials)) {
       _generation++;
       _cancel?.cancel();
@@ -169,68 +212,105 @@ class _PrivateMasanaCallHistoryState
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
         children: [
-          Text('Calls with Masana',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text('Individual audio only. Call admission will resume once '
-              'MB balance and server-enforced time are available.'),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _search,
-            onChanged: _onQuery,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              labelText: 'Search Masana calls',
-              border: const OutlineInputBorder(),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      tooltip: 'Clear calls search',
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        _search.clear();
-                        _onQuery('');
-                      },
-                    )
-                  : null,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+            child: Text('Calls',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700)),
+          ),
+          if (widget.searchOpen) Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: _search,
+              autofocus: true,
+              onChanged: _onQuery,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: 'Search calls',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24)),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        tooltip: 'Clear calls search',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _search.clear();
+                          _onQuery('');
+                        },
+                      )
+                    : null,
+              ),
             ),
           ),
           if (_query.length > 80)
             const ListTile(title: Text('Search must be 80 characters or fewer')),
           if (_loading) const LinearProgressIndicator(),
           if (_history.isEmpty && !_loading && !_failed && _query.length <= 80)
-            ListTile(
-              leading: const Icon(Icons.call_outlined),
-              title: Text(_query.isEmpty ? 'No recent calls' : 'No matching calls'),
-              subtitle: const Text('Your individual Masana audio calls will appear here.'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 65),
+              child: Column(children: [
+                Icon(Icons.call_outlined, size: 44,
+                    color: context.masanawa.textMuted),
+                const SizedBox(height: 12),
+                Text(_query.isEmpty ? 'No calls yet' : 'No matching calls',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ]),
             ),
-          for (final call in _history)
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  call.missed ? Icons.call_missed : Icons.call_made,
+          for (final call in _history) ...[
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 4, vertical: 5),
+              leading: MasanaPortraitAvatar(
+                characterId: call.characterId,
+                displayName: call.displayName,
+                size: 48,
+              ),
+              title: Text(call.displayName,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Row(children: [
+                Icon(
+                  call.missed
+                      ? Icons.call_missed_outgoing_rounded
+                      : Icons.call_made_rounded,
+                  size: 15,
                   color: call.missed
                       ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
+                      : context.masanawa.brand,
                 ),
-                title: Text(call.displayName,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${call.outcomeLabel} · ${_date(call.createdAt)}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                trailing: const Tooltip(
-                  message: 'Calls are pending MB admission',
-                  child: Icon(Icons.lock_clock_outlined),
-                ),
+                const SizedBox(width: 5),
+                Expanded(child: Text(
+                  '${call.outcomeLabel} · ${_date(call.createdAt)}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ]),
+              trailing: IconButton(
+                tooltip: 'Call ${call.displayName}',
+                icon: Icon(Icons.call_rounded, color: context.masanawa.brand),
+                onPressed: ref.read(agentDirectoryProvider)
+                        .find(call.characterId) == null
+                    ? null
+                    : () => context.push(masanaLiveVoiceRoute(call.characterId)),
               ),
             ),
+            Divider(height: 1, indent: 65,
+              color: context.masanawa.structuralBorder),
+          ],
           if (_failed)
-            ListTile(
-              title: const Text('Could not load call history'),
-              subtitle: const Text('Check your connection and retry.'),
-              trailing: TextButton(
-                onPressed: () => _load(reset: true),
-                child: const Text('Retry'),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(children: [
+                Icon(Icons.wifi_off_rounded, size: 34,
+                    color: context.masanawa.textMuted),
+                const SizedBox(height: 12),
+                Text('Calls unavailable',
+                    style: Theme.of(context).textTheme.titleMedium),
+                TextButton(
+                  onPressed: () => _load(reset: true),
+                  child: const Text('Try again'),
+                ),
+              ]),
             ),
           if (!_loading && !_failed && _next != null)
             OutlinedButton(

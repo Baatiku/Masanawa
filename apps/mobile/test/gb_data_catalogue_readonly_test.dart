@@ -13,6 +13,20 @@ Map<String, dynamic> _bundle() => {
 };
 
 void main() {
+  test('NCC-prefix suggestions cover operators with manual portability override', () {
+    for (final sample in <String,String>{
+      '08031234567': 'MTN',
+      '+2347031234567': 'MTN',
+      '08021234567': 'AIRTEL',
+      '09051234567': 'GLO',
+      '08091234567': '9MOBILE',
+    }.entries) {
+      expect(guessGbNetworkForNigerianPhone(sample.key), sample.value);
+    }
+    expect(guessGbNetworkForNigerianPhone('08011234567'), isNull);
+    expect(guessGbNetworkForNigerianPhone('wrong'), isNull);
+  });
+
   test('Nigerian SIM normalization follows the Gateway country boundary', () {
     expect(normalizeNigerianDataPhone('08012345678'), '+2348012345678');
     expect(normalizeNigerianDataPhone(' +2348012345678 '),

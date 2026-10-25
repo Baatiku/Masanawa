@@ -35,6 +35,8 @@ void main() {
   test('Masana contacts never expose humans or persona creation', () {
     final roster = _source('screens/chat/masana_list_screen.dart');
     expect(roster, contains("Search Masana"));
+    expect(roster, contains('masanaContactName(agent.displayName)'));
+    expect(roster, isNot(contains('agent.roleLabel,\n                            maxLines')));
     for (final retired in ['HumanContactsList', 'humanCallStart(',
                            'Create Masana', "Tab(text: 'Humans')",
                            'MyMasanaScreen']) {

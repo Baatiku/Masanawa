@@ -56,6 +56,9 @@ void main() {
     expect(find.text('Legacy group'), findsNothing);
     expect(find.text('Call a person'), findsNothing);
     expect(find.text('Call multiple Masana'), findsNothing);
-    expect(find.byTooltip('New call'), findsNothing);
+    expect(find.byTooltip('New call'), findsOneWidget);
+    expect(find.text('Individual audio only.'), findsNothing);
+    expect(find.text('Calls with Masana'), findsNothing);
+    expect(find.text('Calls'), findsOneWidget);
   });
 }

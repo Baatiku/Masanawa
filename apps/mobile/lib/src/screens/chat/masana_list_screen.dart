@@ -17,6 +17,12 @@ import '../../ui/components/masanawa_list_skeleton.dart';
 
 import '../../ui/components/conversation_search_field.dart';
 
+/// UI-only display name: professional titles are not contact identities.
+String masanaContactName(String value) => value.trim().replaceFirst(
+  RegExp(r'^(?:Prof\\.?|Dr\\.?|Engr\\.?|Arc\\.?|Ustazah|Ustaz|Madam)\\s+', caseSensitive: false),
+  '',
+);
+
 /// Server-driven Masana roster. No persona names, roles or capabilities are
 /// compiled into the app; admin configuration can change without a release.
 class MasanaListScreen extends ConsumerStatefulWidget {
@@ -301,14 +307,14 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
-                          vertical: 7,
+                          vertical: 4,
                         ),
                         leading: _MasanaAvatar(agent: agent),
                         title: Row(
                           children: [
                             Flexible(
                               child: Text(
-                                agent.displayName,
+                                masanaContactName(agent.displayName),
                                 style: TextStyle(
                                   color: u.textPrimary,
                                   fontSize: 16.5,
@@ -322,15 +328,6 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                                 child: Icon(Icons.star_rounded, size: 16),
                               ),
                           ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Text(
-                            agent.roleLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: u.textMuted, fontSize: 14),
-                          ),
                         ),
                         trailing: Tooltip(
                           message: agent.countryName ?? 'Country not specified',

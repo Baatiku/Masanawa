@@ -82,3 +82,15 @@ epoch replacement clears the previous account's bundles and quote, ignores
 late network results and cancels outstanding read/quote work. Narrow width and
 large font keep actions in a vertical scroll list. The Back to Wallet action
 remains; no legacy Bills, crypto or video pages are opened.
+
+## Compact five-tab visual acceptance — 25 October 2026
+
+Owner-approved UI corrections: use semantic Masanawa WhatsApp-green tokens (no arbitrary dark-green gradients) with clean off-white/light surfaces, 48dp touch targets, 320dp and enlarged-type/RTL wrapping. **Status** has one header search affordance, initially icon-only; tapping expands an editable searchable field, submitting/clearing applies one server search and restores the full feed. Remove For You and Following selector entirely; maintain the existing authorized all-Status endpoint, real post pagination, media, likes/comments/saves/report and safe account-switch refresh. The visible feed has a single page title and an unobtrusive Saved control. Do not synthesize posts pretending to be published: fill authentic platform-authored Masana feed coverage through authorized editorial seeding after a repeatable server audit.
+
+**Masana contact cards** show portrait, display name, actual presence and an appropriate message/call affordance, without occupation, profession or long descriptive blurbs; maintain accessible labels, search, and valid canonical Masana IDs.
+
+**Wallet** shows a short branded balance strip with exact MB when available, separate purchased/welcome/reserved totals accessible in a small expandable details section; insufficient authority means a centered “Balance unavailable” retry card, never a fabricated zero. Add/Send/Request/Data remain readable, with functional routing only to server-qualified actions and compact transaction states. Colors come from MasanawaColors.brand, not ColorScheme arbitrary gradients.
+
+**Calls** presents a WhatsApp-style searchable call history with portrait, name, outcome/time, a compact green phone affordance and a clear new Masana call picker; no narrative instructions or misleading disabled-call badges. No human or group call route. Error is a short centered message plus retry, and signed-in account fences remain active.
+
+**Data** has a title/header, compact network selection, phone input, actual approved whole-GB offer cards, readable primary action and review status. Remove long paragraphs, helper prose and repeat labels while retaining short, essential financial and error messages. Empty/error states use concise centered typography + Retry. **Add Data** uses crisp selectable package cards, clearly differentiated GB, NGN price, exact MB and verified bank assignment, with no invented funding instructions before confirmed assignment. Screen state clears on account replacement. Widget tests assert no obsolete tabs, no duplicate search, no profession card subtitle and compact balance/error states.
