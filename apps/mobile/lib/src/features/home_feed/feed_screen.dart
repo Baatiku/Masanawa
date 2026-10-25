@@ -6,6 +6,7 @@ import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'feed_inline_media_card.dart';
+import 'feed_image_mosaic.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -210,7 +211,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if (!mounted || ticket != generation) return;
       setState(() {
         items = page.items;
-        cursor = page.nextCursor;
+        cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
       });
@@ -245,7 +246,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       setState(() {
         final seen = items.map((p) => p.id).toSet();
         items = [...items, ...page.items.where((p) => seen.add(p.id))];
-        cursor = page.nextCursor;
+        // Avoid an infinite Load more loop for empty pages or a server cursor
+        // that did not advance. Keep already loaded authorized posts.
+        cursor = page.items.isEmpty || page.nextCursor == after
+            ? null : page.nextCursor;
         fetchingMore = false;
       });
     } catch (e) {
@@ -701,7 +705,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 ),
                               if (post.kind == 'image' &&
                                   post.mediaIds.isNotEmpty &&
-                                  widget.mediaApi != null)
+                                  widget.mediaApi != null &&
+                                  post.mediaIds.length == 1)
                                 FeedInlineMediaCard(
                                   key: ValueKey(
                                     'status-inline-${widget.accountKey}-${post.id}',
@@ -717,6 +722,19 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                           post,
                                           post.mediaIds.first,
                                         ),
+                                  renderer: widget.inlineMediaRenderer,
+                                ),
+                              if (post.kind == 'image' &&
+                                  post.mediaIds.length > 1 &&
+                                  widget.mediaApi != null)
+                                FeedImageMosaic(
+                                  key: ValueKey('status-mosaic-${widget.accountKey}-${post.id}'),
+                                  api: widget.mediaApi!,
+                                  accountKey: widget.accountKey,
+                                  postId: post.id,
+                                  mediaIds: post.mediaIds,
+                                  onOpen: widget.onOpenMedia == null
+                                      ? null : (id) => widget.onOpenMedia!(post, id),
                                   renderer: widget.inlineMediaRenderer,
                                 ),
                               if (post.mediaIds.isNotEmpty &&
