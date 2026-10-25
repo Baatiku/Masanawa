@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import 'gb_recipient_lookup.dart';
 import 'gb_wallet_summary.dart';
 
 typedef _Owner = ({String accountId, int authorizationEpoch});
@@ -336,18 +337,15 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
             Text('New request', style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            TextField(
+            GbRecipientField(
               controller: _recipient,
+              owner: owner,
               enabled: owner != null && !_busy,
               onChanged: (_) {
                 _createKey = null;
                 setState(() {});
               },
-              decoration: const InputDecoration(
-                isDense: true,
-                labelText: 'Request from @username',
-                border: OutlineInputBorder(),
-              ),
+              label: 'Request from @username',
             ),
             const SizedBox(height: 10),
             Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(

@@ -33,6 +33,25 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
     }
     return identity;
   };
+  // An exact public handle is required: never enumerate profiles by display
+  // name, phone, partial prefix or private contact list. The same active,
+  // self-excluding and bilateral-blocked resolver backs signed Send review.
+  app.get("/v1/gb/wallet/recipients/:username",async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    try{
+      const user=await actor(request.headers.authorization);
+      const raw=(request.params as {username?:unknown}).username;
+      const handle=typeof raw==="string"?raw.trim().replace(/^@/,"").toLowerCase():"";
+      if(!/^[a-z0-9_][a-z0-9_.-]{2,63}$/.test(handle))
+        return reply.code(422).send({error:{code:"invalid_recipient_handle"}});
+      const recipient=await ports.resolveRecipient(user,handle);
+      if(!recipient?.active || recipient.userId===user.userId ||
+          recipient.username!==handle)
+        return reply.code(404).send({error:{code:"recipient_unavailable"}});
+      return {recipient:{id:recipient.userId,username:recipient.username,
+        displayName:recipient.displayName}};
+    }catch(error){return errorResponse(error,reply);}
+  });
   app.post("/v1/gb/wallet/send/quote",{
     schema:{body:Type.Object({
       username:Type.String({minLength:3,maxLength:80}),
