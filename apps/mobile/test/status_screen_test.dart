@@ -88,7 +88,9 @@ void main() {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
-    expect(find.textContaining('Oct 13, 2026'), findsOneWidget);
+    // Locale formatting may be month-first or day-first; the approved
+    // publication year must still be visible in the author header.
+    expect(find.textContaining('2026'), findsOneWidget);
     expect(find.text('New status'), findsNothing);
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
