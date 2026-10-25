@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { afterEach,describe,expect,it,vi } from "vitest";
 import { registerGbSendReviewRoutes } from "./send_routes.js";
-import type { GbSendPorts } from "./send_review.js";
+import { GbSendError, type GbSendPorts } from "./send_review.js";
 
 const apps:Array<ReturnType<typeof Fastify>>=[];
 afterEach(async()=>{await Promise.all(apps.splice(0).map(app=>app.close()));});
@@ -13,7 +13,7 @@ function setup(overrides:Partial<GbSendPorts>={}) {
     ({operationId,amountMb,state:"completed" as const}));
   const ports:GbSendPorts={
     authorize:async header=>{
-      if(header!=="Bearer current")throw new Error("unauthorized");
+      if(header!=="Bearer current")throw new GbSendError(401,"unauthorized");
       return actor;
     },
     resolveRecipient:async()=>target,
@@ -33,7 +33,7 @@ describe("exact whole-MB internal Send review",()=>{
     const {app,transfer}=setup();
     const unauthorized=await app.inject({method:"POST",url:"/v1/gb/wallet/send/quote",
       payload:{username:"bello.user",amountMb:200}});
-    expect(unauthorized.statusCode).toBe(503);
+    expect(unauthorized.statusCode).toBe(401);
     const quote=await app.inject({method:"POST",url:"/v1/gb/wallet/send/quote",
       headers:{authorization:"Bearer current"},
       payload:{username:"@BELLO.User",amountMb:200}});
