@@ -1,3 +1,7 @@
+import { FlutterwaveWebhookError } from '@masanawa/providers';
+import type { BillingCheckoutService } from './billing_checkout.js';
+import type { BillingFinancialService } from './financial_billing.js';
+import type { BillingWalletService } from './billing_wallet.js';
 import type { FastifyInstance } from 'fastify';
 import Type from 'typebox';
 import type { FinancialService } from './financial_service.js';
@@ -8,6 +12,9 @@ import type { MsnwPaystackFiatService } from './msn_wallet/paystack_fiat_evidenc
  */
 export function registerHistoricalFinancialCallbacks(app: FastifyInstance, options: {
   financial?: FinancialService;
+  billingCheckout?: BillingCheckoutService;
+  billingFinancial?: BillingFinancialService;
+  billingWallet?: BillingWalletService;
   msnwPaystackFiat?: MsnwPaystackFiatService;
 }) {
   if (options.financial) {
@@ -28,6 +35,37 @@ export function registerHistoricalFinancialCallbacks(app: FastifyInstance, optio
           return { accepted: true as const };
         });
     }
+  }
+  if (options.billingFinancial) {
+    const billing = options.billingFinancial;
+    const checkout = options.billingCheckout;
+    const wallet = options.billingWallet;
+    app.post('/v1/webhooks/flutterwave', { schema: { body: Type.Unknown() } },
+      async (request, reply) => {
+        const header = request.headers['verif-hash'];
+        const input = { rawBody: Buffer.from(JSON.stringify(request.body ?? {}), 'utf8'),
+          verifHash: typeof header === 'string' ? header : null };
+        try {
+          if (wallet) {
+            const funding = await wallet.receiveFundingWebhook(input);
+            if (funding.handled) return { accepted: true, duplicate: funding.duplicate,
+              funding: true, resumed: funding.resumed };
+          }
+          const result = await billing.receiveWebhook(input);
+          if (result.reference && checkout) {
+            await checkout.reconcileFulfillment({ reference: result.reference });
+          }
+          return { accepted: true, duplicate: result.duplicate };
+        } catch (error) {
+          if (error instanceof FlutterwaveWebhookError) {
+            reply.code(error.code === 'invalid_signature' ? 401 :
+              error.code === 'payload_too_large' ? 413 : 400);
+            return { error: error.code };
+          }
+          reply.code(503);
+          return { error: 'billing_webhook_processing_unavailable' };
+        }
+      });
   }
   if (options.msnwPaystackFiat) {
     const funding = options.msnwPaystackFiat;

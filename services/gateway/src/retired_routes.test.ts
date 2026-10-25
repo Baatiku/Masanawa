@@ -49,4 +49,22 @@ describe('permanent customer API retirement', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/wallet/msnw/funding/verify',
       payload: { reference: 'new-reference' } })).statusCode).toBe(404);
   });
+  it('reconciles original Flutterwave references without restoring bill creation', async () => {
+    const reconcile = vi.fn(async () => null);
+    const receive = vi.fn(async () => ({ duplicate: false, reference: 'original-bill' }));
+    const app = createGatewayApp({ billingFinancial: { receiveWebhook: receive } as never,
+      billingCheckout: { reconcileFulfillment: reconcile } as never });
+    apps.push(app);
+    const url = '/v1/webhooks/flutterwave';
+    expect((await app.inject({ method: 'POST', url, payload: { id: 'old-payment' },
+      headers: { 'verif-hash': 'provider-verified-by-service' } })).statusCode).toBe(200);
+    expect(receive).toHaveBeenCalledWith({ rawBody: Buffer.from('{"id":"old-payment"}'),
+      verifHash: 'provider-verified-by-service' });
+    expect(reconcile).toHaveBeenCalledWith({ reference: 'original-bill' });
+    reconcile.mockRejectedValueOnce(new Error('historical reconciliation pending'));
+    expect((await app.inject({ method: 'POST', url, payload: {} })).statusCode).toBe(503);
+    expect((await app.inject({ method: 'POST', url: '/v1/commerce/bills/quotes',
+      payload: {} })).statusCode).toBe(404);
+  });
+
 });
