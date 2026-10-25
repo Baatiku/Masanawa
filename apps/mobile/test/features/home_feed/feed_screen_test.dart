@@ -48,6 +48,17 @@ class StubFeed implements FeedApi {
   Future<List<FeedComment>> comments(String id) async => [];
 }
 
+class ReactionStubFeed extends StubFeed implements ReactionFeedApi {
+  ReactionStubFeed(super.label);
+  int reactionWrites = 0;
+  Future<void> Function()? onReact;
+  @override
+  Future<void> react(String postId, String? kind) async {
+    reactionWrites++;
+    if (onReact != null) await onReact!();
+  }
+}
+
 class SearchStubFeed extends StubFeed implements SearchFeedApi {
   SearchStubFeed(super.label);
   final requests = <String>[];
@@ -100,6 +111,70 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
   expiresAt: DateTime.now().add(const Duration(minutes: 2)),
 );
 void main() {
+  testWidgets('rich Status Love reaction rolls back failed write and allows retry',
+      (tester) async {
+    final pending = Completer<void>(), api = ReactionStubFeed('Status');
+    api.onReact = () => pending.future;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: MasanaFeedScreen(api:api,accountKey:'owner'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('React to post'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Love'));
+    await tester.pump();
+    expect(tester.widget<IconButton>(find.ancestor(
+      of:find.byIcon(Icons.add_reaction_outlined),
+      matching:find.byType(IconButton)).first).onPressed,isNull);
+    pending.completeError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reaction not confirmed. Refresh or retry.'),
+      findsOneWidget);
+    api.onReact = null;
+    await tester.tap(find.byTooltip('React to post'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Love'));
+    await tester.pumpAndSettle();
+    expect(api.reactionWrites,2);
+    expect(find.text('❤️ 1'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('confirmed reaction survives a failed authoritative count readback',
+      (tester) async {
+    var writes = 0;
+    final dio = Dio(BaseOptions(baseUrl:'https://example.test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
+      if(options.method=='GET' && options.path=='/v1/feed') {
+        handler.resolve(Response(requestOptions:options,statusCode:200,data:{
+          'items':[{'id':'post-1','authorMasanaId':'masana_one',
+            'kind':'text','body':'Status','media':[],
+            'publishedAt':'2026-10-25T18:00:00Z',
+            'likeCount':0,'commentCount':0}], 'nextCursor':null,
+        }));
+      }else if(options.method=='PUT' && options.path.endsWith('/reaction')) {
+        writes++;
+        handler.resolve(Response(requestOptions:options,statusCode:200,data:{}));
+      }else{
+        handler.reject(DioException(requestOptions:options,
+          type:DioExceptionType.connectionError,message:'count read offline'));
+      }
+    }));
+    addTearDown(()=>dio.close(force:true));
+    final api = DioFeedApi(dio,() async=>'owner-token');
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body:MasanaFeedScreen(api:api,accountKey:'owner'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('React to post'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Love'));
+    await tester.pumpAndSettle();
+    expect(writes,1);
+    expect(find.text('❤️ 1'),findsOneWidget);
+    expect(find.text('Reaction saved. Counts may be out of date; pull to refresh.'),
+      findsOneWidget);
+    expect(find.text('Reaction not confirmed. Refresh or retry.'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
   testWidgets('Status opens card body once, retains independent profile and removes flag',
       (tester) async {
     final api = StubFeed('A useful public post');

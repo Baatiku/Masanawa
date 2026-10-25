@@ -23,6 +23,31 @@ class RetryMediaApi implements FeedMediaApi {
 }
 
 void main() {
+  testWidgets('unauthorized media never spins forever and later scoped retry recovers',
+      (tester) async {
+    final api = RetryMediaApi();
+    Widget frame(String owner) => MaterialApp(home: Scaffold(
+      body: FeedInlineMediaCard(api: api, accountKey: owner,
+        postId: 'post-authorized', mediaId: 'media-authorized',
+        mediaCount: 1,
+        renderer: (grant) => Text('Approved: ${grant.mediaId}'))));
+    await tester.pumpWidget(frame(''));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Image unavailable · retry preview'), findsOneWidget);
+    await tester.tap(find.text('Image unavailable · retry preview'));
+    await tester.pumpAndSettle();
+    expect(api.requests, 0);
+    await tester.pumpWidget(frame('new-owner'));
+    await tester.pumpAndSettle();
+    expect(api.requests, 1);
+    expect(find.text('Image unavailable · retry preview'), findsOneWidget);
+    await tester.tap(find.text('Image unavailable · retry preview'));
+    await tester.pumpAndSettle();
+    expect(api.requests, 2);
+    expect(find.text('Approved: media-authorized'), findsOneWidget);
+  });
+
   testWidgets('grant retry only reopens the approved preview, not its viewer',
       (tester) async {
     final api = RetryMediaApi();
