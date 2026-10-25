@@ -34,6 +34,7 @@ GbActivityItem item(String id,int amount,{String unit='MB',String kind='send'})=
 
 class _Activity implements GbActivityTransport {
   final requests=<String?>[];
+  final units=<String>[];
   final detailRequests=<String>[];
   final responses=<String?,GbActivityPage>{};
   Completer<GbActivityPage>? pending;
@@ -42,8 +43,10 @@ class _Activity implements GbActivityTransport {
   bool fail=false;
   @override
   Future<GbActivityPage> page({required int limit,String? cursor,
+    String unit='all',
     CancelToken? cancellation}) async {
     requests.add(cursor);
+    units.add(unit);
     if(fail)throw StateError('offline');
     if(pending!=null && cursor!=null)return pending!.future;
     return responses[cursor]??const GbActivityPage([],null);
@@ -150,6 +153,27 @@ void main() {
     expect(tester.takeException(),isNull);
   });
 
+  testWidgets('unit chips refetch with server filter and fence an older unit cursor', (tester) async {
+    final fake=_Activity()
+      ..responses[null]=GbActivityPage([item('mb:1',-200)],'next-page');
+    await mount(tester,fake);
+    fake.pending=Completer<GbActivityPage>();
+    await tester.tap(find.text('Load more activity'));
+    await tester.pump();
+    fake.responses[null]=GbActivityPage([
+      item('ngn:deposit_new',500050,unit:'NGN',kind:'deposit')],null);
+    await tester.tap(find.text('Naira NGN'));
+    await tester.pumpAndSettle(const Duration(milliseconds:10));
+    fake.pending!.complete(GbActivityPage([item('mb:stale',999)],null));
+    await tester.pumpAndSettle();
+    expect(fake.units,contains('NGN'));
+    expect(fake.units.first,'all');
+    expect(find.text('+₦5,000.50'),findsOneWidget);
+    expect(find.text('+999 MB'),findsNothing);
+    expect(find.text('−200 MB'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('detail reads authoritative exact ID and copies its original reference', (tester) async {
     final fake=_Activity()..detailResponse=item('ngn:fund_1',-128050,
       unit:'NGN',kind:'deposit_reversal');
@@ -163,10 +187,6 @@ void main() {
     expect(find.text('−₦1,280.50'),findsOneWidget);
     expect(find.text('original_ngn:fund_1'),findsOneWidget);
     expect(find.text('Copy reference'),findsOneWidget);
-    await tester.dragUntilVisible(find.textContaining(
-      'not proof of external bank settlement'),find.byType(ListView),
-      const Offset(0,-150));
-    await tester.pumpAndSettle();
     expect(find.textContaining('not proof of external bank settlement'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });

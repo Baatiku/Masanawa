@@ -18,6 +18,7 @@ export interface GbActivityEntry {
   readonly status: "completed" | "reversed";
   readonly createdAt: string;
 }
+export type GbActivityUnitFilter = "all" | "MB" | "NGN";
 
 type Row = {
   entry_id: string;
@@ -54,9 +55,11 @@ function project(row: Row): GbActivityEntry {
 export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
   return Object.freeze({
     async list(actor: GbActivityActor, limit: number,
-        cursor: GbActivityCursor | null): Promise<readonly GbActivityEntry[]> {
+        cursor: GbActivityCursor | null,
+        unit: GbActivityUnitFilter="all"): Promise<readonly GbActivityEntry[]> {
       if (!validActor(actor.tenantId) || !validActor(actor.userId) ||
           !Number.isInteger(limit) || limit < 1 || limit > 31 ||
+          (unit!=="all" && unit!=="MB" && unit!=="NGN") ||
           (cursor !== null && (!/^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$/.test(cursor.entryId) ||
             !Number.isFinite(Date.parse(cursor.createdAt))))) {
         throw new TypeError("invalid_activity_page");
@@ -90,13 +93,14 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
         )
         SELECT entry_id,operation_id,unit,signed_amount,kind,status,
           created_at::text AS created_at
-        FROM posted WHERE ($3::timestamptz IS NULL OR
+        FROM posted WHERE ($6::text='all' OR unit=$6::text) AND
+          ($3::timestamptz IS NULL OR
           created_at < $3::timestamptz OR
           (created_at = $3::timestamptz AND entry_id < $4))
         ORDER BY created_at DESC, entry_id DESC
         LIMIT $5
       `, [actor.tenantId, actor.userId, cursor?.createdAt ?? null,
-        cursor?.entryId ?? null, limit]);
+        cursor?.entryId ?? null, limit,unit]);
       return Object.freeze(result.rows.map(project));
     },
     async find(actor: GbActivityActor, entryId: string): Promise<GbActivityEntry | null> {

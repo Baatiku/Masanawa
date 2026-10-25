@@ -34,7 +34,7 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
         url:"/v1/gb/wallet/activity?limit=1&userId=attacker",headers});
       expect(first.statusCode).toBe(200);
       expect(first.json().items).toHaveLength(1);
-      expect(f.list).toHaveBeenCalledWith(owner,2,null);
+      expect(f.list).toHaveBeenCalledWith(owner,2,null,"all");
       const cursor=first.json().nextCursor as string;
       expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
       f.list.mockResolvedValueOnce([]);
@@ -43,9 +43,10 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       expect(second.statusCode).toBe(200);
       expect(second.json()).toEqual({items:[],nextCursor:null});
       expect(f.list).toHaveBeenCalledWith(owner,2,
-        {createdAt:item(2).createdAt,entryId:"mb:2"});
+        {createdAt:item(2).createdAt,entryId:"mb:2"},"all");
       for(const url of ["/v1/gb/wallet/activity?limit=31",
         "/v1/gb/wallet/activity?limit=0",
+        "/v1/gb/wallet/activity?unit=MSNW",
         "/v1/gb/wallet/activity?limit=1&cursor=invalid"]){
         expect((await f.app.inject({method:"GET",url,headers})).statusCode).toBe(422);
       }
@@ -53,7 +54,27 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       const replay=await f.app.inject({method:"GET",
         url:`/v1/gb/wallet/activity?limit=1&cursor=${cursor}`,headers});
       expect(replay.statusCode).toBe(422);
+      const filterReplay=await f.app.inject({method:"GET",
+        url:`/v1/gb/wallet/activity?unit=MB&cursor=${cursor}`,headers});
+      expect(filterReplay.statusCode).toBe(422);
     } finally {await f.app.close();}
+  });
+  it("binds an MB/NGN filter to every page cursor, never locally mixes units",async()=>{
+    const f=fixture();
+    try{
+      const first=await f.app.inject({method:"GET",
+        url:"/v1/gb/wallet/activity?limit=1&unit=MB",headers});
+      expect(first.statusCode).toBe(200);
+      expect(f.list).toHaveBeenCalledWith(owner,2,null,"MB");
+      const token=first.json().nextCursor as string;
+      const page=await f.app.inject({method:"GET",
+        url:`/v1/gb/wallet/activity?limit=1&unit=MB&cursor=${token}`,headers});
+      expect(page.statusCode).toBe(200);
+      expect(f.list).toHaveBeenCalledWith(owner,2,
+        {createdAt:item(2).createdAt,entryId:"mb:2"},"MB");
+      expect((await f.app.inject({method:"GET",
+        url:`/v1/gb/wallet/activity?unit=NGN&cursor=${token}`,headers})).statusCode).toBe(422);
+    }finally{await f.app.close();}
   });
   it("uses unavailable rather than a false empty state when ledgers cannot be read",async()=>{
     const f=fixture();f.list.mockRejectedValueOnce(new Error("missing_new_ledger"));
