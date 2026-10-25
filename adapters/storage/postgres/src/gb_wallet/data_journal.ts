@@ -1,5 +1,4 @@
 import type {Pool} from "pg";
-import {createHash} from "node:crypto";
 export interface GbDataJournalKey {tenantId:string;userId:string}
 export interface GbDataJournalRow {
  operationId:string;userId:string;bundleId:string;version:string;phone:string;
