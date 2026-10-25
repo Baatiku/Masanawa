@@ -1,3 +1,9 @@
+import {
+  projectVerifiedWholeGbBundles,
+  type ApprovedWholeGbBundle,
+} from "./gb_data/data_catalogue.js";
+import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
+import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
@@ -2739,6 +2745,49 @@ export async function startGatewayService(
           paystackSecretKey: env.PAYSTACK_SECRET_KEY,
         })
       : undefined;
+    // Explicit rollout selection activates the staged reduced-product
+    // route fence. Unknown values are configuration errors, not permission
+    // to silently keep retired public financial and human endpoints open.
+    const rawProductScope = env.MASANAWA_PRODUCT_SCOPE?.trim();
+    if (rawProductScope && rawProductScope !== "legacy" &&
+        rawProductScope !== "masana-lite") {
+      throw new TypeError("MASANAWA_PRODUCT_SCOPE must be legacy or masana-lite");
+    }
+    const productScope = options.appOptions?.productScope ??
+      (rawProductScope === "masana-lite" ? "masana-lite" : "legacy");
+    if (env.MASANAWA_GB_DATA_CATALOG_ENABLED === "true" &&
+        productScope !== "masana-lite") {
+      throw new TypeError("GB data routes may be enabled only in the reduced product scope");
+    }
+
+    // Read-only data discovery is off by default. Server/operator-reviewed
+    // exact bundle mapping plus the existing credentialed Flutterwave adapter
+    // are both required; old bill purchases remain excluded in lite mode.
+    const gbDataCatalogue: GbDataCataloguePorts | undefined =
+      options.appOptions?.gbDataCatalogue ?? (() => {
+        if (env.MASANAWA_GB_DATA_CATALOG_ENABLED !== "true") return undefined;
+        const raw = env.MASANAWA_GB_DATA_APPROVALS_JSON?.trim();
+        if (!raw || !flutterwaveBills || !featurePool || !sessions || !featureTenant) {
+          throw new TypeError("GB data catalogue enabled without provider, authenticated database, or approved mapping");
+        }
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          throw new TypeError("GB data mapping must be an operator-approved array");
+        }
+        const approved = parsed as ApprovedWholeGbBundle[];
+        // Validate approval structure, duplicate provider identity and exact
+        // prices before exposing a route. An empty live result never approves
+        // an item; every customer visit uses real Flutterwave catalogue data.
+        projectVerifiedWholeGbBundles(approved, [], new Date());
+        return {
+          authorize: async (header: string | undefined) => {
+            const actor = await resolveFeatureFan(header);
+            return { tenantId: actor.tenantId, userId: actor.userId };
+          },
+          approved: async () => approved,
+          liveItems: createLiveFlutterwaveGbDataItems(flutterwaveBills),
+        };
+      })();
     app = appFactory({
       ...(status ? {status} : {}),
       ...(videos ? {videos} : {}),
@@ -2750,6 +2799,8 @@ export async function startGatewayService(
       ...(creatorPolicy ? {creatorPolicy} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
+      productScope,
+      ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
       ...(sessions ? { mobileDiagnostics: {

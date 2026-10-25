@@ -34,6 +34,13 @@ export function registerGbDataCatalogueRoutes(
         : error.code === "bundle_unavailable" ? 404 : 503);
       return { error: { code: error.code, message: error.message } };
     }
+    if (typeof error === "object" && error !== null &&
+        "statusCode" in error &&
+        ((error as { statusCode?: unknown }).statusCode === 401 ||
+         (error as { statusCode?: unknown }).statusCode === 403)) {
+      reply.code((error as { statusCode: 401 | 403 }).statusCode);
+      return { error: { code: "unauthorized", message: "Authentication required" } };
+    }
     if (error instanceof Error && error.message === "gb.data.unauthorized") {
       reply.code(401);
       return { error: { code: "unauthorized", message: "Authentication required" } };
