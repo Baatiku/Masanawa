@@ -70,11 +70,7 @@ import {
   readRequiredEnv,
   type TenantId,
 } from "@masanawa/contracts";
-import {
-  hashPlatformSessionToken,
-  type CustomerChannelRepository,
-  type PlatformSessionRepository,
-} from "@masanawa/security";
+import { type PlatformSessionRepository } from "@masanawa/security";
 import {
   FlutterwaveBillsClient,
   FlutterwaveFundingClient,
@@ -90,45 +86,7 @@ import {
   type NodeSignalSource,
   type ServiceLifecycleLogger,
 } from "@masanawa/node-runtime";
-import {
-  platformProductMigrationRoots,
-  createPostgresAgentPresentationRepository,
-  createPostgresAgentRunRepository,
-  createPostgresCharacterSessionRepository,
-  createPostgresCharacterOwnershipReader,
-  createPostgresCharacterSkillAssignmentRepository,
-  createPostgresIdentityRepository,
-  createPostgresCommerceRepository,
-  createPostgresCryptoRepository,
-  createPostgresCryptoChatActionRepository,
-  createPostgresPlatformAgentProfileRepository,
-  createPostgresSkillGuideRepository,
-  createPostgresTeachingProgressRepository,
-  createPostgresSkillDistributionRepository,
-  createPostgresSkillRepository,
-  createPostgresUserAgentPreferenceRepository,
-  createPostgresCloneSetupRepository,
-  createPostgresPersonalCloneProvisioningRepository,
-  createPostgresUserRelationshipReader,
-  createPostgresUserRelationshipProvisioner,
-  createPostgresPlatformSessionRepository,
-  createPostgresAccountDeletionRepository,
-  createPostgresAccountDeletionChallengeRepository,
-  createPostgresCustomerChannelRepository,
-  createPostgresServiceDependency,
-  createPostgresMobileShellRepository,
-  createPostgresMobilePushRepository,
-  createPostgresMobileAgentActivityRepository,
-  createPostgresBillingQuoteRepository,
-  createPostgresNgnWalletRepository,
-  createPostgresBillingFulfillmentStore,
-  createPostgresBillingWebhookRepository,
-  createPostgresTwinProfileRepository,
-  createPostgresTwinRuntimeRepository,
-  createPostgresTwinEconomyEventStore,
-  withTransaction,
-  initializePostgresPolicyRevision,
-} from "@masanawa/postgres";
+import { platformProductMigrationRoots, createPostgresAgentPresentationRepository, createPostgresAgentRunRepository, createPostgresCharacterSessionRepository, createPostgresCharacterOwnershipReader, createPostgresCharacterSkillAssignmentRepository, createPostgresIdentityRepository, createPostgresCommerceRepository, createPostgresCryptoRepository, createPostgresCryptoChatActionRepository, createPostgresPlatformAgentProfileRepository, createPostgresSkillGuideRepository, createPostgresTeachingProgressRepository, createPostgresSkillDistributionRepository, createPostgresSkillRepository, createPostgresUserAgentPreferenceRepository, createPostgresCloneSetupRepository, createPostgresPersonalCloneProvisioningRepository, createPostgresUserRelationshipReader, createPostgresUserRelationshipProvisioner, createPostgresPlatformSessionRepository, createPostgresAccountDeletionRepository, createPostgresAccountDeletionChallengeRepository, createPostgresServiceDependency, createPostgresMobileShellRepository, createPostgresMobilePushRepository, createPostgresMobileAgentActivityRepository, createPostgresBillingQuoteRepository, createPostgresNgnWalletRepository, createPostgresBillingFulfillmentStore, createPostgresBillingWebhookRepository, createPostgresTwinProfileRepository, createPostgresTwinRuntimeRepository, createPostgresTwinEconomyEventStore, withTransaction, initializePostgresPolicyRevision } from "@masanawa/postgres";
 import {
   createAgentDirectoryService,
   type AgentDirectoryAuthorizer,
@@ -311,15 +269,7 @@ import {
   createAgentTeachingAssistant,
   type AgentTeachingAssistant,
 } from "./agent_teaching_assistant.js";
-import { createCustomerChannelBridge } from "./customer_channel_bridge.js";
 import { MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS } from "./agent_msnw_crypto_assistant.js";
-import type { CustomerChannelOptions } from "./customer_channel_routes.js";
-import { sendTelegram } from "./customer_channel_routes.js";
-import { registerAndVerifyTelegramWebhook } from "./telegram_webhook_registration.js";
-import {
-  createLinkedWhatsAppController,
-  type LinkedWhatsAppController,
-} from "./whatsapp_linked_device.js";
 import {
   ensureDefaultPlatformAgents,
   type PlatformAgentIdentityProvisioner,
@@ -367,7 +317,6 @@ export interface ServiceDatabaseDependency {
   readonly platformSessions?: PlatformSessionRepository;
   readonly accountDeletionRequests?: AccountDeletionRepository;
   readonly accountDeletionChallenges?: AccountDeletionChallengeRepository;
-  readonly customerChannels?: CustomerChannelRepository;
   readonly commerce?: CommerceRepository;
   readonly crypto?: CryptoRepository;
   readonly cryptoChatActions?: CryptoChatActionRepository;
@@ -560,7 +509,6 @@ function createDefaultDatabaseDependency(
     platformSessions: createPostgresPlatformSessionRepository(database.pool),
     accountDeletionRequests: createPostgresAccountDeletionRepository(database.pool),
     accountDeletionChallenges: createPostgresAccountDeletionChallengeRepository(database.pool),
-    customerChannels: createPostgresCustomerChannelRepository(database.pool),
     commerce: createPostgresCommerceRepository(database.pool),
     crypto: createPostgresCryptoRepository(database.pool),
     cryptoChatActions: createPostgresCryptoChatActionRepository(database.pool),
@@ -726,8 +674,6 @@ export async function startGatewayService(
     options.appOptions?.twinProduction;
   let pushSender: MobilePushSender | undefined;
   let ownerAccessSweepTenantId: TenantId | undefined;
-  let channelRecoveryTimer: ReturnType<typeof setInterval> | undefined;
-  let channelRecovery: Promise<void> | undefined;
   let ownerAccessSweepTimer: ReturnType<typeof setInterval> | undefined;
   let ownerAccessSweepRunning = false;
   let talkPushDedupePurgeTimer: ReturnType<typeof setInterval> | undefined;
@@ -1822,148 +1768,6 @@ export async function startGatewayService(
         })
       : undefined);
 
-  let composedCustomerChannels: CustomerChannelOptions | undefined =
-    options.appOptions?.customerChannels;
-  let telegramWebhookRegistration:
-    | Readonly<{ botToken: string; webhookSecret: string; webhookUrl: string }>
-    | undefined;
-  let linkedWhatsAppController: LinkedWhatsAppController | undefined;
-  let linkedWhatsAppAdmin:
-    | NonNullable<GatewayAppOptions["linkedWhatsApp"]>
-    | undefined;
-  const whatsappEnabled = env.MASANAWA_WHATSAPP_ENABLED === "true";
-  const telegramEnabled = env.MASANAWA_TELEGRAM_ENABLED === "true";
-  if (
-    !composedCustomerChannels &&
-    (whatsappEnabled || telegramEnabled)
-  ) {
-    if (
-      !platformTenantId ||
-      !database.platformSessions ||
-      !database.customerChannels ||
-      !database.platformAgentProfiles ||
-      !composedConversation
-    ) {
-      throw new TypeError(
-        "Customer channels require platform auth, channel storage, support agents, and Agent conversation runtime",
-      );
-    }
-
-    const bridge = createCustomerChannelBridge({
-      tenantId: platformTenantId,
-      sessions: database.platformSessions,
-      channels: database.customerChannels,
-      platformProfiles: database.platformAgentProfiles,
-      ...(database.userAgentPreferences
-        ? { userPreferences: database.userAgentPreferences }
-        : {}),
-      conversation: composedConversation,
-      // Use the same authenticated, tenant-scoped, published Masana directory
-      // as the Flutter app. Retired user-created Twins are not channel targets.
-      ...(composedDirectory ? { directory: composedDirectory } : {}),
-    });
-
-    if (whatsappEnabled) {
-      const mode = env.MASANAWA_WHATSAPP_MODE?.trim() || "linked-device";
-      if (mode !== "linked-device") {
-        throw new TypeError(
-          "MASANAWA_WHATSAPP_MODE must be linked-device; Meta Cloud transport is not the production WhatsApp mode",
-        );
-      }
-      const authDir = env.MASANAWA_WHATSAPP_AUTH_DIR?.trim();
-      const adminToken = env.MASANAWA_WHATSAPP_ADMIN_TOKEN?.trim();
-      const adminPrincipals = readPrincipalSet(
-        env.MASANAWA_ADMIN_PRINCIPALS ??
-          env.MASANAWA_ADMIN_USER_IDS ??
-          env.MASANAWA_ADMIN_EMAILS,
-      );
-      if (!authDir) {
-        throw new TypeError(
-          "WhatsApp linked-device mode requires MASANAWA_WHATSAPP_AUTH_DIR",
-        );
-      }
-      if (!adminToken && adminPrincipals.size === 0) {
-        throw new TypeError(
-          "WhatsApp linked-device administration requires MASANAWA_WHATSAPP_ADMIN_TOKEN or configured platform admin principals",
-        );
-      }
-      linkedWhatsAppController = createLinkedWhatsAppController({
-        bridge,
-        authDir,
-      });
-      linkedWhatsAppAdmin = Object.freeze({
-        controller: linkedWhatsAppController,
-        ...(adminToken ? { adminToken } : {}),
-        ...(adminPrincipals.size > 0
-          ? {
-              async authorizeSession(authorizationHeader: string | undefined) {
-                const supplied = /^Bearer\s+(.+)$/iu.exec(
-                  authorizationHeader?.trim() ?? "",
-                )?.[1]?.trim();
-                if (!supplied) return false;
-                let accessHash: string;
-                try {
-                  accessHash = hashPlatformSessionToken(supplied);
-                } catch {
-                  return false;
-                }
-                const identity = await database.platformSessions!.resolveAccess({
-                  accessHash,
-                  at: new Date().toISOString(),
-                });
-                if (!identity || identity.tenantId !== platformTenantId) {
-                  return false;
-                }
-                const candidates = [
-                  identity.userId,
-                  identity.profile.email?.trim().toLowerCase() ?? "",
-                  identity.profile.phone?.trim() ?? "",
-                ].filter(Boolean);
-                return candidates.some((candidate) =>
-                  adminPrincipals.has(candidate),
-                );
-              },
-            }
-          : {}),
-      });
-    }
-
-    let telegram: CustomerChannelOptions["telegram"];
-    if (telegramEnabled) {
-      const botToken = env.MASANAWA_TELEGRAM_BOT_TOKEN?.trim();
-      const webhookSecret = env.MASANAWA_TELEGRAM_WEBHOOK_SECRET?.trim();
-      const explicitWebhookUrl = env.MASANAWA_TELEGRAM_WEBHOOK_URL?.trim();
-      const publicBaseUrl = env.MASANAWA_PUBLIC_BASE_URL?.trim();
-      const webhookUrl =
-        explicitWebhookUrl ||
-        (publicBaseUrl
-          ? new URL(
-              "/channels/telegram/webhook",
-              publicBaseUrl.endsWith("/") ? publicBaseUrl : `${publicBaseUrl}/`,
-            ).toString()
-          : "");
-      if (!botToken || !webhookSecret || !webhookUrl) {
-        throw new TypeError(
-          "Telegram is enabled but bot token, webhook secret, or public webhook URL is missing",
-        );
-      }
-      if (new URL(webhookUrl).protocol !== "https:") {
-        throw new TypeError("Telegram webhook URL must use HTTPS");
-      }
-      telegram = Object.freeze({ botToken, webhookSecret });
-      telegramWebhookRegistration = Object.freeze({
-        botToken,
-        webhookSecret,
-        webhookUrl,
-      });
-    }
-
-    composedCustomerChannels = Object.freeze({
-      bridge,
-      ...(telegram ? { telegram } : {}),
-    });
-  }
-
   const composedPush =
     options.appOptions?.mobilePush ??
     (conversationAuthorizer && database.mobilePush
@@ -2648,12 +2452,6 @@ export async function startGatewayService(
       ...(composedBillingWallet ? { billingWallet: composedBillingWallet } : {}),
       ...(composedFinancial ? { financial: composedFinancial } : {}),
       ...(composedMsnwConversion ? {msnwConversion:composedMsnwConversion} : {}),
-      ...(composedCustomerChannels
-        ? { customerChannels: composedCustomerChannels }
-        : {}),
-      ...(linkedWhatsAppAdmin
-        ? { linkedWhatsApp: linkedWhatsAppAdmin }
-        : {}),
       // MSN is separate from legacy Credits and customer-facing NGN.
       // Read-only, requiring explicit operator flag and platform session.
       // No payment, issuance, conversion or transfer route is registered.
@@ -2810,15 +2608,6 @@ export async function startGatewayService(
     throw error;
   }
 
-  if (linkedWhatsAppController) {
-    try {
-      await linkedWhatsAppController.start();
-    } catch (error) {
-      await database.close().catch(() => undefined);
-      throw error;
-    }
-  }
-
   const lifecycle = await startNodeService({
     serviceName: "gateway",
     server: app,
@@ -2827,10 +2616,6 @@ export async function startGatewayService(
     ...(options.logger ? { logger: options.logger } : {}),
     onDraining: () => {
       drain.beginDraining();
-      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
-      if (linkedWhatsAppController) {
-        void linkedWhatsAppController.stop().catch(() => undefined);
-      }
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -2841,11 +2626,6 @@ export async function startGatewayService(
       }
     },
     onAfterClose: async () => {
-      if (channelRecoveryTimer) clearInterval(channelRecoveryTimer);
-      await channelRecovery;
-      if (linkedWhatsAppController) {
-        await linkedWhatsAppController.stop().catch(() => undefined);
-      }
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -2860,38 +2640,6 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
-
-  if (telegramWebhookRegistration) {
-    try {
-      await registerAndVerifyTelegramWebhook(telegramWebhookRegistration);
-    } catch (error) {
-      await lifecycle.stop("manual").catch(() => undefined);
-      throw error;
-    }
-  }
-  const runChannelRecovery = () => {
-    const channels=composedCustomerChannels;
-    if(channelRecovery || drain.isDraining() || !channels?.bridge.delivery) return;
-    const work:Promise<void>[]=[];
-    if(channels.telegram) {
-      const config=channels.telegram;
-      work.push(channels.bridge.delivery.recover("telegram",async(saved)=>{
-        await sendTelegram(config,saved.chatId,saved.reply,saved.requestContact);
-      },()=>!drain.isDraining()));
-    }
-    if(linkedWhatsAppController?.snapshot().connected && linkedWhatsAppController.sendReply) {
-      const controller=linkedWhatsAppController;
-      work.push(channels.bridge.delivery.recover("whatsapp",async(saved)=>{
-        await controller.sendReply!(saved.chatId,saved.reply);
-      },()=>!drain.isDraining()));
-    }
-    channelRecovery=Promise.allSettled(work).then(()=>undefined).finally(()=>{channelRecovery=undefined;});
-  };
-  if(composedCustomerChannels?.bridge.delivery) {
-    channelRecoveryTimer=setInterval(runChannelRecovery,5000);
-    channelRecoveryTimer.unref();
-    runChannelRecovery();
-  }
 
   const runTalkPushDedupePurge = async () => {
     if (

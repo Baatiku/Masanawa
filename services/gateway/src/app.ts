@@ -74,8 +74,6 @@ import type { BillingWalletService } from "./billing_wallet.js";
 import type { MobilePushRegistrationService } from "./mobile_push.js";
 import type { AccountNotificationService } from "./notification_preferences.js";
 import type { FinancialService } from "./financial_service.js";
-import { type CustomerChannelOptions } from "./customer_channel_routes.js";
-import type { LinkedWhatsAppController } from "./whatsapp_linked_device.js";
 import {
   CustomerAuthError,
   type CustomerAuthService,
@@ -157,14 +155,6 @@ export interface GatewayAppOptions {
     service: ReturnType<typeof createMsnwUsdtConversion>;
   };
   readonly financial?: FinancialService;
-  readonly customerChannels?: CustomerChannelOptions;
-  readonly linkedWhatsApp?: Readonly<{
-    controller: LinkedWhatsAppController;
-    adminToken?: string;
-    authorizeSession?: (
-      authorizationHeader: string | undefined,
-    ) => Promise<boolean>;
-  }>;
   readonly twinProduction?: TwinProductionRuntime;
   /** Read-only off-chain MSN. No issuance authority in a customer route. */
   readonly msnBalance?: Readonly<{ authorizer: MsnBalanceAuthority; ledger: MsnBalanceReader }>;

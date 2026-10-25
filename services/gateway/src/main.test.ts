@@ -61,6 +61,9 @@ describe("gateway production lifecycle", () => {
         MASANAWA_GATEWAY_HOST: "127.0.0.1",
         MASANAWA_GATEWAY_PORT: "4100",
         MASANAWA_SHUTDOWN_TIMEOUT_MS: "1000",
+        // Retired deployment flags cannot restart external channel listeners.
+        MASANAWA_TELEGRAM_ENABLED: "true",
+        MASANAWA_WHATSAPP_ENABLED: "true",
       },
       processRef: processRef(),
       logger: log,
