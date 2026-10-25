@@ -7,6 +7,7 @@ import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_ite
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
@@ -17,6 +18,7 @@ import {
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
+  createPostgresGbRequestRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentMasanaIdentityReader} from "./agent_directory_rooms.js";
@@ -2273,6 +2275,13 @@ export async function startGatewayService(
           reviewSecret: mbSendReviewSecret,
         }
       : undefined);
+  const gbRequests: GbRequestPorts | undefined =
+    options.appOptions?.gbRequests ??
+    (featurePool && sessions && featureTenant && gbSendReview
+      ? {authorize: resolveFeatureFan,
+         resolveRecipient: gbSendReview.resolveRecipient,
+         store: createPostgresGbRequestRepository(featurePool)}
+      : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -2385,6 +2394,7 @@ export async function startGatewayService(
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(gbSendReview ? { gbSendReview } : {}),
+      ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
         : {}),
