@@ -7,7 +7,6 @@ import 'feed_inline_media_card.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'saved_status_library_screen.dart';
-import '../videos/video_models.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -22,11 +21,8 @@ class MasanaFeedScreen extends StatefulWidget {
     this.enabled = true,
     this.audioPlaybackAvailable = false,
     this.authorScoped = false,
-    this.ownPostsOnly = false,
     this.mediaApi,
     this.inlineMediaRenderer,
-    this.onCreateHumanStatus,
-    this.onOpenSavedVideo,
     this.wrapAccountRoute,
   });
   final FeedApi api;
@@ -35,8 +31,6 @@ class MasanaFeedScreen extends StatefulWidget {
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final ValueChanged<String>? onReport;
   final bool enabled;
-  final Future<bool> Function()? onCreateHumanStatus;
-  final Future<void> Function(ExternalVideo)? onOpenSavedVideo;
 
   /// Session owner installs a reactive guard on each pushed page. Switching
   /// accounts hides previous-account content without waiting for a request.
@@ -45,9 +39,6 @@ class MasanaFeedScreen extends StatefulWidget {
 
   /// A dedicated professional feed has one author, not global ranking modes.
   final bool authorScoped;
-
-  /// A secondary owner-only public post route, never a new root/feed ledger.
-  final bool ownPostsOnly;
 
   /// Optional per-account signed media projection, never persisted to disk.
   final FeedMediaApi? mediaApi;
@@ -147,7 +138,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override
   void initState() {
     super.initState();
-    mode = widget.ownPostsOnly ? 'mine' : 'for_you';
+    mode = 'for_you';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) refresh();
     });
@@ -160,22 +151,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     // same authorized account. Do not erase visible posts or refetch then.
     if (old.accountKey != widget.accountKey ||
         old.enabled != widget.enabled ||
-        old.ownPostsOnly != widget.ownPostsOnly ||
         (widget.accountKey.isEmpty && old.api != widget.api)) {
       clearProjection();
-      mode = widget.ownPostsOnly ? 'mine' : 'for_you';
+      mode = 'for_you';
       searchController.clear();
       searchTerm = '';
       if (widget.enabled) refresh();
-    }
-  }
-
-  void verifyOwnerProjection(FeedPage page) {
-    if (widget.ownPostsOnly &&
-        page.items.any(
-          (post) => !post.isHuman || post.authorId != widget.accountKey,
-        )) {
-      throw const FormatException('Unexpected author in own Status');
     }
   }
 
@@ -191,7 +172,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     });
     try {
       final page = await listCurrent();
-      verifyOwnerProjection(page);
       if (!mounted || ticket != generation) return;
       setState(() {
         items = page.items;
@@ -225,7 +205,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     });
     try {
       final page = await listCurrent(after);
-      verifyOwnerProjection(page);
       if (!mounted || ticket != generation) return;
       setState(() {
         final seen = items.map((p) => p.id).toSet();
@@ -519,37 +498,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     );
   }
 
-  void openMine() {
-    if (!widget.enabled || widget.accountKey.isEmpty) return;
-    final account = widget.accountKey;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) {
-          final child = Scaffold(
-            appBar: AppBar(title: Text(t('My posts', 'Labaraina'))),
-            body: MasanaFeedScreen(
-              api: widget.api,
-              accountKey: account,
-              authorScoped: true,
-              ownPostsOnly: true,
-              onMasanaProfile: widget.onMasanaProfile,
-              onHumanProfile: widget.onHumanProfile,
-              onOpenMedia: widget.onOpenMedia,
-              onReport: widget.onReport,
-              enabled: widget.enabled,
-              audioPlaybackAvailable: widget.audioPlaybackAvailable,
-              mediaApi: widget.mediaApi,
-              inlineMediaRenderer: widget.inlineMediaRenderer,
-              onOpenSavedVideo: widget.onOpenSavedVideo,
-              wrapAccountRoute: widget.wrapAccountRoute,
-            ),
-          );
-          return widget.wrapAccountRoute?.call(child) ?? child;
-        },
-      ),
-    );
-  }
-
   void openSaved() {
     if (widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty)
       return;
@@ -573,7 +521,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               if (!mounted || widget.accountKey != account) return;
               await openPost(currentPost);
             },
-            openVideo: widget.onOpenSavedVideo,
           );
           return guard?.call(saved) ?? saved;
         },
@@ -597,25 +544,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       );
     return Column(
       children: [
-        if (!widget.authorScoped && widget.onCreateHumanStatus != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final changed = await widget.onCreateHumanStatus!();
-                if (changed && mounted) {
-                  setState(() {
-                    mode = 'for_you';
-                    items = [];
-                    cursor = null;
-                  });
-                  await refresh();
-                }
-              },
-              icon: const Icon(Icons.edit_outlined),
-              label: Text(t('Write a Status', 'Rubuta labari')),
-            ),
-          ),
         if (!widget.authorScoped)
           Align(
             alignment: AlignmentDirectional.centerEnd,
@@ -624,11 +552,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               runSpacing: 4,
               alignment: WrapAlignment.end,
               children: [
-                TextButton.icon(
-                  onPressed: widget.accountKey.isNotEmpty ? openMine : null,
-                  icon: const Icon(Icons.person_outline),
-                  label: Text(t('My posts', 'Labaraina')),
-                ),
                 if (widget.api is SavedStatusLibraryApi)
                   TextButton.icon(
                     onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
@@ -639,7 +562,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             ),
           ),
         if (!widget.authorScoped &&
-            !widget.ownPostsOnly &&
             widget.api is SearchFeedApi)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
@@ -771,8 +693,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   'No updates from people or Masana you follow yet.',
                                   'Har yanzu babu sabuntawa daga wadanda kake bi.',
                                 )
-                              : widget.ownPostsOnly
-                              ? t('No public posts yet', 'Babu labarana tukuna')
                               : t(
                                   'No Status updates yet',
                                   'Babu labarai tukuna',
