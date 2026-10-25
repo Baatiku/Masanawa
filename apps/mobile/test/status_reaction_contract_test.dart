@@ -168,7 +168,7 @@ void main(){
     await tester.tap(find.text('Love'));
     await tester.pump();
     final disabled = tester.widget<IconButton>(
-        find.byTooltip('React to post'));
+        find.widgetWithIcon(IconButton, Icons.add_reaction_outlined));
     expect(disabled.onPressed, isNull);
     pending.completeError(StateError('write unavailable'));
     await tester.pumpAndSettle();
