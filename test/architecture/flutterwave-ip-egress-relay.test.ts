@@ -12,7 +12,7 @@ describe("fixed IPv4 Flutterwave relay production safety", () => {
       timeout: 30_000,
       env: { ...process.env, MASANAWA_FLUTTERWAVE_RELAY_TOKEN: "test-only" },
     });
-    expect(output).toContain("pass 4");
+    expect(output).toContain("pass 5");
     expect(output).toContain("fail 0");
   });
 });
