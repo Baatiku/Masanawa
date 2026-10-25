@@ -100,7 +100,7 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
 );
 void main() {
   testWidgets(
-    'Status search no-match is distinct from an empty feed; Following stays scoped',
+    'Status search expands from one icon and never renders ranking tabs',
     (tester) async {
       final api = SearchStubFeed('ordinary');
       api.searchHandler = (mode, term, cursor) =>
@@ -126,6 +126,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('For You'), findsNothing);
+      expect(find.text('Following'), findsNothing);
+      await tester.tap(find.byTooltip('Search Status'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'a');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
@@ -135,9 +140,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No Status posts match this search.'), findsOneWidget);
       expect(api.requests.last, 'for_you:no matches:-');
-      await tester.tap(find.text('Following'));
-      await tester.pumpAndSettle();
-      expect(api.requests.last, 'following:no matches:-');
+      expect(find.text('For You'), findsNothing);
+      expect(find.text('Following'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -172,6 +176,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Search Status'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'river');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
@@ -203,6 +209,8 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Search Status'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'old');
       await tester.testTextInput.receiveAction(TextInputAction.search);

@@ -15,6 +15,14 @@ describe("financial account-status admission",()=>{
       expect(requiresFinancialCustomerState("POST",route+"/other")).toBe(true);
     }
     for(const route of [
+      "/v1/gb/wallet/virtual-account",
+      "/v1/gb/data/redeem",
+      "/v1/gb/data/purchases/data_orig/reconcile",
+      "/v1/gb/wallet/send/confirm",
+      "/v1/gb/wallet/send/quote",
+      "/v1/gb/wallet/requests",
+      "/v1/gb/wallet/requests/mbreq_example/pay",
+      "/v1/gb/wallet/requests/mbreq_example/cancel",
       "/v1/wallet/msnw/custody/send",
       "/v1/wallet/msnw/p2p/methods/verify",
       "/v1/financial/crypto/withdrawals",

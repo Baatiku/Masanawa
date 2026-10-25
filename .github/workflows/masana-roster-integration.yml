@@ -5,12 +5,9 @@ on:
       - "services/gateway/src/platform_agent_bootstrap*"
       - "services/gateway/src/main.ts"
       - "services/gateway/src/agent_directory.ts"
-      - "services/gateway/src/agent_identity*"
       - "apps/mobile/lib/src/agents/agent_directory.dart"
       - "apps/mobile/lib/src/router/app_router.dart"
-      - "apps/mobile/lib/src/screens/rooms/rooms_screen.dart"
       - "apps/mobile/lib/src/screens/chat/ai_chat_screen.dart"
-      - "apps/mobile/test/masana_room_link_test.dart"
       - "adapters/storage/postgres/src/masana/catalog_seed*"
       - "adapters/storage/postgres/src/index.ts"
       - "apps/mobile/assets/masana/**"
@@ -53,10 +50,10 @@ jobs:
           pnpm --filter @masanawa/gateway-service... build
           pnpm --filter @masanawa/worker-service... build
       - name: Professional agent identity and call profile seeds
-        run: pnpm exec vitest run services/gateway/src/platform_agent_bootstrap.test.ts services/gateway/src/agent_directory.test.ts services/gateway/src/agent_directory_route.test.ts services/gateway/src/agent_identity.test.ts services/gateway/src/customer_auth.test.ts
-      - name: Real PG18 approved Masana profiles
+        run: pnpm exec vitest run services/gateway/src/platform_agent_bootstrap.test.ts services/gateway/src/agent_directory.test.ts services/gateway/src/agent_directory_route.test.ts services/gateway/src/agent_identity.integration.test.ts services/gateway/src/customer_auth.test.ts
+      - name: Real PG18 approved platform Masana catalogue
         run: pnpm exec vitest run adapters/storage/postgres/src/masana/catalog_seed.integration.test.ts
-      - name: Protected Masana voice token regressions
+      - name: Masana protected voice token regressions
         run: pnpm exec vitest run services/gateway/src/live_voice_token.test.ts
   flutter-roster:
     runs-on: ubuntu-latest
@@ -69,6 +66,6 @@ jobs:
         with: {channel: stable,cache: true}
       - run: flutter pub get
       - name: Dedicated 26 portraits bundled in Flutter
-        run: flutter test --no-pub --reporter expanded test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/masana_room_link_test.dart
+        run: flutter test --no-pub --reporter expanded test/masana_professional_portraits_test.dart test/agent_directory_readiness_test.dart test/masana_only_chat_inbox_test.dart
       - name: Focused Dart analysis
         run: dart analyze --no-fatal-warnings lib/src/agents/masana_portrait_avatar.dart lib/src/screens/chat/masana_list_screen.dart lib/src/screens/chat/ai_chat_screen.dart  lib/src/router/app_router.dart lib/src/agents/agent_directory.dart

@@ -6,6 +6,7 @@ import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_summary.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
+import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
 
 class _SignedOut extends SessionController {
   @override
@@ -43,8 +44,9 @@ void main() {
       overrides: [sessionProvider.overrideWith(_SignedOut.new)],
       child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
     ));
-    expect(find.text('— GB'), findsOneWidget);
-    expect(find.text('Exact MB balance unavailable'), findsOneWidget);
+    expect(find.text('Balance unavailable'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gb-wallet-balance-card')), findsOneWidget);
+    expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(find.text('Send'), findsOneWidget);
     expect(find.text('Request'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -70,9 +72,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('10.85 GB'), findsOneWidget);
-    expect(find.text('10,850 MB available'), findsOneWidget);
-    expect(find.textContaining('Welcome: 475 MB'), findsOneWidget);
-    expect(find.textContaining('Pending reservations: 150 MB'), findsOneWidget);
+    expect(find.text('10,850 MB'), findsOneWidget);
+    await tester.tap(find.text('Balance details'));
+    await tester.pumpAndSettle();
+    expect(find.text('475 MB'), findsOneWidget);
+    expect(find.text('150 MB'), findsOneWidget);
     expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -106,11 +110,52 @@ void main() {
     }), throwsFormatException);
   });
 
+  testWidgets('Data enables reviewed approved bundles but never unreviewed purchase',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async =>
+          [GbVerifiedBundle(
+            id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
+            allowanceGb: 2, costMb: 2000, validityDays: 30,
+            providerAmount: '1500.00',
+            expiresAt: DateTime.utc(2099),
+          )]),
+      ],
+      child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('2 GB'), findsOneWidget);
+    expect(find.textContaining('2,000 MB'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pump();
+    final action = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Review bundle'));
+    expect(action.onPressed, isNull);
+    expect(find.textContaining('Suggested: MTN'), findsOneWidget);
+    await tester.tap(find.text('2 GB'));
+    await tester.pump();
+    expect(tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
+      isNotNull);
+    expect(find.text('Review before purchase'), findsOneWidget);
+    expect(find.text('Confirm data purchase'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Data never offers unverified Flutterwave purchases',
       (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(
-      body: DataRedemptionScreen(),
-    )));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sessionProvider.overrideWith(_SignedIn.new),
+        gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
+      ],
+      child: const MaterialApp(home: Scaffold(
+        body: DataRedemptionScreen(),
+      )),
+    ));
+    await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);

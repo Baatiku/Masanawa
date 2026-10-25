@@ -1,17 +1,34 @@
 import { PgSavedLibraryRepository } from "@masanawa/postgres";
+import type { Pool } from "@masanawa/postgres";
 import {
   projectVerifiedWholeGbBundles,
   type ApprovedWholeGbBundle,
 } from "./gb_data/data_catalogue.js";
 import { createLiveFlutterwaveGbDataItems } from "./gb_data/flutterwave_live_items.js";
 import type { GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import type { GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
+import { createBillstack9PsbClient } from "./gb_wallet/billstack_provider.js";
+import type { BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
+import { DEFAULT_RECHARGE_RATE_BOOK } from "./gb_wallet/pricing.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
-import { createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility, PgFeedMediaAuthorization, createMasanaInboxRepository, createPostgresGbWalletRepository, ensureMasanaCatalogProfiles, withCatalogProvisionLock } from "@masanawa/postgres";
+import {
+  createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
+  PgFeedMediaAuthorization,
+  createMasanaInboxRepository,
+  createPostgresGbWalletRepository,
+  createPostgresGbRequestRepository,
+  createGbUsageReservations,
+  createGbDataJournal,
+  createGbBillstackRepository,
+  ensureMasanaCatalogProfiles,withCatalogProvisionLock,
+} from "@masanawa/postgres";
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
@@ -195,8 +212,8 @@ export interface ServiceDatabaseDependency {
     eligibility: PgStatusEligibility;
     published: PgFeedMediaAuthorization;
   };
-  /** Reuses the same canonical platform Pool for Rooms and C10. */
-  readonly featurePool?: import("@masanawa/postgres").Pool;
+  /** Shared PostgreSQL Pool for retained Masana, Status and MB functionality. */
+  readonly featurePool?: Pool;
   readonly callHistory?: CallHistoryRepository & CallHistoryRecorder;
   readonly readinessCheck: ReadinessCheck;
   readonly platformAgentIdentity?: PlatformAgentIdentityProvisioner;
@@ -1604,9 +1621,7 @@ export async function startGatewayService(
     await database.close().catch(() => undefined);
     throw error;
   }
-
-  // One canonical signed-in fan and tenant authority, shared with Status and
-  // Videos. Feature flags default OFF; no Room paid/subscription activation.
+  // One signed-in fan and tenant authority for retained Status, Masana and MB services.
   const featurePool = database.featurePool;
   const featureTenant = platformTenantId;
   const resolveFeatureFan = async (authorizationHeader: string | undefined) => {
@@ -1641,6 +1656,94 @@ export async function startGatewayService(
       authorize: async (header: string | undefined) => resolveFeatureFan(header),
       read: createPostgresGbWalletRepository(featurePool).read,
     } : undefined);
+  // No legacy Credit Send fallback. The signer is a private Railway secret,
+  // never a client-supplied or generated-on-each-request review authority.
+  const mbSendReviewSecret = env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
+  const gbSendReview: GbSendPorts | undefined =
+    options.appOptions?.gbSendReview ??
+    (featurePool && sessions && featureTenant &&
+        mbSendReviewSecret && Buffer.byteLength(mbSendReviewSecret, "utf8") >= 32
+      ? {
+          authorize: resolveFeatureFan,
+          resolveRecipient: async (actor, username) => {
+            // Server-only resolution; do not infer ownership from a display
+            // name, user-provided ID, unverified contact or human chat.
+            // Active user + mutual block + operator-safety checks are required.
+            const result = await featurePool.query<{
+              user_id: string; handle: string; display_name: string;
+            }>(`
+              SELECT p.user_id,p.handle,p.display_name
+              FROM talks.public_profiles p
+              JOIN identity.users u
+                ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
+              WHERE p.tenant_id=$1 AND p.handle=$3
+                AND u.state='active' AND p.user_id <> $2
+                AND NOT EXISTS (
+                  SELECT 1 FROM talks.safety_preferences b
+                  WHERE b.tenant_id=p.tenant_id AND b.blocked=true
+                    AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id)
+                      OR (b.subject_user_id=$2 AND b.viewer_user_id=p.user_id))
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM talks.safety_enforcement se
+                  WHERE se.tenant_id=p.tenant_id
+                    AND se.target_kind='profile' AND se.target_id=p.handle
+                    AND se.visibility IN ('restricted','blocked')
+                )
+              LIMIT 1
+            `, [actor.tenantId,actor.userId,username]);
+            const row = result.rows[0];
+            return row ? {
+              userId: row.user_id, username: row.handle,
+              displayName: row.display_name, active: true,
+            } : null;
+          },
+          balance: createPostgresGbWalletRepository(featurePool).read,
+          transfer: createPostgresGbWalletRepository(featurePool).transfer,
+          reviewSecret: mbSendReviewSecret,
+        }
+      : undefined);
+  const gbRequests: GbRequestPorts | undefined =
+    options.appOptions?.gbRequests ??
+    (featurePool && sessions && featureTenant && gbSendReview
+      ? {authorize: resolveFeatureFan,
+         resolveRecipient: gbSendReview.resolveRecipient,
+         store: createPostgresGbRequestRepository(featurePool)}
+      : undefined);
+  // Funding instructions appear only after provider-verified 9PSB assignment.
+  const billstackSecret = env.MASANAWA_BILLSTACK_SECRET_KEY?.trim();
+  const billstackFunding: BillstackFundingPorts | undefined =
+    options.appOptions?.billstackFunding ??
+    (billstackSecret && featurePool && sessions && featureTenant ? (() => {
+      const storage = createGbBillstackRepository(featurePool);
+      const provider = createBillstack9PsbClient({secretKey:billstackSecret});
+      return {
+        authorize:async(header:string|undefined)=>resolveFeatureFan(header),
+        applicant:async(actor:{tenantId:string;userId:string},reference:string)=>{
+          const result=await featurePool.query<{
+            display_name:string;email:string|null;phone:string|null;
+          }>("SELECT display_name,email,phone FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2",
+            [actor.tenantId,actor.userId]);
+          const profile=result.rows[0];
+          if(!profile?.email || !profile.phone) {
+            throw new Error("billstack.verified_contact_required");
+          }
+          const phone=profile.phone.trim().replace(/^\\+234/,"0");
+          const names=profile.display_name.trim().split(/\\s+/);
+          return {reference,email:profile.email.trim(),phone,
+            firstName:names[0]??"",lastName:names.slice(1).join(" ") || (names[0] ?? "")};
+        },
+        read:storage.read,
+        start:storage.start,
+        create:provider.reserve,
+        finalize:storage.finalize,
+        credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0],
+          quote:Parameters<typeof storage.applyVerifiedPayment>[1])=>
+          storage.applyVerifiedPayment(payment,quote),
+        webhookSecret:billstackSecret,
+        rateBook:DEFAULT_RECHARGE_RATE_BOOK,
+      };
+    })() : undefined);
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {
@@ -1695,6 +1798,32 @@ export async function startGatewayService(
           liveItems: createLiveFlutterwaveGbDataItems(flutterwaveBills),
         };
       })();
+    const gbDataPurchases: GbDataPurchaseRoutes | undefined =
+      options.appOptions?.gbDataPurchases ?? (() => {
+        if (env.MASANAWA_GB_DATA_PURCHASE_ENABLED !== "true") return undefined;
+        if (!gbDataCatalogue || !flutterwaveBills || !featurePool ||
+            !sessions || !featureTenant) {
+          throw new TypeError("GB Data purchase enabled without approved live catalogue, credentialed provider and durable MB ledger");
+        }
+        const reservations=createGbUsageReservations(featurePool);
+        const journal=createGbDataJournal(featurePool);
+        return {
+          authorize:gbDataCatalogue.authorize,
+          service:{
+            approved:gbDataCatalogue.approved,
+            liveItems:gbDataCatalogue.liveItems,
+            reserve:reservations.reserve,
+            capture:reservations.capture,
+            release:reservations.release,
+            claim:journal.claim,
+            read:journal.read,
+            resolve:journal.resolve,
+            pay:(input:Parameters<typeof flutterwaveBills.createPayment>[0])=>
+              flutterwaveBills.createPayment(input),
+            status:(reference:string)=>flutterwaveBills.getStatus(reference),
+          },
+        };
+      })();
     app = appFactory({
       ...(status ? {status} : {}),
       ...(masana ? {masana} : {}),
@@ -1702,6 +1831,8 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       productScope,
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
+      ...(gbDataPurchases ? { gbDataPurchases } : {}),
+      ...(billstackFunding ? { billstackFunding } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
       ...(sessions ? { mobileDiagnostics: {
@@ -1731,12 +1862,14 @@ export async function startGatewayService(
             } : {}),
           }) }
         : {}),
-      // Paystack customer creation and identity verification precede account assignment.
-      // This never issues MSNW; it only establishes provider-verified KYC.
-      ...(msnwPaystackEnrollment ? { msnwPaystackEnrollment } : {}),
+      // Legacy P2P and Credit Send are retired at the application boundary.
+      // The historical escrow and credit ledgers remain intact for readback,
+      // reconciliation, retention and any required account-data exports.
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
+      ...(gbSendReview ? { gbSendReview } : {}),
+      ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
         : {}),

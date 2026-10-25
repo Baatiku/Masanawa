@@ -35,6 +35,8 @@ void main() {
   test('Masana contacts never expose humans or persona creation', () {
     final roster = _source('screens/chat/masana_list_screen.dart');
     expect(roster, contains("Search Masana"));
+    expect(roster, contains('masanaContactName(agent.displayName)'));
+    expect(roster, isNot(contains('agent.roleLabel,\n                            maxLines')));
     for (final retired in ['HumanContactsList', 'humanCallStart(',
                            'Create Masana', "Tab(text: 'Humans')",
                            'MyMasanaScreen']) {
@@ -77,6 +79,11 @@ void main() {
       expect(sheet, isNot(contains(retired)));
     }
     expect(chat, isNot(contains("value: 'room'")));
+  });
+
+  test('retired Rooms and Videos feature packages contain no source files', () {
+    expect(Directory('lib/src/features/rooms').existsSync(), isFalse);
+    expect(Directory('lib/src/features/videos').existsSync(), isFalse);
   });
 
   test('notification controls only offer active categories', () {

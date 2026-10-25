@@ -1,0 +1,112 @@
+import {randomUUID} from "node:crypto";
+import type {FastifyInstance} from "fastify";
+import {verifyBillstackWebhook,type BillstackReceivedPayment} from "./billstack_provider.js";
+import {quoteVerifiedDeposit,type RechargeRateBook} from "./pricing.js";
+
+export interface BillstackFundingActor {tenantId:string;userId:string}
+export interface BillstackAccount {
+ state:"pending"|"assigned"|"suspended";
+ reference:string;accountNumber:string|null;accountName:string|null;bankName:string|null;bankId:"9PSB";
+}
+export interface BillstackFundingPorts {
+ authorize:(header:string|undefined)=>Promise<BillstackFundingActor>;
+ applicant:(actor:BillstackFundingActor,reference:string)=>Promise<{
+  reference:string;email:string;phone:string;firstName:string;lastName:string;
+ }>;
+ read:(actor:BillstackFundingActor)=>Promise<BillstackAccount|null>;
+ start:(actor:BillstackFundingActor,reference:string)=>Promise<{account:BillstackAccount;created:boolean}>;
+ create:(input:{reference:string;email:string;phone:string;firstName:string;lastName:string})=>
+   Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB"}>;
+ finalize:(actor:BillstackFundingActor,reference:string,account:{
+  reference:string;accountNumber:string;accountName:string;bankName:string;bankId:"9PSB";
+ })=>Promise<BillstackAccount>;
+ credit:(payment:BillstackReceivedPayment,quote:(amountKobo:number,carry:{
+  numerator:string;denominator:string;
+ })=>{rateVersion:string;creditedMb:number;remainder:{numerator:string;denominator:string}})
+ =>Promise<{state:"credited"|"duplicate";creditedMb:number;eventId:string}>;
+ webhookSecret:string;
+ rateBook:RechargeRateBook;
+ now?:()=>number;
+}
+
+const safe=(account:BillstackAccount|null)=>{
+ if(!account)return {state:"unassigned" as const};
+ // Never invent transfer instructions when provider response is pending.
+ if(account.state!=="assigned")return {state:account.state};
+ if(!account.accountNumber||!account.accountName||!account.bankName)throw new Error("billstack.account_not_ready");
+ return {state:"assigned" as const, bankId:"9PSB" as const,bankName:account.bankName,
+  accountNumber:account.accountNumber,accountName:account.accountName};
+};
+export function registerBillstackFundingRoutes(app:FastifyInstance,ports:BillstackFundingPorts) {
+ const actor=async(header:string|undefined)=>{
+  const identity=await ports.authorize(header);
+  if(!identity?.tenantId||!identity.userId)throw new Error("unauthorized");
+  return identity;
+ };
+ app.get("/v1/gb/wallet/virtual-account",async(request,reply)=>{
+  reply.header("cache-control","no-store");
+  let person:BillstackFundingActor;
+  try{person=await actor(request.headers.authorization);}catch{
+    reply.code(401);return {error:{code:"unauthorized"}};
+  }
+  try{return {account:safe(await ports.read(person))};}catch{
+    reply.code(503);return {error:{code:"bank_account_unavailable"}};
+  }
+ });
+ app.post("/v1/gb/wallet/virtual-account",async(request,reply)=>{
+  reply.header("cache-control","no-store");
+  let person:BillstackFundingActor;
+  try{person=await actor(request.headers.authorization);}catch{
+    reply.code(401);return {error:{code:"unauthorized"}};
+  }
+  try{
+    const existing=await ports.read(person);
+    if(existing)return {account:safe(existing)};
+    const ref="gb"+randomUUID().replaceAll("-","");
+    const applicant=await ports.applicant(person,ref);
+    const first=await ports.start(person,ref);
+    if(!first.created)return {account:safe(first.account)};
+    // Provider create is a financial write: never automatically retry after
+    // an unknown outcome; the durable pending reference is operator-reconcilable.
+    const generated=await ports.create(applicant);
+    const assigned=await ports.finalize(person,ref,generated);
+    return {account:safe(assigned)};
+  }catch{
+    reply.code(503);
+    return {error:{code:"account_assignment_pending",message:"Account assignment is pending verification. Do not transfer until bank details appear."}};
+  }
+ });
+ // One scoped raw-body parser for exactly this provider route. No reserialised
+ // JSON HMAC and no global request parser change.
+ app.register(async scope=>{
+  scope.removeContentTypeParser("application/json");
+  scope.addContentTypeParser("application/json",{parseAs:"buffer",bodyLimit:65536},
+    (_request,body,done)=>done(null,body));
+  scope.post("/webhooks/billstack/gb",async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    try{
+      const raw=request.body;
+      if(!Buffer.isBuffer(raw))throw new Error("invalid_raw_body");
+      const header=(name:string)=>{
+        const entry=request.headers[name];
+        return typeof entry==="string"?entry:undefined;
+      };
+      const verified=verifyBillstackWebhook(raw,{
+        "x-wiaxy-timestamp":header("x-wiaxy-timestamp"),
+        "x-wiaxy-signature-256":header("x-wiaxy-signature-256"),
+      },ports.webhookSecret,ports.now?.());
+      const receipt=await ports.credit(verified,(amountKobo,carry)=>{
+        const result=quoteVerifiedDeposit(amountKobo,ports.rateBook,carry);
+        return {rateVersion:result.rateVersion,creditedMb:result.creditedMb,
+          remainder:result.remainder};
+      });
+      return {accepted:true,duplicate:receipt.state==="duplicate"};
+    }catch{
+      // Unknown event remains retryable; never acknowledge a forged or
+      // unmatched event as credited. Never echo private signing data.
+      reply.code(503);
+      return {error:{code:"provider_notification_unverified"}};
+    }
+  });
+ });
+}

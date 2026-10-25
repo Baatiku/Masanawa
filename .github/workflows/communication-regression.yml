@@ -28,12 +28,6 @@ on:
       - "services/gateway/src/agent_conversation*"
       - "services/gateway/src/live_voice_token*"
       - "services/gateway/src/call_history/**"
-      - "services/gateway/src/incoming_calls/**"
-      - "apps/mobile/lib/src/human_chat/**"
-      - "apps/mobile/lib/src/human_calls/**"
-      - "apps/mobile/test/human_*"
-      - "services/gateway/src/human_communication/**"
-      - "packages/talks/migrations/**"
       - ".github/workflows/communication-regression.yml"
   push:
     branches: [main]
@@ -48,13 +42,7 @@ on:
       - "apps/mobile/lib/src/state/ai_chat_state.dart"
       - "apps/mobile/lib/src/calls/**"
       - "services/gateway/src/live_voice_token.ts"
-      - "services/gateway/src/incoming_calls/**"
       - "services/gateway/src/call_history/**"
-      - "apps/mobile/lib/src/human_chat/**"
-      - "apps/mobile/lib/src/human_calls/**"
-      - "apps/mobile/test/human_*"
-      - "services/gateway/src/human_communication/**"
-      - "packages/talks/migrations/**"
       - ".github/workflows/communication-regression.yml"
 
 permissions: {contents: read}
@@ -89,13 +77,13 @@ jobs:
           services/gateway/src/agent_conversation_route.test.ts
           services/gateway/src/live_voice_token.test.ts
           services/gateway/src/paid_voice.test.ts
-      - name: Real PostgreSQL call lifecycle, incoming grants and account-fenced history
+          services/gateway/src/paid_voice_routes.test.ts
+      - name: Real PostgreSQL Masana call history and account-scoped inbox
         # Repository tests allocate and tear down disposable databases. Running
         # files concurrently can terminate another suite's pool (PG 57P01).
         run: |
           pnpm exec vitest run --no-file-parallelism services/gateway/src/call_history
-          pnpm exec vitest run --no-file-parallelism
-          pnpm exec vitest run --no-file-parallelism services/gateway/src/talk_profiles/human_contacts.integration.test.ts adapters/storage/postgres/src/masana_chat/inbox.integration.test.ts
+          pnpm exec vitest run --no-file-parallelism adapters/storage/postgres/src/masana_chat/inbox.integration.test.ts
 
   flutter-message-recording-and-live-call:
     runs-on: ubuntu-latest
@@ -108,7 +96,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable, cache: true}
       - run: flutter pub get
-      - name: Text chat, finite M4A recording, playback, live WebSocket, call and incoming history
+      - name: Masana chat, M4A recording, playback, live WebSocket and call history
         run: >-
           flutter test --no-pub --reporter expanded
           test/agent_experience_test.dart

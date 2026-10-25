@@ -37,13 +37,10 @@ export interface MobileAgentDirectoryEntry {
   readonly defaultPlatformAgent: boolean;
   readonly voiceProvider: string | null;
   readonly voiceName: string | null;
-  readonly roomId?: string;
   readonly portraitKey?: string;
   readonly following?: boolean;
   readonly conversationStarters?: readonly string[];
   readonly socialChannels?: readonly MasanaSocialChannel[];
-  readonly creatorHandle?: string;
-  readonly creatorName?: string;
   readonly countryCode?: string | null;
   readonly countryName?: string | null;
 }

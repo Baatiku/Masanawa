@@ -275,6 +275,13 @@
       "description": "Production configuration for MASANAWA_BILLING_REDIRECT_URL."
     },
     {
+      "name": "MASANAWA_BILLSTACK_SECRET_KEY",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Private Billstack reserved-collection merchant signing/creation authority. Routes remain unavailable without real operator-provisioned credentials and verified 9PSB provider event contract; never a mobile setting."
+    },
+    {
       "name": "MASANAWA_BOOTSTRAP_PLATFORM_AGENTS",
       "owner": "gateway",
       "classification": "public",
@@ -345,6 +352,20 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Disabled by default. Set true only after verified operator mapping and credentialed live Flutterwave Bills read are configured in Masana-lite scope; does not enable purchases."
+    },
+    {
+      "name": "MASANAWA_GB_DATA_PURCHASE_ENABLED",
+      "owner": "gateway/gb-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Only enable Flutterwave whole-GB redemption after approved current operator mapping, live Bills credentials, authenticated MB reservations, forward-only journal migration and independently qualified provider delivery GET are ready."
+    },
+    {
+      "name": "MASANAWA_GB_SEND_REVIEW_SECRET",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Optional 32-byte-or-longer private signing authority for immutable purchased-MB Send review tokens. Provision only when the production atomic recipient ledger and recipient eligibility reader are verified; never reveal to clients."
     },
     {
       "name": "MASANAWA_GEMINI_API_KEY",

@@ -87,13 +87,10 @@ class AgentDirectoryEntry {
     this.defaultPlatformAgent = false,
     this.voiceProvider,
     this.voiceName,
-    this.roomId,
     this.portraitKey,
     this.following = false,
     this.conversationStarters = const [],
     this.socialChannels = const [],
-    this.creatorHandle,
-    this.creatorName,
     this.countryCode,
     this.countryName,
   });
@@ -113,12 +110,10 @@ class AgentDirectoryEntry {
   final bool defaultPlatformAgent;
   final String? voiceProvider;
   final String? voiceName;
-  final String? roomId;
   final String? portraitKey;
   final bool following;
   final List<String> conversationStarters;
   final List<AgentSocialChannel> socialChannels;
-  final String? creatorHandle, creatorName;
   final String? countryCode, countryName;
 
   String get countrySearchText => [countryName ?? '', countryCode ?? '',
@@ -145,13 +140,11 @@ class AgentDirectoryEntry {
         defaultPlatformAgent: defaultPlatformAgent,
         voiceProvider: voiceProvider,
         voiceName: voiceName,
-        roomId: roomId,
         portraitKey: portraitKey,
         following: following,
         conversationStarters: conversationStarters,
         socialChannels: socialChannels,
         countryCode:countryCode,countryName:countryName,
-        creatorHandle:creatorHandle,creatorName:creatorName,
       );
 
   String get initial =>
@@ -185,13 +178,10 @@ class AgentDirectoryEntry {
         'defaultPlatformAgent': defaultPlatformAgent,
         if (voiceProvider != null) 'voiceProvider': voiceProvider,
         if (voiceName != null) 'voiceName': voiceName,
-        if (roomId != null) 'roomId': roomId,
         if (portraitKey != null) 'portraitKey': portraitKey,
         'following': following,
         'conversationStarters': conversationStarters,
         'socialChannels': [for (final channel in socialChannels) channel.toJson()],
-        if(creatorHandle!=null) 'creatorHandle':creatorHandle,
-        if(creatorName!=null) 'creatorName':creatorName,
         if(countryCode!=null) 'countryCode':countryCode,
         if(countryName!=null) 'countryName':countryName,
       };
@@ -222,8 +212,6 @@ class AgentDirectoryEntry {
       defaultPlatformAgent: json['defaultPlatformAgent'] == true,
       voiceProvider: (json['voiceProvider'] as String?)?.trim(),
       voiceName: (json['voiceName'] as String?)?.trim(),
-      creatorHandle:json['creatorHandle'] is String && RegExp(r'^[a-z0-9_][a-z0-9_.-]{1,39}$').hasMatch(json['creatorHandle'] as String) ? json['creatorHandle'] as String : null,
-      creatorName:json['creatorName'] is String ? (json['creatorName'] as String).trim() : null,
       countryCode:json['countryCode'] is String && RegExp(r'^[A-Z]{2}$').hasMatch(json['countryCode'] as String)?json['countryCode'] as String:null,
       countryName:json['countryName'] is String && (json['countryName'] as String).trim().isNotEmpty?(json['countryName'] as String).trim():null,
       portraitKey: json['portraitKey'] is String &&
@@ -240,8 +228,6 @@ class AgentDirectoryEntry {
               .map(AgentSocialChannel.fromJson)
               .whereType<AgentSocialChannel>().take(7).toList(growable: false)
           : const [],
-      roomId: (json['roomId'] is String && (json['roomId'] as String).trim().isNotEmpty)
-          ? (json['roomId'] as String).trim() : null,
     );
   }
 }

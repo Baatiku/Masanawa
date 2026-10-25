@@ -24,6 +24,10 @@ describe("gateway service bootstrap", () => {
       ["GET", "/v1/rooms/room_12345678/questions"],
       ["GET", "/v1/admin/rooms"],
       ["GET", "/v1/rooms/room_12345678/discussion"],
+      ["GET", "/v1/rooms"],
+      ["GET", "/v1/rooms/discover"],
+      ["GET", "/v1/rooms/room_12345678/community"],
+      ["POST", "/v1/rooms/room_12345678/community/timeline"],
     ] as const) {
       const response = await app.inject({ method, url });
       expect(response.statusCode, `${method} ${url}`).toBe(404);

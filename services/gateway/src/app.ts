@@ -8,7 +8,12 @@ import {
   type RechargeRateBook,
 } from "./gb_wallet/pricing.js";
 import { registerGbDataCatalogueRoutes, type GbDataCataloguePorts } from "./gb_data/data_catalogue_routes.js";
+import { registerGbDataPurchaseRoutes, type GbDataPurchaseRoutes } from "./gb_data/data_purchase_routes.js";
+import { registerBillstackFundingRoutes, type BillstackFundingPorts } from "./gb_wallet/billstack_funding_routes.js";
 import { registerGbWalletSummaryRoutes, type GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
+import { registerGbSendReviewRoutes } from "./gb_wallet/send_routes.js";
+import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import { registerGbRequestRoutes, type GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { registerMobileDiagnosticsRoutes, type MobileDiagnosticsPorts } from "./mobile_diagnostics.js";
 import { registerAuthEmailRoutes } from "./auth_email_routes.js";
 import { streamConversationReply } from "./conversation_stream.js";
@@ -95,8 +100,14 @@ export interface GatewayAppOptions {
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
+  /** New review-confirmed purchased-MB transfer; no legacy Credits. */
+  readonly gbSendReview?: GbSendPorts;
+  readonly gbRequests?: GbRequestPorts;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
+  readonly gbDataPurchases?: GbDataPurchaseRoutes;
+  readonly billstackFunding?: BillstackFundingPorts;
+
 }
 
 const HealthResponseSchema = Type.Object(
@@ -146,41 +157,6 @@ const AgentDirectoryEntrySchema = Type.Object(
 const AgentDirectoryResponseSchema = Type.Object(
   {
     agents: Type.Array(AgentDirectoryEntrySchema),
-  },
-  { additionalProperties: false },
-);
-
-
-const HomeAssistantSchema = Type.Object(
-  {
-    role: Type.Union([Type.Literal("gwana"), Type.Literal("gwani")]),
-    characterId: Type.String(),
-    displayName: Type.String(),
-    description: Type.String(),
-    voiceLabel: Type.Union([Type.String(), Type.Null()]),
-    avatarUrl: Type.Union([Type.String(), Type.Null()]),
-    isAvailable: Type.Boolean(),
-  },
-  { additionalProperties: false },
-);
-
-const HomeRoomSchema = Type.Object(
-  {
-    roomId: Type.String(),
-    title: Type.String(),
-    description: Type.String(),
-    iconKey: Type.String(),
-    continuationLabel: Type.Union([Type.String(), Type.Null()]),
-    isAvailable: Type.Boolean(),
-  },
-  { additionalProperties: false },
-);
-
-const HomeResponseSchema = Type.Object(
-  {
-    assistants: Type.Array(HomeAssistantSchema),
-    rooms: Type.Array(HomeRoomSchema),
-    continuations: Type.Array(Type.Unknown()),
   },
   { additionalProperties: false },
 );
@@ -370,7 +346,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
+  if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
+  if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
+  if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 
@@ -787,114 +767,6 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           })),
         ],
       }),
-    );
-
-    app.get(
-      "/home",
-      {
-        schema: {
-          response: { 200: HomeResponseSchema },
-        },
-      },
-      async (request) => {
-        const agents = await directory.list({
-          authorizationHeader: request.headers.authorization,
-        });
-        const support = agents.filter((agent) => agent.supportAgent);
-
-        const byRole = (
-          role: "gwana" | "gwani",
-        ) => {
-          const expectedName = role === "gwana" ? "gwana" : "gwani";
-          const expectedVoice = role === "gwana" ? "sulafat" : "bodi";
-          const agent =
-            support.find(
-              (item) => item.displayName.trim().toLowerCase() === expectedName,
-            ) ??
-            support.find(
-              (item) => item.voiceName?.trim().toLowerCase() === expectedVoice,
-            );
-          if (!agent) return null;
-          return {
-            role,
-            characterId: agent.characterId,
-            displayName: agent.displayName,
-            description: agent.about || agent.roleLabel,
-            voiceLabel: agent.voiceName,
-            avatarUrl: null,
-            isAvailable: agent.presence !== "offline",
-          } as const;
-        };
-
-        const assistants = [];
-        const gwana = byRole("gwana");
-        const gwani = byRole("gwani");
-        if (gwana !== null) assistants.push(gwana);
-        if (gwani !== null) assistants.push(gwani);
-
-        return {
-          assistants,
-          rooms: [
-            {
-              roomId: "room.internet-cafe",
-              title: "Internet Cafe",
-              description: "Data, airtime, bills, applications and documents",
-              iconKey: "internet_cafe",
-              continuationLabel: null,
-              isAvailable: true,
-            },
-            {
-              roomId: "room.study-center",
-              title: "Study Center",
-              description: "Lessons, homework help and exam preparation",
-              iconKey: "study",
-              continuationLabel: null,
-              isAvailable: true,
-            },
-            {
-              roomId: "room.story-radio",
-              title: "Story Radio",
-              description: "Serialized audio stories",
-              iconKey: "story_radio",
-              continuationLabel: null,
-              isAvailable: false,
-            },
-            {
-              roomId: "room.work-business",
-              title: "Work & Business",
-              description: "Plans, proposals, reports and project work",
-              iconKey: "work",
-              continuationLabel: null,
-              isAvailable: false,
-            },
-            {
-              roomId: "room.research-answers",
-              title: "Research & Answers",
-              description: "Research, comparisons and sourced answers",
-              iconKey: "research",
-              continuationLabel: null,
-              isAvailable: false,
-            },
-            {
-              roomId: "room.news",
-              title: "News",
-              description: "Current sourced news and articles",
-              iconKey: "news",
-              continuationLabel: null,
-              isAvailable: false,
-            },
-            {
-              roomId: "room.groups",
-              title: "Group Rooms",
-              description: "Shared rooms with people and AI",
-              iconKey: "groups",
-              continuationLabel: null,
-              isAvailable: false,
-            },
-          ],
-          continuations: [],
-        };
-      },
     );
 
     app.put(
