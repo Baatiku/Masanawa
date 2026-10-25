@@ -96,7 +96,7 @@ void main() {
     expect(restored.portraitKey, 'gwani');
     expect(restored.following, isTrue);
     expect(restored.conversationStarters, hasLength(2));
-    expect(restored.roomId, 'room_masana_00_gwani');
+    expect(restored.toJson().containsKey('roomId'), isFalse);
     expect(restored.presence, AgentPresence.unknown);
   });
 
@@ -138,14 +138,14 @@ void main() {
     expect(entry.socialChannels.map((v) => v.platform), ['telegram']);
   });
 
-  test('public creator link survives directory cache without leaking private ownership', () {
+  test('retired creator metadata is dropped from any restored directory cache', () {
     final entry = AgentDirectoryEntry.fromJson({
       ...entryWithPresence('unknown'),
       'creatorHandle': 'amina', 'creatorName': 'Amina Bello',
     });
     final restored = AgentDirectoryEntry.fromJson(entry.withUnverifiedPresence().toJson());
-    expect(restored.creatorHandle, 'amina');
-    expect(restored.creatorName, 'Amina Bello');
+    expect(restored.toJson().containsKey('creatorHandle'), isFalse);
+    expect(restored.toJson().containsKey('creatorName'), isFalse);
     expect(restored.toJson().containsKey('ownerUserId'), isFalse);
   });
 
