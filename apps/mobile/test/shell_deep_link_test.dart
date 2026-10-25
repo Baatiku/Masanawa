@@ -14,22 +14,22 @@ void main() {
   test('public Masana links resolve to the public profile route', () {
     expect(
       shellDeepLinkRoute(Uri.parse('https://masanawa.com/twin/amina_bello')),
-      '/persona/amina_bello',
+      '/masana',
     );
     expect(
       shellDeepLinkRoute(Uri.parse('masanawa://twin/amina_bello')),
-      '/persona/amina_bello',
+      '/masana',
     );
   });
 
   test('public Talk links resolve to the canonical Talk route', () {
     expect(
       shellDeepLinkRoute(Uri.parse('https://masanawa.com/talk/talk-123')),
-      '/talk/talk-123',
+      '/home?tab=status',
     );
     expect(
       shellDeepLinkRoute(Uri.parse('masanawa://talk/talk-123')),
-      '/talk/talk-123',
+      '/home?tab=status',
     );
   });
 
@@ -49,16 +49,16 @@ void main() {
 
   test('modern resource links resolve to authenticated destination routes', () {
     for (final item in <String, String>{
-      'masanawa://rooms/room_123': '/rooms/room_123',
+      'masanawa://rooms/room_123': '/home?tab=status',
       'masanawa://masana/character_abc': '/masana/character_abc',
       'masanawa://status/post_123': '/status/post_123',
       'masanawa://calls/history': '/home?tab=calls',
-      'masanawa://wallet/transaction/order_123': '/wallet/transactions/order_123',
+      'masanawa://wallet/transaction/order_123': '/home?tab=wallet',
       'masanawa://search': '/search',
-      'https://masanawa.com/room/room_123': '/rooms/room_123',
+      'https://masanawa.com/room/room_123': '/home?tab=status',
       'https://masanawa.com/masana/character_abc': '/masana/character_abc',
       'https://masanawa.com/status/post_123': '/status/post_123',
-      'https://masanawa.com/transaction/order_123': '/wallet/transactions/order_123',
+      'https://masanawa.com/transaction/order_123': '/home?tab=wallet',
     }.entries) {
       expect(shellDeepLinkRoute(Uri.parse(item.key)), item.value,
           reason: item.key);
@@ -146,7 +146,7 @@ void main() {
     expect(pending.take(ready: false), isNull);
     expect(
       shellDeepLinkRoute(pending.take(ready: true)!),
-      '/persona/amina_bello',
+      '/masana',
     );
     expect(pending.take(ready: true), isNull);
   });
@@ -157,7 +157,7 @@ void main() {
     expect(pending.take(ready: false), isNull);
     expect(
       shellDeepLinkRoute(pending.take(ready: true)!),
-      '/talk/talk-123',
+      '/home?tab=status',
     );
     expect(pending.take(ready: true), isNull);
   });

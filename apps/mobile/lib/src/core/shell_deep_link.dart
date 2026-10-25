@@ -13,8 +13,8 @@ String? shellDeepLinkRoute(Uri uri) {
     return null;
   }
 
-  // Human push payloads use canonical internal paths. Only these exact paths
-  // are accepted; relative links cannot inject a different app destination.
+  // Old human communication links are validated and land directly on safe tabs.
+  // No retired screen or call intent is instantiated.
   final human = uri.pathSegments;
   if (uri.queryParameters.isEmpty) {
     if (!uri.hasScheme &&
@@ -23,14 +23,14 @@ String? shellDeepLinkRoute(Uri uri) {
         human[0] == 'human' &&
         const ['chat', 'call'].contains(human[1]) &&
         _validResourceId(human[2])) {
-      return '/human/${human[1]}/${Uri.encodeComponent(human[2])}';
+      return human[1] == 'call' ? '/home?tab=calls' : '/home?tab=chats';
     }
     if (uri.scheme == 'masanawa' &&
         uri.host == 'human' &&
         human.length == 2 &&
         const ['chat', 'call'].contains(human[0]) &&
         _validResourceId(human[1])) {
-      return '/human/${human[0]}/${Uri.encodeComponent(human[1])}';
+      return human[0] == 'call' ? '/home?tab=calls' : '/home?tab=chats';
     }
     if (uri.scheme == 'https' &&
         uri.host.toLowerCase() == 'masanawa.com' &&
@@ -38,7 +38,7 @@ String? shellDeepLinkRoute(Uri uri) {
         human[0] == 'human' &&
         const ['chat', 'call'].contains(human[1]) &&
         _validResourceId(human[2])) {
-      return '/human/${human[1]}/${Uri.encodeComponent(human[2])}';
+      return human[1] == 'call' ? '/home?tab=calls' : '/home?tab=chats';
     }
     if ((uri.scheme == 'https' &&
             uri.host.toLowerCase() == 'masanawa.com' &&
@@ -58,7 +58,7 @@ String? shellDeepLinkRoute(Uri uri) {
     if (uri.host == 'rooms' &&
         segments.length == 1 &&
         _validResourceId(segments.single)) {
-      return '/rooms/${Uri.encodeComponent(segments.single)}';
+      return '/home?tab=status';
     }
     if (uri.host == 'masana' &&
         segments.length == 1 &&
@@ -79,7 +79,7 @@ String? shellDeepLinkRoute(Uri uri) {
         segments.length == 2 &&
         segments.first == 'transaction' &&
         _validTransactionId(segments.last)) {
-      return '/wallet/transactions/${Uri.encodeComponent(segments.last)}';
+      return '/home?tab=wallet';
     }
     if (uri.host == 'search' && segments.isEmpty) {
       return '/search';
@@ -115,7 +115,7 @@ String? shellDeepLinkRoute(Uri uri) {
         ).hasMatch(uri.pathSegments[1])) {
       return null;
     }
-    return '/calls/incoming/${uri.pathSegments[1]}';
+    return '/home?tab=calls';
   }
 
   if (uri.scheme == 'https') {
@@ -127,7 +127,7 @@ String? shellDeepLinkRoute(Uri uri) {
     final kind = uri.pathSegments.first;
     final id = uri.pathSegments[1];
     if (kind == 'room' && _validResourceId(id)) {
-      return '/rooms/${Uri.encodeComponent(id)}';
+      return '/home?tab=status';
     }
     if (kind == 'masana' && _validCharacterId(id)) {
       return '/masana/${Uri.encodeComponent(id)}';
@@ -136,15 +136,15 @@ String? shellDeepLinkRoute(Uri uri) {
       return '/status/${Uri.encodeComponent(id)}';
     }
     if (kind == 'transaction' && _validTransactionId(id)) {
-      return '/wallet/transactions/${Uri.encodeComponent(id)}';
+      return '/home?tab=wallet';
     }
     if (kind == 'twin') {
       if (!_validPublicId(id)) return null;
-      return '/persona/${Uri.encodeComponent(id)}';
+      return '/masana';
     }
     if (kind == 'talk') {
       if (!_validTalkId(id)) return null;
-      return '/talk/${Uri.encodeComponent(id)}';
+      return '/home?tab=status';
     }
     return null;
   }
@@ -168,7 +168,7 @@ String? shellDeepLinkRoute(Uri uri) {
     }
     final publicId = uri.pathSegments.single;
     if (!_validPublicId(publicId)) return null;
-    return '/persona/${Uri.encodeComponent(publicId)}';
+    return '/masana';
   }
 
   if (uri.host == 'talk') {
@@ -177,7 +177,7 @@ String? shellDeepLinkRoute(Uri uri) {
     }
     final talkId = uri.pathSegments.single;
     if (!_validTalkId(talkId)) return null;
-    return '/talk/${Uri.encodeComponent(talkId)}';
+    return '/home?tab=status';
   }
 
   if (uri.host == 'activity') {

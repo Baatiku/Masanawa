@@ -4,10 +4,10 @@ import 'package:masanawa/src/calls/call_history.dart';
 
 void main() {
   const id = '9db005b8-7126-4f11-a12a-7b48c1e02812';
-  test('incoming hints route only validated metadata', () {
+  test('retired incoming hints validate metadata and redirect to Calls', () {
     expect(
       shellDeepLinkRoute(Uri.parse('masanawa://calls/incoming/$id')),
-      '/calls/incoming/$id',
+      '/home?tab=calls',
     );
     for (final raw in [
       'masanawa://calls/incoming/bad',

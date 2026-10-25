@@ -25,3 +25,9 @@ Basis: `AGENTS.md`, `docs/SCREEN-JOURNEYS.md` and live `main` at `b4edb8778ecbcd
 6. **Acceptance:** Flutter analyze and widget tests, deep links/push smoke tests, startup and idle network trace (notably retired polling), account A→B switch, 320dp/large-font, and real release device before marking these as finished. No APK without explicit owner request.
 
 No live funding or Flutterwave provider operation is involved in these deletions. Oracle Cloud account not activated; the optional fixed-IP relay is parked until a reliable outbound IP exists.
+
+## Source deletion batch — 25 October
+
+Starting main: `26d4e3139192ffcc68b905fb009e6b17b74573a2` (PR #400 already merged, all head checks passed). Deleted 187 unreachable Dart files after an import/export/part traversal from `lib/main.dart`, plus obsolete feature tests. Removed root human call coordinator, human inbox polling/controller subscription, quick reply/share listeners, native share bridge/intents, incoming call notification/channel/background handler and full-screen/phone-call permissions. Removed unused public creator transport implementations/providers and unused WebView/QR scanner dependencies. Preserved retained media authorization, Masana inbox/search and audio/recording tests; adapted mixed tests instead of retaining retired imports. Calls detail/recording helpers retained. This batch does not finish paid Credits replacement, saved-video cleanup, backend routes/workers or measured handset acceptance. No database migration or historical finance mutation.
+
+Validation pending at branch head; no provider/device/APK acceptance claimed.

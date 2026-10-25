@@ -9,7 +9,6 @@ import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/features/masana_chat/inbox_search.dart';
 import 'package:masanawa/src/screens/chat/chat_list_screen.dart';
-import 'package:masanawa/src/human_chat/screens.dart' show humanInboxProvider;
 import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
 import 'package:masanawa/src/state/session_state.dart';
@@ -134,7 +133,6 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(TestSession.new),
-        humanInboxProvider.overrideWith((ref, key) async => []),
         agentDirectoryProvider.overrideWith(TestDirectory.new),
         aiChatProvider.overrideWith(TestChats.new),
         masanaInboxSearchProvider.overrideWithValue(inbox),
