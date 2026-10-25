@@ -161,6 +161,7 @@ export function createGbSendReviewService(ports: GbSendPorts) {
         recipient:{id:recipient.userId,username:recipient.username,
           displayName:recipient.displayName},
         amountMb:amount, feeMb:0, expiresAt,
+        operationId:"send_"+randomNonce,
         reviewToken:issue(review),
         requiresConfirmation:true as const,
       };
