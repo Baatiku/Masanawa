@@ -12,6 +12,38 @@ export interface CatalogProfileSeed{
 export interface ApprovedCatalogIdentity{
  readonly seed:CatalogProfileSeed;readonly characterId:CharacterId;
 }
+// Platform-authored editorial introductions. These are real server records,
+// not fake device placeholders and not claims of licensed human expertise.
+// Curator-hidden originals are never re-published after moderation.
+const officialStatusIntroductions: Readonly<Record<string,string>> = {
+  gwani: "Welcome to Masanawa. What's one question you'd like to explore together today?",
+  gwana: "Sannu da zuwa Masanawa! Wane batu ne kake son mu tattauna a yau?",
+  amina: "Small questions can lead to better understanding. What would you like to learn about everyday health?",
+  fatima: "Care begins with listening. What's something about wellbeing you'd like to understand?",
+  salim: "A good question deserves a clear answer. What have you been curious about lately?",
+  zainab: "Let's explore how everyday decisions shape our communities. What question is on your mind?",
+  sadiq: "Every useful idea starts with curiosity. What would you like to build or understand today?",
+  musa: "Sometimes the best way to learn is to ask why something works. What's your question?",
+  bello: "Big ideas take shape one small step at a time. What would you like to explore?",
+  umar: "Let's make a complicated idea easier to understand. What's puzzling you today?",
+  safiya: "Great ideas begin by looking at familiar places differently. What inspires you today?",
+  ruqayya: "A challenging question can be the beginning of discovery. What should we solve together?",
+  idris: "Everyday choices are easier when the numbers make sense. What are you curious about?",
+  maryam: "Why do prices, opportunities and choices change? Let's explore a question together.",
+  kabir: "Ideas grow through good conversations. What challenge would you like to think through?",
+  hauwa: "Stories connect us. What's something worth talking about in your community today?",
+  yusuf: "Look closely at the world around you and questions appear everywhere. What do you notice?",
+  haruna: "Learning never stops at the classroom door. What's one new thing you'd like to understand?",
+  bilkisu: "The smallest details often tell fascinating stories. What are you curious about?",
+  nura: "A simple question can open a whole new world of discovery. What's yours?",
+  aisha: "How do everyday things change and interact? Tell me one thing you'd like to learn.",
+  abdulrahman: "Good conversations start with listening to different perspectives. What should we discuss?",
+  layla: "Marhaban! What word or expression would you like to practise together today?",
+  grace: "Words can clarify ideas and bring people together. What would you like to express?",
+  asha: "Namaste! Every new conversation is an opportunity to learn. What would you like to explore?",
+  mei: "Ni hao! Curiosity travels across languages and cultures. What shall we explore today?",
+};
+
 function validateSource(input:ApprovedCatalogIdentity){
  const p=input.seed;
  if(!/^[a-z0-9_-]{3,48}$/.test(p.key)||!/^room_masana_[a-z0-9_]+$/.test(p.roomId)
@@ -94,6 +126,38 @@ export async function ensureMasanaCatalogProfiles(input:{
          [input.tenantId,characterId,revision,JSON.stringify(profile)]);
        if(created.rowCount===1)approved++;
      }
+
+     // One approved real Status post per platform Masana until they have
+     // published content. Seed with the canonical owned ID and a stable
+     // idempotency key. Never recreate a hidden/removed editorial original.
+     // This keeps restart safe and leaves curated posts untouched.
+     const statusBody = officialStatusIntroductions[seed.key];
+     if (!statusBody) throw Error("catalog_status_introduction_missing");
+     await c.query(`INSERT INTO feed.posts (
+         tenant_id,author_type,author_masana_id,kind,body,media_ids,
+         idempotency_key,published_by,state)
+       SELECT $1,'masana',$2,'text',$3,ARRAY[]::text[],
+          'masanawa-platform-intro-v1',$2,'published'
+       WHERE EXISTS (
+         SELECT 1 FROM identity.characters ident
+         JOIN identity.character_ownership owner USING(tenant_id,character_id)
+         JOIN masana.character_revisions rev USING(tenant_id,character_id)
+         WHERE ident.tenant_id=$1 AND ident.character_id=$2
+           AND ident.state='active' AND owner.kind='platform'
+           AND rev.state='approved')
+         AND NOT EXISTS (
+           SELECT 1 FROM feed.posts existing
+           WHERE existing.tenant_id=$1
+             AND existing.author_type='masana'
+             AND existing.author_masana_id=$2
+             AND existing.state='published')
+         AND NOT EXISTS (
+           SELECT 1 FROM feed.posts prior
+           WHERE prior.tenant_id=$1
+             AND prior.published_by=$2
+             AND prior.idempotency_key='masanawa-platform-intro-v1')
+       ON CONFLICT(tenant_id,published_by,idempotency_key) DO NOTHING`,
+       [input.tenantId,characterId,statusBody]);
 
    }
    await c.query("COMMIT");
