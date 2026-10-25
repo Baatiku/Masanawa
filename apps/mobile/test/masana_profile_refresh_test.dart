@@ -44,7 +44,12 @@ class SignedIn extends SessionController {
 class EpochSession extends SignedIn {
   int epoch = 1;
   @override int get authorizationEpoch => epoch;
-  void reauthenticate() { epoch++; state = const SessionSignedIn(user, tokens); }
+  void reauthenticate() {
+    epoch++;
+    state = SessionSignedIn(user, AuthTokens(
+      accessToken: 'new-epoch-$epoch', refreshToken: 'new-refresh',
+      accessExpiresIn: 3600, user: user));
+  }
 }
 ApiClient client({Completer<Response<dynamic>>? follow}) {
   final dio = Dio();
