@@ -55,6 +55,8 @@ Fetch latest GitHub main and follow the stable UX checklist in `docs/PRODUCT-ROA
 
 **Merged UX #447** (`06ea4fb6`, exact head `af5406d2`): Calls history now opens the original one-to-one Masana call detail, groups authorized records by local date, and keeps verified rows through failed older-page recovery with terminal empty/repeated cursors. Live-call redial remains a separately guarded action; no client-created MB cost/receipt was added. Mobile Build #940/Foundation CI #1375 PASS_REAL. Initial Mobile #936 caught an offscreen detail-assertion test failure, fixed at final head. UX-H04/H05 remain partial for authoritative billed MB usage/receipt, complete filters/export, actual device/audio and accessibility.
 
+**Merged UX #454** (`47e5f8b5`, exact head `d44425c0`): Notifications now bind Activity/Preferences state and all GET/PUT completions to the signed-in authorization epoch, including sign-out/reauthentication under the same user ID. Late prior-session alerts are rejected and the Activity-first tab resets; routine token refresh preserves verified alerts. Mobile Build #959/Foundation CI #1396 PASS_REAL with both widget cases. UX-N02 remains partial pending server read-state, real push permissions/quiet-hours delivery and device acceptance.
+
 Remaining unchecked UX IDs are the queue, especially P0 chat/note/call recovery, portraits, financial recipient selection, Add Data, authoritative history/receipts and device/provider acceptance. No APK; fixed-IP hosting on hold; preserve historical finances and separate Masanawa-App. Older sections below are historical checkpoints, not current PR statuses.
 
 ## Actual source work, separate non-overlapping paths
