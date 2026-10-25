@@ -85,8 +85,8 @@ describe.skipIf(!url)("whole-MB Request reconciliation on disposable PostgreSQL1
     ]);
     expect(first).toEqual(repeated);
     expect(first).toMatchObject({amountMb:400,state:"completed"});
-    expect((await repo().list(actor(payer))).find(x=>x.requestId===created.requestId))
-      ?.state).toBe("paid");
+    expect((await repo().list(actor(payer))).find(x=>x.requestId===created.requestId)?.state)
+      .toBe("paid");
     const ledger=await pool.query<{amount_mb:string}>(`
       SELECT amount_mb::text FROM gb_wallet.movements
       WHERE tenant_id=$1 AND operation_id=$2`,[
