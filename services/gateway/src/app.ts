@@ -1,3 +1,4 @@
+import {GbCallRelayError} from "./gb_calls/errors.js";
 import {registerGbCallRoutes} from "./gb_calls/routes.js";
 import type {GbCallPorts} from "./gb_calls/review.js";
 import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
@@ -254,6 +255,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   app.setErrorHandler((error, request, reply) => {
     if(error instanceof CustomerAuthError) {
       void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
+      return;
+    }
+    if (error instanceof GbCallRelayError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
       return;
     }
     if (error instanceof GeminiProviderError) {

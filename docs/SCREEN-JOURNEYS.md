@@ -118,3 +118,7 @@ The call admission journal reserves an owner/character-bound MB budget and accep
 ### Protected MB call review and admission contract (not yet composed in main)
 
 The retained call flow will request a bounded MB review, display Masana and maximum connected seconds/MB, then create the hold only after explicit signed acceptance. Reviews expire and changes invalidate consent. Original admission readback resolves timeout/pending/ended states without another reservation. Private receipts stay readable during customer recovery restrictions while new spending is denied. No phone/user-selected actor or client duration is accepted. The optional Gateway call routes require trusted relay/recovery readiness; current production main and mobile remain unswitched by this service-only batch.
+
+### Trusted relay contract before call UI cutover
+
+The opt-in server relay returns an opaque header credential and a same-Gateway WebSocket path; provider keys/URLs remain private. Actual provider setup/progress owns MB proof and deadline, with no client duration authority. Reconnect preserves the original admission, uncertain loss bills saved proof only, and normal End stops the upstream before settlement. New access and originating-session revocation checks run throughout the call. Caller-facing provider errors are redacted and typed unavailability is 503. Main/mobile do not enable this transport until the protected review, token, history and lifecycle integration is complete. See `MB-CALL-PROVIDER-RELAY-20261025.md`; provider/device acceptance remains open.

@@ -166,6 +166,15 @@ export function createGbCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
         r.expires_at=new Date(at.getTime()+30000);
       }));
     },
+    /** Upstream loss proves no additional duration beyond the last checkpoint. */
+    async abandonConnection(actor:GbCallActor,id:string,leaseId:string){
+      return project(await mutate(actor,id,(r,at)=>{
+        if(!valid(leaseId)||r.lease_id!==leaseId||
+           (r.state!=='connecting'&&r.state!=='connected'))fail('stale_connection');
+        clearConnection(r);r.state='reserved';
+        r.expires_at=new Date(at.getTime()+30000);
+      }));
+    },
     /** Call only after relay termination. Connected proof must be frozen first. */
     async finish(actor:GbCallActor,id:string){
       await mutate(actor,id,r=>{
@@ -184,8 +193,9 @@ export function createGbCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
         WHERE (c.state='settling' OR (c.state NOT IN ('completed','failed') AND c.expires_at<=$1)
           OR (c.state='failed' AND o.state='reserved'))
         ORDER BY c.expires_at,c.admission_id LIMIT $2`,[now(),limit]);
-      const receipts:GbCallAdmission[]=[];
+      const receipts:GbCallAdmission[]=[],failures:Error[]=[];
       for(const row of pending.rows){
+        try{
         const actor={tenantId:row.tenant_id,userId:row.user_id},id=row.admission_id;
         const frozen=await mutate(actor,id,(r,at)=>{
           if(r.state==='completed'||r.state==='failed'||r.state==='settling')return;
@@ -193,7 +203,9 @@ export function createGbCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
           r.state='settling';clearConnection(r);
         });
         if(['settling','completed','failed'].includes(frozen.state))receipts.push(await settle(actor,id));
+        }catch{failures.push(new GbCallAdmissionError('gb.call.recovery_item_unavailable',503));}
       }
+      if(failures.length)throw new AggregateError(failures,'gb.call.recovery_partial');
       return receipts;
     },
   };
