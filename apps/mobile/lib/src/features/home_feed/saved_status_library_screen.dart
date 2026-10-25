@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'status_post_author_header.dart';
+import 'status_post_body.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
 /// The app never retains a cross-account/offline copy of these items.
@@ -294,8 +295,15 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
                                     child: SizedBox(
                                       width: double.infinity,
-                                      child: Text(description, maxLines: 4,
-                                        overflow: TextOverflow.ellipsis),
+                                      child: item.post == null
+                                          ? Text(description, maxLines: 4,
+                                              overflow: TextOverflow.ellipsis)
+                                          : StatusPostBody(
+                                              accountKey: widget.accountKey,
+                                              postId: item.post!.id,
+                                              body: description,
+                                              mode: StatusPostBodyMode.saved,
+                                            ),
                                     ),
                                   ),
                                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'status_post_author_header.dart';
+import 'status_post_body.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
 /// AF00 owns root/deep-link registration. This screen never exposes fan publishing.
@@ -188,7 +189,8 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
                     ()=>widget.onMasanaProfile!(p.authorMasanaId)),
             ),
             const SizedBox(height:12),
-            Text(p.body,style:Theme.of(context).textTheme.bodyLarge),
+            StatusPostBody(accountKey:widget.accountKey,postId:p.id,
+              body:p.body,mode:StatusPostBodyMode.detail),
             for(final media in p.mediaIds)ListTile(leading:Icon(p.kind=='audio'?
               Icons.play_circle_outline:Icons.image_outlined),
               title:Text(p.kind=='audio'?t('Play audio','Kunna sauti'):t('View image','Duba hoto')),
