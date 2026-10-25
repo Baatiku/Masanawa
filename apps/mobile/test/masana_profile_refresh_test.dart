@@ -82,18 +82,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('contacts Create Masana FAB opens the existing creation form directly', (tester) async {
+  testWidgets('contacts show only platform Masana without public creation or human picker', (tester) async {
     await tester.pumpWidget(ProviderScope(overrides: [
       agentDirectoryProvider.overrideWith(EmptyDirectory.new),
       sessionProvider.overrideWith(SignedIn.new),
       apiClientProvider.overrideWithValue(client()),
     ], child: const MaterialApp(home: MasanaListScreen())));
     await tester.pumpAndSettle();
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-    await tester.tap(find.text('Create Masana'));
-    await tester.pumpAndSettle();
-    expect(find.text('Describe your character'), findsOneWidget);
-    expect(find.text('My Masana'), findsNothing);
+    expect(find.text('Search Masana'), findsOneWidget);
+    expect(find.text('Create Masana'), findsNothing);
+    expect(find.text('Humans'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
