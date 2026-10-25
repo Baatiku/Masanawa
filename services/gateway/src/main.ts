@@ -143,10 +143,6 @@ import { createMsnwBillingFunding } from "./msn_wallet/billing_funding.js";
 import { createMsnwBillingService } from "./msn_wallet/billing_service.js";
 import { createMsnwUsdtConversion } from "./msn_wallet/usdt_conversion.js";
 import { probeNowPaymentsReadOnly } from "./nowpayments_readonly_probe.js";
-import { createP2pService } from "./p2p/service.js";
-import { createMsnwP2pCustodyEscrow } from "./p2p/custody_escrow.js";
-import { configuredP2pEvidenceStorage } from "./p2p/evidence_storage.js";
-import { createVerifiedP2pBankMethods } from "./p2p/bank_methods.js";
 import type { MsnBalanceAuthority } from "./msn_wallet/routes.js";
 import { createAgentShellService } from "./agent_shell.js";
 import { createPrivateChatMediaService } from "./private_chat_media.js";
@@ -2394,50 +2390,9 @@ export async function startGatewayService(
             paystackSecretKey: env.PAYSTACK_SECRET_KEY,
           }) }
         : {}),
-      // P2P is composed independently of legacy Credits/MSN. The API can
-      // discover offers and manage escrow journals; order creation is FAILED
-      // CLOSED until finance supplies a genuine atomic MSNW reserve/release/
-      // refund adapter. Never turn an on-chain balance read into a debit.
-      ...(database.featurePool && msnBalanceAuthorizer
-        ? { p2p: options.appOptions?.p2p ?? (() => {
-            // Reuse WS1's custody accounts and immutable MSNW backing proof.
-            // Escrow can only reserve genuinely available customer balances.
-            const escrow=createMsnwP2pCustodyEscrow();
-            const service = createP2pService(database.featurePool!, escrow);
-            const evidenceStorage=configuredP2pEvidenceStorage(env,service);
-            return {
-              service,
-              ...(evidenceStorage ? { evidenceStorage } : {}),
-              ...(env.PAYSTACK_SECRET_KEY?.trim()
-                ? { bankMethods: createVerifiedP2pBankMethods({
-                    pool: database.featurePool!,
-                    service,
-                    paystackSecretKey:env.PAYSTACK_SECRET_KEY,
-                  }) } : {}),
-              authorize: async (header: string | undefined) => {
-                const owner = await msnBalanceAuthorizer!.authorize({authorizationHeader:header});
-                return {tenantId:owner.tenantId,userId:owner.userId};
-              },
-              ...(customerAuth ? {
-                authorizeBankStepUp: async(request: {
-                  authorizationHeader:string|undefined;bankCode:string;accountNumber:string;
-                  stepUpToken:string|undefined;
-                }) => customerAuth.consumeBankStepUp(request),
-              } : {}),
-              // Reuse the same operator-principal allowlist already bound
-              // to the Gateway; no customer-supplied staff role is trusted.
-              ...(talkSafetyPlatformAuthority ? {
-                authorizeOperator: async (header: string | undefined) => {
-                  const admin = await talkSafetyPlatformAuthority!.authorize({authorizationHeader:header});
-                  return {tenantId:admin.tenantId,userId:admin.actorId};
-                },
-              } : {}),
-            };
-          })() }
-        : {}),
-      // Only the production operator may enable this legacy credit-ledger
-      // transfer. This never activates MSN minting, funding or crypto payouts.
-      walletCreditSendEnabled: env.MASANAWA_WALLET_CREDIT_SEND_ENABLED === "true" && !!twinProduction,
+      // Legacy P2P and Credit Send are retired at the application boundary.
+      // The historical escrow and credit ledgers remain intact for readback,
+      // reconciliation, retention and any required account-data exports.
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
