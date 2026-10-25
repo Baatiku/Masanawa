@@ -135,10 +135,12 @@ void main() {
       child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('2 GB'), findsOneWidget);
-    expect(find.textContaining('2,000 MB'), findsOneWidget);
+    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
+    expect(find.text('2 GB'), findsNothing);
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pump();
+    expect(find.text('2 GB'), findsOneWidget);
+    expect(find.textContaining('2,000 MB'), findsOneWidget);
     final action = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Review bundle'));
     expect(action.onPressed, isNull);
@@ -165,12 +167,15 @@ void main() {
       )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('No verified GB bundles available'), findsOneWidget);
+    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
     await tester.enterText(find.byType(TextField), 'not a phone');
     await tester.pump();
     expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
+    await tester.tap(find.text('MTN'));
+    await tester.pump();
+    expect(find.text('No MTN bundles available'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
