@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_wallet_activity.dart';
-import 'gb_wallet_summary.dart';
 
 /// Fresh journal readback only. No provider, bank or data-delivery receipt.
 class GbWalletActivityDetailScreen extends ConsumerWidget {

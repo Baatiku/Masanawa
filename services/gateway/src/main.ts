@@ -1660,10 +1660,12 @@ export async function startGatewayService(
       authorize: async (header: string | undefined) => resolveFeatureFan(header),
       read: createPostgresGbWalletRepository(featurePool).read,
     } : undefined);
+  const gbActivityStorage=featurePool?createGbWalletActivityRepository(featurePool):undefined;
   const gbWalletActivity: GbActivityPorts | undefined = options.appOptions?.gbWalletActivity ??
     (featurePool && sessions && featureTenant ? {
       authorize: resolveFeatureFan,
-      list: createGbWalletActivityRepository(featurePool).list,
+      list: gbActivityStorage!.list,
+      find: gbActivityStorage!.find,
     } : undefined);
   // No legacy Credit Send fallback. The signer is a private Railway secret,
   // never a client-supplied or generated-on-each-request review authority.
