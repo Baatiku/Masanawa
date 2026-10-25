@@ -147,8 +147,9 @@ void main() {
     await tester.tap(find.text('Amina'));
     await tester.pumpAndSettle();
     expect(find.byType(CallDetailsScreen), findsOneWidget);
-    expect(find.text('Call reference'), findsOneWidget);
-    expect(find.text('single'), findsOneWidget);
+    expect(tester.widget<CallDetailsScreen>(find.byType(CallDetailsScreen))
+        .initial.callId, 'single');
+    expect(find.text('Call details'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byType(CallDetailsScreen), findsNothing);
