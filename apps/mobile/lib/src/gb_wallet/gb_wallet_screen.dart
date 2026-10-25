@@ -54,7 +54,7 @@ class GbWalletScreen extends ConsumerWidget {
               Text('Data balance', style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),
               Text(
-                isUnavailable ? '— GB' : decimalGb(balance!.availableMb) + ' GB',
+                isUnavailable ? '— GB' : decimalGb(balance.availableMb) + ' GB',
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -63,7 +63,7 @@ class GbWalletScreen extends ConsumerWidget {
               if (isUnavailable)
                 const Text('Exact MB balance unavailable')
               else
-                Text(groupedMb(balance!.availableMb) + ' MB available',
+                Text(groupedMb(balance.availableMb) + ' MB available',
                     style: theme.textTheme.titleMedium),
               if (isLoading)
                 const LinearProgressIndicator(minHeight: 2),
@@ -80,11 +80,11 @@ class GbWalletScreen extends ConsumerWidget {
                 const Text('The MB ledger is not available yet. '
                     'No historical money has been converted.')
               else ...[
-                Text('Purchased: ' + groupedMb(balance!.purchasedAvailableMb) +
-                     ' MB · Welcome: ' + groupedMb(balance!.welcomeAvailableMb) + ' MB'),
-                if (balance!.reservedMb > 0)
-                  Text('Pending reservations: ' + groupedMb(balance!.reservedMb) + ' MB'),
-                if (balance!.frozen)
+                Text('Purchased: ' + groupedMb(balance.purchasedAvailableMb) +
+                     ' MB · Welcome: ' + groupedMb(balance.welcomeAvailableMb) + ' MB'),
+                if (balance.reservedMb > 0)
+                  Text('Pending reservations: ' + groupedMb(balance.reservedMb) + ' MB'),
+                if (balance.frozen)
                   const Text('This wallet is currently restricted.'),
                 const Text('Welcome MB can only pay for Masana replies and '
                   'connected call time.'),
