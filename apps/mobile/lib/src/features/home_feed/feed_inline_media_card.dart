@@ -15,12 +15,19 @@ class FeedInlineMediaCard extends StatefulWidget {
     required this.postId,
     required this.mediaId,
     required this.mediaCount,
+    this.imageOrdinal = 1,
+    this.previewHeight = 220,
+    this.tileMode = false,
+    this.showViewAll = true,
     this.onOpen,
     this.renderer,
   });
   final FeedMediaApi api;
   final String accountKey,postId,mediaId;
   final int mediaCount;
+  final int imageOrdinal;
+  final double previewHeight;
+  final bool tileMode,showViewAll;
   final VoidCallback? onOpen;
   final Widget Function(FeedMediaGrant)? renderer;
   @override State<FeedInlineMediaCard> createState()=>_FeedInlineMediaCardState();
@@ -81,32 +88,43 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   @override void dispose(){_discard();super.dispose();}
   @override Widget build(BuildContext context){
     final current=grant;
-    if(loading)return SizedBox(height:120,child:Center(
-      child:Semantics(label:'Loading approved image preview',
+    Widget retryControl(String label) => widget.tileMode
+        ? Column(mainAxisSize:MainAxisSize.min,children:[
+            IconButton(tooltip:label,onPressed:_retryPreview,
+              icon:const Icon(Icons.refresh)),
+            const Text('Retry image',textAlign:TextAlign.center,
+              maxLines:2,overflow:TextOverflow.ellipsis),
+          ])
+        : TextButton.icon(onPressed:_retryPreview,
+            icon:const Icon(Icons.refresh),label:Text(label));
+    if(loading)return SizedBox(height:widget.tileMode?widget.previewHeight:120,child:Center(
+      child:Semantics(label:'Loading approved image ${widget.imageOrdinal} of ${widget.mediaCount}',
         child:const CircularProgressIndicator(strokeWidth:2))));
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
-      return Align(alignment:Alignment.centerLeft,child:TextButton.icon(
-        onPressed:_retryPreview,
-        icon:const Icon(Icons.refresh),
-        label:const Text('Image unavailable · retry preview')));
+      return SizedBox(height:widget.tileMode?widget.previewHeight:null,
+        child:Align(alignment:Alignment.center,
+          child:retryControl('Image unavailable · retry preview')));
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      InkWell(
-        onTap:widget.onOpen,
-        child:ClipRRect(
-          borderRadius:BorderRadius.circular(10),
-          child:widget.renderer?.call(current)??Image.network(
-            current.url.toString(),height:220,width:double.infinity,
-            cacheWidth:960,fit:BoxFit.cover,
-            errorBuilder:(_,__,___)=>SizedBox(height:120,
-              child:Center(child:TextButton.icon(
-                onPressed:_retryPreview,
-                icon:const Icon(Icons.refresh),
-                label:const Text('Image failed to load · retry preview')))),
+      Semantics(
+        button:widget.onOpen!=null,
+        label:'Approved Masana image ${widget.imageOrdinal} of ${widget.mediaCount}',
+        child:InkWell(
+          onTap:widget.onOpen,
+          child:ClipRRect(
+          borderRadius:BorderRadius.circular(widget.tileMode?0:10),
+          child:SizedBox(height:widget.previewHeight,width:double.infinity,
+            child:widget.renderer?.call(current)??Image.network(
+            current.url.toString(),height:widget.previewHeight,width:double.infinity,
+            cacheWidth:widget.tileMode?480:960,fit:BoxFit.cover,
+            errorBuilder:(_,__,___)=>SizedBox(height:widget.previewHeight,
+              child:Center(child:retryControl('Image failed to load · retry preview'))),
+          ),
+          ),
           ),
         ),
       ),
-      if(widget.mediaCount>1)
+      if(widget.showViewAll && widget.mediaCount>1)
         Align(alignment:Alignment.centerRight,child:TextButton(
           onPressed:widget.onOpen,
           child:Text('View all ${widget.mediaCount} images'))),

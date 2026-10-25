@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'feed_media_api.dart';
-import 'feed_inline_media_card.dart';
+import 'feed_inline_media_gallery.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -702,21 +702,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                               if (post.kind == 'image' &&
                                   post.mediaIds.isNotEmpty &&
                                   widget.mediaApi != null)
-                                FeedInlineMediaCard(
+                                FeedInlineMediaGallery(
                                   key: ValueKey(
                                     'status-inline-${widget.accountKey}-${post.id}',
                                   ),
                                   api: widget.mediaApi!,
                                   accountKey: widget.accountKey,
                                   postId: post.id,
-                                  mediaId: post.mediaIds.first,
-                                  mediaCount: post.mediaIds.length,
+                                  mediaIds: post.mediaIds,
                                   onOpen: widget.onOpenMedia == null
                                       ? null
-                                      : () => widget.onOpenMedia!(
-                                          post,
-                                          post.mediaIds.first,
-                                        ),
+                                      : (id) => widget.onOpenMedia!(post, id),
                                   renderer: widget.inlineMediaRenderer,
                                 ),
                               if (post.mediaIds.isNotEmpty &&

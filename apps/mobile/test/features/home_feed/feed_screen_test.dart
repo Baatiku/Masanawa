@@ -569,8 +569,9 @@ void main() {
             accountKey: 'owner1',
             mediaApi: InlineMediaStub((p, id) {
               expect(p, 'post1');
-              expect(id, 'media1');
-              return pending.future;
+              if (id == 'media1') return pending.future;
+              expect(id, 'media2');
+              return Future.value(inlineGrant('media2'));
             }),
             inlineMediaRenderer: (grant) =>
                 Text('AUTHORIZED IMAGE: ${grant.mediaId}'),
@@ -580,10 +581,11 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.textContaining('AUTHORIZED IMAGE'), findsNothing);
+    expect(find.text('AUTHORIZED IMAGE: media1'), findsNothing);
     pending.complete(inlineGrant('media1'));
     await tester.pumpAndSettle();
     expect(find.text('AUTHORIZED IMAGE: media1'), findsOneWidget);
+    expect(find.text('AUTHORIZED IMAGE: media2'), findsOneWidget);
     await tester.tap(find.text('View all 2 images'));
     await tester.pump();
     expect(opened, 'media1');
