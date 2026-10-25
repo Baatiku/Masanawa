@@ -59,6 +59,7 @@ class TestChats extends AiChatController {
     'character_00000000-0000-0000-0000-000000000001': ChatThread(
       characterId: 'character_00000000-0000-0000-0000-000000000001',
       title: 'Local history',
+      archived: true,
       updatedAt: DateTime.utc(2026, 10, 13),
       messages: [
         AiChatMessage(id:'m1', isUser:false, text:'Cached',
@@ -66,6 +67,7 @@ class TestChats extends AiChatController {
       ],
     ),
   });
+  void goOffline() => state = state.copyWith(online: false);
 }
 
 class FakeInbox implements MasanaInboxSearchAccess {
@@ -73,6 +75,7 @@ class FakeInbox implements MasanaInboxSearchAccess {
   final pins = <String>[];
   final reads = <String>[];
   final pending = <String, Completer<List<MasanaInboxSearchItem>>>{};
+  final responses = <String, List<MasanaInboxSearchItem>>{};
   bool disabled = false;
   final remote = const MasanaInboxSearchItem(
     characterId: 'character_00000000-0000-0000-0000-000000000099',
@@ -96,6 +99,7 @@ class FakeInbox implements MasanaInboxSearchAccess {
     }
     final wait = pending[query];
     if (wait != null) return wait.future;
+    if (responses.containsKey(query)) return responses[query]!;
     return query == 'astronomy' ? [remote] : [];
   }
 
@@ -183,6 +187,68 @@ void main() {
     old.complete(const []);
     await tester.pump();
     expect(find.text('Astronomy Masana'), findsOneWidget);
+  });
+
+  testWidgets('server-only search hit reuses cached thread and deduplicates replay', (tester) async {
+    final inbox = FakeInbox();
+    inbox.responses['stars'] = [
+      const MasanaInboxSearchItem(
+        characterId: 'character_00000000-0000-0000-0000-000000000001',
+        displayName: 'Gwana', profession: 'Teacher', lastMessage: 'Stars',
+        pinned: true, unreadCount: 7, revision: 2,
+      ),
+      inbox.remote,
+      inbox.remote,
+    ];
+    await mount(tester, inbox);
+    await tester.enterText(find.byType(TextField), 'stars');
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump();
+    // The local message/draft identity wins even when the server is the only
+    // source of the text match. Replayed server records never add extra rows.
+    expect(find.text('Local history'), findsOneWidget);
+    expect(find.text('Astronomy Masana'), findsOneWidget);
+    expect(find.byKey(const ValueKey('remote-character_00000000-0000-0000-0000-000000000001')), findsNothing);
+    expect(find.byType(ListTile), findsNWidgets(2));
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.text('Other server conversations'), findsNothing);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump(const Duration(milliseconds: 380));
+    expect(find.text('Local history'), findsOneWidget);
+    expect(find.text('Astronomy Masana'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('inbox wire timestamp is validated and preserved on pin revisions', () {
+    final row = MasanaInboxSearchItem.fromJson({
+      'characterId': 'character_00000000-0000-0000-0000-000000000001',
+      'displayName': 'Gwana', 'profession': 'Teacher',
+      'lastMessage': 'Salam', 'pinned': false, 'unreadCount': 1,
+      'revision': 7, 'lastActivityAt': '2026-10-20T15:20:00Z',
+    });
+    expect(row.lastActivityAt, DateTime.utc(2026, 10, 20, 15, 20));
+    expect(row.withPin(true, 8).lastActivityAt, row.lastActivityAt);
+    expect(() => MasanaInboxSearchItem.fromJson({
+      'characterId': row.characterId, 'displayName': row.displayName,
+      'profession': row.profession, 'pinned': false,
+      'unreadCount': 0, 'revision': 1, 'lastActivityAt': 'invalid',
+    }), throwsFormatException);
+  });
+
+  testWidgets('offline search keeps cached history and never starts server request', (tester) async {
+    final inbox = FakeInbox();
+    final container = await mount(tester, inbox);
+    (container.read(aiChatProvider.notifier) as TestChats).goOffline();
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'history');
+    await tester.pump(const Duration(milliseconds: 380));
+    expect(find.text('Local history'), findsOneWidget);
+    expect(inbox.calls, isEmpty);
+    await tester.enterText(find.byType(TextField), 'missing');
+    await tester.pump(const Duration(milliseconds: 380));
+    expect(find.text('No matches in saved conversations'), findsOneWidget);
+    expect(find.textContaining('Offline searches only include saved'), findsOneWidget);
+    expect(inbox.calls, isEmpty);
   });
 
   testWidgets('switching fans fences late search response and clears query', (tester) async {
