@@ -86,10 +86,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first,'@bello.user');
     await tester.enterText(find.byKey(const ValueKey('send-custom-mb')),'250');
+    // The shared exact-handle readback is debounced. Let its identity check
+    // finish before entering the signed transfer review flow.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
     await tester.dragUntilVisible(find.text('Review recipient and amount'),
       find.byType(ListView),const Offset(0,-150));
     await tester.tap(find.text('Review recipient and amount'));
     await tester.pumpAndSettle();
+    expect(find.text('Confirm recipient',skipOffstage:false),findsOneWidget);
     await tester.dragUntilVisible(find.text('Confirm Send'),
       find.byType(ListView),const Offset(0,-150));
     await tester.tap(find.text('Confirm Send'));
