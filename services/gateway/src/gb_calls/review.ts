@@ -18,6 +18,12 @@ export interface GbCallPorts {
   /** Must be true only when the trusted relay and durable recovery are ready. */
   ready():boolean;
   reviewSecret:string;
+  /** Ephemeral, admission-bound relay grant; never a direct provider token. */
+  grant?(actor:GbCallActor,authorizationHeader:string|undefined,id:string):Promise<{
+    token:string;websocketUrl:string;transport:'gateway_relay';model:string;
+    voiceName:string;expiresAt:string;systemInstruction?:string;callId?:string;
+  }>;
+  finish?(actor:GbCallActor,id:string):Promise<GbCallAdmission>;
   now?:()=>Date;
 }
 interface Review {
@@ -94,6 +100,12 @@ export function createGbCallReviewService(ports:GbCallPorts){
     },
     async read(actor:GbCallActor,id:string){
       const row=await ports.journal.read(actor,id);
+      if(!row)fail('not_found',404);
+      return row;
+    },
+    async readOriginal(actor:GbCallActor,idempotencyKey:string){
+      if(!key(idempotencyKey))fail('invalid_request',400);
+      const row=await ports.journal.readOriginal(actor,idempotencyKey);
       if(!row)fail('not_found',404);
       return row;
     },

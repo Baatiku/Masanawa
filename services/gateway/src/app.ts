@@ -3,6 +3,7 @@ import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import {GbCallRelayError} from "./gb_calls/errors.js";
 import {registerGbCallRoutes} from "./gb_calls/routes.js";
 import type {GbCallPorts} from "./gb_calls/review.js";
+import {installGbCallRelay,createGbCallRelay} from "./gb_calls/relay.js";
 import { registerTalkSafetyRoutes } from './talk_safety_routes.js';
 import { registerHistoricalFinancialCallbacks } from './historical_financial_callbacks.js';
 import {
@@ -112,6 +113,7 @@ export interface GatewayAppOptions {
   readonly gbSendReview?: GbSendPorts;
   readonly gbRequests?: GbRequestPorts;
   readonly gbCalls?: GbCallPorts;
+  readonly gbCallRelay?: ReturnType<typeof createGbCallRelay>;
   /** Optional, qualified whole-GB read-only data catalogue, never a checkout. */
   readonly gbDataCatalogue?: GbDataCataloguePorts;
   readonly gbDataPurchases?: GbDataPurchaseRoutes;
@@ -373,6 +375,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
   if (options.gbCalls) registerGbCallRoutes(app, options.gbCalls);
+  if (options.gbCallRelay) installGbCallRelay(app, options.gbCallRelay);
   registerAuthEmailRoutes(app);
   if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
 

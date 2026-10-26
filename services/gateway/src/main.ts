@@ -30,10 +30,13 @@ import {
   createPostgresGbRequestRepository,
   createGbUsageReservations,
   createGbDataJournal,
+  createGbCallAdmissions,
   createGbBillstackRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
+import {createGbCallRelay} from "./gb_calls/relay.js";
+import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -555,6 +558,7 @@ export async function startGatewayService(
   let strategy = options.agentStrategy;
   let nativeAudio;
   let liveVoiceTokens: LiveVoiceTokenService | undefined;
+  let mbLiveVoiceTokens: LiveVoiceTokenService | undefined;
   let twinProduction: TwinProductionRuntime | undefined =
     options.appOptions?.twinProduction;
   let pushSender: MobilePushSender | undefined;
@@ -1113,6 +1117,15 @@ export async function startGatewayService(
             ? { paidVoiceAdmission: twinProduction.voiceAdmissionGate }
             : {}),
         });
+        // The MB relay mints only after a separately authorized admission.
+        // Its provider grant is never returned directly to the phone.
+        mbLiveVoiceTokens = createGeminiLiveTokenService({
+          apiKey: liveApiKey,
+          authorizer: conversationAuthorizer,
+          ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
+          ...(database.platformAgentProfiles ? {platformProfiles:database.platformAgentProfiles} : {}),
+          model: liveModel,voiceName: liveVoice,
+        });
       }
     }
   }
@@ -1660,6 +1673,64 @@ export async function startGatewayService(
       authorize: async (header: string | undefined) => resolveFeatureFan(header),
       read: createPostgresGbWalletRepository(featurePool).read,
     } : undefined);
+  let mbRelay:ReturnType<typeof createGbCallRelay>|undefined;
+  const callJournal=featurePool?createGbCallAdmissions(featurePool):undefined;
+  const approvedCallMasana=async(actor:{tenantId:string;userId:string},characterId:string)=>{
+    if(!featurePool)return null;
+    const result=await featurePool.query<{revision:number}>(`
+      SELECT r.revision FROM masana.character_revisions r
+      JOIN identity.characters c ON c.tenant_id=r.tenant_id
+        AND c.character_id=r.character_id AND c.state='active'
+      JOIN identity.character_ownership o ON o.tenant_id=r.tenant_id
+        AND o.character_id=r.character_id AND o.kind='platform'
+      WHERE r.tenant_id=$1 AND r.character_id=$2 AND r.state='approved'
+      LIMIT 1`,[actor.tenantId,characterId]);
+    const revision=result.rows[0]?.revision;
+    return typeof revision==='number'&&Number.isSafeInteger(revision)&&revision>0
+      ?{version:String(revision)}:null;
+  };
+  const mbCallSecret=env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
+  if(env.MASANAWA_MB_CALLS_ENABLED==='true' &&
+     (!callJournal||!sessions||!featureTenant||!mbCallSecret||
+      Buffer.byteLength(mbCallSecret)<32||!mbLiveVoiceTokens||
+      !conversationAuthorizer||!publicBaseUrl))
+    throw new TypeError('MB calls enabled without authorized journal, live provider, review key and public relay origin');
+  const gbCalls:GbCallPorts|undefined=options.appOptions?.gbCalls ??
+    (env.MASANAWA_MB_CALLS_ENABLED==='true' && callJournal && sessions && featureTenant &&
+     mbCallSecret && Buffer.byteLength(mbCallSecret)>=32 && mbLiveVoiceTokens &&
+     conversationAuthorizer && publicBaseUrl ? {
+      authorize:resolveFeatureFan,approved:approvedCallMasana,
+      balance:createPostgresGbWalletRepository(featurePool!).read,
+      journal:callJournal,reviewSecret:mbCallSecret,
+      ready:()=>mbRelay?.ready()===true,
+      grant:async(actor,authorizationHeader,id)=>{
+        const admission=await callJournal.read(actor,id);
+        if(!admission)throw new GbCallReviewError('gb.call.not_found',404);
+        if(admission.state!=='reserved')
+          throw new GbCallReviewError('gb.call.not_reserved',409);
+        if(!await approvedCallMasana(actor,admission.characterId))
+          throw new GbCallReviewError('gb.call.masana_unavailable',404);
+        const validateOwner=async()=>{
+          const current=await conversationAuthorizer!.authorize({
+            authorizationHeader,characterId:parseCanonicalId('character',admission.characterId),
+          });
+          if(current.scope.tenantId!==actor.tenantId||current.scope.userId!==actor.userId)
+            throw new Error('gb.call.unauthorized');
+        };
+        await validateOwner();
+        const provider=await mbLiveVoiceTokens!.mint({authorizationHeader,
+          characterId:admission.characterId});
+        return mbRelay!.issue(actor,admission.characterId,id,provider,validateOwner);
+      },
+      finish:(actor,id)=>mbRelay!.finish(actor,id),
+    }:undefined);
+  if(env.MASANAWA_MB_CALLS_ENABLED==='true' && gbCalls &&
+     !options.appOptions?.gbCallRelay && callJournal && publicBaseUrl){
+    mbRelay=createGbCallRelay({store:callJournal,publicOrigin:publicBaseUrl,
+      validate:async(actor,id)=>{if(!await approvedCallMasana(actor,id))
+        throw new Error('gb.call.masana_unavailable');},
+    });
+  }
   const gbActivityStorage=featurePool?createGbWalletActivityRepository(featurePool):undefined;
   const gbWalletActivity: GbActivityPorts | undefined = options.appOptions?.gbWalletActivity ??
     (featurePool && sessions && featureTenant ? {
@@ -1933,6 +2004,8 @@ export async function startGatewayService(
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(gbWalletActivity ? { gbWalletActivity } : {}),
+      ...(gbCalls ? {gbCalls} : {}),
+      ...(mbRelay ? {gbCallRelay:mbRelay} : {}),
       ...(gbSendReview ? { gbSendReview } : {}),
       ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
