@@ -69,6 +69,8 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
       const id=replies[0]!.json().admission.admissionId;
       const wallet=await f.ports.balance(f.actor);expect(wallet?.reservedWelcomeMb).toBe(300);
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id,headers:f.headers})).statusCode).toBe(200);
+      expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/original/original-http-call',headers:f.headers})).json().admission.admissionId).toBe(id);
+      expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/original/original-http-call',headers:{authorization:'Bearer other'}})).statusCode).toBe(404);
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id})).statusCode).toBe(401);
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id,headers:{authorization:'Bearer other'}})).statusCode).toBe(404);
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id,headers:f.headers,

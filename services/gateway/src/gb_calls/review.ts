@@ -103,5 +103,11 @@ export function createGbCallReviewService(ports:GbCallPorts){
       if(!row)fail('not_found',404);
       return row;
     },
+    async readOriginal(actor:GbCallActor,idempotencyKey:string){
+      if(!key(idempotencyKey))fail('invalid_request',400);
+      const row=await ports.journal.readOriginal(actor,idempotencyKey);
+      if(!row)fail('not_found',404);
+      return row;
+    },
   };
 }
