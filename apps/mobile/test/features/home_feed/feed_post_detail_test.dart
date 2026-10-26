@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
+import 'package:masanawa/src/features/home_feed/feed_image_mosaic.dart';
+import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
+
+class _ApprovedMedia implements FeedMediaApi {
+  @override
+  Future<FeedMediaGrant> getGrant(String postId,String mediaId) async =>
+      FeedMediaGrant(mediaId:mediaId,kind:'image',
+        url:Uri.parse('https://example.test/approved'),
+        expiresAt:DateTime.now().add(const Duration(minutes:2)));
+}
 
 final sample=FeedPost(id:'381026c2-9d56-47b1-b73d-1784e24e41e2',
   authorMasanaId:'masana_lecturer',authorName:'Gwana',kind:'text',
@@ -11,6 +21,21 @@ final root=FeedComment(id:'9b8c8884-7a31-49d9-aee5-521364b54aef',body:'A questio
   state:'visible',createdAt:DateTime.utc(2026));
 
 void main(){
+ testWidgets('detail shares the feed multi-image mosaic and preserves exact media entry', (tester) async {
+   final gallery=FeedPost(id:'status-gallery',authorMasanaId:'masana_owner',
+     kind:'image',body:'Approved photos',mediaIds:const ['image-first','image-second'],
+     publishedAt:DateTime.utc(2026),likeCount:0,commentCount:0,
+     liked:false,saved:false);
+   final opened=<String>[];
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:gallery,accountKey:'fan',loadPost:(_)async=>gallery,
+     loadThread:(_,__)async=>[],sendComment:(_,__,___,____)async{},
+     mediaApi:_ApprovedMedia(),onMedia:opened.add)));
+   await tester.pump();
+   expect(find.byType(FeedImageMosaic),findsOneWidget);
+   expect(find.text('View image'),findsNothing,
+     reason:'Detail must render the same approved mosaic as the feed');
+ });
  testWidgets('C22 loads approved detail, oldest order and replies with parent id',(tester)async{
    String? reply;String order='newest';String? key;
    await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(

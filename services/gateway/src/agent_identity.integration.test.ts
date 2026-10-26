@@ -62,6 +62,15 @@ it("fences approved identity by tenant and follows by user",async()=>{
  expect((await identities.read({tenantId:otherTenant,userId:user,characterIds:ids})).size).toBe(0);
  expect((await identities.read({tenantId:tenant,userId:otherUser,characterIds:ids})).get(ids[2]!)?.following).toBe(false);
 });
+it("same-name characters keep distinct approved portraits by canonical ID",async()=>{
+ await db.query(`UPDATE agents.agent_presentations SET display_name='Same doctor'
+  WHERE tenant_id=$1 AND character_id=ANY($2::text[])`,[tenant,[ids[0],ids[1]]]);
+ const service=createAgentDirectoryService({presentations,identities,
+  authorizer:{authorize:async()=>({tenantId:tenant,userId:user,characterIds:ids})}});
+ const rows=await service.list({authorizationHeader:'Bearer owner'});
+ expect(rows.find(row=>row.characterId===ids[0])).toMatchObject({displayName:'Same doctor',portraitKey:'gwani'});
+ expect(rows.find(row=>row.characterId===ids[1])).toMatchObject({displayName:'Same doctor',portraitKey:'gwana'});
+});
 it("does not bind a stock portrait from media approved by another source",async()=>{
  // The canonical media ID alone cannot establish the platform stock binding.
  await db.query("UPDATE masana.character_media SET approved_by='custom-staff' WHERE tenant_id=$1 AND media_id='masana_portrait_amina'",[tenant]);

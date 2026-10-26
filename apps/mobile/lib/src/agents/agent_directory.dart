@@ -133,7 +133,9 @@ class AgentDirectoryEntry {
         roleLabel: roleLabel,
         about: about,
         presence: AgentPresence.unknown,
-        avatarUrl: avatarUrl,
+        // Offline directory snapshots cannot assert a media grant is still
+        // authorized. The approved portraitKey remains as stable metadata.
+        avatarUrl: null,
         greeting: greeting,
         activeWorkCount: 0,
         supportAgent: supportAgent,
@@ -171,7 +173,7 @@ class AgentDirectoryEntry {
           AgentPresence.offline => 'offline',
           AgentPresence.unknown => 'unknown',
         },
-        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        // Never serialize URL-bearing portrait data to plaintext roster cache.
         if (greeting != null) 'greeting': greeting,
         'activeWorkCount': activeWorkCount,
         'supportAgent': supportAgent,

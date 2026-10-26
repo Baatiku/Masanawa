@@ -92,7 +92,7 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   @override Widget build(BuildContext context){
     final current=grant;
     Widget frame(Widget child)=>widget.tile?SizedBox.expand(child:child):
-      SizedBox(height:120,child:child);
+      SizedBox(height:224,child:child);
     Widget retry(String label)=>widget.tile
       ?IconButton(tooltip:label,onPressed:_retryPreview,
           icon:const Icon(Icons.refresh),iconSize:28)

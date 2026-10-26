@@ -5,8 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
 import 'feed_media_api.dart';
-import 'feed_inline_media_card.dart';
-import 'feed_image_mosaic.dart';
+import 'status_post_media.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -70,6 +69,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   bool loading = false, fetchingMore = false, offline = false;
   int generation = 0;
   final Set<String> pendingActions = {};
+  // A timed-out Save may have reached the server. Do not turn a second tap
+  // into an accidental inverse write before a fresh account-bound read.
+  final Set<String> uncertainSaves = {};
   String? pageError;
   void _onExternalSearchChanged() {
     if (!mounted) return;
@@ -88,6 +90,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     loading = false;
     fetchingMore = false;
     pendingActions.clear();
+    uncertainSaves.clear();
   }
 
   @override
@@ -218,6 +221,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
+        uncertainSaves.clear();
       });
     } catch (e) {
       if (!mounted || ticket != generation) return;
@@ -273,7 +277,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
 
   Future<void> action(FeedPost p, {required bool like}) async {
     final index = items.indexWhere((row) => row.id == p.id);
-    if (!widget.enabled || index < 0 || pendingActions.contains(p.id)) return;
+    if (!widget.enabled || index < 0 || pendingActions.contains(p.id) ||
+        (!like && uncertainSaves.contains(p.id))) return;
     final enabled = like ? !p.liked : !p.saved, scope = generation;
     setState(() {
       pendingActions.add(p.id);
@@ -294,6 +299,25 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           clearProjection();
           error = e.toString();
         });
+        return;
+      }
+      if (!like && e is DioException &&
+          (e.type == DioExceptionType.connectionError ||
+           e.type == DioExceptionType.connectionTimeout ||
+           e.type == DioExceptionType.receiveTimeout ||
+           const [502, 503, 504].contains(e.response?.statusCode))) {
+        final now = items.indexWhere((row) => row.id == p.id);
+        setState(() {
+          uncertainSaves.add(p.id);
+          if (now >= 0) items[now] = p;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t(
+            'Save status unknown. Refresh before changing it again.',
+            'Ba a san matsayin ajiya ba. Sabunta kafin a sake canjawa.',
+          )),
+          action: SnackBarAction(label: t('Refresh', 'Sabunta'), onPressed: refresh),
+        ));
         return;
       }
       final now = items.indexWhere((row) => row.id == p.id);
@@ -423,6 +447,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             onMedia: widget.onOpenMedia == null
                 ? null
                 : (id) => widget.onOpenMedia!(post, id),
+            mediaApi: widget.mediaApi,
+            inlineMediaRenderer: widget.inlineMediaRenderer,
+            audioPlaybackAvailable: widget.audioPlaybackAvailable,
             authorDirectory: widget.authorDirectory,
             enabled: widget.enabled,
           );
@@ -444,6 +471,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             api: widget.api as SavedStatusLibraryApi,
             accountKey: account,
             authorDirectory: widget.authorDirectory,
+            mediaApi: widget.mediaApi,
+            inlineMediaRenderer: widget.inlineMediaRenderer,
             isAccountCurrent: () =>
                 mounted && widget.enabled && widget.accountKey == account,
             openPost: (post) async {
@@ -471,11 +500,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
 
   Future<void> sharePost(FeedPost post) async {
     if (!widget.enabled || widget.accountKey.isEmpty) return;
+    final account = widget.accountKey, scope = generation;
     try {
+      // The original may have been hidden or removed after the feed loaded.
+      // Authorize it again before exporting any text from this account.
+      final current = widget.api is DioFeedApi
+          ? await (widget.api as DioFeedApi).detail(post.id) : post;
+      if (!mounted || scope != generation || widget.accountKey != account) return;
       // A user-initiated public text excerpt. Do not export signed media URLs
       // or invent a shareable deep link for a post that may lose visibility.
       await SharePlus.instance.share(ShareParams(
-        text: '${post.displayAuthor}\n\n${post.body}',
+        text: '${current.displayAuthor}\n\n${current.body}',
       ));
     } catch (_) {
       if (!mounted) return;
@@ -731,8 +766,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     IconButton(
                                       tooltip: post.saved
                                           ? t('Remove saved post', 'Cire ajiya')
-                                          : t('Save post', 'Ajiye labari'),
-                                      onPressed: pendingActions.contains(post.id)
+                                          : uncertainSaves.contains(post.id)
+                                              ? t('Refresh to confirm saved state', 'Sabunta don tabbatar da ajiya')
+                                              : t('Save post', 'Ajiye labari'),
+                                      onPressed: pendingActions.contains(post.id) ||
+                                              uncertainSaves.contains(post.id)
                                           ? null
                                           : () => action(post, like: false),
                                       icon: Icon(post.saved
@@ -752,72 +790,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     body: post.body,
                                   ),
                                 ),
-                              if (post.kind == 'image' &&
-                                  post.mediaIds.isNotEmpty &&
-                                  widget.mediaApi != null &&
-                                  post.mediaIds.length == 1)
-                                FeedInlineMediaCard(
-                                  key: ValueKey(
-                                    'status-inline-${widget.accountKey}-${post.id}',
-                                  ),
-                                  api: widget.mediaApi!,
-                                  accountKey: widget.accountKey,
-                                  postId: post.id,
-                                  mediaId: post.mediaIds.first,
-                                  mediaCount: post.mediaIds.length,
-                                  onOpen: widget.onOpenMedia == null
-                                      ? null
-                                      : () => widget.onOpenMedia!(
-                                          post,
-                                          post.mediaIds.first,
-                                        ),
-                                  renderer: widget.inlineMediaRenderer,
-                                ),
-                              if (post.kind == 'image' &&
-                                  post.mediaIds.length > 1 &&
-                                  widget.mediaApi != null)
-                                FeedImageMosaic(
-                                  key: ValueKey('status-mosaic-${widget.accountKey}-${post.id}'),
-                                  api: widget.mediaApi!,
-                                  accountKey: widget.accountKey,
-                                  postId: post.id,
-                                  mediaIds: post.mediaIds,
-                                  onOpen: widget.onOpenMedia == null
-                                      ? null : (id) => widget.onOpenMedia!(post, id),
-                                  renderer: widget.inlineMediaRenderer,
-                                ),
-                              if (post.mediaIds.isNotEmpty &&
-                                  (post.kind != 'image' ||
-                                      widget.mediaApi == null))
-                                Wrap(
-                                  spacing: 8,
-                                  children: post.mediaIds
-                                      .map(
-                                        (id) => ActionChip(
-                                          avatar: Icon(
-                                            post.kind == 'audio'
-                                                ? Icons.play_circle_outline
-                                                : Icons.image_outlined,
-                                          ),
-                                          label: Text(
-                                            post.kind == 'audio'
-                                                ? t('Play audio', 'Kunna sauti')
-                                                : t('View image', 'Duba hoto'),
-                                          ),
-                                          onPressed:
-                                              widget.onOpenMedia == null ||
-                                                  (post.kind == 'audio' &&
-                                                      !widget
-                                                          .audioPlaybackAvailable)
-                                              ? null
-                                              : () => widget.onOpenMedia!(
-                                                  post,
-                                                  id,
-                                                ),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
+                              StatusPostMedia(
+                                post: post,
+                                accountKey: widget.accountKey,
+                                mediaApi: widget.mediaApi,
+                                renderer: widget.inlineMediaRenderer,
+                                audioPlaybackAvailable: widget.audioPlaybackAvailable,
+                                onOpen: widget.onOpenMedia == null
+                                    ? null : (id) => widget.onOpenMedia!(post, id),
+                              ),
                               if (post.totalReactions > 0 || post.commentCount > 0)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
