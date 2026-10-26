@@ -6,9 +6,36 @@ import '../state/session_state.dart';
 import 'ngn_wallet.dart';
 
 /// Read-only account information: viewing a card never allocates an account.
+class NgnFundingBalance extends ConsumerWidget {
+  const NgnFundingBalance({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
+    final owner = s is SessionSignedIn
+        ? (accountId: s.user.id,
+            authorizationEpoch: ref.read(sessionProvider.notifier).authorizationEpoch)
+        : null;
+    final cash = owner == null ? null : ref.watch(ngnWalletBalanceProvider(owner));
+    return Semantics(
+      label: 'NGN balance',
+      child: Text(
+        cash?.valueOrNull == null
+            ? (cash?.isLoading == true ? 'Checking…' : 'Unavailable')
+            : formatNgn(cash!.valueOrNull!.balanceKobo),
+        textAlign: TextAlign.end,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 class NgnFundingCardDetails extends ConsumerWidget {
-  const NgnFundingCardDetails({super.key, this.compact = false});
+  const NgnFundingCardDetails({super.key, this.compact = false, this.showBalance = true});
   final bool compact;
+  final bool showBalance;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(sessionProvider);
@@ -31,7 +58,7 @@ class NgnFundingCardDetails extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Divider(height: compact ? 8 : 16),
-        Row(
+        if (showBalance) Row(
           children: [
             Expanded(
               child: Text(
@@ -59,12 +86,20 @@ class NgnFundingCardDetails extends ConsumerWidget {
           Text('Reconciliation due: ${formatNgn(cash!.valueOrNull!.debtKobo)}'),
         SizedBox(height: compact ? 2 : 4),
         if (account?.state == 'assigned') ...[
-          Text(account!.bank!, style: Theme.of(context).textTheme.labelMedium),
+          if (compact && MediaQuery.textScalerOf(context).scale(1) >= 1.5)
+            Text(account!.bank!, style: Theme.of(context).textTheme.labelMedium),
           Row(
             children: [
+              if (!(compact && MediaQuery.textScalerOf(context).scale(1) >= 1.5)) Expanded(
+                child: Text(account!.bank!, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium),
+              ),
+              if (!(compact && MediaQuery.textScalerOf(context).scale(1) >= 1.5))
+                const SizedBox(width: 8),
               Expanded(
                 child: SelectableText(
-                  account.number!,
+                  account!.number!,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),

@@ -84,27 +84,34 @@ class GbWalletBalanceCard extends StatelessWidget {
           if (balance == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 7),
-              child: Center(
-                child: Text(
+              child: Row(children: [
+                Expanded(child: Text(
                   loading ? 'Checking balance…' : 'Balance unavailable',
-                  textAlign: TextAlign.center,
+                  textAlign: compact ? TextAlign.start : TextAlign.center,
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: colors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
-              ),
+                )),
+                if (compact) ...[const SizedBox(width: 8),
+                  const Expanded(child: NgnFundingBalance())],
+              ]),
             )
           else ...[
             if (!compact && ownerName != null && ownerName!.trim().isNotEmpty)
               Text('Data balance', style: theme.textTheme.labelMedium?.copyWith(
                 color: colors.textMuted)),
             if (compact)
-              Text(
-                '${decimalGb(balance!.availableMb)} GB',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800, color: colors.textPrimary),
-              )
+              Row(children: [
+                Expanded(child: Semantics(label: 'Data balance', child: Text(
+                  '${decimalGb(balance!.availableMb)} GB',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800, color: colors.textPrimary),
+                ))),
+                const SizedBox(width: 8),
+                const Expanded(child: NgnFundingBalance()),
+              ])
             else ...[
               Text(
                 '${decimalGb(balance!.availableMb)} GB',
@@ -141,7 +148,7 @@ class GbWalletBalanceCard extends StatelessWidget {
                 ),
             ],
           ],
-          NgnFundingCardDetails(compact: compact),
+          NgnFundingCardDetails(compact: compact, showBalance: !compact),
         ],
       ),
     );

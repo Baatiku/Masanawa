@@ -284,6 +284,20 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('compact card aligns balances and bank account details', (tester) async {
+    final f = _Fixture();
+    await tester.pumpWidget(f.app(const Scaffold(body: GbWalletBalanceCard(
+      balance: balance, loading: false, compact: true,
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('NGN balance'), findsNothing);
+    expect(tester.getCenter(find.text('14 GB')).dy,
+      tester.getCenter(find.text('₦90,000')).dy);
+    expect(tester.getCenter(find.text('9PSB Fixture')).dy,
+      tester.getCenter(find.text('0000000100')).dy);
+    expect(find.byTooltip('Copy account number'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'package chooser has no bank details and exchanges only after explicit review',
     (tester) async {
