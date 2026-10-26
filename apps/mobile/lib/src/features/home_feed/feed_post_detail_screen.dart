@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../agents/agent_directory.dart';
+import '../../agents/masana_portrait_avatar.dart';
 import 'feed_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
@@ -147,22 +148,49 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
   }
   Widget commentRow(FeedComment c){
     final reply=c.parentId!=null;
-    return Padding(padding:EdgeInsetsDirectional.only(start:reply?24:0),child:
-      ListTile(dense:true,leading:Icon(reply?Icons.subdirectory_arrow_right:Icons.chat_bubble_outline,size:18),
-        title:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          if(c.authorName?.trim().isNotEmpty==true)
-            TextButton(
-              onPressed:c.authorType=='human'&&c.authorHandle!=null&&widget.onHumanProfile!=null
-                ? ()=>widget.onHumanProfile!(c.authorHandle!)
-                : c.authorType=='masana'&&c.authorId!=null&&widget.onMasanaProfile!=null
-                  ? ()=>widget.onMasanaProfile!(c.authorId!) : null,
-              child:Text(c.authorName!),
-            ),
-          Text(c.body),
-        ]),subtitle:c.state=='pending'?Text(t('Awaiting review','Ana jiran dubawa')):null,
-        trailing:!reply&&c.state=='visible'&&widget.canReply?
-          TextButton(onPressed:()=>setState(()=>replyTo=c.id),
-            child:Text(t('Reply','Amsa'))):null));
+    final name=c.authorName?.trim().isNotEmpty==true?c.authorName!.trim():
+      t('Member','Memba');
+    final openProfile=c.authorType=='human'&&c.authorHandle!=null&&widget.onHumanProfile!=null
+      ? ()=>widget.onHumanProfile!(c.authorHandle!)
+      : c.authorType=='masana'&&c.authorId!=null&&widget.onMasanaProfile!=null
+        ? ()=>widget.onMasanaProfile!(c.authorId!) : null;
+    final agent=c.authorId==null?null:widget.authorDirectory[c.authorId];
+    return Padding(
+      padding:EdgeInsetsDirectional.fromSTEB(reply?28:0,8,0,8),
+      child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        InkWell(onTap:openProfile,child:c.authorType=='masana'&&c.authorId!=null
+          ? MasanaPortraitAvatar(characterId:c.authorId!,agent:agent,
+              displayName:name,size:36)
+          : const CircleAvatar(radius:18,child:Icon(Icons.person_outline,size:20))),
+        const SizedBox(width:8),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Container(
+            width:double.infinity,
+            padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
+            decoration:BoxDecoration(color:Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius:BorderRadius.circular(15)),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              InkWell(onTap:openProfile,child:Text(name,
+                style:Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight:FontWeight.w700))),
+              const SizedBox(height:3),
+              Text(c.body),
+            ]),
+          ),
+          Padding(padding:const EdgeInsetsDirectional.only(start:10,top:3),child:
+            Wrap(spacing:14,crossAxisAlignment:WrapCrossAlignment.center,children:[
+              Text(MaterialLocalizations.of(context).formatTimeOfDay(
+                TimeOfDay.fromDateTime(c.createdAt.toLocal())),
+                style:Theme.of(context).textTheme.bodySmall),
+              if(c.state=='pending')Text(t('Awaiting review','Ana jiran dubawa'),
+                style:Theme.of(context).textTheme.bodySmall),
+              if(!reply&&c.state=='visible'&&widget.canReply)
+                InkWell(onTap:()=>setState(()=>replyTo=c.id),
+                  child:Text(t('Reply','Amsa'),
+                    style:Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight:FontWeight.w700))),
+            ])),
+        ])),
+      ]),
+    );
   }
   @override Widget build(BuildContext context){
     if(!widget.enabled)return Scaffold(appBar:AppBar(title:Text(t('Post','Labari'))),

@@ -48,7 +48,7 @@ class _ReadbackStub extends DioFeedApi {
 }
 
 Future<void> _chooseLove(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('React to post'));
+  await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
   await tester.pumpAndSettle();
   await tester.tap(find.text('Love'));
   await tester.pumpAndSettle();
@@ -104,7 +104,7 @@ void main(){
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:
       MasanaFeedScreen(api:api,accountKey:'fan-a'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     expect(find.text('Love'),findsOneWidget);
     expect(find.text('Care'),findsOneWidget);
@@ -112,13 +112,13 @@ void main(){
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
     expect(api.reactions,['love']);
-    expect(find.textContaining('❤️ 1'),findsOneWidget);
-    await tester.tap(find.byTooltip('React to post'));
+    expect(find.textContaining('👍 ❤️ 3'),findsOneWidget);
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
     expect(api.reactions,['love',null]);
-    expect(find.textContaining('❤️ 1'),findsNothing);
+    expect(find.textContaining('❤️'),findsNothing);
   });
 
   testWidgets('accepted reaction survives a failed post-count readback', (tester) async {
@@ -130,7 +130,7 @@ void main(){
     await tester.pumpAndSettle();
     await _chooseLove(tester);
     expect(feed.reactions, ['love']);
-    expect(find.textContaining('❤️ 1'), findsOneWidget);
+    expect(find.textContaining('👍 ❤️ 3'), findsOneWidget);
     expect(find.textContaining('Reaction saved. Counts may be out of date'),
         findsOneWidget);
 
@@ -149,7 +149,7 @@ void main(){
     )));
     await tester.pumpAndSettle();
     await _chooseLove(tester);
-    expect(find.textContaining('❤️ 1'), findsOneWidget);
+    expect(find.textContaining('👍 ❤️ 3'), findsOneWidget);
     expect(find.textContaining('Reaction saved. Counts may be out of date'),
         findsOneWidget);
   });
@@ -163,20 +163,20 @@ void main(){
       body: MasanaFeedScreen(api: feed, accountKey: 'fan-a'),
     )));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pump();
-    final disabled = tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.add_reaction_outlined));
+    final disabled = tester.widget<TextButton>(
+        find.widgetWithIcon(TextButton, Icons.thumb_up_outlined));
     expect(disabled.onPressed, isNull);
     pending.completeError(StateError('write unavailable'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('❤️ 1'), findsNothing);
+    expect(find.textContaining('❤️'), findsNothing);
     feed.put = null;
     await _chooseLove(tester);
     expect(feed.reactions, ['love', 'love']);
-    expect(find.textContaining('❤️ 1'), findsOneWidget);
+    expect(find.textContaining('👍 ❤️ 3'), findsOneWidget);
   });
 
   testWidgets('revoked reaction detail read clears private feed projection',

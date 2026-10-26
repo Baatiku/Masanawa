@@ -29,7 +29,7 @@ class StatusPostAuthorHeader extends StatelessWidget {
     final l10n = MaterialLocalizations.of(context);
     final date = l10n.formatMediumDate(localTime);
     final time = l10n.formatTimeOfDay(TimeOfDay.fromDateTime(localTime));
-    final caption = '${post.isHuman ? 'Member' : 'Masana · AI'} · $date · $time';
+    final caption = '$date · $time';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
