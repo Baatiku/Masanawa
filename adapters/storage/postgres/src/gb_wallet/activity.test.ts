@@ -47,16 +47,36 @@ describe("read-only NGN and MB wallet activity",()=>{
     expect(sql).toContain("m.to_id=$2");
     expect(sql).toContain("n.account_id=$2");
     expect(sql).toContain("ORDER BY created_at DESC, entry_id DESC");
-    expect(args).toEqual(["tenant_one","fan_one",null,null,6,"all"]);
+    expect(args.slice(0,6)).toEqual(["tenant_one","fan_one",null,null,6,"all"]);
+    expect(args.slice(6,11)).toEqual(["all","all","all",null,null]);
+    expect(args[11]).toEqual(expect.any(String));
   });
   it("uses a stable time-plus-entry cursor for both ledgers",async()=>{
     const f=fixture();
     await f.repo.list(scope,11,{createdAt:"2026-10-20T08:00:00.000Z",entryId:"mb:77"});
     const [sql,args]=f.query.mock.calls[0] as unknown as [string,unknown[]];
     expect(sql).toContain("entry_id < $4");
-    expect(args).toEqual(["tenant_one","fan_one","2026-10-20T08:00:00.000Z","mb:77",11,"all"]);
+    expect(args.slice(0,6)).toEqual(["tenant_one","fan_one","2026-10-20T08:00:00.000Z","mb:77",11,"all"]);
     await f.repo.list(scope,11,null,"MB");
     expect((f.query.mock.calls[1] as unknown as [string,unknown[]])[1][5]).toBe("MB");
+  });
+  it("passes all five facets as typed SQL parameters with no untrusted interpolated clauses",async()=>{
+    const f=fixture();
+    await f.repo.list(scope,9,null,"MB",{
+      purpose:"masana",status:"reversed",direction:"outgoing",
+      days:"30",reference:"tip_ledger_1",snapshotAt:"2026-10-26T00:00:00.000Z"});
+    const [sql,args]=f.query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("FROM classified");
+    expect(sql).toContain("operation_id=$11::text");
+    expect(sql).toContain("created_at <= $12::timestamptz");
+    expect(sql).not.toContain("tip_ledger_1");
+    expect(args.slice(5)).toEqual(["MB","masana","reversed","outgoing",30,
+      "tip_ledger_1","2026-10-26T00:00:00.000Z"]);
+    f.query.mockClear();
+    await expect(f.repo.list(scope,5,null,"all",{
+      purpose:"all",status:"all",direction:"all",days:"7",reference:"bad' OR 1=1",
+      snapshotAt:"2026-10-26T00:00:00.000Z"})).rejects.toThrow("invalid_activity_page");
+    expect(f.query).not.toHaveBeenCalled();
   });
   it("rejects malformed IDs, amount overflow, and bad scope before exposing an account",async()=>{
     const f=fixture([{entry_id:"mb:1",operation_id:"send",unit:"MB",

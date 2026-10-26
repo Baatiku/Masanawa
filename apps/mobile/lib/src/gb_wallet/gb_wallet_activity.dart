@@ -88,7 +88,7 @@ class GbActivityPeriodSummary {
 
 abstract class GbActivityTransport {
   Future<GbActivityPage> page({required int limit,String? cursor,
-    String unit='all',
+    String unit='all', GbActivityFilters filters=gbActivityAllFilters,
     CancelToken? cancellation});
   Future<GbActivityItem> detail({required String entryId,
     CancelToken? cancellation});
@@ -96,21 +96,38 @@ abstract class GbActivityTransport {
     CancelToken? cancellation});
 }
 
+typedef GbActivityFilters=({String purpose,String status,String direction,
+  String days,String reference});
+const GbActivityFilters gbActivityAllFilters=(purpose:'all',status:'all',
+  direction:'all',days:'all',reference:'');
+
+bool validGbActivityReference(String reference)=>reference.isEmpty ||
+  (reference.length<=160 &&
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]*$').hasMatch(reference));
+
 class DioGbActivityTransport implements GbActivityTransport {
   const DioGbActivityTransport(this.dio);
   final Dio dio;
   @override
   Future<GbActivityPage> page({required int limit,String? cursor,
-    String unit='all',
+    String unit='all', GbActivityFilters filters=gbActivityAllFilters,
     CancelToken? cancellation}) async {
     if (limit<1 || limit>30 ||
         !const {'all','MB','NGN'}.contains(unit) ||
+        !const {'all','funding','transfers','masana','data','reversals','other'}.contains(filters.purpose) ||
+        !const {'all','completed','reversed'}.contains(filters.status) ||
+        !const {'all','incoming','outgoing'}.contains(filters.direction) ||
+        !const {'all','7','30'}.contains(filters.days) ||
+        !validGbActivityReference(filters.reference) ||
         (cursor!=null && (cursor.isEmpty || cursor.length>1024 ||
           !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)))) {
       throw const FormatException('Invalid wallet activity request');
     }
     final response=await dio.get<Object?>(
       '/v1/gb/wallet/activity',queryParameters:{'limit':limit,'unit':unit,
+        'purpose':filters.purpose,'status':filters.status,
+        'direction':filters.direction,'days':filters.days,
+        if(filters.reference.isNotEmpty)'reference':filters.reference,
         if(cursor!=null)'cursor':cursor},cancelToken:cancellation,
       options:Options(headers:const {'Cache-Control':'no-store'}));
     return GbActivityPage.read(response.data);
@@ -148,7 +165,8 @@ class DioGbActivityTransport implements GbActivityTransport {
 final gbActivityTransportProvider=Provider<GbActivityTransport>((ref)=>
   DioGbActivityTransport(ref.watch(apiClientProvider).dio));
 
-typedef GbActivityRequest=({GbWalletOwner owner,int limit,String unit});
+typedef GbActivityRequest=({GbWalletOwner owner,int limit,String unit,
+  GbActivityFilters filters});
 final gbActivityPageProvider=FutureProvider.autoDispose.family<GbActivityPage,GbActivityRequest>(
   (ref,request) async {
     bool sameOwner() {
@@ -161,7 +179,7 @@ final gbActivityPageProvider=FutureProvider.autoDispose.family<GbActivityPage,Gb
     if(!sameOwner())throw StateError('account_changed');
     final cancel=CancelToken();ref.onDispose(cancel.cancel);
     final result=await ref.watch(gbActivityTransportProvider)
-      .page(limit:request.limit,unit:request.unit,cancellation:cancel);
+      .page(limit:request.limit,unit:request.unit,filters:request.filters,cancellation:cancel);
     if(!sameOwner())throw StateError('account_changed');
     return result;
   });

@@ -57,7 +57,8 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
         url:"/v1/gb/wallet/activity?limit=1&userId=attacker",headers});
       expect(first.statusCode).toBe(200);
       expect(first.json().items).toHaveLength(1);
-      expect(f.list).toHaveBeenCalledWith(owner,2,null,"all");
+      expect(f.list).toHaveBeenCalledWith(owner,2,null,"all",expect.objectContaining({
+        purpose:"all",status:"all",direction:"all",days:"all",reference:""}));
       const cursor=first.json().nextCursor as string;
       expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
       f.list.mockResolvedValueOnce([]);
@@ -66,7 +67,8 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       expect(second.statusCode).toBe(200);
       expect(second.json()).toEqual({items:[],nextCursor:null});
       expect(f.list).toHaveBeenCalledWith(owner,2,
-        {createdAt:item(2).createdAt,entryId:"mb:2"},"all");
+        {createdAt:item(2).createdAt,entryId:"mb:2"},"all",expect.objectContaining({
+          snapshotAt:expect.any(String)}));
       for(const url of ["/v1/gb/wallet/activity?limit=31",
         "/v1/gb/wallet/activity?limit=0",
         "/v1/gb/wallet/activity?unit=MSNW",
@@ -88,13 +90,13 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       const first=await f.app.inject({method:"GET",
         url:"/v1/gb/wallet/activity?limit=1&unit=MB",headers});
       expect(first.statusCode).toBe(200);
-      expect(f.list).toHaveBeenCalledWith(owner,2,null,"MB");
+      expect(f.list).toHaveBeenCalledWith(owner,2,null,"MB",expect.any(Object));
       const token=first.json().nextCursor as string;
       const page=await f.app.inject({method:"GET",
         url:`/v1/gb/wallet/activity?limit=1&unit=MB&cursor=${token}`,headers});
       expect(page.statusCode).toBe(200);
       expect(f.list).toHaveBeenCalledWith(owner,2,
-        {createdAt:item(2).createdAt,entryId:"mb:2"},"MB");
+        {createdAt:item(2).createdAt,entryId:"mb:2"},"MB",expect.any(Object));
       expect((await f.app.inject({method:"GET",
         url:`/v1/gb/wallet/activity?unit=NGN&cursor=${token}`,headers})).statusCode).toBe(422);
     }finally{await f.app.close();}
@@ -106,6 +108,38 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       expect(r.statusCode).toBe(503);
       expect(r.json().error.code).toBe("activity_ledger_unavailable");
     } finally {await f.app.close();}
+  });
+  it("enforces validated history facets and binds every cursor to the exact snapshot/filter",async()=>{
+    const f=fixture();
+    try{
+      const suffix="unit=MB&purpose=transfers&status=completed&direction=outgoing&days=30&reference=original_22";
+      const first=await f.app.inject({method:"GET",url:`/v1/gb/wallet/activity?limit=1&${suffix}`,headers});
+      expect(first.statusCode).toBe(200);
+      const facets=(f.list.mock.lastCall as unknown[])[4] as {snapshotAt:string};
+      expect(facets).toMatchObject({purpose:"transfers",status:"completed",
+        direction:"outgoing",days:"30",reference:"original_22"});
+      const token=first.json().nextCursor as string;
+      const next=await f.app.inject({method:"GET",url:`/v1/gb/wallet/activity?limit=1&${suffix}&cursor=${token}`,headers});
+      expect(next.statusCode).toBe(200);
+      expect(((f.list.mock.lastCall as unknown[])[4] as {snapshotAt:string}).snapshotAt)
+        .toBe(facets.snapshotAt);
+      for(const change of [
+        suffix.replace("purpose=transfers","purpose=funding"),
+        suffix.replace("status=completed","status=reversed"),
+        suffix.replace("direction=outgoing","direction=incoming"),
+        suffix.replace("days=30","days=7"),
+        suffix.replace("reference=original_22","reference=original_23"),
+      ]){
+        const r=await f.app.inject({method:"GET",url:`/v1/gb/wallet/activity?${change}&cursor=${token}`,headers});
+        expect(r.statusCode).toBe(422);
+      }
+      for(const value of ["purpose=unknown","status=pending","direction=all%20rows",
+        "days=365","reference=hello%25world","reference=%20bad"]){
+        expect((await f.app.inject({method:"GET",url:`/v1/gb/wallet/activity?${value}`,headers})).statusCode).toBe(422);
+      }
+      expect(f.list).toHaveBeenCalledTimes(2);
+      expect(next.headers["cache-control"]).toBe("no-store");
+    }finally{await f.app.close();}
   });
   it("reads exact entry freshly within the authenticated actor scope",async()=>{
     const f=fixture();

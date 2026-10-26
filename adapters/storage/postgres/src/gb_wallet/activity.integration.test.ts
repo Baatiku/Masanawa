@@ -47,6 +47,24 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
       expect(first.map(x=>[x.unit,x.amount,x.operationId])).toEqual([
         ["NGN",500050,"deposit_a"], ["MB",-500,"sent"],
       ]);
+      const all={purpose:"all" as const,status:"all" as const,
+        direction:"all" as const,days:"all" as const,
+        reference:"",snapshotAt:"2026-10-26T00:00:00.000Z"};
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,purpose:"funding"})).map(x=>x.operationId)).toEqual(["deposit_a"]);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,purpose:"transfers",direction:"outgoing"})).map(x=>x.operationId))
+        .toEqual(["sent"]);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,status:"reversed"}))).toEqual([]);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,reference:"received"})).map(x=>x.operationId)).toEqual(["received"]);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,reference:"neighbor"}))).toEqual([]);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,days:"7"}))).toHaveLength(3);
+      expect((await repository.list(actor,10,null,"all",{
+        ...all,days:"7",snapshotAt:"2026-11-20T00:00:00.000Z"}))).toEqual([]);
       const summary=await repository.summary(actor,7,new Date("2026-10-26T00:00:00.000Z"));
       expect(summary.MB).toEqual({received:300,spent:500,net:-200});
       expect(summary.NGN).toEqual({received:500050,spent:0,net:500050});

@@ -19,6 +19,14 @@ export interface GbActivityEntry {
   readonly createdAt: string;
 }
 export type GbActivityUnitFilter = "all" | "MB" | "NGN";
+export interface GbActivityFacets {
+  readonly purpose: "all"|"funding"|"transfers"|"masana"|"data"|"reversals"|"other";
+  readonly status: "all"|"completed"|"reversed";
+  readonly direction: "all"|"incoming"|"outgoing";
+  readonly days: "all"|"7"|"30";
+  readonly reference: string;
+  readonly snapshotAt: string;
+}
 
 type Row = {
   entry_id: string;
@@ -112,10 +120,22 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
     },
     async list(actor: GbActivityActor, limit: number,
         cursor: GbActivityCursor | null,
-        unit: GbActivityUnitFilter="all"): Promise<readonly GbActivityEntry[]> {
+        unit: GbActivityUnitFilter="all",
+        facets:GbActivityFacets={purpose:"all",status:"all",direction:"all",
+          days:"all",reference:"",snapshotAt:new Date().toISOString()})
+        : Promise<readonly GbActivityEntry[]> {
       if (!validActor(actor.tenantId) || !validActor(actor.userId) ||
           !Number.isInteger(limit) || limit < 1 || limit > 31 ||
           (unit!=="all" && unit!=="MB" && unit!=="NGN") ||
+          !["all","funding","transfers","masana","data","reversals","other"].includes(facets.purpose) ||
+          !["all","completed","reversed"].includes(facets.status) ||
+          !["all","incoming","outgoing"].includes(facets.direction) ||
+          !["all","7","30"].includes(facets.days) ||
+          !(facets.reference==="" || (facets.reference.length<=160 &&
+            /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(facets.reference))) ||
+          !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(facets.snapshotAt) ||
+          !Number.isFinite(Date.parse(facets.snapshotAt)) ||
+          new Date(facets.snapshotAt).toISOString()!==facets.snapshotAt ||
           (cursor !== null && (!/^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$/.test(cursor.entryId) ||
             !Number.isFinite(Date.parse(cursor.createdAt))))) {
         throw new TypeError("invalid_activity_page");
@@ -147,16 +167,36 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           FROM gb_wallet.ngn_entries n
           WHERE n.tenant_id=$1 AND n.account_id=$2
         )
+        ,classified AS (
+          SELECT *, CASE
+            WHEN kind IN ('welcome_grant','verified_deposit','ngn_exchange','deposit') THEN 'funding'
+            WHEN kind IN ('send','request_pay') THEN 'transfers'
+            WHEN kind IN ('tip','reply','connected_call') THEN 'masana'
+            WHEN kind IN ('redeem','exchange') THEN 'data'
+            WHEN kind IN ('reversal','deposit_reversal') THEN 'reversals'
+            ELSE 'other' END AS purpose
+          FROM posted
+        )
         SELECT entry_id,operation_id,unit,signed_amount,kind,status,
           created_at::text AS created_at
-        FROM posted WHERE ($6::text='all' OR unit=$6::text) AND
+        FROM classified WHERE ($6::text='all' OR unit=$6::text) AND
+          ($7::text='all' OR purpose=$7::text) AND
+          ($8::text='all' OR status=$8::text) AND
+          ($9::text='all' OR (CASE WHEN signed_amount::bigint>0
+            THEN 'incoming' ELSE 'outgoing' END)=$9::text) AND
+          ($10::integer IS NULL OR created_at >= $12::timestamptz -
+            ($10::integer * INTERVAL '1 day')) AND
+          ($11::text IS NULL OR operation_id=$11::text) AND
+          created_at <= $12::timestamptz AND
           ($3::timestamptz IS NULL OR
           created_at < $3::timestamptz OR
           (created_at = $3::timestamptz AND entry_id < $4))
         ORDER BY created_at DESC, entry_id DESC
         LIMIT $5
       `, [actor.tenantId, actor.userId, cursor?.createdAt ?? null,
-        cursor?.entryId ?? null, limit,unit]);
+        cursor?.entryId ?? null, limit,unit,facets.purpose,facets.status,
+        facets.direction,facets.days==="all"?null:Number(facets.days),
+        facets.reference||null,facets.snapshotAt]);
       return Object.freeze(result.rows.map(project));
     },
     async find(actor: GbActivityActor, entryId: string): Promise<GbActivityEntry | null> {
