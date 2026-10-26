@@ -200,6 +200,38 @@ void main() {
       await server.close(force: true);
     }
   });
+  for (final relay in [true,false]) {
+    test('WebSocket ${relay ? 'relay' : 'provider'} sends credentials only in the relay header', () async {
+      final server=await HttpServer.bind(InternetAddress.loopbackIPv4,0);
+      final header=Completer<String?>(),peer=Completer<WebSocket>();
+      final listener=server.listen((request) async {
+        header.complete(request.headers.value('authorization'));
+        peer.complete(await WebSocketTransformer.upgrade(request));
+      });
+      final live=LiveVoiceSession(
+        grant:AgentLiveVoiceGrant(token:'opaque-relay-token',
+          websocketUrl:'ws://127.0.0.1:${server.port}',model:'test',
+          voiceName:'Bodi',expiresAt:DateTime.now().add(const Duration(minutes:1)),
+          transport:relay ? AgentLiveVoiceTransport.gatewayRelay
+              : AgentLiveVoiceTransport.providerDirect),
+        characterName:'Gwani',sendGreeting:false,
+        sharedMicrophone:const Stream<Uint8List>.empty(),
+        onAudioPcm:(_)async{},
+      );
+      try {
+        await live.start();
+        expect(await header.future,relay?'Bearer opaque-relay-token':null);
+        final socket=await peer.future;
+        socket.add(jsonEncode({'setupComplete':{}}));
+        await live.ready.timeout(const Duration(seconds:2));
+        await socket.close();
+      } finally {
+        await live.close();
+        await listener.cancel();
+        await server.close(force:true);
+      }
+    });
+  }
   test('Gemini connection-grant expiry never caps an established call', () {
     final now = DateTime(2026, 10, 15, 10);
     // The admission controls call length, not the short-lived grant token.

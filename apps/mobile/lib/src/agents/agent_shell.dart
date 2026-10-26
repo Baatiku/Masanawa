@@ -125,6 +125,8 @@ class AgentShellEvent {
       );
 }
 
+enum AgentLiveVoiceTransport { providerDirect, gatewayRelay }
+
 class AgentLiveVoiceGrant {
   const AgentLiveVoiceGrant({
     required this.token,
@@ -134,9 +136,12 @@ class AgentLiveVoiceGrant {
     required this.expiresAt,
     this.callId,
     this.systemInstruction,
+    this.transport = AgentLiveVoiceTransport.providerDirect,
   });
   final String? systemInstruction;
   final String? callId;
+  /// Relay credentials are header-only, unlike provider-issued URLs.
+  final AgentLiveVoiceTransport transport;
   final String token;
   final String websocketUrl;
   final String model;

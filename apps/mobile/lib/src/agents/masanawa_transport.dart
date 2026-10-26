@@ -859,6 +859,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
     final websocketUrl = data['websocketUrl'];
     final model = data['model'];
     final voiceName = data['voiceName'];
+    final rawTransport = data['transport'];
     final systemInstruction=data['systemInstruction'];
     if(systemInstruction!=null && (systemInstruction is! String || systemInstruction.length>32000)) {
       throw const ApiException('Invalid live voice context');
@@ -870,6 +871,27 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
         expiresAt == null) {
       throw const ApiException('Invalid live voice grant');
     }
+    if (rawTransport != null && rawTransport != 'gateway_relay') {
+      throw const ApiException('Unsupported live voice transport');
+    }
+    final transport = rawTransport == 'gateway_relay'
+        ? AgentLiveVoiceTransport.gatewayRelay
+        : AgentLiveVoiceTransport.providerDirect;
+    if (transport == AgentLiveVoiceTransport.gatewayRelay) {
+      final endpoint = Uri.tryParse(websocketUrl);
+      final gateway = Uri.tryParse(_client.baseUrl);
+      final local = gateway != null &&
+          const {'127.0.0.1', 'localhost', '::1'}.contains(gateway.host);
+      if (endpoint == null || gateway == null ||
+          endpoint.scheme != (local && gateway.scheme == 'http' ? 'ws' : 'wss') ||
+          endpoint.host != gateway.host || endpoint.port != gateway.port ||
+          endpoint.path != '/agent/live/stream' ||
+          endpoint.userInfo.isNotEmpty || endpoint.hasQuery ||
+          endpoint.hasFragment ||
+          !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(token)) {
+        throw const ApiException('Invalid trusted voice relay grant');
+      }
+    }
     return AgentLiveVoiceGrant(
       token: token,
       websocketUrl: websocketUrl,
@@ -878,6 +900,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
       expiresAt: expiresAt,
       callId: data['callId'] is String ? data['callId'] as String : null,
       systemInstruction:systemInstruction as String?,
+      transport:transport,
     );
   }
 
