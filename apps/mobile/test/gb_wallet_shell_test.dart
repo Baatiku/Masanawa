@@ -232,6 +232,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(overrides: [
       sessionProvider.overrideWith(_SignedIn.new),
       apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+      gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
       gbDataCatalogueProvider.overrideWith((ref, owner) async => [
         GbVerifiedBundle(id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
           allowanceGb: 2, costMb: 2000, validityDays: 30,
@@ -255,6 +256,9 @@ void main() {
     expect(find.text('Review data purchase'), findsOneWidget);
     expect(find.text('2,000 MB'), findsWidgets);
     expect(find.text('+2348031234567'), findsOneWidget);
+    expect(find.text('Continue to purchase'), findsOneWidget);
+    await tester.tap(find.text('Continue to purchase'));
+    await tester.pumpAndSettle();
     expect(find.text('Confirm data purchase'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
