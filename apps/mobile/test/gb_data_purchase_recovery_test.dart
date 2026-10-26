@@ -239,12 +239,11 @@ void main() {
     await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Review bundle'));
-    await tester.tap(find.text('Review bundle'));
+    expect(find.text('Review data purchase'), findsOneWidget);
+    expect(find.text('+2348031234567'), findsOneWidget);
+    expect(find.text('Continue to purchase'), findsOneWidget);
+    await tester.tap(find.text('Continue to purchase'));
     await tester.pumpAndSettle();
-    expect(find.text('Bundle review'), findsOneWidget);
-    expect(find.text('Review bundle'), findsNothing);
-    expect(find.text('Recipient: +2348031234567'), findsOneWidget);
     expect(find.text('Confirm data purchase'), findsOneWidget);
     expect(f.purchasePosts, 0, reason: 'Quote is not a purchase');
     await tester.ensureVisible(find.text('Back to plans'));

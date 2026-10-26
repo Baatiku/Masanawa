@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,8 @@ import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_pending_store.dart';
+import 'package:masanawa/src/core/network/api_client.dart';
+import 'package:masanawa/src/core/providers.dart';
 
 class _PendingDataStore extends GbDataPendingStore {
   final records = <String, GbPendingDataPurchase>{};
@@ -170,11 +173,7 @@ void main() {
     expect(find.textContaining('Suggested: MTN'), findsOneWidget);
     await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
-    await tester.pump();
-    expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
-      isNotNull);
-    expect(find.text('Review before purchase'), findsOneWidget);
+    await tester.pumpAndSettle();
     expect(find.text('Confirm data purchase'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -206,6 +205,61 @@ void main() {
     await tester.tap(find.text('MTN').last);
     await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selecting a verified bundle opens its exact review sheet',
+      (tester) async {
+    final dio = Dio(BaseOptions(baseUrl: kApiBaseUrl));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.path == '/v1/gb/data/quote') {
+        handler.resolve(Response(requestOptions: options, statusCode: 200,
+          data: {'previewOnly': true, 'quote': {
+            'id': 'MTN:exact-2gb', 'version': 'v1', 'network': 'MTN',
+            'allowanceGb': 2, 'costMb': 2000, 'validityDays': 30,
+            'providerAmount': '1500.00',
+            'expiresAt': DateTime.utc(2099).toIso8601String(),
+            'recipientPhone': '+2348031234567',
+            'quoteExpiresAt': DateTime.now().toUtc()
+                .add(const Duration(minutes: 2)).toIso8601String(),
+            'requiresWalletReservation': true, 'feeMb': 0,
+          }}));
+      } else {
+        handler.reject(DioException(requestOptions: options,
+          type: DioExceptionType.badResponse));
+      }
+    }));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+      gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
+      gbDataCatalogueProvider.overrideWith((ref, owner) async => [
+        GbVerifiedBundle(id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
+          allowanceGb: 2, costMb: 2000, validityDays: 30,
+          providerAmount: '1500.00', expiresAt: DateTime.utc(2099)),
+      ]),
+    ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MTN').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Monthly'));
+    await tester.tap(find.text('Monthly'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 GB'), findsOneWidget);
+    await tester.ensureVisible(find.text('2 GB'));
+    await tester.tap(find.text('2 GB'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review data purchase'), findsOneWidget);
+    expect(find.text('2,000 MB'), findsWidgets);
+    expect(find.text('+2348031234567'), findsOneWidget);
+    expect(find.text('Continue to purchase'), findsOneWidget);
+    await tester.tap(find.text('Continue to purchase'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm data purchase'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

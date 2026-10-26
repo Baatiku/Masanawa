@@ -13,11 +13,13 @@ class GbWalletBalanceCard extends StatelessWidget {
     required this.balance,
     required this.loading,
     this.showSendable = false,
+    this.compact = false,
   });
 
   final GbWalletBalance? balance;
   final bool loading;
   final bool showSendable;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +40,7 @@ class GbWalletBalanceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: colors.brand.withValues(alpha: .35)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: compact ? 9 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -73,7 +75,7 @@ class GbWalletBalanceCard extends StatelessWidget {
           ),
           if (largeText)
             Align(alignment: AlignmentDirectional.centerEnd, child: addData),
-          const SizedBox(height: 6),
+          SizedBox(height: compact ? 2 : 6),
           if (balance == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 7),
@@ -89,19 +91,25 @@ class GbWalletBalanceCard extends StatelessWidget {
               ),
             )
           else ...[
-            Text(
-              '${decimalGb(balance!.availableMb)} GB',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colors.textPrimary,
+            if (compact)
+              Text(
+                '${decimalGb(balance!.availableMb)} GB  ·  ${groupedMb(balance!.availableMb)} MB',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800, color: colors.textPrimary),
+              )
+            else ...[
+              Text(
+                '${decimalGb(balance!.availableMb)} GB',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800, color: colors.textPrimary),
               ),
-            ),
-            Text(
-              '${groupedMb(balance!.availableMb)} MB',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.textMuted,
+              Text(
+                '${groupedMb(balance!.availableMb)} MB',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.textMuted,
+                ),
               ),
-            ),
+            ],
             if (showSendable) ...[
               const SizedBox(height: 8),
               Text(
@@ -125,7 +133,7 @@ class GbWalletBalanceCard extends StatelessWidget {
                 ),
             ],
           ],
-          const NgnFundingCardDetails(),
+          NgnFundingCardDetails(compact: compact),
         ],
       ),
     );

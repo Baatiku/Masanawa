@@ -7,7 +7,8 @@ import 'ngn_wallet.dart';
 
 /// Read-only account information: viewing a card never allocates an account.
 class NgnFundingCardDetails extends ConsumerWidget {
-  const NgnFundingCardDetails({super.key});
+  const NgnFundingCardDetails({super.key, this.compact = false});
+  final bool compact;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(sessionProvider);
@@ -29,7 +30,7 @@ class NgnFundingCardDetails extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(height: 16),
+        Divider(height: compact ? 8 : 16),
         Row(
           children: [
             Expanded(
@@ -56,7 +57,7 @@ class NgnFundingCardDetails extends ConsumerWidget {
           const Text('NGN wallet restricted'),
         if ((cash?.valueOrNull?.debtKobo ?? 0) > 0)
           Text('Reconciliation due: ${formatNgn(cash!.valueOrNull!.debtKobo)}'),
-        const SizedBox(height: 4),
+        SizedBox(height: compact ? 2 : 4),
         if (account?.state == 'assigned') ...[
           Text(account!.bank!, style: Theme.of(context).textTheme.labelMedium),
           Row(
