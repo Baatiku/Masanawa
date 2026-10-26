@@ -118,19 +118,19 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: MasanaFeedScreen(api:api,accountKey:'owner'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pump();
     expect(tester.widget<IconButton>(find.ancestor(
-      of:find.byIcon(Icons.add_reaction_outlined),
-      matching:find.byType(IconButton)).first).onPressed,isNull);
+      of:find.byIcon(Icons.thumb_up_outlined),
+      matching:find.byType(TextButton)).first).onPressed,isNull);
     pending.completeError(StateError('offline'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction not confirmed. Refresh or retry.'),
       findsOneWidget);
     api.onReact = null;
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
@@ -164,7 +164,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body:MasanaFeedScreen(api:api,accountKey:'owner'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
