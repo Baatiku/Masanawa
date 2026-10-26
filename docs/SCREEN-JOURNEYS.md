@@ -2,6 +2,8 @@
 
 **Active owner refactor, 24 October 2026.** Exactly five tabs: **Chats · Status · Wallet · Calls · Data**. This document supersedes the old 177-screen/820-item scope. All legacy UI remains in Git history, not active routes. New MB balance is never derived from old Credits or MSNW. The next implementation batch must update this contract as screen/backend behavior lands, without inventing a second active plan.
 
+**Owner acceptance override, 26 October 2026:** These descriptions remain design/source contracts, but their real-device, TalkBack, visual, Bluetooth and microphone scenarios are **not active checklist closure gates**. Close each implemented feature after relevant automated tests and merged CI, then let the owner test a consolidated build when requested. Record any feedback as a new actionable fix and iterate. Do not imply any unperformed handset/device test passed, and do not waive independent backend-provider or MB/funds safety prerequisites.
+
 ## Universal presentation and state rules
 
 Actors: phone/email-authenticated human, signed-out/recovering human, authorized platform editor/admin, platform Masana, provider callback (server only). Root navigation is a persistent accessible 5-item bottom bar; Chats selected by default. Each tab retains bounded scroll/selection for the same active account and destroys private state on user switch. Supported deep links route to account-bound content; retired routes only redirect to appropriate canonical tab. Protected content never flashes during session restore.
