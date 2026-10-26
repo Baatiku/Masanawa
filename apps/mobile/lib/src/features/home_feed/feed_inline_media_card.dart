@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'feed_media_api.dart';
@@ -37,6 +38,7 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   bool loading=true;
   String? error;
   int generation=0;
+  Timer? _expiryTimer;
 
   @override void initState(){
     super.initState();
@@ -54,6 +56,8 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
   }
   void _discard(){
     generation++;
+    _expiryTimer?.cancel();
+    _expiryTimer=null;
     final previous=grant;
     grant=null;
     // Signed network images are retained only while their authorizing card
@@ -81,10 +85,21 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
          !result.expiresAt.isAfter(DateTime.now())){
         throw const FormatException('Invalid inline media grant');
       }
+      // A short-lived signed URL must leave the widget AND memory at expiry,
+      // even when the page has not otherwise rebuilt.
+      _expiryTimer?.cancel();
+      _expiryTimer=Timer(result.expiresAt.difference(DateTime.now()),(){
+        if(!mounted||ticket!=generation)return;
+        setState((){_discard();error='Preview expired';loading=false;});
+      });
       setState(() {grant=result;loading=false;});
-    }catch(_){
+    }catch(e){
       if(mounted&&ticket==generation)setState((){
-        loading=false;error='Preview unavailable';
+        loading=false;
+        final status=e is DioException?e.response?.statusCode:null;
+        error=status==403||status==401?'Image access denied':
+          status==404||status==410?'Image no longer available':
+          'Preview unavailable';
       });
     }
   }
@@ -102,7 +117,9 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
       child:Semantics(label:'Loading approved image preview',
         child:const CircularProgressIndicator(strokeWidth:2))));
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
-      return frame(Center(child:retry('Image unavailable · retry preview')));
+      return frame(Center(child:retry(error==null||error=='Preview unavailable'
+        ? 'Image unavailable · retry preview'
+        : '$error · retry preview')));
     }
     final preview=widget.renderer?.call(current)??Image.network(
       current.url.toString(),
@@ -114,7 +131,7 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
     );
     if(widget.tile){
       return Semantics(
-        label:'Image ${widget.imageIndex} of ${widget.mediaCount}',
+        label:'Image ${widget.imageIndex} of ${widget.mediaCount}. No approved description provided',
         child:ClipRRect(borderRadius:BorderRadius.circular(10),child:Stack(
           fit:StackFit.expand,children:[
             InkWell(onTap:widget.onOpen,child:preview),
@@ -130,11 +147,14 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
       );
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      InkWell(
-        onTap:widget.onOpen,
-        child:ClipRRect(
-          borderRadius:BorderRadius.circular(10),
-          child:preview,
+      Semantics(
+        label:'Image 1 of ${widget.mediaCount}. No approved description provided',
+        child:InkWell(
+          onTap:widget.onOpen,
+          child:ClipRRect(
+            borderRadius:BorderRadius.circular(10),
+            child:preview,
+          ),
         ),
       ),
       if(widget.mediaCount>1)

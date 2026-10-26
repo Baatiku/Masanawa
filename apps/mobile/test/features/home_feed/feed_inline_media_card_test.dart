@@ -95,6 +95,42 @@ void main() {
     expect(find.text('Image unavailable · retry preview'), findsOneWidget);
     expect(find.text('Never show expired image'), findsNothing);
   });
+
+  testWidgets('a displayed signed image is removed when its grant expires',
+      (tester) async {
+    final api = _ShortMediaApi();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: FeedInlineMediaCard(
+        api: api,
+        accountKey: 'signed-in',
+        postId: 'post1',
+        mediaId: 'media1',
+        mediaCount: 1,
+        renderer: (_) => const Text('Authorized temporary image'),
+      ),
+    )));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Authorized temporary image'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Authorized temporary image'), findsNothing);
+    expect(find.text('Preview expired · retry preview'), findsOneWidget);
+    expect(api.requests, 1);
+  });
+}
+
+class _ShortMediaApi implements FeedMediaApi {
+  int requests = 0;
+  @override
+  Future<FeedMediaGrant> getGrant(String postId, String mediaId) async {
+    requests++;
+    return FeedMediaGrant(
+      mediaId: mediaId,
+      kind: 'image',
+      url: Uri.parse('https://example.test/temporary-grant'),
+      expiresAt: DateTime.now().add(const Duration(seconds: 2)),
+    );
+  }
 }
 
 class _ExpiredMediaApi implements FeedMediaApi {
