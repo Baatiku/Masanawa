@@ -101,7 +101,7 @@ class GbWalletBalanceCard extends StatelessWidget {
                 color: colors.textMuted)),
             if (compact)
               Text(
-                '${decimalGb(balance!.availableMb)} GB  ·  ${groupedMb(balance!.availableMb)} MB',
+                '${decimalGb(balance!.availableMb)} GB',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800, color: colors.textPrimary),
               )

@@ -300,15 +300,8 @@ void main() {
       expect(f.posts, isEmpty);
       await tester.tap(find.byTooltip('Back to packages'));
       await tester.pumpAndSettle();
-      expect(find.text('Choose a package'), findsOneWidget);
-      expect(
-        tester
-            .widget<RadioListTile<int>>(
-              find.byKey(const ValueKey('gb-package-10')),
-            )
-            .groupValue,
-        10,
-      );
+      expect(find.text('Choose a package'), findsNothing);
+      expect(find.byKey(const ValueKey('gb-package-10')), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
