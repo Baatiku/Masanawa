@@ -54,7 +54,7 @@ class _MbRequest {
         payer is! String || payer.isEmpty || requester == payer ||
         amount is! int || amount < 1 || amount > 1000000000 ||
         state is! String ||
-        !const {'open','expired','paid','cancelled'}.contains(state) ||
+        !const {'open','expired','paid','cancelled','declined'}.contains(state) ||
         expiry == null || !expiry.isUtc) {
       throw const FormatException('Inconsistent payment request');
     }
@@ -235,16 +235,22 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
   }
 
   Future<void> _action(
-    _Owner owner, _MbRequest item, {required bool pay}
+    _Owner owner, _MbRequest item, {required String action}
   ) async {
     if (_busy || !_isCurrent(owner)) return;
+    final pay = action == 'pay';
+    final decline = action == 'decline';
     final accepted = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(pay ? 'Pay MB request?' : 'Cancel request?'),
+        title: Text(pay ? 'Pay MB request?' : decline
+            ? 'Decline request?' : 'Cancel request?'),
         content: Text(pay
             ? 'Send ${groupedMb(item.amountMb)} purchased MB to '
                 '@${item.requesterName}?'
+            : decline
+            ? 'Decline the ${groupedMb(item.amountMb)} MB request from '
+                '@${item.requesterName}? No MB will move.'
             : 'Cancel the ${groupedMb(item.amountMb)} MB request?'),
         actions: [
           TextButton(
@@ -253,7 +259,8 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(pay ? 'Confirm payment' : 'Cancel request'),
+            child: Text(pay ? 'Confirm payment' : decline
+                ? 'Confirm decline' : 'Cancel request'),
           ),
         ],
       ),
@@ -270,7 +277,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
     try {
       final result = await ref.read(apiClientProvider).dio.post<Object?>(
         '/v1/gb/wallet/requests/${Uri.encodeComponent(item.id)}/'
-            '${pay ? 'pay' : 'cancel'}',
+            '$action',
         data: pay ? {'reviewAccepted':true} : <String, Object>{},
         cancelToken: cancel,
         options: Options(headers: const {'Cache-Control':'no-store'}),
@@ -290,11 +297,12 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
       } else {
         final body=result.data;
         if (body is! Map<String, dynamic>) {
-          throw const FormatException('Request cancellation mismatch');
+          throw const FormatException('Request closure mismatch');
         }
         final changed=_MbRequest.fromJson(body['request']);
-        if (changed.id != item.id || changed.state != 'cancelled') {
-          throw const FormatException('Request cancellation mismatch');
+        if (changed.id != item.id || changed.state !=
+            (decline ? 'declined' : 'cancelled')) {
+          throw const FormatException('Request closure mismatch');
         }
       }
       if (!mounted || sequence != _generation || !_isCurrent(owner)) return;
@@ -307,7 +315,8 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
         _busy = false;
         _error = pay
             ? 'Payment not confirmed. Refresh this request before retrying.'
-            : 'Cancellation not confirmed. Refresh and retry.';
+            : '${decline ? 'Decline' : 'Cancellation'} not confirmed. '
+                'Refresh and retry.';
       });
     }
   }
@@ -476,7 +485,8 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
                       const SizedBox(height: 5),
                       Text(item.state == 'open' ? 'Pending' :
                         item.state == 'paid' ? 'Paid' :
-                        item.state == 'expired' ? 'Expired' : 'Cancelled',
+                        item.state == 'expired' ? 'Expired' :
+                        item.state == 'declined' ? 'Declined' : 'Cancelled',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colors.textMuted)),
                       if (item.operationId != null)
@@ -484,14 +494,22 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
                           style: theme.textTheme.labelSmall),
                       if (item.state == 'open') Align(
                         alignment: AlignmentDirectional.centerEnd,
-                        child: TextButton.icon(
-                          onPressed: _busy || owner == null
-                              ? null : () => _action(owner,item,pay:_incoming),
-                          icon: Icon(_incoming
-                              ? Icons.check_circle_outline
-                              : Icons.cancel_outlined),
-                          label: Text(_incoming ? 'Pay request' : 'Cancel'),
-                        ),
+                        child: Wrap(spacing:8,children:[
+                          if (_incoming) TextButton.icon(
+                            onPressed: _busy || owner == null ? null
+                                : () => _action(owner,item,action:'decline'),
+                            icon:const Icon(Icons.close_rounded),
+                            label:const Text('Decline')),
+                          TextButton.icon(
+                            onPressed: _busy || owner == null ? null
+                                : () => _action(owner,item,
+                                    action:_incoming ? 'pay' : 'cancel'),
+                            icon: Icon(_incoming
+                                ? Icons.check_circle_outline
+                                : Icons.cancel_outlined),
+                            label: Text(_incoming ? 'Pay request' : 'Cancel'),
+                          ),
+                        ]),
                       ),
                     ],
                   ),

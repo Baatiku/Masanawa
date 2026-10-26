@@ -48,6 +48,43 @@ ApiClient _requestFixture(List<String> sentKeys) {
   return ApiClient(dio: dio);
 }
 
+ApiClient _declineFixture(List<String> postedPaths) {
+  const id = 'mbreq_abcdefghijklmnopqrstuvwx';
+  var state = 'open';
+  final dio = Dio(BaseOptions(baseUrl: kApiBaseUrl));
+  dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+    final request = <String, dynamic>{
+      'requestId': id, 'requesterId': 'someone-else',
+      'payerId': _fan.id, 'requesterUsername': 'requester',
+      'payerUsername': 'payer', 'amountMb': 250, 'state': state,
+      'expiresAt': '2026-11-01T00:00:00.000Z', 'operationId': null,
+    };
+    if (options.method == 'GET' &&
+        options.path == '/v1/gb/wallet/requests') {
+      handler.resolve(Response<Map<String, dynamic>>(
+        requestOptions: options, statusCode: 200,
+        data: {'requests': [request]},
+      ));
+      return;
+    }
+    if (options.method == 'POST') {
+      postedPaths.add(options.path);
+      if (options.path == '/v1/gb/wallet/requests/$id/decline') {
+        state = 'declined';
+        handler.resolve(Response<Map<String, dynamic>>(
+          requestOptions: options, statusCode: 200,
+          data: {'request': {...request, 'state': state}},
+        ));
+        return;
+      }
+    }
+    handler.reject(DioException(requestOptions: options,
+      response: Response(requestOptions: options, statusCode: 503),
+      type: DioExceptionType.badResponse));
+  }));
+  return ApiClient(dio: dio);
+}
+
 void main() {
   testWidgets('signed-out Request cannot construct payment or creation POST',
       (tester) async {
@@ -130,6 +167,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(keys, hasLength(2));
     expect(keys[1], keys[0]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('payer explicitly declines without a Pay POST, with terminal readback',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 1050);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final writes = <String>[];
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      apiClientProvider.overrideWithValue(_declineFixture(writes)),
+    ], child: const MaterialApp(home: GbRequestScreen())));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Decline'));
+    expect(find.text('Pay request'), findsOneWidget);
+    await tester.tap(find.text('Decline'));
+    await tester.pumpAndSettle();
+    expect(find.text('Decline request?'), findsOneWidget);
+    expect(writes, isEmpty, reason: 'The confirmation dialog cannot move MB');
+    await tester.tap(find.text('Confirm decline'));
+    await tester.pumpAndSettle();
+    expect(writes, ['/v1/gb/wallet/requests/mbreq_abcdefghijklmnopqrstuvwx/decline']);
+    expect(find.text('Declined'), findsOneWidget);
+    expect(find.text('Pay request'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

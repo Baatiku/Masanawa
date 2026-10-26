@@ -16,6 +16,8 @@ export interface GbRequestStore {
     Promise<{operationId:string;amountMb:number;state:"completed"}>;
   cancel: (actor: GbRequestActor,requestId:string) =>
     Promise<GbPaymentRequest>;
+  decline: (actor: GbRequestActor,requestId:string) =>
+    Promise<GbPaymentRequest>;
 }
 export interface GbRequestPorts {
   readonly authorize: GbSendPorts["authorize"];
@@ -105,6 +107,16 @@ export function registerGbRequestRoutes(
       const owner=await actor(request.headers.authorization);
       const id=(request.params as {requestId:string}).requestId;
       return {request:await ports.store.cancel(owner,id)};
+    }catch(error){return failure(error,reply);}
+  });
+  app.post("/v1/gb/wallet/requests/:requestId/decline",{
+    schema:{params,body:Type.Object({}, {additionalProperties:false})},
+  },async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    try {
+      const owner=await actor(request.headers.authorization);
+      const id=(request.params as {requestId:string}).requestId;
+      return {request:await ports.store.decline(owner,id)};
     }catch(error){return failure(error,reply);}
   });
 }
