@@ -101,7 +101,8 @@ class GbActivityTile extends StatelessWidget {
 
 /// Small authoritative preview in Wallet; no invented empty activity state.
 class GbWalletActivitySection extends ConsumerWidget {
-  const GbWalletActivitySection({super.key});
+  const GbWalletActivitySection({super.key,this.previewCount=5});
+  final int previewCount;
   @override
   Widget build(BuildContext context,WidgetRef ref) {
     final owner=_ownerFor(ref);
@@ -133,7 +134,7 @@ class GbWalletActivitySection extends ConsumerWidget {
         const Padding(padding:EdgeInsets.symmetric(vertical:22),
           child:Center(child:Text('No posted MB or NGN activity yet.')))
       else
-        for(final item in page.valueOrNull!.items)
+        for(final item in page.valueOrNull!.items.take(previewCount))
           GbActivityTile(key:ValueKey('wallet-preview-${item.id}'),item:item),
     ]);
   }

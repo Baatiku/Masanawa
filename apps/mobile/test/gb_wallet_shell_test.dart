@@ -111,6 +111,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Wallet leads with account and two real recent movements',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 950);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final entries = [
+      for (var i = 1; i <= 3; i++)
+        GbActivityItem(id: 'mb:$i', operationId: 'send_$i', unit: 'MB',
+          amount: -i * 100, kind: 'send', status: 'completed',
+          createdAt: DateTime.utc(2026, 10, 25)),
+    ];
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
+        const GbWalletBalance(totalMb: 1500, availableMb: 1500,
+          purchasedAvailableMb: 1500, welcomeAvailableMb: 0,
+          reservedMb: 0, frozen: false)),
+      gbActivityPageProvider.overrideWith((ref, request) async =>
+        GbActivityPage(entries, null)),
+    ], child: const MaterialApp(home: Scaffold(body: GbWalletScreen()))));
+    await tester.pumpAndSettle();
+    expect(find.text('Masanawa fan'), findsOneWidget);
+    expect(find.text('Data balance'), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-preview-mb:1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-preview-mb:2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-preview-mb:3')), findsNothing);
+    expect(find.text('See all'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   test('rejects fabricated or inconsistent MB readback', () {
     final valid = <String, dynamic>{
       'balance': {

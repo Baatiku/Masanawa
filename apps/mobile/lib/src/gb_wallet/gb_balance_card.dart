@@ -14,12 +14,14 @@ class GbWalletBalanceCard extends StatelessWidget {
     required this.loading,
     this.showSendable = false,
     this.compact = false,
+    this.ownerName,
   });
 
   final GbWalletBalance? balance;
   final bool loading;
   final bool showSendable;
   final bool compact;
+  final String? ownerName;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +56,10 @@ class GbWalletBalanceCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Data balance',
+                  ownerName == null || ownerName!.trim().isEmpty
+                      ? 'Data balance' : ownerName!.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: colors.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -91,6 +96,9 @@ class GbWalletBalanceCard extends StatelessWidget {
               ),
             )
           else ...[
+            if (!compact && ownerName != null && ownerName!.trim().isNotEmpty)
+              Text('Data balance', style: theme.textTheme.labelMedium?.copyWith(
+                color: colors.textMuted)),
             if (compact)
               Text(
                 '${decimalGb(balance!.availableMb)} GB  ·  ${groupedMb(balance!.availableMb)} MB',

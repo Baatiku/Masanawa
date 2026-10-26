@@ -57,7 +57,8 @@ class GbWalletScreen extends ConsumerWidget {
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700)),
           ),
-          GbWalletBalanceCard(balance: balance, loading: loading),
+          GbWalletBalanceCard(balance: balance, loading: loading,
+            ownerName: session is SessionSignedIn ? session.user.name : null),
           if (balance == null && !loading)
             Center(
               child: Padding(
@@ -91,6 +92,8 @@ class GbWalletScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          const SizedBox(height: 8),
+          const GbWalletActivitySection(previewCount: 2),
           const SizedBox(height: 18),
           Text('Quick actions', style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700)),
@@ -128,8 +131,6 @@ class GbWalletScreen extends ConsumerWidget {
               ],
             );
           }),
-          const SizedBox(height: 26),
-          const GbWalletActivitySection(),
         ],
       ),
     );
