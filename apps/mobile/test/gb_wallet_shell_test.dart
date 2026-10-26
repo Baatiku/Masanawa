@@ -240,9 +240,15 @@ void main() {
     ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MTN').last);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Monthly'));
     await tester.tap(find.text('Monthly'));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('2 GB'), findsOneWidget);
     await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
     await tester.pumpAndSettle();
