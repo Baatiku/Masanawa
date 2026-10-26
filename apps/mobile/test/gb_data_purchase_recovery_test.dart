@@ -250,6 +250,9 @@ void main() {
     await tester.ensureVisible(find.text('Back to plans'));
     await tester.tap(find.text('Back to plans'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Review bundle'), 150,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Review bundle'), findsOneWidget);
     expect(find.text('Confirm data purchase'), findsNothing);
     await tester.scrollUntilVisible(find.byType(TextField), -150,
