@@ -44,6 +44,11 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   bool offline = false;
   int epoch = 0;
   final Set<String> pending = {};
+  // A timed-out DELETE/PUT may have reached the server. Do not encourage a
+  // second toggle until a successful owner-scoped collection read confirms it.
+  final Set<String> uncertainRemovals = {};
+
+  String _itemKey(SavedStatusItem item) => '${item.isPost}-${item.id}';
 
   bool get current => widget.accountKey.isNotEmpty && widget.isAccountCurrent();
 
@@ -65,6 +70,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       cursor = null;
       error = null;
       pending.clear();
+      uncertainRemovals.clear();
       loading = false;
       loadingMore = false;
       if (current) refresh();
@@ -78,7 +84,9 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   }
 
   Future<void> refresh() async {
-    if (!current) return;
+    // A read racing a still-in-flight removal cannot establish the outcome of
+    // that write; wait for it to settle before the verification refresh.
+    if (!current || pending.isNotEmpty) return;
     final ticket = ++epoch;
     setState(() {
       loading = true;
@@ -98,6 +106,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
         cursor = page.items.isEmpty ? null : page.nextCursor;
         loading = false;
         offline = false;
+        uncertainRemovals.clear();
       });
     } catch (e) {
       if (!mounted || ticket != epoch || !current) return;
@@ -154,7 +163,8 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   }
 
   Future<void> remove(SavedStatusItem item) async {
-    if (!current || pending.contains(item.id)) return;
+    final itemKey = _itemKey(item);
+    if (!current || pending.contains(itemKey) || uncertainRemovals.contains(itemKey)) return;
     final consent = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -176,7 +186,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
     );
     if (consent != true || !mounted || !current) return;
     final ticket = epoch;
-    setState(() => pending.add(item.id));
+    setState(() => pending.add(itemKey));
     try {
       await widget.api.removeSaved(item);
       if (!mounted || ticket != epoch || !current) return;
@@ -187,14 +197,15 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       );
     } catch (_) {
       if (!mounted || ticket != epoch || !current) return;
+      setState(() => uncertainRemovals.add(itemKey));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Removal not confirmed. Refresh and retry.'),
+          content: Text('Removal not confirmed. Refresh to verify the saved state.'),
         ),
       );
     } finally {
       if (mounted && ticket == epoch && current) {
-        setState(() => pending.remove(item.id));
+        setState(() => pending.remove(itemKey));
       }
     }
   }
@@ -245,6 +256,18 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                         ? null
                         : (items.isNotEmpty ? nextPage : refresh),
                     child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            if (uncertainRemovals.isNotEmpty)
+              MaterialBanner(
+                content: const Text(
+                  'A removal may have succeeded. Refresh Saved to confirm before trying again.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: loading || pending.isNotEmpty ? null : refresh,
+                    child: const Text('Refresh'),
                   ),
                 ],
               ),
@@ -328,7 +351,8 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
                                     TextButton.icon(
-                                      onPressed: pending.contains(item.id)
+                                      onPressed: pending.contains(_itemKey(item)) ||
+                                              uncertainRemovals.contains(_itemKey(item))
                                           ? null
                                           : () => remove(item),
                                       icon: const Icon(

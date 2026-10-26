@@ -225,6 +225,55 @@ void main() {
     expect(find.text('Approved original'), findsOneWidget);
   });
 
+  testWidgets('uncertain saved removal stays locked until confirmed readback', (
+    tester,
+  ) async {
+    final api = SavedStub();
+    final pending = Completer<void>();
+    api.remover = (_) => pending.future;
+    await tester.pumpWidget(MaterialApp(
+      home: SavedStatusLibraryScreen(
+        api: api,
+        accountKey: 'fan',
+        isAccountCurrent: () => true,
+        openPost: (_) async {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove').last);
+    await tester.pump();
+    expect(api.removals, [_postId]);
+    // A refresh during an unresolved write cannot establish its outcome.
+    await (tester.state(find.byType(SavedStatusLibraryScreen)) as dynamic)
+        .refresh();
+    expect(api.cursors, [null]);
+    pending.completeError(DioException(
+      requestOptions: RequestOptions(path: '/v1/saved'),
+      type: DioExceptionType.connectionTimeout,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('A removal may have succeeded'), findsOneWidget);
+    expect(find.text('Hello Status'), findsOneWidget);
+    final removeButtons = tester.widgetList<TextButton>(
+      find.widgetWithText(TextButton, 'Remove'),
+    ).toList();
+    expect(removeButtons.first.onPressed, isNull);
+    expect(api.removals, [_postId]);
+
+    api.remover = (_) async {};
+    api.page = SavedStatusPage([
+      SavedStatusItem.fromJson(savedSecondPost()),
+    ], null);
+    await tester.tap(find.text('Refresh').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Hello Status'), findsNothing);
+    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.textContaining('A removal may have succeeded'), findsNothing);
+    expect(api.cursors, [null, null]);
+  });
+
   testWidgets('pagination uses server cursor, dedupes and recovers failures', (
     tester,
   ) async {
