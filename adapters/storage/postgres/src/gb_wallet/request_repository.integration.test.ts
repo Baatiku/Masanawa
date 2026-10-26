@@ -129,4 +129,59 @@ describe.skipIf(!url)("whole-MB Request reconciliation on disposable PostgreSQL1
     await expect(repo().pay(actor(payer),created.requestId))
       .rejects.toMatchObject({code:"request_cancelled"});
   });
+
+  it("payer Decline is idempotent, actor-bound, and never posts an MB movement",async()=>{
+    const created=await repo().create(actor(requester),{
+      payerId:payer,amountMb:75,idempotencyKey:"request_decline_123456789",
+    });
+    await expect(repo().decline(actor(requester),created.requestId))
+      .rejects.toMatchObject({code:"request_not_found"});
+    await expect(repo().decline(actor(unpaid),created.requestId))
+      .rejects.toMatchObject({code:"request_not_found"});
+    const declined=await repo().decline(actor(payer),created.requestId);
+    expect(declined).toMatchObject({state:"declined",operationId:null});
+    expect(await repo().decline(actor(payer),created.requestId)).toEqual(declined);
+    expect((await repo().list(actor(requester)))
+      .find(x=>x.requestId===created.requestId)?.state).toBe("declined");
+    await expect(repo().pay(actor(payer),created.requestId))
+      .rejects.toMatchObject({code:"request_cancelled"});
+    const movements=await pool.query(`SELECT 1 FROM gb_wallet.movements
+      WHERE tenant_id=$1 AND operation_id=$2`,[
+        tenant,"request_pay_"+created.requestId,
+      ]);
+    expect(movements.rows).toHaveLength(0);
+  });
+
+  it("concurrent Pay versus Decline has exactly one terminal result",async()=>{
+    const created=await repo().create(actor(requester),{
+      payerId:payer,amountMb:80,idempotencyKey:"request_race_1234567890",
+    });
+    const results=await Promise.allSettled([
+      repo().decline(actor(payer),created.requestId),
+      repo().pay(actor(payer),created.requestId),
+    ]);
+    expect(results.filter(r=>r.status==="fulfilled")).toHaveLength(1);
+    const current=(await repo().list(actor(payer)))
+      .find(x=>x.requestId===created.requestId);
+    expect(["paid","declined"]).toContain(current?.state);
+    const journal=await pool.query(`SELECT count(*)::int AS count
+      FROM gb_wallet.movements WHERE tenant_id=$1 AND operation_id=$2`,[
+        tenant,"request_pay_"+created.requestId,
+      ]);
+    expect(journal.rows[0]?.count).toBe(current?.state==="paid"?1:0);
+  });
+
+  it("expired request cannot be rewritten as Declined",async()=>{
+    const created=await repo().create(actor(requester),{
+      payerId:payer,amountMb:90,idempotencyKey:"request_expire_decline_123",
+    });
+    await pool.query(`UPDATE gb_wallet.payment_requests
+      SET created_at=now()-INTERVAL '8 days',
+          expires_at=now()-INTERVAL '1 day'
+      WHERE tenant_id=$1 AND request_id=$2`,[tenant,created.requestId]);
+    await expect(repo().decline(actor(payer),created.requestId))
+      .rejects.toMatchObject({code:"request_expired"});
+    expect((await repo().list(actor(payer)))
+      .find(x=>x.requestId===created.requestId)?.state).toBe("expired");
+  });
 });

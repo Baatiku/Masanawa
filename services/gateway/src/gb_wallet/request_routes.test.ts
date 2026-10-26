@@ -25,6 +25,7 @@ function setup(overrides:Partial<GbRequestPorts>={}) {
       amountMb:250,state:"completed" as const,
     })),
     cancel:vi.fn(async()=>({...entry,state:"cancelled" as const})),
+    decline:vi.fn(async()=>({...entry,state:"declined" as const})),
   };
   const ports:GbRequestPorts={
     authorize:async(header)=>{
@@ -42,7 +43,7 @@ function setup(overrides:Partial<GbRequestPorts>={}) {
   return {app,store};
 }
 describe("durable whole-MB Request transport",()=>{
-  it("requires authentication on reads, creates, Pay and Cancel",async()=>{
+  it("requires authentication on reads, creates, Pay, Cancel and Decline",async()=>{
     const {app}=setup();
     const calls=[
       {method:"GET",url:"/v1/gb/wallet/requests"},
@@ -51,6 +52,8 @@ describe("durable whole-MB Request transport",()=>{
       {method:"POST",url:"/v1/gb/wallet/requests/"+entry.requestId+"/pay",
         payload:{reviewAccepted:true}},
       {method:"POST",url:"/v1/gb/wallet/requests/"+entry.requestId+"/cancel",
+        payload:{}},
+      {method:"POST",url:"/v1/gb/wallet/requests/"+entry.requestId+"/decline",
         payload:{}},
     ] as const;
     for(const req of calls){
@@ -94,6 +97,21 @@ describe("durable whole-MB Request transport",()=>{
       url:"/v1/gb/wallet/requests/"+entry.requestId+"/cancel",payload:{}});
     expect(cancellation.statusCode).toBe(200);
     expect(cancellation.json().request.state).toBe("cancelled");
+  });
+  it("limits Decline to the authenticated original payer and empty body",async()=>{
+    const {app,store}=setup();
+    const url="/v1/gb/wallet/requests/"+entry.requestId+"/decline";
+    const headers={authorization:"Bearer current"};
+    expect((await app.inject({method:"POST",url,headers,
+      payload:[]})).statusCode).toBe(400);
+    expect(store.decline).not.toHaveBeenCalled();
+    const response=await app.inject({method:"POST",url,headers,payload:{}});
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json().request).toMatchObject({
+      requestId:entry.requestId,state:"declined",operationId:null,
+    });
+    expect(store.decline).toHaveBeenCalledWith(actor,entry.requestId);
   });
   it("rejects self-request and hidden or unverified target",async()=>{
     const {app}=setup({

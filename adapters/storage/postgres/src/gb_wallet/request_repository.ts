@@ -9,7 +9,7 @@ export interface GbPaymentRequest {
   readonly requesterUsername: string | null;
   readonly payerUsername: string | null;
   readonly amountMb: number;
-  readonly state: "open" | "paid" | "cancelled" | "expired";
+  readonly state: "open" | "paid" | "cancelled" | "declined" | "expired";
   readonly createdAt: string;
   readonly expiresAt: string;
   readonly operationId: string | null;
@@ -49,7 +49,7 @@ function checkActor(a: GbRequestActor): void {
 type RequestRow = {
   request_id: string; requester_id: string; payer_id: string;
   requester_username: string | null; payer_username: string | null;
-  amount_mb: string; state: "open" | "paid" | "cancelled";
+  amount_mb: string; state: "open" | "paid" | "cancelled" | "declined";
   created_at: Date | string; expires_at: Date | string;
   operation_id: string | null;
 };
@@ -280,6 +280,37 @@ export function createPostgresGbRequestRepository(pool: Pool) {
         if (!prior.rows[0])throw new GbRequestStoreError(404,"request_not_found");
         if (prior.rows[0].state==="paid")throw new GbRequestStoreError(409,"already_paid");
         return project(prior.rows[0]);
+      });
+    },
+    async decline(actor:GbRequestActor,requestId:string):Promise<GbPaymentRequest> {
+      checkActor(actor);
+      if (!validId(requestId))throw new GbRequestStoreError(422,"invalid_request");
+      return withTransaction(pool, async c => {
+        // The UPDATE locks the same row as Pay. Only an open, unexpired
+        // original request can be declined; a concurrent Pay cannot follow.
+        const updated=await c.query<RequestRow>(`
+          UPDATE gb_wallet.payment_requests SET state='declined'
+          WHERE tenant_id=$1 AND payer_id=$2 AND request_id=$3
+            AND state='open' AND expires_at>statement_timestamp()
+          RETURNING *,NULL::text AS requester_username,
+            NULL::text AS payer_username`,[
+            actor.tenantId,actor.userId,requestId,
+          ]);
+        if (updated.rows[0])return project(updated.rows[0]);
+        const prior=await c.query<RequestRow>(`
+          SELECT *,NULL::text AS requester_username,
+            NULL::text AS payer_username
+          FROM gb_wallet.payment_requests
+          WHERE tenant_id=$1 AND payer_id=$2 AND request_id=$3`,[
+            actor.tenantId,actor.userId,requestId,
+          ]);
+        const row=prior.rows[0];
+        if (!row)throw new GbRequestStoreError(404,"request_not_found");
+        if (row.state==="declined")return project(row);
+        if (row.state==="open" && new Date(row.expires_at)<=new Date()) {
+          throw new GbRequestStoreError(410,"request_expired");
+        }
+        throw new GbRequestStoreError(409,"request_already_closed");
       });
     },
   };
