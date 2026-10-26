@@ -35,6 +35,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   CancelToken? _cancel;
   bool _loadingQuote = false;
   bool _purchaseLocked = false;
+  bool _showingResult = false;
   int _generation = 0;
 
   @override
@@ -144,6 +145,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _validity = GbDataValidityPeriod.daily;
       _bundleId = null;
       _purchaseLocked = false;
+      _showingResult = false;
       _owner = owner;
     }
 
@@ -160,7 +162,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     final phone = _phone.text.trim();
     final validPhone = normalizeNigerianDataPhone(phone) != null;
     final canQuote = owner != null && selected != null && validPhone &&
-        !_loadingQuote && !(catalogue?.isLoading ?? false);
+        !_purchaseLocked && !_loadingQuote && !(catalogue?.isLoading ?? false);
     final theme = Theme.of(context);
     final colors = context.masanawa;
     return RefreshIndicator(
@@ -177,6 +179,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           GbWalletBalanceCard(balance: wallet?.valueOrNull,
               loading: wallet?.isLoading ?? false),
           const SizedBox(height: 18),
+          if (_quote == null && !_purchaseLocked && !_showingResult) ...[
           LayoutBuilder(builder: (context, constraints) {
             final network = DropdownButtonFormField<String>(
               key: ValueKey('data-network-selector-${_network ?? 'none'}'),
@@ -321,25 +324,6 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               child: Text(_error!, textAlign: TextAlign.center,
                 style: TextStyle(color: theme.colorScheme.error)),
             )),
-          if (_quote != null)
-            Card(child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Bundle review', style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700, color: colors.brandStrong)),
-                  Text('${_quote!.bundle.network} · '
-                      '${_quote!.bundle.allowanceGb} GB'),
-                  Text('Cost: ${groupedMb(_quote!.bundle.costMb)} MB'),
-                  Text('Recipient: ${_quote!.recipientPhone}'),
-                  Text('Validity: ${_quote!.bundle.validityDays} days'),
-                  const Text('Fee: 0 MB'),
-                  const SizedBox(height: 6),
-                  const Text('Preview · Not purchased'),
-                ],
-              ),
-            )),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: canQuote ? () => _requestQuote(owner, selected!) : null,
@@ -347,18 +331,74 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             label: const Text('Review bundle'),
           ),
           const SizedBox(height: 8),
-          if (_quote != null && owner != null)
+          Center(child: Text('Review before purchase',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.textMuted))),
+          ],
+          if (_quote != null && !_showingResult)
+            Card(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Bundle review',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colors.brandStrong)),
+                  if (!_purchaseLocked)
+                    Align(alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => setState(_clearQuote),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        label: const Text('Back to plans'))),
+                  Text('${_quote!.bundle.network} · '
+                      '${_quote!.bundle.allowanceGb} GB'),
+                  Text('Cost: ${groupedMb(_quote!.bundle.costMb)} MB'),
+                  Text('Recipient: ${_quote!.recipientPhone}'),
+                  Text('Validity: ${_quote!.bundle.validityDays} days'),
+                  const Text('Fee: 0 MB'),
+                  const SizedBox(height: 6),
+                  Text(_purchaseLocked
+                    ? 'Original request saved · Awaiting verified status'
+                    : 'Preview · Not purchased'),
+                ],
+              ),
+            )),
+          if (_quote == null && _purchaseLocked)
+            Padding(padding: const EdgeInsets.all(10),
+              child: Text('Checking your original data purchase',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium)),
+          const SizedBox(height: 12),
+          if (owner != null)
             GbDataPurchasePanel(
-              key: ValueKey('data-purchase-${owner.accountId}-${_quote!.bundle.id}'),
+              key: ValueKey('data-purchase-${owner.accountId}-${owner.authorizationEpoch}'),
               owner: owner,
-              quote: _quote!,
-              onStarted: () => setState(() => _purchaseLocked = true),
-              onResolved: () => setState(() => _purchaseLocked = false),
-            )
-          else
-            Center(child: Text('Review before purchase',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: colors.textMuted))),
+              quote: _quote,
+              onStarted: () {
+                if (mounted && !_purchaseLocked && _isOwner(owner)) {
+                  setState(() => _purchaseLocked = true);
+                }
+              },
+              onResolved: () {
+                if (mounted && _purchaseLocked && _isOwner(owner)) {
+                  setState(() => _purchaseLocked = false);
+                }
+              },
+              onFinished: () {
+                if (mounted && _isOwner(owner)) {
+                  setState(() => _showingResult = true);
+                }
+              },
+            ),
+          if (_showingResult && !_purchaseLocked)
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _showingResult = false;
+                _clearQuote();
+              }),
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Back to plans')),
           TextButton(
             onPressed: () => context.go('/home?tab=wallet'),
             child: const Text('Back to Wallet'),

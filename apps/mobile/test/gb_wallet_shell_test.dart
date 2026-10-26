@@ -8,6 +8,19 @@ import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
+import 'package:masanawa/src/gb_wallet/gb_data_pending_store.dart';
+
+class _PendingDataStore extends GbDataPendingStore {
+  final records = <String, GbPendingDataPurchase>{};
+  @override
+  Future<GbPendingDataPurchase?> read(String id) async => records[id];
+  @override
+  Future<void> write(String id, GbPendingDataPurchase record) async {
+    records[id] = record;
+  }
+  @override
+  Future<void> clear(String id) async { records.remove(id); }
+}
 
 class _SignedOut extends SessionController {
   @override
@@ -129,6 +142,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(_SignedIn.new),
+        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
         gbDataCatalogueProvider.overrideWith((ref, owner) async =>
           [GbVerifiedBundle(
             id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
@@ -170,6 +184,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(_SignedIn.new),
+        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
         gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
       ],
       child: const MaterialApp(home: Scaffold(
@@ -205,6 +220,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(_SignedIn.new),
+        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
         gbDataCatalogueProvider.overrideWith((ref, owner) async => [
           bundle('mtn-2gb', 'MTN', 2),
           bundle('airtel-3gb', 'AIRTEL', 3),

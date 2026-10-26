@@ -16,8 +16,8 @@ export function registerGbDataPurchaseRoutes(app:FastifyInstance,ports:GbDataPur
    if(e instanceof Error&&e.message==="unauthorized"){reply.code(401);return {error:{code:"unauthorized"}};}
    if(e instanceof Error&&e.message==="data_redemption_not_found"){reply.code(404);return {error:{code:"not_found"}};}
    if(e instanceof Error&&e.message.includes("insufficient")){reply.code(409);return {error:{code:"insufficient_purchased_mb"}};}
-   if(e instanceof Error&&e.message.includes("idempotency")){reply.code(409);return {error:{code:"conflicting_request"}};}
    if(e instanceof Error&&e.message==="invalid_idempotency"){reply.code(422);return {error:{code:"invalid_idempotency"}};}
+   if(e instanceof Error&&e.message.includes("idempotency")){reply.code(409);return {error:{code:"conflicting_request"}};}
    reply.code(503);return {error:{code:"data_purchase_unavailable"}};
  };
  app.post("/v1/gb/data/redeem",{
@@ -44,6 +44,16 @@ export function registerGbDataPurchaseRoutes(app:FastifyInstance,ports:GbDataPur
      const user=await authorize(request.headers.authorization);
      const {operationId}=request.params as {operationId:string};
      return await service.reconcile(user,operationId);
+   }catch(e){return error(e,reply);}
+ });
+ app.get("/v1/gb/data/purchases/intent/:idempotencyKey",{
+   schema:{params:Type.Object({idempotencyKey:Type.String({minLength:8,maxLength:128})})},
+ },async(request,reply)=>{
+   reply.header("cache-control","no-store");
+   try{
+     const user=await authorize(request.headers.authorization);
+     const {idempotencyKey}=request.params as {idempotencyKey:string};
+     return await service.readOriginal(user,idempotencyKey);
    }catch(e){return error(e,reply);}
  });
  app.get("/v1/gb/data/purchases/:operationId",{
