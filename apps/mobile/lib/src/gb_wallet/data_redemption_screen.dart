@@ -137,8 +137,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       isDismissible: false,
       enableDrag: false,
       useSafeArea: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, refreshSheet) => PopScope(
+      builder: (sheetContext) => PopScope(
           canPop: !_purchaseLocked,
           child: FractionallySizedBox(
             heightFactor: .82,
@@ -179,7 +178,6 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             ]),
           ),
         ),
-      ),
     );
   }
 
@@ -423,6 +421,11 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 }
               },
             )),
+          if (_quote != null && !_purchaseLocked && !_showingResult)
+            TextButton.icon(
+              onPressed: () => setState(_clearQuote),
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Back to plans')),
           if (_showingResult && !_purchaseLocked)
             TextButton.icon(
               onPressed: () => setState(() {
