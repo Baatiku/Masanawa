@@ -8,6 +8,56 @@ const approved=[{
 }];
 const live=[{billerCode:"BIL22",itemCode:"DT001",name:"untrusted-title",amount:"500",currency:"NGN" as const,labelName:"Phone"}];
 describe("original-reference Flutterwave whole-GB redemption",()=>{
+ it("rejects unapproved, fractional, stale and expired offers before reserving MB or calling a provider",async()=>{
+  const reserve=vi.fn(async()=>{}),claim=vi.fn(async()=>true);
+  const pay=vi.fn(async()=>{throw Error("External payment must not run");});
+  const actor={tenantId:"tenant",userId:"fan"};
+  const base={bundleId:"BIL22:DT001",version:"v1",recipientPhone:"08012345678",
+   idempotencyKey:"fresh-idempotency-key"};
+  const purchaseWith=(items:typeof approved,providerItems:typeof live=live)=>
+   createDataRedemptionService({approved:async()=>items,liveItems:async()=>providerItems,
+    reserve,claim,pay,capture:async()=>{},release:async()=>{},
+    read:async()=>null,resolve:async()=>{},status:async()=>null,
+    now:()=>new Date("2026-10-25T00:00:00Z"),
+   }).purchase(actor,base);
+  await expect(purchaseWith([])).rejects.toThrow("Verified GB bundle is unavailable");
+  await expect(purchaseWith(approved,[])).rejects.toThrow("Verified GB bundle is unavailable");
+  await expect(purchaseWith([{...approved[0]!,allowanceGb:0.5}])).rejects.toThrow();
+  await expect(purchaseWith([{...approved[0]!,allowanceGb:2000}])).rejects.toThrow();
+  await expect(purchaseWith([{...approved[0]!,expiresAt:"2026-10-24T00:00:00Z"}]))
+   .rejects.toThrow("Verified GB bundle is unavailable");
+  await expect(createDataRedemptionService({approved:async()=>approved,
+   liveItems:async()=>live,reserve,claim,pay,capture:async()=>{},release:async()=>{},
+   read:async()=>null,resolve:async()=>{},status:async()=>null,
+   now:()=>new Date("2026-10-25T00:00:00Z"),
+  }).purchase(actor,{...base,version:"outdated"}))
+   .rejects.toThrow("Bundle configuration changed");
+  expect(reserve).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  expect(pay).not.toHaveBeenCalled();
+ });
+ it("reserves exactly 1,000 purchased MB per approved GB and stops on insufficient funds",async()=>{
+  const events:string[]=[];
+  const pay=vi.fn(async()=>{throw Error("Provider dispatch must be unreachable");});
+  const reserve=vi.fn(async(v:{use:string;amountMb:number;tenantId:string;userId:string})=>{
+   events.push("reserve");
+   expect(v).toMatchObject({tenantId:"tenant",userId:"fan",use:"redeem",amountMb:1000});
+   throw new RangeError("gb.wallet.insufficient_mb");
+  });
+  const claim=vi.fn(async()=>true);
+  const service=createDataRedemptionService({approved:async()=>approved,
+   liveItems:async()=>live,reserve,claim,pay,capture:async()=>{},release:async()=>{},
+   read:async()=>null,resolve:async()=>{},status:async()=>null,
+   now:()=>new Date("2026-10-25T00:00:00Z"),
+  });
+  await expect(service.purchase({tenantId:"tenant",userId:"fan"},{
+   bundleId:"BIL22:DT001",version:"v1",recipientPhone:"08012345678",
+   idempotencyKey:"budget-restricted-request",
+  })).rejects.toThrow("gb.wallet.insufficient_mb");
+  expect(events).toEqual(["reserve"]);
+  expect(claim).not.toHaveBeenCalled();
+  expect(pay).not.toHaveBeenCalled();
+ });
  it("reserves purchased MB first, dispatches once, captures only GET-confirmed matching status",async()=>{
   let journal:DataRedemptionRow|null=null;
   const events:string[]=[];
