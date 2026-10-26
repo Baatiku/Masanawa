@@ -160,6 +160,9 @@ void main() {
       expect(() => GbSendQuote.fromJson(broken, 250),
           throwsFormatException);
     }
+    expect(() => GbSendQuote.fromJson(
+      {..._quote(expiry),'amountMb':-1},-1,requireFresh:false),
+      throwsFormatException);
     final expired=_quote('2026-10-20T00:00:00Z');
     expect(() => GbSendQuote.fromJson(expired,250),throwsFormatException);
     expect(GbSendQuote.fromJson(expired,250,requireFresh:false).operationId,
@@ -203,9 +206,9 @@ void main() {
     await tester.ensureVisible(find.text('Open send review'));
     await tester.tap(find.text('Open send review'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton,'Send MB'),findsOneWidget);
+    expect(find.widgetWithText(FilledButton,'Retry same confirmation'),findsOneWidget);
     expect(tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton,'Send MB')).onPressed,isNull,
+      find.widgetWithText(FilledButton,'Retry same confirmation')).onPressed,isNull,
       reason:'Expired original tokens cannot be replayed');
     await tester.dragUntilVisible(find.text('Check original transfer'),
       find.byType(ListView).last,const Offset(0,-150));
@@ -269,7 +272,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(posts,['/v1/gb/wallet/send/quote']);
     expect(find.textContaining('Could not save secure transfer recovery'),
-      findsOneWidget);
+      findsWidgets);
     expect(store.pending,isNull);
     expect(tester.takeException(),isNull);
   });

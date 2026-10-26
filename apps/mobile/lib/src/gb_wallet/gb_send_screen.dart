@@ -46,7 +46,8 @@ class GbSendQuote {
     final time = response['expiresAt'];
     final expires = time is String ? DateTime.tryParse(time) : null;
     final now = DateTime.now().toUtc();
-    if (recipientId is! String || recipientId.isEmpty ||
+    if (requestedMb < 1 || requestedMb > 1000000000 ||
+        recipientId is! String || recipientId.isEmpty ||
         name is! String || name.trim().isEmpty ||
         handle is! String ||
         !RegExp(r'^[a-z0-9_][a-z0-9_.-]{2,63}$').hasMatch(handle) ||
