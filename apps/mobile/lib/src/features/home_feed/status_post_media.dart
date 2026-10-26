@@ -66,8 +66,10 @@ class StatusPostMedia extends StatelessWidget {
                   ? Icons.play_circle_outline
                   : Icons.image_outlined),
               label: Text(post.kind == 'audio'
-                  ? 'Play audio ${index + 1} of ${ids.length}'
-                  : 'View image ${index + 1} of ${ids.length}'),
+                  ? (ids.length == 1 ? 'Play audio'
+                      : 'Play audio ${index + 1} of ${ids.length}')
+                  : (ids.length == 1 ? 'View image'
+                      : 'View image ${index + 1} of ${ids.length}')),
               onPressed: onOpen == null ||
                       (post.kind == 'audio' && !audioPlaybackAvailable)
                   ? null
