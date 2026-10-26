@@ -884,7 +884,9 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
           const {'127.0.0.1', 'localhost', '::1'}.contains(gateway.host);
       if (endpoint == null || gateway == null ||
           endpoint.scheme != (local && gateway.scheme == 'http' ? 'ws' : 'wss') ||
-          endpoint.host != gateway.host || endpoint.port != gateway.port ||
+          endpoint.host != gateway.host ||
+          endpoint.hasPort != gateway.hasPort ||
+          (endpoint.hasPort && endpoint.port != gateway.port) ||
           endpoint.path != '/agent/live/stream' ||
           endpoint.userInfo.isNotEmpty || endpoint.hasQuery ||
           endpoint.hasFragment ||

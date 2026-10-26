@@ -204,6 +204,7 @@ void main() {
     test('WebSocket ${relay ? 'relay' : 'provider'} sends credentials only in the relay header', () async {
       final server=await HttpServer.bind(InternetAddress.loopbackIPv4,0);
       final header=Completer<String?>(),peer=Completer<WebSocket>();
+      final microphone=StreamController<Uint8List>.broadcast();
       final listener=server.listen((request) async {
         header.complete(request.headers.value('authorization'));
         peer.complete(await WebSocketTransformer.upgrade(request));
@@ -215,7 +216,7 @@ void main() {
           transport:relay ? AgentLiveVoiceTransport.gatewayRelay
               : AgentLiveVoiceTransport.providerDirect),
         characterName:'Gwani',sendGreeting:false,
-        sharedMicrophone:const Stream<Uint8List>.empty(),
+        sharedMicrophone:microphone.stream,
         onAudioPcm:(_)async{},
       );
       try {
@@ -227,6 +228,7 @@ void main() {
         await socket.close();
       } finally {
         await live.close();
+        await microphone.close();
         await listener.cancel();
         await server.close(force:true);
       }
