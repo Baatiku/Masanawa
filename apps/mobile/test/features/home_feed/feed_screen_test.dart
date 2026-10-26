@@ -118,6 +118,47 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
   expiresAt: DateTime.now().add(const Duration(minutes: 2)),
 );
 void main() {
+  testWidgets('uncertain Save cannot issue an inverse write before fresh readback', (tester) async {
+    var saveWrites = 0, reads = 0;
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (options.method == 'GET' && options.path == '/v1/feed') {
+        reads++;
+        handler.resolve(Response(requestOptions: options, statusCode: 200, data: {
+          'items': [{'id': 'post-1', 'authorMasanaId': 'masana_one',
+            'kind': 'text', 'body': 'Saved original', 'media': [],
+            'publishedAt': '2026-10-25T18:00:00Z', 'likeCount': 0,
+            'commentCount': 0, 'viewerSaved': reads > 1}],
+          'nextCursor': null,
+        }));
+      } else if (options.method == 'PUT' && options.path.endsWith('/save')) {
+        saveWrites++;
+        handler.reject(DioException(requestOptions: options,
+          type: DioExceptionType.connectionError,
+          message: 'response lost after commit'));
+      } else {
+        handler.reject(DioException(requestOptions: options,
+          type: DioExceptionType.badResponse));
+      }
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
+      api: DioFeedApi(dio, () async => 'owner-token'), accountKey: 'owner'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save post'));
+    await tester.pumpAndSettle();
+    expect(saveWrites, 1);
+    expect(find.byTooltip('Refresh to confirm saved state'), findsOneWidget);
+    final button = tester.widget<IconButton>(find.ancestor(
+      of: find.byTooltip('Refresh to confirm saved state'),
+      matching: find.byType(IconButton)).first);
+    expect(button.onPressed, isNull);
+    await tester.tap(find.text('Refresh').last);
+    await tester.pumpAndSettle();
+    expect(reads, greaterThan(1));
+    expect(find.byTooltip('Remove saved post'), findsOneWidget);
+    expect(saveWrites, 1);
+  });
   testWidgets('scroll collapses only the Status title, not search; new account resets it',
       (tester) async {
     tester.view.physicalSize = const Size(320, 600);

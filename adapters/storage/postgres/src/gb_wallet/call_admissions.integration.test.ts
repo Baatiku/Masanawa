@@ -136,4 +136,25 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
     f.advance(61000);await f.repo.recover();
     expect(await f.balance()).toMatchObject({held_welcome:0,welcome:50});
   });
+  it('one damaged journal does not starve another expired reservation',async()=>{
+    const broken=await fixture(0,0),healthy=await fixture();
+    await expect(broken.repo.admit(broken.actor,broken.args)).rejects.toThrow('gb.wallet.insufficient_mb');
+    const {admissionId:id}=await healthy.repo.admit(healthy.actor,healthy.args);
+    // A synthetic damaged fixture claims proof without any original wallet hold.
+    // Recovery must report it, never invent funds, and still process later rows.
+    await pool.query(`UPDATE gb_wallet.call_admissions SET state='settling',
+      verified_connected_ms=1000,connection_base_ms=1000,expires_at='2026-10-25T11:00:00Z'
+      WHERE tenant_id=$1 AND user_id=$2`,[broken.actor.tenantId,broken.actor.userId]);
+    try{
+      healthy.advance(61000);
+      await expect(healthy.repo.recover()).rejects.toThrow('gb.call.recovery_partial');
+      expect(await healthy.repo.read(healthy.actor,id)).toMatchObject({state:'failed',chargedMb:0});
+      expect(await healthy.balance()).toMatchObject({held_welcome:0});
+    }finally{
+      await pool.query(`UPDATE gb_wallet.call_admissions SET state='failed',charged_mb=0,
+        verified_connected_ms=0,connection_base_ms=0 WHERE tenant_id=$1 AND user_id=$2`,
+        [broken.actor.tenantId,broken.actor.userId]);
+    }
+  });
+
 });

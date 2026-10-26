@@ -150,4 +150,13 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('canonical history without approved metadata ignores a supplied network photo', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body:
+      MasanaPortraitAvatar(characterId:'character_missing',
+        displayName:'Dr. Amina Yusuf',
+        avatarUrl:'https://example.org/stale-private-portrait.jpg'))));
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('D'), findsOneWidget);
+  });
+
 }

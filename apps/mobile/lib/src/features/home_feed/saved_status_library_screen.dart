@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
+import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'status_post_media.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
 /// The app never retains a cross-account/offline copy of these items.
@@ -16,6 +18,8 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     required this.isAccountCurrent,
     required this.openPost,
     this.authorDirectory = const {},
+    this.mediaApi,
+    this.inlineMediaRenderer,
   });
 
   final SavedStatusLibraryApi api;
@@ -23,6 +27,8 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final bool Function() isAccountCurrent;
   final Future<void> Function(FeedPost) openPost;
   final Map<String, AgentDirectoryEntry> authorDirectory;
+  final FeedMediaApi? mediaApi;
+  final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -89,7 +95,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       if (!mounted || ticket != epoch || !current) return;
       setState(() {
         items = page.items;
-        cursor = page.nextCursor;
+        cursor = page.items.isEmpty ? null : page.nextCursor;
         loading = false;
         offline = false;
       });
@@ -125,7 +131,10 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
           ...items,
           ...page.items.where((item) => ids.add('${item.isPost}-${item.id}')),
         ];
-        cursor = page.nextCursor;
+        // A repeated or empty continuation is terminal, not an invitation to
+        // request the same saved page forever.
+        cursor = page.items.isEmpty || page.nextCursor == after
+            ? null : page.nextCursor;
         loadingMore = false;
       });
     } catch (e) {
@@ -307,6 +316,14 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     ),
                                   ),
                                 ),
+                                if (item.post != null)
+                                  StatusPostMedia(
+                                    post: item.post!,
+                                    accountKey: widget.accountKey,
+                                    mediaApi: widget.mediaApi,
+                                    renderer: widget.inlineMediaRenderer,
+                                    onOpen: canOpen ? (_) => open(item) : null,
+                                  ),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [

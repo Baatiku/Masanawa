@@ -169,9 +169,10 @@ class MasanaPortraitAvatar extends StatelessWidget {
     final svgAsset = canonical
         ? portraitAssetForKey(approvedKey)
         : portraitAssetFor(name);
-    final url = agent != null && !matchesIdentity
-        ? null
-        : avatarUrl ?? agent?.avatarUrl;
+    // Canonical platform Masana use only the approved bundled media projection.
+    // An unverified history/status URL or a cached legacy avatarUrl cannot
+    // substitute for a missing/revoked server-owned portrait key.
+    final url = canonical ? null : avatarUrl;
     final initial = matchesIdentity ? agent!.initial
         : (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 

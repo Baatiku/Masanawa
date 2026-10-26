@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import 'feed_api.dart';
+import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'status_post_media.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
 /// AF00 owns root/deep-link registration. This screen never exposes fan publishing.
@@ -13,6 +15,7 @@ class FeedPostDetailScreen extends StatefulWidget {
     required this.accountKey,required this.loadPost,required this.loadThread,
     this.loadMoreThread,
     required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,
+    this.mediaApi,this.inlineMediaRenderer,this.audioPlaybackAvailable=false,
     this.authorDirectory = const {},
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
@@ -23,6 +26,9 @@ class FeedPostDetailScreen extends StatefulWidget {
   final Future<List<FeedComment>> Function(String,String,String) ? loadMoreThread;
   final Future<void> Function(String,String,String,String?) sendComment;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile,onMedia;
+  final FeedMediaApi? mediaApi;
+  final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
+  final bool audioPlaybackAvailable;
   final Map<String, AgentDirectoryEntry> authorDirectory;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
@@ -219,10 +225,10 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
             const SizedBox(height:12),
             StatusPostBody(accountKey:widget.accountKey,postId:p.id,
               body:p.body,mode:StatusPostBodyMode.detail),
-            for(final media in p.mediaIds)ListTile(leading:Icon(p.kind=='audio'?
-              Icons.play_circle_outline:Icons.image_outlined),
-              title:Text(p.kind=='audio'?t('Play audio','Kunna sauti'):t('View image','Duba hoto')),
-              onTap:widget.onMedia==null?null:()=>widget.onMedia!(media)),
+            StatusPostMedia(post:p,accountKey:widget.accountKey,
+              mediaApi:widget.mediaApi,renderer:widget.inlineMediaRenderer,
+              onOpen:widget.onMedia,
+              audioPlaybackAvailable:widget.audioPlaybackAvailable),
             Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
             Row(children:[
               ChoiceChip(label:Text(t('Newest','Sabbi')),selected:sort=='newest',
