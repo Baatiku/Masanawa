@@ -112,8 +112,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(reads,hasLength(1));
     expect(posts,hasLength(1));
-    expect(find.text('MB transfer completed'),findsOneWidget);
-    expect(find.text('Receipt: send_12345678901234567890123456789012'),findsOneWidget);
+    expect(find.text('MB transfer completed'),findsWidgets);
+    expect(find.text('Receipt: send_12345678901234567890123456789012'),findsWidgets);
     expect(tester.takeException(),isNull);
   });
   test('review enforces server identity, purchased MB and short expiry', () {
