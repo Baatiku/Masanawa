@@ -22,6 +22,11 @@ export interface DataRedemptionPorts {
  now?:()=>Date;
 }
 const validId=(s:string)=>/^[A-Za-z0-9][A-Za-z0-9_:-]{0,159}$/.test(s);
+const validKey=(s:string)=>/^[A-Za-z0-9_-]{8,128}$/.test(s);
+const originalId=(actor:DataRedemptionActor,key:string)=>"data_"+
+ createHash("sha256").update(JSON.stringify([
+  actor.tenantId,actor.userId,key,
+ ])).digest("hex").slice(0,48);
 function checkActor(a:DataRedemptionActor) {
  if(!validId(a?.tenantId)||!validId(a?.userId))throw new Error("unauthorized");
 }
@@ -64,19 +69,28 @@ export function createDataRedemptionService(ports:DataRedemptionPorts) {
  };
  return {
   reconcile,
+  async readOriginal(actor:DataRedemptionActor,key:string){
+   checkActor(actor);
+   if(!validKey(key))throw Error("invalid_idempotency");
+   const id=originalId(actor,key);
+   const row=await ports.read(actor,id);
+   if(!row||row.operationId!==id||row.userId!==actor.userId)
+     throw Error("data_redemption_not_found");
+   // A read-only recovery: no quote, reserve, provider dispatch or reconcile.
+   return {operationId:id,state:row.state,costMb:row.costMb,
+     bundleId:row.bundleId,version:row.version,recipientPhone:row.phone};
+  },
   async purchase(actor:DataRedemptionActor,input:{
    bundleId:string;version:string;recipientPhone:string;idempotencyKey:string;
   }){
    checkActor(actor);
-   if(!/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey))throw Error("invalid_idempotency");
+   if(!validKey(input.idempotencyKey))throw Error("invalid_idempotency");
    const approved=await ports.approved();
    const live=await ports.liveItems(approved);
    const quote=quoteVerifiedWholeGb({approved,liveItems:live,itemId:input.bundleId,
      version:input.version,recipientPhone:input.recipientPhone,
      ...(ports.now ? {now:ports.now()} : {})});
-   const id="data_"+createHash("sha256").update(JSON.stringify([
-     actor.tenantId,actor.userId,input.idempotencyKey,
-   ])).digest("hex").slice(0,48);
+   const id=originalId(actor,input.idempotencyKey);
    const fingerprint=createHash("sha256").update(JSON.stringify([
      quote.id,quote.version,quote.recipientPhone,quote.costMb,quote.providerAmount,
    ])).digest("hex");

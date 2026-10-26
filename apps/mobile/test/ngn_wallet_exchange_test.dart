@@ -15,6 +15,19 @@ import 'package:masanawa/src/gb_wallet/recharge_screen.dart';
 import 'package:masanawa/src/gb_wallet/ngn_funding_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
+import 'package:masanawa/src/gb_wallet/gb_data_pending_store.dart';
+
+class _DataMemoryStore extends GbDataPendingStore {
+  final records = <String, GbPendingDataPurchase>{};
+  @override
+  Future<GbPendingDataPurchase?> read(String id) async => records[id];
+  @override
+  Future<void> write(String id, GbPendingDataPurchase saved) async {
+    records[id] = saved;
+  }
+  @override
+  Future<void> clear(String id) async { records.remove(id); }
+}
 
 class _Session extends SessionController {
   @override
@@ -95,6 +108,7 @@ class _Fixture {
   _Fixture({this.loseReply = false});
   final bool loseReply;
   final store = _MemoryStore();
+  final dataStore = _DataMemoryStore();
   final posts = <Map<String, dynamic>>[];
   Map<String, dynamic>? lastQuote, completed;
   Completer<void>? quoteWait;
@@ -159,6 +173,7 @@ class _Fixture {
           sessionProvider.overrideWith(_Session.new),
           apiClientProvider.overrideWithValue(api),
           ngnPendingStoreProvider.overrideWithValue(store),
+          gbDataPendingStoreProvider.overrideWithValue(dataStore),
           ngnWalletBalanceProvider.overrideWith(
             (ref, owner) async =>
                 const NgnWalletBalance(9000000, 0, false, true),

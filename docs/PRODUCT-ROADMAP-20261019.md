@@ -112,6 +112,23 @@ The owner's requested set of ten *code-level subfeatures* is now merged. This is
 
 No APK is requested/delivered. Production fixed-IP hosting, live Flutterwave qualification, external data/network redemption and handset/push/media/screen-reader acceptance remain on hold or NOT_RUN as recorded by their parent checklist IDs. Local code/CI success is not live operational qualification.
 
+### 26 October — next ten connected Data purchase recovery/review subfeatures
+
+The next ten are scoped source deliverables, **not** ten unrelated parent UX IDs or new handset acceptance tasks. Implementation lives in `data_purchase_service.ts`, `data_purchase_routes.ts`, `gb_data_pending_store.dart`, `gb_data_purchase_panel.dart`, and `data_redemption_screen.dart`; regression coverage is `data_purchase_routes.test.ts`, `gb_data_purchase_recovery_test.dart`, plus the existing wallet shell tests. Merge requires the exact-head Foundation CI and Mobile Build, in addition to local gateway tests and TypeScript checking.
+
+1. Read-only, owner/tenant-derived original Data operation lookup by its idempotency key, with no second reserve, quote, provider dispatch or reconciliation.
+2. Authenticated lookup validation, non-disclosing missing-reference response and account isolation.
+3. Save the original bundle ID, mapping version, normalized recipient, exact MB cost and key in account-keyed encrypted storage **before** its first purchase POST; storage failure submits nothing.
+4. Automatically restore a pending or uncertain original when Data reopens; preserve the account record across same-user reauthentication.
+5. Replace uncertain-response “Retry same request” POST with GET-only “Find original purchase”; a 404/timeout retains the lock and cannot resubmit.
+6. Reconcile only the exact recovered operation reference; never confuse provider dispatch acceptance with delivery.
+7. Delivered/failed server-journal state clears local recovery, releases the lock and refreshes authoritative MB balance on delivery.
+8. Copy the original reference on explicit user action and display the verified recipient, bundle and exact MB cost with truthful pending/delivered/failed result copy.
+9. Visually separate operator/recipient and verified plan selection, expiring quote review, confirm and result; Back to plans invalidates the quote without discarding the typed phone or chosen carrier.
+10. Regression coverage for owner isolation, absent original, encrypted-storage failure, lost acknowledgement/restart with no duplicate POST, 320dp review/Back and existing selection rules; source and hosted verification are documented without inventing provider/phone results.
+
+The broader UX-D01 and UX-W02 remain open for approved operator identity assets, private contacts/recent-number affordances and their remaining requirements. UX-D05/D06 remain provider-gated; fixed-IP hosting and APK remain on hold.
+
 ### P0 — Restore reliable chat, notes, calls and identity before polish
 
 **26 October closure reconciliation for the original 12 IDs:** Seven code-complete items are checked on merged source and hosted CI (R04/R05/R07, C03/C04, L02/L03); owner-phone retrospective R01 is retired, not an active checkbox; only **R02, R03, R06 and R08 remain open for actionable source/backend work**. Actual handset/audio, screen-reader and subjective visual approval are not completion requirements. If the owner later reports a defect, create a fresh narrowly scoped source fix with regression coverage and merge it before the next requested build. Do not reactivate these checked IDs as indefinite device-testing gates. Do not interpret source closure as provider/funds activation approval.
