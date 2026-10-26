@@ -107,7 +107,7 @@ class NgnFundingCardDetails extends ConsumerWidget {
                 tooltip: 'Copy account number',
                 icon: const Icon(Icons.copy_outlined, size: 20),
                 onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: account!.number!));
+                  await Clipboard.setData(ClipboardData(text: account.number!));
                   if (context.mounted)
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Account number copied')),
