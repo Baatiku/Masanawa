@@ -39,15 +39,18 @@ describe("mobile FCM call channels", () => {
       deepLink: "masanawa://human/call/" + uuid + "?token=private",
     })).toEqual({ type: "human_call", callId: uuid });
     expect(mobilePushSafeData({
+      type: "human_message", deepLink: "masanawa://human/chat/" + uuid,
+    })).toEqual({ type: "human_message" });
+    expect(mobilePushSafeData({
       type: "room_post", roomId: uuid, postId: uuid,
       orderId: "p2p_order_1", body: "Hidden Room text",
       deepLink: "masanawa://wallet/transaction/order_1/private",
     })).toEqual({ type: "room_post", roomId: uuid, postId: uuid, orderId: "p2p_order_1" });
   });
 
-  it("classifies human invitations as calls with private previews", () => {
-    expect(mobilePushAndroidChannel({type:"human_call",callId:uuid})).toBe("masanawa_calls");
-    expect(mobilePushSafePreview({type:"human_call",callId:uuid,sender:"Private"})).toEqual({title:"Incoming call",body:"Open Calls to respond"});
+  it("never routes retired human-call hints into the urgent call channel", () => {
+    expect(mobilePushAndroidChannel({type:"human_call",callId:uuid})).toBe("masanawa_work");
+    expect(mobilePushSafePreview({type:"human_call",callId:uuid,sender:"Private"})).toEqual({title:"Masanawa",body:"Open the app to view your update"});
     expect(mobilePushAndroidChannel({type:"human_call",callId:"invalid"})).toBe("masanawa_work");
   });
 
