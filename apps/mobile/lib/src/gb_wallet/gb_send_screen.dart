@@ -105,6 +105,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   bool _uncertain = false;
   String? _error;
   String? _quickSelection;
+  int? _reviewBalanceMb;
   int _request = 0;
 
   @override
@@ -124,6 +125,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
     _busy = false;
     _uncertain = false;
     _error = null;
+    _reviewBalanceMb = null;
   }
 
   bool _isOwner(GbWalletOwner owner) {
@@ -176,8 +178,10 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       if (!mounted || sequence != _request || !_isOwner(owner)) return;
       setState(() {
         _quote = quote;
+        _reviewBalanceMb = balance.purchasedAvailableMb;
         _busy = false;
       });
+      if (mounted) _showSendReview(owner, quote);
     } on DioException catch (error) {
       if (!mounted || sequence != _request || !_isOwner(owner)) return;
       setState(() {
@@ -196,6 +200,65 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         _error = 'Send review could not be verified. No MB was moved.';
       });
     }
+  }
+
+  Future<void> _showSendReview(GbWalletOwner owner, GbSendQuote quote) async {
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true, isDismissible: false,
+      enableDrag: false, useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, refreshSheet) => PopScope(
+          canPop: !_busy && !_uncertain,
+          child: FractionallySizedBox(heightFactor: .75,
+            child: ListView(padding: const EdgeInsets.all(20), children: [
+              Row(children: [
+                Expanded(child: Text('Review MB send',
+                  style: Theme.of(sheetContext).textTheme.titleLarge)),
+                IconButton(tooltip: 'Close review',
+                  onPressed: _busy || _uncertain ? null
+                    : () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.close_rounded)),
+              ]),
+              const SizedBox(height: 12),
+              Text('${groupedMb(quote.amountMb)} MB',
+                style: Theme.of(sheetContext).textTheme.headlineMedium),
+              const SizedBox(height: 12),
+              _SendReviewLine('Recipient', quote.recipientName),
+              _SendReviewLine('Username', '@${quote.recipientHandle}'),
+              _SendReviewLine('Amount',
+                '${groupedMb(quote.amountMb)} MB (${decimalGb(quote.amountMb)} GB)'),
+              const _SendReviewLine('Fee', '0 MB'),
+              if (_reviewBalanceMb != null)
+                _SendReviewLine('Remaining sendable',
+                  '${groupedMb(_reviewBalanceMb! - quote.amountMb)} MB'),
+              const SizedBox(height: 12),
+              SelectableText('Reference: ${quote.operationId}'),
+              const SizedBox(height: 12),
+              if (_error != null) Text(_error!,
+                style: TextStyle(color: Theme.of(sheetContext).colorScheme.error)),
+              if (_receipt != null) ...[
+                const Text('MB transfer completed'),
+                SelectableText('Receipt: ${_receipt!.operationId}'),
+              ]
+              else ...[
+                FilledButton(
+                  onPressed: _busy || !quote.expiresAt.isAfter(DateTime.now().toUtc())
+                    ? null : () async {
+                      await _confirm(owner, quote);
+                      if (sheetContext.mounted) refreshSheet(() {});
+                    },
+                  child: Text(_uncertain ? 'Retry same confirmation' : 'Send MB')),
+                TextButton.icon(
+                  onPressed: _busy ? null : () async {
+                    await _checkOriginal(owner, quote);
+                    if (sheetContext.mounted) refreshSheet(() {});
+                  },
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Check original transfer')),
+              ],
+            ])),
+        )),
+    );
   }
 
   Future<void> _confirm(GbWalletOwner owner, GbSendQuote quote) async {
@@ -302,7 +365,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           GbWalletBalanceCard(
-            balance: balance, loading: loadingBalance, showSendable: true),
+            balance: balance, loading: loadingBalance, showSendable: true,
+            compact: true),
           if (balance == null && !loadingBalance && owner != null)
             Align(
               alignment: AlignmentDirectional.centerEnd,
@@ -401,44 +465,11 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Review recipient and amount'),
             ),
-          if (_quote != null && _receipt == null) Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Confirm recipient', style: theme.textTheme.titleMedium),
-                  Text(_quote!.recipientName,
-                    style: theme.textTheme.titleLarge),
-                  Text('@${_quote!.recipientHandle}'),
-                  const SizedBox(height: 8),
-                  Text('${groupedMb(_quote!.amountMb)} MB '
-                      '(${decimalGb(_quote!.amountMb)} GB)'),
-                  const Text('Transfer fee: 0 MB'),
-                  SelectableText('Reference: ${_quote!.operationId}'),
-                  const SizedBox(height: 8),
-                  const Text('Only purchased MB will be debited. '
-                      'Check the username carefully before confirming.'),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: _busy ||
-                        !_quote!.expiresAt.isAfter(DateTime.now().toUtc())
-                      ? null : () => _confirm(owner!, _quote!),
-                    child:Text(_uncertain?'Retry same confirmation':'Confirm Send'),
-                  ),
-                  TextButton.icon(
-                    onPressed:_busy?null:()=>_checkOriginal(owner!,_quote!),
-                    icon:const Icon(Icons.receipt_long_outlined),
-                    label:const Text('Check original transfer'),
-                  ),
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => setState(_clearReview),
-                    child: const Text('Cancel review'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          if (_quote != null && _receipt == null)
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _showSendReview(owner!, _quote!),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Open send review')),
           if (_receipt != null) Card(child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -460,4 +491,18 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       ),
     );
   }
+}
+
+class _SendReviewLine extends StatelessWidget {
+  const _SendReviewLine(this.label, this.value);
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(children: [
+      Expanded(child: Text(label)),
+      Flexible(child: Text(value, textAlign: TextAlign.end,
+        style: const TextStyle(fontWeight: FontWeight.w700))),
+    ]),
+  );
 }

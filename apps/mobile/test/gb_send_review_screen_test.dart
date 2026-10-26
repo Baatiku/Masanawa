@@ -94,11 +94,11 @@ void main() {
       find.byType(ListView),const Offset(0,-150));
     await tester.tap(find.text('Review recipient and amount'));
     await tester.pumpAndSettle();
-    expect(find.text('Confirm recipient',skipOffstage:false),findsOneWidget);
-    await tester.dragUntilVisible(find.text('Confirm Send'),
-      find.byType(ListView),const Offset(0,-150));
-    final confirm = tester.widget<FilledButton>(find.ancestor(
-      of:find.text('Confirm Send'),matching:find.byType(FilledButton)));
+    expect(find.text('Review MB send'),findsOneWidget);
+    await tester.dragUntilVisible(find.widgetWithText(FilledButton,'Send MB'),
+      find.byType(ListView).last,const Offset(0,-150));
+    final confirm = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton,'Send MB'));
     expect(confirm.onPressed,isNotNull);
     // Invoke the bound handler after asserting the rendered button is enabled;
     // text hit-testing under the scrolled recipient sheet is platform-sensitive.
@@ -107,7 +107,7 @@ void main() {
     expect(posts,hasLength(1));
     expect(find.text('Retry same confirmation'),findsOneWidget);
     await tester.dragUntilVisible(find.text('Check original transfer'),
-      find.byType(ListView),const Offset(0,-150));
+      find.byType(ListView).last,const Offset(0,-150));
     await tester.tap(find.text('Check original transfer'));
     await tester.pumpAndSettle();
     expect(reads,hasLength(1));
@@ -189,8 +189,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('gb-wallet-balance-card')),
       findsOneWidget);
-    expect(find.text('1.35 GB'), findsOneWidget);
-    expect(find.text('1,350 MB'), findsOneWidget);
+    expect(find.text('1.35 GB  ·  1,350 MB'), findsOneWidget);
     expect(find.text('Sendable: 850 MB purchased'), findsOneWidget);
     expect(find.textContaining('Send only purchased MB'), findsNothing);
     expect(tester.widget<ChoiceChip>(find.byKey(

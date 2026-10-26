@@ -174,7 +174,6 @@ void main() {
     expect(tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
       isNotNull);
-    expect(find.text('Review before purchase'), findsOneWidget);
     expect(find.text('Confirm data purchase'), findsNothing);
     expect(tester.takeException(), isNull);
   });
