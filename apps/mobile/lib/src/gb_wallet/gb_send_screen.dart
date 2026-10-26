@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/providers.dart';
@@ -27,7 +31,8 @@ class GbSendQuote {
   final String operationId, reviewToken;
   final DateTime expiresAt;
 
-  factory GbSendQuote.fromJson(Object? response, int requestedMb) {
+  factory GbSendQuote.fromJson(Object? response, int requestedMb,
+      {bool requireFresh = true}) {
     if (response is! Map<String, dynamic> ||
         response['recipient'] is! Map<String, dynamic>) {
       throw const FormatException('Unverified MB Send review');
@@ -51,8 +56,9 @@ class GbSendQuote {
         response['requiresConfirmation'] != true ||
         response['feeMb'] != 0 ||
         response['amountMb'] != requestedMb ||
-        expires == null || !expires.isUtc || !expires.isAfter(now) ||
-        expires.isAfter(now.add(const Duration(minutes: 6)))) {
+        expires == null || !expires.isUtc ||
+        expires.isAfter(now.add(const Duration(minutes: 6))) ||
+        (requireFresh && !expires.isAfter(now))) {
       throw const FormatException('Inconsistent MB Send review');
     }
     return GbSendQuote(
@@ -62,7 +68,55 @@ class GbSendQuote {
       expiresAt: expires,
     );
   }
+
+  Map<String,dynamic> toJson()=>{
+    'recipient':{'id':recipientId,'username':recipientHandle,
+      'displayName':recipientName},
+    'amountMb':amountMb,'feeMb':0,'requiresConfirmation':true,
+    'operationId':operationId,'reviewToken':reviewToken,
+    'expiresAt':expiresAt.toIso8601String(),
+  };
 }
+
+abstract class GbSendPendingStore {
+  Future<GbSendQuote?> read(String accountId);
+  Future<void> write(String accountId,GbSendQuote quote);
+  Future<void> clear(String accountId);
+}
+
+/// Encrypted original operation recovery; a restored token is never replayed
+/// automatically. Readback is separately reauthorized by the Gateway.
+class SecureGbSendPendingStore implements GbSendPendingStore {
+  const SecureGbSendPendingStore();
+  static const _storage=FlutterSecureStorage();
+  String _key(String accountId)=>
+    'gb-send-v1-${sha256.convert(utf8.encode(accountId))}';
+
+  @override
+  Future<GbSendQuote?> read(String accountId) async {
+    final raw=await _storage.read(key:_key(accountId));
+    if(raw==null)return null;
+    final data=jsonDecode(raw);
+    if(data is! Map || data['ownerId']!=accountId || data['quote'] is! Map) {
+      throw const FormatException('Mismatched pending Send owner');
+    }
+    final quote=Map<String,dynamic>.from(data['quote'] as Map);
+    return GbSendQuote.fromJson(quote,quote['amountMb'] is int
+      ? quote['amountMb'] as int : -1,requireFresh:false);
+  }
+
+  @override
+  Future<void> write(String accountId,GbSendQuote quote)=>_storage.write(
+    key:_key(accountId),value:jsonEncode({
+      'ownerId':accountId,'quote':quote.toJson(),
+    }));
+
+  @override
+  Future<void> clear(String accountId)=>_storage.delete(key:_key(accountId));
+}
+
+final gbSendPendingStoreProvider=Provider<GbSendPendingStore>(
+  (ref)=>const SecureGbSendPendingStore());
 
 class GbSendReceipt {
   const GbSendReceipt({required this.operationId, required this.amountMb});
@@ -103,6 +157,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   CancelToken? _cancel;
   bool _busy = false;
   bool _uncertain = false;
+  bool _storeReady = false, _restoring = false;
   String? _error;
   String? _quickSelection;
   int? _reviewBalanceMb;
@@ -136,6 +191,33 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
             owner.authorizationEpoch;
   }
 
+  Future<void> _restore(GbWalletOwner owner) async {
+    if(!_isOwner(owner))return;
+    final sequence=++_request;
+    setState((){_storeReady=false;_restoring=true;_error=null;});
+    try {
+      final pending=await ref.read(gbSendPendingStoreProvider)
+        .read(owner.accountId);
+      if(!mounted||sequence!=_request||!_isOwner(owner))return;
+      setState(() {
+        _storeReady=true;_restoring=false;
+        if(pending!=null){
+          _quote=pending;_uncertain=true;
+          _username.text='@${pending.recipientHandle}';
+          _mb.text=pending.amountMb.toString();
+          _error='An original Send may be pending. Check its receipt '
+            'before starting another transfer.';
+        }
+      });
+    }catch (_) {
+      if(!mounted||sequence!=_request||!_isOwner(owner))return;
+      setState(() {
+        _restoring=false;_storeReady=false;
+        _error='Could not read secure Send recovery. Retry before sending MB.';
+      });
+    }
+  }
+
   int? get _amount {
     final text = _mb.text.trim();
     if (!RegExp(r'^[1-9][0-9]{0,8}$').hasMatch(text) &&
@@ -151,7 +233,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
 
   Future<void> _review(GbWalletOwner owner) async {
     final amount = _amount;
-    if (amount == null || !_validHandle || !_isOwner(owner) || _busy) return;
+    if (amount == null || !_validHandle || !_isOwner(owner) || _busy ||
+        !_storeReady || _quote!=null) return;
     final balance = ref.read(gbWalletSummaryProvider(owner)).valueOrNull;
     if (balance == null || balance.frozen ||
         amount > balance.purchasedAvailableMb) return;
@@ -263,7 +346,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
 
   Future<void> _confirm(GbWalletOwner owner, GbSendQuote quote) async {
     if (_busy || !_isOwner(owner) ||
-        !quote.expiresAt.isAfter(DateTime.now().toUtc())) return;
+        !_storeReady || !quote.expiresAt.isAfter(DateTime.now().toUtc())) return;
     final cancel = CancelToken();
     _cancel = cancel;
     final sequence = ++_request;
@@ -271,6 +354,20 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       _busy = true;
       _error = null;
     });
+    // Persist the signed original BEFORE issuing the financial write. If
+    // encrypted storage fails, no HTTP confirm is permitted.
+    try {
+      await ref.read(gbSendPendingStoreProvider).write(owner.accountId,quote);
+    }catch (_) {
+      if(!mounted||sequence!=_request||!_isOwner(owner))return;
+      setState(() {
+        _busy=false;_error='Could not save secure transfer recovery. '
+          'No MB was submitted. Retry the same review.';
+      });
+      return;
+    }
+    if(!mounted||sequence!=_request||!_isOwner(owner))return;
+    setState(()=>_uncertain=true);
     try {
       final response = await ref.read(apiClientProvider).dio.post<Object?>(
         '/v1/gb/wallet/send/confirm',
@@ -280,12 +377,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       );
       final receipt = GbSendReceipt.fromJson(response.data, quote);
       if (!mounted || sequence != _request || !_isOwner(owner)) return;
-      setState(() {
-        _busy = false;
-        _receipt = receipt;
-        _uncertain = false;
-      });
-      ref.invalidate(gbWalletSummaryProvider(owner));
+      await _complete(owner,sequence,receipt);
     } catch (_) {
       if (!mounted || sequence != _request || !_isOwner(owner)) return;
       setState(() {
@@ -293,6 +385,21 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         _uncertain = true;
         _error = 'Confirmation was not verified. Do not start another Send. '
             'Retry this SAME review, or contact support with the reference.';
+      });
+    }
+  }
+
+  Future<void> _complete(GbWalletOwner owner,int sequence,
+      GbSendReceipt receipt) async {
+    if(!mounted||sequence!=_request||!_isOwner(owner))return;
+    setState((){_busy=false;_receipt=receipt;_uncertain=false;_error=null;});
+    ref.invalidate(gbWalletSummaryProvider(owner));
+    try {
+      await ref.read(gbSendPendingStoreProvider).clear(owner.accountId);
+    }catch (_) {
+      if(mounted&&sequence==_request&&_isOwner(owner))setState(() {
+        _error='Transfer completed, but secure recovery cleanup is pending. '
+          'The original receipt can be checked again after reopening Send.';
       });
     }
   }
@@ -310,8 +417,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         options:Options(headers:const {'Cache-Control':'no-store'}));
       final receipt=GbSendReceipt.fromJson(response.data,quote);
       if(!mounted || ticket!=_request || !_isOwner(owner))return;
-      setState((){_busy=false;_uncertain=false;_receipt=receipt;});
-      ref.invalidate(gbWalletSummaryProvider(owner));
+      await _complete(owner,ticket,receipt);
     }on DioException catch(error) {
       if(!mounted || ticket!=_request || !_isOwner(owner))return;
       setState((){
@@ -348,6 +454,10 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       _mb.clear();
       _quickSelection = null;
       _owner = owner;
+      _storeReady=false;_restoring=false;
+      if(owner!=null) WidgetsBinding.instance.addPostFrameCallback((_) {
+        if(mounted&&_owner==owner)_restore(owner);
+      });
     }
     final balanceState = owner == null
         ? null : ref.watch(gbWalletSummaryProvider(owner));
@@ -449,17 +559,24 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                 style: TextStyle(color: theme.colorScheme.error)),
             ),
           if (_busy) const LinearProgressIndicator(),
+          if (_restoring) const LinearProgressIndicator(),
           if (_error != null) Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(_error!, style: TextStyle(
               color: theme.colorScheme.error)),
           ),
+          if(owner!=null && !_storeReady && !_restoring)
+            TextButton.icon(
+              onPressed:()=>_restore(owner),
+              icon:const Icon(Icons.refresh_rounded),
+              label:const Text('Retry secure Send recovery')),
           const SizedBox(height: 14),
           if (owner == null)
             const Text('Sign in before transferring MB.')
           else if (_quote == null && _receipt == null)
             FilledButton.icon(
               onPressed: _validHandle && chosenMb != null && !_busy &&
+                  _storeReady &&
                   sendableMb != null && chosenMb <= sendableMb
                   ? () => _review(owner) : null,
               icon: const Icon(Icons.fact_check_outlined),
