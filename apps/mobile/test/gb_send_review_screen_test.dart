@@ -214,8 +214,12 @@ void main() {
       find.byType(ListView).last,const Offset(0,-150));
     await tester.tap(find.text('Check original transfer'));
     await tester.pumpAndSettle();
-    expect(requests,hasLength(1));
-    expect(requests.single,startsWith('GET /v1/gb/wallet/send/receipt/'));
+    // The Send page may also read wallet summary and account details. Only
+    // the saved original receipt may be accessed under the Send endpoints.
+    expect(requests.where((request) => request.contains('/v1/gb/wallet/send/')),
+      ['GET /v1/gb/wallet/send/receipt/send_12345678901234567890123456789012']);
+    expect(requests.where((request) => request.startsWith('POST ')),isEmpty,
+      reason:'Restart must never resubmit an ambiguous Send');
     expect(store.pending,isNull);
     expect(store.clears,1);
     expect(find.text('MB transfer completed'),findsWidgets);
