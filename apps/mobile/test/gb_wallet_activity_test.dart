@@ -275,16 +275,23 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
     await tester.pumpAndSettle();
     expect(fake.filters.last.reference,'refer_42');
+    await tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('No posted activity matches these filters.'),
+      find.byType(ListView),const Offset(0,-180));
     expect(find.text('No posted activity matches these filters.'),findsOneWidget);
     await tester.enterText(input,"evil' OR 1=1");
     await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
     await tester.pumpAndSettle();
     expect(fake.filters.last.reference,'refer_42');
     expect(find.textContaining('Use letters, numbers'),findsOneWidget);
-    await tester.ensureVisible(find.text('Clear filters and show all'));
+    await tester.dragUntilVisible(find.text('Clear filters and show all'),
+      find.byType(ListView),const Offset(0,-160));
     await tester.tap(find.text('Clear filters and show all'));
     await tester.pumpAndSettle();
     expect(fake.filters.last.reference,'');
+    await tester.dragUntilVisible(find.text('No posted MB or NGN activity yet.'),
+      find.byType(ListView),const Offset(0,-160));
     expect(find.text('No posted MB or NGN activity yet.'),findsOneWidget);
   });
 

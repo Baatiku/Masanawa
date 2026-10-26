@@ -270,7 +270,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                       setState((){_reset();_unit=choice.key;});},
                   )),
             ])),
-          Row(children:[
+          Wrap(crossAxisAlignment:WrapCrossAlignment.center,children:[
             TextButton.icon(
               key:const ValueKey('activity-toggle-more-filters'),
               onPressed:()=>setState(()=>_showFacets=!_showFacets),
