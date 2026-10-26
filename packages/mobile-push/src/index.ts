@@ -51,7 +51,7 @@ function serviceAccount(raw: string): ServiceAccount {
 export function mobilePushAndroidChannel(
   data: Readonly<Record<string, string>> | undefined,
 ): "masanawa_calls" | "masanawa_work" {
-  return (data?.type === "incoming_call" || data?.type === "human_call") && typeof data.callId === "string" &&
+  return data?.type === "incoming_call" && typeof data.callId === "string" &&
       /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/u.test(data.callId)
     ? "masanawa_calls"
     : "masanawa_work";
@@ -84,7 +84,7 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
   }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
-      /^masanawa:\/\/(?:wallet\/transaction|human\/(?:call|chat)|calls\/incoming)\/[A-Za-z0-9_-]{1,128}$/u.test(rawLink)) {
+      /^masanawa:\/\/(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}$/u.test(rawLink)) {
     try {
       const link = new URL(rawLink);
       if (link.protocol === "masanawa:" && link.hostname && !link.username &&
@@ -112,18 +112,30 @@ export function pushCategory(data: Readonly<Record<string, string>> | undefined)
   return "messages";
 }
 
+/** Retired customer products must not create NEW push or Activity records,
+ * even if an older account still has their preference bits enabled. Historic
+ * records are retained by the database for audit and account export.
+ */
+function retiredNotification(category: MobileNotificationCategory,
+  data: Readonly<Record<string, string>> | undefined): boolean {
+  const type = data?.type ?? "";
+  return category === "rooms" || category === "p2p" ||
+    type === "room" || type.startsWith("room_") ||
+    type.startsWith("p2p_") || type.startsWith("human_");
+}
+
 export function pushAllowed(
   preferences: MobileNotificationPreferences,
   category: MobileNotificationCategory,
   now: Date,
   data?: Readonly<Record<string, string>>,
 ): boolean {
+  if (retiredNotification(category, data)) return false;
   if (!preferences[category]) return false;
   // Fraud/security warnings and money requiring timely action remain audible;
   // an unrelated caller cannot claim criticality by supplying arbitrary data.
-  const critical = category === "calls" && (data?.type === "incoming_call" || data?.type === "human_call") ||
-    category === "wallet" && data?.type === "wallet_security" ||
-    category === "p2p" && data?.type === "p2p_deadline";
+  const critical = category === "calls" && data?.type === "incoming_call" ||
+    category === "wallet" && data?.type === "wallet_security";
   if (critical) return true;
   const from = preferences.quietStart, to = preferences.quietEnd;
   if (from === null || to === null || from === to) return true;
@@ -197,6 +209,9 @@ export function createFcmPushSender(input: {
     async send(request) {
       const safeData = mobilePushSafeData(request.data);
       const category = pushCategory(safeData);
+      if (retiredNotification(category,safeData)) {
+        return Object.freeze({ attempted: 0, delivered: 0 });
+      }
       const preview = mobilePushSafePreview(safeData);
       // History is durable even when push is disabled, device permission
       // denied, or quiet hours suppress a nonurgent notification.
@@ -222,7 +237,6 @@ export function createFcmPushSender(input: {
       let delivered = 0;
       const safePreview = mobilePushSafePreview(safeData);
       for (const registration of registrations) {
-        const nativeHumanCall = registration.platform === "android" && safeData.type === "human_call" && mobilePushAndroidChannel(safeData) === "masanawa_calls";
         const response = await fetchImpl(
           `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
             credentials.project_id,
@@ -237,10 +251,10 @@ export function createFcmPushSender(input: {
             body: JSON.stringify({
               message: {
                 token: registration.token,
-                ...(nativeHumanCall ? {} : {notification: {
+                notification: {
                   title: safePreview.title,
                   body: safePreview.body,
-                }}),
+                },
                 data: {
                   ...safeData,
                   masanawa: "1",
@@ -250,7 +264,7 @@ export function createFcmPushSender(input: {
                   ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
-                  ...(nativeHumanCall ? {} : {notification: {
+                  notification: {
                     channel_id: mobilePushAndroidChannel(safeData),
                     visibility: "PRIVATE",
                     ...(safeData.eventId
@@ -262,7 +276,7 @@ export function createFcmPushSender(input: {
                           tag: `masanawa-call-${safeData.callId}`,
                         }
                       : {}),
-                  }}),
+                  },
                 },
                 apns: {
                   payload: { aps: { sound: "default" } },
