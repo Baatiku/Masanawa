@@ -87,6 +87,28 @@ void main() {
     expect(find.byType(MasanawaListSkeleton), findsNothing);
   });
 
+  testWidgets('first signup paints protected home after profile completion',
+      (tester) async {
+    const firstUser = AuthUser(
+      id: 'new-fan', name: 'New Fan', email: 'new@example.invalid',
+      locale: 'en-NG', status: 'ACTIVE', role: 'USER', isNewUser: true,
+      createdAt: '2026-10-26T00:00:00Z',
+    );
+    const firstTokens = AuthTokens(
+      accessToken: 'first-session', refreshToken: 'first-refresh',
+      accessExpiresIn: 900, user: firstUser,
+    );
+    final harness = _harness(const SessionNameRequired(
+      OtpChannel.email, 'new@example.invalid', '123456'));
+    addTearDown(harness.dispose);
+    await _mount(tester, harness);
+    expect(find.text('Chats ready'), findsNothing);
+    harness.change(const SessionSignedIn(firstUser, firstTokens));
+    await tester.pump();
+    expect(find.text('Chats ready'), findsOneWidget);
+    expect(find.byType(MasanawaListSkeleton), findsNothing);
+  });
+
   testWidgets('signed out never mounts protected child', (tester) async {
     final harness = _harness(const SessionSignedOut());
     addTearDown(harness.dispose);

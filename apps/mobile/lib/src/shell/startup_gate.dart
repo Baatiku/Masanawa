@@ -14,7 +14,7 @@ class StartupGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    if (session is SessionSignedIn && !session.user.isNewUser) {
+    if (session is SessionSignedIn) {
       return child;
     }
     if (session is SessionRestoring) {
