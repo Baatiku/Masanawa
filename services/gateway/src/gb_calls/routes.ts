@@ -49,4 +49,24 @@ export function registerGbCallRoutes(app:FastifyInstance,ports:GbCallPorts){
     try{return {admission:await service.read(await ports.authorize(request.headers.authorization),request.params.id)};}
     catch(error){return fail(error,reply);}
   });
+  if(ports.grant)app.post<{Params:{id:string}}>('/v1/gb/calls/admissions/:id/grant',{
+    preValidation:async request=>{onlyFields(request.body,[]);onlyFields(request.query,[]);},
+    schema:{body:Type.Object({},{additionalProperties:false}),querystring:Type.Object({},{additionalProperties:false}),params:Type.Object({
+      id:Type.String({minLength:1,maxLength:160,pattern:'^[A-Za-z0-9][A-Za-z0-9_:.-]*$'}),
+    },{additionalProperties:false})},
+  },async(request,reply)=>{
+    reply.header('Cache-Control','private, no-store');
+    try{return {grant:await ports.grant!(await ports.authorize(request.headers.authorization),request.headers.authorization,request.params.id)};}
+    catch(error){return fail(error,reply);}
+  });
+  if(ports.finish)app.post<{Params:{id:string}}>('/v1/gb/calls/admissions/:id/finish',{
+    preValidation:async request=>{onlyFields(request.body,[]);onlyFields(request.query,[]);},
+    schema:{body:Type.Object({},{additionalProperties:false}),querystring:Type.Object({},{additionalProperties:false}),params:Type.Object({
+      id:Type.String({minLength:1,maxLength:160,pattern:'^[A-Za-z0-9][A-Za-z0-9_:.-]*$'}),
+    },{additionalProperties:false})},
+  },async(request,reply)=>{
+    reply.header('Cache-Control','private, no-store');
+    try{return {admission:await ports.finish!(await ports.authorize(request.headers.authorization),request.params.id)};}
+    catch(error){return fail(error,reply);}
+  });
 }

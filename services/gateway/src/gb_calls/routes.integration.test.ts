@@ -8,7 +8,7 @@ import {createGbCallAdmissions} from '../../../../adapters/storage/postgres/src/
 import {createPostgresGbWalletRepository} from '../../../../adapters/storage/postgres/src/gb_wallet/repository.js';
 import {foundationMigrationRoots} from '../../../../adapters/storage/postgres/src/readiness.js';
 import {runMigrations} from '../../../../adapters/storage/postgres/src/migrations.js';
-import type {GbCallPorts} from './review.js';
+import {GbCallReviewError,type GbCallPorts} from './review.js';
 
 const connection=process.env.MASANAWA_TEST_DATABASE_URL;
 (connection?describe:describe.skip)('reduced Gateway MB call review with real PostgreSQL',()=>{
@@ -32,6 +32,16 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
       approved:async(_actor,id)=>id===characterId?{version:'approved-v1'}:null,
       balance:createPostgresGbWalletRepository(pool).read,journal,
       ready:()=>true,reviewSecret:'fixture-private-domain-separated-review-key',
+      grant:async(owner,_header,id)=>{
+        const row=await journal.read(owner,id);
+        if(!row)throw new GbCallReviewError('gb.call.not_found',404);
+        if(row.state!=='reserved')throw new GbCallReviewError('gb.call.not_reserved',409);
+        return {token:'opaque-fixture-grant',transport:'gateway_relay',
+          websocketUrl:'wss://gateway.example/agent/live/stream',
+          model:'approved-model',voiceName:'approved-voice',
+          expiresAt:new Date(Date.now()+60000).toISOString()};
+      },
+      finish:(owner,id)=>journal.finish(owner,id),
     };
     let hold=false;
     const app=createGatewayApp({gbCalls:ports,customerAuth:{
@@ -63,7 +73,16 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id,headers:{authorization:'Bearer other'}})).statusCode).toBe(404);
       expect((await f.app.inject({method:'GET',url:'/v1/gb/calls/admissions/'+id,headers:f.headers,
         query:{userId:'other'}})).statusCode).toBe(400); // Principal cannot be selected by a query.
-      await f.journal.finish(f.actor,id);
+      const grant=await f.app.inject({method:'POST',url:'/v1/gb/calls/admissions/'+id+'/grant',headers:f.headers,payload:{}});
+      expect(grant.statusCode).toBe(200);
+      expect(grant.json().grant.transport).toBe('gateway_relay');
+      expect(grant.headers['cache-control']).toBe('private, no-store');
+      expect((await f.app.inject({method:'POST',url:'/v1/gb/calls/admissions/'+id+'/grant',headers:{authorization:'Bearer other'},payload:{}})).statusCode).toBe(404);
+      expect((await f.app.inject({method:'POST',url:'/v1/gb/calls/admissions/'+id+'/grant',headers:f.headers,payload:{connectedSeconds:30}})).statusCode).toBe(400);
+      const finished=await f.app.inject({method:'POST',url:'/v1/gb/calls/admissions/'+id+'/finish',headers:f.headers,payload:{}});
+      expect(finished.statusCode).toBe(200);
+      expect(finished.json().admission.state).toBe('failed');
+      expect((await f.app.inject({method:'POST',url:'/v1/gb/calls/admissions/'+id+'/grant',headers:f.headers,payload:{}})).statusCode).toBe(409);
       expect((await f.ports.balance(f.actor))?.reservedWelcomeMb).toBe(0);
     }finally{await f.cleanup();await f.app.close()}
   });
