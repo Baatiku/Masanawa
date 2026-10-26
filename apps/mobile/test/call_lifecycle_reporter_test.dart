@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:masanawa/src/agents/masanawa_transport.dart';
+import 'package:masanawa/src/agents/agent_shell.dart';
+import 'package:masanawa/src/core/network/api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/calls/call_lifecycle_reporter.dart';
 import 'package:masanawa/src/calls/call_lifecycle_limits.dart';
@@ -28,8 +30,10 @@ class FailingStore extends MemoryStore {
 }
 
 class GrantAdapter implements HttpClientAdapter {
-  GrantAdapter(this.callId);
+  GrantAdapter(this.callId,{this.transport,this.url='wss://example.test'});
   final Object? callId;
+  final String? transport;
+  final String url;
   final started = Completer<RequestOptions>();
   final released = Completer<void>();
   @override
@@ -42,8 +46,10 @@ class GrantAdapter implements HttpClientAdapter {
     await released.future;
     return ResponseBody.fromString(
       jsonEncode({
-        'token': 'provider-token',
-        'websocketUrl': 'wss://example.test',
+        'token': transport == 'gateway_relay'
+            ? List.filled(43, 'A').join() : 'provider-token',
+        'websocketUrl': url,
+        if (transport != null) 'transport': transport,
         'model': 'model',
         'voiceName': 'voice',
         'expiresAt': '2026-10-11T12:00:00Z',
@@ -246,6 +252,27 @@ void main() {
       },
     );
   }
+  test('mobile accepts only same-Gateway header-only relay grants', () async {
+    Future<AgentLiveVoiceGrant> mint(String? transport,String url) async {
+      final adapter=GrantAdapter(null,transport:transport,url:url);
+      final dio=Dio()..httpClientAdapter=adapter;
+      final client=MasanawaAgentTransport(dio:dio,baseUrl:'https://gateway.test',
+        readAccessToken:()=>'owner-token');
+      final pending=client.mintLiveVoiceGrantPinned('persona');
+      await adapter.started.future;
+      adapter.released.complete();
+      return pending;
+    }
+    final authorized=await mint('gateway_relay','wss://gateway.test/agent/live/stream');
+    expect(authorized.transport,AgentLiveVoiceTransport.gatewayRelay);
+    for (final location in ['wss://evil.example/agent/live/stream',
+      'wss://gateway.test/agent/live/stream?access_token=secret',
+      'wss://gateway.test/other']) {
+      await expectLater(mint('gateway_relay',location),throwsA(isA<ApiException>()));
+    }
+    await expectLater(mint('unexpected','wss://gateway.test'),
+      throwsA(isA<ApiException>()));
+  });
   test(
     'failed connected persists before end and retries after restart without secrets',
     () async {

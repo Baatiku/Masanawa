@@ -216,7 +216,11 @@ class LiveVoiceSession with WidgetsBindingObserver {
   /// resumes the same model context with the original grant, call admission
   /// and duration timer; we never create another paid call or receipt.
   Future<void> _connectSocket({String? resumeHandle}) async {
-    final socket = await WebSocket.connect(_activeGrant.websocketUrl)
+    final socket = await WebSocket.connect(
+      _activeGrant.websocketUrl,
+      headers: _activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay
+          ? {'Authorization': 'Bearer ${_activeGrant.token}'} : null,
+    )
         .timeout(const Duration(seconds: 20));
     if (_closed) {
       await socket.close();
