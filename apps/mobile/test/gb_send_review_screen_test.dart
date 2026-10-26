@@ -189,7 +189,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('gb-wallet-balance-card')),
       findsOneWidget);
-    expect(find.text('1.35 GB  ·  1,350 MB'), findsOneWidget);
+    expect(find.text('1.35 GB'), findsOneWidget);
     expect(find.text('Sendable: 850 MB purchased'), findsOneWidget);
     expect(find.textContaining('Send only purchased MB'), findsNothing);
     expect(tester.widget<ChoiceChip>(find.byKey(

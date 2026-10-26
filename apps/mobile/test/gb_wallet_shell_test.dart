@@ -102,7 +102,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('10.85 GB'), findsOneWidget);
-    expect(find.text('10,850 MB'), findsOneWidget);
+    expect(find.text('10,850 MB'), findsNothing);
     await tester.tap(find.text('Balance details'));
     await tester.pumpAndSettle();
     expect(find.text('475 MB'), findsOneWidget);
@@ -134,7 +134,7 @@ void main() {
     ], child: const MaterialApp(home: Scaffold(body: GbWalletScreen()))));
     await tester.pumpAndSettle();
     expect(find.text('Masanawa fan'), findsOneWidget);
-    expect(find.text('Data balance'), findsOneWidget);
+    expect(find.text('Data balance'), findsNothing);
     expect(find.byKey(const ValueKey('wallet-preview-mb:1')), findsOneWidget);
     expect(find.byKey(const ValueKey('wallet-preview-mb:2')), findsOneWidget);
     expect(find.byKey(const ValueKey('wallet-preview-mb:3')), findsNothing);

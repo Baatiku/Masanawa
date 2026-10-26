@@ -326,28 +326,51 @@ class _RechargePackagesScreenState
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               if (review == null) ...[
-                Text(
-                  'Choose a package',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
                 if (!_enabled && !_loading)
                   const Text('Package exchange is currently unavailable.'),
-                for (final p in _packages)
-                  RadioListTile<int>(
-                    key: ValueKey('gb-package-${p.gb}'),
-                    value: p.gb,
-                    groupValue: _selected,
-                    title: Text('${p.gb} GB'),
-                    subtitle: Text(
-                      '${formatNgn(p.kobo)} · ${groupedMb(p.gb * 1000)} MB',
+                LayoutBuilder(builder: (context, constraints) {
+                  final scale = MediaQuery.textScalerOf(context).scale(1);
+                  final columns = scale >= 1.8 ? 1 : constraints.maxWidth >= 390 && scale < 1.3 ? 3 : 2;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _packages.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: columns == 1 ? 3.2 : 1.5,
                     ),
-                    onChanged: _busy
-                        ? null
-                        : (v) => setState(() {
-                            _selected = v;
+                    itemBuilder: (context, index) {
+                      final p = _packages[index];
+                      final selected = _selected == p.gb && _custom.text.isEmpty;
+                      final scheme = Theme.of(context).colorScheme;
+                      return Material(
+                        color: selected ? scheme.primaryContainer : scheme.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          key: ValueKey('gb-package-${p.gb}'),
+                          onTap: _busy ? null : () => setState(() {
+                            _selected = p.gb;
                             _custom.clear();
                           }),
-                  ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('${p.gb} GB', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text(formatNgn(p.kobo), style: Theme.of(context).textTheme.bodyMedium),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }),
                 TextField(
                   controller: _custom,
                   enabled: !_busy,
