@@ -382,6 +382,13 @@
       "description": "Optional 32-byte-or-longer private signing authority for immutable purchased-MB Send review tokens. Provision only when the production atomic recipient ledger and recipient eligibility reader are verified; never reveal to clients."
     },
     {
+      "name": "MASANAWA_MB_CALLS_ENABLED",
+      "owner": "gateway/gb-calls",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Disabled by default. Enables protected one-to-one Masana MB call admission, relay grant and finish routes only when the private review authority, call journal, live voice credentials and public HTTPS relay origin are configured. Enable after mobile cutover and accounting verification."
+    },
+    {
       "name": "MASANAWA_GEMINI_API_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",
