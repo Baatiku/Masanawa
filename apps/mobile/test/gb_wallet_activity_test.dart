@@ -28,13 +28,16 @@ class _Session extends SessionController {
   }
 }
 
-GbActivityItem item(String id,int amount,{String unit='MB',String kind='send'})=>
+GbActivityItem item(String id,int amount,{String unit='MB',String kind='send',
+  DateTime? at})=>
   GbActivityItem(id:id,operationId:'original_$id',unit:unit,
-    amount:amount,kind:kind,status:'completed',createdAt:DateTime.utc(2026,10,25,19));
+    amount:amount,kind:kind,status:'completed',
+    createdAt:at??DateTime.utc(2026,10,25,19));
 
 class _Activity implements GbActivityTransport {
   final requests=<String?>[];
   final units=<String>[];
+  final filters=<GbActivityFilters>[];
   final summaryRequests=<int>[];
   final detailRequests=<String>[];
   final responses=<String?,GbActivityPage>{};
@@ -46,9 +49,11 @@ class _Activity implements GbActivityTransport {
   @override
   Future<GbActivityPage> page({required int limit,String? cursor,
     String unit='all',
+    GbActivityFilters filters=gbActivityAllFilters,
     CancelToken? cancellation}) async {
     requests.add(cursor);
     units.add(unit);
+    this.filters.add(filters);
     if(fail)throw StateError('offline');
     if(pending!=null && cursor!=null)return pending!.future;
     return responses[cursor]??const GbActivityPage([],null);
@@ -218,6 +223,88 @@ void main() {
     expect(find.text('+₦5,000.50'),findsOneWidget);
     expect(find.text('+999 MB'),findsNothing);
     expect(find.text('−200 MB'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('purpose, status, direction and date controls always ask server for a new scoped page',
+      (tester) async {
+    final fake=_Activity()
+      ..responses[null]=GbActivityPage([item('mb:1',-200)],null);
+    await mount(tester,fake);
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    Future<void> choose(String key) async {
+      final finder=find.byKey(ValueKey(key));
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+    await choose('activity-purpose-funding');
+    expect(fake.filters.last.purpose,'funding');
+    await choose('activity-status-reversed');
+    expect(fake.filters.last.status,'reversed');
+    await choose('activity-direction-outgoing');
+    expect(fake.filters.last.direction,'outgoing');
+    await choose('activity-history-30');
+    expect(fake.filters.last.days,'30');
+    expect(fake.filters.last.purpose,'funding');
+    expect(fake.filters.last.status,'reversed');
+    expect(fake.filters.last.direction,'outgoing');
+    await tester.ensureVisible(find.text('Clear filters'));
+    await tester.tap(find.text('Clear filters'));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last,gbActivityAllFilters);
+    expect(fake.units.last,'all');
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('exact reference Search is explicit and invalid input never makes a read',
+      (tester) async {
+    final fake=_Activity()..responses[null]=const GbActivityPage([],null);
+    await mount(tester,fake);
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    final initialRequests=fake.requests.length;
+    final input=find.byKey(const ValueKey('activity-reference-input'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input,"refer_42");
+    await tester.pumpAndSettle();
+    expect(fake.requests.length,initialRequests,
+      reason:'Typing is not a network search or a changed cursor');
+    await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last.reference,'refer_42');
+    expect(find.text('No posted activity matches these filters.'),findsOneWidget);
+    await tester.enterText(input,"evil' OR 1=1");
+    await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last.reference,'refer_42');
+    expect(find.textContaining('Use letters, numbers'),findsOneWidget);
+    await tester.ensureVisible(find.text('Clear filters and show all'));
+    await tester.tap(find.text('Clear filters and show all'));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last.reference,'');
+    expect(find.text('No posted MB or NGN activity yet.'),findsOneWidget);
+  });
+
+  testWidgets('history dates group verified entries across loaded pages without duplicate rows',
+      (tester) async {
+    final fake=_Activity()
+      ..responses[null]=GbActivityPage([
+        item('mb:1',-100),item('mb:2',200)],'next-page')
+      ..responses['next-page']=GbActivityPage([
+        item('mb:2',200),item('mb:3',-30,at:DateTime.utc(2026,10,24,19))],null);
+    await mount(tester,fake);
+    await tester.dragUntilVisible(find.text('Load more activity'),
+      find.byType(ListView),const Offset(0,-180));
+    await tester.tap(find.text('Load more activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 verified entries loaded'),findsOneWidget);
+    expect(find.byWidgetPredicate((widget)=>widget.key is ValueKey<String> &&
+      (widget.key! as ValueKey<String>).value.startsWith('activity-date-')),
+      findsNWidgets(2));
+    expect(find.text('+200 MB'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 

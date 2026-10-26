@@ -47,6 +47,25 @@ String _groupActivity(int n)=>n.toString().replaceAllMapped(
 String _ngnActivity(int kobo)=>'₦${_groupActivity(kobo~/100)}.'
   '${(kobo%100).toString().padLeft(2,'0')}';
 
+List<Widget> _datedActivityTiles(BuildContext context,Iterable<GbActivityItem> items) {
+  final children=<Widget>[];
+  DateTime? previousDay;
+  for(final item in items){
+    final local=item.createdAt.toLocal();
+    final day=DateUtils.dateOnly(local);
+    if(day!=previousDay){
+      children.add(Padding(
+        key:ValueKey('activity-date-${day.toIso8601String()}'),
+        padding:const EdgeInsetsDirectional.fromSTEB(4,20,4,6),
+        child:Text(MaterialLocalizations.of(context).formatMediumDate(day),
+          style:Theme.of(context).textTheme.labelLarge)));
+      previousDay=day;
+    }
+    children.add(GbActivityTile(key:ValueKey('activity-row-${item.id}'),item:item));
+  }
+  return children;
+}
+
 class GbActivityTile extends StatelessWidget {
   const GbActivityTile({super.key,required this.item});
   final GbActivityItem item;
@@ -86,7 +105,8 @@ class GbWalletActivitySection extends ConsumerWidget {
   @override
   Widget build(BuildContext context,WidgetRef ref) {
     final owner=_ownerFor(ref);
-    final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5,unit:'all')));
+    final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5,
+      unit:'all',filters:gbActivityAllFilters)));
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Row(children:[
         Expanded(child:Text('Activity',style:Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -106,7 +126,8 @@ class GbWalletActivitySection extends ConsumerWidget {
           subtitle:const Text('No transaction has been assumed or changed.'),
           trailing:IconButton(tooltip:'Retry wallet activity',
             icon:const Icon(Icons.refresh),
-            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,unit:'all')))),
+            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,
+              unit:'all',filters:gbActivityAllFilters)))),
         )
       else if(page.valueOrNull!.items.isEmpty)
         const Padding(padding:EdgeInsets.symmetric(vertical:22),
@@ -135,6 +156,31 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   int _request=0;
   String _unit='all';
   int _days=7;
+  String _purpose='all',_status='all',_direction='all',_period='all',_reference='';
+  bool _badReference=false,_showFacets=false;
+  final _referenceInput=TextEditingController();
+
+  GbActivityFilters get _facets=>(purpose:_purpose,status:_status,
+    direction:_direction,days:_period,reference:_reference);
+  bool get _filtered=>_unit!='all'||_purpose!='all'||_status!='all'||
+    _direction!='all'||_period!='all'||_reference.isNotEmpty;
+
+  void _clearFilters(){
+    setState((){
+      _reset();_unit='all';_purpose='all';_status='all';
+      _direction='all';_period='all';_reference='';_badReference=false;
+      _showFacets=false;
+      _referenceInput.clear();
+    });
+  }
+  void _submitReference(){
+    final text=_referenceInput.text.trim();
+    if(!validGbActivityReference(text)){
+      setState(()=>_badReference=true);return;
+    }
+    if(text==_reference)return;
+    setState((){_reset();_badReference=false;_reference=text;});
+  }
 
   void _reset() {
     ++_request;_cancel?.cancel();_cancel=null;
@@ -142,7 +188,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     _loadedMore=_loadingMore=_pageError=false;
   }
   @override
-  void dispose(){_reset();super.dispose();}
+  void dispose(){_reset();_referenceInput.dispose();super.dispose();}
 
   bool _same(GbWalletOwner owner,int ticket) {
     final session=ref.read(sessionProvider);
@@ -158,7 +204,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     setState((){_loadingMore=true;_pageError=false;});
     try {
       final page=await ref.read(gbActivityTransportProvider)
-        .page(limit:20,cursor:cursor,unit:_unit,cancellation:cancel);
+        .page(limit:20,cursor:cursor,unit:_unit,filters:_facets,cancellation:cancel);
       if(!_same(owner,ticket))return;
       setState((){
         _loadingMore=false;_loadedMore=true;_seen.add(cursor);
@@ -176,8 +222,12 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   @override
   Widget build(BuildContext context) {
     final owner=_ownerFor(ref);
-    if(owner!=_owner){_reset();_owner=owner;_unit='all';_days=7;}
-    final request=owner==null?null:(owner:owner,limit:20,unit:_unit);
+    if(owner!=_owner){
+      _reset();_owner=owner;_unit='all';_days=7;_purpose='all';
+      _status='all';_direction='all';_period='all';_reference='';
+      _badReference=false;_showFacets=false;_referenceInput.clear();
+    }
+    final request=owner==null?null:(owner:owner,limit:20,unit:_unit,filters:_facets);
     final first=request==null?null:ref.watch(gbActivityPageProvider(request));
     final summaryRequest=owner==null?null:(owner:owner,days:_days);
     final summary=summaryRequest==null?null:ref.watch(gbActivitySummaryProvider(summaryRequest));
@@ -220,11 +270,106 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                       setState((){_reset();_unit=choice.key;});},
                   )),
             ])),
+          Row(children:[
+            TextButton.icon(
+              key:const ValueKey('activity-toggle-more-filters'),
+              onPressed:()=>setState(()=>_showFacets=!_showFacets),
+              icon:Icon(_showFacets?Icons.keyboard_arrow_up:Icons.tune),
+              label:Text(_showFacets?'Hide filters':'More filters')),
+            if(_filtered)const Padding(padding:EdgeInsetsDirectional.only(start:8),
+              child:Text('Filtered',semanticsLabel:'History filters are active')),
+          ]),
+          if(_showFacets)...[
+          const SizedBox(height:8),
+          Text('Purpose',style:Theme.of(context).textTheme.labelLarge),
+          SingleChildScrollView(scrollDirection:Axis.horizontal,
+            key:const ValueKey('activity-purpose-filters'),
+            child:Row(children:[
+              for(final choice in const <String,String>{
+                'all':'Any purpose','funding':'Funding','transfers':'Transfers',
+                'masana':'Masana usage','data':'Data','reversals':'Reversals',
+                'other':'Other',
+              }.entries)
+                Padding(padding:const EdgeInsetsDirectional.only(end:6),
+                  child:ChoiceChip(key:ValueKey('activity-purpose-${choice.key}'),
+                    label:Text(choice.value),selected:_purpose==choice.key,
+                    onSelected:(_){if(_purpose!=choice.key)setState((){
+                      _reset();_purpose=choice.key;
+                    });})),
+            ])),
+          const SizedBox(height:10),
+          Text('Posting status',style:Theme.of(context).textTheme.labelLarge),
+          SingleChildScrollView(scrollDirection:Axis.horizontal,
+            child:Row(children:[
+              for(final choice in const <String,String>{
+                'all':'Any status','completed':'Posted','reversed':'Reversed',
+              }.entries)
+                Padding(padding:const EdgeInsetsDirectional.only(end:6),
+                  child:ChoiceChip(key:ValueKey('activity-status-${choice.key}'),
+                    label:Text(choice.value),selected:_status==choice.key,
+                    onSelected:(_){if(_status!=choice.key)setState((){
+                      _reset();_status=choice.key;
+                    });})),
+            ])),
+          const SizedBox(height:10),
+          Text('Direction',style:Theme.of(context).textTheme.labelLarge),
+          SingleChildScrollView(scrollDirection:Axis.horizontal,
+            child:Row(children:[
+              for(final choice in const <String,String>{
+                'all':'In & out','incoming':'Received','outgoing':'Spent',
+              }.entries)
+                Padding(padding:const EdgeInsetsDirectional.only(end:6),
+                  child:ChoiceChip(key:ValueKey('activity-direction-${choice.key}'),
+                    label:Text(choice.value),selected:_direction==choice.key,
+                    onSelected:(_){if(_direction!=choice.key)setState((){
+                      _reset();_direction=choice.key;
+                    });})),
+            ])),
+          const SizedBox(height:10),
+          Text('History period',style:Theme.of(context).textTheme.labelLarge),
+          SingleChildScrollView(scrollDirection:Axis.horizontal,
+            child:Row(children:[
+              for(final choice in const <String,String>{
+                'all':'All dates','7':'Last 7 days','30':'Last 30 days',
+              }.entries)
+                Padding(padding:const EdgeInsetsDirectional.only(end:6),
+                  child:ChoiceChip(key:ValueKey('activity-history-${choice.key}'),
+                    label:Text(choice.value),selected:_period==choice.key,
+                    onSelected:(_){if(_period!=choice.key)setState((){
+                      _reset();_period=choice.key;
+                    });})),
+            ])),
+          const SizedBox(height:10),
+          Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Expanded(child:TextField(
+              key:const ValueKey('activity-reference-input'),
+              controller:_referenceInput,maxLength:160,
+              textInputAction:TextInputAction.search,
+              decoration:InputDecoration(
+                labelText:'Exact operation reference',
+                hintText:'Paste original reference',
+                errorText:_badReference?'Use letters, numbers, _, ., : or -':null,
+                border:const OutlineInputBorder(),
+                isDense:true),
+              onChanged:(_){if(_badReference)setState(()=>_badReference=false);},
+              onSubmitted:(_)=>_submitReference())),
+            const SizedBox(width:8),
+            Padding(padding:const EdgeInsets.only(top:4),
+              child:IconButton.filledTonal(
+                key:const ValueKey('activity-reference-submit'),
+                tooltip:'Find exact operation',onPressed:_submitReference,
+                icon:const Icon(Icons.search))),
+          ]),
+          ],
+          if(_filtered)Align(alignment:AlignmentDirectional.centerEnd,
+            child:TextButton.icon(onPressed:_clearFilters,
+              icon:const Icon(Icons.filter_alt_off),label:const Text('Clear filters'))),
           const SizedBox(height:12),
           Card(child:Padding(padding:const EdgeInsets.all(14),
             child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
               Text('Posted activity totals',style:Theme.of(context).textTheme.titleMedium),
-              const Text('Only verified journal rows; MB and NGN are never combined.'),
+              const Text('These totals cover all purposes and statuses for the selected totals period, '
+                'independently of history filters. MB and NGN are never combined.'),
               const SizedBox(height:8),
               Wrap(spacing:8,runSpacing:4,children:[
                 for(final days in const [7,30])
@@ -270,10 +415,18 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                 tooltip:'Retry wallet activity',onPressed:()=>
                   ref.invalidate(gbActivityPageProvider(request!)))),
           if(initial!=null && byId.isEmpty)
-            const Padding(padding:EdgeInsets.all(32),
-              child:Center(child:Text('No posted MB or NGN activity yet.'))),
-          for(final item in byId.values)GbActivityTile(
-            key:ValueKey('activity-row-${item.id}'),item:item),
+            Padding(padding:const EdgeInsets.all(24),
+              child:Column(children:[
+                Text(_filtered?'No posted activity matches these filters.':
+                  'No posted MB or NGN activity yet.'),
+                if(_filtered)TextButton(onPressed:_clearFilters,
+                  child:const Text('Clear filters and show all')),
+              ])),
+          if(byId.isNotEmpty)Padding(padding:const EdgeInsetsDirectional.fromSTEB(4,10,4,0),
+            child:Text('${byId.length} verified ${byId.length==1?'entry':'entries'} loaded'
+              '${cursor!=null?' · more available':''}',
+              style:Theme.of(context).textTheme.bodySmall)),
+          ..._datedActivityTiles(context,byId.values),
           if(_pageError && initial!=null)ListTile(
             title:const Text('Could not load more activity. Previous rows are retained.'),
             trailing:IconButton(tooltip:'Retry loading activity',
