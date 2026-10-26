@@ -76,6 +76,13 @@ class SearchStubFeed extends StubFeed implements SearchFeedApi {
   }
 }
 
+class TallSearchStubFeed extends SearchStubFeed {
+  TallSearchStubFeed() : super('Status');
+  @override
+  Future<FeedPage> list({required String mode, String? cursor}) async =>
+      FeedPage(List.generate(20, (index) => update('Update number $index')), null);
+}
+
 FeedPost update(String body) => FeedPost(
   id: '381026c2-9d56-47b1-b73d-1784e24e41e2',
   authorMasanaId: 'masana',
@@ -111,6 +118,30 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
   expiresAt: DateTime.now().add(const Duration(minutes: 2)),
 );
 void main() {
+  testWidgets('scroll collapses only the Status title, not search; new account resets it',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = TallSearchStubFeed();
+    Widget page(String account) => MaterialApp(home: Scaffold(body:
+      MasanaFeedScreen(api: api, accountKey: account)));
+    await tester.pumpWidget(page('fan-a'));
+    await tester.pumpAndSettle();
+    expect(find.text('Status'), findsOneWidget);
+    expect(find.byTooltip('Search Status'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(find.text('Status'), findsNothing);
+    expect(find.byTooltip('Search Status'), findsOneWidget);
+    await tester.pumpWidget(page('fan-b'));
+    await tester.pumpAndSettle();
+    expect(find.text('Status'), findsOneWidget);
+    expect(find.byTooltip('Search Status'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('rich Status Love reaction rolls back failed write and allows retry',
       (tester) async {
     final pending = Completer<void>(), api = ReactionStubFeed('Status');
@@ -118,19 +149,19 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: MasanaFeedScreen(api:api,accountKey:'owner'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pump();
-    expect(tester.widget<IconButton>(find.ancestor(
-      of:find.byIcon(Icons.add_reaction_outlined),
-      matching:find.byType(IconButton)).first).onPressed,isNull);
+    expect(tester.widget<TextButton>(find.ancestor(
+      of:find.byIcon(Icons.thumb_up_outlined),
+      matching:find.byType(TextButton)).first).onPressed,isNull);
     pending.completeError(StateError('offline'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction not confirmed. Refresh or retry.'),
       findsOneWidget);
     api.onReact = null;
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
@@ -164,7 +195,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body:MasanaFeedScreen(api:api,accountKey:'owner'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('React to post'));
+    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();

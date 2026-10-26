@@ -144,7 +144,8 @@ void main() {
         'fan_a',
       );
       expect(find.text('Zainab A.'), findsOneWidget);
-      expect(find.textContaining('Member ·'), findsOneWidget);
+      expect(find.textContaining('Member ·'), findsNothing,
+          reason: 'The streamlined author header has no role badge');
       await tester.tap(find.text('Zainab A.'));
       expect(openedHuman, 'zainab');
       expect(openedMasana, isNull);

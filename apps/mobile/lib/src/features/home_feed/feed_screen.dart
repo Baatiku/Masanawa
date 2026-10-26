@@ -64,6 +64,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   String searchTerm = '';
   String mode = 'for_you';
   bool localSearchExpanded = false;
+  bool titleCollapsed = false;
   List<FeedPost> items = [];
   String? cursor, error;
   bool loading = false, fetchingMore = false, offline = false;
@@ -79,6 +80,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   void clearProjection() {
     generation++;
     items = [];
+    titleCollapsed = false;
     cursor = null;
     error = null;
     pageError = null;
@@ -114,6 +116,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (query == searchTerm) return;
     setState(() {
       searchTerm = query;
+      titleCollapsed = false;
       items = [];
       cursor = null;
       pageError = null;
@@ -126,6 +129,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (searchTerm.isEmpty) return;
     setState(() {
       searchTerm = '';
+      titleCollapsed = false;
       items = [];
       cursor = null;
       pageError = null;
@@ -535,12 +539,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 10, 4),
             child: Row(children: [
-              Expanded(child: Text(
-                t('Status', 'Labarai'),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              )),
+              if (!titleCollapsed)
+                Expanded(child: Text(
+                  t('Status', 'Labarai'),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ))
+              else
+                const Spacer(),
               if (widget.api is SearchFeedApi && widget.searchExpanded == null)
                 IconButton(
                   tooltip: localSearchExpanded ? 'Close Status search' : 'Search Status',
@@ -662,6 +669,19 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: refresh,
+                  child: NotificationListener<ScrollUpdateNotification>(
+                    onNotification: (notice) {
+                      if (notice.depth != 0) return false;
+                      final collapsed = notice.metrics.pixels > 12;
+                      if (collapsed != titleCollapsed) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && titleCollapsed != collapsed) {
+                            setState(() => titleCollapsed = collapsed);
+                          }
+                        });
+                      }
+                      return false;
+                    },
                   child: ListView.builder(
                     key: PageStorageKey<String>(
                       'status-feed-${widget.accountKey}-$mode-$searchTerm',
@@ -679,10 +699,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                       final post = items[i];
                       return Card(
                         key: ValueKey(post.id),
-                        margin: const EdgeInsets.symmetric(
-                          vertical: 6,
-                          horizontal: 10,
-                        ),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        elevation: 0,
+                        shape: const RoundedRectangleBorder(),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => openPost(post),
@@ -799,11 +818,13 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                       )
                                       .toList(),
                                 ),
-                              if (post.totalReactions > 0)
+                              if (post.totalReactions > 0 || post.commentCount > 0)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    FeedPost.reactionKinds
+                                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                                  child: Row(children: [
+                                    if (post.totalReactions > 0)
+                                      Expanded(child: Text(
+                                    '${FeedPost.reactionKinds
                                         .where(
                                           (kind) =>
                                               (post.effectiveReactionCounts[kind] ??
@@ -812,17 +833,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                         )
                                         .map(
                                           (kind) =>
-                                              (FeedPost.reactionEmoji[kind] ??
-                                                  '') +
-                                              ' ' +
-                                              post.effectiveReactionCounts[kind]
-                                                  .toString(),
+                                              FeedPost.reactionEmoji[kind] ?? '',
                                         )
-                                        .join('  '),
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
+                                        .join(' ')} ${post.totalReactions}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  )),
+                                    if (post.commentCount > 0)
+                                      Text('${post.commentCount} comments',
+                                        style: Theme.of(context).textTheme.bodySmall),
+                                  ]),
                                 ),
                               const Divider(height: 1),
                               Padding(
@@ -868,15 +887,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                         ),
                                       ),
                                     )),
-                                    if (widget.api is ReactionFeedApi)
-                                      Builder(builder: (anchor) => IconButton(
-                                        tooltip: t('React to post', 'Martani ga labari'),
-                                        onPressed: pending ? null
-                                            : () => showReactions(anchor, post),
-                                        icon: const Icon(Icons.add_reaction_outlined, size: 20),
-                                        constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
-                                        padding: EdgeInsets.zero,
-                                      )),
                                     actionButton(t('Comment', 'Sharhi'),
                                         Icons.mode_comment_outlined,
                                         () => openComments(post)),
@@ -891,7 +901,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                         ),
                       );
                     },
-                  ),
+                  )),
                 ),
         ),
       ],
