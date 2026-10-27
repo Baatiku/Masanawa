@@ -73,7 +73,7 @@ export function createMbBilledConversation(input:{
         await reservations.capture(actor,1);
       // There is intentionally no reserve for an old pre-rollout reply.
       return {reply:original.reply,agentRunId:original.agentRunId,
-        parts:original.parts} as T;
+        parts:original.parts} as unknown as T;
     }
     // No provider work before a valid atomically held 1 MB. A previous
     // reservation without a persisted command may represent an unknown
@@ -105,7 +105,7 @@ export function createMbBilledConversation(input:{
         // was lost. Capture exactly once and return that canonical reply.
         await reservations.capture(actor,1);
         return {reply:terminal.reply,agentRunId:terminal.agentRunId,
-          parts:terminal.parts} as T;
+          parts:terminal.parts} as unknown as T;
       }
       if(matches(terminal)&&terminal?.state==="failed")
         await reservations.release(actor).catch(()=>undefined);
