@@ -15,6 +15,7 @@ import { DEFAULT_RECHARGE_RATE_BOOK } from "./gb_wallet/pricing.js";
 import type { GbWalletSummaryPorts } from "./gb_wallet/summary_routes.js";
 import type { GbActivityPorts } from "./gb_wallet/activity_routes.js";
 import type { GbSendPorts } from "./gb_wallet/send_review.js";
+import type { StatusTipPorts } from "./gb_wallet/tip_review.js";
 import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
@@ -1796,6 +1797,39 @@ export async function startGatewayService(
           reviewSecret: mbSendReviewSecret,
         }
       : undefined);
+  // Reviewed Status tips are a separate, opt-in MB money movement.
+  // Published posts and their approved platform Masana are rechecked at
+  // review, confirmation and inside the serializable ledger debit.
+  const gbStatusTips:StatusTipPorts|undefined=
+    options.appOptions?.gbStatusTips ??
+    (env.MASANAWA_STATUS_TIPS_ENABLED==="true" && status && featurePool &&
+     sessions && featureTenant && mbSendReviewSecret &&
+     Buffer.byteLength(mbSendReviewSecret,"utf8")>=32 ? {
+      authorize:resolveFeatureFan,
+      post:async (actor,postId)=>{
+        const result=await featurePool.query<{post_id:string;character_id:string;display_name:string}>(`
+          SELECT p.id::text AS post_id,p.author_masana_id AS character_id,
+            coalesce(nullif(btrim(r.profile->>'displayName'),''),
+              p.author_masana_id) AS display_name
+          FROM feed.posts p
+          JOIN masana.character_revisions r ON r.tenant_id=p.tenant_id
+            AND r.character_id=p.author_masana_id AND r.state='approved'
+          JOIN identity.characters c ON c.tenant_id=r.tenant_id
+            AND c.character_id=r.character_id AND c.state='active'
+          JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id
+            AND o.character_id=c.character_id AND o.kind='platform'
+          WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.state='published'
+          LIMIT 1
+        `,[actor.tenantId,postId]);
+        const row=result.rows[0];
+        return row?{postId:row.post_id,characterId:row.character_id,
+          displayName:row.display_name}:null;
+      },
+      balance:createPostgresGbWalletRepository(featurePool).read,
+      tip:createPostgresGbWalletRepository(featurePool).tip,
+      readTip:createPostgresGbWalletRepository(featurePool).readTip,
+      reviewSecret:mbSendReviewSecret,
+    }:undefined);
   const gbRequests: GbRequestPorts | undefined =
     options.appOptions?.gbRequests ??
     (featurePool && sessions && featureTenant && gbSendReview
@@ -2007,6 +2041,7 @@ export async function startGatewayService(
       ...(gbCalls ? {gbCalls} : {}),
       ...(mbRelay ? {gbCallRelay:mbRelay} : {}),
       ...(gbSendReview ? { gbSendReview } : {}),
+      ...(gbStatusTips ? { gbStatusTips } : {}),
       ...(gbRequests ? { gbRequests } : {}),
       ...(!options.appOptions?.callHistory && directoryAuthorizer && database.callHistory
         ? { callHistory: createCallHistoryService({ authorizer: directoryAuthorizer, repository: database.callHistory }) }
