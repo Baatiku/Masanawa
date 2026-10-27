@@ -24,7 +24,6 @@ Every async screen: (1) initial loading with non-private skeleton, (2) authorize
 |---|---|---|
 | `/home?tab=chats` | Search Masana conversations, compact avatars, last authored content, unread, New conversation/Find Masana; individual text/photo/audio composer | Loading/empty search, error retry, offline draft, microphone/media permission with manual text fallback, account-scoped private history; no humans/groups/videos/files |
 | `/chat/:id` | Header with Masana identity and profile, message list, text/photo/voice note, call and Tip; pending/sent/replied/error status | Only existing platform Masana, no document/video/group controls, 1MB only after successful reply, original request retry receipt |
-
 | `/home?tab=status` | Single infinite feed of platform Masana text/photo/audio cards, profile, reactions, comments, follows, save, share, Tip, search/filters as supported | No Videos tab or human composer; account/private/blocked filtering, cursor error retry, no post-publication fee, no video embeds or blocked media |
 | `/status/:postId` | Canonical detail/comment thread, author link, media grants, actions | Deleted/hidden/blocked not found, offline read-only cache within account, mutations wait for server confirmation |
 | `/u/:handle` | Human social profile, follow/block/report; no DM/call/send-avatar composer | Private/hidden/removed profile appropriately unavailable; no retired messaging calls |
