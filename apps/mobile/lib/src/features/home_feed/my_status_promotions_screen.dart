@@ -29,13 +29,14 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
     final end=deadline is String?DateTime.tryParse(deadline):null;
     final now=_serverNow;
     if(end==null||now==null)return null;
-    return end.difference(now).subtract(_serverElapsed?.elapsed??Duration.zero);
+    return end.difference(now)-(_serverElapsed?.elapsed??Duration.zero);
   }
   String _remainingText(Object? deadline){
     final left=_remaining(deadline);
     if(left==null)return 'Expiry time unavailable';
     if(left<=Duration.zero)return 'Retention ended · refresh for deletion';
-    return 'Expires in ${left.inHours}h ${left.inMinutes.remainder(60)}m';
+    final wholeMinutes=(left.inSeconds+59)~/60;
+    return 'Expires in ${wholeMinutes~/60}h ${wholeMinutes.remainder(60)}m';
   }
   Future<void> refresh() async {
     if(loading)return;setState((){loading=true;error=null;});
