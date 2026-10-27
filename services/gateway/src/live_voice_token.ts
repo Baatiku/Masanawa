@@ -67,6 +67,7 @@ export function createGeminiLiveTokenService(input: {
           "authority.revoked",
           "agent.provider_unavailable",
           "calls.paid_admission_unavailable",
+          "calls.mb_admission_required",
           "calls.masana_unavailable",
           "calls.incoming_unavailable",
         ].includes(error.code)
@@ -124,7 +125,7 @@ export function createGeminiLiveTokenService(input: {
         profile.voiceName.trim()
           ? profile.voiceName.trim()
           : creatorVoice ?? voiceName;
-      // Do not substitute owner-selected Gemini voices. Bodi and Fora are
+      // Do not substitute owner-selected Gemini voices. Bodi and Fola are
       // passed unchanged to the mobile Live setup, exactly as configured.
       // Provider acceptance is verified at runtime, never guessed here.
       if (input.callHistory && !profile && !creatorVoice) {
