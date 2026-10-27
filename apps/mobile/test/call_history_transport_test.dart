@@ -192,6 +192,25 @@ void main() {
     dio.close();
   });
 
+  test('filters and verified totals use the same authorized history request',()async{
+    final dio=Dio(BaseOptions(baseUrl:'https://example.test'));
+    final api=ApiClient(dio:dio)..accessToken='session-token';
+    dio.httpClientAdapter=_Adapter((request)async{
+      expect(request.queryParameters,{'limit':30,'q':'amina','connection':'connected','days':'7'});
+      expect(request.headers['Authorization'],'Bearer session-token');
+      return ResponseBody.fromString(jsonEncode({'calls':[],'nextCursor':null,'summary':{
+        'calls':3,'verifiedConnectedMs':1501,'chargedMb':2,'unverifiedCalls':1,'pendingUsageCalls':1,
+      }}),200,headers:{Headers.contentTypeHeader:['application/json']});
+    });
+    final page=await GatewayCallHistoryTransport(api:api).loadPage(query:'amina',connection:'connected',days:'7');
+    expect(page.summary!.verifiedConnectedMs,1501);
+    expect(page.summary!.chargedMb,2);
+    expect(page.summary!.unverifiedCalls,1);
+    expect(()=>CallHistorySummary.read({'calls':1,'verifiedConnectedMs':0,
+      'chargedMb':0,'unverifiedCalls':1,'pendingUsageCalls':1}),throwsFormatException);
+    dio.close();
+  });
+
   test(
     'rejects malformed history rather than silently displaying an empty list',
     () async {

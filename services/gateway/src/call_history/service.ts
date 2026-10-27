@@ -28,8 +28,15 @@ export interface CallRecord {
     readonly chargedMb:number|null;readonly state:string};
 }
 export interface CallCursor { readonly createdAt: string; readonly callId: string }
+export type CallConnectionFilter = "all" | "connected" | "not_connected";
+export type CallPeriodFilter = "all" | "7" | "30";
+export interface CallHistorySummary {
+  readonly calls:number; readonly verifiedConnectedMs:number; readonly chargedMb:number;
+  readonly unverifiedCalls:number; readonly pendingUsageCalls:number;
+}
 export interface CallHistoryRepository {
-  list(input: CallScope & { readonly limit: number; readonly cursor: CallCursor | null; readonly query?: string }): Promise<{ readonly calls: readonly CallRecord[]; readonly nextCursor: string | null }>;
+  list(input: CallScope & { readonly limit: number; readonly cursor: CallCursor | null; readonly query?: string;
+    readonly connection?:CallConnectionFilter;readonly days?:CallPeriodFilter }): Promise<{ readonly calls: readonly CallRecord[]; readonly nextCursor: string | null;readonly summary?:CallHistorySummary }>;
   get(input: CallScope & { readonly callId: string }): Promise<CallRecord | null>;
   report(input: CallScope & { readonly callId: string; readonly event: "connected" | "ended"; readonly endReason?: CallEndReason }): Promise<CallRecord | null>;
 }
@@ -45,8 +52,8 @@ function id(value: string): string {
   if (!uuid.test(value)) throw new CallHistoryError("calls.id_invalid", 400);
   return value;
 }
-export function encodeCallCursor(cursor: CallCursor, query = ""): string {
-  return Buffer.from(JSON.stringify(query
+export function encodeCallCursor(cursor: CallCursor, query = "", filters = ""): string {
+  return Buffer.from(JSON.stringify(filters ? [cursor.createdAt,cursor.callId,query,filters] : query
     ? [cursor.createdAt, cursor.callId, query]
     : [cursor.createdAt, cursor.callId])).toString("base64url");
 }
@@ -57,15 +64,17 @@ function normalizedSearch(value?: string): string {
     throw new CallHistoryError("calls.query_invalid", 400);
   return query;
 }
-function decodeCursor(value: string | undefined, query: string): CallCursor | null {
+function decodeCursor(value: string | undefined, query: string, filters = ""): CallCursor | null {
   if (value === undefined) return null;
   try {
     if (!/^[A-Za-z0-9_-]{1,600}$/u.test(value)) throw new Error();
     const decoded: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-    if (!Array.isArray(decoded) || decoded.length !== (query ? 3 : 2) || (query && decoded[2] !== query) || typeof decoded[0] !== "string" || typeof decoded[1] !== "string") throw new Error();
+    if (!Array.isArray(decoded) || decoded.length !== (filters ? 4 : query ? 3 : 2) ||
+      ((query || filters) && decoded[2] !== query) || (filters && decoded[3] !== filters) ||
+      typeof decoded[0] !== "string" || typeof decoded[1] !== "string") throw new Error();
     if (new Date(decoded[0]).toISOString() !== decoded[0]) throw new Error();
     const result = { createdAt: decoded[0], callId: id(decoded[1]) };
-    if (encodeCallCursor(result, query) !== value) throw new Error();
+    if (encodeCallCursor(result, query,filters) !== value) throw new Error();
     return result;
   } catch { throw new CallHistoryError("calls.cursor_invalid", 400); }
 }
@@ -75,12 +84,18 @@ export function createCallHistoryService(input: { readonly repository: CallHisto
     return { tenantId: actor.tenantId, userId: actor.userId, characterIds: actor.characterIds ?? null };
   }
   return Object.freeze({
-    async list(request: { readonly authorizationHeader?: string; readonly limit?: number; readonly cursor?: string; readonly query?: string }) {
+    async list(request: { readonly authorizationHeader?: string; readonly limit?: number; readonly cursor?: string; readonly query?: string;
+      readonly connection?:CallConnectionFilter;readonly days?:CallPeriodFilter }) {
       const actor = await scope(request.authorizationHeader);
       const limit = request.limit ?? 30;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new CallHistoryError("calls.limit_invalid", 400);
       const query = normalizedSearch(request.query);
-      return input.repository.list({ ...actor, limit, query, cursor: decodeCursor(request.cursor, query) });
+      const connection=request.connection??"all",days=request.days??"all";
+      if(!["all","connected","not_connected"].includes(connection)||!["all","7","30"].includes(days))
+        throw new CallHistoryError("calls.filter_invalid",400);
+      const filters=connection==="all"&&days==="all"?"":`${connection}/${days}`;
+      return input.repository.list({ ...actor, limit, query, cursor: decodeCursor(request.cursor, query,filters),
+        ...(connection==="all"?{}:{connection}),...(days==="all"?{}:{days}) });
     },
     async get(request: { readonly authorizationHeader?: string; readonly callId: string }) {
       const actor = await scope(request.authorizationHeader);

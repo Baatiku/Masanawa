@@ -78,6 +78,33 @@ describe.skipIf(!databaseUrl)("Masana call history on PostgreSQL", () => {
     expect(await runMigrations(pool, [{ owner: "agents", directory: migrationDirectory }])).toEqual([]);
   });
 
+  it("filters before paging and totals only matching server-proven usage, without inventing legacy charges",async()=>{
+    const actor={...scope,userId:'usage-filter'};
+    const add=()=>repository.recordIssued({...actor,characterId:'masana-a',expiresAt:expiresAt()});
+    const settled=await add(),pending=await add(),legacy=await add(),unconnected=await add(),old=await add();
+    for(const [callId,admission,state,ms,charged] of [
+      [settled,'settled-filter','completed',1501,2],
+      [pending,'pending-filter','connected',500,null],
+      [old,'old-filter','completed',5000,5],
+    ] as const){
+      await pool.query('UPDATE agents.masana_call_history SET mb_admission_id=$2 WHERE call_id=$1',[callId,admission]);
+      await pool.query('INSERT INTO gb_wallet.call_admissions VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp())',
+        [actor.tenantId,actor.userId,'masana-a',admission,state,ms,charged]);
+    }
+    await pool.query('UPDATE agents.masana_call_history SET connected_at=clock_timestamp() WHERE call_id=$1',[legacy]);
+    await pool.query("UPDATE agents.masana_call_history SET created_at=clock_timestamp()-interval '40 days' WHERE call_id=$1",[old]);
+    const first=await repository.list({...actor,limit:1,cursor:null,connection:'connected',days:'7'});
+    expect(first.calls).toHaveLength(1);
+    expect(first.summary).toEqual({calls:3,verifiedConnectedMs:2001,chargedMb:2,unverifiedCalls:1,pendingUsageCalls:1});
+    expect(first.nextCursor).not.toBeNull();
+    const other=await repository.list({...actor,limit:10,cursor:null,connection:'not_connected',days:'7'});
+    expect(other.calls.map(x=>x.callId)).toEqual([unconnected]);
+    expect(other.summary).toMatchObject({calls:1,chargedMb:0,unverifiedCalls:1});
+    const foreign=await repository.list({...actor,userId:'foreign-user',limit:10,cursor:null,days:'7'});
+    expect(foreign.summary).toEqual({calls:0,verifiedConnectedMs:0,chargedMb:0,unverifiedCalls:0,pendingUsageCalls:0});
+    expect((await repository.list({...actor,limit:10,cursor:null,query:'no-matching-profile'})).summary?.calls).toBe(0);
+  });
+
   it("records approved Masana only and never leaks another account or tenant", async () => {
     const callId = await repository.recordIssued({ ...scope, characterId: "masana-a", expiresAt: expiresAt() });
     expect(await repository.get({ ...scope, callId })).toMatchObject({ callId, displayName: "Amina", state: "connecting", connectionEvidence: null });

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/state/agent_directory_state.dart';
@@ -31,7 +32,7 @@ class _SignedIn extends SessionController {
 class _History implements CallHistoryTransport {
   @override
   Future<CallHistoryPage> loadPage({
-    String? cursor, String query = '', CancelToken? cancelToken,
+    String? cursor, String query = '', String connection = 'all', String days = 'all', CancelToken? cancelToken,
   }) async => CallHistoryPage(calls: [
     CallHistoryItem(callId: 'single', characterId: 'masana-a',
       displayName: 'Amina', state: 'ended', createdAt: DateTime.utc(2026, 10, 21)),
@@ -53,7 +54,7 @@ class _PagingHistory implements CallHistoryTransport {
   int olderAttempts = 0;
 
   @override
-  Future<CallHistoryPage> loadPage({String? cursor, String query = '',
+  Future<CallHistoryPage> loadPage({String? cursor, String query = '', String connection = 'all', String days = 'all',
       CancelToken? cancelToken}) async {
     if (cursor == null) {
       return CallHistoryPage(calls: [
@@ -84,7 +85,41 @@ class _CachedDirectory extends _Directory {
   void restore() => state = super.build();
 }
 
+class _FilteredHistory implements CallHistoryTransport {
+  final stale=Completer<CallHistoryPage>();
+  final requests=<(String,String)>[];
+  @override Future<CallHistoryPage> loadPage({String? cursor,String query='',
+    String connection='all',String days='all',CancelToken? cancelToken})async{
+    requests.add((connection,days));
+    if(connection=='connected')return stale.future;
+    return CallHistoryPage(calls:[CallHistoryItem(callId:'filtered',characterId:'masana-a',
+      displayName:'Amina',state:'ended',createdAt:DateTime.utc(2026,10,21))],
+      summary:const CallHistorySummary(calls:1,verifiedConnectedMs:0,chargedMb:0,
+        unverifiedCalls:1,pendingUsageCalls:0));
+  }
+}
+
 void main() {
+  testWidgets('filter changes fence stale totals and unknown usage never becomes a zero charge', (tester) async {
+    tester.view.physicalSize=const Size(320,900);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    final history=_FilteredHistory();
+    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_SignedIn.new),
+      callHistoryTransportProvider.overrideWithValue(history),agentDirectoryProvider.overrideWith(_Directory.new)],
+      child:MaterialApp(home:const MasanaOnlyCallsScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('Settled charges unavailable'),findsOneWidget);
+    expect(find.text('Confirmed charges: 0 MB'),findsNothing);
+    await tester.tap(find.text('Connected'));await tester.pump(const Duration(milliseconds:400));
+    await tester.tap(find.text('No confirmed connection'));await tester.pumpAndSettle();
+    expect(history.requests.last,('not_connected','all'));
+    history.stale.complete(const CallHistoryPage(calls:[],summary:CallHistorySummary(
+      calls:99,verifiedConnectedMs:99000,chargedMb:99,unverifiedCalls:0,pendingUsageCalls:0)));
+    await tester.pumpAndSettle();
+    expect(find.text('99 matching calls'),findsNothing);
+    expect(find.text('1 matching call'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
   testWidgets('history resolves the canonical picture when cached directory arrives', (tester) async {
     await tester.pumpWidget(ProviderScope(overrides: [
       sessionProvider.overrideWith(_SignedIn.new),
@@ -182,11 +217,14 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const ValueKey('masana-call-day-2026-10-15')),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Load more'));
+    await tester.dragUntilVisible(find.text('Load more').hitTestable(),find.byType(ListView),const Offset(0,-180));
     await tester.tap(find.text('Load more'));
     await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.byKey(const ValueKey('masana-call-first')),
+      find.byType(ListView),const Offset(0,180));
     expect(find.byKey(const ValueKey('masana-call-first')), findsOneWidget);
-    await tester.ensureVisible(find.text('Could not load older calls · Retry'));
+    await tester.dragUntilVisible(find.text('Could not load older calls · Retry').hitTestable(),
+      find.byType(ListView),const Offset(0,-180));
     await tester.tap(find.text('Could not load older calls · Retry'));
     await tester.pumpAndSettle();
     expect(transport.olderAttempts, 2);

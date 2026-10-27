@@ -1,5 +1,14 @@
 # Masanawa — canonical screen and journey contract
 
+**Calls history filters and totals:** The existing Calls timeline offers All,
+Connected and No confirmed connection, plus All time/7 days/30 days. Search and
+filters apply on the server before pagination. Changing a filter cancels old
+requests, clears the old rows/totals/cursor and retains the search. Summary shows
+matching call count, server-verified connected time and confirmed MB charges;
+missing or pending usage is explicit and never inferred from client timestamps.
+Loading/offline/Retry, empty results, account change, dated paging, canonical
+portraits, receipt detail and redial remain on the same accessible scrolling screen.
+
 **27 October owner-approved 36-plan catalogue:** Data supports approved exact MB
 allowances, including 40/100/200/350/500/750 MB and fractional GB. Show MB below
 1 GB and trimmed GB otherwise, with exact purchased-MB debit, provider validity
