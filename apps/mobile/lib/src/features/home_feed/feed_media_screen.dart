@@ -32,6 +32,19 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
   int generation=0;
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
   StreamSubscription<void>? _becomingNoisy;
+  Timer? _grantExpiry;
+
+  void _discardGrant() {
+    _grantExpiry?.cancel();
+    _grantExpiry = null;
+    final previous = grant;
+    grant = null;
+    if (previous != null && previous.kind == 'image') {
+      // A revoked or expired signed URL must not linger in Flutter's global
+      // memory image cache after leaving this account/media projection.
+      unawaited(NetworkImage(previous.url.toString()).evict());
+    }
+  }
   String tr(String en,String ha)=>Localizations.localeOf(context).languageCode=='ha'?ha:en;
   @override void initState(){
     super.initState();
@@ -58,10 +71,15 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
         widget.mediaIds.join('|')!=old.mediaIds.join('|')){
       generation++;
       unawaited(player.stop());
-      index=0;grant=null;error=null;offline=false;
+      _discardGrant();
+      index=0;error=null;offline=false;
       load();
     }else if(!old.enabled&&widget.enabled){load();}
-    if(old.enabled&&!widget.enabled){generation++;unawaited(player.stop());grant=null;}
+    if(old.enabled&&!widget.enabled){
+      generation++;
+      unawaited(player.stop());
+      _discardGrant();
+    }
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state){
     if(state!=AppLifecycleState.resumed)unawaited(player.pause());
@@ -70,11 +88,27 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
     if(!mounted||!widget.enabled||widget.mediaIds.isEmpty)return;
     final ticket=++generation,mediaId=widget.mediaIds[index];
     unawaited(player.stop());
-    setState((){grant=null;error=null;loading=true;offline=false;});
+    _discardGrant();
+    setState((){error=null;loading=true;offline=false;});
     try{
       final result=await widget.api.getGrant(widget.postId,mediaId);
       if(!mounted||ticket!=generation)return;
-      if(result.mediaId!=mediaId||result.kind!=widget.kind)throw const FormatException('Mismatched media grant');
+      if(result.mediaId!=mediaId||result.kind!=widget.kind||
+          !result.expiresAt.isAfter(DateTime.now())) {
+        throw const FormatException('Mismatched or expired media grant');
+      }
+      // A grant is temporary permission to render or play, not a permanent
+      // attachment to the post. Expire it even without further UI input.
+      _grantExpiry=Timer(result.expiresAt.difference(DateTime.now()),(){
+        if(!mounted||ticket!=generation)return;
+        unawaited(player.stop());
+        setState((){
+          _discardGrant();
+          offline=false;
+          error=tr('Media grant expired. Retry to check access.',
+            'Izinin hoton ko sautin ya kare. Sake gwadawa.');
+        });
+      });
       setState((){grant=result;loading=false;});
     }catch(e){
       if(!mounted||ticket!=generation)return;
@@ -109,7 +143,9 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
     index=next;load();
   }
   @override void dispose(){
-    generation++;WidgetsBinding.instance.removeObserver(this);
+    generation++;
+    _discardGrant();
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_interruptions?.cancel());
     unawaited(_becomingNoisy?.cancel());
     unawaited(player.dispose());super.dispose();
