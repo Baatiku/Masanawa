@@ -82,7 +82,19 @@ class MbCallFlow {
     }
     if (_terminal(row)) {
       final old = await journal.forOwner(ownerId);
-      if (old != null && old.characterId == admission.characterId) {
+      if (old != null && old.submitted &&
+          old.characterId == admission.characterId) {
+        // A previous call to the SAME Masana may still have an uncertain
+        // financial outcome. Never clear its durable original key just
+        // because a different admission returned a terminal receipt.
+        final original = await transport.readOriginal(old.operationKey);
+        if (original.id != admission.id ||
+            original.characterId != admission.characterId) {
+          throw StateError('Call receipt does not match the original admission.');
+        }
+        if (!_terminal(original)) {
+          throw StateError('Original call settlement is still pending.');
+        }
         await journal.clear(ownerId, old.operationKey);
       }
     }
