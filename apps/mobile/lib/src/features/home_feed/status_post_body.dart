@@ -41,7 +41,7 @@ class _StatusPostBodyState extends State<StatusPostBody> {
   @override
   Widget build(BuildContext context) {
     if (widget.body.isEmpty) return const SizedBox.shrink();
-    final style = Theme.of(context).textTheme.bodyLarge;
+    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4);
     if (widget.mode == StatusPostBodyMode.detail) {
       return Text(widget.body, style: style);
     }

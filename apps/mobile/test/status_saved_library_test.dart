@@ -133,19 +133,14 @@ void main() {
                 body: Center(child: Text('Account access changed')),
               ),
       );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MasanaFeedScreen(
-              api: FeedStub(),
-              accountKey: 'fan',
-              wrapAccountRoute: guard,
-            ),
-          ),
+      await tester.pumpWidget(MaterialApp(home: guard(
+        SavedStatusLibraryScreen(
+          api: FeedStub(),
+          accountKey: 'fan',
+          isAccountCurrent: () => active.value,
+          openPost: (_) async {},
         ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Saved Status'));
+      )));
       await tester.pumpAndSettle();
       expect(find.text('Approved original'), findsOneWidget);
       active.value = false;
@@ -441,7 +436,7 @@ void main() {
     expect(find.text('Saved items could not be refreshed.'), findsOneWidget);
   });
 
-  testWidgets('Status entry opens Saved without another root tab', (
+  testWidgets('Home removes the visible Saved entry without modifying bookmarks', (
     tester,
   ) async {
     final api = FeedStub();
@@ -453,11 +448,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Saved Status'));
-    await tester.pumpAndSettle();
-    // Saved opens a dedicated route; its root-header action is now offstage.
     expect(find.byTooltip('Saved Status'), findsNothing);
-    expect(find.text('Hello Status'), findsWidgets);
-    expect(find.text('Approved original'), findsOneWidget);
+    expect(find.byTooltip('Save post'), findsNothing);
+    expect(find.text('Hello Status'), findsOneWidget);
+    expect(find.byType(SavedStatusLibraryScreen), findsNothing);
   });
 }

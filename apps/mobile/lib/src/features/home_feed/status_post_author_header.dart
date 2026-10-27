@@ -29,7 +29,18 @@ class StatusPostAuthorHeader extends StatelessWidget {
     final l10n = MaterialLocalizations.of(context);
     final date = l10n.formatMediumDate(localTime);
     final time = l10n.formatTimeOfDay(TimeOfDay.fromDateTime(localTime));
-    final caption = '$date · $time';
+    final absoluteTime = '$date · $time';
+    final ago = DateTime.now().difference(post.publishedAt);
+    final ha = Localizations.localeOf(context).languageCode == 'ha';
+    final relativeTime = ago.isNegative || ago.inMinutes < 1
+        ? (ha ? 'Yanzu' : 'Just now')
+        : ago.inMinutes < 60
+            ? (ha ? 'Minti ${ago.inMinutes} da suka wuce' : '${ago.inMinutes}m ago')
+            : ago.inHours < 24
+                ? (ha ? 'Sa’o’i ${ago.inHours} da suka wuce' : '${ago.inHours}h ago')
+                : ago.inDays < 7
+                    ? (ha ? 'Kwanaki ${ago.inDays} da suka wuce' : '${ago.inDays}d ago')
+                    : absoluteTime;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -71,11 +82,17 @@ class StatusPostAuthorHeader extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    caption,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Tooltip(
+                    message: absoluteTime,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(child: Text(relativeTime,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall)),
+                      const SizedBox(width: 5),
+                      Icon(Icons.public, size: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ]),
                   ),
                 ],
               ),

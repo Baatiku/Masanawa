@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../agents/agent_directory.dart';
+import '../../theme/masanawa_theme.dart';
 import 'feed_api.dart';
 import 'status_tip_flow.dart';
 import 'feed_media_api.dart';
@@ -14,7 +15,6 @@ import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
-import 'saved_status_library_screen.dart';
 import 'status_promotion_api.dart';
 import 'status_promotion_sheet.dart';
 import 'my_status_promotions_screen.dart';
@@ -78,16 +78,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   String searchTerm = '';
   String mode = 'for_you';
   bool localSearchExpanded = false;
-  bool titleCollapsed = false;
   List<FeedPost> items = [];
   String? cursor, error;
   bool loading = false, fetchingMore = false, offline = false;
   bool promotionsAvailable = false;
   int generation = 0;
   final Set<String> pendingActions = {};
-  // A timed-out Save may have reached the server. Do not turn a second tap
-  // into an accidental inverse write before a fresh account-bound read.
-  final Set<String> uncertainSaves = {};
   String? pageError;
   void _onExternalSearchChanged() {
     if (!mounted) return;
@@ -98,7 +94,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   void clearProjection() {
     generation++;
     items = [];
-    titleCollapsed = false;
     cursor = null;
     error = null;
     pageError = null;
@@ -106,7 +101,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     loading = false;
     fetchingMore = false;
     pendingActions.clear();
-    uncertainSaves.clear();
     promotionsAvailable = false;
   }
 
@@ -136,7 +130,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (query == searchTerm) return;
     setState(() {
       searchTerm = query;
-      titleCollapsed = false;
       items = [];
       cursor = null;
       pageError = null;
@@ -149,7 +142,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (searchTerm.isEmpty) return;
     setState(() {
       searchTerm = '';
-      titleCollapsed = false;
       items = [];
       cursor = null;
       pageError = null;
@@ -287,7 +279,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
-        uncertainSaves.clear();
       });
     } catch (e) {
       if (!mounted || ticket != generation) return;
@@ -341,23 +332,16 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }
   }
 
-  Future<void> action(FeedPost p, {required bool like}) async {
+  Future<void> likePost(FeedPost p) async {
     final index = items.indexWhere((row) => row.id == p.id);
-    if (!widget.enabled || index < 0 || pendingActions.contains(p.id) ||
-        (!like && uncertainSaves.contains(p.id))) return;
-    final enabled = like ? !p.liked : !p.saved, scope = generation;
+    if (!widget.enabled || index < 0 || pendingActions.contains(p.id)) return;
+    final enabled = !p.liked, scope = generation;
     setState(() {
       pendingActions.add(p.id);
-      items[index] = like
-          ? p.withAction(liked: enabled)
-          : p.withAction(saved: enabled);
+      items[index] = p.withAction(liked: enabled);
     });
     try {
-      if (like) {
-        await widget.api.like(p.id, enabled);
-      } else {
-        await widget.api.save(p.id, enabled);
-      }
+      await widget.api.like(p.id, enabled);
     } catch (e) {
       if (!mounted || scope != generation) return;
       if (accessLost(e)) {
@@ -365,25 +349,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           clearProjection();
           error = e.toString();
         });
-        return;
-      }
-      if (!like && e is DioException &&
-          (e.type == DioExceptionType.connectionError ||
-           e.type == DioExceptionType.connectionTimeout ||
-           e.type == DioExceptionType.receiveTimeout ||
-           const [502, 503, 504].contains(e.response?.statusCode))) {
-        final now = items.indexWhere((row) => row.id == p.id);
-        setState(() {
-          uncertainSaves.add(p.id);
-          if (now >= 0) items[now] = p;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(t(
-            'Save status unknown. Refresh before changing it again.',
-            'Ba a san matsayin ajiya ba. Sabunta kafin a sake canjawa.',
-          )),
-          action: SnackBarAction(label: t('Refresh', 'Sabunta'), onPressed: refresh),
-        ));
         return;
       }
       final now = items.indexWhere((row) => row.id == p.id);
@@ -520,39 +485,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
-        },
-      ),
-    );
-  }
-
-  void openSaved() {
-    if (widget.api is! SavedStatusLibraryApi || widget.accountKey.isEmpty)
-      return;
-    final account = widget.accountKey;
-    final guard = widget.wrapAccountRoute;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) {
-          final saved = SavedStatusLibraryScreen(
-            api: widget.api as SavedStatusLibraryApi,
-            accountKey: account,
-            authorDirectory: widget.authorDirectory,
-            mediaApi: widget.mediaApi,
-            inlineMediaRenderer: widget.inlineMediaRenderer,
-            isAccountCurrent: () =>
-                mounted && widget.enabled && widget.accountKey == account,
-            openPost: (post) async {
-              // A saved post may have lost visibility since the list read.
-              // Re-authorize the original before opening the content page.
-              final api = widget.api;
-              final currentPost = api is DioFeedApi
-                  ? await api.detail(post.id)
-                  : post;
-              if (!mounted || widget.accountKey != account) return;
-              await openPost(currentPost);
-            },
-          );
-          return guard?.call(saved) ?? saved;
         },
       ),
     );
@@ -726,38 +658,20 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       );
     return Column(
       children: [
-        if (!widget.authorScoped)
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 10, 4),
-            child: Row(children: [
-              if (!titleCollapsed)
-                Expanded(child: Text(
-                  t('Home', 'Gida'),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ))
-              else
-                const Spacer(),
-              if (widget.api is SearchFeedApi && widget.searchExpanded == null)
-                IconButton(
-                  tooltip: localSearchExpanded ? 'Close Status search' : 'Search Status',
-                  icon: Icon(localSearchExpanded ? Icons.close : Icons.search),
-                  onPressed: () {
-                    if (localSearchExpanded) clearSearch();
-                    setState(() => localSearchExpanded = !localSearchExpanded);
-                  },
-                ),
-              if (widget.api is SavedStatusLibraryApi)
-                IconButton(
-                  tooltip: t('Saved Status', 'Labarai da aka ajiye'),
-                  onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
-                  icon: const Icon(Icons.bookmark_border_rounded),
-                ),
-              if(widget.promotions!=null&&widget.accountKey.isNotEmpty)
-                IconButton(tooltip:t('My promotions','Tallace-tallacena'),
-                  onPressed:openMyPromotions,icon:const Icon(Icons.campaign_outlined)),
-            ]),
+        // The real Home shell already has its wordmark and expandable Search.
+        // Embedded/standalone feeds may still need their own compact search.
+        if (!widget.authorScoped && widget.searchExpanded == null &&
+            widget.api is SearchFeedApi)
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: IconButton(
+              tooltip: localSearchExpanded ? 'Close Status search' : 'Search Status',
+              icon: Icon(localSearchExpanded ? Icons.close : Icons.search),
+              onPressed: () {
+                if (localSearchExpanded) clearSearch();
+                setState(() => localSearchExpanded = !localSearchExpanded);
+              },
+            ),
           ),
         if (!widget.authorScoped&&!widget.ownPostsOnly&&promotionsAvailable)
           Padding(padding:const EdgeInsets.fromLTRB(12,4,12,8),
@@ -776,7 +690,23 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 IconButton(tooltip:t('Promote post','Yada sako'),
                   onPressed:()=>openPromotion(),
                   icon:const Icon(Icons.add_photo_alternate_outlined)),
+                IconButton(tooltip:t('My promotions','Tallace-tallacena'),
+                  onPressed:openMyPromotions,
+                  icon:const Icon(Icons.campaign_outlined)),
               ]))),
+          ),
+        // Incident mode: new spending stays OFF, but the owner must still be
+        // able to review receipts, cancel reserves and delete their post.
+        if (!widget.authorScoped && !widget.ownPostsOnly &&
+            !promotionsAvailable && widget.promotions != null &&
+            widget.accountKey.isNotEmpty)
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed: openMyPromotions,
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              label: Text(t('My promotions', 'Tallace-tallacena')),
+            ),
           ),
         if (!widget.authorScoped &&
             !widget.ownPostsOnly &&
@@ -882,25 +812,22 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: refresh,
-                  child: NotificationListener<ScrollUpdateNotification>(
-                    onNotification: (notice) {
-                      if (notice.depth != 0) return false;
-                      final collapsed = notice.metrics.pixels > 12;
-                      if (collapsed != titleCollapsed) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted && titleCollapsed != collapsed) {
-                            setState(() => titleCollapsed = collapsed);
-                          }
-                        });
-                      }
-                      return false;
-                    },
-                  child: ListView.builder(
+                  child: ColoredBox(
+                    color: context.masanawa.surfaceBg,
+                    child: ListView.separated(
                     key: PageStorageKey<String>(
                       'status-feed-${widget.accountKey}-$mode-$searchTerm',
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
+                    separatorBuilder: (ctx, index) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Divider(
+                        height: 12,
+                        thickness: 0.7,
+                        color: context.masanawa.structuralBorder.withValues(alpha: 0.48),
+                      ),
+                    ),
                     itemBuilder: (ctx, i) {
                       if (i == items.length)
                         return Center(
@@ -917,10 +844,13 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                         onVerified:(_)=>unawaited(reconcileQualifiedView(post.id,generation)),
                         child:Card(
                         key: ValueKey(post.id),
-                        margin: const EdgeInsets.fromLTRB(10,4,10,6),
-                        elevation: 0.7,
-                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(13),
-                          side:BorderSide(color:Theme.of(context).colorScheme.outlineVariant.withValues(alpha:0.5))),
+                        color: context.masanawa.surfaceCard,
+                        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                        elevation: 3,
+                        shadowColor: Theme.of(context).colorScheme.shadow.withValues(alpha:0.17),
+                        surfaceTintColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(16),
+                          side:BorderSide(color:context.masanawa.structuralBorder.withValues(alpha:0.38))),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => openPost(post),
@@ -947,36 +877,14 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                                     post.authorMasanaId,
                                                   )),
                                     )),
-                                    IconButton(
-                                      tooltip: post.saved
-                                          ? t('Remove saved post', 'Cire ajiya')
-                                          : uncertainSaves.contains(post.id)
-                                              ? t('Refresh to confirm saved state', 'Sabunta don tabbatar da ajiya')
-                                              : t('Save post', 'Ajiye labari'),
-                                      onPressed: pendingActions.contains(post.id) ||
-                                              uncertainSaves.contains(post.id)
-                                          ? null
-                                          : () => action(post, like: false),
-                                      icon: Icon(post.saved
-                                          ? Icons.bookmark_rounded
-                                          : Icons.bookmark_border_rounded),
-                                    ),
-                                    PopupMenuButton<String>(
-                                      tooltip:t('Post options','Zaɓin labari'),
-                                      icon:const Icon(Icons.more_horiz_rounded),
-                                      onSelected:(choice){
-                                        if(choice=='tip')tipPost(post);
-                                        if(choice=='boost')openPromotion(postId:post.id);
-                                      },
-                                      itemBuilder:(_)=>[
-                                        if(widget.statusTips!=null&&!post.isHuman)
-                                          PopupMenuItem(value:'tip',
-                                            child:Text(t('Tip MB','Kyautar MB'))),
-                                        if(promotionsAvailable&&post.boostEligible)
-                                          PopupMenuItem(value:'boost',
-                                            child:Text(t('Boost post','Kara yada labari'))),
-                                      ],
-                                    ),
+                                    if (widget.statusTips != null && !post.isHuman)
+                                      IconButton(
+                                        tooltip: t('Tip MB', 'Kyautar MB'),
+                                        onPressed: pendingActions.contains(post.id)
+                                            ? null : () => tipPost(post),
+                                        icon: const Icon(Icons.volunteer_activism_outlined),
+                                        constraints: const BoxConstraints(minWidth:48,minHeight:48),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -999,49 +907,54 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 onOpen: widget.onOpenMedia == null
                                     ? null : (id) => widget.onOpenMedia!(post, id),
                               ),
-                              if (post.totalReactions > 0 || post.commentCount > 0 ||
-                                post.verifiedViewCount != null ||
-                                (promotionsAvailable&&post.boostEligible))
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                                  child: Row(children: [
-                                    if (post.totalReactions > 0)
-                                      Expanded(child: Text(
-                                    '${FeedPost.reactionKinds
-                                        .where(
-                                          (kind) =>
-                                              (post.effectiveReactionCounts[kind] ??
-                                                  0) >
-                                              0,
-                                        )
-                                        .map(
-                                          (kind) =>
-                                              FeedPost.reactionEmoji[kind] ?? '',
-                                        )
-                                        .join(' ')} ${post.totalReactions}',
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  )),
-                                    if (post.commentCount > 0)
-                                      Text('${post.commentCount} comments',
-                                        style: Theme.of(context).textTheme.bodySmall),
-                                    if(post.verifiedViewCount!=null)...[
-                                      if(post.commentCount>0||post.totalReactions>0)
-                                        const SizedBox(width:8),
-                                      const Icon(Icons.visibility_outlined,size:14),
-                                      const SizedBox(width:3),
-                                      Text('${post.verifiedViewCount} ${t('verified','tabbatattu')}',
-                                        style:Theme.of(context).textTheme.bodySmall),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                  Wrap(
+                                    spacing: 12, runSpacing: 6,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      if (post.totalReactions > 0)
+                                        Text(
+                                          '${FeedPost.reactionKinds.where((kind) =>
+                                            (post.effectiveReactionCounts[kind] ?? 0) > 0)
+                                            .map((kind) => FeedPost.reactionEmoji[kind] ?? '')
+                                            .join(' ')} ${post.totalReactions}',
+                                          style: Theme.of(context).textTheme.bodySmall,
+                                        ),
+                                      if (post.commentCount > 0)
+                                        Text('${post.commentCount} ${t('comments','sharhi')}',
+                                          style: Theme.of(context).textTheme.bodySmall),
+                                      Row(mainAxisSize:MainAxisSize.min,children:[
+                                        Icon(Icons.visibility_outlined,size:15,
+                                          color:context.masanawa.textMuted),
+                                        const SizedBox(width:4),
+                                        ConstrainedBox(
+                                          constraints:BoxConstraints(maxWidth:
+                                            (MediaQuery.sizeOf(context).width - 100).clamp(120.0, 480.0).toDouble()),
+                                          child:Text(post.verifiedViewCount == null
+                                            ?t('Views unavailable','Ba a samu adadin kallo ba')
+                                            :'${post.verifiedViewCount} ${t('views','kallo')}',
+                                            softWrap:true,
+                                            style:Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color:context.masanawa.textMuted))),
+                                      ]),
                                     ],
-                                    if(promotionsAvailable&&post.boostEligible)...[
-                                      const Spacer(),
-                                      TextButton.icon(
+                                  ),
+                                  if(promotionsAvailable&&post.boostEligible)
+                                    Align(alignment:AlignmentDirectional.centerEnd,
+                                      child:OutlinedButton.icon(
+                                        style:OutlinedButton.styleFrom(
+                                          minimumSize:const Size(0,44),
+                                          padding:const EdgeInsets.symmetric(horizontal:9)),
                                         onPressed:()=>openPromotion(postId:post.id),
                                         icon:const Icon(Icons.rocket_launch_outlined,size:16),
                                         label:Text(t('Boost','Kara yada'),maxLines:1),
-                                      ),
-                                    ],
-                                  ]),
-                                ),
+                                      )),
+                                ]),
+                              ),
                               const Divider(height: 1),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -1076,7 +989,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                             minimumSize: const Size(0, 48),
                                           ),
                                           onPressed: pending ? null
-                                              : () => action(post, like: true),
+                                              : () => likePost(post),
                                           icon: Icon(post.currentReaction == 'like'
                                               ? Icons.thumb_up_rounded
                                               : Icons.thumb_up_outlined, size: 20),
