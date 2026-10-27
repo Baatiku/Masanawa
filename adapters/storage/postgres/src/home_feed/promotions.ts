@@ -312,17 +312,24 @@ export class PgStatusPromotions {
  async mine(t:string,u:string){actor(t,u);
   const campaigns=await this.pool.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 ORDER BY created_at DESC,id DESC LIMIT 100`,[t,u]);
-  const inactive=await this.pool.query(`SELECT id,paid_purge_at FROM feed.posts
-    WHERE tenant_id=$1 AND author_type='human' AND author_user_id=$2
-     AND state='hidden' AND paid_purge_at>statement_timestamp()
-     AND paid_purged_at IS NULL ORDER BY paid_purge_at LIMIT 100`,[t,u]);
+  const inactive=await this.pool.query(`SELECT p.id,p.body,p.kind,p.paid_disabled_at,
+    p.paid_purge_at,(SELECT count(*)::int FROM feed.qualified_views v
+      WHERE v.tenant_id=p.tenant_id AND v.post_id=p.id) AS historical_views
+    FROM feed.posts p WHERE p.tenant_id=$1 AND p.author_type='human'
+     AND p.author_user_id=$2 AND p.state='hidden'
+     AND p.paid_purge_at>statement_timestamp() AND p.paid_purged_at IS NULL
+    ORDER BY p.paid_purge_at,p.id LIMIT 100`,[t,u]);
   const earnings=await this.pool.query(`SELECT b.post_id,count(*)::int AS views,
     sum(c.sharer_half_mb)::int AS half_mb FROM feed.promotion_view_charges c
     JOIN feed.promotion_campaigns b ON b.tenant_id=c.tenant_id AND b.id=c.campaign_id
     WHERE c.tenant_id=$1 AND c.sharer_id=$2 GROUP BY b.post_id
     ORDER BY views DESC LIMIT 100`,[t,u]);
-  return {campaigns:campaigns.rows.map(x=>campaign(x as Row)),
-   inactivePosts:inactive.rows.map(x=>({postId:String(x.id),purgeAt:x.paid_purge_at})),
+  const serverClock=await this.pool.query(`SELECT statement_timestamp() AS now_utc`);
+  return {serverNow:serverClock.rows[0]!.now_utc,
+   campaigns:campaigns.rows.map(x=>campaign(x as Row)),
+   inactivePosts:inactive.rows.map(x=>({postId:String(x.id),purgeAt:x.paid_purge_at,
+    disabledAt:x.paid_disabled_at,kind:x.kind,body:String(x.body??''),
+    historicalVerifiedViews:count(x.historical_views)})),
    sharingEarnings:earnings.rows.map(x=>({postId:x.post_id,
     referredQualifiedViews:x.views,pendingHalfMb:x.half_mb,
     settlementState:'provider_qualification_pending'}))};

@@ -12,6 +12,8 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
+**27 October Status preview merged:** #522 merged at `374518b3`, exact head `86cc1693`, after Foundation CI #1599, Mobile Build #1099, retained PostgreSQL #119, startup #231 and roster #418 all PASS. It preserves the `/status/:postId` HTML document as one specifically allowlisted non-API app-link path, serves only approved global public text with OpenGraph escaping without a paid view, and wires signed-in six-second continuous-visible app challenges with account/referral fencing. The public and financial gates remain OFF; no public-image media, guest qualified-view consent/proof or referral settlement is claimed. Next source work adds a bounded retryable cleanup scheduler and fuller owner-only 72-hour inactive content review. Required CDN/media erasure, independent fraud authority and true reward backing are still missing; no APK until consolidated Status/feed completion.
+
 **27 October continued R03/F03 diagnosis merged #518:** Source merge
 `5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
 `1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`; all SIX applicable hosted checks PASS
