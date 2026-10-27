@@ -144,7 +144,11 @@ void main() {
     expect(() => GbPendingDataPurchase.fromJson({...valid,
       'idempotencyKey': 'redeem_fake'}), throwsFormatException);
     expect(() => GbPendingDataPurchase.fromJson({...valid,
-      'costMb': 1999}), throwsFormatException);
+      'costMb': 0}), throwsFormatException);
+    for(final mb in [40,350,500,1050,2500]) {
+      final small={...valid,'costMb':mb};
+      expect(GbPendingDataPurchase.fromJson(small).toJson(),small);
+    }
   });
 
   testWidgets('storage failure stops the original financial POST', (tester) async {

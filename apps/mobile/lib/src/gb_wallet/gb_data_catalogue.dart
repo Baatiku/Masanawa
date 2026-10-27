@@ -41,10 +41,15 @@ class GbVerifiedBundle {
     required this.validityDays,
     required this.providerAmount,
     required this.expiresAt,
+    this.extrasLabel,
   });
 
   final String id, version, network, providerAmount;
-  final int allowanceGb, costMb, validityDays;
+  final num allowanceGb;
+  final int costMb, validityDays;
+  final String? extrasLabel;
+  String get allowanceLabel => costMb < 1000 ? '$costMb MB' :
+      '${(costMb / 1000).toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '')} GB';
   final DateTime expiresAt;
 
   factory GbVerifiedBundle.fromJson(Object? value) {
@@ -56,6 +61,8 @@ class GbVerifiedBundle {
     final network = value['network'];
     final gb = value['allowanceGb'];
     final mb = value['costMb'];
+    final approvedMb = value['allowanceMb'];
+    final extras = value['extrasLabel'];
     final days = value['validityDays'];
     final providerAmount = value['providerAmount'];
     final expiresText = value['expiresAt'];
@@ -63,8 +70,11 @@ class GbVerifiedBundle {
     if (id is! String || id.length < 3 || id.length > 260 ||
         version is! String || version.isEmpty || version.length > 128 ||
         network is! String || !gbDataNetworks.contains(network) ||
-        gb is! int || gb < 1 || gb > 1000 ||
-        mb is! int || mb != gb * 1000 ||
+        gb is! num || !gb.isFinite ||
+        mb is! int || mb < 1 || mb > 1000000 ||
+        (approvedMb == null ? (gb is! int || gb < 1 || mb != gb * 1000)
+          : (approvedMb is! int || approvedMb != mb || gb != mb / 1000)) ||
+        (extras != null && (extras is! String || extras.isEmpty || extras.length > 160)) ||
         days is! int || days < 1 || days > 366 ||
         providerAmount is! String ||
         !RegExp(r'^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?$')
@@ -78,6 +88,7 @@ class GbVerifiedBundle {
       id: id, version: version, network: network, allowanceGb: gb,
       costMb: mb, validityDays: days, providerAmount: providerAmount,
       expiresAt: expires,
+      extrasLabel: extras as String?,
     );
   }
 }
@@ -114,6 +125,7 @@ class GbReadOnlyQuote {
         bundle.network != selected.network ||
         bundle.costMb != selected.costMb ||
         bundle.allowanceGb != selected.allowanceGb ||
+        bundle.extrasLabel != selected.extrasLabel ||
         bundle.validityDays != selected.validityDays ||
         bundle.providerAmount != selected.providerAmount ||
         raw['requiresWalletReservation'] != true ||
@@ -184,6 +196,7 @@ final gbDataCatalogueProvider =
     ref.onDispose(cancel.cancel);
     final result = await ref.watch(apiClientProvider).dio.get<Object?>(
       '/v1/gb/data/bundles',
+      queryParameters: const {'units': 'mb'},
       cancelToken: cancel,
       options: Options(headers: const {'Cache-Control': 'no-store'}),
     );

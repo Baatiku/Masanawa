@@ -14,6 +14,9 @@ export interface ApprovedWholeGbBundle {
   readonly billerCode: string;
   readonly itemCode: string;
   readonly allowanceGb: number;
+  /** Explicit integer-MB approval for the owner-selected fractional/MB plans. */
+  readonly allowanceMb?: number;
+  readonly extrasLabel?: string;
   readonly validityDays: number;
   /** Exact NGN provider amount approved for this item; no client price. */
   readonly providerAmount: string;
@@ -29,6 +32,8 @@ export interface VerifiedWholeGbBundle {
   readonly version: string;
   readonly network: NigerianNetwork;
   readonly allowanceGb: number;
+  readonly allowanceMb?: number;
+  readonly extrasLabel?: string;
   readonly costMb: number;
   readonly validityDays: number;
   readonly providerAmount: string;
@@ -105,8 +110,12 @@ export function projectVerifiedWholeGbBundles(
       !approvedCode.test(item.itemCode) ||
       !approvedCode.test(item.evidenceRef) ||
       !approvedCode.test(item.reviewedBy) ||
-      !Number.isSafeInteger(item.allowanceGb) ||
-      item.allowanceGb < 1 || item.allowanceGb > 1000 ||
+      (item.allowanceMb === undefined
+        ? !Number.isSafeInteger(item.allowanceGb) || item.allowanceGb < 1 || item.allowanceGb > 1000
+        : !Number.isSafeInteger(item.allowanceMb) || item.allowanceMb < 1 ||
+          item.allowanceMb > 1000000 || item.allowanceGb !== item.allowanceMb / 1000) ||
+      (item.extrasLabel !== undefined && (typeof item.extrasLabel !== "string" ||
+        item.extrasLabel.length < 1 || item.extrasLabel.length > 160 || /[\x00-\x1f\x7f]/.test(item.extrasLabel))) ||
       !Number.isSafeInteger(item.validityDays) ||
       item.validityDays < 1 || item.validityDays > 366 ||
       normalizeNgn(item.providerAmount) <= 0n ||
@@ -138,7 +147,9 @@ export function projectVerifiedWholeGbBundles(
       version: item.version,
       network: item.network,
       allowanceGb: item.allowanceGb,
-      costMb: item.allowanceGb * 1000,
+      ...(item.allowanceMb === undefined ? {} : {allowanceMb:item.allowanceMb}),
+      ...(item.extrasLabel === undefined ? {} : {extrasLabel:item.extrasLabel}),
+      costMb: item.allowanceMb ?? item.allowanceGb * 1000,
       validityDays: item.validityDays,
       providerAmount: item.providerAmount,
       billerCode: item.billerCode,

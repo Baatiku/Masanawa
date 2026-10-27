@@ -24,7 +24,7 @@ class GbPendingDataPurchase {
        bundleId is! String||bundleId.length<3||bundleId.length>260||
        version is! String||version.isEmpty||version.length>128||
        phone is! String||normalizeNigerianDataPhone(phone)!=phone||
-       cost is! int||cost<1000||cost>1000000||cost%1000!=0)
+       cost is! int||cost<1||cost>1000000)
       throw const FormatException('Invalid pending data purchase');
     return GbPendingDataPurchase(idempotencyKey:key,bundleId:bundleId,
       version:version,recipientPhone:phone,costMb:cost);
