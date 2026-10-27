@@ -90,8 +90,8 @@ void main() {
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
-    // One Home shell label plus the one current-feed title (no sixth tab).
-    expect(find.text('Home'), findsNWidgets(2));
+    // Home is already named by the shell: no duplicated in-feed title strip.
+    expect(find.text('Home'), findsOneWidget);
     expect(find.text('Chats'), findsOneWidget);
     // The date string is locale-formatted and may omit the year. The shared
     // header must receive the real post timestamp, not a fabricated label.

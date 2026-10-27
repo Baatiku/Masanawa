@@ -159,10 +159,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
       api:StubFeed('Original status'),accountKey:'owner',statusTips:flow))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Post options'));
-    await tester.pumpAndSettle();
-    expect(find.text('Tip MB'),findsOneWidget);
-    await tester.tap(find.text('Tip MB'));
+    expect(find.byTooltip('Save post'), findsNothing);
+    expect(find.byTooltip('Post options'), findsNothing);
+    await tester.tap(find.byTooltip('Tip MB'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('50 MB').first);
     await tester.pumpAndSettle();
@@ -173,9 +172,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(confirmations,0);
     expect(store.value,isNull);
-    await tester.tap(find.byTooltip('Post options'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tip MB'));
+    await tester.tap(find.byTooltip('Tip MB'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('50 MB').first);
     await tester.pumpAndSettle();
@@ -187,48 +184,56 @@ void main() {
     expect(find.textContaining('Tip confirmed: 50 MB'),findsOneWidget);
   });
 
-  testWidgets('uncertain Save cannot issue an inverse write before fresh readback', (tester) async {
-    var saveWrites = 0, reads = 0;
-    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'));
-    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
-      if (options.method == 'GET' && options.path == '/v1/feed') {
-        reads++;
-        handler.resolve(Response(requestOptions: options, statusCode: 200, data: {
-          'items': [{'id': 'post-1', 'authorMasanaId': 'masana_one',
-            'kind': 'text', 'body': 'Saved original', 'media': [],
-            'publishedAt': '2026-10-25T18:00:00Z', 'likeCount': 0,
-            'commentCount': 0, 'viewerSaved': reads > 1}],
-          'nextCursor': null,
-        }));
-      } else if (options.method == 'PUT' && options.path.endsWith('/save')) {
-        saveWrites++;
-        handler.reject(DioException(requestOptions: options,
-          type: DioExceptionType.connectionError,
-          message: 'response lost after commit'));
-      } else {
-        handler.reject(DioException(requestOptions: options,
-          type: DioExceptionType.badResponse));
-      }
-    }));
-    addTearDown(() => dio.close(force: true));
+  testWidgets('Home removes card Save and top Saved while retaining three actions', (tester) async {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
-      api: DioFeedApi(dio, () async => 'owner-token'), accountKey: 'owner'))));
+      api: StubFeed('An original post'), accountKey: 'owner'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Save post'));
-    await tester.pumpAndSettle();
-    expect(saveWrites, 1);
-    expect(find.byTooltip('Refresh to confirm saved state'), findsOneWidget);
-    final button = tester.widget<IconButton>(find.ancestor(
-      of: find.byTooltip('Refresh to confirm saved state'),
-      matching: find.byType(IconButton)).first);
-    expect(button.onPressed, isNull);
-    await tester.tap(find.text('Refresh').last);
-    await tester.pumpAndSettle();
-    expect(reads, greaterThan(1));
-    expect(find.byTooltip('Remove saved post'), findsOneWidget);
-    expect(saveWrites, 1);
+    expect(find.byTooltip('Save post'), findsNothing);
+    expect(find.byTooltip('Remove saved post'), findsNothing);
+    expect(find.byTooltip('Saved Status'), findsNothing);
+    expect(find.byIcon(Icons.bookmark_border_rounded), findsNothing);
+    expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(find.text('Views unavailable'), findsOneWidget);
+    final card = tester.widget<Card>(find.byType(Card).first);
+    expect(card.elevation, greaterThan(1));
+    expect(tester.takeException(), isNull);
   });
-  testWidgets('scroll collapses only the Status title, not search; new account resets it',
+
+  testWidgets('320dp enlarged/RTL feed separates cards and does not offer human Tip MB',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = StubFeed('two posts');
+    api.onList = (_, __) async => FeedPage([
+      FeedPost(id:'human-post', authorMasanaId:'', authorType:'human',
+        authorId:'publisher', authorHandle:'publisher', kind:'text',
+        body:'An approved human promotion', mediaIds:const [],
+        publishedAt:DateTime.now().subtract(const Duration(hours:2)),
+        likeCount:3,commentCount:2,liked:false,saved:false,
+        verifiedViewCount:127),
+      update('An official Masana update'),
+    ], null);
+    await tester.pumpWidget(MaterialApp(
+      builder:(context,child)=>MediaQuery(
+        data:MediaQuery.of(context).copyWith(
+          textScaler:const TextScaler.linear(2)),
+        child:Directionality(textDirection:TextDirection.rtl,child:child!)),
+      home:Scaffold(body:MasanaFeedScreen(api:api,accountKey:'fan')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(Card), findsNWidgets(2));
+    expect(find.text('127 views'), findsOneWidget);
+    expect(find.text('Views unavailable'), findsOneWidget);
+    expect(find.byTooltip('Tip MB'), findsNothing);
+    expect(find.byTooltip('Save post'), findsNothing);
+    expect(find.byType(Divider), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Home has no duplicate title; compact search survives scroll and account switch',
       (tester) async {
     tester.view.physicalSize = const Size(320, 600);
     tester.view.devicePixelRatio = 1;
@@ -239,7 +244,7 @@ void main() {
       MasanaFeedScreen(api: api, accountKey: account)));
     await tester.pumpWidget(page('fan-a'));
     await tester.pumpAndSettle();
-    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Home'), findsNothing);
     expect(find.byTooltip('Search Status'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -300));
     await tester.pumpAndSettle();
@@ -247,7 +252,7 @@ void main() {
     expect(find.byTooltip('Search Status'), findsOneWidget);
     await tester.pumpWidget(page('fan-b'));
     await tester.pumpAndSettle();
-    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Home'), findsNothing);
     expect(find.byTooltip('Search Status'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
