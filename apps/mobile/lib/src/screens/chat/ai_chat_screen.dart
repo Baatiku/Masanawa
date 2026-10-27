@@ -112,7 +112,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   ProviderSubscription<SessionState>? _voiceAccountSubscription;
   int _voiceAuthorizationEpoch = 0;
   StreamSubscription<LiveVoiceState>? _inlineVoiceStateSub;
-  final MbCallIntentJournal _mbCallJournal = MbCallIntentJournal(const SecureMbCallIntentStore());
   MbCallAdmission? _inlineMbAdmission;
   MbCallFlow? _inlineMbFlow;
   bool _mbCallStarting = false;
@@ -1764,7 +1763,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final api = ref.read(apiClientProvider);
     return MbCallFlow(
       ownerId: owner.accountId,
-      journal: _mbCallJournal,
+      journal: MbCallIntentJournal(SecureMbCallIntentStore(ownerId: owner.accountId)),
       transport: MbCallTransport(
         dio: api.dio,
         baseUrl: api.dio.options.baseUrl,
