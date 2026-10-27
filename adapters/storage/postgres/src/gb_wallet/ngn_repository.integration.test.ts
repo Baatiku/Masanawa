@@ -51,6 +51,17 @@ const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
     .toMatchObject({state:"credited",creditedKobo:20_000_000});
   expect((await repo().read(actor)).balanceKobo).toBe(30_000_000);
  });
+ it("keeps under/overpayment and fractional-naira cash exact without automatic MB conversion",async()=>{
+  const under=await account(499999);await repo().deposit(under.payment);
+  await expect(repo().exchange(exchange(under.actor))).rejects.toThrow('ngn.insufficient_balance');
+  expect((await repo().read(under.actor)).balanceKobo).toBe(499999);
+  const over=await account(500001);await repo().deposit(over.payment);
+  const receipt=await repo().exchange(exchange(over.actor));
+  expect(receipt).toMatchObject({amountMb:10000,amountKobo:500000});
+  expect((await repo().read(over.actor)).balanceKobo).toBe(1);
+  await repo().deposit(over.payment);
+  expect((await repo().read(over.actor)).balanceKobo).toBe(1);
+ });
  it("atomically exchanges once with concurrent confirmations; immutable matching receipts",async()=>{
   const {actor,payment}=await account();await repo().deposit(payment);
   const request=exchange(actor);

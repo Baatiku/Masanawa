@@ -154,9 +154,14 @@ class MbCallTransport {
     if (instruction != null && (instruction is! String || instruction.length > 32000)) {
       throw const FormatException('Invalid call context');
     }
+    final historyId=value['callId'];
+    if(historyId!=null && (historyId is! String ||
+      !RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$').hasMatch(historyId))) {
+      throw const FormatException('Invalid canonical call history reference');
+    }
     return AgentLiveVoiceGrant(token: token, websocketUrl: websocketUrl,
       model: model, voiceName: voiceName, expiresAt: expiresAt,
-      systemInstruction: instruction as String?, callId: admission.id,
+      systemInstruction: instruction as String?, callId: historyId as String?,
       transport: AgentLiveVoiceTransport.gatewayRelay);
   }
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { withTransaction } from "../transaction.js";
 
 /**
@@ -74,7 +74,12 @@ type Reserved = {
   state:string;
 };
 
-export function createGbUsageReservations(pool: Pool) {
+export function createGbUsageReservations(pool: Pool, transactionClient?: PoolClient) {
+  // A caller completing a durable reply can settle its hold in the SAME
+  // transaction. The outer transaction owns retries, commit and rollback.
+  const transaction = <T>(action: (client: PoolClient) => Promise<T>, options: {isolation: "serializable"}) =>
+    transactionClient ? action(transactionClient) : withTransaction(pool, action, options);
+  const retry = <T>(action: () => Promise<T>) => transactionClient ? action() : serializable(action);
   const checkActor = (v: Pick<GbUsageReservation,
   "tenantId"|"userId"|"operationId">) => {
     assertId(v.tenantId);
@@ -82,7 +87,7 @@ export function createGbUsageReservations(pool: Pool) {
     assertId(v.operationId);
   };
   const readOperation = async (tenantId:string,operationId:string,userId:string) => {
-    const result=await pool.query<Operation>(
+    const result=await (transactionClient ?? pool).query<Operation>(
       `SELECT operation_id,actor_id,request_sha256,operation_kind,
               amount_mb::text,state
        FROM gb_wallet.operations
@@ -102,7 +107,7 @@ export function createGbUsageReservations(pool: Pool) {
       const fingerprint=createHash("sha256")
         .update(JSON.stringify([input.userId,input.use,input.amountMb]))
         .digest("hex");
-      return serializable(() => withTransaction(pool, async client => {
+      return retry(() => transaction( async client => {
         await client.query(
           `INSERT INTO gb_wallet.accounts(tenant_id,account_kind,account_id)
            VALUES ($1,'human',$2) ON CONFLICT DO NOTHING`,
@@ -200,7 +205,7 @@ export function createGbUsageReservations(pool: Pool) {
     ): Promise<GbUsageReceipt> {
       checkActor(actor);
       safeMb(actualMb);
-      return serializable(() => withTransaction(pool, async client => {
+      return retry(() => transaction( async client => {
         const row=await client.query<Reserved & { state:string }>(
           `SELECT r.purchased_mb::text,r.welcome_mb::text,r.state
              FROM gb_wallet.reservations r
@@ -288,7 +293,7 @@ export function createGbUsageReservations(pool: Pool) {
     async release(actor: {tenantId:string;userId:string;operationId:string}):
       Promise<boolean> {
       checkActor(actor);
-      return serializable(() => withTransaction(pool,async client=>{
+      return retry(() => transaction(async client=>{
         const r=await client.query<Reserved>(
           `SELECT r.purchased_mb::text,r.welcome_mb::text,r.state
            FROM gb_wallet.reservations r

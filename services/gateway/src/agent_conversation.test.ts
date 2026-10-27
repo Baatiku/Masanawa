@@ -353,3 +353,23 @@ describe("Alpha conversation service", () => {
   });
 
 });
+
+it.each(['turn','mediaTurn','mediaSetTurn'] as const)('MB %s prevents inference under recovery hold and releases admitted failures',async(method)=>{
+ const f=fixture(),session=sessionFor(f);
+ const claimTurn=vi.fn(async()=>({state:'created',command:{}}));
+ const failTurn=vi.fn(async()=>({}));
+ const execute=vi.fn(async()=>({reply:'answer',parts:[]}));
+ const request={authorizationHeader:'Bearer owner',characterId:f.scope.characterId,
+  characterSessionId:session.characterSessionId,requestId:createCanonicalId('request'),
+  correlationId:createCanonicalId('correlation'),text:'hello',caption:'hello',
+  mimeType:'audio/wav',dataBase64:'YWJj',media:[{mimeType:'image/jpeg',dataBase64:'YWJj'},{mimeType:'image/jpeg',dataBase64:'ZGVm'}]};
+ const base={sessions:{read:async()=>session} as never,runs:{create:async()=>{throw new Error('run storage failed')},finish:async()=>({})} as never,
+  authorizer:{authorize:async()=>f.admission},strategy:{execute} as never,
+  mobileShell:{claimTurn,failTurn,appendEvent:async()=>{}} as never,sessionDurationMs:60000};
+ const denied=createAgentConversationService({...base,beforeTurn:async()=>{throw new Error('recovery hold')}});
+ await expect(denied[method](request)).rejects.toThrow('recovery hold');
+ expect(claimTurn).not.toHaveBeenCalled();expect(execute).not.toHaveBeenCalled();
+ const admitted=createAgentConversationService(base);
+ await expect(admitted[method](request)).rejects.toThrow('run storage failed');
+ expect(failTurn).toHaveBeenCalledOnce();expect(execute).not.toHaveBeenCalled();
+});

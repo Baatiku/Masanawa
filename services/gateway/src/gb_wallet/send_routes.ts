@@ -64,7 +64,8 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
           recipient.username!==handle)
         return reply.code(404).send({error:{code:"recipient_unavailable"}});
       return {recipient:{id:recipient.userId,username:recipient.username,
-        displayName:recipient.displayName}};
+        displayName:recipient.displayName,
+        ...(recipient.avatarUrl?{avatarUrl:recipient.avatarUrl}:{})}};
     }catch(error){return errorResponse(error,reply);}
   });
   app.post("/v1/gb/wallet/send/quote",{

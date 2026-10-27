@@ -1159,6 +1159,27 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
+    },
+    {
+      "name": "MASANAWA_MB_REPLIES_ENABLED",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in new 1 MB reply reservations and atomic durable-delivery settlement. Does not convert or charge historical turns. Enable only with migrated trusted ledger and reconciliation."
+    },
+    {
+      "name": "MASANAWA_NGN_EXCHANGE_QUALIFICATION",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Server/operator-only JSON: rateVersion, reference, expiresAt, fulfillmentKoboPerGb, fixedFeeKobo, feeBps, minimumMarginBps, maximumGb=2000. New exchanges require current evidence and nonnegative qualified margin for every supported custom quantity; no inferred provider costs."
+    },
+    {
+      "name": "RAILWAY_GIT_COMMIT_SHA",
+      "owner": "runtime/diagnostics",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Railway-provided deployed Git SHA; only a validated 40-character hexadecimal value may appear in sanitized MB call relay diagnostics."
     }
   ]
 }

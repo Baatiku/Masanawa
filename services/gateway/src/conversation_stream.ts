@@ -1,3 +1,4 @@
+import {replyWalletFailure} from "./gb_wallet/reply_errors.js";
 import { once } from "node:events";
 import type { FastifyReply } from "fastify";
 
@@ -42,8 +43,10 @@ export async function streamConversationReply(
       onAudioTranscriptDelta: async text => { if (text) await emit({ type: "audio-transcript", text }); },
     }, controller.signal);
     await emit({ type: "done", ...result });
-  } catch {
-    if (!controller.signal.aborted) await emit({ type: "error", code: "turn_failed" }).catch(() => undefined);
+  } catch (error) {
+    const walletFailure=replyWalletFailure(error);
+    if (!controller.signal.aborted) await emit({ type: "error",code:walletFailure?.code??"turn_failed",
+      ...(walletFailure?{message:walletFailure.message}:{}) }).catch(() => undefined);
   } finally {
     finished = true;
     reply.raw.off("close", abort);

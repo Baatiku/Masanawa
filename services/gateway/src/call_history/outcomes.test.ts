@@ -12,8 +12,11 @@ describe('owner-scoped call detail and outcomes',()=>{
  const expiresAt=()=>new Date(Date.now()+60000).toISOString();
  beforeAll(async()=>{
   db=new PGlite();await db.exec('CREATE SCHEMA agents');
-  for(const name of ['0002_agent_configurations.sql','0004_platform_agent_preferences.sql','0007_masana_call_history.sql','0008_masana_group_calls.sql','0009_masana_incoming_calls.sql','0013_masana_call_outcomes.sql'])
+  for(const name of ['0002_agent_configurations.sql','0004_platform_agent_preferences.sql','0007_masana_call_history.sql','0008_masana_group_calls.sql','0009_masana_incoming_calls.sql','0013_masana_call_outcomes.sql','0016_masana_mb_call_history.sql'])
    await db.exec(await readFile(new URL('../../../../packages/agents/migrations/'+name,import.meta.url),'utf8'));
+  await db.exec(`CREATE SCHEMA gb_wallet;
+   CREATE TABLE gb_wallet.call_admissions(tenant_id text,user_id text,character_id text,
+    admission_id text,state text,verified_connected_ms bigint,charged_mb integer,updated_at timestamptz)`);
   const query=async(sql:string,values?:unknown[])=>{const r=await db.query(sql,values);return {rows:r.rows,rowCount:r.affectedRows??r.rows.length};};
   repository=createPostgresCallHistoryRepository({query} as CallHistorySqlPool);
   await db.exec(`INSERT INTO agents.agent_presentations(tenant_id,character_id,character_version_id,display_name,role_label)

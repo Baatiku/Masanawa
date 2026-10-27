@@ -57,3 +57,5 @@ export {createGbBillstackRepository} from "./gb_wallet/billstack_repository.js";
 export * from "./gb_wallet/call_admissions.js";
 export {createNgnWalletRepository} from "./gb_wallet/ngn_repository.js";
 export type {NgnActor,NgnBalance,NgnExchange,NgnReceipt} from "./gb_wallet/ngn_repository.js";
+
+export { recoverExpiredMbReplies } from "./agents/mobile-shell.js";

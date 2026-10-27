@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { createGbUsageReservations } from "../gb_wallet/reservations.js";
 import type { Pool } from "pg";
 import { parseCanonicalId, toInstant } from "@masanawa/contracts";
 import { canonicalJson } from "@masanawa/security";
@@ -66,7 +68,12 @@ function action(row: any): MobileShellActionRecord {
   });
 }
 
-export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepository {
+export function createPostgresMobileShellRepository(pool: Pool, options: {billReplies?: boolean} = {}): MobileShellRepository {
+  const chargeActor = (input: {scope: {tenantId:string;userId:string};requestId:string}) => ({
+    tenantId: input.scope.tenantId, userId: input.scope.userId,
+    operationId: "reply_" + createHash("sha256").update(JSON.stringify([
+      input.scope.tenantId,input.scope.userId,input.requestId])).digest("hex"),
+  });
   return Object.freeze({
     async claimTurn(input: Parameters<MobileShellRepository["claimTurn"]>[0]) {
       return withTransaction(pool, async client => {
@@ -80,6 +87,13 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
            input.characterSessionId,input.requestId,input.kind,input.userText,input.payloadHash],
         );
         if (result.rows[0]) {
+          if (options.billReplies) {
+            const actor = chargeActor(input);
+            await createGbUsageReservations(pool, client).reserve({...actor,
+              idempotencyKey: actor.operationId, use: "reply", amountMb: 1});
+            await client.query(`UPDATE agents.mobile_turn_commands SET mb_reply_operation_id=$3
+              WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,input.requestId,actor.operationId]);
+          }
           return Object.freeze({ state: "created" as const, command: command(result.rows[0]) });
         }
         const replay = await client.query(
@@ -106,18 +120,19 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
     },
 
     async completeTurn(input: Parameters<MobileShellRepository["completeTurn"]>[0]) {
-      const result = await pool.query(
+      return withTransaction(pool, async client => {
+      const result = await client.query(
         `UPDATE agents.mobile_turn_commands
             SET state='completed', agent_run_id=$5, reply=$6, parts=$7::jsonb,
                 failure_code=NULL, updated_at=clock_timestamp()
           WHERE tenant_id=$1 AND user_id=$2 AND relationship_id=$3 AND request_id=$4
-            AND state='pending'
+            AND state='pending' AND character_id=$8
           RETURNING *`,
         [input.scope.tenantId,input.scope.userId,input.scope.relationshipId,input.requestId,
-         input.agentRunId,input.reply,canonicalJson(input.parts)],
+         input.agentRunId,input.reply,canonicalJson(input.parts),input.scope.characterId],
       );
       if (!result.rows[0]) {
-        const replay = await pool.query(
+        const replay = await client.query(
           `SELECT * FROM agents.mobile_turn_commands
             WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
               AND relationship_id=$4 AND request_id=$5`,
@@ -128,22 +143,32 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
         if (current?.state === "completed" && current.agentRunId === input.agentRunId) return current;
         throw new Error("mobile turn completion conflict");
       }
+      if (result.rows[0].mb_reply_operation_id) {
+      const wallet = createGbUsageReservations(pool, client);
+      const actor = {...chargeActor(input),operationId:result.rows[0].mb_reply_operation_id as string};
+      // Only new billed turns have a hold; historical commands remain intact.
+      const hold = await wallet.read(actor.tenantId, actor.operationId, actor.userId);
+      if (!hold) throw new Error("gb.wallet.reservation_missing");
+      await wallet.capture(actor, 1);
+      }
       return command(result.rows[0]);
+      });
     },
 
     async failTurn(input: Parameters<MobileShellRepository["failTurn"]>[0]) {
-      const result = await pool.query(
+      return withTransaction(pool, async client => {
+      const result = await client.query(
         `UPDATE agents.mobile_turn_commands
             SET state='failed', agent_run_id=COALESCE(agent_run_id,$5),
                 failure_code=$6, updated_at=clock_timestamp()
           WHERE tenant_id=$1 AND user_id=$2 AND relationship_id=$3 AND request_id=$4
-            AND state='pending'
+            AND state='pending' AND character_id=$7
           RETURNING *`,
         [input.scope.tenantId,input.scope.userId,input.scope.relationshipId,input.requestId,
-         input.agentRunId,input.failureCode],
+         input.agentRunId,input.failureCode,input.scope.characterId],
       );
       if (!result.rows[0]) {
-        const replay = await pool.query(
+        const replay = await client.query(
           `SELECT * FROM agents.mobile_turn_commands
             WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
               AND relationship_id=$4 AND request_id=$5`,
@@ -154,7 +179,16 @@ export function createPostgresMobileShellRepository(pool: Pool): MobileShellRepo
         if (current?.state === "failed") return current;
         throw new Error("mobile turn failure conflict");
       }
+      if (result.rows[0].mb_reply_operation_id) {
+      const wallet = createGbUsageReservations(pool, client);
+      const actor = {...chargeActor(input),operationId:result.rows[0].mb_reply_operation_id as string};
+      // Only new billed turns have a hold; historical commands remain intact.
+      const hold = await wallet.read(actor.tenantId, actor.operationId, actor.userId);
+      if (!hold) throw new Error("gb.wallet.reservation_missing");
+      await wallet.release(actor);
+      }
       return command(result.rows[0]);
+      });
     },
 
     async readTurn(input: Parameters<MobileShellRepository["readTurn"]>[0]) {
@@ -539,3 +573,34 @@ export function createPostgresMobileAgentActivityRepository(
   });
 }
 
+
+/** Cancel only commands whose durable delivery never completed. A concurrent
+ * completion wins or loses the command-row lock atomically with its charge.
+ * Late provider output cannot complete a failed command or debit a released hold.
+ */
+export async function recoverExpiredMbReplies(pool: Pool, limit = 100): Promise<number> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new RangeError("Invalid recovery limit");
+  const rows = await pool.query(`SELECT c.* FROM agents.mobile_turn_commands c
+    WHERE c.state='pending' AND c.mb_reply_operation_id IS NOT NULL AND c.created_at < clock_timestamp()-interval '15 minutes'
+    ORDER BY c.created_at LIMIT $1`, [limit]);
+  const repository = createPostgresMobileShellRepository(pool, {billReplies: true});
+  let recovered=0;
+  for (const row of rows.rows) {
+    const turn=command(row);
+    // Recovery is intentionally bounded to turns admitted by the new MB policy.
+    const operationId=row.mb_reply_operation_id as string;
+    const hold=await createGbUsageReservations(pool).read(turn.scope.tenantId,operationId,turn.scope.userId);
+    if (!hold || hold.state!=="reserved") continue;
+    try {
+      await repository.failTurn({scope:turn.scope,requestId:turn.requestId,
+        agentRunId:turn.agentRunId,failureCode:"agents.turn_expired"});
+      recovered++;
+    } catch (error) {
+      // A successful concurrent completion is authoritative. Other failures
+      // remain visible to the lifecycle runner and are retried next sweep.
+      const current=await repository.readTurn({scope:turn.scope,requestId:turn.requestId});
+      if(current?.state!=="completed")throw error;
+    }
+  }
+  return recovered;
+}

@@ -15,6 +15,7 @@ export interface GbSendRecipient {
   readonly username: string;
   readonly displayName: string;
   readonly active: boolean;
+  readonly avatarUrl?: string | null;
 }
 export interface GbSendPorts {
   readonly authorize: (header: string | undefined) => Promise<GbSendActor>;
@@ -123,9 +124,6 @@ export function createGbSendReviewService(ports: GbSendPorts) {
         !Number.isFinite(Date.parse(r.expiresAt))) {
       throw new GbSendError(403,"review_account_mismatch");
     }
-    if (Date.parse(r.expiresAt)<=now().getTime()) {
-      throw new GbSendError(410,"review_expired");
-    }
     return r as GbSendReview;
   };
   return {
@@ -170,6 +168,15 @@ export function createGbSendReviewService(ports: GbSendPorts) {
     async confirm(actor:GbSendActor, reviewToken:string) {
       checkActor(actor);
       const review=verify(reviewToken,actor);
+      // A completed original transfer is immutable even after expiry, recipient
+      // rename/revocation or a later balance restriction. Never submit it twice.
+      const old=await ports.readTransfer(actor,"send_"+review.nonce);
+      if(old){
+        if(old.state!=="completed"||old.amountMb!==review.amountMb||old.operationId!=="send_"+review.nonce)
+          throw new GbSendError(503,"send_unavailable");
+        return old;
+      }
+      if(Date.parse(review.expiresAt)<=now().getTime())throw new GbSendError(410,"review_expired");
       // Resolve AGAIN on confirmation so an expired/renamed/suspended user
       // cannot receive funds based on an earlier display-only name.
       const live=await ports.resolveRecipient(actor,review.username);

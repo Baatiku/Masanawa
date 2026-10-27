@@ -145,6 +145,38 @@ The broader UX-D01 and UX-W02 remain open for approved operator identity assets,
 
 **27 October source checkpoint (#501, merged `e7defb72`):** All active Masana call UI routes now use reviewed MB admission and server-owned relay/settlement, with owner-scoped encrypted original-key recovery. UX-R08 is checked on registered reduced-Gateway, real-PG and Flutter source-contract coverage; **37/58** UX items now checked, **21 remain open**. UX-R02/R06 stay open for provider qualification, connected-second and reply settlement completeness; R03/F03 for deployed-stage incident correlation and actual repaired build; S05/S06 for MB tips and approved media/audio contracts. Do not enable production calls, approve pending Railway deployments, issue an APK or resume fixed-IP work by inference from CI.
 
+### 27 October — owner-assigned communication and wallet completion batch
+
+Branch `feat/communication-wallet-completion-oct27`, source base `ede57f79`.
+Assigned IDs: R02/R03/R06/F03, followed by W02/W04/W05/T03/T05/D01.
+New source makes durable reply completion and its 1 MB capture one PostgreSQL
+transaction, reserves before inference, releases definitive/expired undelivered
+turns, fences late completion, and preserves legacy turns without charges. It
+also binds one Calls history UUID to each MB admission, reads trusted usage,
+blocks client lifecycle evidence overwrite, and wires sanitized relay failures.
+This replaces the separate reserve/persist/capture design proposed by open #507;
+its branch is preserved. No production reply/call flag is changed.
+
+W02/D01 now package the four inspected carrier marks with text/fallback, and
+provide deliberate clipboard paste without contacts access or overriding a ported
+network. T03 projects canonical public-profile avatars, retains stable identity
+and cancels stale/disabled lookup; T05 recovers a completed original transfer
+before expiry/recipient checks without another debit. W05 follows the newer NGN
+model: exact cash credit, explicit whole-GB exchange, exact remaining kobo, no
+automatic deposit conversion or historical repricing. W04 now checks current
+version-bound fulfillment cost, fees, minimum margin and 2 TB limits for every
+custom quantity; absent/expired/unprofitable evidence closes new exchanges.
+
+**Evidence/closure:** grouped mobile 69 PASS_SIMULATED; workspace TypeScript
+PASS_REAL. Full PG18/pgvector, server, Flutter analysis and hosted exact-head
+results are pending this branch's final run. Do not check items merely from this
+note. Real provider model/voice and connected-call qualification, independently
+verified settlement and actual cost/fee evidence remain substantive operational
+dependencies. R03/F03's historical token-500 cause is still unknown: bounded
+read-only Railway diagnostics found no matching redacted-stage event, and newer
+main deployments remain pending approval behind last observed SUCCESS `1bb16673`.
+No handset exercise is a closure requirement; no APK/fixed-IP change is requested.
+
 ### P0 — Restore reliable chat, notes, calls and identity before polish
 
 **26 October closure reconciliation for the original 12 IDs:** Seven code-complete items are checked on merged source and hosted CI (R04/R05/R07, C03/C04, L02/L03); owner-phone retrospective R01 is retired, not an active checkbox; **R02, R03 and R06 remain open for substantive source/backend/provider verification**; R08 was later source-closed on 27 October under merged #501 with the registered reduced-Gateway contract and all five hosted checks. Actual handset/audio, screen-reader and subjective visual approval are not completion requirements. If the owner later reports a defect, create a fresh narrowly scoped source fix with regression coverage and merge it before the next requested build. Do not reactivate these checked IDs as indefinite device-testing gates. Do not interpret source closure as provider/funds activation approval.

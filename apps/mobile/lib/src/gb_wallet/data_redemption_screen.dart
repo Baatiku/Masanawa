@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -61,6 +62,25 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
         session.user.id == owner.accountId &&
         ref.read(sessionProvider.notifier).authorizationEpoch ==
             owner.authorizationEpoch;
+  }
+
+  Future<void> _pastePhone(GbDataOwner owner) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted || !_isOwner(owner) || _purchaseLocked) return;
+    final value = data?.text?.trim();
+    if (value == null || normalizeNigerianDataPhone(value) == null) {
+      setState(
+        () =>
+            _error = 'Copy a valid Nigerian phone number, then paste it here.',
+      );
+      return;
+    }
+    setState(() {
+      _clearQuote();
+      _bundleId = null;
+      _phone.text = value;
+      if (!_manualNetwork) _network = guessGbNetworkForNigerianPhone(value);
+    });
   }
 
   Future<void> _reload(GbDataOwner owner) async {
@@ -241,10 +261,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               decoration: const InputDecoration(labelText: 'Network',
                   border: OutlineInputBorder()),
               items: [for (final value in gbDataNetworks)
-                DropdownMenuItem(value: value, child: Text(switch (value) {
-                  'AIRTEL' => 'Airtel', 'GLO' => 'Glo',
-                  '9MOBILE' => '9mobile', _ => value,
-                }))],
+                DropdownMenuItem(value: value, child: Row(children:[
+                  GbNetworkLogo(value,size:24),const SizedBox(width:6),
+                  Expanded(child:Text(switch (value) {
+                    'AIRTEL' => 'Airtel', 'GLO' => 'Glo',
+                    '9MOBILE' => '9mobile', _ => value,
+                  },overflow:TextOverflow.ellipsis)),
+                ]))],
               onChanged: owner == null || _purchaseLocked ? null : (value) {
                 if (value == null) return;
                 setState(() {
@@ -272,6 +295,9 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               labelText: 'Mobile number',
               hintText: '08012345678',
               prefixIcon: const Icon(Icons.phone_android_outlined),
+              suffixIcon:IconButton(tooltip:'Paste mobile number',
+                onPressed:owner==null||_purchaseLocked?null:()=>_pastePhone(owner),
+                icon:const Icon(Icons.content_paste_outlined)),
               isDense: true,
               focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: colors.brandStrong, width: 2),
