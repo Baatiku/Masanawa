@@ -35,6 +35,7 @@ export * from "./commerce/ngn-wallet.js";
 // Retained Status uses the existing authenticated PostgreSQL pool.
 export { PgSavedLibraryRepository } from "./home_feed/saved_repository.js";
 export { PgHomeFeedRepository } from "./home_feed/repository.js";
+export { PgStatusPromotions } from "./home_feed/promotions.js";
 export { PgEditorialReviewRepository } from "./home_feed/review_repository.js";
 export { PgStatusEligibility } from "./home_feed/eligibility.js";
 export { PgFeedMediaAuthorization } from "./home_feed/media_authorization.js";

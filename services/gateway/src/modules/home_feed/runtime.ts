@@ -2,6 +2,7 @@ import type {FastifyInstance,FastifyRequest} from "fastify";
 import {registerHomeFeedRoutes,type FeedRoutesOptions} from "./routes.js";
 import {registerAdminFeedReviewRoutes,type AdminReviewRoutesOptions} from "./admin_review_routes.js";
 import {registerFeedMediaRoutes,type FeedMediaOptions} from "./media_routes.js";
+import {registerPromotionRoutes,type PromotionPort} from "./promotion_routes.js";
 
 /** Structural port implemented by the existing platform customer-session
  * authorizer. The host supplies that authority, never an HTTP role header. */
@@ -15,6 +16,8 @@ export interface StatusRuntime {
  /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
+ promotions?:PromotionPort;
+ promotionsEnabled?:()=>boolean;
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */
@@ -79,6 +82,11 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
      typeof cursor==='string'?cursor:undefined);
   });
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
+  if(options.promotions)await registerPromotionRoutes(scope,{
+    port:options.promotions,principal:resolve,
+    isEditor:async session=>await options.isEditor?.(session)===true,
+    enabled:options.promotionsEnabled??(()=>false),
+  });
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
   if(options.updateMediaAlt)scope.put('/v1/admin/feed/media/:mediaId/alt',async(request,reply)=>{
     reply.header('Cache-Control','private, no-store');
