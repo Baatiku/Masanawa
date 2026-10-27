@@ -62,6 +62,7 @@ export function registerGbDataCatalogueRoutes(
   app.get("/v1/gb/data/bundles", {
     schema: {
       querystring: Type.Object({
+        units: Type.Optional(Type.Literal("mb")),
         network: Type.Optional(Type.Union([
           Type.Literal("MTN"), Type.Literal("AIRTEL"),
           Type.Literal("GLO"), Type.Literal("9MOBILE"),
@@ -71,9 +72,10 @@ export function registerGbDataCatalogueRoutes(
   }, async (request, reply) => {
     try {
       const { approved, liveItems } = await fetchAuthorized(request.headers.authorization);
-      const network = (request.query as { network?: NigerianNetwork }).network;
+      const {network,units} = request.query as { network?: NigerianNetwork; units?: "mb" };
       const options = projectVerifiedWholeGbBundles(approved, liveItems, now())
-        .filter(bundle => network === undefined || bundle.network === network);
+        .filter(bundle => (network === undefined || bundle.network === network) &&
+          (units === "mb" || (Number.isSafeInteger(bundle.allowanceGb) && bundle.allowanceGb >= 1)));
       return { bundles: options };
     } catch (error) { return deny(error, reply); }
   });

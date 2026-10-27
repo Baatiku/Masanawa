@@ -24,6 +24,18 @@ const providerItem: FlutterwaveBillItem = {
 const live = [providerItem];
 
 describe("operator-reviewed Flutterwave whole-GB catalogue", () => {
+  it("uses explicit integer MB for approved fractional and small plans without rounding or bonus credit", () => {
+    for (const allowanceMb of [40,100,350,500,750,1050,2500,3900,10800]) {
+      const approved={...approval,allowanceMb,allowanceGb:allowanceMb/1000,
+        extrasLabel:"Restricted YouTube extra"};
+      expect(projectVerifiedWholeGbBundles([approved],live,now)[0])
+        .toMatchObject({allowanceMb,costMb:allowanceMb,
+          allowanceGb:allowanceMb/1000,extrasLabel:"Restricted YouTube extra"});
+      expect(()=>projectVerifiedWholeGbBundles([{...approved,allowanceMb:allowanceMb+1}],live,now)).toThrow();
+    }
+    for(const allowanceMb of [0,-1,1.5,1000001,NaN])
+      expect(()=>projectVerifiedWholeGbBundles([{...approval,allowanceMb}],live,now)).toThrow();
+  });
   it("maps only approved exact IDs and ignores untrusted product names", () => {
     expect(projectVerifiedWholeGbBundles([approval], live, now)).toEqual([{
       id: "BIL100:DAT200", version: "bundle-review-v1", network: "MTN",

@@ -1,5 +1,13 @@
 # Masanawa — contribution and agent execution rules
 
+**Owner Data override, 27 October 2026:** The explicit 36-plan selection supersedes
+whole-GB/minimum-1000-MB restrictions for approved Data products. Support exact
+integer MB (1 GB = 1000 MB), purchased funds only, and separately described
+YouTube/social extras excluded from the base debit. Exclude call-minute plans,
+MTN MD606/MD610/MD611/MD612, long/unknown MTN durations and 9mobile MD152.
+Retain deduplication and exclude ambiguous Glo MD368. Older APKs receive only
+their compatible whole-GB subset, so fractional rows cannot break their catalogue.
+
 **Owner-approved refactor, 24 October 2026.** Work only in `Baatiku/Masanawa`. The separate private `Baatiku/Masanawa-App` retains the original product; DO NOT update, reset, rebase or delete it. The requested reset SHA `895e86a5` has not been verified in either remote: never force-update shared history in an attempt to reproduce it.
 
 **Owner-approved Home/Status exception, 27 October 2026 (paid promotions planned, Home-first navigation separate):** Allow **only approved, MB-funded human text/image promotional posts** beside platform Masana posts. Require 1 MB per verified qualified view, tracked Share & Earn links, 50% commission on referred qualified views, server-verified counts on every feed card, **no default Sponsored badge**, and a compact paid composer with insufficient-MB Add data route. Do **not** introduce a paid-ad frequency cap, pacing delay or forced organic/paid ratio while demand is low. Include truthful Wallet Activity rows, commission/refund receipts and account-safe Notifications Activity/Preferences events. Rename the existing public Status tab to localized Home and switch its position with Chats, making Home the default; preserve old Status links and keep the same feed and five tabs. The SPE checklist also covers safe advertiser destinations, unfurl/view anti-fraud, privacy, paid edit review, **funded Masana-post Share & Earn**, and backed reward liabilities. Full unique active checklist: [Status Promote & Earn](docs/STATUS-PROMOTE-AND-EARN-IMPLEMENTATION-CHECKLIST-20261027.md). This exception does not restore free human posting, direct human chats/calls or creator tooling.

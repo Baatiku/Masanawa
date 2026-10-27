@@ -51,6 +51,17 @@ void main() {
     }
   });
 
+  test('explicit MB plans preserve fractional allowance and reject inconsistent debit', () {
+    for(final mb in [40,350,500,750,1050,2500,3900]) {
+      final raw={..._bundle(),'allowanceGb':mb/1000,'allowanceMb':mb,'costMb':mb};
+      final item=GbVerifiedBundle.fromJson(raw);
+      expect(item.costMb,mb);
+      expect(item.allowanceLabel,mb<1000?'$mb MB':'${mb/1000} GB');
+      expect(()=>GbVerifiedBundle.fromJson({...raw,'costMb':mb+1}),throwsFormatException);
+      expect(()=>GbVerifiedBundle.fromJson({...raw,'allowanceMb':null}),throwsFormatException);
+    }
+  });
+
   test('signed preview is only accepted for the same selected bundle and SIM', () {
     final item = GbVerifiedBundle.fromJson(_bundle());
     final expiry = DateTime.now().toUtc().add(

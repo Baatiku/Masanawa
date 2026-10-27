@@ -1,5 +1,14 @@
 # Masanawa — canonical screen and journey contract
 
+**27 October owner-approved 36-plan catalogue:** Data supports approved exact MB
+allowances, including 40/100/200/350/500/750 MB and fractional GB. Show MB below
+1 GB and trimmed GB otherwise, with exact purchased-MB debit, provider validity
+and separately labeled restricted extras. No call minutes, inferred extra base
+allowance or rounding to whole GB. Review, Back, insufficient balance, original
+pending recovery, expiry/repricing, account switch, offline/retry and accessible
+narrow/large-text/RTL behavior remain unchanged. Older APKs receive a whole-GB
+subset; the updated app explicitly requests the MB-capable catalogue.
+
 **Active owner refactor, 24 October 2026.** Exactly five tabs: **Home (the existing Status feed) · Chats · Wallet · Calls · Data**. This document supersedes the old 177-screen/820-item scope. All legacy UI remains in Git history, not active routes. New MB balance is never derived from old Credits or MSNW. The next implementation batch must update this contract as screen/backend behavior lands, without inventing a second active plan.
 
 **Owner acceptance override, 26 October 2026:** These descriptions remain design/source contracts, but their real-device, TalkBack, visual, Bluetooth and microphone scenarios are **not active checklist closure gates**. Close each implemented feature after relevant automated tests and merged CI, then let the owner test a consolidated build when requested. Record any feedback as a new actionable fix and iterate. Do not imply any unperformed handset/device test passed, and do not waive independent backend-provider or MB/funds safety prerequisites.

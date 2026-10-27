@@ -171,8 +171,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   icon: const Icon(Icons.close_rounded)),
               ]),
               const SizedBox(height: 12),
-              Text('${quote.bundle.allowanceGb} GB',
+              Text(quote.bundle.allowanceLabel,
                 style: Theme.of(sheetContext).textTheme.headlineMedium),
+              if (quote.bundle.extrasLabel != null)
+                Text(quote.bundle.extrasLabel!),
               const SizedBox(height: 12),
               _ReviewLine('Network', quote.bundle.network),
               _ReviewLine('Recipient', quote.recipientPhone),
@@ -528,7 +530,7 @@ class _SelectableDataBundle extends StatelessWidget {
     return Semantics(
       selected: selected,
       button: true,
-      label: '${bundle.network}, ${bundle.allowanceGb} GB, '
+      label: '${bundle.network}, ${bundle.allowanceLabel}, '
           '${bundle.costMb} MB, ${bundle.validityDays} days',
       child: Material(
         color: selected ? colors.surfaceMuted : colors.surfaceCard,
@@ -548,7 +550,7 @@ class _SelectableDataBundle extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(children: [
-                  Expanded(child: Text('${bundle.allowanceGb} GB',
+                  Expanded(child: Text(bundle.allowanceLabel,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800))),

@@ -34,6 +34,21 @@ function appWith(overrides: Partial<GbDataCataloguePorts> = {}) {
   return app;
 }
 describe("GB data read and review APIs", () => {
+  it("keeps legacy catalogues parseable while MB-capable clients receive exact small plans", async () => {
+    const app=appWith({approved:async()=>[
+      ...approved,{...approved[0]!,itemCode:"SMALL",allowanceGb:0.35,allowanceMb:350},
+    ],liveItems:async()=>[...live,{...live[0]!,itemCode:"SMALL"}]});
+    const headers={authorization:"Bearer owned"};
+    const legacy=await app.inject({method:"GET",url:"/v1/gb/data/bundles",headers});
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json().bundles.map((b:{id:string})=>b.id)).toEqual(["BIL2:ITEM3"]);
+    const current=await app.inject({method:"GET",url:"/v1/gb/data/bundles?units=mb",headers});
+    expect(current.json().bundles).toHaveLength(2);
+    expect(current.json().bundles[0]).toMatchObject({allowanceMb:350,costMb:350});
+    const quote=await app.inject({method:"POST",url:"/v1/gb/data/quote",headers,
+      payload:{bundleId:"BIL2:SMALL",version:"approved-v1",recipientPhone:"08012345678"}});
+    expect(quote.json().quote).toMatchObject({allowanceMb:350,costMb:350,feeMb:0});
+  });
   it("is account-bound, excludes unknown catalogue items and does not allow purchases", async () => {
     const app = appWith();
     const unauthorized = await app.inject({ method: "GET", url: "/v1/gb/data/bundles" });
