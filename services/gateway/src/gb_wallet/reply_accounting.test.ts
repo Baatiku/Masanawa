@@ -78,7 +78,7 @@ describe("one MB for persisted successful Masana replies",()=>{
  it("reserves before provider and captures only a durable completed text reply",async()=>{
    const f=fixture();
    expect((await f.wrapped.turn(input)).reply).toBe("A meaningful answer");
-   expect(f.events,["reserve","provider","capture"]);
+   expect(f.events).toEqual(["reserve","provider","capture"]);
    expect(f.capture).toHaveBeenCalledTimes(1);
    expect(f.release).not.toHaveBeenCalled();
    expect(f.getState()).toBe("completed");
@@ -86,7 +86,7 @@ describe("one MB for persisted successful Masana replies",()=>{
  it("terminal failed provider releases reservation and cannot charge MB",async()=>{
    const f=fixture();f.setFailure(true);
    await expect(f.wrapped.turn(input)).rejects.toThrow("provider_failed");
-   expect(f.events,["reserve","provider","release"]);
+   expect(f.events).toEqual(["reserve","provider","release"]);
    expect(f.capture).not.toHaveBeenCalled();
    expect(f.getState()).toBe("failed");
  });
@@ -94,7 +94,7 @@ describe("one MB for persisted successful Masana replies",()=>{
    const f=fixture();f.setLost(true);
    const reply=await f.wrapped.turn(input);
    expect(reply.reply).toBe("A meaningful answer");
-   expect(f.events,["reserve","provider","capture"]);
+   expect(f.events).toEqual(["reserve","provider","capture"]);
    expect(f.capture).toHaveBeenCalledTimes(1);
  });
  it("pending original cannot start inference again or release held MB",async()=>{
@@ -115,10 +115,10 @@ describe("one MB for persisted successful Masana replies",()=>{
    const a=fixture();
    expect((await a.wrapped.mediaTurn(request as unknown as Parameters<
       AgentConversationService["mediaTurn"]>[0])).reply).toBe("A meaningful answer");
-   expect(a.events,["reserve","provider","capture"]);
+   expect(a.events).toEqual(["reserve","provider","capture"]);
    const b=fixture();
    expect((await b.wrapped.mediaSetTurn(request as unknown as Parameters<
       AgentConversationService["mediaSetTurn"]>[0])).reply).toBe("A meaningful answer");
-   expect(b.events,["reserve","provider","capture"]);
+   expect(b.events).toEqual(["reserve","provider","capture"]);
  });
 });
