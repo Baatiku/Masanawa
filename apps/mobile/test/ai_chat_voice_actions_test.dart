@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
+import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
 import 'package:masanawa/src/commerce/wallet_models.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/core/voice_note_recorder.dart';
@@ -45,6 +46,12 @@ class _Chats extends AiChatController {
  @override void closeThread() {}
  @override Future<void> sendAttachment(String characterId,ChatAttachment attachment,{String? caption,String? replyToId,String? replyPreview,Future<void> Function()? onAccepted}) async {sent.add(attachment);await onAccepted?.call();await response?.future;}
 }
+class _VoiceChats extends _Chats {
+ @override AiChatState build()=>AiChatState(threads:{'agent':ChatThread(characterId:'agent',messages:[
+  AiChatMessage(id:'voice-agent',isUser:false,text:'',createdAt:DateTime.now(),deliveryStatus:'delivered',
+   attachment:const ChatAttachment(kind:'voice',path:'/private/agent.m4a',durationMs:95000,sizeBytes:42,waveform:[.2,.6,.4,.8,.3])),
+ ])});
+}
 class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
  @override Future<void> refresh() async {}
@@ -66,6 +73,17 @@ class _Wallet extends WalletController {
 }
 void main() {
  setUp(()=>SharedPreferences.setMockInitialValues({}));
+ testWidgets('received voice note uses the Masana portrait and a wide shallow player',(tester)async{
+  tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_VoiceChats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  expect(find.byType(MasanaPortraitAvatar),findsNWidgets(2));
+  final play=find.byTooltip('Play voice note');
+  expect(play,findsOneWidget);
+  expect(tester.getSize(play).height,greaterThanOrEqualTo(40));
+  expect(tester.takeException(),isNull);
+ });
  testWidgets('chat microphone records and sends a voice note, never requests a call permission', (tester) async {
   var callPermissionRequests=0;
   const channel=MethodChannel('flutter.baseflow.com/permissions/methods');
@@ -95,6 +113,23 @@ void main() {
   expect(recorder.state,VoiceNoteState.ready);expect(find.byTooltip('Play preview'),findsOneWidget);expect(chats.sent,isEmpty);
   await tester.tap(find.byTooltip('Record again'));await tester.pumpAndSettle();
   expect(recorder.state,VoiceNoteState.recording);expect(chats.sent,isEmpty);expect(tester.takeException(),isNull);
+ });
+ testWidgets('reference-sized recording panel stays usable at 320dp and large text',(tester)async{
+  tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  final recorder=_Recorder();
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:const AiChatScreen(characterId:'agent')))));
+  await tester.pumpAndSettle();
+  expect(find.byTooltip('Camera'),findsOneWidget);
+  await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
+  expect(find.byTooltip('Stop & review'),findsOneWidget);
+  expect(find.byTooltip('Cancel recording'),findsOneWidget);
+  expect(find.bySemanticsLabel('Send voice note'),findsOneWidget);
+  expect(tester.takeException(),isNull);
+  await tester.tap(find.byTooltip('Stop & review'));await tester.pumpAndSettle();
+  expect(find.byTooltip('Play preview'),findsOneWidget);
+  expect(find.byTooltip('Record again'),findsOneWidget);
+  expect(tester.takeException(),isNull);
  });
  testWidgets('accepted voice note closes recorder before the agent finishes', (tester) async {
   final chats=_Chats()..response=Completer<void>();final recorder=_Recorder();
@@ -135,7 +170,9 @@ void main() {
  testWidgets('chat search uses the available header width and closes with its back arrow', (tester) async {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
-  await tester.tap(find.byTooltip('Search'));
+  await tester.tap(find.byTooltip('More'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Search chat'));
   await tester.pumpAndSettle();
   final search=find.byWidgetPredicate((widget)=>widget is TextField && widget.decoration?.hintText=='Search this chat');
   expect(search, findsOneWidget);
@@ -149,7 +186,7 @@ void main() {
   expect(find.byTooltip('Call'), findsOneWidget);
   expect(tester.takeException(), isNull);
  });
- testWidgets('Wallet icon replaces bundles before call and search at phone width', (tester) async {
+ testWidgets('compact header keeps Wallet and Call before More at phone width', (tester) async {
   tester.view.physicalSize=const Size(360,800);tester.view.devicePixelRatio=1;
   addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
@@ -158,7 +195,8 @@ void main() {
   expect(find.text('Data Bundles'), findsNothing);
   expect(bundles, findsOneWidget);
   expect(tester.getCenter(bundles).dx,lessThan(tester.getCenter(find.byTooltip('Call')).dx));
-  expect(tester.getCenter(find.byTooltip('Call')).dx,lessThan(tester.getCenter(find.byTooltip('Search')).dx));
+  expect(tester.getCenter(find.byTooltip('Call')).dx,lessThan(tester.getCenter(find.byTooltip('More')).dx));
+  expect(find.byTooltip('Search'),findsNothing);
   expect(find.byIcon(Icons.account_balance_wallet_outlined), findsOneWidget);
   expect(tester.takeException(),isNull);
  });

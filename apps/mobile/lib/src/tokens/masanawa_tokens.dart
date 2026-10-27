@@ -85,7 +85,7 @@ final class MasanawaTokens {
     surfaceMuted: '#E7FCEB',
     structuralBorder: '#E9EDEF',
     bubbleOut: '#D9FDD3',
-    chatBg: '#FFFFFF',
+    chatBg: '#F7F5EF',
     tickRead: '#53BDEB',
     chatNotice: '#FFD279',
   );
