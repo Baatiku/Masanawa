@@ -23,6 +23,19 @@ export interface GbTransferRequest extends GbAccountKey {
   readonly idempotencyKey: string;
 }
 
+export interface GbTipRequest extends GbAccountKey {
+  readonly postId: string;
+  readonly characterId: string;
+  readonly amountMb: number;
+  readonly operationId: string;
+  readonly idempotencyKey: string;
+}
+
+export interface GbTipReceipt extends GbReceipt {
+  readonly postId: string;
+  readonly characterId: string;
+}
+
 export interface GbReceipt {
   readonly operationId: string;
   readonly amountMb: number;
@@ -249,6 +262,139 @@ export function createPostgresGbWalletRepository(pool: Pool) {
         return { operationId:input.operationId, amountMb:amount, state:"completed" as const };
       }, { isolation:"serializable" }));
     },
+    /** Reviewed, immutable purchased-MB tip to an approved platform Masana.
+     * Only a published, still-authorized post can receive a new tip. A
+     * previously committed original operation remains readable on takedown. */
+    async tip(input: GbTipRequest): Promise<GbTipReceipt> {
+      for (const [value,label] of [
+        [input.tenantId,"tenant"], [input.userId,"actor"],
+        [input.characterId,"Masana"], [input.operationId,"operation"],
+        [input.idempotencyKey,"idempotency"],
+      ] as const) assertKey(value,label);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.postId)) {
+        throw new TypeError("Invalid Status post");
+      }
+      if (!/^tip_[A-Za-z0-9_-]{22,128}$/.test(input.operationId) ||
+          input.idempotencyKey !== input.operationId) {
+        throw new TypeError("Invalid original tip operation");
+      }
+      const amount=positiveMb(input.amountMb);
+      const fingerprint=createHash("sha256")
+        .update(JSON.stringify(["status_tip_v1",input.userId,input.postId,
+          input.characterId,amount])).digest("hex");
+      return retrySerialization(() => withTransaction(pool, async client => {
+        await ensureAccount(client,input.tenantId,"human",input.userId);
+        await ensureAccount(client,input.tenantId,"masana",input.characterId);
+        const locked=await client.query<WalletRow & {account_kind:string;account_id:string}>(`
+          SELECT account_kind,account_id,purchased_mb::text,welcome_mb::text,
+                 reserved_purchased_mb::text,reserved_welcome_mb::text,frozen
+          FROM gb_wallet.accounts
+          WHERE tenant_id=$1 AND (
+            (account_kind='human' AND account_id=$2) OR
+            (account_kind='masana' AND account_id=$3))
+          ORDER BY account_kind,account_id FOR UPDATE
+        `,[input.tenantId,input.userId,input.characterId]);
+        const source=locked.rows.find(row=>row.account_kind==="human"&&row.account_id===input.userId);
+        const target=locked.rows.find(row=>row.account_kind==="masana"&&row.account_id===input.characterId);
+        if(!source||!target||source.frozen||target.frozen)
+          throw new Error("gb.wallet.account_unavailable");
+        const existing=await client.query<{operation_id:string;
+          request_sha256:string;amount_mb:string;state:string;operation_kind:string}>(`
+          SELECT operation_id,request_sha256,amount_mb::text,state,operation_kind
+          FROM gb_wallet.operations
+          WHERE tenant_id=$1 AND actor_id=$2 AND idempotency_key=$3
+        `,[input.tenantId,input.userId,input.idempotencyKey]);
+        if(existing.rows[0]){
+          const prior=existing.rows[0];
+          if(prior.operation_id!==input.operationId ||
+              prior.request_sha256!==fingerprint || prior.operation_kind!=="tip")
+            throw new Error("gb.wallet.idempotency_conflict");
+          if(prior.state!=="completed")throw new Error("gb.wallet.pending_operation");
+          const saved=await client.query<{post_id:string;character_id:string}>(`
+            SELECT post_id::text,character_id FROM gb_wallet.tip_receipts
+            WHERE tenant_id=$1 AND operation_id=$2
+          `,[input.tenantId,input.operationId]);
+          if(saved.rows[0]?.post_id!==input.postId ||
+             saved.rows[0]?.character_id!==input.characterId)
+            throw new Error("gb.wallet.tip_receipt_mismatch");
+          return {operationId:input.operationId,postId:input.postId,
+            characterId:input.characterId,amountMb:bigintMb(prior.amount_mb),
+            state:"completed" as const};
+        }
+        // Lock the published post through settlement so takedown cannot race
+        // a successful debit. Client-submitted post/author IDs never grant
+        // permission to pay an arbitrary or retired Masana.
+        const eligible=await client.query<{author_masana_id:string}>(`
+          SELECT p.author_masana_id FROM feed.posts p
+          WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.state='published'
+            AND p.author_masana_id=$3 AND EXISTS (
+              SELECT 1 FROM masana.character_revisions r
+              JOIN identity.characters c ON c.tenant_id=r.tenant_id
+                AND c.character_id=r.character_id AND c.state='active'
+              JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id
+                AND o.character_id=c.character_id AND o.kind='platform'
+              WHERE r.tenant_id=p.tenant_id
+                AND r.character_id=p.author_masana_id AND r.state='approved')
+          FOR SHARE OF p
+        `,[input.tenantId,input.postId,input.characterId]);
+        if(!eligible.rows[0])throw new Error("gb.wallet.tip_post_unavailable");
+        if(BigInt(source.purchased_mb)-BigInt(source.reserved_purchased_mb)<BigInt(amount))
+          throw new RangeError("gb.wallet.insufficient_purchased_mb");
+        await client.query(`
+          INSERT INTO gb_wallet.operations
+            (tenant_id,operation_id,actor_id,idempotency_key,request_sha256,
+             operation_kind,amount_mb,state)
+          VALUES($1,$2,$3,$4,$5,'tip',$6,'completed')
+        `,[input.tenantId,input.operationId,input.userId,input.idempotencyKey,
+          fingerprint,amount]);
+        await client.query(`
+          UPDATE gb_wallet.accounts SET purchased_mb=purchased_mb-$3,version=version+1
+          WHERE tenant_id=$1 AND account_kind='human' AND account_id=$2
+        `,[input.tenantId,input.userId,amount]);
+        await client.query(`
+          UPDATE gb_wallet.accounts SET purchased_mb=purchased_mb+$3,version=version+1
+          WHERE tenant_id=$1 AND account_kind='masana' AND account_id=$2
+        `,[input.tenantId,input.characterId,amount]);
+        await client.query(`
+          INSERT INTO gb_wallet.movements
+            (tenant_id,operation_id,from_kind,from_id,to_kind,to_id,
+             source_bucket,target_bucket,amount_mb)
+          VALUES($1,$2,'human',$3,'masana',$4,'purchased','purchased',$5)
+        `,[input.tenantId,input.operationId,input.userId,input.characterId,amount]);
+        await client.query(`
+          INSERT INTO gb_wallet.tip_receipts(tenant_id,operation_id,post_id,character_id)
+          VALUES($1,$2,$3::uuid,$4)
+        `,[input.tenantId,input.operationId,input.postId,input.characterId]);
+        return {operationId:input.operationId,postId:input.postId,
+          characterId:input.characterId,amountMb:amount,state:"completed" as const};
+      },{isolation:"serializable"}));
+    },
+
+    /** An unknown confirmation stays unknown until its exact original receipt
+     * is observed for the SAME tenant and spending human. */
+    async readTip(actor:GbAccountKey,operationId:string):Promise<GbTipReceipt|null> {
+      assertKey(actor.tenantId,"tenant");
+      assertKey(actor.userId,"actor");
+      if(!/^tip_[A-Za-z0-9_-]{22,128}$/.test(operationId))
+        throw new TypeError("Invalid Status tip operation");
+      const result=await pool.query<{operation_id:string;amount_mb:string;
+        state:string;post_id:string;character_id:string}>(`
+        SELECT o.operation_id,o.amount_mb::text,o.state,
+               t.post_id::text,t.character_id
+        FROM gb_wallet.operations o JOIN gb_wallet.tip_receipts t
+          ON t.tenant_id=o.tenant_id AND t.operation_id=o.operation_id
+        WHERE o.tenant_id=$1 AND o.actor_id=$2 AND o.operation_id=$3
+          AND o.operation_kind='tip'
+        LIMIT 1
+      `,[actor.tenantId,actor.userId,operationId]);
+      const row=result.rows[0];
+      if(!row)return null;
+      if(row.state!=="completed")throw new Error("gb.wallet.tip_not_confirmed");
+      return Object.freeze({operationId:row.operation_id,
+        amountMb:bigintMb(row.amount_mb),state:"completed" as const,
+        postId:row.post_id,characterId:row.character_id});
+    },
+
     /** Original-key confirmed Send readback. A missing row is UNKNOWN, not a
      * failed transfer. Ownership is constrained to the debit actor. */
     async readTransfer(actor:GbAccountKey,operationId:string):Promise<GbReceipt|null> {

@@ -78,6 +78,7 @@ jobs:
           adapters/storage/postgres/src/home_feed/feed.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/gb_wallet.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/reservations.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/tip.integration.test.ts
       - name: Preserve historic custody and P2P escrow liabilities
         run: >-
           pnpm exec vitest run --no-file-parallelism

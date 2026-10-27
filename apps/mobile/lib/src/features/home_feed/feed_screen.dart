@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
+import 'status_tip_flow.dart';
 import 'feed_media_api.dart';
 import 'status_post_media.dart';
 import 'status_post_author_header.dart';
@@ -28,10 +29,14 @@ class MasanaFeedScreen extends StatefulWidget {
     this.ownPostsOnly = false,
     this.mediaApi,
     this.inlineMediaRenderer,
+    this.statusTips,
+    this.onTipCompleted,
     this.wrapAccountRoute,
     this.searchExpanded,
   });
   final FeedApi api;
+  final StatusTipFlow? statusTips;
+  final VoidCallback? onTipCompleted;
   /// Header-owned search affordance for the Status root.
   final ValueNotifier<bool>? searchExpanded;
   final String accountKey;
@@ -520,6 +525,94 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }
   }
 
+  Future<void> tipPost(FeedPost post) async {
+    final flow=widget.statusTips;
+    if(flow==null||!widget.enabled||widget.accountKey.isEmpty||
+       pendingActions.contains(post.id))return;
+    final account=widget.accountKey,scope=generation;
+    final amount=await showDialog<int>(
+      context:context,
+      builder:(dialogContext)=>SimpleDialog(
+        title:Text(t('Tip this Masana','Ba Masana kyauta')),
+        children:[
+          Padding(padding:const EdgeInsets.symmetric(horizontal:24),
+            child:Text(t('Only purchased MB can be tipped. '
+              'A server review will show the exact recipient before payment.',
+              'MB da aka saya kawai za a iya bayarwa.'))),
+          for(final choice in const [1,10,50,100])
+            SimpleDialogOption(onPressed:()=>Navigator.pop(dialogContext,choice),
+              child:Text(choice.toString() + ' MB')),
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),
+            child:Text(t('Cancel','Soke'))),
+        ],
+      ),
+    );
+    if(amount==null||!mounted||scope!=generation||
+       widget.accountKey!=account)return;
+    setState(()=>pendingActions.add(post.id));
+    try{
+      final review=await flow.review(post.id,amount);
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      final accepted=await showDialog<bool>(
+        context:context,
+        builder:(dialogContext)=>AlertDialog(
+          title:Text(t('Review MB tip','Duba kyautar MB')),
+          content:Text('Recipient: ' + review.displayName + '\n'
+            + 'Amount: ' + review.amountMb.toString() + ' MB\nFee: 0 MB\n'
+            + 'This debits purchased MB. Welcome MB cannot be used.'),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(dialogContext,false),
+              child:Text(t('Not now','Ba yanzu ba'))),
+            FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),
+              child:Text(t('Confirm tip','Tabbatar'))),
+          ],
+        ),
+      );
+      if(accepted!=true||!mounted||scope!=generation||
+         widget.accountKey!=account)return;
+      final receipt=await flow.confirm(review);
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      widget.onTipCompleted?.call();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text('Tip confirmed: ' + receipt.amountMb.toString() +
+          ' MB. Reference: ' + receipt.operationId),
+      ));
+    }catch(_){
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text(t('Tip not confirmed. Check the original receipt '
+          'before trying another payment.',
+          'Ba a tabbatar da kyautar ba. Duba takardar asali.')),
+        action:SnackBarAction(label:t('Check tip','Duba kyauta'),
+          onPressed:()=>checkOriginalTip(flow,scope,account)),
+      ));
+    }finally{
+      if(mounted&&scope==generation)
+        setState(()=>pendingActions.remove(post.id));
+    }
+  }
+
+  Future<void> checkOriginalTip(StatusTipFlow flow,int scope,String account) async {
+    try{
+      final receipt=await flow.recover();
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      if(receipt!=null)widget.onTipCompleted?.call();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text(receipt==null
+          ?t('No unresolved tip found.','Ba a sami kyautar da ba a warware ba.')
+          :'Confirmed: ' + receipt.amountMb.toString() +
+            ' MB · ' + receipt.operationId),
+      ));
+    }catch(_){
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:Text(t('Original payment remains unconfirmed. '
+          'No new tip was sent. Retry the receipt check later.',
+          'Ba a tabbatar da kyautar ba. Ba a aika wata ba.')),
+      ));
+    }
+  }
+
   Future<void> showReactions(BuildContext anchor, FeedPost post) async {
     if (pendingActions.contains(post.id) || widget.api is! ReactionFeedApi) {
       return;
@@ -874,6 +967,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     actionButton(t('Share', 'Raba'),
                                         Icons.share_outlined,
                                         () => sharePost(post)),
+                                    if(widget.statusTips!=null)
+                                      actionButton(t('Tip MB','Kyautar MB'),
+                                        Icons.volunteer_activism_outlined,
+                                        pending?null:()=>tipPost(post)),
                                   ]);
                                 }),
                               ),
