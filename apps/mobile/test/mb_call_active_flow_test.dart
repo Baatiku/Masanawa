@@ -35,7 +35,7 @@ void main() {
     expect(screen, contains('MbCallFlow _captureMbCallFlow('));
     expect(screen, contains('Future<void> _startInlineLiveVoice('));
     expect(screen, contains('Future<void> _openLiveVoice('));
-    expect(RegExp(r'flow\\.transport\\.grant\\(admission\\)').allMatches(screen).length, 2);
+    expect(RegExp(r'flow\.transport\.grant\(admission\)').allMatches(screen).length, 2);
     expect(screen, isNot(contains('GroupPaidVoiceTransport(')));
     expect(screen, isNot(contains('spendCapCredits')));
     expect(screen, isNot(contains('/agent/twin/voice/')));
