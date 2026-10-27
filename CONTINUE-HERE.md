@@ -10,6 +10,20 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
+**27 October continued R03/F03 diagnosis (source batch in progress):** Structured
+Railway attributes recover `agent.live_token_failed`, `paid-voice-admission`,
+`unknown` at 25 October 07:36:15 UTC. Network-flow and deployment context bind the
+incident window to deployment `74bba050-5c14-429d-b2dc-1530bc40c964`, source
+`0be4626875aab90f87f88825d23e9ef7c7f66b22`. This precedes provider token issuance;
+it does not prove a model/voice rejection or the exact legacy gate exception.
+New source returns typed `409 calls.mb_admission_required` on public direct-token
+requests for both support and normal Masana, avoiding legacy Credits admission
+and a free support/provider-token bypass. The private reviewed MB relay service
+is retained. Local grouped server/architecture: 137 pass; PG suites skipped after
+restart, hosted exact-head checks required. No production flag/deploy/provider
+call. See the addendum audit for exact evidence and superseded message-only queries.
+
+
 **27 October communication/wallet completion merged:** PR #514 merged at
 `c17260e594a4b43cd937b8dc71ed266001fe9796`, verified head
 `a30506903c1c51032ee6c41de3548d73887d2f74`; all EIGHT applicable hosted checks PASS

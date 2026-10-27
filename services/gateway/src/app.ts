@@ -1,3 +1,4 @@
+import {MbCallAdmissionRequiredError} from "./gb_calls/public_token_policy.js";
 import {replyWalletFailure} from "./gb_wallet/reply_errors.js";
 import {registerNgnWalletRoutes} from "./gb_wallet/ngn_routes.js";
 import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
@@ -266,6 +267,10 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   const checks = options.readinessChecks ?? [];
 
   app.setErrorHandler((error, request, reply) => {
+    if(error instanceof MbCallAdmissionRequiredError){
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
+      return;
+    }
     const walletFailure=replyWalletFailure(error);
     if(walletFailure){
       void reply.code(walletFailure.status).send({error:{code:walletFailure.code,message:walletFailure.message}});
