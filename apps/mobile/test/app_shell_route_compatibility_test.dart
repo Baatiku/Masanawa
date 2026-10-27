@@ -5,8 +5,8 @@ import 'package:masanawa/src/screens/twin/shell_tab.dart';
 void main() {
   test('R17 routes only approved root tabs to indices', () {
     expect(shellRootTabIndex(null), 0);
-    expect(shellRootTabIndex('chats'), 0);
-    expect(shellRootTabIndex('status'), 1);
+    expect(shellRootTabIndex('chats'), 1);
+    expect(shellRootTabIndex('status'), 0);
     expect(shellRootTabIndex('wallet'), 2);
     expect(shellRootTabIndex('calls'), 3);
     expect(shellRootTabIndex('data'), 4);
@@ -26,8 +26,10 @@ void main() {
       expect(uri.path, '/home');
       expect(shellRootTabIndex(uri.queryParameters['tab']), tab.index);
     }
-    expect(MasanawaRootTab.fromQuery('create'), MasanawaRootTab.chats);
-    expect(MasanawaRootTab.fromQuery('activity'), MasanawaRootTab.chats);
+    expect(MasanawaRootTab.fromQuery('create'), MasanawaRootTab.status);
+    expect(MasanawaRootTab.fromQuery('activity'), MasanawaRootTab.status);
+    expect(MasanawaRootTab.status.location, '/home');
+    expect(MasanawaRootTab.chats.location, '/home?tab=chats');
   });
 
   test('R17 old shell links retain their original destination', () {
@@ -37,6 +39,7 @@ void main() {
     expect(legacyShellDestination('wallet'), '/home?tab=wallet');
     expect(legacyShellDestination('rooms'), '/home?tab=status');
     expect(legacyShellDestination('talk'), '/home?tab=status');
+    expect(legacyShellDestination('home'), '/home?tab=status');
     expect(legacyShellDestination('you'), isNull);
     expect(legacyShellDestination(null), isNull);
   });

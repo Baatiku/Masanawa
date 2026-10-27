@@ -139,8 +139,8 @@ final statusFeedApiProvider = Provider<FeedApi>((ref) {
   );
 });
 
-/// The Status root is for Masana-authored approved updates only. The former
-/// Talk creation route is not a Status action and is deliberately absent.
+/// Home uses the existing Status feed. Paid human promotions remain gated
+/// until the reviewed campaign API is implemented.
 class StatusScreen extends ConsumerStatefulWidget {
   const StatusScreen({super.key});
 
@@ -163,7 +163,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     if (session is! SessionSignedIn) {
       return Center(
         child: Text(
-          'Sign in to view Status updates.',
+          'Sign in to view Home updates.',
           style: TextStyle(color: context.masanawa.textPrimary),
         ),
       );
@@ -299,7 +299,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
         final active = routeRef.watch(sessionProvider);
         if (active is! SessionSignedIn || active.user.id != account) {
           return const Scaffold(
-            body: Center(child: Text('Sign in to view this Status.')),
+            body: Center(child: Text('Sign in to view this Home update.')),
           );
         }
         return content;
@@ -312,7 +312,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
         ValueListenableBuilder<bool>(
           valueListenable: _searchExpanded,
           builder: (context, expanded, _) => IconButton(
-            tooltip: expanded ? 'Close Status search' : 'Search Status',
+            tooltip: expanded ? 'Close Home search' : 'Search Home',
             icon: Icon(expanded ? Icons.close_rounded : Icons.search_rounded),
             onPressed: () => _searchExpanded.value = !expanded,
           ),

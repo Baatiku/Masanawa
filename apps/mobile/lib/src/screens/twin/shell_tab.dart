@@ -1,10 +1,10 @@
-/// Canonical consumer root tabs: Chats · Status · Wallet · Calls · Data.
+/// Canonical consumer root tabs: Home (the existing Status feed) · Chats · Wallet · Calls · Data.
 ///
 /// Route identifiers are a navigation contract (query values stay stable for
 /// deep links); they are not service categories or permissions.
 enum MasanawaRootTab {
-  chats('chats'),
   status('status'),
+  chats('chats'),
   wallet('wallet'),
   calls('calls'),
   data('data');
@@ -14,13 +14,14 @@ enum MasanawaRootTab {
   final String queryValue;
 
   static MasanawaRootTab fromQuery(String? value) => switch (value) {
-        'status' => MasanawaRootTab.status,
+        'status' || 'home' => MasanawaRootTab.status,
+        'chats' => MasanawaRootTab.chats,
         'wallet' => MasanawaRootTab.wallet,
         'calls' => MasanawaRootTab.calls,
         'data' => MasanawaRootTab.data,
-        _ => MasanawaRootTab.chats,
+        _ => MasanawaRootTab.status,
       };
 
   String get location =>
-      this == MasanawaRootTab.chats ? '/home' : '/home?tab=$queryValue';
+      this == MasanawaRootTab.status ? '/home' : '/home?tab=$queryValue';
 }
