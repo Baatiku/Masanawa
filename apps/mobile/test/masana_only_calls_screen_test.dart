@@ -217,11 +217,14 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const ValueKey('masana-call-day-2026-10-15')),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Load more'));
+    await tester.dragUntilVisible(find.text('Load more'),find.byType(ListView),const Offset(0,-180));
     await tester.tap(find.text('Load more'));
     await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.byKey(const ValueKey('masana-call-first')),
+      find.byType(ListView),const Offset(0,180));
     expect(find.byKey(const ValueKey('masana-call-first')), findsOneWidget);
-    await tester.ensureVisible(find.text('Could not load older calls · Retry'));
+    await tester.dragUntilVisible(find.text('Could not load older calls · Retry'),
+      find.byType(ListView),const Offset(0,-180));
     await tester.tap(find.text('Could not load older calls · Retry'));
     await tester.pumpAndSettle();
     expect(transport.olderAttempts, 2);
