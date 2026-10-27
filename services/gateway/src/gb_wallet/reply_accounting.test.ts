@@ -1,4 +1,5 @@
 import {describe,expect,it,vi} from "vitest";
+import {createHash} from "node:crypto";
 import type {AgentConversationService,AgentConversationAuthorizer} from "../agent_conversation_contract.js";
 import type {MobileShellRepository,MobileTurnCommand} from "@masanawa/agents";
 import {createMbBilledConversation,type GbReplyReservations} from "./reply_accounting.js";
@@ -18,9 +19,17 @@ function fixture(){
   let ledgerState:"absent"|"reserved"|"completed"|"failed"="absent";
   let fail=false,ackLost=false;
   const reply={reply:"A meaningful answer",agentRunId:"run_a",parts:[]};
+  const originalHash=(kind:"text"|"media"|"media-set")=>{
+    const plain=kind==="text"?request.text:kind==="media"
+      ?JSON.stringify([request.mimeType,request.caption,request.dataBase64])
+      :JSON.stringify([request.caption,...request.media.map(item=>
+        [item.mimeType,"",item.dataBase64])]);
+    return createHash("sha256").update(plain).digest("hex");
+  };
   const asCommand=(kind:"text"|"media"|"media-set",state:"pending"|"completed"|"failed")=>
     ({scope,characterSessionId:request.characterSessionId,
-      requestId:request.requestId,kind,state,agentRunId:"run_a",
+      requestId:request.requestId,kind,state,payloadHash:originalHash(kind),
+      agentRunId:"run_a",
       reply:state==="completed"?reply.reply:null,parts:[],
       failureCode:state==="failed"?"provider_failed":null}) as unknown as MobileTurnCommand;
   const produce=vi.fn(async(kind:"text"|"media"|"media-set")=>{
@@ -108,6 +117,14 @@ describe("one MB for persisted successful Masana replies",()=>{
  it("historical completed reply before enablement is not retroactively charged",async()=>{
    const f=fixture();f.setCommand("text","completed");
    await f.wrapped.turn(input);
+   expect(f.reserve).not.toHaveBeenCalled();
+   expect(f.capture).not.toHaveBeenCalled();
+ });
+ it("a reused request ID with changed payload cannot read or charge the prior reply",async()=>{
+   const f=fixture();f.setCommand("text","completed");
+   await expect(f.wrapped.turn({...input,text:"Changed question"})).rejects
+     .toThrow("gb.reply.original_request_conflict");
+   expect(f.produce).not.toHaveBeenCalled();
    expect(f.reserve).not.toHaveBeenCalled();
    expect(f.capture).not.toHaveBeenCalled();
  });
