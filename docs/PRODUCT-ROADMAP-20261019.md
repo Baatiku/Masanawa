@@ -167,7 +167,7 @@ automatic deposit conversion or historical repricing. W04 now checks current
 version-bound fulfillment cost, fees, minimum margin and 2 TB limits for every
 custom quantity; absent/expired/unprofitable evidence closes new exchanges.
 
-**Evidence/closure:** grouped mobile 57 PASS_SIMULATED; workspace TypeScript
+**Evidence/closure:** grouped mobile 69 PASS_SIMULATED; workspace TypeScript
 PASS_REAL. Full PG18/pgvector, server, Flutter analysis and hosted exact-head
 results are pending this branch's final run. Do not check items merely from this
 note. Real provider model/voice and connected-call qualification, independently

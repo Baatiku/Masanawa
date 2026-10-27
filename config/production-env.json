@@ -1173,6 +1173,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Server/operator-only JSON: rateVersion, reference, expiresAt, fulfillmentKoboPerGb, fixedFeeKobo, feeBps, minimumMarginBps, maximumGb=2000. New exchanges require current evidence and nonnegative qualified margin for every supported custom quantity; no inferred provider costs."
+    },
+    {
+      "name": "RAILWAY_GIT_COMMIT_SHA",
+      "owner": "runtime/diagnostics",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Railway-provided deployed Git SHA; only a validated 40-character hexadecimal value may appear in sanitized MB call relay diagnostics."
     }
   ]
 }

@@ -17,7 +17,7 @@ restart expiry recovery; one canonical call-history UUID per admission and trust
 usage projection; no legacy client history writes for MB; redacted relay logs;
 NGN cost/fee/margin qualification; exact original Send recovery; canonical
 recipient avatars/cancellation; carrier marks and deliberate clipboard paste.
-Grouped mobile 57 passed, workspace TypeScript passed; final full PG18/pgvector,
+Grouped mobile 69 passed, workspace TypeScript passed; final full PG18/pgvector,
 Flutter and exact-head hosted checks remain in progress. Preserve open #507's
 branch; this batch replaces its non-atomic reply billing approach and must never
 compose both charging paths. Real provider/model/voice qualification and actual
