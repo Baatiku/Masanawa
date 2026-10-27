@@ -39,8 +39,7 @@ function fixture(){
   } as unknown as AgentConversationService;
   const readTurn=vi.fn(async()=>persisted);
   const shell={readTurn} as unknown as MobileShellRepository;
-  const authorizer={authorize:vi.fn(async()=>({scope}))}
-    as unknown as AgentConversationAuthorizer;
+  const authorizer={authorize:vi.fn(async()=>({scope}))} as unknown as AgentConversationAuthorizer;
   const reserve=vi.fn(async(input:{amountMb:number})=>{
     events.push("reserve");
     expect(input.amountMb).toBe(1);
