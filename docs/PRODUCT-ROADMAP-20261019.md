@@ -8,6 +8,12 @@ Deliver a small Masana-first application with exactly **Chats · Status · Walle
 
 In the active product **remove** human messaging/calls, Rooms, videos, human content publishing, public Masana creation/creator economy, group calls, P2P marketplace/escrow, crypto/MSNW/old Credits, blockchain transfers and withdrawals, non-data bills, retired web pages/jobs/listeners/integrations. Preserve historic financial obligations and unmodified applied migrations for compliance and reconciliation, but expose no legacy consumer flow or new write.
 
+## Owner-approved 27 October — Paid Status Promote & Earn (planned)
+
+**New scope authority:** [SPE implementation checklist](STATUS-PROMOTE-AND-EARN-IMPLEMENTATION-CHECKLIST-20261027.md) is the single detailed active worklist for 47 items in **five dependency-aware batches (SPE-A01–E06)**. It supersedes earlier *blanket* bans on human Status authoring **only** for approved, prepaid **text/image promotions**; platform Masana posts remain, and free human posting/human conversations remain retired. Reuse existing Status/Wallet screens and canonical post routes, add verified view counts to every feed card and unique Share & Earn URLs. At **1 MB per qualified view**, direct/organic exposure credits Masanawa 1 MB; referral-attributed exposure allocates 0.5 MB to the sharer and 0.5 MB to Masanawa. Paid-post display must not be delayed, rate-limited, capped by a sponsored ratio or artificially paced after funding/approval. User-requested compact Facebook-inspired composer, instant Recharge/Add data action for insufficient eligible MB, and source-identified card texture gaps (without a default Sponsored badge) are all SPE-C in **one shared-widget pass** to prevent repeated screen rewrites. Wallet Activity reconciliation/receipts and Notifications Activity/Preferences events are part of SPE-D, with no new root tab. Backend fraud admission, moderation, legally required advertising review, finite user-funded budget and qualified provider settlement still apply.
+
+**Planning status:** All SPE items remain unchecked until independently implemented, tested and merged. Do not mistake this checklist update for live financial/reward activation, or reopen retired 177-screen specifications. Continue existing UX-S05/S06 and wallet/provider safety obligations separately without duplicating SPE IDs.
+
 ## Evidence semantics
 
 - `[x]` means the exact requested scoped source and tests were merged; it is not a live acceptance claim.
@@ -176,6 +182,11 @@ The broader UX-D01 and UX-W02 remain open for approved operator identity assets,
 
 ### Status — Primary visual redesign
 
+**New paid user promotions, unique views, composer/card texture, wallet rewards:** see the [single SPE checklist](STATUS-PROMOTE-AND-EARN-IMPLEMENTATION-CHECKLIST-20261027.md). Implement the shared visual pass once under SPE-C; previous source-closed UX-F02/S01 do not claim the new requirements are complete.
+
+
+**26 October owner-installed-build feedback (new code fixes):**
+
 **26 October owner-installed-build feedback (new code fixes):**
 
 - [x] **UX-F01** Collapse the Status title while the feed scrolls down and restore it at the top; preserve Search/Saved access and the current post position. **Source-closed:** integrated the original Status density branch after its first hosted Flutter failure, retaining the mounted account-scoped feed while only the title recedes beyond 12 pixels. Search/Saved controls remain visible, including during scroll; account replacement and search reset restore the title. A 320dp scroll/account-switch widget regression protects these states; Mobile Build on the exact corrected integration head is the merge gate. No owner handset sign-off.
@@ -279,4 +290,4 @@ Billstack signup-to-account and deposit-to-NGN end-to-end gaps are itemized in [
 
 25 October owner update: mobile signup switches to verified email OTP, required first/last name and separately stored Nigerian contact phone. Data uses that phone as an editable account-scoped default. Billstack account assignment can be attempted once after new signup using the persistent reserved-account adapter. Independent final settlement verification, reversal/fee qualification, pending-reference recovery, existing-user completion and old-client cutoff are still required before enabling funding credit or transfer instructions. Contact phone is not proof for the phone-verified welcome grant.
 
-Read `docs/NGN-WALLET-DATA-REDESIGN-20261025.md` for cutover and reconciliation details. This is the sole active checklist; older automatic-conversion statements are historical and must not override this owner update.
+Read `docs/NGN-WALLET-DATA-REDESIGN-20261025.md` for cutover and reconciliation details. This roadmap remains the canonical checklist index, with the linked SPE checklist its active new-feature detail; older automatic-conversion statements are historical and must not override this owner update.
