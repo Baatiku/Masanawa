@@ -53,5 +53,6 @@ jobs:
           scripts/flutterwave-billing-qualification-gate.test.mjs
           scripts/flutterwave-billing-production-qualification.test.mjs
           scripts/nowpayments-production-qualification.test.mjs
+          scripts/flutterwave-railway-observation.test.mjs
       - name: Build
         run: pnpm build
