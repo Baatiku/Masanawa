@@ -13,7 +13,7 @@ const gbDataNetworks = ['MTN', 'AIRTEL', 'GLO', '9MOBILE'];
 enum GbDataValidityPeriod { daily, weekly, monthly, other }
 
 GbDataValidityPeriod gbDataValidityPeriod(int validityDays) {
-  if (validityDays == 1) return GbDataValidityPeriod.daily;
+  if (validityDays == 1 || validityDays == 2) return GbDataValidityPeriod.daily;
   if (validityDays == 7) return GbDataValidityPeriod.weekly;
   if (validityDays >= 28 && validityDays <= 31) {
     return GbDataValidityPeriod.monthly;
