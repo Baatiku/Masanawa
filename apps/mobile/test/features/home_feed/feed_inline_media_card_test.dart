@@ -46,11 +46,12 @@ void main() {
       renderer:(_)=>const Text('Scoped approved image')))));
     await tester.pumpAndSettle();
     expect(find.text('A reviewed portrait of the Masana at a desk.'),findsOneWidget);
-    final handle=tester.ensureSemantics();
-    expect(find.bySemanticsLabel(
-      'Image 1 of 2. A reviewed portrait of the Masana at a desk.'),
+    // Inspect the specific semantics node: Flutter may merge its caption
+    // Text as a second newline-delimited utterance at the root.
+    expect(find.byWidgetPredicate((widget)=>widget is Semantics &&
+      widget.properties.label?.contains(
+        'Image 1 of 2. A reviewed portrait of the Masana at a desk.')==true),
       findsOneWidget);
-    handle.dispose();
   });
   testWidgets('unauthorized media never spins forever and later scoped retry recovers',
       (tester) async {
