@@ -40,7 +40,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
   Future<void> _submit() async {
     final current = ref.read(sessionProvider);
     if (current is SessionSignedIn) {
-      context.go('/chats');
+      context.go('/home');
       return;
     }
     if (current is! SessionNameRequired && current is! SessionRegisterProfile) {
@@ -74,7 +74,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
   Widget build(BuildContext context) {
     ref.listen(sessionProvider, (previous, next) {
       if (next is SessionSignedIn) {
-        context.go('/chats');
+        context.go('/home');
       } else if (next is SessionNameRequired && next.message != null) {
         _snack(
           AuthErrorLocalizer.message(

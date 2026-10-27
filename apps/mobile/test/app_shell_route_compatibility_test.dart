@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/router/app_router.dart';
 import 'package:masanawa/src/screens/twin/shell_tab.dart';
@@ -42,5 +44,10 @@ void main() {
     expect(legacyShellDestination('home'), '/home?tab=status');
     expect(legacyShellDestination('you'), isNull);
     expect(legacyShellDestination(null), isNull);
+  });
+  test('first-time account completion lands on the same Home tab', () {
+    final signup = File('lib/src/screens/onboarding/name_screen.dart').readAsStringSync();
+    expect(signup, contains("context.go('/home');"));
+    expect(signup, isNot(contains("context.go('/chats');")));
   });
 }
