@@ -1152,6 +1152,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Default off. Independent qualification gate for Billstack new NGN deposits and account allocation. Requires authenticated provider final-state/receiving account/amount evidence, verified webhook contract, cutoff/deduplication/reversal and operational reconciliation. Never infer verification from possession of a key."
+    },
+    {
+      "name": "MASANAWA_STATUS_TIPS_ENABLED",
+      "owner": "gateway/status-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
     }
   ]
 }
