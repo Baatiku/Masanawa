@@ -10,6 +10,7 @@ import '../../features/home_feed/status_tip_flow.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
 import '../../features/home_feed/feed_screen.dart';
+import '../../features/home_feed/status_promotion_api.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
@@ -140,8 +141,8 @@ final statusFeedApiProvider = Provider<FeedApi>((ref) {
   );
 });
 
-/// Home uses the existing Status feed. Paid human promotions remain gated
-/// until the reviewed campaign API is implemented.
+/// Home keeps the existing Status feed; promotion UI only appears if the
+/// server advertises a financially qualified rollout capability.
 class StatusScreen extends ConsumerStatefulWidget {
   const StatusScreen({super.key});
 
@@ -250,6 +251,10 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       currentAccountId:currentAccount,
       store:SecureStatusTipStore(account),
     );
+    final promotions=StatusPromotionApi(dio:api.dio,ownerAccount:account,
+      currentAccount:currentAccount,
+      accessToken:()async=>api.accessToken,
+      journal:SecureStatusPromotionJournal(account));
 
     // Only the current signed-in account may obtain an original-media grant.
     final inlineMedia = AccountBoundFeedMediaApi(
@@ -329,6 +334,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       key: ValueKey('status-account-$account'),
       child: MasanaFeedScreen(
         api: feed,
+        promotions:promotions,
         statusTips:statusTips,
         accountKey: account,
         authorDirectory: authorDirectory,

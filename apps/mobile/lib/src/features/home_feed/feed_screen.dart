@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../agents/agent_directory.dart';
 import 'feed_api.dart';
@@ -12,6 +13,9 @@ import 'status_post_body.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'saved_status_library_screen.dart';
+import 'status_promotion_api.dart';
+import 'status_promotion_sheet.dart';
+import 'my_status_promotions_screen.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -33,8 +37,11 @@ class MasanaFeedScreen extends StatefulWidget {
     this.onTipCompleted,
     this.wrapAccountRoute,
     this.searchExpanded,
+    this.promotions,
   });
   final FeedApi api;
+  /// Financial controls appear only after server capability discovery.
+  final StatusPromotionApi? promotions;
   final StatusTipFlow? statusTips;
   final VoidCallback? onTipCompleted;
   /// Header-owned search affordance for the Status root.
@@ -72,6 +79,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   List<FeedPost> items = [];
   String? cursor, error;
   bool loading = false, fetchingMore = false, offline = false;
+  bool promotionsAvailable = false;
   int generation = 0;
   final Set<String> pendingActions = {};
   // A timed-out Save may have reached the server. Do not turn a second tap
@@ -96,6 +104,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     fetchingMore = false;
     pendingActions.clear();
     uncertainSaves.clear();
+    promotionsAvailable = false;
   }
 
   @override
@@ -173,7 +182,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     widget.searchExpanded?.addListener(_onExternalSearchChanged);
     mode = widget.ownPostsOnly ? 'mine' : 'for_you';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) refresh();
+      if (mounted) {refresh();checkPromotions();}
     });
   }
 
@@ -195,7 +204,46 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       searchController.clear();
       searchTerm = '';
       if (widget.enabled) refresh();
+      if (widget.enabled) checkPromotions();
     }
+  }
+
+  Future<void> checkPromotions() async {
+    final api=widget.promotions,scope=generation;
+    if(api==null||!widget.enabled||widget.accountKey.isEmpty)return;
+    try{
+      final enabled=await api.available();
+      if(mounted&&scope==generation)setState(()=>promotionsAvailable=enabled);
+    }catch(_){if(mounted&&scope==generation)
+      setState(()=>promotionsAvailable=false);}
+  }
+
+  Future<void> openPromotion({String? postId}) async {
+    final api=widget.promotions;
+    if(api==null||!promotionsAvailable||widget.accountKey.isEmpty)return;
+    final scope=generation,account=widget.accountKey;
+    final result=await showModalBottomSheet<StatusPromotionCampaign>(
+      context:context,isScrollControlled:true,showDragHandle:false,
+      builder:(ctx)=>StatusPromotionSheet(api:api,postId:postId,
+        onRecharge:()async{await ctx.push<void>('/wallet');}),
+    );
+    if(!mounted||scope!=generation||widget.accountKey!=account||result==null)return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
+      result.state=='pending_review'
+        ?t('Submitted for review. Budget reserved.','An tura don dubawa. An ajiye MB.')
+        :t('Boost confirmed. Budget reserved.','An tabbatar da kara yadawa. An ajiye MB.'))));
+    await refresh();
+  }
+
+  Future<void> openMyPromotions() async {
+    final api=widget.promotions;
+    if(api==null||!promotionsAvailable)return;
+    final account=widget.accountKey,scope=generation;
+    final page=MyStatusPromotionsScreen(api:api,
+      onBoostAgain:(postId)=>openPromotion(postId:postId));
+    await Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>
+      widget.wrapAccountRoute?.call(page)??page));
+    if(mounted&&scope==generation&&account==widget.accountKey)await refresh();
   }
 
   void verifyOwnerProjection(FeedPage page) {
@@ -514,9 +562,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if (!mounted || scope != generation || widget.accountKey != account) return;
       // A user-initiated public text excerpt. Do not export signed media URLs
       // or invent a shareable deep link for a post that may lose visibility.
-      await SharePlus.instance.share(ShareParams(
-        text: '${current.displayAuthor}\n\n${current.body}',
-      ));
+      final linked=promotionsAvailable&&widget.promotions!=null
+        ?await widget.promotions!.share(current.id):null;
+      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+      await SharePlus.instance.share(ShareParams(text:linked??
+        '${current.displayAuthor}\n\n${current.body}'));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -669,7 +719,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             child: Row(children: [
               if (!titleCollapsed)
                 Expanded(child: Text(
-                  t('Status', 'Labarai'),
+                  t('Home', 'Gida'),
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -691,7 +741,29 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                   onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
                   icon: const Icon(Icons.bookmark_border_rounded),
                 ),
+              if(promotionsAvailable)
+                IconButton(tooltip:t('My promotions','Tallace-tallacena'),
+                  onPressed:openMyPromotions,icon:const Icon(Icons.campaign_outlined)),
             ]),
+          ),
+        if (!widget.authorScoped&&!widget.ownPostsOnly&&promotionsAvailable)
+          Padding(padding:const EdgeInsets.fromLTRB(12,4,12,8),
+            child:Material(color:Theme.of(context).colorScheme.surface,
+              borderRadius:BorderRadius.circular(14),
+              child:Padding(padding:const EdgeInsets.all(10),child:Row(children:[
+                CircleAvatar(radius:19,child:const Icon(Icons.person_outline,size:21)),
+                const SizedBox(width:10),
+                Expanded(child:OutlinedButton(
+                  onPressed:()=>openPromotion(),
+                  style:OutlinedButton.styleFrom(alignment:Alignment.centerLeft,
+                    minimumSize:const Size(0,44)),
+                  child:Text(t('What would you like to promote?',
+                    'Me kake son yadawa?'),maxLines:1,
+                    overflow:TextOverflow.ellipsis))),
+                IconButton(tooltip:t('Promote post','Yada sako'),
+                  onPressed:()=>openPromotion(),
+                  icon:const Icon(Icons.add_photo_alternate_outlined)),
+              ]))),
           ),
         if (!widget.authorScoped &&
             !widget.ownPostsOnly &&
@@ -827,9 +899,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                       final post = items[i];
                       return Card(
                         key: ValueKey(post.id),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        elevation: 0,
-                        shape: const RoundedRectangleBorder(),
+                        margin: const EdgeInsets.fromLTRB(10,4,10,6),
+                        elevation: 0.7,
+                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(13),
+                          side:BorderSide(color:Theme.of(context).colorScheme.outlineVariant.withValues(alpha:0.5))),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => openPost(post),
@@ -870,6 +943,22 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                           ? Icons.bookmark_rounded
                                           : Icons.bookmark_border_rounded),
                                     ),
+                                    PopupMenuButton<String>(
+                                      tooltip:t('Post options','Zaɓin labari'),
+                                      icon:const Icon(Icons.more_horiz_rounded),
+                                      onSelected:(choice){
+                                        if(choice=='tip')tipPost(post);
+                                        if(choice=='boost')openPromotion(postId:post.id);
+                                      },
+                                      itemBuilder:(_)=>[
+                                        if(widget.statusTips!=null&&!post.isHuman)
+                                          PopupMenuItem(value:'tip',
+                                            child:Text(t('Tip MB','Kyautar MB'))),
+                                        if(promotionsAvailable&&post.boostEligible)
+                                          PopupMenuItem(value:'boost',
+                                            child:Text(t('Boost post','Kara yada labari'))),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -892,7 +981,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 onOpen: widget.onOpenMedia == null
                                     ? null : (id) => widget.onOpenMedia!(post, id),
                               ),
-                              if (post.totalReactions > 0 || post.commentCount > 0)
+                              if (post.totalReactions > 0 || post.commentCount > 0 ||
+                                post.verifiedViewCount != null ||
+                                (promotionsAvailable&&post.boostEligible))
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
                                   child: Row(children: [
@@ -915,6 +1006,22 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     if (post.commentCount > 0)
                                       Text('${post.commentCount} comments',
                                         style: Theme.of(context).textTheme.bodySmall),
+                                    if(post.verifiedViewCount!=null)...[
+                                      if(post.commentCount>0||post.totalReactions>0)
+                                        const SizedBox(width:8),
+                                      const Icon(Icons.visibility_outlined,size:14),
+                                      const SizedBox(width:3),
+                                      Text('${post.verifiedViewCount} ${t('verified','tabbatattu')}',
+                                        style:Theme.of(context).textTheme.bodySmall),
+                                    ],
+                                    if(promotionsAvailable&&post.boostEligible)...[
+                                      const Spacer(),
+                                      TextButton.icon(
+                                        onPressed:()=>openPromotion(postId:post.id),
+                                        icon:const Icon(Icons.rocket_launch_outlined,size:16),
+                                        label:Text(t('Boost','Kara yada'),maxLines:1),
+                                      ),
+                                    ],
                                   ]),
                                 ),
                               const Divider(height: 1),
@@ -964,13 +1071,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     actionButton(t('Comment', 'Sharhi'),
                                         Icons.mode_comment_outlined,
                                         () => openComments(post)),
-                                    actionButton(t('Share', 'Raba'),
+                                    actionButton(post.shareEarnEligible&&promotionsAvailable
+                                          ?t('Share & Earn','Raba ka samu MB')
+                                          :t('Share', 'Raba'),
                                         Icons.share_outlined,
                                         () => sharePost(post)),
-                                    if(widget.statusTips!=null)
-                                      actionButton(t('Tip MB','Kyautar MB'),
-                                        Icons.volunteer_activism_outlined,
-                                        pending?null:()=>tipPost(post)),
                                   ]);
                                 }),
                               ),

@@ -15,6 +15,10 @@ function item(r:Row){
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
+  verifiedViewCount:Number(r.verified_view_count??0),
+  promotionDeliveredViews:Number(r.promotion_delivered_views??0),
+  promotionActive:Boolean(r.promotion_active),
+  shareEarnEligible:Boolean(r.share_earn_eligible),boostEligible:Boolean(r.boost_eligible),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
   viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
   reactionCounts:(r.reaction_counts??{}) as Record<string,number>};
@@ -39,6 +43,10 @@ const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.
     AND NOT EXISTS (SELECT 1 FROM talks.safety_enforcement enforcement
       WHERE enforcement.tenant_id=p.tenant_id AND enforcement.target_kind='profile'
         AND enforcement.target_id=hp.handle AND enforcement.visibility<>'public')
+    AND EXISTS (SELECT 1 FROM feed.promotion_campaigns paid
+      WHERE paid.tenant_id=p.tenant_id AND paid.post_id=p.id
+        AND paid.state='active' AND paid.remaining_views>0)
+    AND p.paid_purged_at IS NULL
     AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences block
       WHERE block.tenant_id=p.tenant_id AND block.blocked AND
         ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
@@ -58,6 +66,16 @@ const projection=`p.*,
   FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id GROUP BY l.reaction_kind) rc),'{}'::jsonb) AS reaction_counts,
  (SELECT l.reaction_kind FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 LIMIT 1) AS viewer_reaction,
  (SELECT count(*)::int FROM feed.comments c WHERE c.tenant_id=p.tenant_id AND c.post_id=p.id AND c.state='visible') AS comment_count,
+ (SELECT count(*)::int FROM feed.qualified_views v WHERE v.tenant_id=p.tenant_id AND v.post_id=p.id) AS verified_view_count,
+ (SELECT count(*)::int FROM feed.promotion_view_charges c JOIN feed.promotion_campaigns b
+  ON b.tenant_id=c.tenant_id AND b.id=c.campaign_id
+  WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id) AS promotion_delivered_views,
+ EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id
+  AND b.post_id=p.id AND b.state='active' AND b.remaining_views>0) AS promotion_active,
+ EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
+   AND b.state='active' AND b.remaining_views>0 AND b.sponsor_id IS DISTINCT FROM $2
+   AND (p.author_type='masana' OR p.author_user_id IS DISTINCT FROM $2)) AS share_earn_eligible,
+ (p.paid_purged_at IS NULL AND p.state='published') AS boost_eligible,
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 AND l.reaction_kind='like') AS viewer_liked,
  EXISTS(SELECT 1 FROM feed.saves s WHERE s.tenant_id=p.tenant_id AND s.post_id=p.id AND s.fan_id=$2) AS viewer_saved`;
 // Resolve comment authors only through tenant-matched active user public profiles.

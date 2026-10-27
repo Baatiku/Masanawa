@@ -20,6 +20,11 @@ class FeedPost {
     required this.saved,
     this.viewerReaction,
     this.reactionCounts = const {},
+    this.verifiedViewCount,
+    this.promotionDeliveredViews,
+    this.promotionActive = false,
+    this.shareEarnEligible = false,
+    this.boostEligible = false,
   });
   final String id, authorMasanaId, kind, body, authorType;
   final String? authorName, authorId, authorHandle;
@@ -29,6 +34,9 @@ class FeedPost {
   final bool liked, saved;
   final String? viewerReaction;
   final Map<String, int> reactionCounts;
+  /// Authoritative completed qualified exposures, never a local impression count.
+  final int? verifiedViewCount, promotionDeliveredViews;
+  final bool promotionActive, shareEarnEligible, boostEligible;
   static const reactionKinds = [
     'like',
     'love',
@@ -122,6 +130,15 @@ class FeedPost {
         json['reactionCounts'],
         json['likeCount'] as int? ?? 0,
       ),
+      verifiedViewCount: json['verifiedViewCount'] is int &&
+          (json['verifiedViewCount'] as int) >= 0
+          ? json['verifiedViewCount'] as int : null,
+      promotionDeliveredViews: json['promotionDeliveredViews'] is int &&
+          (json['promotionDeliveredViews'] as int) >= 0
+          ? json['promotionDeliveredViews'] as int : null,
+      promotionActive: json['promotionActive'] == true,
+      shareEarnEligible: json['shareEarnEligible'] == true,
+      boostEligible: json['boostEligible'] == true,
     );
   }
   FeedPost withReaction(String? kind) {
@@ -152,6 +169,11 @@ class FeedPost {
       saved: saved,
       viewerReaction: kind,
       reactionCounts: counts,
+      verifiedViewCount: verifiedViewCount,
+      promotionDeliveredViews: promotionDeliveredViews,
+      promotionActive: promotionActive,
+      shareEarnEligible: shareEarnEligible,
+      boostEligible: boostEligible,
     );
   }
 
@@ -176,6 +198,11 @@ class FeedPost {
       saved: saved ?? result.saved,
       viewerReaction: result.viewerReaction,
       reactionCounts: result.reactionCounts,
+      verifiedViewCount: result.verifiedViewCount,
+      promotionDeliveredViews: result.promotionDeliveredViews,
+      promotionActive: result.promotionActive,
+      shareEarnEligible: result.shareEarnEligible,
+      boostEligible: result.boostEligible,
     );
   }
 }
@@ -453,11 +480,15 @@ class SavedStatusPage {
     return SavedStatusPage(
       raw
           .where((item) {
-            if (item is! Map) return true;
-            if (item['kind'] == 'video') return false;
-            final post = item['post'];
-            final author = post is Map ? post['author'] : null;
-            return author is! Map || author['type'] != 'human';
+            if(item is! Map)return true;
+            if(item['kind']=='video')return false;
+            final post=item['post'];
+            if(post is! Map)return true;
+            final author=post['author'];
+            // Backward-incompatible retired/free human bookmarks must never
+            // bypass the server-funded active-promotion projection.
+            return author is! Map || author['type']!='human' ||
+              post['promotionActive']==true;
           })
           .map(
             (item) => SavedStatusItem.fromJson(

@@ -159,6 +159,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
       api:StubFeed('Original status'),accountKey:'owner',statusTips:flow))));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post options'));
+    await tester.pumpAndSettle();
     expect(find.text('Tip MB'),findsOneWidget);
     await tester.tap(find.text('Tip MB'));
     await tester.pumpAndSettle();
@@ -171,6 +173,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(confirmations,0);
     expect(store.value,isNull);
+    await tester.tap(find.byTooltip('Post options'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tip MB'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('50 MB').first);
@@ -235,15 +239,15 @@ void main() {
       MasanaFeedScreen(api: api, accountKey: account)));
     await tester.pumpWidget(page('fan-a'));
     await tester.pumpAndSettle();
-    expect(find.text('Status'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
     expect(find.byTooltip('Search Status'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -300));
     await tester.pumpAndSettle();
-    expect(find.text('Status'), findsNothing);
+    expect(find.text('Home'), findsNothing);
     expect(find.byTooltip('Search Status'), findsOneWidget);
     await tester.pumpWidget(page('fan-b'));
     await tester.pumpAndSettle();
-    expect(find.text('Status'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
     expect(find.byTooltip('Search Status'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
