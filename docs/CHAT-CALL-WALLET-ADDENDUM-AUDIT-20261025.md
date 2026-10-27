@@ -2,6 +2,50 @@
 
 Owner-requested addition to [the Status/wallet plan](FEED-WALLET-UX-AUDIT-AND-PLAN-20261025.md). Source baseline: GitHub main **0c1dc595e0f592e57c67e6cea27c822de7902e26** (merged #421). This is an audit and implementation contract, not a claim that the repairs below have shipped. The **only active implementation checklist** is the stable-ID section in [the canonical roadmap](PRODUCT-ROADMAP-20261019.md#owner-ux-and-communication-repair-checklist). Earlier implemented behavior remains distinguishable from requested changes.
 
+## 27 October structured-log correction and source repair
+
+A fresh read of Railway's **structured attributes**, rather than message-text
+filtering alone, recovered the historical failure boundary:
+
+- Deployment `74bba050-5c14-429d-b2dc-1530bc40c964`, source
+  `0be4626875aab90f87f88825d23e9ef7c7f66b22` (`main`), was present in the network-flow
+  window 25 October 07:35–07:37 UTC; Railway deployment context independently
+  returns that exact repository/branch/SHA.
+- HTTP recorded `/agent/live/token` 500 at `07:36:05.639657418Z` and
+  `07:36:15.023333452Z`. Two runtime entries at `07:36:15.407747220Z` and
+  `07:36:15.407749860Z` have attributes `event=agent.live_token_failed`,
+  `stage=paid-voice-admission`, `code=unknown`. Their message strings are empty.
+  No request IDs were exposed by this bounded read; the first HTTP failure is not
+  asserted to share an independently correlated event.
+- At the exact source SHA, the public token service calls the legacy
+  `twinProduction.voiceAdmissionGate`: it exempts matching support profiles,
+  otherwise reads retired Credits admission and throws plain `Error` for
+  missing/invalid admission. Provider token creation occurs **after** this stage.
+  The observed stage does not prove which admission/storage error occurred, but
+  it does not establish a Gemini model/voice rejection either.
+
+The source correction retires public direct-provider token admission for both
+support and other Masana. After canonical authentication it returns bounded
+`409 calls.mb_admission_required` before profile, Credits, provider, hold or
+history work. Main's alpha and normal public service compositions use the same
+policy. The separate private MB service still mints only through the reviewed,
+authorized admission/one-use relay path; no free support call or restored Credits
+route is introduced. The typed error is whitelisted in sanitized diagnostics.
+Merged [#518](https://github.com/Baatiku/Masanawa/pull/518) at
+`5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
+`1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`. All SIX applicable hosted checks PASS:
+Foundation, server/Flutter rosters, Gateway contracts, retained PostgreSQL and
+Flutter message/recording/live-call. APK SKIPPED. Grouped local server/architecture:
+137 pass, 16 PG-only cases explicitly skipped after the environment restart; the
+hosted PG results now provide that merge evidence. No production flag, deployment
+approval or provider call occurred.
+
+The earlier “no matching diagnostic event” observations below describe the old
+message-filtered query and are superseded by this attribute-based finding.
+Official Google Gemini source currently documents `gemini-3.8-live`; this read
+therefore does **not** replace the configured model or owner-approved voice.
+Actual provider/voice connection and MB second qualification remain NOT_RUN.
+
 ## Confirmed source findings
 
 | Area | Evidence | Required change |

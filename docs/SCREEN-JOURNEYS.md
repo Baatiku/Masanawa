@@ -339,3 +339,15 @@ financial admission ID. Active call widgets never enqueue legacy client connecte
 ended reports for MB sessions; server settlement refreshes Calls history for the
 same account. A late account-switched finish cannot display a prior owner's
 settlement notice. Missing history metadata cannot become a fabricated UUID.
+
+## Public-token compatibility correction — 27 October
+
+A legacy `/agent/live/token` request authenticates the canonical user first, then
+returns `409 calls.mb_admission_required` with “Start a reviewed MB call to continue.”
+This applies to support and other Masana, old Credits admission IDs and retired
+setup purposes. No provider fetch, wallet reservation or financial movement occurs
+on this compatibility path. Authentication failures remain 401/403 and invalid
+input remains 400. Actual calls follow signed MB review/confirm, the private
+provider token service and the one-use same-origin relay grant; provider secrets
+never return through the public compatibility endpoint. Existing MB original-call
+recovery, setup/ringing zero cost, server-owned time and account fences are retained.

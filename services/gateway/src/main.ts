@@ -1,3 +1,4 @@
+import {reviewedMbCallRequired} from "./gb_calls/public_token_policy.js";
 import {qualifiedNgnExchange} from "./gb_wallet/ngn_qualification.js";
 import {createCanonicalId} from "@masanawa/contracts";
 import {createNgnWalletRepository} from "@masanawa/postgres";
@@ -660,6 +661,7 @@ export async function startGatewayService(
       voiceName: env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE ?? "Bodi",
     });
     liveVoiceTokens = createGeminiLiveTokenService({
+      paidVoiceAdmission: reviewedMbCallRequired,
       apiKey: alphaGeminiApiKey,
       authorizer: conversationAuthorizer!,
       ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
@@ -1118,9 +1120,9 @@ export async function startGatewayService(
           ...(database.platformAgentProfiles ? { platformProfiles: database.platformAgentProfiles } : {}),
           model: liveModel,
           voiceName: liveVoice,
-          ...(twinProduction
-            ? { paidVoiceAdmission: twinProduction.voiceAdmissionGate }
-            : {}),
+          // Public direct tokens cannot enforce MB time limits, including
+          // support Masana. Retired Credits admission never authorizes a call.
+          paidVoiceAdmission: reviewedMbCallRequired,
         });
         // The MB relay mints only after a separately authorized admission.
         // Its provider grant is never returned directly to the phone.
