@@ -51,4 +51,50 @@ void main(){
    expect(find.text('Could not open media.'),findsOneWidget);
    expect(find.text('Retry'),findsOneWidget);
  });
+ testWidgets('full media viewer expires grant and requires fresh authorized read',
+     (t) async {
+   var reads=0;
+   final api=MediaStub((_,id) async {
+     reads++;
+     return FeedMediaGrant(mediaId:id,kind:'image',
+       url:Uri.parse('https://media.example.test/signed?read=$reads'),
+       expiresAt:DateTime.now().add(const Duration(seconds:2)));
+   });
+   await t.pumpWidget(MaterialApp(home:FeedMediaScreen(
+     accountKey:'a',api:api,postId:post,kind:'image',
+     mediaIds:const ['media_abcdefgh'],
+     mediaRenderer:(g)=>Text('approved image $reads'))));
+   await t.pumpAndSettle();
+   expect(reads,1);
+   expect(find.text('approved image 1'),findsOneWidget);
+   await t.pump(const Duration(seconds:3));
+   await t.pump();
+   expect(find.text('approved image 1'),findsNothing);
+   expect(find.text('Media grant expired. Retry to check access.'),findsOneWidget);
+   await t.tap(find.text('Retry'));
+   await t.pumpAndSettle();
+   expect(reads,2);
+   expect(find.text('approved image 2'),findsOneWidget);
+ });
+
+ testWidgets('old account expiry cannot revoke new account media',(t) async {
+   final a=MediaStub((_,id) async => FeedMediaGrant(mediaId:id,kind:'image',
+     url:Uri.parse('https://media.example.test/a'),
+     expiresAt:DateTime.now().add(const Duration(seconds:2))));
+   final b=MediaStub((_,id) async => FeedMediaGrant(mediaId:id,kind:'image',
+     url:Uri.parse('https://media.example.test/b'),
+     expiresAt:DateTime.now().add(const Duration(minutes:1))));
+   Widget viewer(String account, FeedMediaApi api) => MaterialApp(
+     home:FeedMediaScreen(accountKey:account,api:api,postId:post,kind:'image',
+       mediaIds:const ['media_abcdefgh'],
+       mediaRenderer:(g)=>Text('approved $account')));
+   await t.pumpWidget(viewer('a',a));
+   await t.pumpAndSettle();
+   await t.pumpWidget(viewer('b',b));
+   await t.pumpAndSettle();
+   await t.pump(const Duration(seconds:3));
+   expect(find.text('approved a'),findsNothing);
+   expect(find.text('approved b'),findsOneWidget);
+ });
+
 }
