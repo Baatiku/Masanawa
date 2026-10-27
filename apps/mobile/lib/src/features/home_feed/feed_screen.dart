@@ -250,9 +250,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
 
   Future<void> openMyPromotions() async {
     final api=widget.promotions;
-    if(api==null||!promotionsAvailable)return;
+    if(api==null||widget.accountKey.isEmpty)return;
     final account=widget.accountKey,scope=generation;
-    final page=MyStatusPromotionsScreen(api:api,
+    final page=MyStatusPromotionsScreen(api:api,canBoost:promotionsAvailable,
       onBoostAgain:(postId)=>openPromotion(postId:postId));
     await Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>
       widget.wrapAccountRoute?.call(page)??page));
@@ -754,7 +754,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                   onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
                   icon: const Icon(Icons.bookmark_border_rounded),
                 ),
-              if(promotionsAvailable)
+              if(widget.promotions!=null&&widget.accountKey.isNotEmpty)
                 IconButton(tooltip:t('My promotions','Tallace-tallacena'),
                   onPressed:openMyPromotions,icon:const Icon(Icons.campaign_outlined)),
             ]),

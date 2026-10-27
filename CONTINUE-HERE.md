@@ -18,6 +18,8 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 **Owner campaign readback follow-up, source-scoped:** Upcoming separate Status receipt/UI batch will render live reserved MB distinctly from spent MB and unused funds already released, show direct/referred qualified-view delivery and immutable rejection reasons in My Promotions. The state transition's original remaining-view arithmetic remains available for financial audit; it must never be interpreted as a still-reserved balance after cancellation. Wallet Activity aggregation and provider-backed rewards still require separate end-to-end source acceptance.
 
+**Status admin and money readback verified:** #525 merged as `8bf8faf2`, exact head `c3a515b6`, after Foundation and retained PostgreSQL checks PASS, adding tenant-scoped independent editor queue, aggregate funding/commission summary, rejection reasons and refunded, database-scrubbed unsafe human content. #526 merged as `affcd2a6`, exact head `beb247c1`, after Foundation CI, Mobile Build and retained PG checks PASS, restoring truthful spent/reserved/released-MB representations and private rejection receipt readback. Both are source safety work behind a hard-OFF finance switch, not legal/provider qualification or APK readiness. Next emergency safety split keeps *new* spending off while letting authenticated owners read/cancel/delete and authorized staff reject/takedown even during an operational stop.
+
 **27 October continued R03/F03 diagnosis merged #518:** Source merge
 `5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
 `1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`; all SIX applicable hosted checks PASS

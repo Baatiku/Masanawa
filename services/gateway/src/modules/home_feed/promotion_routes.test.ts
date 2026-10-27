@@ -70,14 +70,46 @@ describe('SPE promotion routes inherit the established principal and staff autho
   expect(events).toContainEqual(['takedown','trusted','reviewer','uuid','Unsafe claims']);
   await server.close();
  });
- it('hides staff review and takedown APIs behind the financial safety gate',async()=>{
+ it('stops new money while preserving owner recovery and staff emergency safety',async()=>{
   const server=Fastify();const {port,events}=fake();
   await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'trusted',userId:'reviewer'}),
    isEditor:async()=>true,enabled:()=>false});
-  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/review'})).statusCode).toBe(503);
-  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/overview'})).statusCode).toBe(503);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Must not spend',targetViews:1}})).statusCode).toBe(503);
+  expect((await server.inject({method:'POST',url:'/v1/posts/post/view-challenges',
+   payload:{}})).statusCode).toBe(503);
+  expect((await server.inject({method:'GET',url:'/v1/promotions/mine'})).json())
+   .toMatchObject({campaigns:[]});
+  expect((await server.inject({method:'GET',url:'/v1/promotions/quotes/quote/receipt'})).statusCode)
+   .toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/cancel',
+   payload:{}})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/posts/post/delete',
+   payload:{}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/review'})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/overview'})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/uuid/review',
+   payload:{decision:'approve'}})).statusCode).toBe(503);
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/uuid/review',
+   payload:{decision:'reject',reason:'Safety hold'}})).statusCode).toBe(200);
   expect((await server.inject({method:'POST',url:'/v1/admin/promotions/posts/uuid/takedown',
-   payload:{reason:'Safety'}})).statusCode).toBe(503);
-  expect(events).toHaveLength(0);await server.close();
+   payload:{reason:'Safety'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/purge-expired',
+   payload:{}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['review','trusted','reviewer','uuid',false,'Safety hold']);
+  expect(events).toContainEqual(['takedown','trusted','reviewer','uuid','Safety']);
+  await server.close();
+ });
+ it('still rejects an unprivileged admin when payment admission is switched off',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'trusted',userId:'fan'}),
+   isEditor:async()=>false,enabled:()=>false});
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/overview'})).statusCode)
+   .toBe(403);
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/posts/post/takedown',
+   payload:{reason:'Try takeover'}})).statusCode).toBe(403);
+  expect(events).toHaveLength(0);
+  await server.close();
  });
 });

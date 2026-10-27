@@ -67,8 +67,9 @@ void main(){
    final api=StatusPromotionApi(dio:dio,accessToken:()async=>'session',
      ownerAccount:'owner',currentAccount:()=> 'owner',journal:_MemoryJournal());
    await tester.pumpWidget(MaterialApp(home:MyStatusPromotionsScreen(
-     api:api,onBoostAgain:(_)async{})));
+     api:api,canBoost:false,onBoostAgain:(_)async{})));
    await tester.pumpAndSettle();
+   expect(find.text('New promotion spending is temporarily unavailable.'),findsOneWidget);
    expect(find.textContaining('3/8 qualified views'),findsOneWidget);
    expect(find.textContaining('0 MB still reserved'),findsNWidgets(2));
    expect(find.textContaining('5 MB still reserved'),findsNothing);

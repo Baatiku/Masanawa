@@ -44,7 +44,10 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   return options.principal(r);
  };
  const admin=async(r:FastifyRequest)=>{
-  const p=await who(r);if(!await options.isEditor(p))fail('editorial_permission_denied',403);
+  // Safety response, moderation, refunds and immutable receipts must remain
+  // available even when new spending and paid views are switched OFF.
+  const p=await options.principal(r);
+  if(!await options.isEditor(p))fail('editorial_permission_denied',403);
   return p;
  };
  app.post('/v1/promotions/quotes',async(r,reply)=>{
@@ -65,19 +68,19 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   return options.port.confirm(p.tenantId,p.userId,params(r,'quoteId'),key as string);
  });
  app.get('/v1/promotions/quotes/:quoteId/receipt',async(r,reply)=>{
-  reply.header('Cache-Control','private, no-store');const p=await who(r);
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r);
   return options.port.receipt(p.tenantId,p.userId,params(r,'quoteId'));
  });
  app.get('/v1/promotions/mine',async(r,reply)=>{
-  reply.header('Cache-Control','private, no-store');const p=await who(r);
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r);
   return options.port.mine(p.tenantId,p.userId);
  });
  app.post('/v1/promotions/:campaignId/cancel',async(r,reply)=>{
-  reply.header('Cache-Control','private, no-store');const p=await who(r);fields(body(r),[]);
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
   return options.port.cancel(p.tenantId,p.userId,params(r,'campaignId'));
  });
  app.post('/v1/promotions/posts/:postId/delete',async(r,reply)=>{
-  reply.header('Cache-Control','private, no-store');const p=await who(r);fields(body(r),[]);
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
   return options.port.deleteOwnPost(p.tenantId,p.userId,params(r,'postId'));
  });
  app.post('/v1/posts/:postId/share-link',async(r,reply)=>{
@@ -101,6 +104,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.post('/v1/admin/promotions/:campaignId/review',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
   fields(b,['decision','reason']);if(b.decision!=='approve'&&b.decision!=='reject')fail('invalid_review');
+  if(b.decision==='approve'&&!options.enabled())fail('status_financial_qualification_missing',503);
   if(b.reason!==undefined&&typeof b.reason!=='string')fail('invalid_review_reason');
   if(b.decision==='reject'&&(typeof b.reason!=='string'||!b.reason.trim()))fail('review_reason_required');
   return options.port.review(p.tenantId,p.userId,params(r,'campaignId'),b.decision==='approve',
