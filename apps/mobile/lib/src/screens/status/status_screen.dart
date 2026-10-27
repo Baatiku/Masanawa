@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../features/home_feed/feed_api.dart';
+import '../../features/home_feed/status_tip_flow.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
 import '../../features/home_feed/feed_screen.dart';
@@ -236,6 +237,13 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       );
     }
 
+    final statusTips=StatusTipFlow(
+      dio:api.dio,accountId:account,
+      accessToken:api.accessToken??'',
+      currentAccountId:currentAccount,
+      store:SecureStatusTipStore(account),
+    );
+
     // Only the current signed-in account may obtain an original-media grant.
     final inlineMedia = AccountBoundFeedMediaApi(
       delegate: DioFeedMediaApi(api.dio, () async => api.accessToken),
@@ -314,6 +322,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       key: ValueKey('status-account-$account'),
       child: MasanaFeedScreen(
         api: feed,
+        statusTips:statusTips,
         accountKey: account,
         authorDirectory: authorDirectory,
         searchExpanded: _searchExpanded,
