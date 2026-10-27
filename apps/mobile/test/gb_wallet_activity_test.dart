@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -11,6 +12,7 @@ import 'package:masanawa/src/gb_wallet/gb_wallet_activity_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity_detail_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_receipt_actions.dart';
 import 'package:masanawa/src/gb_wallet/gb_receipt_document.dart';
+import 'package:masanawa/src/gb_wallet/gb_receipt_share.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
 
@@ -28,6 +30,15 @@ class _Session extends SessionController {
     final me=user('fan_b');
     state=SessionSignedIn(me,AuthTokens(accessToken:'b',refreshToken:'r2',
       accessExpiresIn:600,user:me));
+  }
+}
+
+class _Exporter implements GbReceiptExporter {
+  final formats=<GbReceiptFormat>[];
+  @override Future<void> share(GbReceiptDocument document,GbReceiptFormat format,
+    {required bool Function() isCurrent,Rect? origin})async{
+    expect(isCurrent(),isTrue);formats.add(format);
+    if(formats.length==1)throw StateError('share unavailable');
   }
 }
 
@@ -392,6 +403,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Wallet receipt'),findsNothing);
     expect(find.text('Share PDF'),findsNothing);
+  });
+
+  testWidgets('receipt preview wraps RTL large text and retries a failed native share', (tester)async{
+    tester.view.physicalSize=const Size(320,900);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    final fake=_Activity()..detailResponse=item('mb:1',1050);
+    final exporter=_Exporter();
+    final document=GbReceiptDocument(pngPages:[base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=')],pdf:Uint8List.fromList([1]));
+    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
+      gbActivityTransportProvider.overrideWithValue(fake),
+      gbReceiptDocumentBuilderProvider.overrideWithValue((_)async=>document),
+      gbReceiptExporterProvider.overrideWithValue(exporter)],child:MaterialApp(
+        home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),
+          child:Directionality(textDirection:TextDirection.rtl,
+            child:const GbWalletActivityDetailScreen(entryId:'mb:1'))))));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('Preview receipt').hitTestable(),find.byType(ListView),const Offset(0,-180));
+    await tester.tap(find.text('Preview receipt'));await tester.pumpAndSettle();
+    expect(fake.detailRequests,['mb:1','mb:1']);
+    expect(find.bySemanticsLabel('Masanawa receipt page'),findsOneWidget);
+    await tester.tap(find.text('Share PDF'));await tester.pumpAndSettle();
+    expect(find.text('Receipt sharing failed. Try again.'),findsOneWidget);
+    await tester.tap(find.text('Share PNG'));await tester.pumpAndSettle();
+    expect(exporter.formats,[GbReceiptFormat.pdf,GbReceiptFormat.png]);
+    await tester.tap(find.byTooltip('Close receipt'));await tester.pumpAndSettle();
+    expect(find.text('Wallet receipt'),findsNothing);expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('offline fresh receipt read refuses cached export and supports retry', (tester)async{
+    final fake=_Activity()..detailResponse=item('mb:1',1050);var renders=0;
+    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
+      gbActivityTransportProvider.overrideWithValue(fake),
+      gbReceiptDocumentBuilderProvider.overrideWithValue((_)async{
+        renders++;throw StateError('renderer unavailable');
+      })],child:const MaterialApp(home:GbWalletActivityDetailScreen(entryId:'mb:1'))));
+    await tester.pumpAndSettle();fake.fail=true;
+    await tester.dragUntilVisible(find.text('Preview receipt').hitTestable(),find.byType(ListView),const Offset(0,-150));
+    await tester.tap(find.text('Preview receipt'));await tester.pumpAndSettle();
+    expect(renders,0);expect(find.text('Share PDF'),findsNothing);
+    expect(find.text('Receipt could not be verified. Retry when online.'),findsOneWidget);
+    fake.fail=false;await tester.tap(find.text('Preview receipt'));await tester.pumpAndSettle();
+    expect(renders,1);expect(fake.detailRequests.length,3);
+    expect(find.text('Share PDF'),findsNothing);expect(tester.takeException(),isNull);
   });
 
   test('receipt metadata preserves cash/MB units, reversals and safe counterparties',(){
