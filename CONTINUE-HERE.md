@@ -10,7 +10,11 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
-**27 October continued R03/F03 diagnosis (source batch in progress):** Structured
+**27 October continued R03/F03 diagnosis merged #518:** Source merge
+`5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
+`1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`; all SIX applicable hosted checks PASS
+(Foundation, both rosters, Gateway contracts, retained PG and Flutter communication),
+APK SKIPPED. Structured
 Railway attributes recover `agent.live_token_failed`, `paid-voice-admission`,
 `unknown` at 25 October 07:36:15 UTC. Network-flow and deployment context bind the
 incident window to deployment `74bba050-5c14-429d-b2dc-1530bc40c964`, source
@@ -20,7 +24,7 @@ New source returns typed `409 calls.mb_admission_required` on public direct-toke
 requests for both support and normal Masana, avoiding legacy Credits admission
 and a free support/provider-token bypass. The private reviewed MB relay service
 is retained. Local grouped server/architecture: 137 pass; PG suites skipped after
-restart, hosted exact-head checks required. No production flag/deploy/provider
+restart; hosted exact-head PG/contract/communication checks are now verified. No production flag/deploy/provider
 call. See the addendum audit for exact evidence and superseded message-only queries.
 
 
