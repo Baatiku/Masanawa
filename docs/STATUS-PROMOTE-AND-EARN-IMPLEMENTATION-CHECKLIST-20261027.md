@@ -1,5 +1,5 @@
 # Masanawa — Paid Status Promotions, View Counts and Share & Earn
-**Owner-approved implementation checklist · 27 October 2026 · 59 tasks in five batches**
+**Owner-approved implementation checklist · 27 October 2026 · 64 tasks in five batches**
 
 This is the single detailed checklist for the new Status/Wallet promotion programme. Link here from the canonical roadmap and journey map; do **not** copy these items into older UX-S/UX-W checklists or repeatedly rewrite feed/detail/Saved presentation. Source baseline inspected: main 00750b9a11b9d1b18dc3acff8a02839be0cb1aff (recheck main before code work).
 
@@ -30,6 +30,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 - [ ] **SPE-A10** Define paid-post edit, rejection appeal and budget-extension behavior: any approved text/image/destination change returns to moderation; keep immutable original reservation/receipts and explicit unused-budget release. Additional target views require a new reviewed quote/confirmation, never silent charges or edits.
 - [ ] **SPE-A11** Before reward availability, verify real MB economic backing across purchase funding, provider-data delivery cost, refunds, platform share and outstanding half-MB commissions. Gate settlement/redeem when provisioning is unqualified rather than minting unbacked rewards; admin reconciliation sees gross/net liability.
 
+- [ ] **SPE-A12** Let authorized admin attach a **funded Share & Earn campaign to selected approved Masana posts**, with target/budget, explicit platform MB funding, moderation, pause/exhaustion and immutable receipts. An ordinary unfunded Masana post still displays verified views but pays no referral rewards. Treat admin-funded campaign spending as programme expense/MB liability, **not new platform revenue from itself**.
+
 ### Batch B — Verifiable views, tracked links and sharing commission (server + web)
 - [ ] **SPE-B01** Define one server-authoritative unique qualified-view event for app and public web: post actually in foreground, at least 50% in viewport, proposed minimum 6 seconds of engaged display, first payable exposure per viewer/post/campaign, with tamper-resistant collection and privacy-conscious guest verification. Mere fetch, autoplay, hidden page, refresh or bot hit does not qualify.
 - [ ] **SPE-B02** Add verified-view counters for every Masana/paid post; distinguish public unique verified view count from campaign payable delivered views, both scoped correctly and returned in feed/detail/Saved projections. Preserve accurate 0, loading, unavailable and delayed-reconciliation cases.
@@ -45,6 +47,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 - [ ] **SPE-B11** Implement safe public link preview/Open Graph title, description and approved image. Unfurl crawlers, social previews, speculative prefetch and link scanners must never become qualified views or rewards; verify external browser and no-JavaScript cases.
 - [ ] **SPE-B12** Write and implement guest analytics/attribution privacy notice, consent where required, privacy-safe guest proof, scoped retention/deletion and noninvasive fraud review. Do not demand invasive fingerprinting or expose viewers; declining optional tracking cannot be billed as a referred view.
 - [ ] **SPE-B13** Define forwarding and attribution exactly: a reused link stays credited only to its original sharer, never multi-level; a separate user gets their own signed URL only through their own Share. Revoked/expired/malformed links safely render permitted content without commission, and app/browser transitions preserve eligible attribution.
+
+- [ ] **SPE-B14** The same per-sharer signed link, first-qualified-view rule, 0.5 MB earned allocation, bot rejection and verified-view counters work on **admin-funded Masana reward campaigns** as on paid human promotions. Do not double-count an app view and its later external share, or pay for unfunded ordinary Masana posts.
 
 ### Batch C — ONE coordinated Home (existing Status screen) UI pass (feed + detail + Saved + composer)
 **Single reusable StatusPostCard and canonical post presentation:** make it the only implementation of author/header, body, media, social proof, promoted identity and actions across feed/detail/Saved; use variants for density rather than forked markup.
@@ -63,8 +67,10 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 - [ ] **SPE-C12** Carry identical typography, color tokens, avatar trust, actions, count and image behavior to detail and Saved without copying the whole card. Preserve profile navigation, comments, reactions, Save, error/retry and post visibility.
 - [ ] **SPE-C13** One Flutter widget/golden/semantics suite covering 320dp, large text, Hausa labels/word spacing, RTL, reduced motion, light/dark, touch targets, offline/skeleton and account switching; source-verify once for the shared component, not screen by screen.
 
-- [ ] **SPE-C14** Rename the **existing Status tab** to localized **Home** (not a new tab), position it first/leftmost, move Chats second and launch `/home` into the existing Status feed on cold start, first sign-in, return and safe resume. Keep `?tab=status` and `/status/:postId` deep links, state restoration, account isolation, semantics and notifications compatible. Change shell/router labels/indices once without rewriting cards.
+- [x] **SPE-C14** Rename the **existing Status tab** to localized **Home** (not a new tab), position it first/leftmost, move Chats second and launch `/home` into the existing Status feed on cold start, first sign-in, return and safe resume. Keep `?tab=status` and `/status/:postId` deep links, state restoration, account isolation, semantics and notifications compatible. Change shell/router labels/indices once without rewriting cards.
 - [ ] **SPE-C15** In the same shared feed/detail/Saved card pass, add restrained optional reviewed CTA plus post-specific hide/report, Share & Earn details and publisher Manage Promotion via accessible overflow. Safe CTA opens do not masquerade as post views, and no Sponsored badge or new root tab appears.
+
+- [ ] **SPE-C16** In the one shared card/Share action, show **Share & Earn** on both eligible human promotions and admin-funded Masana posts, and ordinary Share on unfunded/exhausted posts. Keep exactly one Home feed and one card renderer; no new reward tab or special sponsored marker.
 
 ### Batch D — Wallet, redemption and admin finishing pass
 - [ ] **SPE-D01** Extend compact Wallet balance details with clearly separated purchased, restricted welcome, campaign reserved, pending earned, and settled/redeemable earned MB while keeping NGN independent. Show 0 only on an authoritative read; no cosmetic oversized balance card.
@@ -82,6 +88,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 - [ ] **SPE-D11** Give sharers an account-safe Earnings review/appeal entry when qualified views or 0.5 MB commission are withheld/reversed, with campaign, reason category, receipt and resolution state; never silently deduct already-redeemed MB.
 - [ ] **SPE-D12** Show simple reward terms in My Promotions/Sharing Earnings: qualifying views, 1 MB/view, 50% referred allocation, pending/settlement policy, changes/reversals and any expiry rules. Bind versions to confirmed campaigns and do not silently expire or reprice MB balances; no new settings tab.
 
+- [ ] **SPE-D13** Reconcile Wallet Sharing Earnings, Activity receipts, milestones and admin reports for both human-funded and **admin-funded Masana sharing campaigns**, explicitly distinguishing programme cost from revenue and guaranteeing every sharer liability is budget-backed.
+
 ### Batch E — End-to-end evidence and merge
 - [ ] **SPE-E01** Arithmetic acceptance: 10,000 funded views = 10,000 MB; 1,500 organic + 8,500 linked yields exactly 4,250 MB sharer liability and 5,750 MB platform allocation. Test odd referred views and fractional carry across campaigns.
 - [ ] **SPE-E02** Real PostgreSQL transaction race tests: last paid view, two concurrent viewers, multiple shares, duplicate callback, failed confirm, lost response, cancel/reject/expire, account switching, refund and complete immutable financial audit.
@@ -92,6 +100,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 
 - [ ] **SPE-E07** Test tab indices/order, default Home startup, localized Home label, sign-in/restore, account switch, navigation back/forward, legacy Status link compatibility, notification returns and no sixth tab using source/widget/route regression checks.
 - [ ] **SPE-E08** Measure concurrent funded campaign discovery and paid-view bursts end-to-end with monitoring/backpressure: no artificial paid-post display pacing/ratio or waiting, but reliable idempotent view budget exhaustion, deduplicated ledger/notification output and server safety switches distinct from ad frequency restrictions.
+
+- [ ] **SPE-E09** Accept both campaign sources end-to-end: funded human post, funded selected Masana post, unfunded Masana post, exhausted/paused reward pool, direct views versus referred views, same post across app/web and true programme-expense reconciliation.
 
 ## Source-based card texture gaps — address only in Batch C
 The existing Status feed (now the **Home tab**) uses a flat zero-elevation rectangular Card, minimal absolute date/time author line, total reaction/comments only when nonzero, plain text Share action and no view counter. Existing shared portrait/body/media widgets are promising, but the overall surface lacks: (1) clear card-versus-feed separation; (2) relative-time/identity/audience rhythm; (3) warm text-only composition; (4) a persistent metrics strip containing views; (5) a three-action hierarchy with earned-sharing affordance; (6) human paid-post author authenticity without Sponsored badges; (7) compact paid composer entry; (8) one coordinated feed/detail/Saved treatment. Do **not** rewrite these presentations in batches A, B or D.
