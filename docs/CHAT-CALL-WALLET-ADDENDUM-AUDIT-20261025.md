@@ -31,9 +31,14 @@ history work. Main's alpha and normal public service compositions use the same
 policy. The separate private MB service still mints only through the reviewed,
 authorized admission/one-use relay path; no free support call or restored Credits
 route is introduced. The typed error is whitelisted in sanitized diagnostics.
-Grouped server/architecture checks: 137 passed; PG-only suites were explicitly
-skipped locally after the environment restart. Hosted exact-head checks remain
-the merge gate. No production flags, deployment approval or provider call occurs.
+Merged [#518](https://github.com/Baatiku/Masanawa/pull/518) at
+`5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
+`1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`. All SIX applicable hosted checks PASS:
+Foundation, server/Flutter rosters, Gateway contracts, retained PostgreSQL and
+Flutter message/recording/live-call. APK SKIPPED. Grouped local server/architecture:
+137 pass, 16 PG-only cases explicitly skipped after the environment restart; the
+hosted PG results now provide that merge evidence. No production flag, deployment
+approval or provider call occurred.
 
 The earlier “no matching diagnostic event” observations below describe the old
 message-filtered query and are superseded by this attribute-based finding.
