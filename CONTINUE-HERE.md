@@ -10,20 +10,22 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
-**27 October owner-assigned communication/wallet completion source batch (not yet merged):**
-`feat/communication-wallet-completion-oct27` from `ede57f79` takes R02/R03/R06/F03
-then W02/W04/W05/T03/T05/D01. Atomic command+reply MB reserve/complete/fail with
-restart expiry recovery; one canonical call-history UUID per admission and trusted
-usage projection; no legacy client history writes for MB; redacted relay logs;
-NGN cost/fee/margin qualification; exact original Send recovery; canonical
-recipient avatars/cancellation; carrier marks and deliberate clipboard paste.
-Grouped mobile 69 passed, workspace TypeScript passed; final full PG18/pgvector,
-Flutter and exact-head hosted checks remain in progress. Preserve open #507's
-branch; this batch replaces its non-atomic reply billing approach and must never
-compose both charging paths. Real provider/model/voice qualification and actual
-funding/cost evidence remain unverified, historical token-500 cause remains unknown,
-and no deployment approval/production flag/APK/fixed-IP change is inferred.
-
+**27 October communication/wallet completion merged:** PR #514 merged at
+`c17260e594a4b43cd937b8dc71ed266001fe9796`, verified head
+`a30506903c1c51032ee6c41de3548d73887d2f74`; all EIGHT applicable hosted checks PASS
+(Foundation, Mobile Build, retained PG, both rosters, Gateway contracts, voice-note,
+Flutter message/recording/live-call), APK SKIPPED. Expanded local mobile: 69 pass;
+workspace TS and Flutter analysis pass. Atomic MB reply command+hold and
+reply+capture, expired undelivered recovery, canonical MB-call history/receipt and
+no legacy client evidence writes, redacted deployed-SHA diagnostics, verified
+recipient avatars/cancellation, immutable original Send recovery, carrier marks and
+explicit ported-number-safe clipboard paste, and exact NGN economics qualification
+are merged. Close source W02/W05/T03/T05/D01. Keep R02/R03/R06/F03/W04 open only for
+actual provider/voice/connected-second qualification, failing deployed-stage/cause
+correlation and real cost/fee/operator evidence; no phone-only tasks. No production
+reply/call/exchange activation, deployment approval, APK or fixed-IP change.
+#507's alternate reply-billing branch is preserved and superseded; never compose
+both charge paths. Use the canonical roadmap for current item evidence.
 
 **27 October chat visual checkpoint, main `efc2d1eb`:** #508 merged the owner-reference Masana chat pass with exact-head Mobile Build, Foundation, voice-note, communication and roster checks green. It increases the canonical header portrait, keeps Wallet/Call visible and moves Search into More, adds direct Camera, a quiet original chat texture, a wider avatar-bearing voice player, and a separate recording/review panel. A first CI run exposed hold-release and Send accessibility regressions; both were fixed before merge. The source UX item is **UX-F05** (the pre-existing wallet density item is UX-F04); no Android visual/microphone outcome or APK is claimed. #501/#503 from the other window already switched active calls to MB source and hardened original admission matching, so re-read current main before any further call changes. Gateway production rollout/provider qualification, 1 MB completed-reply charging, installed-build incident evidence and remaining wallet/Status/provider work stay separately open.
 
