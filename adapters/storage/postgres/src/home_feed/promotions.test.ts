@@ -103,4 +103,59 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect((await query(`SELECT state,body FROM feed.posts WHERE id=$1`,[c.postId])).rows[0])
     .toMatchObject({state:'removed',body:''});
  });
+
+ it('queues tenant-scoped paid content, gives rejection reasons and refunds unused budget',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'Review this learning offer',targetViews:3});
+  const c=await service.confirm(t,'publisher',q.quoteId,'review-safety-0001');
+  const before=await service.adminQueue(t,'trusted_reviewer');
+  expect(before.pending).toContainEqual(expect.objectContaining({
+   campaignId:c.id,authorId:'publisher',sponsorId:'publisher',
+   body:'Review this learning offer',targetViews:3}));
+  expect(await service.adminOverview(t,'trusted_reviewer'))
+   .toMatchObject({pendingReview:1,rewardSettlementEnabled:false,
+    fundingQualification:'not_qualified'});
+  await expect(service.review(t,'trusted_reviewer',c.id,false))
+   .rejects.toMatchObject({code:'invalid_review_reason'});
+  await expect(service.review(t,'trusted_reviewer',c.id,false,'  '))
+   .rejects.toMatchObject({code:'invalid_review_reason'});
+  const beforeBalance=await balance('publisher');
+  const rejected=await service.review(t,'trusted_reviewer',c.id,false,
+   'Misleading educational claims');
+  expect(rejected).toMatchObject({state:'rejected',reason:'Misleading educational claims'});
+  expect((await balance('publisher')).reserved).toBe((beforeBalance as {reserved:number}).reserved-3);
+  expect((await service.adminQueue(t,'trusted_reviewer')).pending)
+   .not.toContainEqual(expect.objectContaining({campaignId:c.id}));
+  const audit=await query(`SELECT details FROM feed.promotion_audit WHERE tenant_id=$1
+   AND campaign_id=$2 AND action='rejected'`,[t,c.id]);
+  expect(audit.rows[0]).toMatchObject({details:{reason:'Misleading educational claims'}});
+ });
+
+ it('permanently removes unsafe human content, refunds all boosters and revokes referral',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'Remove an unsafe offer',targetViews:3});
+  const c=await service.confirm(t,'publisher',q.quoteId,'takedown-safety-0001');
+  await service.review(t,'independent_editor',c.id,true);
+  const b=await service.quote({tenantId:t,sponsorId:'booster',postId:c.postId,targetViews:2});
+  await service.confirm(t,'booster',b.quoteId,'takedown-boost-0001');
+  const link=await service.share(t,'sharer',c.postId);
+  expect(link.earnable).toBe(true);
+  await expect(service.adminTakedown(t,'publisher',c.postId,'Not allowed'))
+   .rejects.toMatchObject({code:'separate_reviewer_required'});
+  const beforeOwner=await balance('publisher'),beforeBooster=await balance('booster');
+  expect(await service.adminTakedown(t,'independent_editor',c.postId,
+   'Verified harmful advertising')).toMatchObject({state:'removed',refundedMb:5});
+  expect((await balance('publisher')).reserved).toBe((beforeOwner as {reserved:number}).reserved-3);
+  expect((await balance('booster')).reserved).toBe((beforeBooster as {reserved:number}).reserved-2);
+  expect((await query(`SELECT state,body,cardinality(media_ids) AS media_count
+   FROM feed.posts WHERE tenant_id=$1 AND id=$2`,[t,c.postId])).rows[0])
+   .toMatchObject({state:'removed',body:'',media_count:0});
+  expect((await query(`SELECT count(*)::int AS active FROM feed.share_links
+   WHERE tenant_id=$1 AND post_id=$2 AND revoked_at IS NULL`,[t,c.postId])).rows[0])
+   .toMatchObject({active:0});
+  expect(await service.adminTakedown(t,'independent_editor',c.postId,
+   'Verified harmful advertising')).toMatchObject({alreadyRemoved:true});
+  await expect(service.beginView(t,'viewertwo',c.postId))
+   .rejects.toMatchObject({code:'post_not_found'});
+ });
 });

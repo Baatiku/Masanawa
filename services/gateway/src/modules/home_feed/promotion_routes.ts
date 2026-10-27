@@ -4,7 +4,10 @@ export interface PromotionPort {
  quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
- review(t:string,editor:string,id:string,approved:boolean):Promise<unknown>;
+ review(t:string,editor:string,id:string,approved:boolean,reason?:string):Promise<unknown>;
+ adminQueue(t:string,editor:string):Promise<unknown>;
+ adminOverview(t:string,editor:string):Promise<unknown>;
+ adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
  cancel(t:string,s:string,id:string):Promise<unknown>;
  share(t:string,sharer:string,post:string):Promise<unknown>;
  beginView(t:string,viewer:string,post:string,referral?:string):Promise<unknown>;
@@ -97,8 +100,24 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  });
  app.post('/v1/admin/promotions/:campaignId/review',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
-  fields(b,['decision']);if(b.decision!=='approve'&&b.decision!=='reject')fail('invalid_review');
-  return options.port.review(p.tenantId,p.userId,params(r,'campaignId'),b.decision==='approve');
+  fields(b,['decision','reason']);if(b.decision!=='approve'&&b.decision!=='reject')fail('invalid_review');
+  if(b.reason!==undefined&&typeof b.reason!=='string')fail('invalid_review_reason');
+  if(b.decision==='reject'&&(typeof b.reason!=='string'||!b.reason.trim()))fail('review_reason_required');
+  return options.port.review(p.tenantId,p.userId,params(r,'campaignId'),b.decision==='approve',
+   b.reason as string|undefined);
+ });
+ app.get('/v1/admin/promotions/review',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await admin(r);
+  return options.port.adminQueue(p.tenantId,p.userId);
+ });
+ app.get('/v1/admin/promotions/overview',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await admin(r);
+  return options.port.adminOverview(p.tenantId,p.userId);
+ });
+ app.post('/v1/admin/promotions/posts/:postId/takedown',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
+  fields(b,['reason']);if(typeof b.reason!=='string'||!b.reason.trim())fail('review_reason_required');
+  return options.port.adminTakedown(p.tenantId,p.userId,params(r,'postId'),b.reason);
  });
  app.post('/v1/admin/promotions/purge-expired',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');await admin(r);fields(body(r),[]);
