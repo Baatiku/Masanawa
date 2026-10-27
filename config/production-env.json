@@ -1159,6 +1159,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
+    },
+    {
+      "name": "MASANAWA_MB_REPLIES_ENABLED",
+      "owner": "gateway/masana-replies",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Enforces server-authorized one MB per durable completed one-to-one Masana text/media reply, with prior reserve, welcome/purchased buckets, terminal mobile command proof and original-operation reconciliation. Requires canonical mobile turn storage and PostgreSQL usage ledger; enable only after qualification."
     }
   ]
 }
