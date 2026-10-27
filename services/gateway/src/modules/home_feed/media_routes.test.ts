@@ -20,6 +20,27 @@ describe("C23 signed media HTTP denial",()=>{
   expect(res.json().url).toMatch(/^https:/);
   expect(res.json().transcript).toBe("Speech");await app.close();
  });
+ it("returns only reviewed image alt and never reuses audio transcript as alt",async()=>{
+  const app=Fastify();
+  await registerFeedMediaRoutes(app,options({
+    find:async()=>({...proof,kind:"image",transcript:"Unreviewed",
+      altText:"A reviewed portrait of the Masana explaining a lesson."}),
+    sign:async()=>({url:"https://s3.example.test/image?sig=one",
+      contentType:"image/webp",expiresAt:new Date(Date.now()+60000).toISOString()}),
+  }));
+  const image=await app.inject({method:"GET",url});
+  expect(image.statusCode).toBe(200);
+  expect(image.json().altText).toBe(
+    "A reviewed portrait of the Masana explaining a lesson.");
+  expect(image.json().transcript).toBeNull();
+  await app.close();
+  const audio=Fastify();
+  await registerFeedMediaRoutes(audio,options({
+    find:async()=>({...proof,altText:"Do not reuse image descriptions for audio"}),
+  }));
+  expect((await audio.inject({method:"GET",url})).json().altText).toBeNull();
+  await audio.close();
+ });
  it("does not query storage when disabled",async()=>{
   const app=Fastify(),o=options({enabled:()=>false});await registerFeedMediaRoutes(app,o);
   expect((await app.inject({method:"GET",url})).statusCode).toBe(503);
