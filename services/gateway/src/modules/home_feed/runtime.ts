@@ -16,6 +16,10 @@ export interface StatusRuntime {
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
+ /** Only authenticated content editors can approve or withdraw descriptive
+  * media copy. The database owns rights/revision and approval provenance. */
+ updateMediaAlt?:(tenantId:string,reviewerId:string,mediaId:string,
+   altText:string|null)=>Promise<{mediaId:string;altText:string|null}|null>;
 }
 
 /** One registration for the canonical feed/editorial/media services. No
@@ -76,5 +80,26 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
   });
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
+  if(options.updateMediaAlt)scope.put('/v1/admin/feed/media/:mediaId/alt',async(request,reply)=>{
+    reply.header('Cache-Control','private, no-store');
+    if(!enabled())return reply.code(503).send({code:'editorial_feature_disabled'});
+    const reviewer=await resolve(request);
+    if(await options.isEditor?.(reviewer)!==true)
+      return reply.code(403).send({code:'editorial_permission_denied'});
+    const {mediaId}=request.params as {mediaId?:unknown};
+    const body=request.body;
+    if(typeof mediaId!=='string'||!/^media_[A-Za-z0-9_-]{8,128}$/.test(mediaId)||
+       !body||typeof body!=='object'||Array.isArray(body)||
+       Object.keys(body).length!==1||!('altText' in body))
+      return reply.code(422).send({code:'invalid_alt_review'});
+    const copy=(body as {altText:unknown}).altText;
+    if(copy!==null && (typeof copy!=='string'||copy.trim().length<5||
+       copy.trim().length>280))
+      return reply.code(422).send({code:'invalid_alt_review'});
+    const result=await options.updateMediaAlt!(reviewer.tenantId,reviewer.userId,
+      mediaId,copy===null?null:(copy as string).trim());
+    if(!result)return reply.code(404).send({code:'media_unavailable'});
+    return {media:result};
+  });
  });
 }
