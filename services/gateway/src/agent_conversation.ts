@@ -95,6 +95,8 @@ export function createAgentConversationService(input: {
   readonly runs: AgentRunRepository;
   readonly authorizer: AgentConversationAuthorizer;
   readonly strategy: AgentStrategy;
+  /** New paid turns require current account/recovery authority before any hold. */
+  readonly beforeTurn?: (authorizationHeader:string|undefined)=>Promise<void>;
   readonly nativeAudio?: NativeAudioRenderer;
   readonly voiceForCharacter?: (scope: import("@masanawa/agents").CharacterSessionScope) => Promise<string | undefined>;
   readonly mobileShell?: MobileShellRepository;
@@ -190,6 +192,7 @@ export function createAgentConversationService(input: {
         characterSessionId,
       });
       assertConversationSessionOpen(session);
+      await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
         const claim = await input.mobileShell.claimTurn({
@@ -206,10 +209,11 @@ export function createAgentConversationService(input: {
           characterSessionId,
           type: "turn.started",
           payload: { requestId: request.requestId, kind: "text" },
-        });
+        }).catch(() => undefined);
       }
 
       const agentRunId = createCanonicalId("agent-run");
+      try {
       await input.runs.create({
         authority: admission.authority,
         scope: admission.scope,
@@ -230,7 +234,6 @@ export function createAgentConversationService(input: {
         },
       });
 
-      try {
         const teachingPreparation = await input.teachingAssistant?.prepare({
           scope: admission.scope,
           text,
@@ -323,7 +326,7 @@ export function createAgentConversationService(input: {
               reply,
               parts: [...result.parts],
             },
-          });
+          }).catch(() => undefined);
         }
 
         await input.twinObserver?.completed({
@@ -417,6 +420,7 @@ export function createAgentConversationService(input: {
         characterSessionId,
       });
       assertConversationSessionOpen(session);
+      await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
         const claim = await input.mobileShell.claimTurn({
@@ -435,10 +439,11 @@ export function createAgentConversationService(input: {
           characterSessionId,
           type: "turn.started",
           payload: { requestId: request.requestId, kind: "media" },
-        });
+        }).catch(() => undefined);
       }
 
       const agentRunId = createCanonicalId("agent-run");
+      try {
       await input.runs.create({
         authority: admission.authority,
         scope: admission.scope,
@@ -459,7 +464,6 @@ export function createAgentConversationService(input: {
         },
       });
 
-      try {
         const generated = await input.strategy.execute({
           agentRunId,
           characterSessionId,
@@ -513,7 +517,7 @@ export function createAgentConversationService(input: {
               reply,
               parts: [...result.parts],
             },
-          });
+          }).catch(() => undefined);
         }
 
         await input.twinObserver?.completed({
@@ -607,6 +611,7 @@ export function createAgentConversationService(input: {
         characterSessionId,
       });
       assertConversationSessionOpen(session);
+      await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
         const claim = await input.mobileShell.claimTurn({
@@ -632,10 +637,11 @@ export function createAgentConversationService(input: {
           characterSessionId,
           type: "turn.started",
           payload: { requestId: request.requestId, kind: "media-set" },
-        });
+        }).catch(() => undefined);
       }
 
       const agentRunId = createCanonicalId("agent-run");
+      try {
       await input.runs.create({
         authority: admission.authority,
         scope: admission.scope,
@@ -656,7 +662,6 @@ export function createAgentConversationService(input: {
         },
       });
 
-      try {
         const generated = await input.strategy.execute({
           agentRunId,
           characterSessionId,
@@ -708,7 +713,7 @@ export function createAgentConversationService(input: {
               reply,
               parts: [...result.parts],
             },
-          });
+          }).catch(() => undefined);
         }
 
         const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);

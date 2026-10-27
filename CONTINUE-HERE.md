@@ -8,6 +8,21 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 ## Latest implementation checkpoint
 
+**27 October owner-assigned communication/wallet completion source batch (not yet merged):**
+`feat/communication-wallet-completion-oct27` from `ede57f79` takes R02/R03/R06/F03
+then W02/W04/W05/T03/T05/D01. Atomic command+reply MB reserve/complete/fail with
+restart expiry recovery; one canonical call-history UUID per admission and trusted
+usage projection; no legacy client history writes for MB; redacted relay logs;
+NGN cost/fee/margin qualification; exact original Send recovery; canonical
+recipient avatars/cancellation; carrier marks and deliberate clipboard paste.
+Grouped mobile 57 passed, workspace TypeScript passed; final full PG18/pgvector,
+Flutter and exact-head hosted checks remain in progress. Preserve open #507's
+branch; this batch replaces its non-atomic reply billing approach and must never
+compose both charging paths. Real provider/model/voice qualification and actual
+funding/cost evidence remain unverified, historical token-500 cause remains unknown,
+and no deployment approval/production flag/APK/fixed-IP change is inferred.
+
+
 **27 October chat visual checkpoint, main `efc2d1eb`:** #508 merged the owner-reference Masana chat pass with exact-head Mobile Build, Foundation, voice-note, communication and roster checks green. It increases the canonical header portrait, keeps Wallet/Call visible and moves Search into More, adds direct Camera, a quiet original chat texture, a wider avatar-bearing voice player, and a separate recording/review panel. A first CI run exposed hold-release and Send accessibility regressions; both were fixed before merge. The source UX item is **UX-F05** (the pre-existing wallet density item is UX-F04); no Android visual/microphone outcome or APK is claimed. #501/#503 from the other window already switched active calls to MB source and hardened original admission matching, so re-read current main before any further call changes. Gateway production rollout/provider qualification, 1 MB completed-reply charging, installed-build incident evidence and remaining wallet/Status/provider work stay separately open.
 
 **27 October merged MB call active-source checkpoint, main `e7defb72`:** PR #501 merged the source cutover of both inline chat and full-screen Masana call controls from retired Credits transport to signed MB review/confirm/one-use same-origin relay grant, server-owned connected seconds and finish. New `MbCallFlow` uses encrypted account-scoped original-operation journal (with matching-owner v1 migration), safe lost-confirm and lost-finish readback, and new source/Dio regressions; `docs/SCREEN-JOURNEYS.md` now specifies error, unknown, account-switch and large-font behavior. **All five exact-head #501 workflows PASS:** Mobile Build, Foundation CI, voice-note, communication and roster; no real device/provider/funds acceptance. Roadmap UX-R08 may be source-closed from this registered Gateway + Flutter contract; UX-R02/R03/R06/F03/S05/S06 remain open for substantive live provider, reply charging, installed-build incident correlation, reviewed MB tipping and approved media/caption/audio. Railway production has not promoted several newer `main` deployments (latest queued `NEEDS_APPROVAL`, last observed SUCCESS at `1bb16673`); **do not approve or switch on `MASANAWA_MB_CALLS_ENABLED` without the full qualified provider/ledger rollout.** No APK, no fixed-IP changes, and keep `Baatiku/Masanawa-App` untouched.

@@ -1,3 +1,4 @@
+import {replyWalletFailure} from "./gb_wallet/reply_errors.js";
 import {registerNgnWalletRoutes} from "./gb_wallet/ngn_routes.js";
 import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import {GbCallRelayError} from "./gb_calls/errors.js";
@@ -265,6 +266,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   const checks = options.readinessChecks ?? [];
 
   app.setErrorHandler((error, request, reply) => {
+    const walletFailure=replyWalletFailure(error);
+    if(walletFailure){
+      void reply.code(walletFailure.status).send({error:{code:walletFailure.code,message:walletFailure.message}});
+      return;
+    }
     if(error instanceof CustomerAuthError) {
       void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
       return;

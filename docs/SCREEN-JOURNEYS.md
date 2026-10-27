@@ -296,3 +296,39 @@ Tapping an MB or NGN Activity row opens its exact, freshly authorized ledger ent
 ### Trusted relay contract before call UI cutover
 
 The opt-in server relay returns an opaque header credential and a same-Gateway WebSocket path; provider keys/URLs remain private. Actual provider setup/progress owns MB proof and deadline, with no client duration authority. Reconnect preserves the original admission, uncertain loss bills saved proof only, and normal End stops the upstream before settlement. New access and originating-session revocation checks run throughout the call. Caller-facing provider errors are redacted and typed unavailability is 503. Main/mobile do not enable this transport until the protected review, token, history and lifecycle integration is complete. See `MB-CALL-PROVIDER-RELAY-20261025.md`; provider/device acceptance remains open.
+
+## 27 October communication and wallet completion batch
+
+New reply billing is opt-in through `MASANAWA_MB_REPLIES_ENABLED`: the original
+account-scoped text, voice-note or media-set command and its 1 MB hold commit
+before provider work. Successful durable reply storage and capture commit together;
+definitive failure releases the hold. Replays never infer twice or charge twice.
+An expired pending command is failed with its hold released; late results cannot
+resurrect it. Welcome MB is eligible for these replies, never Send or Data.
+Call history retains one stable UUID per MB admission across relay grants, exposes
+server-verified connected milliseconds and settled MB, and displays Pending
+reconciliation while accounting is unresolved. Client lifecycle reports cannot
+change MB history evidence. Account changes clear the visible history and receipt.
+The Data operator selector and recipient review preserve drafts on Back, provide
+manual entry without contacts permission, and never infer delivery or funding.
+
+Wallet/Data completion: all four carrier choices retain visible text and packaged
+marks offline; a selected ported network survives phone edits and explicit Paste
+number. Clipboard is read only after the user presses Paste; manual entry always
+works without contacts permission. Invalid paste shows an actionable format error.
+Send and Request show the exact server-resolved handle, display name, stable ID
+and canonical public profile avatar (neutral initials if absent/invalid). Cancel
+verification clears only the preview, retaining the amount/handle draft. Disabling
+the field cancels late lookup updates. Completed original Send receipts survive
+quote expiry and recipient rename/revocation without another transfer invocation.
+The proposed quantity rate version is unavailable for new exchanges unless
+operator-provided fulfillment/fee/margin/limit evidence is current and every
+permitted integer quantity passes exact kobo arithmetic. Funding still credits
+NGN only; underpayment cannot exchange, excess kobo stays cash, and no historical
+receipt is repriced. Provider qualification is never implied by these controls.
+
+MB call lifecycle uses the relay's canonical history UUID separately from its
+financial admission ID. Active call widgets never enqueue legacy client connected/
+ended reports for MB sessions; server settlement refreshes Calls history for the
+same account. A late account-switched finish cannot display a prior owner's
+settlement notice. Missing history metadata cannot become a fabricated UUID.

@@ -128,6 +128,13 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
      if(item.endedAt!=null)...[const Divider(height:22),detailField(Icons.call_end_outlined,'Ended',date(item.endedAt!))],
      const Divider(height:22),
      detailField(Icons.timer_outlined,'Duration',item.duration==null?'No completed connection duration recorded':callDurationLabel(item.duration!)),
+     if(item.mbAdmissionId!=null)...[
+      const Divider(height:22),
+      detailField(Icons.data_usage_outlined,'MB usage',item.chargedMb==null
+        ? 'Pending reconciliation' : '${item.chargedMb} MB'),
+      const Divider(height:22),
+      detailField(Icons.receipt_long_outlined,'MB receipt reference',item.mbAdmissionId!),
+     ],
      if(item.endReason!=null)...[const Divider(height:22),detailField(Icons.info_outline,'End reason',item.endReason!.label)],
     ])),
     if(group!=null)...[

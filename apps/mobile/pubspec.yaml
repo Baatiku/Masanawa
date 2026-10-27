@@ -105,6 +105,7 @@ flutter:
 
   assets:
     - assets/brand/
+    - assets/networks/
     - assets/masana/avatars/
     - assets/masana/banners/
     - assets/masana/portraits/

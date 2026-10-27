@@ -1,3 +1,5 @@
+import {qualifiedNgnExchange} from "./gb_wallet/ngn_qualification.js";
+import {createCanonicalId} from "@masanawa/contracts";
 import {createNgnWalletRepository} from "@masanawa/postgres";
 import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import { PgSavedLibraryRepository } from "@masanawa/postgres";
@@ -30,6 +32,7 @@ import {
   createGbWalletActivityRepository,
   createPostgresGbRequestRepository,
   createGbUsageReservations,
+  recoverExpiredMbReplies,
   createGbDataJournal,
   createGbCallAdmissions,
   createGbBillstackRepository,
@@ -421,7 +424,7 @@ function createDefaultDatabaseDependency(
     crypto: createPostgresCryptoRepository(database.pool),
     cryptoChatActions: createPostgresCryptoChatActionRepository(database.pool),
     ownerships: createPostgresCharacterOwnershipReader(database.pool),
-    mobileShell: createPostgresMobileShellRepository(database.pool),
+    mobileShell: createPostgresMobileShellRepository(database.pool, {billReplies: env.MASANAWA_MB_REPLIES_ENABLED === "true"}),
     mobilePush: createPostgresMobilePushRepository(database.pool),
     mobileActivity: createPostgresMobileAgentActivityRepository(database.pool),
     billingQuotes: createPostgresBillingQuoteRepository(database.pool),
@@ -1484,6 +1487,13 @@ export async function startGatewayService(
         })
       : undefined);
 
+  if(env.MASANAWA_MB_REPLIES_ENABLED==='true' &&
+    (!conversationAuthorizer||!customerAuth||!database.mobileShell||!database.featurePool||
+     options.appOptions?.agentConversation)) {
+    await database.close();
+    throw new TypeError('Atomic MB replies require canonical persisted turns, account-state authority and the registered conversation service');
+  }
+
   const composedConversation =
     options.appOptions?.agentConversation ??
     (conversationAuthorizer &&
@@ -1495,6 +1505,10 @@ export async function startGatewayService(
           runs: database.agentRuns,
           authorizer: conversationAuthorizer,
           strategy,
+          ...(env.MASANAWA_MB_REPLIES_ENABLED==='true'?{beforeTurn:async(authorizationHeader:string|undefined)=>{
+            if(!customerAuth)throw Object.assign(new Error('Reply accounting authority is unavailable'),{statusCode:503});
+            await customerAuth.authorizeSensitiveMutation({authorizationHeader});
+          }}:{}),
           ...(nativeAudio ? { nativeAudio } : {}),
           voiceForCharacter: async (scope) => {
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
@@ -1751,13 +1765,29 @@ export async function startGatewayService(
         await validateOwner();
         const provider=await mbLiveVoiceTokens!.mint({authorizationHeader,
           characterId:admission.characterId});
-        return mbRelay!.issue(actor,admission.characterId,id,provider,validateOwner);
+        // One history identity per durable admission, including grant retries.
+        const history=await featurePool!.query<{call_id:string}>(`INSERT INTO agents.masana_call_history
+          (tenant_id,user_id,call_id,character_id,display_name,expires_at,mb_admission_id)
+          SELECT p.tenant_id,$2,$3::uuid,p.character_id,a.display_name,$5,$6
+          FROM agents.platform_agent_profiles p
+          JOIN agents.agent_presentations a USING(tenant_id,character_id)
+          WHERE p.tenant_id=$1 AND p.character_id=$4 AND a.visible_in_user_app
+          ON CONFLICT (tenant_id,user_id,mb_admission_id) WHERE mb_admission_id IS NOT NULL
+          DO UPDATE SET expires_at=EXCLUDED.expires_at
+          RETURNING call_id`,[actor.tenantId,actor.userId,
+            createCanonicalId('request').slice('request_'.length),admission.characterId,admission.expiresAt,id]);
+        const callId=history.rows[0]?.call_id;
+        if(!callId)throw new GbCallReviewError('gb.call.masana_unavailable',404);
+        return mbRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner);
       },
       finish:(actor,id)=>mbRelay!.finish(actor,id),
     }:undefined);
   if(env.MASANAWA_MB_CALLS_ENABLED==='true' && gbCalls &&
      !options.appOptions?.gbCallRelay && callJournal && publicBaseUrl){
     mbRelay=createGbCallRelay({store:callJournal,publicOrigin:publicBaseUrl,
+      report:event=>console.error(JSON.stringify({event:'agent.mb_call_relay_failed',...event,
+        ...( /^[a-f0-9]{40}$/.test(env.RAILWAY_GIT_COMMIT_SHA??'') ? {sourceSha:env.RAILWAY_GIT_COMMIT_SHA}:{}),
+      })),
       validate:async(actor,id)=>{if(!await approvedCallMasana(actor,id))
         throw new Error('gb.call.masana_unavailable');},
     });
@@ -1780,7 +1810,8 @@ export async function startGatewayService(
       receipt:ngnStorage.readReceipt,reviewSecret:mbSendReviewSecret,
       // Explicit operator gates follow provider/cost/limits qualification; no
       // new live price or cash flow is activated by merely merging source.
-      ready:()=>env.MASANAWA_NGN_EXCHANGE_ENABLED==="true",
+      ready:()=>env.MASANAWA_NGN_EXCHANGE_ENABLED==="true" &&
+        qualifiedNgnExchange(env.MASANAWA_NGN_EXCHANGE_QUALIFICATION),
     }:undefined);
   const gbSendReview: GbSendPorts | undefined =
     options.appOptions?.gbSendReview ??
@@ -1793,9 +1824,9 @@ export async function startGatewayService(
             // name, user-provided ID, unverified contact or human chat.
             // Active user + mutual block + operator-safety checks are required.
             const result = await featurePool.query<{
-              user_id: string; handle: string; display_name: string;
+              user_id: string; handle: string; display_name: string; avatar_url:string|null;
             }>(`
-              SELECT p.user_id,p.handle,p.display_name
+              SELECT p.user_id,p.handle,p.display_name,p.avatar_url
               FROM talks.public_profiles p
               JOIN identity.users u
                 ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
@@ -1818,7 +1849,7 @@ export async function startGatewayService(
             const row = result.rows[0];
             return row ? {
               userId: row.user_id, username: row.handle,
-              displayName: row.display_name, active: true,
+              displayName: row.display_name, active: true,avatarUrl:row.avatar_url,
             } : null;
           },
           balance: createPostgresGbWalletRepository(featurePool).read,
@@ -2101,6 +2132,15 @@ export async function startGatewayService(
     throw error;
   }
 
+  let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let replyRecoveryRunning=false;
+  const recoverReplies=async()=>{
+    if(replyRecoveryRunning||drain.isDraining()||!database.featurePool)return;
+    replyRecoveryRunning=true;
+    try { await recoverExpiredMbReplies(database.featurePool); }
+    catch { console.error(JSON.stringify({event:"agent.mb_reply_recovery_failed",code:"unavailable"})); }
+    finally { replyRecoveryRunning=false; }
+  };
   const lifecycle = await startNodeService({
     serviceName: "gateway",
     server: app,
@@ -2109,12 +2149,14 @@ export async function startGatewayService(
     ...(options.logger ? { logger: options.logger } : {}),
     onDraining: () => {
       drain.beginDraining();
+      clearInterval(replyRecoveryTimer);
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
       }
     },
     onAfterClose: async () => {
+      clearInterval(replyRecoveryTimer);
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -2125,6 +2167,12 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
+
+  if(database.featurePool){
+    await recoverReplies();
+    replyRecoveryTimer=setInterval(()=>{void recoverReplies()},30000);
+    replyRecoveryTimer.unref();
+  }
 
   const runOwnerAccessSweep = async () => {
     if (

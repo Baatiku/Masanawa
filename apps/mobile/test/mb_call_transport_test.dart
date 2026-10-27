@@ -46,7 +46,8 @@ void main() {
       if (request.path == '/v1/gb/calls/admissions/call_123/grant') {
         return _ok({'grant':{'transport':'gateway_relay','token':List.filled(43,'a').join(),
           'websocketUrl':'wss://gateway.example/agent/live/stream',
-          'model':'gemini-live','voiceName':'Aoede','expiresAt':expiry}});
+          'model':'gemini-live','voiceName':'Aoede','expiresAt':expiry,
+          'callId':'0199f0d0-0000-7000-8000-000000000001'}});
       }
       throw StateError('Unexpected route ${request.path}');
     });
@@ -58,7 +59,8 @@ void main() {
     expect((await transport.readOriginal(key)).id,admission.id);
     final grant = await transport.grant(admission);
     expect(grant.transport,AgentLiveVoiceTransport.gatewayRelay);
-    expect(grant.callId,admission.id);
+    expect(grant.callId,'0199f0d0-0000-7000-8000-000000000001');
+    expect(grant.callId,isNot(admission.id));
     current='owner-2';
     await expectLater(transport.readOriginal(key),throwsStateError);
     expect(paths.length,4);

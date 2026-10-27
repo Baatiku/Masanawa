@@ -15,8 +15,9 @@ String? exactGbRecipientHandle(String value) {
 }
 
 class GbRecipientIdentity {
-  const GbRecipientIdentity(this.id,this.handle,this.name);
+  const GbRecipientIdentity(this.id,this.handle,this.name,{this.avatarUrl});
   final String id,handle,name;
+  final String? avatarUrl;
 
   factory GbRecipientIdentity.read(Object? data,String expectedHandle) {
     if(data is! Map || data['recipient'] is! Map) {
@@ -30,7 +31,11 @@ class GbRecipientIdentity {
        name is! String || name.trim().isEmpty || name.length>160) {
       throw const FormatException('Invalid recipient identity');
     }
-    return GbRecipientIdentity(id,handle,name);
+    final avatar=recipient['avatarUrl'];
+    final uri=avatar is String?Uri.tryParse(avatar):null;
+    final safeAvatar=uri!=null && uri.scheme=='https' && uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty && !uri.hasFragment && avatar.length<=2048 ? avatar : null;
+    return GbRecipientIdentity(id,handle,name,avatarUrl:safeAvatar);
   }
 }
 
@@ -91,14 +96,15 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
   void didUpdateWidget(covariant GbRecipientField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if(oldWidget.owner!=widget.owner ||
-       oldWidget.controller!=widget.controller) _invalidate();
+       oldWidget.controller!=widget.controller ||
+       (oldWidget.enabled && !widget.enabled)) _invalidate();
   }
 
   @override
   void dispose() {_invalidate();super.dispose();}
 
   bool _same(GbWalletOwner owner,int generation,String handle) {
-    if(!mounted || _generation!=generation || owner!=widget.owner ||
+    if(!mounted || !widget.enabled || _generation!=generation || owner!=widget.owner ||
        exactGbRecipientHandle(widget.controller.text)!=handle)return false;
     final session=ref.read(sessionProvider);
     return session is SessionSignedIn && session.user.id==owner.accountId &&
@@ -163,7 +169,10 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
       ),
       if(verified!=null)Card(
         child:Padding(padding:const EdgeInsets.all(12),child:Row(children:[
-          CircleAvatar(child:Text(verified.name.trim()[0].toUpperCase())),
+          CircleAvatar(
+            foregroundImage:verified.avatarUrl==null?null:NetworkImage(verified.avatarUrl!),
+            onForegroundImageError:verified.avatarUrl==null?null:(_, _) {},
+            child:Text(verified.name.trim().characters.first.toUpperCase())),
           const SizedBox(width:10),
           Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(verified.name,maxLines:2,overflow:TextOverflow.ellipsis,
@@ -174,11 +183,14 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
           ])),
           const Icon(Icons.verified_user_outlined,
             semanticLabel:'Account identity verified'),
+          IconButton(tooltip:'Cancel recipient verification',
+            onPressed:widget.enabled?()=>setState(_invalidate):null,
+            icon:const Icon(Icons.close)),
         ]))),
       if(_error!=null)Padding(padding:const EdgeInsets.only(top:6),
         child:Row(children:[
           Expanded(child:Text(_error!,style:TextStyle(color:Theme.of(context).colorScheme.error))),
-          TextButton(onPressed:owner==null || handle==null?null:
+          TextButton(onPressed:owner==null || handle==null || !widget.enabled?null:
             ()=>_lookup(owner,handle),child:const Text('Retry')),
         ])),
       if(verified==null && _error==null && !_checking && handle!=null)

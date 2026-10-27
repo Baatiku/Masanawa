@@ -23,7 +23,9 @@ export interface CallRecord {
   readonly expiresAt: string;
   readonly endReason?: CallEndReason | null;
   readonly groupId?: string | null;
-  readonly connectionEvidence: "client_report" | null;
+  readonly connectionEvidence: "client_report" | "server_relay" | null;
+  readonly mbUsage?: {readonly admissionId:string;readonly verifiedConnectedMs:number;
+    readonly chargedMb:number|null;readonly state:string};
 }
 export interface CallCursor { readonly createdAt: string; readonly callId: string }
 export interface CallHistoryRepository {

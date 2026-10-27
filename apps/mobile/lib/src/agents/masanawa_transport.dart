@@ -16,6 +16,24 @@ const String kAgentBaseUrl = String.fromEnvironment(
   defaultValue: 'https://masanawa-gateway-production-338f.up.railway.app',
 );
 
+ApiException _replyStreamFailure(Map<String, dynamic> event) {
+  return switch (event['code']) {
+    'gb.wallet.insufficient_mb' => const ApiException(
+      'Not enough data MB for a reply. Add data and try again.',
+      statusCode: 409,
+      code: 'gb.wallet.insufficient_mb',
+    ),
+    'gb.wallet.account_frozen' => const ApiException(
+      'This wallet is restricted. Contact support before trying again.',
+      statusCode: 403,
+      code: 'gb.wallet.account_frozen',
+    ),
+    _ => const ApiException(
+      'The reply was interrupted. Check message status before retrying.',
+    ),
+  };
+}
+
 class _GatewayClient {
   _GatewayClient({
     required Dio dio,
@@ -416,7 +434,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
               }
               continue;
             }
-            if (type == 'error') throw const ApiException('The reply was interrupted. Check message status before retrying.');
+            if (type == 'error') throw _replyStreamFailure(event);
             if (type == 'done') { done = event; break; }
           }
           if (done != null) {
@@ -516,7 +534,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
           requestId:requestId,onSendProgress:onUploadProgress)) {
           final type=event['type'];
           if(const ['delta','audio','audio-transcript','done','error'].contains(type))outputStarted=true;
-          if(type=='error')throw const ApiException('The reply was interrupted. Check message status before retrying.');
+          if(type=='error')throw _replyStreamFailure(event);
           if(type=='delta' && event['text'] is String){
             final text=event['text'] as String;
             if(streamedText.length+text.length>32000)throw const ApiException('Invalid streamed reply');

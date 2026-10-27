@@ -1834,13 +1834,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   Future<void> _finishMbAdmission(
     MbCallFlow flow, MbCallAdmission admission,
   ) async {
+    bool sameOwner() {
+      final current=ref.read(sessionProvider);
+      return current is SessionSignedIn && current.user.id==flow.ownerId;
+    }
     try {
       final result = await flow.finish(admission);
       if (result.state != 'completed' && result.state != 'failed') {
         throw StateError('Call settlement is still pending.');
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && sameOwner()) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(
             'Call settlement is unconfirmed. Your original call is saved '
@@ -1849,7 +1853,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         ));
       }
     }
-    if (mounted) {
+    if (mounted && sameOwner()) {
+      ref.read(callHistoryRevisionProvider.notifier).state++;
       unawaited(ref.read(walletProvider.notifier).refresh());
     }
   }
@@ -1926,7 +1931,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         );
         if (!stillOwner()) throw StateError('Call account changed before grant.');
         final grant = await flow.transport.grant(admission);
-        history = reporter.bind(owner, admission.id);
+        // The trusted MB relay owns connection evidence and history timestamps.
+        // Legacy lifecycle outbox writes must not use an admission as a UUID.
+        history = reporter.bind(owner, null);
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         session = LiveVoiceSession(
           grant: grant,
@@ -2062,7 +2069,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
         if (!stillOwner()) throw StateError('Call account changed before grant.');
         final grant = await flow.transport.grant(admission);
-        history = reporter.bind(owner, admission.id);
+        // The trusted MB relay owns connection evidence and history timestamps.
+        // Legacy lifecycle outbox writes must not use an admission as a UUID.
+        history = reporter.bind(owner, null);
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         session = LiveVoiceSession(
           grant: grant,

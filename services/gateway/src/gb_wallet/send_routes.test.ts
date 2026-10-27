@@ -11,8 +11,8 @@ const target={userId:"recipient-b",username:"bello.user",displayName:"Bello",act
 function setup(overrides:Partial<GbSendPorts>={}) {
   const transfer=vi.fn(async({operationId,amountMb}:{operationId:string;amountMb:number})=>
     ({operationId,amountMb,state:"completed" as const}));
-  const readTransfer=vi.fn(async(_actor:unknown,operationId:string)=>
-    ({operationId,amountMb:200,state:"completed" as const}));
+  const readTransfer=vi.fn(async(_actor:unknown,_operationId:string)=>null as
+    {operationId:string;amountMb:number;state:"completed"}|null);
   const ports:GbSendPorts={
     authorize:async header=>{
       if(header!=="Bearer current")throw new GbSendError(401,"unauthorized");
@@ -34,6 +34,7 @@ function setup(overrides:Partial<GbSendPorts>={}) {
 describe("exact whole-MB internal Send review",()=>{
   it("reads the original operation as the debit actor only without POST replay",async()=>{
     const {app,transfer,readTransfer}=setup();
+    readTransfer.mockImplementation(async(_actor,operationId)=>({operationId,amountMb:200,state:"completed"}));
     const id="send_12345678901234567890123456789012";
     expect((await app.inject({method:"GET",url:`/v1/gb/wallet/send/receipt/${id}`})).statusCode).toBe(401);
     const headers={authorization:"Bearer current"};
@@ -94,6 +95,23 @@ describe("exact whole-MB internal Send review",()=>{
     expect(replay.statusCode).toBe(200);
     expect(transfer.mock.calls[1]).toEqual(transfer.mock.calls[0]);
     // Immutable PG operation key is identical on every acceptance replay.
+  });
+
+  it("recovers a completed original after expiry and recipient revocation without transferring again",async()=>{
+    const original=setup();const headers={authorization:'Bearer current'};
+    const quote=await original.app.inject({method:'POST',url:'/v1/gb/wallet/send/quote',headers,
+      payload:{username:'bello.user',amountMb:200}});
+    const receipt={operationId:quote.json().operationId,amountMb:200,state:'completed' as const};
+    const recovered=setup({now:()=>new Date('2026-10-26T00:00:00Z'),
+      resolveRecipient:async()=>null,readTransfer:async()=>receipt});
+    const result=await recovered.app.inject({method:'POST',url:'/v1/gb/wallet/send/confirm',headers,
+      payload:{reviewToken:quote.json().reviewToken,reviewAccepted:true}});
+    expect(result.statusCode).toBe(200);expect(result.json().receipt).toEqual(receipt);
+    expect(recovered.transfer).not.toHaveBeenCalled();
+    const mismatched=setup({readTransfer:async()=>({...receipt,amountMb:199})});
+    expect((await mismatched.app.inject({method:'POST',url:'/v1/gb/wallet/send/confirm',headers,
+      payload:{reviewToken:quote.json().reviewToken,reviewAccepted:true}})).statusCode).toBe(503);
+    expect(mismatched.transfer).not.toHaveBeenCalled();
   });
 
   it("does not allow Welcome-only MB to fund Send or permit self-send",async()=>{

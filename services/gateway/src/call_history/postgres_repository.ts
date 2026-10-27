@@ -11,6 +11,10 @@ interface Row extends Record<string, unknown> {
   expired: boolean; direction?: "incoming" | "outgoing"; incoming_outcome?: string | null;
 }
 const selection = `h.*, (h.expires_at <= clock_timestamp()) AS expired,
+  (SELECT jsonb_build_object('state',c.state,'verifiedConnectedMs',c.verified_connected_ms,
+     'chargedMb',c.charged_mb,'admissionId',c.admission_id,'updatedAt',c.updated_at)
+   FROM gb_wallet.call_admissions c WHERE c.tenant_id=h.tenant_id AND c.user_id=h.user_id
+     AND c.admission_id=h.mb_admission_id AND c.character_id=h.character_id) AS mb_usage,
   (SELECT member.group_id::text FROM agents.masana_call_group_participants member
    WHERE member.tenant_id=h.tenant_id AND member.user_id=h.user_id AND member.call_id=h.call_id) AS group_id`;
 const scope = `h.tenant_id=$1 AND h.user_id=$2
@@ -22,14 +26,19 @@ const roster = `EXISTS (SELECT 1 FROM agents.platform_agent_profiles p
   WHERE p.tenant_id=h.tenant_id AND p.character_id=h.character_id
     AND a.visible_in_user_app)`;
 function record(row: Row): CallRecord {
+  const mb=row.mb_usage as {state:string;verifiedConnectedMs:number|string;chargedMb:number|null;admissionId:string;updatedAt:string}|null|undefined;
+  const terminal=mb?.state==='completed'||mb?.state==='failed';
+  const mbState=terminal?'ended':mb?.state==='connected'?'active':'connecting';
   return {
     callId: row.call_id, characterId: row.character_id, displayName: row.display_name,
     direction: row.direction ?? "outgoing", kind: "audio",
-    state: row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.connected_at ? "active" : row.expired ? "expired" : "connecting",
+    state: mb ? mbState : row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.connected_at ? "active" : row.expired ? "expired" : "connecting",
     createdAt: row.created_at.toISOString(), connectedAt: row.connected_at?.toISOString() ?? null,
     endedAt: row.ended_at?.toISOString() ?? null, expiresAt: row.expires_at.toISOString(),
     endReason: row.end_reason ?? null,groupId:row.group_id ?? null,
-    connectionEvidence: row.connected_at ? "client_report" : null,
+    connectionEvidence: mb ? "server_relay" : row.connected_at ? "client_report" : null,
+    ...(mb ? {mbUsage:{admissionId:mb.admissionId,verifiedConnectedMs:Number(mb.verifiedConnectedMs),
+      chargedMb:mb.chargedMb,state:mb.state}} : {}),
   };
 }
 export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): CallHistoryRepository & CallHistoryRecorder {
@@ -63,6 +72,11 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
             OR position($6 in lower(h.call_id::text))>0
             OR position($6 in lower(COALESCE(to_jsonb(h)->>'direction','outgoing')))>0
             OR position($6 in lower(CASE
+              WHEN h.mb_admission_id IS NOT NULL THEN (SELECT CASE c.state
+                WHEN 'completed' THEN 'ended' WHEN 'failed' THEN 'ended'
+                WHEN 'connected' THEN 'active' ELSE 'connecting' END
+                FROM gb_wallet.call_admissions c WHERE c.tenant_id=h.tenant_id AND c.user_id=h.user_id
+                  AND c.admission_id=h.mb_admission_id)
               WHEN (to_jsonb(h)->>'incoming_outcome') IN ('missed','declined','cancelled') THEN to_jsonb(h)->>'incoming_outcome'
               WHEN h.ended_at IS NOT NULL THEN 'ended'
               WHEN h.connected_at IS NOT NULL THEN 'active'
@@ -88,7 +102,7 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
           THEN COALESCE(h.connected_at,clock_timestamp()) ELSE h.connected_at END,
         ended_at=CASE WHEN $5='ended' THEN COALESCE(h.ended_at,clock_timestamp()) ELSE h.ended_at END,
         end_reason=CASE WHEN $5='ended' THEN COALESCE(h.end_reason,$6::text) ELSE h.end_reason END
-        WHERE ${scope} AND ${roster} AND h.call_id=$4::uuid RETURNING ${selection}`,
+        WHERE ${scope} AND ${roster} AND h.call_id=$4::uuid AND h.mb_admission_id IS NULL RETURNING ${selection}`,
       [input.tenantId,input.userId,input.characterIds,input.callId,input.event,input.endReason??null]);
       return result.rows[0] ? record(result.rows[0]) : null;
     },
