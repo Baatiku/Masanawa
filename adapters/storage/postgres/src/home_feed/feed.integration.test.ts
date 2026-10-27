@@ -138,10 +138,11 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   const items=(await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,'Paid lesson')).items;
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({id:campaign.postId,author:{type:'human',id:'fan_one',
-    handle:'musa_verified'},verifiedViewCount:0,shareEarnEligible:true,boostEligible:true});
+    handle:'musa_verified'},verifiedViewCount:0,promotionActive:true,
+    shareEarnEligible:true,boostEligible:true});
   await repo.setSave('tenant_test','fan_other',campaign.postId,true);
   expect((await new PgSavedLibraryRepository(pool).list('tenant_test','fan_other',null,10))[0]?.post)
-    .toMatchObject({id:campaign.postId,verifiedViewCount:0});
+    .toMatchObject({id:campaign.postId,verifiedViewCount:0,promotionActive:true});
   for(const viewer of ['distinct_viewer_a','distinct_viewer_b']){
    const challenge=await paid.beginView('tenant_test',viewer,campaign.postId);
    await pool.query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '7 seconds'

@@ -40,6 +40,9 @@ export class PgSavedLibraryRepository {
           'promotionDeliveredViews',(SELECT count(*)::int FROM feed.promotion_view_charges c
             JOIN feed.promotion_campaigns b ON b.tenant_id=c.tenant_id AND b.id=c.campaign_id
             WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id),
+          'promotionActive',EXISTS(SELECT 1 FROM feed.promotion_campaigns b
+            WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
+              AND b.state='active' AND b.remaining_views>0),
           'shareEarnEligible',EXISTS(SELECT 1 FROM feed.promotion_campaigns b
             WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id AND b.state='active'
               AND b.remaining_views>0 AND b.sponsor_id<>$2

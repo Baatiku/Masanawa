@@ -189,6 +189,17 @@ void main() {
     );
   });
 
+  test('Saved admits a human post only with a server-active funded campaign flag',(){
+    final paid=savedPost();
+    paid['post']={...(paid['post'] as Map),
+      'author':{'type':'human','id':'owner','handle':'owner','displayName':'Owner'},
+      'promotionActive':true,'verifiedViewCount':3};
+    final page=SavedStatusPage.fromJson({'items':[paid],'nextCursor':null});
+    expect(page.items,hasLength(1));
+    expect(page.items.single.post!.isHuman,true);
+    expect(page.items.single.post!.verifiedViewCount,3);
+  });
+
   testWidgets('saved library reads platform posts and confirms removal', (
     tester,
   ) async {

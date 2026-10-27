@@ -162,8 +162,6 @@ void main() {
     await tester.tap(find.byTooltip('Post options'));
     await tester.pumpAndSettle();
     expect(find.text('Tip MB'),findsOneWidget);
-    await tester.tap(find.byTooltip('Post options'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Tip MB'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('50 MB').first);
@@ -175,6 +173,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(confirmations,0);
     expect(store.value,isNull);
+    await tester.tap(find.byTooltip('Post options'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tip MB'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('50 MB').first);

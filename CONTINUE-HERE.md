@@ -4,28 +4,28 @@
 
 Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.md` — these replace the former 177-screen/820-item old product. Keep this one handoff as a status checkpoint; source, exact Git SHA, tests and provider verification are independently authoritative.
 
+**27 October Status financial source checkpoint:** #516, `9711a093`, MERGED into main: migrations/API for quote, purchased-MB reserve, independently sponsored Boost, separate editorial approval, distinct sponsor refund, opaque referral URL, qualified-view charge with 50% half-MB pending liability, 72h disabled-state timestamps and owner deletion. First broad CI caught the missing `ngn_exchange` wallet operation kind; fixed, with exact-head Foundation #1581, retained PostgreSQL #109 and roster #413 PASS. Main financial switch remains deliberately hard OFF. #517 (head to check on GitHub) adds status read projections, text-only compact composer, Boost/Share options, original-key journal and My Promotions/earnings screen, with Flutter and PostgreSQL CI in progress. Do not enable because guest/public attribution and anti-bot validation are not production-safe; no legal/ARCON clearance, remote media/CDN purge, automatic timed sweeper, backed reward release/Data redemption or provider qualification. No APK until the full Status/feed card scope is integrated and requested readiness checks pass. C14 remains the one checked SPE task; do not promote partial groundwork to completion.
+
 **27 October owner-approved next Home (renamed Status)/Wallet product direction (financial features planning only):** Paid user text/image promotions, immediate no-pacing feed eligibility, verified view counts on every card, 1 MB per qualified view, 0.5 MB sharer/0.5 MB platform referred split, compact Facebook-inspired paid composer without default Sponsored badges, insufficient-MB Recharge, complete Wallet Activity/receipts and Notifications Activity/Preferences lifecycle events, and a single Status card texture pass are fully grouped in [the SPE checklist](docs/STATUS-PROMOTE-AND-EARN-IMPLEMENTATION-CHECKLIST-20261027.md). Exactly five root tabs remain, no free human composer or human chats. The 64-item SPE audit now also covers safe advertiser destinations, post edits/re-review, external unfurls, visitor privacy, referral link forwarding, earning appeals, reward terms, **admin-funded Share & Earn on selected official Masana posts**, and capacity. **SPE-C14 is the small, independent Home-first navigation rename** (existing Status screen, far-left bottom tab, Chats second, `/home` default and legacy links intact); it does not add a sixth tab. Paid campaign/reward work remains unimplemented until source-verified, tested and merged. Active existing R/UX and fixed-IP no-APK constraints remain.
 
 **27 October next owner extension (scope/checklist, not provider activation):** Add compact **Boost** on existing approved Home cards so any eligible user can fund up to N extra qualified views of their own, another person's or a platform Masana post at 1 MB/view. Preserve per-booster ledger/Wallet Activity, existing Recharge, 50% tracked referral share, exact single-view attribution and no extra tab/paid pacing. Exhausted human paid posts leave Home immediately, remain owner-profile-only **72 hours** for Boost Again/Delete and then purge controlled content/media, retaining required financial records. Official editorial Masana originals do not vanish when someone else's boost ends. Add a separate **country-aware email-OTP signup/Profile batch** with editable international dial code and validated E.164 number, auto-loaded country-dependent states/provinces which the **user selects**, and privacy-safe future ad-personalization consent (not yet enabled). The unique SPE checklist is extended to **88 items across A–F**. Signup completion's old Chats redirect is also being corrected to the established Home default. No international funding/data activation is implied.
 
 ## Latest implementation checkpoint
 
-**27 October communication/wallet completion merged:** PR #514 merged at
-`c17260e594a4b43cd937b8dc71ed266001fe9796`, verified head
-`a30506903c1c51032ee6c41de3548d73887d2f74`; all EIGHT applicable hosted checks PASS
-(Foundation, Mobile Build, retained PG, both rosters, Gateway contracts, voice-note,
-Flutter message/recording/live-call), APK SKIPPED. Expanded local mobile: 69 pass;
-workspace TS and Flutter analysis pass. Atomic MB reply command+hold and
-reply+capture, expired undelivered recovery, canonical MB-call history/receipt and
-no legacy client evidence writes, redacted deployed-SHA diagnostics, verified
-recipient avatars/cancellation, immutable original Send recovery, carrier marks and
-explicit ported-number-safe clipboard paste, and exact NGN economics qualification
-are merged. Close source W02/W05/T03/T05/D01. Keep R02/R03/R06/F03/W04 open only for
-actual provider/voice/connected-second qualification, failing deployed-stage/cause
-correlation and real cost/fee/operator evidence; no phone-only tasks. No production
-reply/call/exchange activation, deployment approval, APK or fixed-IP change.
-#507's alternate reply-billing branch is preserved and superseded; never compose
-both charge paths. Use the canonical roadmap for current item evidence.
+**27 October owner-assigned communication/wallet completion source batch (not yet merged):**
+`feat/communication-wallet-completion-oct27` from `ede57f79` takes R02/R03/R06/F03
+then W02/W04/W05/T03/T05/D01. Atomic command+reply MB reserve/complete/fail with
+restart expiry recovery; one canonical call-history UUID per admission and trusted
+usage projection; no legacy client history writes for MB; redacted relay logs;
+NGN cost/fee/margin qualification; exact original Send recovery; canonical
+recipient avatars/cancellation; carrier marks and deliberate clipboard paste.
+Grouped mobile 69 passed, workspace TypeScript passed; final full PG18/pgvector,
+Flutter and exact-head hosted checks remain in progress. Preserve open #507's
+branch; this batch replaces its non-atomic reply billing approach and must never
+compose both charging paths. Real provider/model/voice qualification and actual
+funding/cost evidence remain unverified, historical token-500 cause remains unknown,
+and no deployment approval/production flag/APK/fixed-IP change is inferred.
+
 
 **27 October chat visual checkpoint, main `efc2d1eb`:** #508 merged the owner-reference Masana chat pass with exact-head Mobile Build, Foundation, voice-note, communication and roster checks green. It increases the canonical header portrait, keeps Wallet/Call visible and moves Search into More, adds direct Camera, a quiet original chat texture, a wider avatar-bearing voice player, and a separate recording/review panel. A first CI run exposed hold-release and Send accessibility regressions; both were fixed before merge. The source UX item is **UX-F05** (the pre-existing wallet density item is UX-F04); no Android visual/microphone outcome or APK is claimed. #501/#503 from the other window already switched active calls to MB source and hardened original admission matching, so re-read current main before any further call changes. Gateway production rollout/provider qualification, 1 MB completed-reply charging, installed-build incident evidence and remaining wallet/Status/provider work stay separately open.
 

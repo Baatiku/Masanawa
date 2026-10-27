@@ -17,6 +17,7 @@ function item(r:Row){
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
   promotionDeliveredViews:Number(r.promotion_delivered_views??0),
+  promotionActive:Boolean(r.promotion_active),
   shareEarnEligible:Boolean(r.share_earn_eligible),boostEligible:Boolean(r.boost_eligible),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
   viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
@@ -69,6 +70,8 @@ const projection=`p.*,
  (SELECT count(*)::int FROM feed.promotion_view_charges c JOIN feed.promotion_campaigns b
   ON b.tenant_id=c.tenant_id AND b.id=c.campaign_id
   WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id) AS promotion_delivered_views,
+ EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id
+  AND b.post_id=p.id AND b.state='active' AND b.remaining_views>0) AS promotion_active,
  EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
    AND b.state='active' AND b.remaining_views>0 AND b.sponsor_id IS DISTINCT FROM $2
    AND (p.author_type='masana' OR p.author_user_id IS DISTINCT FROM $2)) AS share_earn_eligible,
