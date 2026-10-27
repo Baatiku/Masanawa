@@ -11,10 +11,13 @@ test('reports only observed outbound IPv4 and bounded read-only data catalogue',
    {code:'DATA',name:'Mobile Data',country_code:'NG'},{code:'AIRTIME',name:'Airtime',country_code:'NG'}]}};
   if(url.includes('/bills/'))return {status:200,body:{status:'success',data:[{biller_code:'MTN',name:'MTN Data'}]}};
   return {status:200,body:{status:'success',data:[{item_code:'D1',name:'1 GB',amount:500,currency:'NGN',allowance_gb:1,validity_days:30,
+   short_name:'1 GB monthly',validity_period:'30 Days',
    customer_id:'private-phone',authorization:'fixture-private-key'}]}};
  }});
  assert.equal(events[0].event,'flutterwave.outbound_ipv4');assert.equal(events[0].static,false);
  assert.equal(events.find(e=>e.event==='flutterwave.data_item').itemCode,'D1');
+ assert.equal(events.find(e=>e.event==='flutterwave.data_item').validityPeriod,'30 Days');
+ assert.equal(events.find(e=>e.event==='flutterwave.data_item').shortName,'1 GB monthly');
  assert.equal(events.at(-1).code,'read_complete');
  assert.equal(requests.length,4);assert.ok(!requests.some(r=>/payment|validate|AIRTIME/.test(r.url)));
  assert.equal(requests[0].headers,undefined);

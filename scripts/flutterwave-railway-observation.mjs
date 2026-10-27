@@ -20,6 +20,10 @@ export function getJson(url,headers={}) {
 }
 const safeCode=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value)?value:null;
 const safeLabel=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,180):null;
+// Keep provider validity metadata verbatim and bounded. A bare number has no
+// assumed unit and a missing/null value must never become a guessed duration.
+const safeValidity=value=>typeof value==='string'?safeLabel(value).slice(0,80):
+  typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1_000_000?value:null;
 const amount=value=>/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(String(value))?String(value):null;
 const isPublicV4=value=>isIP(value)===4&&!/^(?:0\.|10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(value);
 
@@ -61,6 +65,7 @@ export async function observeRuntime({secretKey,get=getJson,report=entry=>consol
           const itemCode=safeCode(item.item_code);if(!itemCode)continue;
           // Product fields only. No response messages, credentials, phone or customer data.
           report({event:'flutterwave.data_item',billerCode,itemCode,name:safeLabel(item.name),
+            shortName:safeLabel(item.short_name),validityPeriod:safeValidity(item.validity_period),
             amount:amount(item.amount),currency:item.currency==null||item.currency==='NGN'?'NGN':'UNSUPPORTED',
             allowanceGb:Number.isSafeInteger(item.allowance_gb)?item.allowance_gb:null,
             validityDays:Number.isSafeInteger(item.validity_days)?item.validity_days:null,
