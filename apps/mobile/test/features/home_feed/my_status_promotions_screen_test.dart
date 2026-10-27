@@ -70,7 +70,8 @@ void main(){
      api:api,onBoostAgain:(_)async{})));
    await tester.pumpAndSettle();
    expect(find.textContaining('3/8 qualified views'),findsOneWidget);
-   expect(find.textContaining('0 MB still reserved'),findsOneWidget);
+   expect(find.textContaining('0 MB still reserved'),findsNWidgets(2));
+   expect(find.textContaining('5 MB still reserved'),findsNothing);
    expect(find.textContaining('5 MB released'),findsOneWidget);
    expect(find.textContaining('Review reason: Unsafe advertising claim'),findsOneWidget);
    await tester.pumpWidget(const SizedBox.shrink());
