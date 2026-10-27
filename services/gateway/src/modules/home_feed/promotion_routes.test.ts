@@ -22,7 +22,12 @@ describe('SPE promotion routes inherit the established principal and staff autho
    isEditor:async()=>true,enabled:()=>false});
   const result=await server.inject({method:'POST',url:'/v1/promotions/quotes',
    payload:{body:'Bad financial acceptance',targetViews:100}});
-  expect(result.statusCode).toBe(503);await server.close();
+  expect(result.statusCode).toBe(503);
+  const capabilities=await server.inject({method:'GET',url:'/v1/promotions/capabilities'});
+  expect(capabilities.statusCode).toBe(200);
+  expect(capabilities.json()).toMatchObject({enabled:false,priceMbPerQualifiedView:1});
+  expect(capabilities.headers['cache-control']).toBe('private, no-store');
+  await server.close();
  });
  it('ignores forged payer authority and enforces original financial idempotency header',async()=>{
   const server=Fastify();const {port,events}=fake();

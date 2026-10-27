@@ -67,8 +67,8 @@ export class FeedService {
   const rows = this.masanaOnly
    ? await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId,search,true)
    : search===undefined
-     ? await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId)
-     : await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId,search);
+     ? await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId,undefined,false)
+     : await this.repo.list(tenant,viewer,mode,after,21,authorMasanaId,search,false);
   const items=rows.slice(0,20);
   const last=items[items.length-1];
   return {items,nextCursor:rows.length>20&&last?Buffer.from(JSON.stringify(
@@ -77,7 +77,7 @@ export class FeedService {
  async detail(tenant:string,viewer:string|null,id:string){requireId(tenant);requirePostId(id);
   const post=this.masanaOnly
     ? await this.repo.find(tenant,viewer,id,true)
-    : await this.repo.find(tenant,viewer,id);
+    : await this.repo.find(tenant,viewer,id,false);
   if(!post)throw new FeedError(404,"post_not_found");return post}
  async publish(actor:Actor,value:Publish){
   // Staff must use the independently reviewed editorial workflow. Only a

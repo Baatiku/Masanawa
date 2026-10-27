@@ -66,7 +66,7 @@ export class PgSavedLibraryRepository {
                 AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block
                   WHERE block.tenant_id=p.tenant_id AND block.blocked
                     AND ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
-                     OR (block.viewer_user_id=p.author_user_id AND block.subject_user_id=$2)))))
+                     OR (block.viewer_user_id=p.author_user_id AND block.subject_user_id=$2))))
             AND EXISTS(SELECT 1 FROM feed.promotion_campaigns paid
               WHERE paid.tenant_id=p.tenant_id AND paid.post_id=p.id AND paid.state='active'
                 AND paid.remaining_views>0)))

@@ -6,6 +6,7 @@ import {PgSavedLibraryRepository} from "./saved_repository.js";
 import {FeedService} from "@masanawa/feed";
 import {PgHomeFeedRepository} from "./repository.js";
 import {PgEditorialReviewRepository} from "./review_repository.js";
+import {PgStatusPromotions} from "./promotions.js";
 const conn=process.env.MASANAWA_TEST_DATABASE_URL;
 const integration=conn?describe:describe.skip;
 integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
@@ -121,6 +122,37 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect((await repo.list("tenant_test",null,"for_you",null,30))).toHaveLength(1);
   expect((await repo.list("tenant_other",null,"for_you",null,30))).toHaveLength(0);
   expect((await repo.find("tenant_test","fan_one",first.id))?.verifiedViewCount).toBe(0);
+ });
+ it('joins only reviewed funded human campaigns to the existing Home and Saved projections, then hides on exhaustion',async()=>{
+  const pool=isolated.pool;
+  await pool.query(`INSERT INTO gb_wallet.accounts(tenant_id,account_kind,account_id,purchased_mb)
+    VALUES('tenant_test','human','fan_one',6) ON CONFLICT DO NOTHING`);
+  const paid=new PgStatusPromotions(pool,'long-test-secret-for-real-postgres-qualified-home',
+    'https://status.example.test');
+  const q=await paid.quote({tenantId:'tenant_test',sponsorId:'fan_one',
+    body:'Paid lesson for all readers',targetViews:2});
+  const campaign=await paid.confirm('tenant_test','fan_one',q.quoteId,'original-home-paid-0001');
+  const mixed=new FeedService(repo,async()=>true,async()=>false,false);
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,'Paid lesson')).items).toEqual([]);
+  await paid.review('tenant_test','distinct_staff',campaign.id,true);
+  const items=(await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,'Paid lesson')).items;
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({id:campaign.postId,author:{type:'human',id:'fan_one',
+    handle:'musa_verified'},verifiedViewCount:0,shareEarnEligible:true,boostEligible:true});
+  await repo.setSave('tenant_test','fan_other',campaign.postId,true);
+  expect((await new PgSavedLibraryRepository(pool).list('tenant_test','fan_other',null,10))[0]?.post)
+    .toMatchObject({id:campaign.postId,verifiedViewCount:0});
+  for(const viewer of ['distinct_viewer_a','distinct_viewer_b']){
+   const challenge=await paid.beginView('tenant_test',viewer,campaign.postId);
+   await pool.query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '7 seconds'
+      WHERE id=$1`,[challenge.challengeId]);
+   expect(await paid.finishView('tenant_test',viewer,challenge.challengeId,
+    {visibleFraction:0.8,foreground:true,engaged:true})).toMatchObject({qualified:true,payable:true});
+  }
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,'Paid lesson')).items).toEqual([]);
+  expect(await new PgSavedLibraryRepository(pool).list('tenant_test','fan_other',null,10)).toEqual([]);
+  expect((await paid.mine('tenant_test','fan_one')).inactivePosts).toEqual([
+    expect.objectContaining({postId:campaign.postId})]);
  });
  it("following uses the authoritative masana.follows table",async()=>{
   await isolated.pool.query("INSERT INTO masana.follows(tenant_id,fan_user_id,character_id) VALUES($1,$2,$3)",["tenant_test","fan_one","masana_one"]);
