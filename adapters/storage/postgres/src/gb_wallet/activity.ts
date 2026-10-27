@@ -17,6 +17,15 @@ export interface GbActivityEntry {
   readonly kind: string;
   readonly status: "completed" | "reversed";
   readonly createdAt: string;
+  readonly details?:GbActivityReceiptDetails;
+}
+export interface GbActivityReceiptDetails {
+  readonly counterpartyKind?:"human"|"masana"|"service";
+  readonly counterpartyId?:string;
+  readonly counterpartyName?:string;readonly counterpartyHandle?:string;
+  readonly sourceBucket?:string;readonly targetBucket?:string;
+  readonly exchangedMb?:number;readonly exchangeKobo?:number;
+  readonly rateVersion?:string;readonly reversesOperationId?:string;
 }
 export type GbActivityUnitFilter = "all" | "MB" | "NGN";
 export interface GbActivityFacets {
@@ -36,6 +45,7 @@ type Row = {
   kind: string;
   status: string;
   created_at: string;
+  receipt_metadata?:unknown;
 };
 type SummaryRow = {unit:string;received:string;spent:string};
 
@@ -50,7 +60,68 @@ export interface GbActivityPeriodTotals {
 const validActor = (v: string) =>
   /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/.test(v);
 
+function receiptDetails(raw:unknown):GbActivityReceiptDetails|undefined {
+  if(raw==null)return undefined;
+  if(typeof raw!=="object"||Array.isArray(raw))throw new TypeError("invalid_activity_receipt");
+  const source=raw as Record<string,unknown>,result:Record<string,string|number>={};
+  for(const key of ['counterpartyId','rateVersion','reversesOperationId']){
+    const value=source[key];
+    if(value==null)continue;
+    if(typeof value!=="string"||!validActor(value))throw new TypeError("invalid_activity_receipt");
+    result[key]=value;
+  }
+  const kind=source.counterpartyKind;
+  if(kind!=null){
+    if(kind!=="human"&&kind!=="masana"&&kind!=="service")throw new TypeError("invalid_activity_receipt");
+    result.counterpartyKind=kind;
+  }
+  for(const key of ['counterpartyName','counterpartyHandle']){
+    const value=source[key];
+    if(typeof value==='string'&&value.length>0&&value.length<=160&&!/[\x00-\x1f\x7f]/.test(value))result[key]=value;
+  }
+  for(const key of ['sourceBucket','targetBucket']){
+    const value=source[key];if(value==null)continue;
+    if(typeof value!=="string"||!['purchased','welcome','issuance','usage'].includes(value))throw new TypeError("invalid_activity_receipt");
+    result[key]=value;
+  }
+  for(const key of ['exchangedMb','exchangeKobo']){
+    if(source[key]==null)continue;
+    if((typeof source[key]!=="string"&&typeof source[key]!=="number")||
+      !/^\d+$/.test(String(source[key])))throw new TypeError("invalid_activity_receipt");
+    const n=Number(source[key]);
+    if(!Number.isSafeInteger(n)||n<=0)throw new TypeError("invalid_activity_receipt");
+    result[key]=n;
+  }
+  return Object.keys(result).length?Object.freeze(result) as GbActivityReceiptDetails:undefined;
+}
+
+const movementDetails=`jsonb_strip_nulls(jsonb_build_object(
+  'counterpartyKind',CASE WHEN m.to_kind='human' AND m.to_id=$2
+    THEN CASE WHEN m.from_kind IN ('human','masana') THEN m.from_kind ELSE 'service' END
+    ELSE CASE WHEN m.to_kind IN ('human','masana') THEN m.to_kind ELSE 'service' END END,
+  'counterpartyId',CASE WHEN m.to_kind='human' AND m.to_id=$2
+    THEN CASE WHEN m.from_kind IN ('human','masana') THEN m.from_id END
+    ELSE CASE WHEN m.to_kind IN ('human','masana') THEN m.to_id END END,
+  'counterpartyName',COALESCE(p.display_name,a.display_name),'counterpartyHandle',p.handle,
+  'sourceBucket',to_jsonb(m)->>'source_bucket','targetBucket',to_jsonb(m)->>'target_bucket',
+  'exchangedMb',to_jsonb(x)->>'amount_mb','rateVersion',to_jsonb(x)->>'rate_version',
+  'exchangeKobo',CASE WHEN x.operation_id IS NOT NULL THEN abs(x.delta_kobo)::text END)) AS receipt_metadata`;
+const ngnDetails=`jsonb_strip_nulls(jsonb_build_object(
+  'counterpartyKind','service','exchangedMb',to_jsonb(n)->>'amount_mb',
+  'exchangeKobo',CASE WHEN n.kind='exchange' THEN abs(n.delta_kobo)::text END,
+  'rateVersion',to_jsonb(n)->>'rate_version',
+  'reversesOperationId',to_jsonb(n)->>'reverses_operation_id')) AS receipt_metadata`;
+const exchangeJoin=`LEFT JOIN gb_wallet.ngn_entries x ON x.tenant_id=m.tenant_id
+  AND x.operation_id=m.operation_id AND x.account_id=$2 AND x.kind='exchange'
+  LEFT JOIN talks.public_profiles p ON p.tenant_id=m.tenant_id AND p.user_id=
+    CASE WHEN m.to_kind='human' AND m.to_id=$2 AND m.from_kind='human' THEN m.from_id
+      WHEN m.from_kind='human' AND m.from_id=$2 AND m.to_kind='human' THEN m.to_id END
+  LEFT JOIN agents.agent_presentations a ON a.tenant_id=m.tenant_id AND a.visible_in_user_app
+    AND a.character_id=CASE WHEN m.to_kind='human' AND m.to_id=$2 AND m.from_kind='masana' THEN m.from_id
+      WHEN m.from_kind='human' AND m.from_id=$2 AND m.to_kind='masana' THEN m.to_id END`;
+
 function project(row: Row): GbActivityEntry {
+  const details=receiptDetails(row.receipt_metadata);
   const amount = Number(row.signed_amount);
   if (!Number.isSafeInteger(amount) || amount === 0 ||
       !["MB", "NGN"].includes(row.unit) ||
@@ -65,6 +136,7 @@ function project(row: Row): GbActivityEntry {
     unit: row.unit as "MB" | "NGN", amount,
     kind: row.kind, status: row.status as "completed" | "reversed",
     createdAt: new Date(row.created_at).toISOString(),
+    ...(details?{details}:{}),
   });
 }
 
@@ -149,10 +221,11 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
             o.operation_kind AS kind,
             (CASE WHEN o.state='reversed' THEN 'reversed'
               ELSE 'completed' END)::text AS status,
-            m.created_at
+            m.created_at,${movementDetails}
           FROM gb_wallet.movements m
           JOIN gb_wallet.operations o ON o.tenant_id=m.tenant_id
             AND o.operation_id=m.operation_id
+          ${exchangeJoin}
           WHERE m.tenant_id=$1 AND (
             (m.from_kind='human' AND m.from_id=$2) OR
             (m.to_kind='human' AND m.to_id=$2))
@@ -163,7 +236,7 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
             n.kind,
             (CASE WHEN n.kind='deposit_reversal' THEN 'reversed'
               ELSE 'completed' END)::text AS status,
-            n.created_at
+            n.created_at,${ngnDetails}
           FROM gb_wallet.ngn_entries n
           WHERE n.tenant_id=$1 AND n.account_id=$2
         )
@@ -178,7 +251,7 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           FROM posted
         )
         SELECT entry_id,operation_id,unit,signed_amount,kind,status,
-          created_at::text AS created_at
+          created_at::text AS created_at,receipt_metadata
         FROM classified WHERE ($6::text='all' OR unit=$6::text) AND
           ($7::text='all' OR purpose=$7::text) AND
           ($8::text='all' OR status=$8::text) AND
@@ -213,10 +286,11 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           o.operation_kind AS kind,
           (CASE WHEN o.state='reversed' THEN 'reversed'
             ELSE 'completed' END)::text AS status,
-          m.created_at::text AS created_at
+          m.created_at::text AS created_at,${movementDetails}
         FROM gb_wallet.movements m
         JOIN gb_wallet.operations o ON o.tenant_id=m.tenant_id
           AND o.operation_id=m.operation_id
+        ${exchangeJoin}
         WHERE m.tenant_id=$1 AND 'mb:' || m.movement_id::text=$3
           AND ((m.from_kind='human' AND m.from_id=$2) OR
                (m.to_kind='human' AND m.to_id=$2))
@@ -227,7 +301,7 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           n.kind,
           (CASE WHEN n.kind='deposit_reversal' THEN 'reversed'
             ELSE 'completed' END)::text AS status,
-          n.created_at::text AS created_at
+          n.created_at::text AS created_at,${ngnDetails}
         FROM gb_wallet.ngn_entries n
         WHERE n.tenant_id=$1 AND n.account_id=$2
           AND 'ngn:' || n.operation_id=$3

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_wallet_activity.dart';
+import 'gb_receipt_actions.dart';
 
 /// Fresh journal readback only. No provider, bank or data-delivery receipt.
 class GbWalletActivityDetailScreen extends ConsumerWidget {
@@ -79,8 +80,25 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
               child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
                 labelValue('Ledger',Text(item.unit=='MB'?'Masanawa data (MB)':
                   'Nigerian naira (NGN)',style:Theme.of(context).textTheme.bodyLarge)),
-                labelValue('Purpose',Text(item.kind.replaceAll('_',' '),
+                labelValue('Purpose',Text(item.title,
                   style:Theme.of(context).textTheme.bodyLarge)),
+                if(item.unit=='MB')labelValue('Data equivalent',Text(item.gbLabel)),
+                if(item.details?.counterpartyLabel!=null)
+                  labelValue('Counterparty',Text(item.details!.counterpartyLabel!)),
+                if(item.details?.counterpartyId!=null)
+                  labelValue('Counterparty reference',SelectableText(item.details!.counterpartyId!)),
+                if(item.details?.sourceBucket!=null)
+                  labelValue('Source bucket',Text(item.details!.sourceBucket!)),
+                if(item.details?.targetBucket!=null)
+                  labelValue('Target bucket',Text(item.details!.targetBucket!)),
+                if(item.details?.exchangedMb!=null)
+                  labelValue('Purchased data',Text('${groupActivityAmount(item.details!.exchangedMb!)} MB')),
+                if(item.details?.exchangeKobo!=null)
+                  labelValue('NGN exchanged',Text('₦${groupActivityAmount(item.details!.exchangeKobo!~/100)}.${(item.details!.exchangeKobo!%100).toString().padLeft(2,'0')}')),
+                if(item.details?.rateVersion!=null)
+                  labelValue('Rate version',Text(item.details!.rateVersion!)),
+                if(item.details?.reversesOperationId!=null)
+                  labelValue('Reverses operation',SelectableText(item.details!.reversesOperationId!)),
                 labelValue('Recorded',Text('${MaterialLocalizations.of(context)
                   .formatMediumDate(item.createdAt.toLocal())} · '
                   '${TimeOfDay.fromDateTime(item.createdAt.toLocal()).format(context)}',
@@ -99,6 +117,8 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                         label:const Text('Copy reference'))),
                   ])),
               ]))),
+            const SizedBox(height:16),
+            GbReceiptActions(owner:owner,entryId:item.id),
             const Padding(padding:EdgeInsets.all(16),
               child:Text('This is an authorized posted ledger entry. '
                 'It is not proof of external bank settlement or data delivery.')),

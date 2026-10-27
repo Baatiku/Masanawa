@@ -25,23 +25,6 @@ String _amountText(GbActivityItem row) {
   return '$sign${group(absolute)} MB';
 }
 
-String _kindText(String kind) => switch(kind) {
-  'welcome_grant'=>'Welcome data',
-  'verified_deposit'=>'Verified data credit',
-  'ngn_exchange'=>'Data exchange credit',
-  'send'=>'Send / receive',
-  'request_pay'=>'Paid request',
-  'tip'=>'Masana tip',
-  'reply'=>'Masana reply usage',
-  'connected_call'=>'Masana call usage',
-  'redeem'=>'Data redemption',
-  'reversal'=>'Reversal',
-  'deposit'=>'NGN deposit',
-  'exchange'=>'NGN data exchange',
-  'deposit_reversal'=>'Deposit reversal',
-  _=>'Wallet movement',
-};
-
 String _groupActivity(int n)=>n.toString().replaceAllMapped(
   RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>',');
 String _ngnActivity(int kobo)=>'₦${_groupActivity(kobo~/100)}.'
@@ -76,7 +59,7 @@ class GbActivityTile extends StatelessWidget {
     final date=MaterialLocalizations.of(context)
       .formatMediumDate(item.createdAt.toLocal());
     final time=TimeOfDay.fromDateTime(item.createdAt.toLocal()).format(context);
-    final title=_kindText(item.kind);
+    final title=item.title;
     return ListTile(
       key:ValueKey('activity-${item.id}'),
       onTap:()=>context.push('/wallet/activity/${Uri.encodeComponent(item.id)}'),
@@ -87,6 +70,7 @@ class GbActivityTile extends StatelessWidget {
           color:positive?colors.brand:colors.textPrimary,size:21)),
       title:Text(title,maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text('$date · $time · ${item.status == 'reversed'?'Reversed':'Posted'}\n'
+        '${item.details?.counterpartyLabel==null?'':'${item.details!.counterpartyLabel}\n'}'
         'Ref: ${item.operationId}',maxLines:3,overflow:TextOverflow.ellipsis),
       isThreeLine:true,
       trailing:ConstrainedBox(

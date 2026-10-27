@@ -12,6 +12,13 @@ export interface GbActivityItem {
   readonly kind: string;
   readonly status: "completed" | "reversed";
   readonly createdAt: string;
+  readonly details?:{
+    readonly counterpartyKind?:"human"|"masana"|"service";readonly counterpartyId?:string;
+    readonly counterpartyName?:string;readonly counterpartyHandle?:string;
+    readonly sourceBucket?:string;readonly targetBucket?:string;
+    readonly exchangedMb?:number;readonly exchangeKobo?:number;
+    readonly rateVersion?:string;readonly reversesOperationId?:string;
+  };
 }
 export type GbActivityUnitFilter = "all" | "MB" | "NGN";
 export type GbActivityPurpose = "all" | "funding" | "transfers" | "masana" | "data" | "reversals" | "other";

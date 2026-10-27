@@ -8,11 +8,29 @@ import 'gb_wallet_summary.dart';
 class GbActivityItem {
   const GbActivityItem({required this.id,required this.operationId,
     required this.unit,required this.amount,required this.kind,
-    required this.status,required this.createdAt});
+    required this.status,required this.createdAt,this.details});
   final String id, operationId, unit, kind, status;
   /// Server-signed integer MB or NGN kobo; never a decimal guessed by client.
   final int amount;
   final DateTime createdAt;
+  final GbActivityDetails? details;
+  String get title => switch(kind) {
+    'welcome_grant'=>'Welcome data','verified_deposit'=>'Data funding credit',
+    'ngn_exchange'=>'Data exchange credit','send'=>amount>0?'Received MB':'Sent MB',
+    'request_pay'=>amount>0?'Request payment received':'Paid request',
+    'tip'=>'Masana tip','reply'=>'Masana reply usage','connected_call'=>'Masana call usage',
+    'redeem'=>'Data redemption','reversal'=>'Reversal','deposit'=>'NGN deposit',
+    'exchange'=>'NGN data exchange','deposit_reversal'=>'Deposit reversal',_=>'Wallet movement',
+  };
+  String get amountLabel {
+    final n=amount.abs(),sign=amount>0?'+':'−';
+    return unit=='MB'?'$sign${groupActivityAmount(n)} MB':
+      '$sign₦${groupActivityAmount(n~/100)}.${(n%100).toString().padLeft(2,'0')}';
+  }
+  String get gbLabel {
+    final n=amount.abs(),fraction=(n%1000).toString().padLeft(3,'0').replaceFirst(RegExp(r'0+$'),'');
+    return '${amount>0?'+':'−'}${groupActivityAmount(n~/1000)}${fraction.isEmpty?'':'.$fraction'} GB';
+  }
 
   factory GbActivityItem.read(Object? source) {
     if (source is! Map) throw const FormatException('Invalid wallet activity');
@@ -23,13 +41,65 @@ class GbActivityItem {
     final parsed=time is String?DateTime.tryParse(time):null;
     if (id is! String || !RegExp(r'^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$').hasMatch(id) ||
         operation is! String || operation.isEmpty || operation.length>160 ||
-        (unit!='MB' && unit!='NGN') || amount is! int || amount==0 ||
+        (unit!='MB' && unit!='NGN') || amount is! int || amount==0 || amount.abs()>9007199254740991 ||
         kind is! String || kind.isEmpty || kind.length>48 ||
         (status!='completed' && status!='reversed') || parsed==null || !parsed.isUtc) {
       throw const FormatException('Invalid authoritative wallet activity');
     }
     return GbActivityItem(id:id,operationId:operation,unit:unit as String,
-      amount:amount,kind:kind,status:status as String,createdAt:parsed);
+      amount:amount,kind:kind,status:status as String,createdAt:parsed,
+      details:value['details']==null?null:GbActivityDetails.read(value['details']));
+  }
+}
+
+String groupActivityAmount(int value)=>value.toString().replaceAllMapped(
+  RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>',');
+
+class GbActivityDetails {
+  const GbActivityDetails({this.counterpartyKind,this.counterpartyId,this.sourceBucket,
+    this.targetBucket,this.exchangedMb,this.exchangeKobo,this.rateVersion,this.reversesOperationId,
+    this.counterpartyName,this.counterpartyHandle});
+  final String? counterpartyKind,counterpartyId,sourceBucket,targetBucket,rateVersion,reversesOperationId;
+  final String? counterpartyName,counterpartyHandle;
+  final int? exchangedMb,exchangeKobo;
+  String? get counterpartyLabel => counterpartyName!=null
+    ? '$counterpartyName${counterpartyHandle==null?'':' · @$counterpartyHandle'}'
+    : switch(counterpartyKind) {
+    'human'=>counterpartyId==null?'User':'User · $counterpartyId',
+    'masana'=>counterpartyId==null?'Masana':'Masana · $counterpartyId',
+    'service'=>'Masanawa',_=>null,
+  };
+  factory GbActivityDetails.read(Object? raw) {
+    if(raw is! Map)throw const FormatException('Invalid receipt details');
+    String? identity(String key) {
+      final v=raw[key];if(v==null)return null;
+      if(v is! String||!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$').hasMatch(v))
+        throw const FormatException('Invalid receipt reference');
+      return v;
+    }
+    int? quantity(String key) {
+      final v=raw[key];if(v==null)return null;
+      if(v is! int||v<1||v>9007199254740991)throw const FormatException('Invalid receipt amount');
+      return v;
+    }
+    String? bucket(String key) {
+      final v=raw[key];if(v==null)return null;
+      if(v is! String||!const {'purchased','welcome','issuance','usage'}.contains(v))
+        throw const FormatException('Invalid receipt bucket');
+      return v;
+    }
+    final kind=raw['counterpartyKind'];
+    if(kind!=null&&!const {'human','masana','service'}.contains(kind))
+      throw const FormatException('Invalid receipt counterparty');
+    String? label(String key){
+      final v=raw[key];
+      return v is String&&v.isNotEmpty&&v.length<=160&&!RegExp(r'[\x00-\x1f\x7f]').hasMatch(v)?v:null;
+    }
+    return GbActivityDetails(counterpartyKind:kind as String?,counterpartyId:identity('counterpartyId'),
+      sourceBucket:bucket('sourceBucket'),targetBucket:bucket('targetBucket'),
+      exchangedMb:quantity('exchangedMb'),exchangeKobo:quantity('exchangeKobo'),
+      rateVersion:identity('rateVersion'),reversesOperationId:identity('reversesOperationId'),
+      counterpartyName:label('counterpartyName'),counterpartyHandle:label('counterpartyHandle'));
   }
 }
 

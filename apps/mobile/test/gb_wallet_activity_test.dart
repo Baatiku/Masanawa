@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity_detail_screen.dart';
+import 'package:masanawa/src/gb_wallet/gb_receipt_actions.dart';
+import 'package:masanawa/src/gb_wallet/gb_receipt_document.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
 
@@ -369,6 +372,40 @@ void main() {
       const Offset(0,-150));
     expect(find.textContaining('not proof of external bank settlement'),findsOneWidget);
     expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('receipt preview re-reads authority and discards a completed render after account switch', (tester)async{
+    final fake=_Activity()..detailResponse=item('mb:1',1050,kind:'ngn_exchange');
+    final pending=Completer<GbReceiptDocument>();
+    final container=ProviderContainer(overrides:[sessionProvider.overrideWith(_Session.new),
+      gbActivityTransportProvider.overrideWithValue(fake),
+      gbReceiptDocumentBuilderProvider.overrideWithValue((_)=>pending.future)]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(container:container,
+      child:const MaterialApp(home:GbWalletActivityDetailScreen(entryId:'mb:1'))));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('Preview receipt'),find.byType(ListView),const Offset(0,-150));
+    await tester.tap(find.text('Preview receipt'));await tester.pump();await tester.pump();
+    expect(fake.detailRequests,['mb:1','mb:1']);
+    (container.read(sessionProvider.notifier) as _Session).switchAccount();
+    pending.complete(GbReceiptDocument(pngPages:[],pdf:Uint8List(0)));
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet receipt'),findsNothing);
+    expect(find.text('Share PDF'),findsNothing);
+  });
+
+  test('receipt metadata preserves cash/MB units, reversals and safe counterparties',(){
+    final row=GbActivityItem.read({'entryId':'ngn:exchange_1','operationId':'exchange_1',
+      'unit':'NGN','amount':-500050,'kind':'exchange','status':'completed',
+      'createdAt':'2026-10-27T12:00:00.000Z','details':{'counterpartyKind':'service',
+        'exchangedMb':1050,'exchangeKobo':500050,'rateVersion':'rate-v1',
+        'reversesOperationId':'original_1'}});
+    expect(row.amountLabel,'−₦5,000.50');
+    expect(row.details!.exchangedMb,1050);expect(row.details!.rateVersion,'rate-v1');
+    expect(row.details!.counterpartyLabel,'Masanawa');
+    expect(()=>GbActivityDetails.read({'exchangedMb':true}),throwsFormatException);
+    expect(()=>GbActivityDetails.read({'counterpartyId':'private@example.test'}),throwsFormatException);
+    expect(()=>GbActivityDetails.read({'counterpartyKind':'bank_account'}),throwsFormatException);
   });
 
   testWidgets('detail failures retry and account change discards older private detail', (tester) async {
