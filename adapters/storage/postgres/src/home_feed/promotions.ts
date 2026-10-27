@@ -11,6 +11,11 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const principal=/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/;
 const keyPattern=/^[A-Za-z0-9][A-Za-z0-9:_-]{7,127}$/;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+function reviewReason(reason:string|undefined,required:boolean){
+ const value=reason?.trim()??'';
+ if((required&&!value)||value.length>500)fail('invalid_review_reason');
+ return value;
+}
 const count=(v:unknown)=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<0)throw Error('corrupt_promotion_balance');return n;};
 function actor(t:string,u:string){if(!principal.test(t)||!principal.test(u))fail('invalid_actor');}
 function identifier(id:string){if(!uuid.test(id))fail('invalid_identifier');}
@@ -150,7 +155,8 @@ export class PgStatusPromotions {
   if(!r.rows[0])fail('quote_not_found',404);
   return {campaign:r.rows[0].id?campaign(r.rows[0] as Row):null};
  }
- async review(t:string,editor:string,id:string,approve:boolean){actor(t,editor);identifier(id);
+ async review(t:string,editor:string,id:string,approve:boolean,reason?:string){actor(t,editor);identifier(id);
+  const rationale=reviewReason(reason,!approve);
   return serial(this.pool,async c=>{
    const r=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,id]);
@@ -167,8 +173,90 @@ export class PgStatusPromotions {
    await c.query(`UPDATE feed.promotion_campaigns SET state=$3,reviewed_by=$4,
     reviewed_at=statement_timestamp(),updated_at=statement_timestamp()
     WHERE tenant_id=$1 AND id=$2`,[t,id,approve?'active':'rejected',editor]);
-   await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id);
-   return {campaignId:id,state:approve?'active':'rejected'};
+   await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id,
+    rationale?{reason:rationale}:{});
+   return {campaignId:id,state:approve?'active':'rejected',
+    ...(rationale?{reason:rationale}:{})};
+  });
+ }
+
+ /** Tenant-scoped content review. Staff authorization is checked by the
+  * Gateway before this method; never include viewer identities or tokens. */
+ async adminQueue(t:string,editor:string){actor(t,editor);
+  const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
+   c.target_views,c.remaining_views,c.delivered_views,c.created_at,
+   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state
+   FROM feed.promotion_campaigns c JOIN feed.posts p
+    ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+   WHERE c.tenant_id=$1 AND c.state='pending_review'
+   ORDER BY c.created_at,c.id LIMIT 100`,[t]);
+  return {pending:r.rows.map(x=>({campaignId:String(x.id),postId:String(x.post_id),
+   sponsorId:String(x.sponsor_id),authorId:String(x.author_user_id),
+   campaignKind:String(x.kind),contentKind:String(x.content_kind),
+   body:String(x.body??''),postState:String(x.post_state),
+   targetViews:count(x.target_views),remainingViews:count(x.remaining_views),
+   deliveredViews:count(x.delivered_views),submittedAt:x.created_at}))};
+ }
+
+ async adminOverview(t:string,editor:string){actor(t,editor);
+  const budgets=await this.pool.query(`SELECT
+   count(*)::text AS campaigns,
+   count(*) FILTER(WHERE state='pending_review')::text AS pending_review,
+   count(*) FILTER(WHERE state='active')::text AS active,
+   count(*) FILTER(WHERE state='rejected')::text AS rejected,
+   count(*) FILTER(WHERE state='completed')::text AS completed,
+   coalesce(sum(remaining_views) FILTER(WHERE state IN
+    ('pending_review','active','paused')),0)::text AS reserved_mb,
+   coalesce(sum(delivered_views),0)::text AS billed_views,
+   coalesce(sum(referred_views),0)::text AS referred_views
+   FROM feed.promotion_campaigns WHERE tenant_id=$1`,[t]);
+  const liabilities=await this.pool.query(`SELECT
+   coalesce(sum(sharer_half_mb),0)::text AS pending_sharer_half_mb,
+   coalesce(sum(platform_half_mb),0)::text AS allocated_platform_half_mb
+   FROM feed.promotion_view_charges WHERE tenant_id=$1`,[t]);
+  const b=budgets.rows[0]!,l=liabilities.rows[0]!;
+  return {campaigns:count(b.campaigns),pendingReview:count(b.pending_review),
+   active:count(b.active),rejected:count(b.rejected),completed:count(b.completed),
+   outstandingReservedMb:count(b.reserved_mb),billedQualifiedViews:count(b.billed_views),
+   referredQualifiedViews:count(b.referred_views),
+   pendingSharerHalfMb:count(l.pending_sharer_half_mb),
+   allocatedPlatformHalfMb:count(l.allocated_platform_half_mb),
+   rewardSettlementEnabled:false,
+   fundingQualification:'not_qualified'};
+ }
+
+ /** Permanent safety takedown is owned by an independent editor, not a
+  * booster. Refund every unspent sponsor reserve in the same transaction,
+  * revoke linked attribution and scrub the content while preserving audit. */
+ async adminTakedown(t:string,editor:string,post:string,reason:string){
+  actor(t,editor);identifier(post);const rationale=reviewReason(reason,true);
+  return serial(this.pool,async c=>{
+   const found=await c.query(`SELECT author_type,author_user_id,paid_purged_at
+    FROM feed.posts WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,post]);
+   const p=found.rows[0];
+   if(!p||p.author_type!=='human')fail('paid_post_not_found',404);
+   if(p.author_user_id===editor)fail('separate_reviewer_required',403);
+   if(p.paid_purged_at)return {postId:post,state:'removed',alreadyRemoved:true};
+   const campaigns=await c.query(`SELECT * FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND post_id=$2
+     AND state IN ('active','paused','pending_review')
+    ORDER BY sponsor_id,id FOR UPDATE`,[t,post]);
+   let refundedMb=0;
+   for(const b of campaigns.rows){
+    await this.refund(c,t,b as Row);refundedMb+=count(b.remaining_views);
+    await c.query(`UPDATE feed.promotion_campaigns SET state='cancelled',
+     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,b.id]);
+    await this.audit(c,t,post,editor,'moderation_refund',String(b.id),
+     {releasedMb:count(b.remaining_views)});
+   }
+   await c.query(`UPDATE feed.posts SET state='removed',body='',media_ids='{}',
+    transcript=NULL,paid_purged_at=statement_timestamp(),
+    paid_purge_at=NULL WHERE tenant_id=$1 AND id=$2`,[t,post]);
+   await c.query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
+    WHERE tenant_id=$1 AND post_id=$2 AND revoked_at IS NULL`,[t,post]);
+   await this.audit(c,t,post,editor,'moderation_takedown',null,
+    {reason:rationale,refundedMb});
+   return {postId:post,state:'removed',refundedMb};
   });
  }
  async cancel(t:string,s:string,id:string){actor(t,s);identifier(id);
