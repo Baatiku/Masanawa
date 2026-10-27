@@ -24,7 +24,7 @@ describe("reviewer-owned descriptive Status image copy",()=>{
   }});apps.push(app);
   const url="/v1/admin/feed/media/media_abcdefgh/alt";
   const payload={altText:"An approved image of the Masana teaching."};
-  const put=(auth:string,body:unknown=payload)=>app.inject({
+  const put=(auth:string,body:{altText:string|null;role?:string}=payload)=>app.inject({
     method:"PUT",url,headers:{authorization:auth},payload:body,
   });
   expect((await put("Bearer fan")).statusCode).toBe(403);
