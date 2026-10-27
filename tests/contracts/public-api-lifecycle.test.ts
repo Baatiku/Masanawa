@@ -209,6 +209,11 @@ describe("public API lifecycle", () => {
     const compatibility = lifecycle.http.compatibilityUnversionedPrefixes;
     const offenders: string[] = [];
 
+    // One canonical HTML document URL for Android App Links and public
+    // OpenGraph previews; never widen the compatibility prefixes for APIs.
+    expect(lifecycle.http.compatibilityUnversionedPaths.filter(path =>
+      path.startsWith('/status'))).toEqual(['/status/:postId']);
+
     for (const file of sourceFiles(path.resolve("services")).filter(file=>!/\.(?:test|spec)\./u.test(file))) {
       const source = fs.readFileSync(file, "utf8");
       for (const match of source.matchAll(

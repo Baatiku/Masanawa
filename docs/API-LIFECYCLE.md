@@ -38,6 +38,13 @@ Operational probes are intentionally unversioned:
 All product/public/internal HTTP contract routes use a major prefix such as
 `/v1/...`. The supported major list is declared in `API-LIFECYCLE.json`.
 
+**Narrow document-route exception:** `GET /status/:postId` is the previously
+reserved Android/Web Status deep-link address, rendered as an escaped, read-only
+HTML/OpenGraph document for humans and link preview crawlers. It is not a JSON
+service API and performs no view qualification, billable operation or client
+session lookup. This one exact path is enumerated in the legacy URL compatibility
+list to preserve shared URLs; all new Status command/read APIs remain `/v1/...`.
+
 Compatible request/response additions may stay within a major only when existing clients
 remain valid. A breaking route/schema/semantic change requires a new supported major or
 an explicit compatibility layer. Old and new majors may coexist during migration.

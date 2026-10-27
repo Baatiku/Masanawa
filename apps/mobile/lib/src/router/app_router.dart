@@ -260,7 +260,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/status/:postId',
         builder: (_, state) =>
-            StatusResourceLinkScreen(postId: state.pathParameters['postId']!),
+            StatusResourceLinkScreen(postId: state.pathParameters['postId']!,
+              referral: state.uri.queryParameters['r']),
       ),
       GoRoute(path: '/rooms/:id', redirect: (_, __) => '/home?tab=status'),
       GoRoute(path: '/human/chat/:id', redirect: (_, __) => '/home?tab=chats'),

@@ -54,6 +54,25 @@ class StatusPromotionCampaign {
   }
 }
 
+class StatusViewChallenge {
+  const StatusViewChallenge(this.id,this.minimumDwellSeconds);
+  final String id;
+  final int minimumDwellSeconds;
+}
+
+class StatusQualifiedViewResult {
+  const StatusQualifiedViewResult({required this.qualified,this.verifiedViews});
+  final bool qualified;
+  final int? verifiedViews;
+}
+
+abstract interface class StatusQualifiedViewApi {
+  Future<StatusViewChallenge> beginView(String postId,{String? referral});
+  Future<StatusQualifiedViewResult> qualifyView(String id,
+    {required double visibleFraction,required bool foreground,
+     required bool engaged});
+}
+
 abstract interface class StatusPromotionJournal {
   Future<String?> read();
   Future<void> write(String? data);
@@ -91,7 +110,7 @@ class _OriginalConfirmation {
   }
 }
 
-class StatusPromotionApi {
+class StatusPromotionApi implements StatusQualifiedViewApi {
   const StatusPromotionApi({required this.dio,required this.accessToken,
     required this.ownerAccount,required this.currentAccount,
     required this.journal});
@@ -188,6 +207,35 @@ class StatusPromotionApi {
     if(url is! String||Uri.tryParse(url)?.scheme!='https')
       throw const FormatException('Invalid share link');
     return url;
+  }
+  @override
+  Future<StatusViewChallenge> beginView(String postId,{String? referral}) async {
+    final r=await dio.post<Map<String,dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(postId)}/view-challenges',
+      data:{if(referral!=null)'referral':referral},options:await _options());
+    _owner();final raw=_object(r.data);
+    if(raw['challengeId'] is! String || raw['minimumDwellSeconds'] is! int ||
+      (raw['minimumDwellSeconds'] as int)<6){
+      throw const FormatException('Invalid server view challenge');
+    }
+    return StatusViewChallenge(raw['challengeId'] as String,
+      raw['minimumDwellSeconds'] as int);
+  }
+  @override
+  Future<StatusQualifiedViewResult> qualifyView(String id,
+    {required double visibleFraction,required bool foreground,
+     required bool engaged}) async {
+    final r=await dio.post<Map<String,dynamic>>(
+      '/v1/views/${Uri.encodeComponent(id)}/qualify',
+      data:{'visibleFraction':visibleFraction,'foreground':foreground,
+        'engaged':engaged},options:await _options());
+    _owner();final raw=_object(r.data),n=raw['verifiedViews'];
+    if(raw['qualified'] is! bool ||
+      (n!=null&&(n is! int||n<0))){
+      throw const FormatException('Invalid qualified-view response');
+    }
+    return StatusQualifiedViewResult(qualified:raw['qualified'] as bool,
+      verifiedViews:n as int?);
   }
   Future<void> cancel(String campaignId) async {
     await dio.post<void>('/v1/promotions/${Uri.encodeComponent(campaignId)}/cancel',

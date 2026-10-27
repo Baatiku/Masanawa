@@ -3,6 +3,7 @@ import {registerHomeFeedRoutes,type FeedRoutesOptions} from "./routes.js";
 import {registerAdminFeedReviewRoutes,type AdminReviewRoutesOptions} from "./admin_review_routes.js";
 import {registerFeedMediaRoutes,type FeedMediaOptions} from "./media_routes.js";
 import {registerPromotionRoutes,type PromotionPort} from "./promotion_routes.js";
+import {registerPublicStatusLanding,type PublicStatusPost} from "./public_landing.js";
 
 /** Structural port implemented by the existing platform customer-session
  * authorizer. The host supplies that authority, never an HTTP role header. */
@@ -18,6 +19,7 @@ export interface StatusRuntime {
  enabled?:()=>boolean;
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
+ publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>};enabled:()=>boolean};
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */
@@ -28,6 +30,8 @@ export interface StatusRuntime {
 /** One registration for the canonical feed/editorial/media services. No
  * separate session store, publisher, ledger or PostgreSQL connection. */
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
+ // This route is a read-only crawler preview outside the signed-in fan scope.
+ if(options.publicLanding)await registerPublicStatusLanding(app,options.publicLanding);
  await app.register(async scope=>{
   scope.setErrorHandler((error,_request,reply)=>{
    const problem=error as {status?:number;statusCode?:number;code?:string};

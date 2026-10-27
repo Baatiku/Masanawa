@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,6 +18,7 @@ import 'saved_status_library_screen.dart';
 import 'status_promotion_api.dart';
 import 'status_promotion_sheet.dart';
 import 'my_status_promotions_screen.dart';
+import 'status_qualified_view_observer.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -216,6 +219,16 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if(mounted&&scope==generation)setState(()=>promotionsAvailable=enabled);
     }catch(_){if(mounted&&scope==generation)
       setState(()=>promotionsAvailable=false);}
+  }
+
+  Future<void> reconcileQualifiedView(String postId,int scope) async {
+    if(widget.api is! DioFeedApi)return;
+    try{
+      final verified=await (widget.api as DioFeedApi).detail(postId);
+      if(!mounted||scope!=generation)return;
+      final i=items.indexWhere((p)=>p.id==postId);
+      if(i>=0)setState(()=>items[i]=verified);
+    }catch(_){/* An accepted server event is not undone by a stale read. */}
   }
 
   Future<void> openPromotion({String? postId}) async {
@@ -897,7 +910,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                           ),
                         );
                       final post = items[i];
-                      return Card(
+                      return StatusQualifiedViewObserver(
+                        postId:post.id,accountKey:widget.accountKey,
+                        enabled:promotionsAvailable&&widget.promotions!=null,
+                        api:widget.promotions,
+                        onVerified:(_)=>unawaited(reconcileQualifiedView(post.id,generation)),
+                        child:Card(
                         key: ValueKey(post.id),
                         margin: const EdgeInsets.fromLTRB(10,4,10,6),
                         elevation: 0.7,
@@ -1082,7 +1100,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                             ],
                           ),
                         ),
-                      );
+                      ));
                     },
                   )),
                 ),

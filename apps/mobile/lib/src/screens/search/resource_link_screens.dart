@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/home_feed/feed_api.dart';
 import '../../features/home_feed/feed_post_detail_screen.dart';
+import '../../features/home_feed/status_promotion_api.dart';
+import '../../features/home_feed/status_qualified_view_observer.dart';
+import '../../core/providers.dart';
 import '../../screens/profile/masana_profile_screen.dart';
 import '../../screens/status/status_screen.dart';
 import '../../state/agent_directory_state.dart';
@@ -70,8 +73,9 @@ class _MasanaResourceLinkScreenState
 /// Opens one approved Status post through the same account-bound Gateway
 /// read and discussion contracts already used in the Status feed.
 class StatusResourceLinkScreen extends ConsumerStatefulWidget {
-  const StatusResourceLinkScreen({super.key, required this.postId});
+  const StatusResourceLinkScreen({super.key, required this.postId,this.referral});
   final String postId;
+  final String? referral;
   @override
   ConsumerState<StatusResourceLinkScreen> createState() =>
       _StatusResourceLinkScreenState();
@@ -81,6 +85,8 @@ class _StatusResourceLinkScreenState
     extends ConsumerState<StatusResourceLinkScreen> {
   String? _owner;
   Future<FeedPost>? _post;
+  Future<bool>? _qualifiedViewsEnabled;
+  StatusPromotionApi? _promotions;
 
   Future<FeedPost> _load(DioFeedApi api) => api.detail(widget.postId);
 
@@ -90,6 +96,8 @@ class _StatusResourceLinkScreenState
     if (session is! SessionSignedIn) {
       _owner = null;
       _post = null;
+      _qualifiedViewsEnabled=null;
+      _promotions=null;
       return const Scaffold(body: Center(
         child: Text('Sign in to view this Status post.')));
     }
@@ -102,6 +110,14 @@ class _StatusResourceLinkScreenState
     if (_owner != owner || _post == null) {
       _owner = owner;
       _post = _load(api);
+      final client=ref.read(apiClientProvider);
+      _promotions=StatusPromotionApi(dio:client.dio,ownerAccount:owner,
+        accessToken:()async=>client.accessToken,
+        currentAccount:(){
+          final active=ref.read(sessionProvider);
+          return active is SessionSignedIn?active.user.id:null;
+        },journal:SecureStatusPromotionJournal(owner));
+      _qualifiedViewsEnabled=_promotions!.available().catchError((_)=>false);
     }
     return Scaffold(
       appBar: AppBar(title: const Text('Status')),
@@ -128,7 +144,7 @@ class _StatusResourceLinkScreenState
             ));
           }
           final post = snapshot.data!;
-          return FeedPostDetailScreen(
+          final detail=FeedPostDetailScreen(
             key: ValueKey('status-detail-$owner-${post.id}'),
             initialPost: post,
             accountKey: owner,
@@ -137,6 +153,14 @@ class _StatusResourceLinkScreenState
             sendComment: (id, body, key, parent) =>
                 api.sendThreadComment(id, body, key, parent),
           );
+          return FutureBuilder<bool>(future:_qualifiedViewsEnabled,
+            builder:(context,capability)=>StatusQualifiedViewObserver(
+              postId:post.id,accountKey:owner,
+              enabled:capability.data==true,api:_promotions,
+              referral:widget.referral!=null&&
+                RegExp(r'^[A-Za-z0-9_-]{20,128}$').hasMatch(widget.referral!)
+                  ?widget.referral:null,
+              child:detail));
         },
       ),
     );

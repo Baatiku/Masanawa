@@ -51,6 +51,7 @@
       "/safety/reports",
       "/safety/users/:userId/preference",
       "/search",
+      "/status/:postId",
       "/talks",
       "/talks/:talkId",
       "/talks/:talkId/ai-seat-quotes",
