@@ -64,7 +64,12 @@ void main() {
           'characterId':'character_456','budgetMb':5,'state':'reserved',
           'expiresAt':expiry,'verifiedConnectedMs':0}});
       }
-      if (request.path.endsWith('/finish')) {
+      if (request.path.endsWith('/finish') ||
+          request.path.startsWith('/v1/gb/calls/admissions/original/')) {
+        expect(jsonDecode(store.contents!)['operationKey'] as String,
+          request.path.startsWith('/v1/gb/calls/admissions/original/')
+              ? request.path.split('/').last
+              : isNotEmpty);
         return _ok({'admission':{'admissionId':'call_$serial',
           'characterId':'character_456','budgetMb':5,'state':'completed',
           'expiresAt':expiry,'verifiedConnectedMs':2000,'chargedMb':2}});
@@ -84,8 +89,9 @@ void main() {
     final receipt = await flow.finish(admission);
     expect(receipt.chargedMb, 2);
     expect(await flow.journal.forOwner('owner-1'), isNull);
-    expect(events, ['/v1/gb/calls/review','/v1/gb/calls/admissions',
+    expect(events.take(3), ['/v1/gb/calls/review','/v1/gb/calls/admissions',
       '/v1/gb/calls/admissions/call_1/finish']);
+    expect(events.last, startsWith('/v1/gb/calls/admissions/original/'));
   });
 
   test('lost confirm response remains locked and next review reads original first',
@@ -160,4 +166,89 @@ void main() {
     await expectLater(flow.recover(), throwsStateError);
     expect((await journal.forOwner('owner-1'))?.operationKey,'original_key_123');
   });
+  test('a different terminal call to same Masana cannot clear pending original',
+      () async {
+    final expiry = DateTime.now().add(const Duration(minutes: 5))
+        .toUtc().toIso8601String();
+    final store = _Store();
+    final journal = MbCallIntentJournal(store);
+    await journal.prepare('owner-1', 'character_456', 'original_key_pending');
+    await journal.markSubmitted('owner-1', 'original_key_pending');
+    final dio = Dio(BaseOptions(baseUrl: 'https://gateway.example'));
+    final events = <String>[];
+    Map<String, Object> admission(String id) => {
+      'admissionId': id, 'characterId': 'character_456',
+      'budgetMb': 5, 'state': 'completed', 'expiresAt': expiry,
+      'verifiedConnectedMs': 0, 'chargedMb': 0,
+    };
+    dio.httpClientAdapter = _Adapter((request) async {
+      events.add(request.path);
+      if (request.path == '/v1/gb/calls/admissions/different/finish') {
+        return _ok({'admission': admission('different')});
+      }
+      if (request.path ==
+          '/v1/gb/calls/admissions/original/original_key_pending') {
+        return _ok({'admission': admission('pending')});
+      }
+      throw StateError('Unexpected route: ${request.path}');
+    });
+    final flow = MbCallFlow(
+      journal: journal, ownerId: 'owner-1',
+      transport: MbCallTransport(dio: dio, baseUrl: 'https://gateway.example',
+        accessToken: 'pinned', accountId: 'owner-1',
+        currentAccountId: () => 'owner-1'),
+    );
+    final different = MbCallAdmission(id: 'different',
+      characterId: 'character_456', budgetMb: 5, state: 'reserved',
+      expiresAt: DateTime.parse(expiry), verifiedConnectedMs: 0);
+    await expectLater(flow.finish(different), throwsStateError);
+    expect((await journal.forOwner('owner-1'))?.operationKey,
+      'original_key_pending');
+    expect(events, [
+      '/v1/gb/calls/admissions/different/finish',
+      '/v1/gb/calls/admissions/original/original_key_pending',
+    ]);
+  });
+
+  test('terminal finish keeps recovery key when original readback is unavailable',
+      () async {
+    final expiry = DateTime.now().add(const Duration(minutes: 5))
+        .toUtc().toIso8601String();
+    final store = _Store();
+    final journal = MbCallIntentJournal(store);
+    await journal.prepare('owner-1', 'character_456', 'original_key_pending');
+    await journal.markSubmitted('owner-1', 'original_key_pending');
+    var failedRead = true;
+    final dio = Dio(BaseOptions(baseUrl: 'https://gateway.example'));
+    final row = {'admissionId': 'pending', 'characterId': 'character_456',
+      'budgetMb': 5, 'state': 'completed', 'expiresAt': expiry,
+      'verifiedConnectedMs': 1000, 'chargedMb': 1};
+    dio.httpClientAdapter = _Adapter((request) async {
+      if (request.path == '/v1/gb/calls/admissions/pending/finish') {
+        return _ok({'admission': row});
+      }
+      if (request.path ==
+          '/v1/gb/calls/admissions/original/original_key_pending') {
+        if (failedRead) return ResponseBody.fromString('unavailable', 503);
+        return _ok({'admission': row});
+      }
+      throw StateError('Unexpected route: ${request.path}');
+    });
+    final flow = MbCallFlow(
+      journal: journal, ownerId: 'owner-1',
+      transport: MbCallTransport(dio: dio, baseUrl: 'https://gateway.example',
+        accessToken: 'pinned', accountId: 'owner-1',
+        currentAccountId: () => 'owner-1'),
+    );
+    final original = MbCallAdmission(id: 'pending',
+      characterId: 'character_456', budgetMb: 5, state: 'reserved',
+      expiresAt: DateTime.parse(expiry), verifiedConnectedMs: 0);
+    await expectLater(flow.finish(original), throwsA(isA<ApiException>()));
+    expect((await journal.forOwner('owner-1'))?.submitted, true);
+    failedRead = false;
+    final receipt = await flow.finish(original);
+    expect(receipt.chargedMb, 1);
+    expect(await journal.forOwner('owner-1'), isNull);
+  });
+
 }
