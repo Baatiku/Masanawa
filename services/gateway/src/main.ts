@@ -1630,6 +1630,36 @@ export async function startGatewayService(
       // a mounted route must not implicitly activate editorial operations.
       enabled: () => true,
       media: mediaRuntime.media,
+      ...(database.featurePool ? {updateMediaAlt:async (
+        tenantId:string,reviewerId:string,mediaId:string,altText:string|null)=>{
+        const result=await database.featurePool!.query<{
+          media_id:string;status_alt_text:string|null;
+        }>(`
+          UPDATE masana.character_media m
+          SET status_alt_text=$4::text,
+            status_alt_approved_by=CASE WHEN $4::text IS NULL
+              THEN NULL ELSE $2::text END,
+            status_alt_approved_at=CASE WHEN $4::text IS NULL
+              THEN NULL ELSE now() END,
+            updated_at=now()
+          WHERE m.tenant_id=$1 AND m.media_id=$3
+            AND m.kind IN ('portrait','banner','cover')
+            AND length(btrim(m.rights_note))>4
+            AND length(btrim(m.approved_by))>0
+            AND EXISTS(
+              SELECT 1 FROM masana.character_revisions r
+              JOIN identity.characters c ON c.tenant_id=r.tenant_id
+                AND c.character_id=r.character_id AND c.state='active'
+              JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id
+                AND o.character_id=c.character_id AND o.kind='platform'
+              WHERE r.tenant_id=m.tenant_id AND r.character_id=m.character_id
+                AND r.state='approved'
+            )
+          RETURNING m.media_id,m.status_alt_text
+        `,[tenantId,reviewerId,mediaId,altText]);
+        const row=result.rows[0];
+        return row?{mediaId:row.media_id,altText:row.status_alt_text}:null;
+      }}:{}),
     };
   }
   } catch (error) {
