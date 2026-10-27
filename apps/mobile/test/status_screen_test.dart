@@ -76,7 +76,7 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Feed feed, {bool shell = 
       theme: buildMasanawaTheme(brightness: Brightness.light),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: shell ? const FiveTabShell(initialIndex: 1)
+      home: shell ? const FiveTabShell(initialIndex: 0)
           : const Scaffold(body: StatusScreen()),
     ),
   ));
@@ -85,10 +85,13 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Feed feed, {bool shell = 
 }
 
 void main() {
-  testWidgets('real mounted Status tab displays Masana feed without Talk publishing', (tester) async {
+  testWidgets('real mounted Home tab displays the same Masana feed without Talk publishing', (tester) async {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Chats'), findsOneWidget);
     // The date string is locale-formatted and may omit the year. The shared
     // header must receive the real post timestamp, not a fabricated label.
     final authorHeader = tester.widget<StatusPostAuthorHeader>(
@@ -99,15 +102,15 @@ void main() {
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
     expect(find.text('Create Talk'), findsNothing);
-    // Status is now the single platform-Masana feed: no former two-tab bar.
+    // Home is still the same single Status feed: no former two-tab bar.
     expect(find.text('Videos'), findsNothing);
     expect(find.text('Updates'), findsNothing);
     expect(find.text('Create Status'), findsNothing);
     expect(find.text('For You'), findsNothing);
     expect(find.text('Following'), findsNothing);
-    expect(find.byTooltip('Search Status'), findsOneWidget);
+    expect(find.byTooltip('Search Home'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.byTooltip('Search Status'));
+    await tester.tap(find.byTooltip('Search Home'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byTooltip('Search all Status posts'), findsNothing);

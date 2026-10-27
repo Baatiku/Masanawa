@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/startup_metrics.dart';
 import '../../features/home_feed/feed_api.dart';
 import '../../features/home_feed/status_tip_flow.dart';
 import '../../features/home_feed/feed_media_api.dart';
@@ -150,6 +151,12 @@ class StatusScreen extends ConsumerStatefulWidget {
 
 class _StatusScreenState extends ConsumerState<StatusScreen> {
   final ValueNotifier<bool> _searchExpanded = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    MasanawaStartupMetrics.afterFrame('home_first_frame');
+  }
 
   @override
   void dispose() {
