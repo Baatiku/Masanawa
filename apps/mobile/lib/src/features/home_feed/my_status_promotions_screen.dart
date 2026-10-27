@@ -8,9 +8,11 @@ import 'status_promotion_api.dart';
 /// Inactive content is shown only by this signed-in session until server purge.
 class MyStatusPromotionsScreen extends StatefulWidget {
   const MyStatusPromotionsScreen({super.key,required this.api,
-    required this.onBoostAgain});
+    required this.onBoostAgain,this.canBoost=true});
   final StatusPromotionApi api;
   final Future<void> Function(String postId) onBoostAgain;
+  /// Read-only receipts and deletion remain available if live spending pauses.
+  final bool canBoost;
   @override State<MyStatusPromotionsScreen> createState()=>_MyStatusPromotionsScreenState();
 }
 class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
@@ -80,6 +82,10 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
         if(loading&&data==null)const Center(child:CircularProgressIndicator()),
         if(error!=null)Card(child:Padding(padding:const EdgeInsets.all(12),
           child:Text(error!))),
+        if(!widget.canBoost)const ListTile(
+          leading:Icon(Icons.info_outline),
+          title:Text('New promotion spending is temporarily unavailable.'),
+          subtitle:Text('Your existing receipts and post deletion are still available.')),
         Text('My campaigns',style:Theme.of(context).textTheme.titleLarge),
         if(campaigns.isEmpty&&!loading)const ListTile(title:Text('No campaigns yet')),
         for(final c in campaigns)
@@ -117,6 +123,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
               TextButton(onPressed:pending.contains(p['postId'])?null:
                 ()=>delete('${p['postId']}'),child:const Text('Delete')),
               TextButton(onPressed:pending.contains(p['postId'])||
+                !widget.canBoost||
                 (_remaining(p['purgeAt'])??Duration.zero)<=Duration.zero?null:() async {
                 await widget.onBoostAgain('${p['postId']}');
                 if(mounted)await refresh();
