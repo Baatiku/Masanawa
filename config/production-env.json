@@ -1161,6 +1161,27 @@
       "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
     },
     {
+      "name": "MASANAWA_STATUS_PROMOTIONS_ENABLED",
+      "owner": "gateway/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Requires trusted paid-view proof, abuse review, backed half-MB settlement/data redemption, media removal, legal review and qualified PostgreSQL before live payment or commission."
+    },
+    {
+      "name": "MASANAWA_STATUS_ATTRIBUTION_SECRET",
+      "owner": "gateway/home-feed",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "At least 32 bytes of operator-configured entropy for tenant/account-scoped qualified-view digests; keep outside source and never log."
+    },
+    {
+      "name": "MASANAWA_STATUS_PUBLIC_BASE_URL",
+      "owner": "gateway/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "HTTPS origin serving the canonical Status public landing and optional opaque referral URL."
+    },
+    {
       "name": "MASANAWA_MB_REPLIES_ENABLED",
       "owner": "gateway/gb-wallet",
       "classification": "public",

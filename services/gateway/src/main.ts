@@ -26,6 +26,7 @@ import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js"
 import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
 import {
   createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
+  PgStatusPromotions,
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
@@ -1631,12 +1632,22 @@ export async function startGatewayService(
       ...(mediaConfiguration ? {configuration:mediaConfiguration} : {}),
     });
     const author = (tenant:string,id:string) => eligibility.author(tenant,id);
+    const promotionsConfigured=env.MASANAWA_STATUS_PROMOTIONS_ENABLED==='true' &&
+      !!env.MASANAWA_STATUS_ATTRIBUTION_SECRET &&
+      !!env.MASANAWA_STATUS_PUBLIC_BASE_URL && !!database.featurePool;
     status = {
       sessions,
       feed: new FeedService(
         feed, author, mediaRuntime.approved,
         true,
       ),
+      ...(promotionsConfigured?{
+        promotions:new PgStatusPromotions(database.featurePool!,
+          env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!),
+        // Financial activation still requires a separately completed,
+        // security-qualified full Status/public-web client composition.
+        promotionsEnabled:()=>false,
+      }:{}),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
       ...(database.featurePool ? {saved:new SavedLibraryService(
         new PgSavedLibraryRepository(database.featurePool))} : {}),
