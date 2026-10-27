@@ -131,7 +131,8 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
     );
     if(widget.tile){
       return Semantics(
-        label:'Image ${widget.imageIndex} of ${widget.mediaCount}. No approved description provided',
+        label:'Image ${widget.imageIndex} of ${widget.mediaCount}. '+
+          (current.altText??'No approved description provided'),
         child:ClipRRect(borderRadius:BorderRadius.circular(10),child:Stack(
           fit:StackFit.expand,children:[
             InkWell(onTap:widget.onOpen,child:preview),
@@ -148,7 +149,8 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Semantics(
-        label:'Image 1 of ${widget.mediaCount}. No approved description provided',
+        label:'Image 1 of ${widget.mediaCount}. '+
+          (current.altText??'No approved description provided'),
         child:InkWell(
           onTap:widget.onOpen,
           child:ClipRRect(
@@ -157,6 +159,10 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
           ),
         ),
       ),
+      if(current.altText!=null)
+        Padding(padding:const EdgeInsetsDirectional.fromSTEB(12,6,12,2),
+          child:Text(current.altText!,style:Theme.of(context).textTheme.bodyMedium,
+            maxLines:3,overflow:TextOverflow.ellipsis)),
       if(widget.mediaCount>1)
         Align(alignment:Alignment.centerRight,child:TextButton(
           onPressed:widget.onOpen,
