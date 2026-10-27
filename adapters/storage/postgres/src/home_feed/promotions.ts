@@ -19,11 +19,21 @@ function reviewReason(reason:string|undefined,required:boolean){
 const count=(v:unknown)=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<0)throw Error('corrupt_promotion_balance');return n;};
 function actor(t:string,u:string){if(!principal.test(t)||!principal.test(u))fail('invalid_actor');}
 function identifier(id:string){if(!uuid.test(id))fail('invalid_identifier');}
-function campaign(r:Row){return {id:String(r.id),quoteId:String(r.quote_id),postId:String(r.post_id),
- kind:String(r.kind),state:String(r.state),targetViews:count(r.target_views),
- remainingViews:count(r.remaining_views),deliveredViews:count(r.delivered_views),
- directViews:count(r.direct_views),referredViews:count(r.referred_views),
- priceVersion:String(r.price_version)};}
+function campaign(r:Row){
+ const state=String(r.state),remaining=count(r.remaining_views),delivered=count(r.delivered_views);
+ return {id:String(r.id),quoteId:String(r.quote_id),postId:String(r.post_id),
+  kind:String(r.kind),state,targetViews:count(r.target_views),
+  remainingViews:remaining,deliveredViews:delivered,
+  directViews:count(r.direct_views),referredViews:count(r.referred_views),
+  spentMb:delivered,
+  // Ended campaigns retain immutable target/delivery maths in their rows;
+  // unused views have already been released from the sponsor reservation.
+  reservedMb:['active','pending_review','paused'].includes(state)?remaining:0,
+  refundedUnusedMb:['cancelled','rejected'].includes(state)?remaining:0,
+  ...(typeof r.review_reason==='string'&&r.review_reason?
+    {reviewReason:r.review_reason}:{}),
+  priceVersion:String(r.price_version)};
+}
 async function serial<T>(pool:Pool,fn:(c:PoolClient)=>Promise<T>):Promise<T>{
  for(let i=0;i<4;i++)try{return await withTransaction(pool,fn,{isolation:'serializable'});}
  catch(e){if(!['40001','40P01'].includes(String((e as {code?:unknown}).code))||i===3)throw e;}
@@ -149,7 +159,11 @@ export class PgStatusPromotions {
  }
 
  async receipt(t:string,s:string,id:string){actor(t,s);identifier(id);
-  const r=await this.pool.query(`SELECT c.* FROM feed.promotion_quotes q
+  const r=await this.pool.query(`SELECT c.*,(
+    SELECT a.details->>'reason' FROM feed.promotion_audit a
+    WHERE a.tenant_id=c.tenant_id AND a.campaign_id=c.id
+      AND a.action='rejected' ORDER BY a.id DESC LIMIT 1) AS review_reason
+    FROM feed.promotion_quotes q
    LEFT JOIN feed.promotion_campaigns c ON c.tenant_id=q.tenant_id AND c.quote_id=q.id
    WHERE q.tenant_id=$1 AND q.sponsor_id=$2 AND q.id=$3`,[t,s,id]);
   if(!r.rows[0])fail('quote_not_found',404);
@@ -271,7 +285,7 @@ export class PgStatusPromotions {
     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
    await this.disable(c,t,String(p.post_id));
    await this.audit(c,t,String(p.post_id),s,'cancelled',id,{releasedMb:p.remaining_views});
-   return {...campaign(p),state:'cancelled'};
+   return campaign({...p,state:'cancelled'});
   });
  }
 
@@ -398,8 +412,13 @@ export class PgStatusPromotions {
  }
 
  async mine(t:string,u:string){actor(t,u);
-  const campaigns=await this.pool.query(`SELECT * FROM feed.promotion_campaigns
-    WHERE tenant_id=$1 AND sponsor_id=$2 ORDER BY created_at DESC,id DESC LIMIT 100`,[t,u]);
+  const campaigns=await this.pool.query(`SELECT c.*,(
+    SELECT a.details->>'reason' FROM feed.promotion_audit a
+    WHERE a.tenant_id=c.tenant_id AND a.campaign_id=c.id
+      AND a.action='rejected' ORDER BY a.id DESC LIMIT 1) AS review_reason
+    FROM feed.promotion_campaigns c
+    WHERE c.tenant_id=$1 AND c.sponsor_id=$2
+    ORDER BY c.created_at DESC,c.id DESC LIMIT 100`,[t,u]);
   const inactive=await this.pool.query(`SELECT p.id,p.body,p.kind,p.paid_disabled_at,
     p.paid_purge_at,(SELECT count(*)::int FROM feed.qualified_views v
       WHERE v.tenant_id=p.tenant_id AND v.post_id=p.id) AS historical_views

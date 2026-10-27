@@ -86,8 +86,14 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(boost).toMatchObject({state:'active',kind:'boost'});
   await expect(service.deleteOwnPost(t,'booster',c.postId))
     .rejects.toMatchObject({code:'post_not_owned'});
-  await service.cancel(t,'booster',boost.id);
-  await service.cancel(t,'publisher',c.id);
+  const cancelledBoost=await service.cancel(t,'booster',boost.id);
+  expect(cancelledBoost).toMatchObject({state:'cancelled',reservedMb:0,
+   refundedUnusedMb:2,spentMb:0});
+  const cancelledOriginal=await service.cancel(t,'publisher',c.id);
+  expect(cancelledOriginal).toMatchObject({state:'cancelled',reservedMb:0,
+   refundedUnusedMb:4,spentMb:1});
+  expect((await service.mine(t,'booster')).campaigns.find(x=>x.id===boost.id))
+   .toMatchObject({state:'cancelled',reservedMb:0,refundedUnusedMb:2});
   const hidden=await query(`SELECT state,EXTRACT(EPOCH FROM
     (paid_purge_at-paid_disabled_at))::int AS seconds FROM feed.posts WHERE id=$1`,[c.postId]);
   expect(hidden.rows[0]).toMatchObject({state:'hidden',seconds:72*60*60});
@@ -126,6 +132,12 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect((await balance('publisher')).reserved).toBe((beforeBalance as {reserved:number}).reserved-3);
   expect((await service.adminQueue(t,'trusted_reviewer')).pending)
    .not.toContainEqual(expect.objectContaining({campaignId:c.id}));
+  expect((await service.mine(t,'publisher')).campaigns.find(x=>x.id===c.id))
+   .toMatchObject({reservedMb:0,refundedUnusedMb:3,
+    reviewReason:'Misleading educational claims'});
+  expect((await service.receipt(t,'publisher',q.quoteId)).campaign)
+   .toMatchObject({state:'rejected',reservedMb:0,refundedUnusedMb:3,
+    reviewReason:'Misleading educational claims'});
   const audit=await query(`SELECT details FROM feed.promotion_audit WHERE tenant_id=$1
    AND campaign_id=$2 AND action='rejected'`,[t,c.id]);
   expect(audit.rows[0]).toMatchObject({details:{reason:'Misleading educational claims'}});

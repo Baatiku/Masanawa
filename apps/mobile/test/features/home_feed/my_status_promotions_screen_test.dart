@@ -43,4 +43,37 @@ void main(){
    expect(boosts,1);
    await tester.pumpWidget(const SizedBox.shrink());
  });
+
+ testWidgets('cancelled funds show released MB and no fictitious reservation',
+  (tester)async{
+   final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
+   dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
+     if(options.path=='/v1/promotions/mine'){
+       return handler.resolve(Response(requestOptions:options,statusCode:200,data:{
+         'serverNow':'2026-10-27T12:00:00Z',
+         'inactivePosts':<dynamic>[], 'sharingEarnings':<dynamic>[],
+         'campaigns':[{'id':'campaign-1','kind':'boost','state':'cancelled',
+           'targetViews':8,'deliveredViews':3,'directViews':1,'referredViews':2,
+           'remainingViews':5,'spentMb':3,'reservedMb':0,'refundedUnusedMb':5},
+           {'id':'campaign-2','kind':'human_primary','state':'rejected',
+            'targetViews':2,'deliveredViews':0,'directViews':0,'referredViews':0,
+            'remainingViews':2,'spentMb':0,'reservedMb':0,'refundedUnusedMb':2,
+            'reviewReason':'Unsafe advertising claim'}],
+       }));
+     }
+     handler.reject(DioException(requestOptions:options));
+   }));
+   addTearDown(()=>dio.close(force:true));
+   final api=StatusPromotionApi(dio:dio,accessToken:()async=>'session',
+     ownerAccount:'owner',currentAccount:()=> 'owner',journal:_MemoryJournal());
+   await tester.pumpWidget(MaterialApp(home:MyStatusPromotionsScreen(
+     api:api,onBoostAgain:(_)async{})));
+   await tester.pumpAndSettle();
+   expect(find.textContaining('3/8 qualified views'),findsOneWidget);
+   expect(find.textContaining('0 MB still reserved'),findsNWidgets(2));
+   expect(find.textContaining('5 MB still reserved'),findsNothing);
+   expect(find.textContaining('5 MB released'),findsOneWidget);
+   expect(find.textContaining('Review reason: Unsafe advertising claim'),findsOneWidget);
+   await tester.pumpWidget(const SizedBox.shrink());
+ });
 }

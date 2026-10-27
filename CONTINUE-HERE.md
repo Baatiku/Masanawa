@@ -16,6 +16,8 @@ Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.m
 
 **27 October retention completion checkpoint:** #524 merged at `841aa17a` from exact head `16a08c4c` after Foundation #1602, Mobile #1102, retained PG #122 and Masana roster #420 all PASS. Startup and minute-interval bounded server cleanup, safe restart catchup and owner-only inactive content/historical verified views/UTC countdown are source-implemented. The next scoped admin review batch adds tenant-safe moderation queue/summary, rejection reasons and refunded sponsor budgets on independent staff takedown. Neither batch provides remote media/CDN erasure or qualifying view-fraud/provider evidence. Keep Status financial and public gates OFF and withhold consolidated APK until the full Home/feed source package is ready.
 
+**Owner campaign readback follow-up, source-scoped:** Upcoming separate Status receipt/UI batch will render live reserved MB distinctly from spent MB and unused funds already released, show direct/referred qualified-view delivery and immutable rejection reasons in My Promotions. The state transition's original remaining-view arithmetic remains available for financial audit; it must never be interpreted as a still-reserved balance after cancellation. Wallet Activity aggregation and provider-backed rewards still require separate end-to-end source acceptance.
+
 **27 October continued R03/F03 diagnosis merged #518:** Source merge
 `5f3f7cac875c70195387b5112e014765e00a9a2c`, exact head
 `1461c59d8d688a1bbecc2cf22e7ed65f09e0710f`; all SIX applicable hosted checks PASS
