@@ -6,6 +6,15 @@
 
 **Owner-approved further scope, 27 October 2026 (planned):** Every eligible signed-in user may **Boost** an approved Home post (Masana or human) by selecting a funded additional-view target at 1 MB/qualified view, using the existing compact quote/review/Recharge path. Sponsor/publisher privileges remain separate and a qualified view may debit at most one sponsor's balance. **Human paid posts without active budgets leave Home immediately;** a disabled owner-profile copy lasts exactly 72 server-timed hours for Boost Again/Delete, then public content/media is purged while required receipts remain. An ordinary Masana editorial post is not erased by a third-party boost ending; only its funded campaign stops. Add country-calling-code and state/province selection to the **existing** email-OTP signup/Profile, with corrected country inference, ISO/E.164 server validation and explicit region selection (phone ≠ residence proof). Defer geographic ad personalization until consent/product approval and international provider qualification. These are new SPE A–F checklist tasks, **not yet code-complete**.
 
+**Owner-authorized Flutterwave Railway test deployment, 27 October 2026:**
+The owner explicitly authorizes deploying Flutterwave Data on Railway using its
+currently observed dynamic outbound IPv4 for whitelist testing, then replacing
+that address after upgrading to static-IP service. This supersedes the earlier
+fixed-IP hosting hold for this work. Deploy and measure actual outbound IPv4;
+never give an inbound domain address or describe a dynamic observation as a
+reserved IP. Preserve provider credentials in Railway, explicit MB review and
+original-reference reconciliation, and approve only qualified whole-GB bundles.
+
 Read the canonical [roadmap](docs/PRODUCT-ROADMAP-20261019.md), [complete screens/journeys](docs/SCREEN-JOURNEYS.md) and [handoff](CONTINUE-HERE.md). The roadmap and journeys have superseded the old Chats/Status/Wallet/Calls/Rooms crypto-era product. Git history preserves the old specification for audit; do not revive removed features.
 
 1. **Only five root tabs, Home first:** Home (the existing Status feed with platform-Masana posts and approved funded promotions), Chats (one-to-one Masana), Wallet (integer MB), Calls (one-to-one Masana audio), Data (Flutterwave whole-GB mobile data redemption).

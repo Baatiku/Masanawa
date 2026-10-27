@@ -12,9 +12,17 @@ pnpm --filter @masanawa/gateway-service migrate
 pnpm --filter @masanawa/gateway-service start &
 gateway_pid=$!
 presence_pid=""
+flutterwave_observer_pid=""
+if [[ "${MASANAWA_FLUTTERWAVE_OBSERVE_OUTBOUND:-false}" == "true" ]]; then
+  node scripts/flutterwave-railway-observation.mjs &
+  flutterwave_observer_pid=$!
+fi
 
 shutdown() {
   trap - TERM INT
+  if [[ -n "$flutterwave_observer_pid" ]] && kill -0 "$flutterwave_observer_pid" 2>/dev/null; then
+    kill -TERM "$flutterwave_observer_pid" 2>/dev/null || true
+  fi
   if [[ -n "$presence_pid" ]] && kill -0 "$presence_pid" 2>/dev/null; then
     kill -TERM "$presence_pid" 2>/dev/null || true
   fi
@@ -22,6 +30,9 @@ shutdown() {
     kill -TERM "$gateway_pid" 2>/dev/null || true
   fi
   wait "$gateway_pid" 2>/dev/null || true
+  if [[ -n "$flutterwave_observer_pid" ]]; then
+    wait "$flutterwave_observer_pid" 2>/dev/null || true
+  fi
   if [[ -n "$presence_pid" ]]; then
     wait "$presence_pid" 2>/dev/null || true
   fi

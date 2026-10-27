@@ -1201,6 +1201,20 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Railway-provided deployed Git SHA; only a validated 40-character hexadecimal value may appear in sanitized MB call relay diagnostics."
+    },
+    {
+      "name": "MASANAWA_FLUTTERWAVE_DIRECT_ENABLED",
+      "owner": "gateway/flutterwave",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit owner-authorized Railway direct Flutterwave IPv4 mode; bypasses previously configured external relay without modifying its saved credentials. Requires current outbound IPv4 whitelist."
+    },
+    {
+      "name": "MASANAWA_FLUTTERWAVE_OBSERVE_OUTBOUND",
+      "owner": "gateway/flutterwave",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
     }
   ]
 }

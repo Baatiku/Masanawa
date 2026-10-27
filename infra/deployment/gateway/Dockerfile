@@ -16,6 +16,7 @@ COPY adapters ./adapters
 COPY infra ./infra
 COPY services ./services
 COPY apps ./apps
+COPY scripts/flutterwave-railway-observation.mjs ./scripts/flutterwave-railway-observation.mjs
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @masanawa/gateway-service... build

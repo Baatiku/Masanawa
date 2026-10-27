@@ -349,3 +349,16 @@ input remains 400. Actual calls follow signed MB review/confirm, the private
 provider token service and the one-use same-origin relay grant; provider secrets
 never return through the public compatibility endpoint. Existing MB original-call
 recovery, setup/ringing zero cost, server-owned time and account fences are retained.
+
+## Flutterwave Railway test connection — 27 October
+
+The existing Data phone/network → verified bundle → review → confirm → original
+pending/result/receipt flow uses the server's Flutterwave relay. Operator discovery
+fetches current Nigerian Mobile Data billers/items using credentials resolved
+inside Railway. Users still see an honest empty/unavailable/retry state until
+whitelisting and exact bundle approvals are ready; no sample bundle or fabricated
+success is inserted. A provider acknowledgement remains pending until verified
+delivery; unknown writes retain the original reference/hold and never auto-rebuy.
+Temporary outbound IPv4 observation is an operational setup fact, not a promise
+of a permanent IP or data delivery. No provider keys or wholesale diagnostic logs
+are exposed on customer screens.

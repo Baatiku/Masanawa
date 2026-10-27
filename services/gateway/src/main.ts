@@ -1,3 +1,4 @@
+import {flutterwaveTransportConfiguration} from "./gb_data/transport_configuration.js";
 import {reviewedMbCallRequired} from "./gb_calls/public_token_policy.js";
 import {qualifiedNgnExchange} from "./gb_wallet/ngn_qualification.js";
 import {createCanonicalId} from "@masanawa/contracts";
@@ -195,7 +196,6 @@ import {
   createBillingWalletService,
   type BillingWalletService,
 } from "./billing_wallet.js";
-import { MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS } from "./agent_msnw_billing_assistant.js";
 import {
   TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
   createAgentTeachingAssistant,
@@ -1085,10 +1085,8 @@ export async function startGatewayService(
                env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true"
             ? MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
             : []),
-          ...(env.FLUTTERWAVE_BILLS_ENABLED === "true" &&
-               assertMsnwNgnPolicyRate(env.MSNW_BILLING_RATE_KOBO_PER_MSNW)
-            ? MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS
-            : []),
+          // Flutterwave backs the retained Data tab. Enabling its adapter
+          // must not revive retired MSNW/non-data bill prompts in Masana chat.
         ]),
       });
     }
@@ -1139,8 +1137,10 @@ export async function startGatewayService(
 
   const billingEnabled = env.FLUTTERWAVE_BILLS_ENABLED === "true";
   const flutterwaveSecretKey = env.FLUTTERWAVE_SECRET_KEY?.trim();
-  const flutterwaveRelayUrl = env.FLUTTERWAVE_RELAY_URL?.trim();
-  const flutterwaveRelayToken = env.MASANAWA_FLUTTERWAVE_RELAY_TOKEN?.trim();
+  const flutterwaveRelayUrl = env.MASANAWA_FLUTTERWAVE_DIRECT_ENABLED==='true'
+    ? undefined : env.FLUTTERWAVE_RELAY_URL?.trim();
+  const flutterwaveRelayToken = env.MASANAWA_FLUTTERWAVE_DIRECT_ENABLED==='true'
+    ? undefined : env.MASANAWA_FLUTTERWAVE_RELAY_TOKEN?.trim();
   const flutterwaveRelayProtocol = env.FLUTTERWAVE_RELAY_PROTOCOL === "dual-header"
     ? ("dual-header" as const)
     : ("bearer" as const);
@@ -1151,11 +1151,7 @@ export async function startGatewayService(
   }
 
   const flutterwaveTransport = billingEnabled && flutterwaveSecretKey
-    ? new FlutterwaveHttpTransport(
-        flutterwaveRelayUrl && flutterwaveRelayToken
-          ? { baseUrl: flutterwaveRelayUrl, relayToken: flutterwaveRelayToken, relayProtocol: flutterwaveRelayProtocol }
-          : {},
-      )
+    ? new FlutterwaveHttpTransport(flutterwaveTransportConfiguration(env))
     : undefined;
   const flutterwaveBills = billingEnabled && flutterwaveSecretKey && flutterwaveTransport
     ? new FlutterwaveBillsClient({ secretKey: flutterwaveSecretKey, transport: flutterwaveTransport, country: "NG" })
