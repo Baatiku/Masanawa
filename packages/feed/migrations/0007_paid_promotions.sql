@@ -116,5 +116,5 @@ ALTER TABLE gb_wallet.operations DROP CONSTRAINT IF EXISTS operations_operation_
 ALTER TABLE gb_wallet.operations DROP CONSTRAINT IF EXISTS gb_wallet_operations_operation_kind_check;
 ALTER TABLE gb_wallet.operations ADD CONSTRAINT gb_wallet_operations_operation_kind_check CHECK (operation_kind IN (
  'welcome_grant','verified_deposit','send','request_pay','tip','reply','connected_call',
- 'redeem','reversal','promotion_view'));
+ 'redeem','reversal','ngn_exchange','promotion_view'));
 REVOKE ALL ON ALL TABLES IN SCHEMA feed FROM PUBLIC;
