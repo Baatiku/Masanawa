@@ -196,7 +196,6 @@ import {
   createBillingWalletService,
   type BillingWalletService,
 } from "./billing_wallet.js";
-import { MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS } from "./agent_msnw_billing_assistant.js";
 import {
   TEACHING_AGENT_SYSTEM_INSTRUCTIONS,
   createAgentTeachingAssistant,
@@ -1086,10 +1085,8 @@ export async function startGatewayService(
                env.NOWPAYMENTS_DESTINATION_WHITELIST_CONFIRMED === "true"
             ? MSNW_CRYPTO_AGENT_SYSTEM_INSTRUCTIONS
             : []),
-          ...(env.FLUTTERWAVE_BILLS_ENABLED === "true" &&
-               assertMsnwNgnPolicyRate(env.MSNW_BILLING_RATE_KOBO_PER_MSNW)
-            ? MSNW_BILLING_AGENT_SYSTEM_INSTRUCTIONS
-            : []),
+          // Flutterwave backs the retained Data tab. Enabling its adapter
+          // must not revive retired MSNW/non-data bill prompts in Masana chat.
         ]),
       });
     }
