@@ -117,7 +117,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.post('/v1/admin/promotions/posts/:postId/takedown',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
   fields(b,['reason']);if(typeof b.reason!=='string'||!b.reason.trim())fail('review_reason_required');
-  return options.port.adminTakedown(p.tenantId,p.userId,params(r,'postId'),b.reason);
+  return options.port.adminTakedown(p.tenantId,p.userId,params(r,'postId'),b.reason as string);
  });
  app.post('/v1/admin/promotions/purge-expired',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');await admin(r);fields(body(r),[]);
