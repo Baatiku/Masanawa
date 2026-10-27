@@ -5,6 +5,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'gb_wallet_activity.dart';
+import '../tokens/masanawa_tokens.dart';
+
+// Exported documents use the canonical light palette on white paper.
+ui.Color _receiptColor(String hex) => ui.Color(int.parse(hex.substring(1), radix:16) | 0xff000000);
 
 class GbReceiptDocument {
   const GbReceiptDocument({required this.pngPages,required this.pdf});
@@ -42,7 +46,7 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
     final builder=ui.ParagraphBuilder(ui.ParagraphStyle(textDirection:ui.TextDirection.ltr,
       fontSize:size,fontFamily:'Roboto',height:1.35))
       ..pushStyle(ui.TextStyle(fontSize:size,fontWeight:bold?ui.FontWeight.w700:ui.FontWeight.w400,
-        color:color??const ui.Color(0xff172720)))..addText(text);
+        color:color??_receiptColor(MasanawaTokens.light.textPrimary)))..addText(text);
     return builder.build()..layout(const ui.ParagraphConstraints(width:515));
   }
   final pngPages=<Uint8List>[],rgbPages=<Uint8List>[];
@@ -51,12 +55,12 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
   double y=0;
   void beginPage() {
     recorder=ui.PictureRecorder();canvas=ui.Canvas(recorder!)..scale(scale);
-    canvas.drawRect(const ui.Rect.fromLTWH(0,0,width,height),ui.Paint()..color=const ui.Color(0xffffffff));
+    canvas.drawRect(const ui.Rect.fromLTWH(0,0,width,height),ui.Paint()..color=_receiptColor(MasanawaTokens.light.surfaceCard));
     canvas.drawImageRect(logo,ui.Rect.fromLTWH(0,0,logo.width.toDouble(),logo.height.toDouble()),
       const ui.Rect.fromLTWH(40,28,64,64),ui.Paint());
-    canvas.drawParagraph(paragraph('Masanawa',28,bold:true,color:const ui.Color(0xff008450)),const ui.Offset(120,36));
+    canvas.drawParagraph(paragraph('Masanawa',28,bold:true,color:_receiptColor(MasanawaTokens.light.brandStrong)),const ui.Offset(120,36));
     canvas.drawParagraph(paragraph('Wallet receipt',16),const ui.Offset(120,72));
-    canvas.drawLine(const ui.Offset(40,114),const ui.Offset(555,114),ui.Paint()..color=const ui.Color(0xffc9d9d0));
+    canvas.drawLine(const ui.Offset(40,114),const ui.Offset(555,114),ui.Paint()..color=_receiptColor(MasanawaTokens.light.structuralBorder));
     y=132;
   }
   Future<void> finishPage()async{
@@ -77,7 +81,7 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
   try{
     beginPage();
     for(final row in rows){
-      final label=paragraph(row.$1,11,color:const ui.Color(0xff53685c));
+      final label=paragraph(row.$1,11,color:_receiptColor(MasanawaTokens.light.textMuted));
       final value=paragraph(row.$2,16,bold:row.$1=='Amount');
       final needed=label.height+value.height+22;
       if(y+needed>750){await finishPage();beginPage();}
