@@ -144,15 +144,39 @@ class CallHistoryItem {
 }
 
 class CallHistoryPage {
-  const CallHistoryPage({required this.calls, this.nextCursor});
+  const CallHistoryPage({required this.calls, this.nextCursor, this.summary});
   final List<CallHistoryItem> calls;
   final String? nextCursor;
+  final CallHistorySummary? summary;
+}
+
+class CallHistorySummary {
+  const CallHistorySummary({required this.calls,required this.verifiedConnectedMs,
+    required this.chargedMb,required this.unverifiedCalls,required this.pendingUsageCalls});
+  final int calls,verifiedConnectedMs,chargedMb,unverifiedCalls,pendingUsageCalls;
+  factory CallHistorySummary.read(Object? raw) {
+    if(raw is! Map)throw const FormatException('Invalid call totals');
+    final keys=['calls','verifiedConnectedMs','chargedMb','unverifiedCalls','pendingUsageCalls'];
+    for(final key in keys) {
+      if(raw[key] is! int || (raw[key] as int)<0)
+        throw const FormatException('Invalid call totals');
+    }
+    final count=raw['calls'] as int,unknown=raw['unverifiedCalls'] as int,
+      pending=raw['pendingUsageCalls'] as int;
+    if(unknown+pending>count || (count==0 &&
+       ((raw['verifiedConnectedMs'] as int)!=0 || (raw['chargedMb'] as int)!=0)))
+      throw const FormatException('Inconsistent call totals');
+    return CallHistorySummary(calls:count,verifiedConnectedMs:raw['verifiedConnectedMs'] as int,
+      chargedMb:raw['chargedMb'] as int,unverifiedCalls:unknown,pendingUsageCalls:pending);
+  }
 }
 
 abstract interface class CallHistoryTransport {
   Future<CallHistoryPage> loadPage({
     String? cursor,
     String query = '',
+    String connection = 'all',
+    String days = 'all',
     CancelToken? cancelToken,
   });
 }
@@ -205,9 +229,15 @@ class GatewayCallHistoryTransport
   Future<CallHistoryPage> loadPage({
     String? cursor,
     String query = '',
+    String connection = 'all',
+    String days = 'all',
     CancelToken? cancelToken,
   }) async {
-    final parameters = <String, dynamic>{'limit': 30};
+    if(!const {'all','connected','not_connected'}.contains(connection) ||
+       !const {'all','7','30'}.contains(days))
+      throw const FormatException('Invalid call filter');
+    final parameters = <String, dynamic>{'limit': 30,
+      if(connection!='all')'connection':connection,if(days!='all')'days':days};
     if (cursor != null) parameters['cursor'] = cursor;
     if (query.isNotEmpty) parameters['q'] = query;
     final response = await api.dio.get<dynamic>(
@@ -232,6 +262,7 @@ class GatewayCallHistoryTransport
     return CallHistoryPage(
       calls: calls,
       nextCursor: data['nextCursor'] as String?,
+      summary:data['summary']==null?null:CallHistorySummary.read(data['summary']),
     );
   }
 }

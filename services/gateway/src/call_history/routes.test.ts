@@ -120,6 +120,19 @@ describe("Masana call history HTTP authority", () => {
     } finally { await app.close(); }
   });
 
+  it("binds filtered pagination to the exact connection and period",async()=>{
+    const {app,repository}=setup();
+    const cursor=encodeCallCursor({createdAt:"2026-10-12T10:00:00.000Z",callId},"amina","connected/7");
+    try {
+      expect((await app.inject({url:`/v1/calls?q=amina&connection=connected&days=7&cursor=${cursor}`})).statusCode).toBe(200);
+      expect(repository.list).toHaveBeenCalledWith(expect.objectContaining({connection:"connected",days:"7",query:"amina"}));
+      for(const url of [`/v1/calls?q=amina&connection=connected&days=30&cursor=${cursor}`,
+        `/v1/calls?q=amina&connection=not_connected&days=7&cursor=${cursor}`,
+        '/v1/calls?connection=guessed','/v1/calls?days=14'])
+        expect((await app.inject({url})).statusCode).toBe(400);
+    }finally{await app.close();}
+  });
+
   it("rejects financial and participant data in lifecycle reports", async () => {
     const { app, repository } = setup();
     try {

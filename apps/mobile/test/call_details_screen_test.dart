@@ -40,7 +40,7 @@ final item=CallHistoryItem(callId:'call-a',characterId:'agent-a',displayName:'Am
 class _Transport implements CallHistoryTransport,CallDetailTransport {
  _Transport(this.handler);final Future<CallHistoryItem> Function() handler;
  @override Future<CallHistoryItem> get(String id,{CancelToken? cancelToken})=>handler();
- @override Future<CallHistoryPage> loadPage({String? cursor,String query='',CancelToken? cancelToken})async=>CallHistoryPage(calls:[item]);
+ @override Future<CallHistoryPage> loadPage({String? cursor,String query='',String connection='all',String days='all',CancelToken? cancelToken})async=>CallHistoryPage(calls:[item]);
  @override Future<MasanaCallGroup> group(String id,{CancelToken? cancelToken})=>throw StateError('not group');
 }
 Future<void> mount(WidgetTester t,_Session s,_Transport transport)=>t.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(()=>s),callHistoryTransportProvider.overrideWithValue(transport)],child:MaterialApp(home:CallDetailsScreen(ownerId:'a',initial:item))));
