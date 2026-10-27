@@ -28,6 +28,14 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  port:PromotionPort;principal:(r:FastifyRequest)=>Promise<Principal>;
  isEditor:(p:Principal)=>Promise<boolean>;enabled:()=>boolean;
 }){
+ // Client capability discovery is intentionally safe when the financial
+ // engine is disabled. Do not advertise a purchasable campaign until all
+ // source/provider/privacy qualifications have been explicitly released.
+ app.get('/v1/promotions/capabilities',async(_r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  return {enabled:options.enabled(),priceMbPerQualifiedView:1,
+   pendingCommissionHalfMbPerReferredView:1};
+ });
  const who=async(r:FastifyRequest)=>{
   if(!options.enabled())fail('status_financial_qualification_missing',503);
   return options.principal(r);

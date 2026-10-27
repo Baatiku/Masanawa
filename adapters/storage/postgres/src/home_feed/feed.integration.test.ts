@@ -45,6 +45,8 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   const humanMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0006_human_public_status.sql",import.meta.url),"utf8");
   await pool.query(humanMigration);
   await pool.query(humanMigration); // historic Masana IDs retained and idempotent
+  await pool.query(readFileSync(new URL("../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql",import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0007_paid_promotions.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -118,6 +120,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await expect(repo.publish("tenant_test","masana_one",{...value,body:"Modified"})).rejects.toMatchObject({code:"idempotency_conflict"});
   expect((await repo.list("tenant_test",null,"for_you",null,30))).toHaveLength(1);
   expect((await repo.list("tenant_other",null,"for_you",null,30))).toHaveLength(0);
+  expect((await repo.find("tenant_test","fan_one",first.id))?.verifiedViewCount).toBe(0);
  });
  it("following uses the authoritative masana.follows table",async()=>{
   await isolated.pool.query("INSERT INTO masana.follows(tenant_id,fan_user_id,character_id) VALUES($1,$2,$3)",["tenant_test","fan_one","masana_one"]);
