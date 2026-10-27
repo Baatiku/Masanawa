@@ -4,9 +4,9 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 import 'package:masanawa/src/ui/components/masanawa_wordmark.dart';
 
 void main() {
-  test('light chat surface is white without changing outgoing bubble identity', () {
+  test('light chat canvas is warm neutral while message cards keep contrast', () {
     final colors = MasanawaColors.light();
-    expect(colors.chatBg, Colors.white);
+    expect(colors.chatBg, const Color(0xFFF7F5EF));
     expect(colors.surfaceBg, Colors.white);
     expect(colors.surfaceCard, Colors.white);
     expect(colors.bubbleOut, const Color(0xFFD9FDD3));

@@ -1057,7 +1057,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                MasanaPortraitAvatar(agent: agent, size: 36),
+                MasanaPortraitAvatar(agent: agent, size: 42),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Column(
@@ -1120,14 +1120,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   ? null
                   : () => _openLiveVoice(agent),
             ),
-            IconButton(
-              tooltip: _showSearch ? 'Close search' : 'Search',
-              icon: Icon(_showSearch ? Icons.close : Icons.search),
-              onPressed: () => setState(() {
-                _showSearch = !_showSearch;
-                if (!_showSearch) _search.clear();
-              }),
-            ),
             ],
             PopupMenuButton<String>(
               tooltip: 'More',
@@ -1143,6 +1135,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 }
                 if (!context.mounted) return;
                 if (value == 'activity') widget.onOpenActivity?.call();
+                if (value == 'search') setState(() { _showSearch = true; _searchIndex = 0; });
                 if (value == 'profile') _openMasanaProfile(agent);
                 if (value == 'clear') _confirmClear(agent);
                 if (value == 'new') await ctl.newContext(widget.characterId);
@@ -1153,6 +1146,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 if (value == 'report') await _reportAgent(agent);
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(value: 'search', child: Text('Search chat')),
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
                 if (widget.embeddedInShell) ...const [
                   PopupMenuItem(value: 'activity', child: Text('Activity')),
@@ -1215,7 +1209,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 onTap: _sendCafeSuggestion,
               ),
             Expanded(
-              child: messages.isEmpty && !sending
+              child: CustomPaint(
+                painter: _ChatTexturePainter(u.textMuted.withValues(alpha: .055)),
+                child: messages.isEmpty && !sending
                   ? const SizedBox.shrink()
                   : SuperListView.builder(
                       controller: _scroll,
@@ -1293,6 +1289,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                 ),
                                 child: _ChatBubble(
                                   message: message,
+                                  agent: agent,
                                   selected: _selectedMessageIds.contains(message.id),
                                   highlighted: highlightedSearchId == message.id,
                                   onSelect: () => setState(() {
@@ -1363,6 +1360,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         );
                       },
                     ),
+              ),
             ),
             if (!_nearBottom)
               Align(
@@ -1460,6 +1458,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                       _VoiceBubble(
                         key: ValueKey('continuation-$noteId'),
                         attachment: _sequenceNotes[noteId]!,
+                        agent: agent,
                         continuationGeneration: generation,
                         canContinue: () => _canContinueVoiceNotes &&
                             _voiceSequence.isCurrent(noteId, generation) &&
@@ -1482,6 +1481,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   ref.read(aiChatProvider.notifier).stopGeneration(widget.characterId);
                 },
                 onAttach: _openAttachSheet,
+                onCamera: () => _pickImage(ImageSource.camera),
                 onMic: updateRequired
                     ? () {}
                     : () => unawaited(_startInlineRecording()),
@@ -2706,6 +2706,7 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onStop,
     required this.onAttach,
+    required this.onCamera,
     required this.onMic,
     required this.onEmojiToggle,
     required this.focusNode,
@@ -2730,6 +2731,7 @@ class _Composer extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onStop;
   final VoidCallback onAttach;
+  final VoidCallback onCamera;
   final VoidCallback onMic;
   final Future<void> Function()? onHoldStart, onReRecord;
   final VoidCallback? onHoldLock;
@@ -2752,7 +2754,7 @@ class _Composer extends StatelessWidget {
     final isReady = recorder != null && recorder!.state == VoiceNoteState.ready;
     final hasActiveVoice = isRecording || isReady;
 
-    return SafeArea(
+    final textComposer = SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
@@ -2767,19 +2769,15 @@ class _Composer extends StatelessWidget {
                   borderRadius: BorderRadius.circular(26),
                   border: Border.all(color: u.structuralBorder),
                 ),
-                child: hasActiveVoice
-                    ? (isRecording ? _buildRecordingBar(context, u) : _buildPreviewBar(context, u))
-                    : _buildTextBar(context, u),
+                child: _buildTextBar(context, u),
               ),
             ),
             const SizedBox(width: 6),
             Semantics(
               button: true,
-              label: hasActiveVoice
-                  ? 'Send voice note'
-                  : (hasText ? 'Send message' : 'Record voice note'),
+              label: hasText ? 'Send message' : 'Record voice note',
               child: VoiceNoteHoldRegion(
-                enabled:!hasActiveVoice&&!sending&&!hasText&&onHoldStart!=null,
+                enabled:!sending&&!hasText&&onHoldStart!=null,
                 onStart:onHoldStart??()async{},onPreview:onStopRecording??()async{},
                 onCancel:onCancelRecording??()async{},onLock:onHoldLock??(){},
                 child: Material(
@@ -2787,23 +2785,19 @@ class _Composer extends StatelessWidget {
                 shape: const CircleBorder(),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: hasActiveVoice
-                      ? onSendVoiceNote
-                      : (sending ? onStop : (hasText ? onSend : onMic)),
+                  onTap: sending ? onStop : (hasText ? onSend : onMic),
                   child: SizedBox(
                     width: 48,
                     height: 48,
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 160),
                       child: Icon(
-                        hasActiveVoice
-                            ? Icons.send_rounded
-                            : (sending
+                        sending
                                 ? Icons.stop_rounded
                                 : hasText
                                     ? Icons.send_rounded
-                                    : Icons.mic_rounded),
-                        key: ValueKey('$hasActiveVoice-$sending-$hasText'),
+                                    : Icons.mic_rounded,
+                        key: ValueKey('$sending-$hasText'),
                         color: Colors.white,
                         size: 23,
                       ),
@@ -2817,85 +2811,90 @@ class _Composer extends StatelessWidget {
         ),
       ),
     );
+    // Keep the original hold recognizer mounted until the finger lifts. A
+    // recording panel that replaces this subtree would lose the gesture end
+    // event and leave the microphone recording unexpectedly.
+    return Stack(alignment: Alignment.bottomCenter, children: [
+      ExcludeSemantics(excluding: hasActiveVoice, child: textComposer),
+      if (hasActiveVoice) _buildExpandedVoicePanel(context, u, isRecording),
+    ]);
   }
 
-  Widget _buildRecordingBar(BuildContext context, MasanawaColors u) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-            tooltip: 'Cancel recording',
-            onPressed: onCancelRecording,
-          ),
-          const _BlinkingRedDot(),
-          const SizedBox(width: 8),
-          Text(
-            formatDurationMs(recorder!.elapsed.inMilliseconds),
-            style: TextStyle(
-              fontFeatures: const [FontFeature.tabularFigures()],
-              fontWeight: FontWeight.w600,
-              color: u.textPrimary,
-              fontSize: 15,
-            ),
-          ),
-          const SizedBox(width:8),
-          Expanded(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(
-            recordingLocked?'Recording locked':holdActive?'Slide left to cancel · up to lock':'Recording voice note',
-            maxLines:1,overflow:TextOverflow.ellipsis,
-            style: TextStyle(
-              color: u.textMuted,
-              fontSize: 12,
-            ),
-          ),
-          _VoiceWaveform(values:recorder!.waveform,progress:1,enabled:false,onSeek:(_){}),
-          ])),
-          const SizedBox(width: 6),
-          IconButton(
-            icon: Icon(Icons.stop_circle_outlined, color: u.brand, size: 26),
-            tooltip: 'Stop & review',
-            onPressed: onStopRecording,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPreviewBar(BuildContext context, MasanawaColors u) {
-    final durMs = recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-            tooltip: 'Discard',
-            onPressed: onCancelRecording,
-          ),
-          IconButton(
-            icon: Icon(
-              previewPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-              color: u.brand,
-              size: 28,
-            ),
-            tooltip: previewPlaying ? 'Pause' : 'Play preview',
-            onPressed: onTogglePreview,
-          ),
-          IconButton(tooltip:'Record again',onPressed:onReRecord,icon:Icon(Icons.replay,color:u.textPrimary,size:22)),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              'Voice note (${formatDurationMs(durMs)})',
-              style: TextStyle(
-                color: u.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+  Widget _buildExpandedVoicePanel(BuildContext context, MasanawaColors u,
+      bool isRecording) {
+    final durationMs = isRecording
+        ? recorder!.elapsed.inMilliseconds
+        : recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
+    final label = isRecording
+        ? (recordingLocked ? 'Recording locked' :
+            holdActive ? 'Slide left to cancel · up to lock' : 'Recording voice note')
+        : 'Review voice note';
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        decoration: BoxDecoration(
+          color: u.surfaceCard,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .07),
+            blurRadius: 12, offset: const Offset(0, -3))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              if (isRecording) ...[const _BlinkingRedDot(), const SizedBox(width: 8)],
+              Text(formatDurationMs(durationMs),
+                style: TextStyle(color: u.textPrimary, fontSize: 19,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+              const SizedBox(width: 12),
+              Expanded(child: Text(label, maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: u.textMuted, fontSize: 12))),
+            ]),
+            const SizedBox(height: 8),
+            SizedBox(height: 30, child: _VoiceWaveform(
+              values: recorder!.waveform, progress: 1, enabled: false,
+              onSeek: (_) {})),
+            const SizedBox(height: 10),
+            Row(children: [
+              IconButton.filledTonal(
+                tooltip: isRecording ? 'Cancel recording' : 'Discard',
+                onPressed: onCancelRecording,
+                icon: Icon(Icons.delete_outline_rounded, color: u.emergency),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+              const SizedBox(width: 10),
+              Expanded(child: Tooltip(
+                message: isRecording ? 'Stop & review' :
+                  previewPlaying ? 'Pause preview' : 'Play preview',
+                child: FilledButton.tonalIcon(
+                onPressed: isRecording ? onStopRecording : onTogglePreview,
+                icon: Icon(isRecording ? Icons.stop_rounded :
+                  previewPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                label: Text(isRecording ? (largeText ? 'Review' : 'Stop & review') :
+                  previewPlaying ? (largeText ? 'Pause' : 'Pause preview') :
+                    (largeText ? 'Play' : 'Play preview')),
+              ))),
+              const SizedBox(width: 10),
+              Semantics(container: true, button: true, label: 'Send voice note',
+                child: ExcludeSemantics(child: IconButton.filled(
+                tooltip: 'Send voice note',
+                onPressed: sending ? null : onSendVoiceNote,
+                icon: const Icon(Icons.send_rounded),
+                iconSize: 25,
+                constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
+              ))),
+            ]),
+            if (!isRecording) Align(alignment: Alignment.center,
+              child: Tooltip(message: 'Record again', child: TextButton.icon(onPressed: onReRecord,
+                icon: const Icon(Icons.replay_rounded, size: 18),
+                label: const Text('Record again')))),
+          ],
+        ),
       ),
     );
   }
@@ -2933,6 +2932,11 @@ class _Composer extends StatelessWidget {
           tooltip: 'Attach',
           icon: Icons.attach_file,
           onPressed: onAttach,
+        ),
+        _ComposerIcon(
+          tooltip: 'Camera',
+          icon: Icons.camera_alt_outlined,
+          onPressed: onCamera,
         ),
       ],
     );
@@ -3224,6 +3228,7 @@ class _ReplyComposerPreview extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
+    required this.agent,
     required this.selected,
     required this.highlighted,
     required this.onSelect,
@@ -3241,6 +3246,7 @@ class _ChatBubble extends StatelessWidget {
   });
 
   final AiChatMessage message;
+  final AgentDirectoryEntry agent;
   final bool selected;
   final bool highlighted;
   final VoidCallback onSelect;
@@ -3431,7 +3437,8 @@ class _ChatBubble extends StatelessWidget {
                     )
                   else ...[
                     if (attachments.isNotEmpty) ...[
-                      _AttachmentGallery(attachments: attachments),
+                      _AttachmentGallery(attachments: attachments,
+                        senderIsUser: isUser, agent: agent),
                       if (message.text.isNotEmpty) const SizedBox(height: 6),
                     ],
                     if (message.uploadProgress case final progress?
@@ -3576,6 +3583,33 @@ class _ChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A quiet Masanawa texture gives the conversation depth without reusing a
+/// third-party wallpaper asset or competing with message text.
+class _ChatTexturePainter extends CustomPainter {
+  const _ChatTexturePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pen = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1;
+    for (double y = 18; y < size.height + 72; y += 76) {
+      for (double x = 20; x < size.width + 72; x += 76) {
+        final shiftedX = x + ((y ~/ 76).isEven ? 0 : 30);
+        canvas.drawCircle(Offset(shiftedX, y), 11, pen);
+        canvas.drawCircle(Offset(shiftedX, y), 3, pen);
+        canvas.drawLine(Offset(shiftedX + 26, y + 19),
+          Offset(shiftedX + 40, y + 19), pen);
+        canvas.drawLine(Offset(shiftedX + 33, y + 12),
+          Offset(shiftedX + 33, y + 26), pen);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChatTexturePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _DateSeparator extends StatelessWidget {
@@ -3731,8 +3765,11 @@ class _CodeBlock extends StatelessWidget {
 }
 
 class _AttachmentGallery extends StatelessWidget {
-  const _AttachmentGallery({required this.attachments});
+  const _AttachmentGallery({required this.attachments,
+    required this.senderIsUser, required this.agent});
   final List<ChatAttachment> attachments;
+  final bool senderIsUser;
+  final AgentDirectoryEntry agent;
 
   @override
   Widget build(BuildContext context) {
@@ -3743,6 +3780,8 @@ class _AttachmentGallery extends StatelessWidget {
     if (attachments.length == 1) {
       return _AttachmentView(
         attachment: attachments.first,
+        senderIsUser: senderIsUser,
+        agent: agent,
         imagePaths: imagePaths,
         imageIndex: 0,
       );
@@ -3758,6 +3797,8 @@ class _AttachmentGallery extends StatelessWidget {
               width: attachment.kind == 'image' ? 126 : 250,
               child: _AttachmentView(
                 attachment: attachment,
+                senderIsUser: senderIsUser,
+                agent: agent,
                 imagePaths: imagePaths,
                 imageIndex: attachment.kind == 'image'
                     ? imageAttachments.indexOf(attachment)
@@ -3773,11 +3814,15 @@ class _AttachmentGallery extends StatelessWidget {
 class _AttachmentView extends StatelessWidget {
   const _AttachmentView({
     required this.attachment,
+    required this.senderIsUser,
+    required this.agent,
     this.imagePaths = const [],
     this.imageIndex = 0,
   });
 
   final ChatAttachment attachment;
+  final bool senderIsUser;
+  final AgentDirectoryEntry agent;
   final List<String> imagePaths;
   final int imageIndex;
 
@@ -3796,7 +3841,8 @@ class _AttachmentView extends StatelessWidget {
         );
       case 'voice':
       case 'audio':
-        return _VoiceBubble(attachment: attachment);
+        return _VoiceBubble(attachment: attachment,
+          senderIsUser: senderIsUser, agent: agent);
       default:
         return _DocTile(attachment: attachment);
     }
@@ -4079,7 +4125,7 @@ class _VoiceWaveform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    if(values.isEmpty)return SizedBox(height:34,child:Slider(
+    if(values.isEmpty)return SizedBox(height:28,child:Slider(
       value:progress.clamp(0.0,1.0).toDouble(),onChanged:enabled?onSeek:null,
       semanticFormatterCallback:(value)=>'${(value*100).round()} percent',
     ));
@@ -4093,7 +4139,7 @@ class _VoiceWaveform extends StatelessWidget {
           onHorizontalDragUpdate: (details) =>
               _seekFromDx(details.localPosition.dx, width),
           child: SizedBox(
-            height: 34,
+            height: 28,
             child: Stack(
               alignment: Alignment.centerLeft,
               children: [
@@ -4107,7 +4153,7 @@ class _VoiceWaveform extends StatelessWidget {
                           child: Container(
                             width: 2.2,
                             height:
-                                (5 + bars[i].clamp(0.0, 1.0) * 23).toDouble(),
+                                (4 + bars[i].clamp(0.0, 1.0) * 18).toDouble(),
                             decoration: BoxDecoration(
                               color: (i / bars.length) <= progress
                                   ? u.brand
@@ -4185,8 +4231,11 @@ Future<T> _withVoiceRoute<T>(Future<T> Function() work) {
 
 class _VoiceBubble extends StatefulWidget {
   const _VoiceBubble({super.key, required this.attachment,
+    required this.agent, this.senderIsUser=false,
     this.continuationGeneration, this.canContinue});
   final ChatAttachment attachment;
+  final AgentDirectoryEntry agent;
+  final bool senderIsUser;
   final int? continuationGeneration;
   final bool Function()? canContinue;
 
@@ -4499,30 +4548,33 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
                 .toInt(),
           );
 
+    final avatar = widget.senderIsUser
+        ? CircleAvatar(radius: 18,
+            backgroundColor: u.brand.withValues(alpha: .16),
+            child: Icon(Icons.person_rounded, size: 23, color: u.brand))
+        : MasanaPortraitAvatar(agent: widget.agent, size: 36);
     return SizedBox(
-      width: 235,
+      width: 274,
       child: Row(
         children: [
-          GestureDetector(
-            onTap: _toggle,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: u.brand.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
+          if (widget.senderIsUser) ...[avatar, const SizedBox(width: 4)],
+          IconButton(
+            tooltip: _broken ? 'Retry voice note' : _playing ? 'Pause voice note' : 'Play voice note',
+            onPressed: _toggle,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 42, minHeight: 48),
+            padding: EdgeInsets.zero,
+            icon: Icon(
                 _broken
                     ? Icons.refresh
                     : _playing
                     ? Icons.pause
                     : Icons.play_arrow,
-                color: u.brand,
-              ),
+                color: u.textMuted,
+                size: 30,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 2),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4537,7 +4589,8 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
                   children: [
                     Text(
                       _broken ? 'Tap to retry' : remaining,
-                      style: TextStyle(color: u.textMuted, fontSize: 11),
+                      style: TextStyle(color: u.textMuted, fontSize: 11.5,
+                        fontFeatures: const [FontFeature.tabularFigures()]),
                     ),
                     const Spacer(),
                     InkWell(
@@ -4552,7 +4605,7 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
                           '${_sharedVoiceSpeed.toStringAsFixed(_sharedVoiceSpeed == 1 ? 0 : 1)}×',
                           style: TextStyle(
                             color: u.textMuted,
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -4563,11 +4616,13 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
               ],
             ),
           ),
-          const SizedBox(width: 2),
+          if (!widget.senderIsUser) ...[const SizedBox(width: 4), avatar],
           IconButton(
             tooltip: _speakerOn ? 'Use earpiece' : 'Use speaker',
             visualDensity: VisualDensity.compact,
-            iconSize: 18,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 40),
+            padding: EdgeInsets.zero,
+            iconSize: 17,
             onPressed: _toggleAudioRoute,
             icon: Icon(
               _speakerOn ? Icons.volume_up_outlined : Icons.hearing_outlined,
