@@ -45,7 +45,6 @@ import '../../core/voice_note_recorder.dart';
 import '../profile/masana_profile_screen.dart';
 import '../../core/app_permissions.dart';
 import '../../agents/agent_shell.dart';
-import '../../agents/masanawa_transport.dart';
 import '../../core/providers.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
@@ -1905,6 +1904,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       if (transport is! AgentShellTransport) {
         throw StateError('Live voice is unavailable. Please try again.');
       }
+      final shellTransport = transport as AgentShellTransport;
       final reporter = ref.read(callLifecycleReporterProvider);
       final owner = reporter.captureOwner();
       if (owner == null) return;
@@ -1920,7 +1920,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       try {
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         await _activeVoiceBubble?._pauseFromAnotherBubble();
-        await transport.setPresence(
+        await shellTransport.setPresence(
           characterId: agent.characterId,
           state: 'on_call',
           durationMs: 5 * 60 * 1000,
@@ -1955,7 +1955,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           _inlineVoiceSession = session;
           _inlineMbAdmission = admission;
           _inlineMbFlow = flow;
-          _inlineShellTransport = transport;
+          _inlineShellTransport = shellTransport;
           _inlineVoiceCharacterId = agent.characterId;
           _inlineVoiceState = LiveVoiceState.connecting;
         });
@@ -1977,7 +1977,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           _inlineVoiceCharacterId = null;
         }
         await _finishMbAdmission(flow, admission);
-        await transport.setPresence(characterId: agent.characterId,
+        await shellTransport.setPresence(characterId: agent.characterId,
           state: 'available', durationMs: 60 * 1000).catchError((_) {});
         rethrow;
       }
@@ -2042,6 +2042,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       if (transport is! AgentShellTransport) {
         throw StateError('Live voice is unavailable.');
       }
+      final shellTransport = transport as AgentShellTransport;
       final reporter = ref.read(callLifecycleReporterProvider);
       final owner = reporter.captureOwner();
       if (owner == null) return;
@@ -2057,7 +2058,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       try {
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         await _activeVoiceBubble?._pauseFromAnotherBubble();
-        await transport.setPresence(characterId: agent.characterId,
+        await shellTransport.setPresence(characterId: agent.characterId,
           state: 'on_call', durationMs: 5 * 60 * 1000);
         unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
         if (!stillOwner()) throw StateError('Call account changed before grant.');
@@ -2099,7 +2100,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await history?.closed();
         if (identical(_modalVoiceSession, session)) _modalVoiceSession = null;
         await _finishMbAdmission(flow, admission);
-        await transport.setPresence(characterId: agent.characterId,
+        await shellTransport.setPresence(characterId: agent.characterId,
           state: 'available', durationMs: 60 * 1000).catchError((_) {});
         if (mounted) {
           unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
