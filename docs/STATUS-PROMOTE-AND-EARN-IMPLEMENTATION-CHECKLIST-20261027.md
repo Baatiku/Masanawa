@@ -97,6 +97,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 
 **C19 source progress (not completion):** The authenticated My Promotions management view now reads original owner-only inactive body, historic verified count and `serverNow` plus `purgeAt` for a drift-resistant retention countdown, preserving Boost Again/Delete. A fully unified personal-profile My Posts entry, supported image/media review, all state labels and broad Flutter visual/semantics verification are still required.
 
+**C11/D03/D14 source progress (not completion):** Campaign readback now distinguishes the amount actually debited for delivered qualified views, the amount still reserved in a live/pending/paused campaign, and the unused amount already returned on rejection/cancellation. The signed-in My Promotions view shows direct/referred delivery and an immutable rejection reason rather than mislabelling refunded views as funds still held. This does not supply unified Wallet Activity grouping, spend/refund double-entry receipts or economic settlement, and these items remain unchecked.
+
 ### Batch D — Wallet, redemption and admin finishing pass
 - [ ] **SPE-D01** Extend compact Wallet balance details with clearly separated purchased, restricted welcome, campaign reserved, pending earned, and settled/redeemable earned MB while keeping NGN independent. Show 0 only on an authoritative read; no cosmetic oversized balance card.
 - [ ] **SPE-D02** Add Sharing Earnings entry/summary with pending, released, rejected and carry-over **half-MB** rewards, per-post performance and receipts; no fabricated success, impossible negative, cash-out or premature availability.

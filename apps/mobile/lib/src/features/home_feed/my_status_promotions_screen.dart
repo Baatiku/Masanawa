@@ -85,8 +85,15 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
         for(final c in campaigns)
           Card(child:ListTile(
             title:Text('${c['kind']=='boost'?'Boost':'Promotion'} · ${c['state']??'Unknown'}'),
-            subtitle:Text('${c['deliveredViews']??0}/${c['targetViews']??0} delivered views · '
-              '${c['remainingViews']??0} MB reserved\nReference: ${c['id']??''}'),
+            subtitle:Text('${c['deliveredViews']??0}/${c['targetViews']??0} qualified views · '
+              '${c['directViews']??0} direct / ${c['referredViews']??0} referred\n'
+              '${c['spentMb']??c['deliveredViews']??0} MB spent · '
+              '${c['reservedMb']??0} MB still reserved'
+              '${(c['refundedUnusedMb'] is num && c['refundedUnusedMb']>0)?
+                ' · ${c['refundedUnusedMb']} MB released':''}\n'
+              '${c['reviewReason'] is String && (c['reviewReason'] as String).isNotEmpty?
+                'Review reason: ${c['reviewReason']}\n':''}'
+              'Reference: ${c['id']??''}'),
             isThreeLine:true,
             trailing:const {'active','pending_review','paused'}.contains(c['state'])
               ?TextButton(onPressed:pending.contains(c['id'])?null:
