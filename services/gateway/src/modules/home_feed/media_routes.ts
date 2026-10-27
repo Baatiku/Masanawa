@@ -4,6 +4,7 @@ import type {FastifyInstance,FastifyRequest} from "fastify";
 export interface PublishedPostMedia {
   tenantId:string;postId:string;mediaId:string;authorMasanaId:string;
   kind:"image"|"audio";transcript:string|null;
+  altText?:string|null;
 }
 
 /** Signer MUST perform its own tenant/author/media permission and rights check against
@@ -56,6 +57,8 @@ export async function registerFeedMediaRoutes(app:FastifyInstance,options:FeedMe
         /^audio\/(mpeg|mp4|ogg|aac|wav|webm)$/.test(signed.contentType)))
       return reply.code(503).send(bad("media_signer_unavailable"));
     return reply.send({mediaId,kind:post.kind,url:signed.url,contentType:signed.contentType,
-      expiresAt:signed.expiresAt,transcript:post.kind==="audio"?post.transcript:null});
+      expiresAt:signed.expiresAt,transcript:post.kind==="audio"?post.transcript:null,
+      // Never synthesize or copy an unreviewed alt label from post body.
+      altText:post.kind==="image"&&post.altText?.trim()?post.altText:null});
   });
 }

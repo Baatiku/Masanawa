@@ -23,6 +23,36 @@ class RetryMediaApi implements FeedMediaApi {
 }
 
 void main() {
+  test('signed media alt parser allows only bounded reviewed copy',(){
+    final now=DateTime.now().add(const Duration(minutes:2)).toUtc().toIso8601String();
+    final base={'mediaId':'media_abcdefgh','kind':'image',
+      'url':'https://media.example.test/signed','expiresAt':now};
+    expect(FeedMediaGrant.fromJson({...base,
+      'altText':'A reviewed portrait with a blue headscarf.'}).altText,
+      'A reviewed portrait with a blue headscarf.');
+    expect(FeedMediaGrant.fromJson({...base,'altText':'short'}).altText,'short');
+    expect(FeedMediaGrant.fromJson({...base,'altText':String.fromCharCodes(
+      List<int>.filled(500,65))}).altText,isNull);
+    expect(FeedMediaGrant.fromJson({...base,'altText':null}).altText,isNull);
+    expect(FeedMediaGrant.fromJson({...base,'kind':'audio',
+      'altText':'Reviewed image description not applicable to audio.'}).altText,isNull);
+  });
+  testWidgets('approved image caption is displayed and read aloud without guesswork',
+      (tester) async {
+    final api=_ApprovedAltMediaApi();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:FeedInlineMediaCard(
+      api:api,accountKey:'viewer',postId:'post_authorized',
+      mediaId:'media_abcdefgh',mediaCount:2,
+      renderer:(_)=>const Text('Scoped approved image')))));
+    await tester.pumpAndSettle();
+    expect(find.text('A reviewed portrait of the Masana at a desk.'),findsOneWidget);
+    // Inspect the specific semantics node: Flutter may merge its caption
+    // Text as a second newline-delimited utterance at the root.
+    expect(find.byWidgetPredicate((widget)=>widget is Semantics &&
+      widget.properties.label?.contains(
+        'Image 1 of 2. A reviewed portrait of the Masana at a desk.')==true),
+      findsOneWidget);
+  });
   testWidgets('unauthorized media never spins forever and later scoped retry recovers',
       (tester) async {
     final api = RetryMediaApi();
@@ -142,4 +172,12 @@ class _ExpiredMediaApi implements FeedMediaApi {
         url: Uri.parse('https://example.test/expired'),
         expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
       );
+}
+
+class _ApprovedAltMediaApi implements FeedMediaApi {
+  @override Future<FeedMediaGrant> getGrant(String postId,String mediaId) async=>
+    FeedMediaGrant(mediaId:mediaId,kind:'image',
+      url:Uri.parse('https://media.example.test/approved'),
+      expiresAt:DateTime.now().add(const Duration(minutes:1)),
+      altText:'A reviewed portrait of the Masana at a desk.');
 }

@@ -166,10 +166,20 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
               TextButton(onPressed:load,child:Text(tr('Retry','Sake gwadawa')))])
             :grant==null?const SizedBox.shrink()
             :widget.mediaRenderer?.call(grant!)??(grant!.kind=='image'
-              ?InteractiveViewer(minScale:1,maxScale:4,child:Image.network(
-                grant!.url.toString(),fit:BoxFit.contain,
-                errorBuilder:(_,__,___)=>Text(tr('Image failed to load. Retry.',
-                  'An kasa nuna hoton. Sake gwadawa.'))))
+              ?Column(mainAxisSize:MainAxisSize.min,children:[
+                Flexible(child:Semantics(
+                  label:grant!.altText ??
+                    tr('Image. No approved description provided.',
+                      'Hoto. Babu bayanin da aka amince da shi.'),
+                  child:InteractiveViewer(minScale:1,maxScale:4,child:Image.network(
+                    grant!.url.toString(),fit:BoxFit.contain,
+                    errorBuilder:(_,__,___)=>Text(tr('Image failed to load. Retry.',
+                      'An kasa nuna hoton. Sake gwadawa.')))))),
+                if(grant!.altText!=null)
+                  Padding(padding:const EdgeInsets.all(12),
+                    child:SelectableText(grant!.altText!,
+                      textAlign:TextAlign.center)),
+              ])
               :Column(mainAxisSize:MainAxisSize.min,children:[
                 const Icon(Icons.graphic_eq,size:64),
                 StreamBuilder<PlayerState>(stream:player.playerStateStream,
