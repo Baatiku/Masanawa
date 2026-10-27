@@ -54,15 +54,26 @@ export function createMbBilledConversation(input:{
       throw new Error("gb.reply.original_request_conflict");
     const existing=await reservations.read(actor.tenantId,actor.operationId,actor.userId);
     if(original){
-      // Server-stored terminal outcome is authoritative after an uncertain
-      // capture or lost response. Never retrocharge pre-feature old replies.
-      if(existing?.state==="reserved"&&original.state==="completed" &&
-         original.reply?.trim())await reservations.capture(actor,1);
-      if(existing?.state==="reserved"&&original.state==="failed")
-        await reservations.release(actor);
-      if(existing?.state==="reserved"&&original.state==="pending")
+      // Replay is read-only. The canonical command already holds the result:
+      // never invoke inference again, even if a previous answer predates MB.
+      if(original.state==="pending")
         throw new Error("gb.reply.original_pending");
-      return forward();
+      if(original.state==="failed"){
+        if(existing?.state==="completed")
+          throw new Error("gb.reply.inconsistent_financial_outcome");
+        if(existing?.state==="reserved")
+          await reservations.release(actor);
+        throw new Error("gb.reply.original_failed");
+      }
+      if(!original.reply?.trim()||!original.agentRunId)
+        throw new Error("gb.reply.terminal_confirmation_missing");
+      if(existing?.state==="failed")
+        throw new Error("gb.reply.inconsistent_financial_outcome");
+      if(existing?.state==="reserved")
+        await reservations.capture(actor,1);
+      // There is intentionally no reserve for an old pre-rollout reply.
+      return {reply:original.reply,agentRunId:original.agentRunId,
+        parts:original.parts} as T;
     }
     // No provider work before a valid atomically held 1 MB. A previous
     // reservation without a persisted command may represent an unknown
