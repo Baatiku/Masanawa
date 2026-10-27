@@ -8,6 +8,10 @@ matching call count, server-verified connected time and confirmed MB charges;
 missing or pending usage is explicit and never inferred from client timestamps.
 Loading/offline/Retry, empty results, account change, dated paging, canonical
 portraits, receipt detail and redial remain on the same accessible scrolling screen.
+Historical group records retain their stored reference but show a retired-format
+notice and Back to Calls only. Detail never fetches group participants, offers
+group creation/redial or routes a group into a single Masana. Fresh credentials,
+including reauthentication by the same user, clear old detail and fence late reads.
 
 **27 October owner-approved 36-plan catalogue:** Data supports approved exact MB
 allowances, including 40/100/200/350/500/750 MB and fractional GB. Show MB below
