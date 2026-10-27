@@ -2913,9 +2913,7 @@ class _Composer extends StatelessWidget {
     final isReady = recorder != null && recorder!.state == VoiceNoteState.ready;
     final hasActiveVoice = isRecording || isReady;
 
-    if (hasActiveVoice) return _buildExpandedVoicePanel(context, u, isRecording);
-
-    return SafeArea(
+    final textComposer = SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
@@ -2972,6 +2970,13 @@ class _Composer extends StatelessWidget {
         ),
       ),
     );
+    // Keep the original hold recognizer mounted until the finger lifts. A
+    // recording panel that replaces this subtree would lose the gesture end
+    // event and leave the microphone recording unexpectedly.
+    return Stack(alignment: Alignment.bottomCenter, children: [
+      ExcludeSemantics(excluding: hasActiveVoice, child: textComposer),
+      if (hasActiveVoice) _buildExpandedVoicePanel(context, u, isRecording),
+    ]);
   }
 
   Widget _buildExpandedVoicePanel(BuildContext context, MasanawaColors u,
@@ -3034,13 +3039,14 @@ class _Composer extends StatelessWidget {
                     (largeText ? 'Play' : 'Play preview')),
               ))),
               const SizedBox(width: 10),
-              IconButton.filled(
+              Semantics(container: true, button: true, label: 'Send voice note',
+                child: ExcludeSemantics(child: IconButton.filled(
                 tooltip: 'Send voice note',
                 onPressed: sending ? null : onSendVoiceNote,
                 icon: const Icon(Icons.send_rounded),
                 iconSize: 25,
                 constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-              ),
+              ))),
             ]),
             if (!isRecording) Align(alignment: Alignment.center,
               child: Tooltip(message: 'Record again', child: TextButton.icon(onPressed: onReRecord,
