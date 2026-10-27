@@ -46,6 +46,7 @@ import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
+import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
 import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
@@ -1642,6 +1643,10 @@ export async function startGatewayService(
       ...(promotionsConfigured?{
         promotions:new PgStatusPromotions(database.featurePool!,
           env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!),
+        // Crawlers never obtain privileged feed/media access or create paid views.
+        // Public navigation stays disabled until legal/privacy qualification.
+        publicLanding:{port:new PgPublicStatusLanding(database.featurePool!),
+          enabled:()=>false},
         // Financial activation still requires a separately completed,
         // security-qualified full Status/public-web client composition.
         promotionsEnabled:()=>false,
