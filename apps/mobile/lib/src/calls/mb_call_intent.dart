@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 abstract interface class MbCallIntentStore {
@@ -6,12 +7,40 @@ abstract interface class MbCallIntentStore {
   Future<void> write(String? value);
 }
 
+/// Every signed-in account gets its own encrypted recovery slot. A pending
+/// financial operation from account A must not block an unrelated account B
+/// or be cleared when B signs in. Legacy single-slot data is migrated only
+/// for the matching authenticated owner and only after durable new storage.
 class SecureMbCallIntentStore implements MbCallIntentStore {
-  const SecureMbCallIntentStore();
+  const SecureMbCallIntentStore({this.ownerId});
+  final String? ownerId;
   static const _storage = FlutterSecureStorage();
-  static const _key = 'mb_call_original_operation_v1';
+  static const _legacyKey = 'mb_call_original_operation_v1';
+
+  String get _key {
+    final owner = ownerId;
+    if (owner == null) return _legacyKey;
+    if (owner.isEmpty) throw StateError('Cannot store an unowned MB call.');
+    return 'mb_call_original_operation_v2_${sha256.convert(utf8.encode(owner))}';
+  }
+
   @override
-  Future<String?> read() => _storage.read(key: _key);
+  Future<String?> read() async {
+    final current = await _storage.read(key: _key);
+    if (current != null || ownerId == null) return current;
+    final legacy = await _storage.read(key: _legacyKey);
+    if (legacy == null) return null;
+    try {
+      final value = jsonDecode(legacy);
+      if (value is! Map || value['ownerId'] != ownerId) return null;
+    } catch (_) {
+      return null;
+    }
+    await _storage.write(key: _key, value: legacy);
+    await _storage.delete(key: _legacyKey);
+    return legacy;
+  }
+
   @override
   Future<void> write(String? value) => value == null
       ? _storage.delete(key: _key)

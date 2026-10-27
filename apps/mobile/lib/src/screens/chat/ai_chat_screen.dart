@@ -32,8 +32,9 @@ import '../../chat/shell_document.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/call_outcome.dart';
 import '../../calls/call_lifecycle_limits.dart';
-import '../../calls/group_paid_voice_transport.dart';
-import '../../calls/group_paid_voice_outbox.dart';
+import '../../calls/mb_call_transport.dart';
+import '../../calls/mb_call_intent.dart';
+import '../../calls/mb_call_flow.dart';
 import '../../core/live_pcm_audio.dart';
 import '../../core/live_call_foreground.dart';
 import '../../core/live_voice_session.dart';
@@ -44,14 +45,11 @@ import '../../core/voice_note_recorder.dart';
 import '../profile/masana_profile_screen.dart';
 import '../../core/app_permissions.dart';
 import '../../agents/agent_shell.dart';
-import '../../agents/masanawa_transport.dart';
 import '../../core/providers.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
 import '../../state/session_state.dart';
 import '../../state/wallet_state.dart';
-import '../../voice/paid_voice.dart';
-import '../../voice/paid_voice_state.dart';
 import '../../voice/voice_reply_playback_preference.dart';
 import '../../voice/voice_note_sequence.dart';
 import '../../safety/twin_safety_state.dart';
@@ -114,8 +112,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   ProviderSubscription<SessionState>? _voiceAccountSubscription;
   int _voiceAuthorizationEpoch = 0;
   StreamSubscription<LiveVoiceState>? _inlineVoiceStateSub;
-  PaidVoiceAdmission? _inlinePaidAdmission;
-  PaidVoiceController? _inlinePaidController;
+  MbCallAdmission? _inlineMbAdmission;
+  MbCallFlow? _inlineMbFlow;
+  bool _mbCallStarting = false;
   AgentShellTransport? _inlineShellTransport;
   String? _inlineVoiceCharacterId;
   LiveVoiceState _inlineVoiceState = LiveVoiceState.idle;
@@ -1758,53 +1757,101 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       const SnackBar(content: Text('Masana report submitted.')),
     );
   }
-  PaidVoiceController _capturePaidController(
-      CallLifecycleOwner owner, CallLifecycleReporter reporter) {
-    return PaidVoiceController(GroupPaidVoiceTransport(
-      api: ref.read(apiClientProvider),
-      accountKey: owner.accountId,
-      accessToken: owner.accessToken,
-      outbox: ref.read(groupPaidVoiceOutboxProvider),
-      currentAccountKey: () => reporter.captureOwner()?.accountId));
+  MbCallFlow _captureMbCallFlow(
+    CallLifecycleOwner owner, CallLifecycleReporter reporter,
+  ) {
+    final api = ref.read(apiClientProvider);
+    return MbCallFlow(
+      ownerId: owner.accountId,
+      journal: MbCallIntentJournal(SecureMbCallIntentStore(ownerId: owner.accountId)),
+      transport: MbCallTransport(
+        dio: api.dio,
+        baseUrl: api.dio.options.baseUrl,
+        accessToken: owner.accessToken,
+        accountId: owner.accountId,
+        currentAccountId: () => reporter.captureOwner()?.accountId,
+      ),
+    );
   }
 
-  Future<(bool allowed, PaidVoiceAdmission? admission, int? estimatedSeconds)> _admitInlineVoice(
-    AgentDirectoryEntry agent, {required PaidVoiceController controller}
+  Future<MbCallAdmission?> _reviewAndAdmitMbCall(
+    AgentDirectoryEntry agent, MbCallFlow flow, bool Function() stillOwner,
   ) async {
-    // Personal Twins are retired: every non-support Masana goes through
-    // paid admission, preserving billing behavior.
-    final requiresPaidAdmission = !agent.supportAgent;
-    if (!requiresPaidAdmission) return (true, null, null);
-
-    final quote = await controller.quote(
-      characterId: agent.characterId,
-      expectedSeconds: 5 * 60,
-    );
-    if (quote == null || !mounted) return (false, null, null);
-    if (!quote.isTrial) {
-      final accepted = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('Voice with ${agent.displayName}'),
-          content: Text(
-            'Reserve up to ${quote.spendCapCredits} Credits for about 5 minutes. Only verified live time is charged.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Not now'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Accept & start'),
-            ),
-          ],
-        ),
-      );
-      if (accepted != true) return (false, null, null);
+    // The one-to-one server review is the only authority for purchased and
+    // restricted welcome MB. Even support Masana uses the reviewed MB rail.
+    final review = await flow.review(agent.characterId);
+    if (!stillOwner()) {
+      await flow.decline(review);
+      return null;
     }
-    final admission = await controller.accept(characterId: agent.characterId);
-    return (admission != null, admission, quote.estimatedSeconds);
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Voice with ${agent.displayName}'),
+        content: Text(
+          'Reserve up to ${review.budgetMb} MB for this call. '
+          'Only server-confirmed connected seconds are charged at 1 MB '
+          'per started second. Ringing and setup do not cost MB. '
+          'Unused reserved MB is released.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Reserve MB & call'),
+          ),
+        ],
+      ),
+    );
+    if (!stillOwner() || accepted != true) {
+      await flow.decline(review);
+      return null;
+    }
+    final admission = await flow.confirm(review);
+    if (admission.characterId != agent.characterId || !admission.active) {
+      throw StateError('The call admission cannot be used. Check its receipt.');
+    }
+    return admission;
+  }
+
+  Future<AgentLiveVoiceGrant> _renewMbGrant(
+    MbCallFlow flow, MbCallAdmission original, bool Function() stillOwner,
+  ) async {
+    if (!stillOwner()) {
+      throw StateError('The signed-in call account changed.');
+    }
+    final current = await flow.transport.read(original.id);
+    if (!stillOwner() || current.id != original.id ||
+        current.characterId != original.characterId || !current.active) {
+      throw StateError('The original MB call admission is no longer active.');
+    }
+    return flow.transport.grant(current);
+  }
+
+  Future<void> _finishMbAdmission(
+    MbCallFlow flow, MbCallAdmission admission,
+  ) async {
+    try {
+      final result = await flow.finish(admission);
+      if (result.state != 'completed' && result.state != 'failed') {
+        throw StateError('Call settlement is still pending.');
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Call settlement is unconfirmed. Your original call is saved '
+            'for safe readback before another call.',
+          ),
+        ));
+      }
+    }
+    if (mounted) {
+      unawaited(ref.read(walletProvider.notifier).refresh());
+    }
   }
 
   Future<void> _disposeInlineVoice() async {
@@ -1812,39 +1859,28 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final session = _inlineVoiceSession;
     if (session == null) return;
     _inlineVoiceClosing = true;
-    final admission = _inlinePaidAdmission;
+    final admission = _inlineMbAdmission;
+    final flow = _inlineMbFlow;
     final shellTransport = _inlineShellTransport;
     final characterId = _inlineVoiceCharacterId;
-    final paidController = _inlinePaidController;
-    final walletController = admission == null
-        ? null
-        : ref.read(walletProvider.notifier);
     try {
       await _inlineVoiceStateSub?.cancel();
       _inlineVoiceStateSub = null;
       await session.close();
-      if (admission != null && paidController != null) {
-        await paidController
-            .complete(
-              admissionId: admission.admissionId,
-              outcome: 'interrupted',
-            )
-            .catchError((_) {});
-        unawaited(walletController?.refresh() ?? Future<void>.value());
+      if (admission != null && flow != null) {
+        await _finishMbAdmission(flow, admission);
       }
       if (shellTransport != null && characterId != null) {
-        await shellTransport
-            .setPresence(
-              characterId: characterId,
-              state: 'available',
-              durationMs: 60 * 1000,
-            )
-            .catchError((_) {});
+        await shellTransport.setPresence(
+          characterId: characterId,
+          state: 'available',
+          durationMs: 60 * 1000,
+        ).catchError((_) {});
       }
     } finally {
       _inlineVoiceSession = null;
-      _inlinePaidAdmission = null;
-      _inlinePaidController = null;
+      _inlineMbAdmission = null;
+      _inlineMbFlow = null;
       _inlineShellTransport = null;
       _inlineVoiceCharacterId = null;
       _inlineVoiceClosing = false;
@@ -1852,200 +1888,138 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   }
 
   Future<void> _startInlineLiveVoice(AgentDirectoryEntry agent) async {
-    await _prepareCallAudio();
-    if (!mounted) return;
+    if (_mbCallStarting) return;
     if (_inlineVoiceSession != null) {
       await _stopInlineLiveVoice(outcome: 'completed');
       return;
     }
-    if (!await _ensurePermission(AppPermission.microphone, 'Microphone')) {
-      return;
-    }
-    final transport = ref.read(agentTransportProvider);
-    if (transport is! AgentShellTransport) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Live voice is unavailable. Please try again.')),
-        );
-      }
-      return;
-    }
-    final reporter = ref.read(callLifecycleReporterProvider);
-    final owner = reporter.captureOwner();
-    if (owner == null) return;
-    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-    bool stillOwner() => mounted &&
-        reporter.captureOwner()?.accountId == owner.accountId &&
-        ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
-    final paidController = _capturePaidController(owner, reporter);
-    final walletController = ref.read(walletProvider.notifier);
-    final admissionResult = await _admitInlineVoice(agent, controller: paidController);
-    final paidAdmission = admissionResult.$2;
-    if (!admissionResult.$1) return;
-    if (!stillOwner()) {
-      if (paidAdmission != null) {
-        await paidController.complete(admissionId: paidAdmission.admissionId,
-            outcome: 'interrupted').catchError((_) {});
-      }
-      return;
-    }
-
-    final shellTransport = transport as AgentShellTransport;
-    LiveVoiceSession? session;
-    CallLifecycleBinding? history;
+    _mbCallStarting = true;
     try {
-      await _activeVoiceBubble?._pauseFromAnotherBubble();
-      await shellTransport.setPresence(
-        characterId: agent.characterId,
-        state: 'on_call',
-        durationMs: 5 * 60 * 1000,
-      );
-      if (!stillOwner()) {
-        throw StateError('Call account changed before grant issuance');
+      await _prepareCallAudio();
+      if (!mounted || !await _ensurePermission(AppPermission.microphone, 'Microphone')) {
+        return;
       }
-      final grant = shellTransport is MasanawaAgentTransport
-          ? await shellTransport.mintLiveVoiceGrantPinned(agent.characterId,
-              accessToken: owner.accessToken, admissionId: paidAdmission?.admissionId)
-          : await shellTransport.mintLiveVoiceGrant(agent.characterId,
-              admissionId: paidAdmission?.admissionId, purpose: 'conversation');
-      history = reporter.bind(owner, grant.callId);
-      if (!stillOwner()) {
-        await history.closed();
-        throw StateError('Voice screen closed before session start');
+      final transport = ref.read(agentTransportProvider);
+      if (transport is! AgentShellTransport) {
+        throw StateError('Live voice is unavailable. Please try again.');
       }
-      session = LiveVoiceSession(
-        grant: grant,
-        characterName: agent.displayName,
-        renewConnectionGrant: () async {
-          final active = reporter.captureOwner();
-          if (!stillOwner() || active?.accountId != owner.accountId ||
-              (paidAdmission != null &&
-               !DateTime.now().isBefore(paidAdmission.expiresAt))) {
-            throw StateError('The original call admission is no longer active.');
-          }
-          // A new short-lived connection grant is NOT another call. Retain
-          // the original paid admission, account and history lifecycle.
-          return shellTransport is MasanawaAgentTransport
-              ? shellTransport.mintLiveVoiceGrantPinned(
-                  agent.characterId,
-                  accessToken: active!.accessToken,
-                  admissionId: paidAdmission?.admissionId,
-                )
-              : shellTransport.mintLiveVoiceGrant(
-                  agent.characterId,
-                  admissionId: paidAdmission?.admissionId,
-                  purpose: 'conversation',
-                );
-        },
-        onConnected: history.connected,
-        onClosed: () => history!.closed(reason:session?.endReason),
-        captureInputTranscription: false,
-        endAt: paidAdmission?.expiresAt,
-        maxDuration: paidAdmission == null ? null : paidNativeCallMaxDuration(
-          estimatedSeconds: admissionResult.$3!,
-          admissionExpiresAt: paidAdmission.expiresAt,
-          now: DateTime.now(),
-        ),
-      );
-
-      _inlineVoiceStateSub?.cancel();
-      _inlineVoiceStateSub = session.states.listen((state) {
-        if (!mounted) return;
-        setState(() => _inlineVoiceState = state);
-        if (state == LiveVoiceState.failed || state == LiveVoiceState.ended) {
-          unawaited(_stopInlineLiveVoice(outcome: 'interrupted'));
-        }
-      });
-
-      setState(() {
-        _inlineVoiceSession = session;
-        _inlinePaidAdmission = paidAdmission;
-        _inlinePaidController = paidController;
-        _inlineShellTransport = shellTransport;
-        _inlineVoiceCharacterId = agent.characterId;
-        _inlineVoiceState = LiveVoiceState.connecting;
-      });
-
-      await Future.wait<void>([session.start(), session.ready]);
-      if (paidAdmission != null) {
-        await paidController.mediaStarted(admissionId: paidAdmission.admissionId);
-      }
-    } catch (_) {
-      await session?.close();
-      await history?.closed();
-      if (paidAdmission != null) {
-        await paidController.complete(
-              admissionId: paidAdmission.admissionId,
-              outcome: 'interrupted',
-            )
-            .catchError((_) {});
-        unawaited(walletController.refresh());
-      }
-      await shellTransport
-          .setPresence(
-            characterId: agent.characterId,
-            state: 'available',
-            durationMs: 60 * 1000,
-          )
-          .catchError((_) {});
-      if (mounted) {
-        setState(() {
-          _inlineVoiceSession = null;
-          _inlinePaidAdmission = null;
-          _inlinePaidController = null;
-          _inlineShellTransport = null;
-          _inlineVoiceCharacterId = null;
-          _inlineVoiceState = LiveVoiceState.failed;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Live voice could not start. Check microphone access and connection.',
-            ),
+      final shellTransport = transport as AgentShellTransport;
+      final reporter = ref.read(callLifecycleReporterProvider);
+      final owner = reporter.captureOwner();
+      if (owner == null) return;
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      bool stillOwner() => mounted &&
+          reporter.captureOwner()?.accountId == owner.accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
+      final flow = _captureMbCallFlow(owner, reporter);
+      final admission = await _reviewAndAdmitMbCall(agent, flow, stillOwner);
+      if (admission == null) return;
+      LiveVoiceSession? session;
+      CallLifecycleBinding? history;
+      try {
+        if (!stillOwner()) throw StateError('Call account changed before connection.');
+        await _activeVoiceBubble?._pauseFromAnotherBubble();
+        await shellTransport.setPresence(
+          characterId: agent.characterId,
+          state: 'on_call',
+          durationMs: 5 * 60 * 1000,
+        );
+        if (!stillOwner()) throw StateError('Call account changed before grant.');
+        final grant = await flow.transport.grant(admission);
+        history = reporter.bind(owner, admission.id);
+        if (!stillOwner()) throw StateError('Call account changed before connection.');
+        session = LiveVoiceSession(
+          grant: grant,
+          characterName: agent.displayName,
+          renewConnectionGrant: () => _renewMbGrant(flow, admission, stillOwner),
+          onConnected: history.connected,
+          onClosed: () => history!.closed(reason: session?.endReason),
+          captureInputTranscription: false,
+          endAt: admission.expiresAt,
+          maxDuration: paidNativeCallMaxDuration(
+            estimatedSeconds: admission.budgetMb,
+            admissionExpiresAt: admission.expiresAt,
+            now: DateTime.now(),
           ),
         );
+        _inlineVoiceStateSub?.cancel();
+        _inlineVoiceStateSub = session.states.listen((state) {
+          if (!mounted) return;
+          setState(() => _inlineVoiceState = state);
+          if (state == LiveVoiceState.failed || state == LiveVoiceState.ended) {
+            unawaited(_stopInlineLiveVoice(outcome: 'interrupted'));
+          }
+        });
+        setState(() {
+          _inlineVoiceSession = session;
+          _inlineMbAdmission = admission;
+          _inlineMbFlow = flow;
+          _inlineShellTransport = shellTransport;
+          _inlineVoiceCharacterId = agent.characterId;
+          _inlineVoiceState = LiveVoiceState.connecting;
+        });
+        await Future.wait<void>([session.start(), session.ready]);
+        if (!stillOwner()) {
+          throw StateError('Call account changed during connection.');
+        }
+        // The trusted relay, not the mobile timer, proves chargeable seconds.
+      } catch (_) {
+        await session?.close();
+        await history?.closed();
+        if (identical(_inlineVoiceSession, session)) {
+          await _inlineVoiceStateSub?.cancel();
+          _inlineVoiceStateSub = null;
+          _inlineVoiceSession = null;
+          _inlineMbAdmission = null;
+          _inlineMbFlow = null;
+          _inlineShellTransport = null;
+          _inlineVoiceCharacterId = null;
+        }
+        await _finishMbAdmission(flow, admission);
+        await shellTransport.setPresence(characterId: agent.characterId,
+          state: 'available', durationMs: 60 * 1000).catchError((_) {});
+        rethrow;
       }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _inlineVoiceState = LiveVoiceState.failed);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Voice could not start. Check MB balance, '
+            'previous call recovery, or connection and try again.'),
+        ));
+      }
+    } finally {
+      _mbCallStarting = false;
     }
   }
 
-  Future<void> _stopInlineLiveVoice({
-    required String outcome,
-  }) async {
+  Future<void> _stopInlineLiveVoice({required String outcome}) async {
     if (_inlineVoiceClosing) return;
     final session = _inlineVoiceSession;
     if (session == null) return;
     _inlineVoiceClosing = true;
-    final admission = _inlinePaidAdmission;
+    final admission = _inlineMbAdmission;
+    final flow = _inlineMbFlow;
     final shellTransport = _inlineShellTransport;
     final characterId = _inlineVoiceCharacterId;
     try {
       await _inlineVoiceStateSub?.cancel();
       _inlineVoiceStateSub = null;
-      session.endReason??=CallEndReason.userEnded;
+      session.endReason ??= CallEndReason.userEnded;
       await session.close();
-      if (admission != null) {
-        await _inlinePaidController?.complete(
-              admissionId: admission.admissionId,
-              outcome: outcome,
-            )
-            .catchError((_) {});
-        unawaited(ref.read(walletProvider.notifier).refresh());
+      if (admission != null && flow != null) {
+        await _finishMbAdmission(flow, admission);
       }
       if (shellTransport != null && characterId != null) {
-        await shellTransport
-            .setPresence(
-              characterId: characterId,
-              state: 'available',
-              durationMs: 60 * 1000,
-            )
-            .catchError((_) {});
+        await shellTransport.setPresence(characterId: characterId,
+          state: 'available', durationMs: 60 * 1000).catchError((_) {});
       }
     } finally {
       if (mounted) {
         setState(() {
           _inlineVoiceSession = null;
-          _inlinePaidAdmission = null;
-          _inlinePaidController = null;
+          _inlineMbAdmission = null;
+          _inlineMbFlow = null;
           _inlineShellTransport = null;
           _inlineVoiceCharacterId = null;
           _inlineVoiceState = LiveVoiceState.idle;
@@ -2056,223 +2030,90 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   }
 
   Future<void> _openLiveVoice(AgentDirectoryEntry agent) async {
-    await _prepareCallAudio();
-    if (!mounted) return;
-    if (!await _ensurePermission(AppPermission.microphone, 'Microphone')) {
-      return;
-    }
-    final transport = ref.read(agentTransportProvider);
-    if (transport is! AgentShellTransport) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Live voice is unavailable. Please try again.')),
-        );
-      }
-      return;
-    }
-    final reporter = ref.read(callLifecycleReporterProvider);
-    final owner = reporter.captureOwner();
-    if (owner == null) return;
-    final ownerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-    bool stillOwner() => mounted &&
-        reporter.captureOwner()?.accountId == owner.accountId &&
-        ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
-    final shellTransport = transport as AgentShellTransport;
-    // Personal Twins are retired: every non-support Masana goes through
-    // paid admission, preserving billing behavior.
-    final requiresPaidAdmission = !agent.supportAgent;
-
-    final paidController = _capturePaidController(owner, reporter);
-    final walletController = ref.read(walletProvider.notifier);
-    PaidVoiceAdmission? paidAdmission;
-    var estimatedSeconds = 300;
-    if (requiresPaidAdmission) {
-      final controller = paidController;
-      final quote = await controller.quote(
-        characterId: agent.characterId,
-        expectedSeconds: 5 * 60,
-      );
-      // The retired Credits rail cannot qualify a Masanawa MB reservation.
-      // A missing quote must never fall through into an unreserved paid call.
-      if (quote == null || !stillOwner()) {
-        if (stillOwner()) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Could not reserve this voice call.'),
-          ));
-        }
-        return;
-      }
-      estimatedSeconds = quote.estimatedSeconds;
-      if (!stillOwner()) return;
-      if (!quote.isTrial) {
-          final accepted = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: Text('Voice with ${agent.displayName}'),
-              content: Text(
-                'Reserve up to ${quote.spendCapCredits} Credits for about 5 minutes. Only verified call time is charged and unused Credits are returned.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Not now'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Accept & call'),
-                ),
-              ],
-            ),
-          );
-          if (accepted != true) return;
-      }
-      paidAdmission = await controller.accept(characterId: agent.characterId);
-      if (paidAdmission == null || !stillOwner()) {
-        if (paidAdmission != null) {
-          await controller.complete(
-            admissionId: paidAdmission.admissionId, outcome: 'interrupted',
-          ).catchError((_) {});
-        }
-        if (stillOwner()) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not reserve this voice call.')),
-          );
-        }
-        return;
-      }
-    }
-
-    LiveVoiceSession? session;
-    CallLifecycleBinding? history;
-    var verifiedMediaStarted = false;
+    if (_mbCallStarting) return;
+    _mbCallStarting = true;
     try {
-      await _activeVoiceBubble?._pauseFromAnotherBubble();
-      await shellTransport.setPresence(
-        characterId: agent.characterId,
-        state: 'on_call',
-        durationMs: 5 * 60 * 1000,
-      );
-      unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
-      if (!stillOwner()) {
-        throw StateError('Call account changed before grant issuance');
+      await _prepareCallAudio();
+      if (!mounted || !await _ensurePermission(AppPermission.microphone, 'Microphone')) {
+        return;
       }
-      final grant = shellTransport is MasanawaAgentTransport
-          ? await shellTransport.mintLiveVoiceGrantPinned(agent.characterId,
-              accessToken: owner.accessToken, admissionId: paidAdmission?.admissionId)
-          : await shellTransport.mintLiveVoiceGrant(agent.characterId,
-              admissionId: paidAdmission?.admissionId);
-      history = reporter.bind(owner, grant.callId);
-      if (!stillOwner()) {
-        await history.closed();
-        throw StateError('Voice screen closed before call start');
+      final transport = ref.read(agentTransportProvider);
+      if (transport is! AgentShellTransport) {
+        throw StateError('Live voice is unavailable.');
       }
-      session = LiveVoiceSession(
-        grant: grant,
-        characterName: agent.displayName,
-        renewConnectionGrant: () async {
-          final active = reporter.captureOwner();
-          if (!stillOwner() || active?.accountId != owner.accountId ||
-              (paidAdmission != null &&
-               !DateTime.now().isBefore(paidAdmission.expiresAt))) {
-            throw StateError('The original call admission is no longer active.');
-          }
-          // A new short-lived connection grant is NOT another call. Retain
-          // the original paid admission, account and history lifecycle.
-          return shellTransport is MasanawaAgentTransport
-              ? shellTransport.mintLiveVoiceGrantPinned(
-                  agent.characterId,
-                  accessToken: active!.accessToken,
-                  admissionId: paidAdmission?.admissionId,
-                )
-              : shellTransport.mintLiveVoiceGrant(
-                  agent.characterId,
-                  admissionId: paidAdmission?.admissionId,
-                  purpose: 'conversation',
-                );
-        },
-        onConnected: history.connected,
-        onClosed: () => history!.closed(reason:session?.endReason),
-        endAt: paidAdmission?.expiresAt,
-        maxDuration: paidAdmission == null ? null : paidNativeCallMaxDuration(
-          estimatedSeconds: estimatedSeconds,
-          admissionExpiresAt: paidAdmission.expiresAt,
-          now: DateTime.now(),
-        ),
-      );
-      _modalVoiceSession = session;
-      await Navigator.of(context).push<void>(MaterialPageRoute<void>(
-        settings: RouteSettings(name: '/calls/live/${agent.characterId}'),
-        builder: (_) => MasanaLiveCallScreen(
-          agent: agent,
-          session: session!,
-          recordingOwnerId: owner.accountId,
-          isRecordingOwnerCurrent: () {
-            if (!mounted) return false;
-            final current = ref.read(sessionProvider);
-            return current is SessionSignedIn && current.user.id == owner.accountId &&
-                ref.read(sessionProvider.notifier).authorizationEpoch == ownerEpoch;
-          },
-          maxDuration: paidAdmission == null
-              ? null
-              : Duration(
-                  seconds: estimatedSeconds,
-                ),
-          onMediaStarted: paidAdmission == null
-              ? null
-              : () async {
-                  try {
-                    await paidController.mediaStarted(
-                          admissionId: paidAdmission!.admissionId,
-                        );
-                    verifiedMediaStarted = true;
-                  } catch (_) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Voice usage could not be verified, so this call was ended without charging you.',
-                          ),
-                        ),
-                      );
-                    }
-                    rethrow;
-                  }
-                },
+      final shellTransport = transport as AgentShellTransport;
+      final reporter = ref.read(callLifecycleReporterProvider);
+      final owner = reporter.captureOwner();
+      if (owner == null) return;
+      final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+      bool stillOwner() => mounted &&
+          reporter.captureOwner()?.accountId == owner.accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
+      final flow = _captureMbCallFlow(owner, reporter);
+      final admission = await _reviewAndAdmitMbCall(agent, flow, stillOwner);
+      if (admission == null) return;
+      LiveVoiceSession? session;
+      CallLifecycleBinding? history;
+      try {
+        if (!stillOwner()) throw StateError('Call account changed before connection.');
+        await _activeVoiceBubble?._pauseFromAnotherBubble();
+        await shellTransport.setPresence(characterId: agent.characterId,
+          state: 'on_call', durationMs: 5 * 60 * 1000);
+        unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
+        if (!stillOwner()) throw StateError('Call account changed before grant.');
+        final grant = await flow.transport.grant(admission);
+        history = reporter.bind(owner, admission.id);
+        if (!stillOwner()) throw StateError('Call account changed before connection.');
+        session = LiveVoiceSession(
+          grant: grant,
+          characterName: agent.displayName,
+          renewConnectionGrant: () => _renewMbGrant(flow, admission, stillOwner),
+          onConnected: history.connected,
+          onClosed: () => history!.closed(reason: session?.endReason),
+          endAt: admission.expiresAt,
+          maxDuration: paidNativeCallMaxDuration(
+            estimatedSeconds: admission.budgetMb,
+            admissionExpiresAt: admission.expiresAt,
+            now: DateTime.now(),
           ),
-        ),
-      );
+        );
+        _modalVoiceSession = session;
+        await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+          settings: RouteSettings(name: '/calls/live/${agent.characterId}'),
+          builder: (_) => MasanaLiveCallScreen(
+            agent: agent,
+            session: session!,
+            recordingOwnerId: owner.accountId,
+            isRecordingOwnerCurrent: () {
+              if (!mounted) return false;
+              final current = ref.read(sessionProvider);
+              return current is SessionSignedIn &&
+                  current.user.id == owner.accountId &&
+                  ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
+            },
+            maxDuration: Duration(seconds: admission.budgetMb),
+          ),
+        ));
+      } finally {
+        await session?.close();
+        await history?.closed();
+        if (identical(_modalVoiceSession, session)) _modalVoiceSession = null;
+        await _finishMbAdmission(flow, admission);
+        await shellTransport.setPresence(characterId: agent.characterId,
+          state: 'available', durationMs: 60 * 1000).catchError((_) {});
+        if (mounted) {
+          unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
+        }
+      }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Live voice could not start. Check microphone access and connection.',
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Voice could not start. Check MB balance, '
+            'previous call recovery, or connection and try again.'),
+        ));
       }
     } finally {
-      await session?.close();
-      await history?.closed();
-      if (identical(_modalVoiceSession, session)) _modalVoiceSession = null;
-      if (paidAdmission != null) {
-        await paidController.complete(
-              admissionId: paidAdmission.admissionId,
-              outcome: verifiedMediaStarted ? 'completed' : 'interrupted',
-            )
-            .catchError((_) {});
-        unawaited(walletController.refresh());
-      }
-      await shellTransport
-          .setPresence(
-            characterId: agent.characterId,
-            state: 'available',
-            durationMs: 60 * 1000,
-          )
-          .catchError((_) {});
-      if (mounted) {
-        unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
-      }
+      _mbCallStarting = false;
     }
   }
   Future<void> _runAgentAction(AiChatMessage message, String action) async {
