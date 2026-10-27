@@ -18,7 +18,7 @@ async function balance(user:string){
  const r=await query(`SELECT purchased_mb::int AS purchased,
   reserved_purchased_mb::int AS reserved,welcome_mb::int AS welcome
   FROM gb_wallet.accounts WHERE tenant_id=$1 AND account_id=$2`,[t,user]);
- return r.rows[0];
+ return r.rows[0] as {purchased:number;reserved:number;welcome:number};
 }
 describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=>{
  beforeAll(async()=>{
