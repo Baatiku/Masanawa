@@ -37,22 +37,22 @@ String? legacyShellDestination(String? tab) => switch (tab) {
   'agents' => '/home?tab=chats',
   'wallet' => '/home?tab=wallet',
   'talk' => '/home?tab=status',
-  'home' => '/home?tab=chats',
+  'home' => '/home?tab=status',
   _ => null,
 };
 
-/// Chats-first router. Secure local session restoration happens inline on
+/// Home-first router. Home is the existing Status feed. Secure restoration happens inline on
 /// /home, not through a separate branded splash screen or a fixed timer.
 /// Legacy links remain redirects to supported destinations.
 final appRouterProvider = Provider<GoRouter>((ref) {
   String? resumeLocation;
   String? resumeOwner;
   final router = GoRouter(
-    initialLocation: '/home?tab=chats',
+    initialLocation: '/home',
     redirect: (context, state) {
       final path = state.matchedLocation;
 
-      if (path == '/splash') return '/home?tab=chats';
+      if (path == '/splash') return '/home';
       if (path == '/chat' || path == '/chats') return '/home?tab=chats';
       if (path == '/agents') return '/home?tab=chats';
 
@@ -164,7 +164,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // Old splash links now redirect; no splash page is constructed.
-      GoRoute(path: '/splash', redirect: (_, __) => '/home?tab=chats'),
+      GoRoute(path: '/splash', redirect: (_, __) => '/home'),
       GoRoute(
         path: '/phone-login',
         builder: (_, _) => const PhoneLoginScreen(),

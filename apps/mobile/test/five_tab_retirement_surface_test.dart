@@ -49,7 +49,7 @@ void main() {
     final editor = _source('screens/profile/edit_profile_screen.dart');
     final masana = _source('screens/profile/masana_profile_screen.dart');
     expect(settings, isNot(contains('settings-my-masana')));
-    expect(settings, contains('Chats · Status · Wallet · Calls · Data'));
+    expect(settings, contains('Home · Chats · Wallet · Calls · Data'));
     expect(editor, isNot(contains('MyMasanaScreen')));
     expect(masana, isNot(contains('/rooms/')));
     expect(masana, isNot(contains('Creator')));
@@ -59,7 +59,13 @@ void main() {
     final router = _source('router/app_router.dart');
     expect(router, isNot(contains('ShareIntakeScreen(')));
     expect(router, isNot(contains('IncomingCallCoordinator(')));
+    expect(router, contains("initialLocation: '/home'"));
     expect(router, contains("'/home?tab=chats'"));
+    final shell = _source('shell/five_tab_shell.dart');
+    expect(shell, contains('0 => const StatusScreen()'));
+    expect(shell, contains('1 => const ChatListScreen()'));
+    expect(shell, contains('label: strings.home'));
+    expect(shell, contains('label: strings.chats'));
   });
 
   test('chat composer no longer offers video, document, location, poll', () {

@@ -471,7 +471,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 leading: Icon(Icons.tune_outlined, color: u.brand),
                 title: const Text('Notification preferences & activity'),
                 subtitle: const Text(
-                  'Masana chats, calls, Status, Wallet, Data and quiet hours',
+                  'Masana chats, calls, Home, Wallet, Data and quiet hours',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: user == null
@@ -546,13 +546,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 leading: Icon(Icons.info_outline, color: u.brand),
                 title: const Text('About Masanawa'),
-                subtitle: const Text('Chats, Status, Wallet, Calls and Data'),
+                subtitle: const Text('Home, Chats, Wallet, Calls and Data'),
                 onTap: () => showAboutDialog(
                   context: context,
                   applicationName: 'Masanawa',
                   children: const [
                     Text(
-                      'Chat and make audio calls with Masana, follow their Status updates, manage MB in Wallet, and redeem mobile data.',
+                      'Chat and call Masana, browse Home updates, manage MB in Wallet, and redeem mobile data.',
                     ),
                   ],
                 ),
@@ -642,7 +642,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           Center(
             child: Text(
-              'Masanawa · Chats · Status · Wallet · Calls · Data',
+              'Masanawa · Home · Chats · Wallet · Calls · Data',
               style: TextStyle(color: u.textMuted, fontSize: 11),
             ),
           ),

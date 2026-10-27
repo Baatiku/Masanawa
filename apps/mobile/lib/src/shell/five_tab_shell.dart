@@ -13,7 +13,7 @@ import '../ui/components/masanawa_main_header.dart';
 import '../theme/masanawa_theme.dart';
 import '../state/session_state.dart';
 
-/// Canonical five-tab root shell: Chats · Status · Wallet · Calls · Data.
+/// Canonical five-tab root shell: Home (Status feed) · Chats · Wallet · Calls · Data.
 ///
 /// This replaces the retired Home · Agents · Wallet · Talk shell. Each tab
 /// owns its screen; tabs only switch, they never fetch.
@@ -58,8 +58,8 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
   }
 
   Widget _page(int index) => switch (index) {
-    0 => const ChatListScreen(),
-    1 => const StatusScreen(),
+    0 => const StatusScreen(),
+    1 => const ChatListScreen(),
     2 => const GbWalletScreen(),
     3 => const MasanaOnlyCallsScreen(),
     _ => const DataRedemptionScreen(),
@@ -122,14 +122,14 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
           onDestinationSelected: _selectTab,
           destinations: [
             NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home),
+              label: strings.home,
+            ),
+            NavigationDestination(
               icon: const Icon(Icons.chat_bubble_outline),
               selectedIcon: const Icon(Icons.chat_bubble),
               label: strings.chats,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.donut_large),
-              selectedIcon: const Icon(Icons.donut_large),
-              label: strings.status,
             ),
             NavigationDestination(
               icon: const Icon(Icons.account_balance_wallet_outlined),
