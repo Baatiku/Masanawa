@@ -8,6 +8,9 @@ allowance or rounding to whole GB. Review, Back, insufficient balance, original
 pending recovery, expiry/repricing, account switch, offline/retry and accessible
 narrow/large-text/RTL behavior remain unchanged. Older APKs receive a whole-GB
 subset; the updated app explicitly requests the MB-capable catalogue.
+Daily groups the approved one- and two-day offers; each card/review still shows
+its exact numeric duration. Weekly and Monthly remain scoped to their actual
+durations, so none of the 36 approved plans disappears into a hidden Other group.
 
 **Active owner refactor, 24 October 2026.** Exactly five tabs: **Home (the existing Status feed) · Chats · Wallet · Calls · Data**. This document supersedes the old 177-screen/820-item scope. All legacy UI remains in Git history, not active routes. New MB balance is never derived from old Credits or MSNW. The next implementation batch must update this contract as screen/backend behavior lands, without inventing a second active plan.
 

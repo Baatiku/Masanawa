@@ -51,11 +51,12 @@ void main() {
 
   test('verified validity never guesses weekly/monthly from unusual days', () {
     expect(gbDataValidityPeriod(1), GbDataValidityPeriod.daily);
+    expect(gbDataValidityPeriod(2), GbDataValidityPeriod.daily);
     expect(gbDataValidityPeriod(7), GbDataValidityPeriod.weekly);
     for (final days in [28, 29, 30, 31]) {
       expect(gbDataValidityPeriod(days), GbDataValidityPeriod.monthly);
     }
-    for (final days in [2, 3, 6, 14, 21, 60, 365]) {
+    for (final days in [3, 6, 14, 21, 60, 365]) {
       expect(gbDataValidityPeriod(days), GbDataValidityPeriod.other);
     }
     final offers = [
