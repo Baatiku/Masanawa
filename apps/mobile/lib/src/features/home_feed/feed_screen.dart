@@ -35,8 +35,6 @@ class MasanaFeedScreen extends StatefulWidget {
     this.searchExpanded,
   });
   final FeedApi api;
-  /// Only an authenticated root account installs MB tipping. Reused/profile
-  /// feed projections do not implicitly expose a money-moving action.
   final StatusTipFlow? statusTips;
   final VoidCallback? onTipCompleted;
   /// Header-owned search affordance for the Status root.
@@ -543,380 +541,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               'MB da aka saya kawai za a iya bayarwa.'))),
           for(final choice in const [1,10,50,100])
             SimpleDialogOption(onPressed:()=>Navigator.pop(dialogContext,choice),
-              child:Text('
-    if (pendingActions.contains(post.id) || widget.api is! ReactionFeedApi) {
-      return;
-    }
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final target = anchor.findRenderObject() as RenderBox?;
-    if (overlay == null || target == null) return;
-    final origin = target.localToGlobal(Offset.zero, ancestor: overlay);
-    final rect = Rect.fromLTWH(origin.dx, origin.dy, target.size.width,
-        target.size.height);
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
-      items: [
-        PopupMenuItem<String>(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Builder(builder: (menuContext) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final kind in const ['like', 'love', 'care'])
-                TextButton(
-                  onPressed: () => Navigator.pop(menuContext, kind),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(FeedPost.reactionEmoji[kind]!,
-                          style: const TextStyle(fontSize: 23)),
-                      Text(kind[0].toUpperCase() + kind.substring(1)),
-                    ],
-                  ),
-                ),
-            ],
-          )),
-        ),
-      ],
-    );
-    if (!mounted || choice == null) return;
-    await react(post, choice == post.currentReaction ? null : choice);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.enabled)
-      return Center(
-        child: Text(
-          t('Status is currently unavailable', 'Ba a samun labarai a yanzu'),
-        ),
-      );
-    return Column(
-      children: [
-        if (!widget.authorScoped)
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 10, 4),
-            child: Row(children: [
-              if (!titleCollapsed)
-                Expanded(child: Text(
-                  t('Status', 'Labarai'),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ))
-              else
-                const Spacer(),
-              if (widget.api is SearchFeedApi && widget.searchExpanded == null)
-                IconButton(
-                  tooltip: localSearchExpanded ? 'Close Status search' : 'Search Status',
-                  icon: Icon(localSearchExpanded ? Icons.close : Icons.search),
-                  onPressed: () {
-                    if (localSearchExpanded) clearSearch();
-                    setState(() => localSearchExpanded = !localSearchExpanded);
-                  },
-                ),
-              if (widget.api is SavedStatusLibraryApi)
-                IconButton(
-                  tooltip: t('Saved Status', 'Labarai da aka ajiye'),
-                  onPressed: widget.accountKey.isNotEmpty ? openSaved : null,
-                  icon: const Icon(Icons.bookmark_border_rounded),
-                ),
-            ]),
-          ),
-        if (!widget.authorScoped &&
-            !widget.ownPostsOnly &&
-            widget.api is SearchFeedApi &&
-            (widget.searchExpanded?.value ?? localSearchExpanded))
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-            child: TextField(
-              controller: searchController,
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => applySearch(),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: t('Search Status', 'Bincika labarai'),
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: IconButton(
-                  tooltip: t('Clear Status search', 'Goge bincike'),
-                  onPressed: clearSearch,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-            ),
-          ),
-        if (pageError != null && items.isNotEmpty)
-          MaterialBanner(
-            content: Text(
-              t('Could not load more updates', 'An kasa dauko karin labarai'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: nextPage,
-                child: Text(t('Retry', 'Sake gwadawa')),
-              ),
-            ],
-          ),
-        if (offline)
-          MaterialBanner(
-            content: Text(
-              t(
-                'Offline — showing previous updates',
-                'Ba intanet — ana nuna bayanan baya',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: refresh,
-                child: Text(t('Retry', 'Sake gwadawa')),
-              ),
-            ],
-          ),
-        if (error != null && !offline)
-          MaterialBanner(
-            content: Text(t('Could not load updates', 'An kasa dauko labarai')),
-            actions: [
-              TextButton(
-                onPressed: refresh,
-                child: Text(t('Retry', 'Sake gwadawa')),
-              ),
-            ],
-          ),
-        Expanded(
-          child: loading && items.isEmpty
-              ? const MasanawaListSkeleton(
-                  semanticLabel: 'Loading Status updates',
-                )
-              : items.isEmpty
-              ? Center(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.article_outlined, size: 48),
-                        Text(
-                          error != null
-                              ? t(
-                                  'Status is unavailable. Retry.',
-                                  'Ba a samun labarai yanzu. Sake gwadawa.',
-                                )
-                              : searchTerm.isNotEmpty
-                              ? t(
-                                  'No Status posts match this search.',
-                                  'Babu labarai masu dacewa da binciken.',
-                                )
-                              : widget.ownPostsOnly
-                              ? t('No public posts yet', 'Babu labarana tukuna')
-                              : t(
-                                  'No Status updates yet',
-                                  'Babu labarai tukuna',
-                                ),
-                          textAlign: TextAlign.center,
-                        ),
-                        TextButton(
-                          onPressed: refresh,
-                          child: Text(t('Retry', 'Sake gwadawa')),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: refresh,
-                  child: NotificationListener<ScrollUpdateNotification>(
-                    onNotification: (notice) {
-                      if (notice.depth != 0) return false;
-                      final collapsed = notice.metrics.pixels > 12;
-                      if (collapsed != titleCollapsed) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted && titleCollapsed != collapsed) {
-                            setState(() => titleCollapsed = collapsed);
-                          }
-                        });
-                      }
-                      return false;
-                    },
-                  child: ListView.builder(
-                    key: PageStorageKey<String>(
-                      'status-feed-${widget.accountKey}-$mode-$searchTerm',
-                    ),
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: items.length + (cursor == null ? 0 : 1),
-                    itemBuilder: (ctx, i) {
-                      if (i == items.length)
-                        return Center(
-                          child: TextButton(
-                            onPressed: fetchingMore ? null : nextPage,
-                            child: Text(t('Load more', 'Kara nunawa')),
-                          ),
-                        );
-                      final post = items[i];
-                      return Card(
-                        key: ValueKey(post.id),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        elevation: 0,
-                        shape: const RoundedRectangleBorder(),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => openPost(post),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: StatusPostAuthorHeader(
-                                      post: post,
-                                      agent: widget.authorDirectory[post.authorMasanaId],
-                                      onProfile: post.isHuman
-                                          ? (post.authorHandle == null ||
-                                                    widget.onHumanProfile == null
-                                              ? null
-                                              : () => widget.onHumanProfile!(
-                                                    post.authorHandle!,
-                                                  ))
-                                          : (widget.onMasanaProfile == null
-                                              ? null
-                                              : () => widget.onMasanaProfile!(
-                                                    post.authorMasanaId,
-                                                  )),
-                                    )),
-                                    IconButton(
-                                      tooltip: post.saved
-                                          ? t('Remove saved post', 'Cire ajiya')
-                                          : uncertainSaves.contains(post.id)
-                                              ? t('Refresh to confirm saved state', 'Sabunta don tabbatar da ajiya')
-                                              : t('Save post', 'Ajiye labari'),
-                                      onPressed: pendingActions.contains(post.id) ||
-                                              uncertainSaves.contains(post.id)
-                                          ? null
-                                          : () => action(post, like: false),
-                                      icon: Icon(post.saved
-                                          ? Icons.bookmark_rounded
-                                          : Icons.bookmark_border_rounded),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (post.body.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-                                  child: StatusPostBody(
-                                    key: ValueKey('status-body-${widget.accountKey}-${post.id}'),
-                                    accountKey: widget.accountKey,
-                                    postId: post.id,
-                                    body: post.body,
-                                  ),
-                                ),
-                              StatusPostMedia(
-                                post: post,
-                                accountKey: widget.accountKey,
-                                mediaApi: widget.mediaApi,
-                                renderer: widget.inlineMediaRenderer,
-                                audioPlaybackAvailable: widget.audioPlaybackAvailable,
-                                onOpen: widget.onOpenMedia == null
-                                    ? null : (id) => widget.onOpenMedia!(post, id),
-                              ),
-                              if (post.totalReactions > 0 || post.commentCount > 0)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                                  child: Row(children: [
-                                    if (post.totalReactions > 0)
-                                      Expanded(child: Text(
-                                    '${FeedPost.reactionKinds
-                                        .where(
-                                          (kind) =>
-                                              (post.effectiveReactionCounts[kind] ??
-                                                  0) >
-                                              0,
-                                        )
-                                        .map(
-                                          (kind) =>
-                                              FeedPost.reactionEmoji[kind] ?? '',
-                                        )
-                                        .join(' ')} ${post.totalReactions}',
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  )),
-                                    if (post.commentCount > 0)
-                                      Text('${post.commentCount} comments',
-                                        style: Theme.of(context).textTheme.bodySmall),
-                                  ]),
-                                ),
-                              const Divider(height: 1),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 5),
-                                child: LayoutBuilder(builder: (context, constraints) {
-                                  final compact = constraints.maxWidth < 290 ||
-                                      MediaQuery.textScalerOf(context).scale(14) > 20;
-                                  final pending = pendingActions.contains(post.id);
-                                  Widget actionButton(String label, IconData icon,
-                                      VoidCallback? onPressed) => Expanded(
-                                    child: TextButton.icon(
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                                        minimumSize: const Size(0, 48),
-                                      ),
-                                      onPressed: onPressed,
-                                      icon: Icon(icon, size: 20),
-                                      label: compact
-                                          ? const SizedBox.shrink()
-                                          : Text(label, maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                    ),
-                                  );
-                                  return Row(children: [
-                                    Builder(builder: (anchor) => Expanded(
-                                      child: GestureDetector(
-                                        onLongPress: widget.api is ReactionFeedApi && !pending
-                                            ? () => showReactions(anchor, post)
-                                            : null,
-                                        child: TextButton.icon(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                                            minimumSize: const Size(0, 48),
-                                          ),
-                                          onPressed: pending ? null
-                                              : () => action(post, like: true),
-                                          icon: Icon(post.currentReaction == 'like'
-                                              ? Icons.thumb_up_rounded
-                                              : Icons.thumb_up_outlined, size: 20),
-                                          label: compact ? const SizedBox.shrink()
-                                              : Text(t('Like', 'So'), maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis),
-                                        ),
-                                      ),
-                                    )),
-                                    actionButton(t('Comment', 'Sharhi'),
-                                        Icons.mode_comment_outlined,
-                                        () => openComments(post)),
-                                    actionButton(t('Share', 'Raba'),
-                                        Icons.share_outlined,
-                                        () => sharePost(post)),
-                                    if(widget.statusTips!=null)
-                                      actionButton(t('Tip MB','Kyautar MB'),
-                                        Icons.volunteer_activism_outlined,
-                                        pending?null:()=>tipPost(post)),
-                                  ]);
-                                }),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  )),
-                ),
-        ),
-      ],
-    );
-  }
-}
-+'{choice} MB')),
+              child:Text(choice.toString() + ' MB')),
           TextButton(onPressed:()=>Navigator.pop(dialogContext),
             child:Text(t('Cancel','Soke'))),
         ],
@@ -926,17 +551,15 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
        widget.accountKey!=account)return;
     setState(()=>pendingActions.add(post.id));
     try{
-      // The encrypted original-operation journal is reconciled BEFORE a
-      // fresh quote. A lost confirmation cannot create a second payment.
       final review=await flow.review(post.id,amount);
       if(!mounted||scope!=generation||widget.accountKey!=account)return;
       final accepted=await showDialog<bool>(
         context:context,
         builder:(dialogContext)=>AlertDialog(
           title:Text(t('Review MB tip','Duba kyautar MB')),
-          content:Text('Recipient: ${review.displayName}\n'
-            'Amount: ${review.amountMb} MB\nFee: 0 MB\n'
-            'This debits purchased MB. Welcome MB cannot be used.'),
+          content:Text('Recipient: ' + review.displayName + '\n'
+            + 'Amount: ' + review.amountMb.toString() + ' MB\nFee: 0 MB\n'
+            + 'This debits purchased MB. Welcome MB cannot be used.'),
           actions:[
             TextButton(onPressed:()=>Navigator.pop(dialogContext,false),
               child:Text(t('Not now','Ba yanzu ba'))),
@@ -951,8 +574,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if(!mounted||scope!=generation||widget.accountKey!=account)return;
       widget.onTipCompleted?.call();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:Text('Tip confirmed: ${receipt.amountMb} MB. '
-          'Reference: ${receipt.operationId}'),
+        content:Text('Tip confirmed: ' + receipt.amountMb.toString() +
+          ' MB. Reference: ' + receipt.operationId),
       ));
     }catch(_){
       if(!mounted||scope!=generation||widget.accountKey!=account)return;
@@ -977,7 +600,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content:Text(receipt==null
           ?t('No unresolved tip found.','Ba a sami kyautar da ba a warware ba.')
-          :'Confirmed: ${receipt.amountMb} MB · ${receipt.operationId}'),
+          :'Confirmed: ' + receipt.amountMb.toString() +
+            ' MB · ' + receipt.operationId),
       ));
     }catch(_){
       if(!mounted||scope!=generation||widget.accountKey!=account)return;
@@ -1343,6 +967,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     actionButton(t('Share', 'Raba'),
                                         Icons.share_outlined,
                                         () => sharePost(post)),
+                                    if(widget.statusTips!=null)
+                                      actionButton(t('Tip MB','Kyautar MB'),
+                                        Icons.volunteer_activism_outlined,
+                                        pending?null:()=>tipPost(post)),
                                   ]);
                                 }),
                               ),
