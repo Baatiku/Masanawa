@@ -397,3 +397,5 @@ delivery; unknown writes retain the original reference/hold and never auto-rebuy
 Temporary outbound IPv4 observation is an operational setup fact, not a promise
 of a permanent IP or data delivery. No provider keys or wholesale diagnostic logs
 are exposed on customer screens.
+
+27 October retirement audit: the disconnected mobile group-creation/token transport is removed after its final detail-screen reference is retired. Durable historical paid-voice reconciliation/outbox code and its tests remain: retiring a group UI must not discard financial recovery records.
