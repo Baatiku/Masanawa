@@ -9,6 +9,13 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
     try {
       await db.exec(`
         CREATE SCHEMA gb_wallet;
+        CREATE SCHEMA talks;CREATE SCHEMA agents;
+        CREATE TABLE talks.public_profiles(tenant_id text,user_id text,display_name text,handle text,
+          PRIMARY KEY(tenant_id,user_id));
+        CREATE TABLE agents.agent_presentations(tenant_id text,character_id text,display_name text,
+          visible_in_user_app boolean,PRIMARY KEY(tenant_id,character_id));
+        INSERT INTO talks.public_profiles VALUES('a','fan_b','Public Fan B','fan_b'),
+          ('b','fan_b','Other tenant name','private_other_tenant');
         CREATE TABLE gb_wallet.operations(
           tenant_id text,operation_id text,operation_kind text,state text);
         CREATE TABLE gb_wallet.movements(
@@ -87,6 +94,23 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
         ["MB",300,"received"],
       ]);
       expect(await repository.list({tenantId:"x",userId:"fan_a"},20,null)).toEqual([]);
+      expect((await repository.find(actor,first[1]!.entryId))?.details)
+        .toMatchObject({counterpartyKind:"human",counterpartyId:"fan_b",counterpartyName:'Public Fan B',counterpartyHandle:'fan_b'});
+      expect(JSON.stringify(first)).not.toContain('Other tenant name');
+      await db.exec(`ALTER TABLE gb_wallet.ngn_entries ADD COLUMN amount_mb bigint,
+        ADD COLUMN rate_version text,ADD COLUMN reverses_operation_id text;
+        ALTER TABLE gb_wallet.movements ADD COLUMN source_bucket text,ADD COLUMN target_bucket text;
+        INSERT INTO gb_wallet.operations VALUES('a','exchange_a','ngn_exchange','completed');
+        INSERT INTO gb_wallet.ngn_entries VALUES('a','fan_a','exchange_a','exchange',-500050,
+          '2026-10-25T12:07:00Z',1050,'rate-v1',NULL);
+        INSERT INTO gb_wallet.movements(tenant_id,operation_id,from_kind,from_id,to_kind,to_id,
+          amount_mb,created_at,source_bucket,target_bucket) VALUES
+          ('a','exchange_a','issuance','ngn','human','fan_a',1050,'2026-10-25T12:07:00Z','issuance','purchased');`);
+      const rich=await repository.list(actor,10,null,'all',{...all,reference:'exchange_a'});
+      expect(rich).toHaveLength(2);
+      for(const entry of rich)expect(entry.details).toMatchObject({counterpartyKind:'service',
+        exchangedMb:1050,exchangeKobo:500050,rateVersion:'rate-v1'});
+      expect(rich.find(x=>x.unit==='MB')?.details).toMatchObject({sourceBucket:'issuance',targetBucket:'purchased'});
     } finally {await db.close();}
-  });
+  },15000);
 });

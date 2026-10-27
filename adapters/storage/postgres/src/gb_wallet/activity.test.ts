@@ -9,6 +9,17 @@ function fixture(rows: unknown[] = []) {
 }
 
 describe("read-only NGN and MB wallet activity",()=>{
+  it("projects only bounded receipt fields and never invents missing exchange amounts",async()=>{
+    const row={entry_id:"ngn:exchange_1",operation_id:"exchange_1",unit:"NGN",
+      signed_amount:"-500050",kind:"exchange",status:"completed",created_at:"2026-10-25T00:00:00Z"};
+    const f=fixture([{...row,receipt_metadata:{counterpartyKind:"service",exchangedMb:"1050",
+      exchangeKobo:"500050",rateVersion:"rate-v1",private_provider_key:"must-not-leak"}}]);
+    const result=await f.repo.find(scope,"ngn:exchange_1");
+    expect(result?.details).toEqual({counterpartyKind:"service",exchangedMb:1050,exchangeKobo:500050,rateVersion:"rate-v1"});
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
+    for(const invalid of [true,1.5,"1.5",-1,"9007199254740992"])
+      await expect(fixture([{...row,receipt_metadata:{exchangedMb:invalid}}]).repo.find(scope,"ngn:exchange_1")).rejects.toThrow("invalid_activity_receipt");
+  });
   it("totals only authorized posted units in an exact UTC window, rejecting overflow",async()=>{
     const f=fixture([{unit:"MB",received:"1000",spent:"400"},
       {unit:"NGN",received:"500050",spent:"50"}]);

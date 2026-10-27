@@ -9,6 +9,18 @@ missing or pending usage is explicit and never inferred from client timestamps.
 Loading/offline/Retry, empty results, account change, dated paging, canonical
 portraits, receipt detail and redial remain on the same accessible scrolling screen.
 
+**Wallet posted-entry receipts:** Recent/full Activity and transaction detail
+show the authoritative counterparty kind/stable reference, funding bucket and,
+when applicable, the original NGN-to-MB quantity, cash amount, rate version and
+reversed reference. Missing metadata stays absent, never guessed or zero-filled.
+Receipt preview/export starts with a fresh same-account journal read, shows the
+Masanawa logo, exact signed MB/GB or kobo/NGN, UTC timestamp, state and original
+references, and clearly distinguishes a posted entry from provider delivery or
+bank finality. PDF and PNG share actions preserve Back and readable pagination,
+delete private temporary files on success/cancellation/error, stop after account
+change or revoked auth, and offer Retry without any financial POST. Preview and
+controls scroll/wrap at 320dp, large text and RTL; no new tab or storage permission.
+
 **27 October owner-approved 36-plan catalogue:** Data supports approved exact MB
 allowances, including 40/100/200/350/500/750 MB and fractional GB. Show MB below
 1 GB and trimmed GB otherwise, with exact purchased-MB debit, provider validity
