@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 /// Neither object storage keys nor URLs are persisted to offline caches.
 class FeedMediaGrant {
   const FeedMediaGrant({required this.mediaId,required this.kind,
-    required this.url,required this.expiresAt,this.transcript});
+    required this.url,required this.expiresAt,this.transcript,this.altText});
   final String mediaId,kind;
   final Uri url;
   final DateTime expiresAt;
   final String? transcript;
+  /// Only the server-reviewed per-image description is exposed to semantics.
+  final String? altText;
   factory FeedMediaGrant.fromJson(Map<String,dynamic> j) {
     final url=Uri.tryParse(j['url'] as String? ?? '');
     final expires=DateTime.tryParse(j['expiresAt'] as String? ?? '');
@@ -19,8 +21,12 @@ class FeedMediaGrant {
         j['mediaId'] is! String) {
       throw const FormatException('Invalid signed media grant');
     }
+    final alt=j['altText'];
+    final description=alt is String&&alt.trim().length>=5&&alt.trim().length<=280
+      ?alt.trim():null;
     return FeedMediaGrant(mediaId:j['mediaId'] as String,kind:j['kind'] as String,
-      url:url,expiresAt:expires,transcript:j['transcript'] as String?);
+      url:url,expiresAt:expires,transcript:j['transcript'] as String?,
+      altText:j['kind']=='image'?description:null);
   }
 }
 abstract class FeedMediaApi {
