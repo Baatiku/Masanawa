@@ -47,6 +47,7 @@ import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
+import {StatusRetentionWorker} from "./modules/home_feed/retention_worker.js";
 import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
@@ -1621,6 +1622,7 @@ export async function startGatewayService(
     env.MASANAWA_ADMIN_EMAILS,
   );
   let status: StatusRuntime | undefined = options.appOptions?.status;
+  let statusPromotions: PgStatusPromotions | undefined;
   let mediaConfiguration:StatusMediaConfiguration | undefined;
   try {
     mediaConfiguration = options.statusMedia ?? createConfiguredStatusMedia(env);
@@ -1634,15 +1636,16 @@ export async function startGatewayService(
     const promotionsConfigured=env.MASANAWA_STATUS_PROMOTIONS_ENABLED==='true' &&
       !!env.MASANAWA_STATUS_ATTRIBUTION_SECRET &&
       !!env.MASANAWA_STATUS_PUBLIC_BASE_URL && !!database.featurePool;
+    if(promotionsConfigured)statusPromotions=new PgStatusPromotions(database.featurePool!,
+      env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!);
     status = {
       sessions,
       feed: new FeedService(
         feed, author, mediaRuntime.approved,
         true,
       ),
-      ...(promotionsConfigured?{
-        promotions:new PgStatusPromotions(database.featurePool!,
-          env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!),
+      ...(statusPromotions?{
+        promotions:statusPromotions,
         // Crawlers never obtain privileged feed/media access or create paid views.
         // Public navigation stays disabled until legal/privacy qualification.
         publicLanding:{port:new PgPublicStatusLanding(database.featurePool!),
@@ -2147,6 +2150,7 @@ export async function startGatewayService(
   }
 
   let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let statusRetention: StatusRetentionWorker | undefined;
   let replyRecoveryRunning=false;
   const recoverReplies=async()=>{
     if(replyRecoveryRunning||drain.isDraining()||!database.featurePool)return;
@@ -2164,6 +2168,7 @@ export async function startGatewayService(
     onDraining: () => {
       drain.beginDraining();
       clearInterval(replyRecoveryTimer);
+      void statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -2171,6 +2176,7 @@ export async function startGatewayService(
     },
     onAfterClose: async () => {
       clearInterval(replyRecoveryTimer);
+      await statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
@@ -2186,6 +2192,14 @@ export async function startGatewayService(
     await recoverReplies();
     replyRecoveryTimer=setInterval(()=>{void recoverReplies()},30000);
     replyRecoveryTimer.unref();
+  }
+
+  if(statusPromotions){
+    statusRetention=new StatusRetentionWorker(statusPromotions,()=>{
+      // Nothing about post content, account IDs or viewer identity enters logs.
+      console.error(JSON.stringify({event:'status.retention_sweep_failed',code:'retry_later'}));
+    });
+    statusRetention.start();
   }
 
   const runOwnerAccessSweep = async () => {
