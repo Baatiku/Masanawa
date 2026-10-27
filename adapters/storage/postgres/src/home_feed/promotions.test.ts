@@ -50,7 +50,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await expect(service.review(t,'publisher',c.id,true))
     .rejects.toMatchObject({code:'separate_reviewer_required'});
   await service.review(t,'distincteditor',c.id,true);
-  expect((await query(`SELECT state FROM feed.posts WHERE id=$1`,[c.postId])).rows[0]?.state)
+  expect(((await query(`SELECT state FROM feed.posts WHERE id=$1`,[c.postId])).rows[0] as {state:string}|undefined)?.state)
     .toBe('published');
  });
 
@@ -93,7 +93,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(hidden.rows[0]).toMatchObject({state:'hidden',seconds:72*60*60});
   const reboost=await service.quote({tenantId:t,sponsorId:'publisher',postId:c.postId,targetViews:1});
   await service.confirm(t,'publisher',reboost.quoteId,'reboost-original-0001');
-  expect((await query(`SELECT state FROM feed.posts WHERE id=$1`,[c.postId])).rows[0]?.state)
+  expect(((await query(`SELECT state FROM feed.posts WHERE id=$1`,[c.postId])).rows[0] as {state:string}|undefined)?.state)
     .toBe('published');
   await query(`UPDATE feed.posts SET state='hidden',paid_disabled_at=now()-interval '73 hours',
     paid_purge_at=now()-interval '1 hour' WHERE id=$1`,[c.postId]);
