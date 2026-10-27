@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/network/api_client.dart';
 import '../core/providers.dart';
 import 'call_outcome.dart';
-import 'group_call_transport.dart';
 
 class CallHistoryItem {
   const CallHistoryItem({
@@ -183,7 +182,6 @@ abstract interface class CallHistoryTransport {
 
 abstract interface class CallDetailTransport {
   Future<CallHistoryItem> get(String callId, {CancelToken? cancelToken});
-  Future<MasanaCallGroup> group(String groupId, {CancelToken? cancelToken});
 }
 
 class GatewayCallHistoryTransport
@@ -203,25 +201,6 @@ class GatewayCallHistoryTransport
     );
     if (item.callId != callId)
       throw const FormatException('Mismatched call detail');
-    return item;
-  }
-
-  @override
-  Future<MasanaCallGroup> group(
-    String groupId, {
-    CancelToken? cancelToken,
-  }) async {
-    final response = await api.dio.get<dynamic>(
-      '/v1/calls/groups/${Uri.encodeComponent(groupId)}',
-      cancelToken: cancelToken,
-    );
-    if (response.data is! Map)
-      throw const FormatException('Invalid group detail');
-    final item = MasanaCallGroup.fromJson(
-      (response.data as Map).cast<String, dynamic>(),
-    );
-    if (item.groupId != groupId)
-      throw const FormatException('Mismatched group detail');
     return item;
   }
 

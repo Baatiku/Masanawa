@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/calls/call_lifecycle_reporter.dart';
-import 'package:masanawa/src/calls/group_call_transport.dart';
 import 'package:masanawa/src/calls/group_paid_voice_outbox.dart';
 import 'package:masanawa/src/calls/group_paid_voice_transport.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
@@ -46,33 +45,6 @@ class Adapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Map<String, dynamic> groupJson() => {
-  'group': {
-    'groupId': 'g',
-    'state': 'connecting',
-    'createdAt': '2026-10-11T00:00:00Z',
-    'endedAt': null,
-    'participants': [
-      for (final id in ['a', 'b'])
-        {
-          'characterId': id,
-          'displayName': id,
-          'state': 'selected',
-          'callId': null,
-        },
-    ],
-  },
-};
-Map<String, dynamic> voiceJson(String id) => {
-  'groupId': 'g',
-  'characterId': id,
-  'callId': 'call_$id',
-  'token': 'provider-secret',
-  'websocketUrl': 'wss://example.invalid',
-  'model': 'm',
-  'voiceName': 'v',
-  'expiresAt': '2027-01-01T00:00:00Z',
-};
 Map<String, dynamic> admissionJson() => {
   'admissionId': 'admission_1',
   'quoteId': 'quote_1',
@@ -166,42 +138,6 @@ void main() {
         send: (_, _, _) async {},
       );
       await expectLater(brokenOutbox.register('owner', 'a'), throwsStateError);
-    },
-  );
-  test(
-    'group requests snapshot original bearer and reject foreign token responses',
-    () async {
-      String? account = 'owner';
-      final tokenGate = Completer<Map<String, dynamic>>();
-      final adapter = Adapter(
-        (request) =>
-            request.path.endsWith('/token') ? tokenGate.future : groupJson(),
-      );
-      final api = ApiClient(dio: Dio())..accessToken = 'mutable-bearer';
-      final transport = GatewayGroupCallTransport(
-        api: api,
-        accountKey: 'owner',
-        currentAccountKey: () => account,
-        accessToken: 'captured-bearer',
-        adapter: adapter,
-      );
-      await transport.create('request_1', ['a', 'b']);
-      api.accessToken = 'foreign-bearer';
-      final token = transport.token('g', 'a');
-      await Future<void>.delayed(Duration.zero);
-      account = 'other';
-      tokenGate.complete(voiceJson('a'));
-      await expectLater(token, throwsA(isA<ApiException>()));
-      await transport.end('g');
-      expect(adapter.requests.map((r) => r.headers['Authorization']).toSet(), {
-        'Bearer captured-bearer',
-      });
-      expect(adapter.requests.first.data, {
-        'requestId': 'request_1',
-        'characterIds': ['a', 'b'],
-      });
-      expect(adapter.requests.every((r) => r.followRedirects == false), isTrue);
-      await expectLater(transport.load('g'), throwsA(isA<ApiException>()));
     },
   );
   test(

@@ -8,6 +8,10 @@ matching call count, server-verified connected time and confirmed MB charges;
 missing or pending usage is explicit and never inferred from client timestamps.
 Loading/offline/Retry, empty results, account change, dated paging, canonical
 portraits, receipt detail and redial remain on the same accessible scrolling screen.
+Historical group records retain their stored reference but show a retired-format
+notice and Back to Calls only. Detail never fetches group participants, offers
+group creation/redial or routes a group into a single Masana. Fresh credentials,
+including reauthentication by the same user, clear old detail and fence late reads.
 
 **Wallet posted-entry receipts:** Recent/full Activity and transaction detail
 show the authoritative counterparty kind/stable reference, funding bucket and,
@@ -405,3 +409,5 @@ delivery; unknown writes retain the original reference/hold and never auto-rebuy
 Temporary outbound IPv4 observation is an operational setup fact, not a promise
 of a permanent IP or data delivery. No provider keys or wholesale diagnostic logs
 are exposed on customer screens.
+
+27 October retirement audit: the disconnected mobile group-creation/token transport is removed after its final detail-screen reference is retired. Durable historical paid-voice reconciliation/outbox code and its tests remain: retiring a group UI must not discard financial recovery records.

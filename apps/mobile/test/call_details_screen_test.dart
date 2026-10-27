@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:masanawa/src/calls/call_details_screen.dart';
 import 'package:masanawa/src/calls/call_history.dart';
 import 'package:masanawa/src/calls/call_outcome.dart';
-import 'package:masanawa/src/calls/group_call_transport.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/core/api/models.dart';
 SessionSignedIn signedIn(String id) {
@@ -41,7 +40,6 @@ class _Transport implements CallHistoryTransport,CallDetailTransport {
  _Transport(this.handler);final Future<CallHistoryItem> Function() handler;
  @override Future<CallHistoryItem> get(String id,{CancelToken? cancelToken})=>handler();
  @override Future<CallHistoryPage> loadPage({String? cursor,String query='',String connection='all',String days='all',CancelToken? cancelToken})async=>CallHistoryPage(calls:[item]);
- @override Future<MasanaCallGroup> group(String id,{CancelToken? cancelToken})=>throw StateError('not group');
 }
 Future<void> mount(WidgetTester t,_Session s,_Transport transport)=>t.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(()=>s),callHistoryTransportProvider.overrideWithValue(transport)],child:MaterialApp(home:CallDetailsScreen(ownerId:'a',initial:item))));
 void main(){
@@ -71,7 +69,9 @@ void main(){
   expect(find.text('Call again'),findsNothing);
   expect(find.text('Message'),findsNothing);
   expect(find.text('View profile'),findsNothing);
-  expect(find.textContaining('An old group call cannot be redialled'),findsOneWidget);
+  expect(find.text('This historical call format is retired.'),findsOneWidget);
+  expect(find.textContaining('Call multiple Masana'),findsNothing);
+  expect(find.text('Group participants'),findsNothing);
   expect(t.takeException(),isNull);
  });
  testWidgets('one-to-one call actions wrap at 320dp with 200% text',(t)async{
@@ -91,6 +91,15 @@ void main(){
   final pending=Completer<CallHistoryItem>();final s=_Session();
   await mount(t,s,_Transport(()=>pending.future));await t.pump();s.change('b');await t.pump();pending.complete(item);await t.pumpAndSettle();
   expect(find.text('Sign in to view this call.'),findsOneWidget);expect(find.text('Amina'),findsNothing);
+ });
+ testWidgets('credential refresh fences the old read and fetches fresh detail',(t)async{
+  final stale=Completer<CallHistoryItem>();final s=_Session();var requests=0;
+  final fresh=CallHistoryItem(callId:item.callId,characterId:item.characterId,displayName:'Fresh Masana',state:'ended',createdAt:item.createdAt);
+  await mount(t,s,_Transport(()=>requests++==0?stale.future:Future.value(fresh)));
+  await t.pump();s.change('a');await t.pumpAndSettle();
+  expect(requests,2);expect(find.text('Fresh Masana'),findsOneWidget);
+  stale.complete(item);await t.pumpAndSettle();
+  expect(find.text('Fresh Masana'),findsOneWidget);expect(find.text('Amina'),findsNothing);
  });
  testWidgets('centered failure retries detail request',(t)async{
   var requests=0;await mount(t,_Session(),_Transport(()async{if(requests++==0)throw StateError('offline');return item;}));await t.pumpAndSettle();
