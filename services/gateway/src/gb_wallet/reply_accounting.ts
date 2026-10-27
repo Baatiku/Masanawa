@@ -17,6 +17,27 @@ export type GbReplyRequest={
   requestId:string;
 };
 type MbScope={tenantId:string;userId:string;characterId:string};
+type ReplyPayload=GbReplyRequest & {text?:string;caption?:string;
+  mimeType?:string;dataBase64?:string;
+  media?:readonly {mimeType:string;name?:string;dataBase64:string}[]};
+function canonicalPayloadHash(request:ReplyPayload,kind:"text"|"media"|"media-set"){
+  let original:string;
+  if(kind==="text"){
+    if(typeof request.text!=="string")throw new TypeError("Invalid text reply payload");
+    original=request.text.trim();
+  }else if(kind==="media"){
+    if(typeof request.caption!=="string"||typeof request.mimeType!=="string"||
+       typeof request.dataBase64!=="string")throw new TypeError("Invalid media reply payload");
+    original=JSON.stringify([request.mimeType.trim().toLowerCase(),
+      request.caption.trim(),request.dataBase64]);
+  }else{
+    if(typeof request.caption!=="string"||!Array.isArray(request.media))
+      throw new TypeError("Invalid media-set reply payload");
+    original=JSON.stringify([request.caption.trim(),...request.media.map(item=>
+      [item.mimeType.trim().toLowerCase(),item.name?.trim()??"",item.dataBase64])]);
+  }
+  return createHash("sha256").update(original,"utf8").digest("hex");
+}
 function operationId(scope:MbScope,sessionId:string,requestId:string){
   const hash=createHash("sha256")
     .update(JSON.stringify(["masana-reply-v1",scope.tenantId,scope.userId,
@@ -41,6 +62,7 @@ export function createMbBilledConversation(input:{
       characterId:request.characterId as Parameters<AgentConversationAuthorizer["authorize"]>[0]["characterId"],
     });
     const scope=admission.scope;
+    const expectedPayload=canonicalPayloadHash(request,kind);
     const actor={tenantId:scope.tenantId,userId:scope.userId,
       operationId:operationId(scope,request.characterSessionId,request.requestId)};
     const original=await mobileShell.readTurn({
@@ -49,7 +71,8 @@ export function createMbBilledConversation(input:{
     const matches=(row:MobileTurnCommand|null)=>row!==null&&
       row.characterSessionId===request.characterSessionId&&row.kind===kind&&
       row.scope.tenantId===scope.tenantId&&row.scope.userId===scope.userId&&
-      row.scope.characterId===scope.characterId;
+      row.scope.characterId===scope.characterId &&
+      row.payloadHash===expectedPayload;
     if(original && !matches(original))
       throw new Error("gb.reply.original_request_conflict");
     const existing=await reservations.read(actor.tenantId,actor.operationId,actor.userId);
