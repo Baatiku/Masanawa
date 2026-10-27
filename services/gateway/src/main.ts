@@ -102,6 +102,7 @@ import {
   type AgentDirectoryAuthorizer,
 } from "./agent_directory.js";
 import { createAgentConversationService } from "./agent_conversation.js";
+import {createMbBilledConversation} from "./gb_wallet/reply_accounting.js";
 import { createPgCreatorPublicReader } from "./creator_agents/public_reader.js";
 import type {
   AgentConversationAuthorizer,
@@ -1484,7 +1485,7 @@ export async function startGatewayService(
         })
       : undefined);
 
-  const composedConversation =
+  const rawConversation =
     options.appOptions?.agentConversation ??
     (conversationAuthorizer &&
     strategy &&
@@ -1506,6 +1507,23 @@ export async function startGatewayService(
           sessionDurationMs: 24 * 60 * 60 * 1000,
         })
       : undefined);
+
+  // Reply MB charging is opt-in and must wrap *every* actual conversation
+  // implementation, including a DI replacement. A runtime flag without
+  // trusted canonical mobile turn persistence and serializable ledger must
+  // fail startup, never fall back to unbilled provider inference.
+  if(env.MASANAWA_MB_REPLIES_ENABLED==="true" &&
+     (!rawConversation||!conversationAuthorizer||
+      !database.mobileShell||!database.featurePool))
+    throw new TypeError("MB reply billing requires canonical admission, mobile turns and PostgreSQL ledger");
+  const composedConversation=env.MASANAWA_MB_REPLIES_ENABLED==="true" &&
+    rawConversation&&conversationAuthorizer&&database.mobileShell&&database.featurePool
+      ? createMbBilledConversation({
+          delegate:rawConversation,authorizer:conversationAuthorizer,
+          mobileShell:database.mobileShell,
+          reservations:createGbUsageReservations(database.featurePool),
+        })
+      : rawConversation;
 
   const composedPush =
     options.appOptions?.mobilePush ??
