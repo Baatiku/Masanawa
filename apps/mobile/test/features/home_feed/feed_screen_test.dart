@@ -122,7 +122,7 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
 class TipWidgetStore implements StatusTipStore {
   String? value;
   @override Future<String?> read() async=>value;
-  @override Future<void> write(String? next) async=>value=next;
+  @override Future<void> write(String? next) async { value=next; }
 }
 void main() {
   testWidgets('Status tip requires an explicit reviewed confirmation and shows receipt',
