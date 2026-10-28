@@ -29,6 +29,7 @@ import { FeedService, EditorialReviewService, SavedLibraryService } from "@masan
 import {
   createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgStatusPromotions,
+  PgStatusGuestProofs,
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
@@ -49,6 +50,7 @@ import { createConfiguredStatusMedia } from "./modules/home_feed/media_environme
 import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
 import {createApprovedPublicImageReader} from "./modules/home_feed/public_image.js";
 import {StatusRetentionWorker} from "./modules/home_feed/retention_worker.js";
+import {GuestConsentSigner} from './modules/home_feed/guest_consent.js';
 import {StatusMediaDeletionWorker} from './modules/home_feed/media_deletion_worker.js';
 import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
@@ -1625,6 +1627,7 @@ export async function startGatewayService(
   );
   let status: StatusRuntime | undefined = options.appOptions?.status;
   let statusPromotions: PgStatusPromotions | undefined;
+  let statusGuestProofs: PgStatusGuestProofs | undefined;
   let mediaConfiguration:StatusMediaConfiguration | undefined;
   try {
     mediaConfiguration = options.statusMedia ?? createConfiguredStatusMedia(env);
@@ -1642,6 +1645,9 @@ export async function startGatewayService(
       env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!);
     const publicPreview=statusPromotions?
       new PgPublicStatusLanding(database.featurePool!):undefined;
+    if(publicPreview&&env.MASANAWA_STATUS_ATTRIBUTION_SECRET){
+      statusGuestProofs=new PgStatusGuestProofs(database.featurePool!,publicPreview);
+    }
     const publicImages=publicPreview&&mediaConfiguration?
       createApprovedPublicImageReader(publicPreview,mediaConfiguration):undefined;
     status = {
@@ -1660,6 +1666,9 @@ export async function startGatewayService(
           ...(publicImages?{readApprovedImage:publicImages}:{}),
         },enabled:()=>false,imagesEnabled:()=>!!publicImages,
           publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
+        ...(statusGuestProofs?{guestProof:{port:statusGuestProofs,
+          signer:new GuestConsentSigner(env.MASANAWA_STATUS_ATTRIBUTION_SECRET!),
+          enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!}}:{}),
         // Financial activation still requires a separately completed,
         // security-qualified full Status/public-web client composition.
         promotionsEnabled:()=>false,
@@ -2206,7 +2215,11 @@ export async function startGatewayService(
   }
 
   if(statusPromotions){
-    statusRetention=new StatusRetentionWorker(statusPromotions,()=>{
+    statusRetention=new StatusRetentionWorker({
+      purgeExpired:limit=>statusPromotions!.purgeExpired(limit),
+      pruneExpiredViewChallenges:limit=>statusPromotions!.pruneExpiredViewChallenges(limit),
+      ...(statusGuestProofs?{pruneExpiredGuestEvidence:limit=>statusGuestProofs.pruneExpired(limit)}:{}),
+    },()=>{
       // Nothing about post content, account IDs or viewer identity enters logs.
       console.error(JSON.stringify({event:'status.retention_sweep_failed',code:'retry_later'}));
     },mediaConfiguration?.objects.deleteObject

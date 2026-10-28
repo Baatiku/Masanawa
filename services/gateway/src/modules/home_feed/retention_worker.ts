@@ -8,6 +8,7 @@ import type {StatusMediaDeletionWorker} from './media_deletion_worker.js';
 export interface StatusExpiryPort {
   purgeExpired(limit:number):Promise<{purged:number}>;
   pruneExpiredViewChallenges?(limit:number):Promise<{pruned:number}>;
+  pruneExpiredGuestEvidence?(limit:number):Promise<{pruned:number}>;
 }
 
 export class StatusRetentionWorker {
@@ -45,6 +46,13 @@ export class StatusRetentionWorker {
         const {pruned}=await this.port.pruneExpiredViewChallenges(100);
         if(!Number.isSafeInteger(pruned)||pruned<0||pruned>100)
          throw new Error('status_challenge_retention_invalid_batch');
+        if(pruned<100)break;
+       }
+      if(!this.stopped&&this.port.pruneExpiredGuestEvidence)
+       for(let i=0;i<5&&!this.stopped;i++){
+        const {pruned}=await this.port.pruneExpiredGuestEvidence(100);
+        if(!Number.isSafeInteger(pruned)||pruned<0||pruned>100)
+         throw new Error('status_guest_retention_invalid_batch');
         if(pruned<100)break;
        }
       if(!this.stopped)await this.mediaDeletion?.sweep();
