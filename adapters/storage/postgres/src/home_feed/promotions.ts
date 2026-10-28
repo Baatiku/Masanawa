@@ -4,7 +4,8 @@ import {withTransaction} from '../transaction.js';
 
 type Row=Record<string,unknown>;
 export class PromotionError extends Error {
- constructor(readonly status:number,readonly code:string){super(code);}
+ readonly statusCode:number;
+ constructor(readonly status:number,readonly code:string){super(code);this.statusCode=status;}
 }
 const fail=(code:string,status=422):never=>{throw new PromotionError(status,code);};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

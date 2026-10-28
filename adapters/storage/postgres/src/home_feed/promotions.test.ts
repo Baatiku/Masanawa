@@ -89,7 +89,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await query(`INSERT INTO feed.view_challenges(tenant_id,post_id,viewer_digest)
     SELECT $1,$2,$3 FROM generate_series(1,99)`,[t,post,digest]);
   await expect(service.beginView(t,'viewerone',post)).rejects.toMatchObject({
-    code:'view_challenge_rate_limited',status:429});
+    code:'view_challenge_rate_limited',status:429,statusCode:429});
   // Another authenticated account is independent even on a shared carrier IP.
   await expect(service.beginView(t,'viewertwo',post)).resolves.toMatchObject({
     minimumDwellSeconds:6});
