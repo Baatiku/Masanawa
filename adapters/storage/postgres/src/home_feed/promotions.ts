@@ -1,6 +1,7 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {withTransaction} from '../transaction.js';
+import {reviewedPromotionDestination} from '@masanawa/feed';
 
 type Row=Record<string,unknown>;
 export class PromotionError extends Error {
@@ -90,12 +91,15 @@ export class PgStatusPromotions {
    ON CONFLICT (tenant_id,post_id,media_id) DO NOTHING`,[t,post]);
  }
 
- async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}){
+ async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}){
   const {tenantId:t,sponsorId:s}=input;actor(t,s);
   if(!Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000)
    fail('invalid_view_target');
   const isBoost=input.postId!==undefined;
   if(isBoost)identifier(input.postId!);
+  let destinationUrl:string|null;
+  try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}catch{fail('invalid_promotion_destination');}
+  if(isBoost&&destinationUrl!==null)fail('boost_cannot_edit_post');
   const body=input.body?.trim();
   if(!isBoost&&(!body||body.length>5000))fail('promotion_body_required');
   if(isBoost&&body!==undefined)fail('boost_cannot_edit_post');
@@ -117,9 +121,9 @@ export class PgStatusPromotions {
     WHERE tenant_id=$1 AND account_kind='human' AND account_id=$2 AND NOT frozen`,[t,s]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    const quote=await c.query(`INSERT INTO feed.promotion_quotes
-     (tenant_id,sponsor_id,post_id,kind,body,target_views)
-     VALUES($1,$2,$3,$4,$5,$6) RETURNING id,expires_at`,
-     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews]);
+     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,expires_at`,
+     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destinationUrl]);
    return {quoteId:String(quote.rows[0]!.id),expiresAt:quote.rows[0]!.expires_at,
     targetViews:input.targetViews,totalMb:input.targetViews,eligibleMb:available,
     insufficientMb:available<input.targetViews,priceVersion:'2026-10-27:1MB'};
@@ -132,7 +136,7 @@ export class PgStatusPromotions {
    const quotes=await c.query(`SELECT * FROM feed.promotion_quotes
     WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,qid,s]);
    const q=(quotes.rows[0] as Row|undefined)??fail('quote_not_found',404);
-   const fp=hash(JSON.stringify([qid,s,q.kind,q.post_id,q.body,q.target_views]));
+   const fp=hash(JSON.stringify([qid,s,q.kind,q.post_id,q.body,q.target_views,q.destination_url]));
    const previous=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 AND idempotency_key=$3`,[t,s,key]);
    if(previous.rows[0]){
@@ -209,8 +213,26 @@ export class PgStatusPromotions {
    await c.query(`UPDATE feed.promotion_campaigns SET state=$3,reviewed_by=$4,
     reviewed_at=statement_timestamp(),updated_at=statement_timestamp()
     WHERE tenant_id=$1 AND id=$2`,[t,id,approve?'active':'rejected',editor]);
+   const approvedQuote=approve?await c.query(`SELECT q.body,q.destination_url,q.media_ids,
+     p.kind AS content_kind,p.media_ids AS posted_media
+     FROM feed.promotion_quotes q JOIN feed.posts p ON p.tenant_id=q.tenant_id
+      AND p.id=$3 WHERE q.tenant_id=$1 AND q.id=$2`,[t,p.quote_id,p.post_id]):null;
+   const approval=approvedQuote?.rows[0];
+   // Any image must match exact registered, independently approved objects.
+   // Failure rolls back the publish and campaign state transition.
+   if(approval?.content_kind==='image'){
+    const ready=await c.query(`SELECT count(*)::int AS approved
+      FROM feed.paid_post_media_objects
+      WHERE tenant_id=$1 AND post_id=$2 AND review_state='approved'
+       AND media_id::text=ANY($3::text[])`,[t,p.post_id,approval.posted_media]);
+    const attached=Array.isArray(approval.posted_media)?approval.posted_media.length:0;
+    if(!attached||Number(ready.rows[0]?.approved)!==attached)fail('paid_media_not_approved',409);
+   }
    await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id,
-    rationale?{reason:rationale}:{});
+    approve?{bodySha256:hash(String(approval?.body??'')),
+     destinationUrl:approval?.destination_url??null,
+     reviewedMediaIds:approval?.media_ids??[],reason:rationale||null}:
+     {reason:rationale});
    if(!approve)await this.disable(c,t,String(p.post_id));
    return {campaignId:id,state:approve?'active':'rejected',
     ...(rationale?{reason:rationale}:{})};
@@ -222,8 +244,10 @@ export class PgStatusPromotions {
  async adminQueue(t:string,editor:string){actor(t,editor);
   const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
    c.target_views,c.remaining_views,c.delivered_views,c.created_at,
-   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state
-   FROM feed.promotion_campaigns c JOIN feed.posts p
+   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state,q.destination_url AS destination_url
+   FROM feed.promotion_campaigns c JOIN feed.promotion_quotes q
+    ON q.tenant_id=c.tenant_id AND q.id=c.quote_id
+   JOIN feed.posts p
     ON p.tenant_id=c.tenant_id AND p.id=c.post_id
    WHERE c.tenant_id=$1 AND c.state='pending_review'
    ORDER BY c.created_at,c.id LIMIT 100`,[t]);
@@ -231,6 +255,7 @@ export class PgStatusPromotions {
    sponsorId:String(x.sponsor_id),authorId:String(x.author_user_id),
    campaignKind:String(x.kind),contentKind:String(x.content_kind),
    body:String(x.body??''),postState:String(x.post_state),
+   destinationUrl:x.destination_url==null?null:String(x.destination_url),
    targetViews:count(x.target_views),remainingViews:count(x.remaining_views),
    deliveredViews:count(x.delivered_views),submittedAt:x.created_at}))};
  }
