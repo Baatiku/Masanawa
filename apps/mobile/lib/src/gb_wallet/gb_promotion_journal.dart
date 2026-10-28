@@ -112,7 +112,7 @@ class GbPromotionNotice {
     final date=at is String?DateTime.tryParse(at):null;
     if(date==null||!date.isUtc||
       (campaign!=null&&(campaign is! String||campaign.length>160))||
-      (reason!=null&&(reason is! String||reason.length>160)))
+      (reason!=null&&(reason is! String||reason.length>500)))
       throw const FormatException('Invalid promotion update');
     return GbPromotionNotice(id:id,kind:kind,postId:post,
       occurredAt:date,campaignId:campaign as String?,reason:reason as String?);

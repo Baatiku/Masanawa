@@ -20,6 +20,19 @@ void main(){
     expect(model.notices.single.label,'Promotion paused');
   });
 
+  test('full 500-character moderation reasons remain visible in private history',(){
+    final ordinary={'campaigns':[], 'sharingEarnings':[],
+      'lifecycleNotifications':[{'id':'notice-1','kind':'rejected',
+        'postId':'post-1','at':'2026-10-28T12:00:00Z'}]};
+    final event=(ordinary['lifecycleNotifications'] as List).single as Map;
+    event['reason']=List<String>.filled(500,'r').join();
+    expect(GbPromotionJournal.read(ordinary).notices.single.reason,hasLength(500));
+    event['reason']=String.fromCharCodes([65,10,66]);
+    expect(GbPromotionJournal.read(ordinary).notices.single.reason,'A\\nB');
+    event['reason']=List<String>.filled(501,'r').join();
+    expect(()=>GbPromotionJournal.read(ordinary),throwsFormatException);
+  });
+
   test('empty authoritative campaigns are distinguished from an unavailable read',(){
     expect(GbPromotionJournal.read({'campaigns':[],
       'sharingEarnings':[],'lifecycleNotifications':[]}).campaigns,isEmpty);
