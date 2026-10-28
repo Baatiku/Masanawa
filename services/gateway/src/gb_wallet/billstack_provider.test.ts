@@ -1,6 +1,6 @@
 import {createHmac} from "node:crypto";
 import {describe,expect,it,vi} from "vitest";
-import {createBillstackReservedAccountClient,verifyBillstackWebhook} from "./billstack_provider.js";
+import {assertBillstackApplicant,createBillstackReservedAccountClient,verifyBillstackWebhook} from "./billstack_provider.js";
 const key="local-test-only-9psb-provider-webhook-key";
 describe("Billstack reserved 9PSB and raw-body authenticated notification",()=>{
   it("reserves exactly 9PSB and maps only matching account identity",async()=>{
@@ -14,6 +14,21 @@ describe("Billstack reserved 9PSB and raw-body authenticated notification",()=>{
     const account=await client.reserve({reference:"customer123",email:"test@example.com",phone:"08012345678",firstName:"Mary",lastName:"Okafor"});
     expect(account).toMatchObject({accountNumber:"0000000013",bankId:"9PSB"});
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it('accepts the new +234 contact storage while sending only Nigeria-local format',async()=>{
+    const fetcher=vi.fn(async(_url:string,options:RequestInit)=>{
+      expect(JSON.parse(String(options.body)).phone).toBe('08031234567');
+      return new Response(JSON.stringify({status:true,data:{reference:'r',account:[{
+        account_number:'0000000013',account_name:'Customer',bank_name:'9PSB',bank_id:'9PSB'}]}}),{status:200});
+    });
+    const details={reference:'customer123',email:'test@example.com',
+      phone:'+2348031234567',firstName:'Mary',lastName:'Okafor'};
+    expect(()=>assertBillstackApplicant(details)).not.toThrow();
+    await expect(createBillstackReservedAccountClient({secretKey:key,fetcher:fetcher as typeof fetch})
+      .reserve(details)).resolves.toMatchObject({bankId:'9PSB'});
+    expect(fetcher).toHaveBeenCalledOnce();
+    for(const foreign of ['+233241234567','+14165550123','+2341234'])
+      expect(()=>assertBillstackApplicant({...details,phone:foreign})).toThrow();
   });
   it("rejects wrong bank and unsigned or stale transfer claims",async()=>{
     const client=createBillstackReservedAccountClient({secretKey:key,fetcher:async()=>new Response(

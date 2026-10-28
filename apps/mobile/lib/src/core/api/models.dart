@@ -49,7 +49,7 @@ class OtpSendResponse {
 
 class OtpVerifyRequest {
   const OtpVerifyRequest({this.phone, this.email, required this.code, this.name,
-    this.firstName, this.lastName, this.contactPhone})
+    this.firstName, this.lastName, this.contactPhone,this.countryIso,this.subdivisionIso})
       : assert(phone != null || email != null, 'Provide exactly one of phone or email');
 
   final String? phone;
@@ -57,6 +57,7 @@ class OtpVerifyRequest {
   final String code;
   final String? name;
   final String? firstName, lastName, contactPhone;
+  final String? countryIso,subdivisionIso;
 
   Map<String, dynamic> toJson() => {
         if (phone != null) 'phone': phone,
@@ -66,6 +67,8 @@ class OtpVerifyRequest {
         if (firstName != null) 'firstName': firstName,
         if (lastName != null) 'lastName': lastName,
         if (contactPhone != null) 'contactPhone': contactPhone,
+        if (countryIso != null) 'countryIso':countryIso,
+        if (subdivisionIso != null) 'subdivisionIso':subdivisionIso,
       };
 }
 
@@ -110,6 +113,7 @@ class PasswordSetupRequest {
     required this.password,
     required this.name,
     this.email,
+    this.firstName,this.lastName,this.contactPhone,this.countryIso,this.subdivisionIso,
   });
 
   final String phone;
@@ -117,6 +121,7 @@ class PasswordSetupRequest {
   final String password;
   final String name;
   final String? email;
+  final String? firstName,lastName,contactPhone,countryIso,subdivisionIso;
 
   Map<String, dynamic> toJson() => {
         'phone': phone,
@@ -124,6 +129,11 @@ class PasswordSetupRequest {
         'password': password,
         'name': name,
         if (email != null) 'email': email,
+        if (firstName != null) 'firstName':firstName,
+        if (lastName != null) 'lastName':lastName,
+        if (contactPhone != null) 'contactPhone':contactPhone,
+        if (countryIso != null) 'countryIso':countryIso,
+        if (subdivisionIso != null) 'subdivisionIso':subdivisionIso,
       };
 }
 

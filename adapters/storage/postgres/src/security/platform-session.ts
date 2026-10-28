@@ -28,6 +28,9 @@ interface ProfileRow {
   email: string | null;
   phone: string | null;
   contact_phone?: string | null;
+  country_iso?:string|null;
+  subdivision_iso?:string|null;
+  country_source?:'user_selected'|'legacy_phone_hint'|null;
   first_name?: string | null;
   last_name?: string | null;
   locale: string;
@@ -44,6 +47,9 @@ function profile(row: ProfileRow): PlatformAuthProfile {
     email: row.email,
     phone: row.phone,
     contactPhone: row.contact_phone ?? null,
+    countryIso:row.country_iso??null,
+    subdivisionIso:row.subdivision_iso??null,
+    countrySource:row.country_source??null,
     firstName: row.first_name ?? null,
     lastName: row.last_name ?? null,
     locale: row.locale,
@@ -69,7 +75,7 @@ async function loadProfile(
   userId: UserId,
 ): Promise<PlatformAuthProfile | null> {
   const result = await client.query<ProfileRow>(
-    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.first_name,p.last_name,p.contact_phone,p.locale,p.created_at,h.handle AS username,
+    `SELECT p.tenant_id,p.user_id,p.display_name,p.email,p.phone,p.first_name,p.last_name,p.contact_phone,p.country_iso,p.subdivision_iso,p.country_source,p.locale,p.created_at,h.handle AS username,
          CASE WHEN c.state IS NOT NULL AND
            (c.until_at IS NULL OR c.until_at>clock_timestamp())
            THEN c.state
@@ -243,19 +249,36 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
         });
         const inserted = await client.query<ProfileRow>(
           `INSERT INTO security.platform_user_profiles(
-             tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,locale,created_at,updated_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
-           RETURNING tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,locale,created_at`,
+             tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,country_iso,subdivision_iso,country_source,locale,created_at,updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+           RETURNING tenant_id,user_id,display_name,email,phone,first_name,last_name,contact_phone,country_iso,subdivision_iso,country_source,locale,created_at`,
           [
             input.tenantId,userId,name,
             input.channel === "email" ? input.identifier : null,
             input.channel === "sms" ? input.identifier : null,
             input.firstName ?? null,input.lastName ?? null,input.contactPhone ?? null,
+            input.countryIso??null,input.subdivisionIso??null,
+            input.contactPhone?(input.contactPhone.startsWith('0')?'legacy_phone_hint':'user_selected'):null,
             input.locale,input.createdAt,
           ],
         );
         const username=await ensureSignupUsername(client,{tenantId:input.tenantId,userId,name});
         return profile({...inserted.rows[0]!,username});
+      });
+    },
+
+    async updateContactGeography(input){
+      return withTransaction(pool,async client=>{
+        const updated=await client.query(`UPDATE security.platform_user_profiles
+          SET contact_phone=$3,country_iso=$4,subdivision_iso=$5,
+            country_source='user_selected',updated_at=statement_timestamp()
+          WHERE tenant_id=$1 AND user_id=$2 RETURNING user_id`,
+          [input.tenantId,input.userId,input.contactPhone,input.countryIso,
+            input.subdivisionIso??null]);
+        if(!updated.rowCount)throw new Error('auth.profile_not_found');
+        const latest=await loadProfile(client,input.tenantId,input.userId);
+        if(!latest)throw new Error('auth.profile_not_found');
+        return latest;
       });
     },
 

@@ -194,6 +194,8 @@ class SessionController extends Notifier<SessionState> {
     String? firstName,
     String? lastName,
     String? contactPhone,
+    String? countryIso,
+    String? subdivisionIso,
   }) async {
     final channel = phone != null ? OtpChannel.sms : OtpChannel.email;
     final identifier = phone ?? email!;
@@ -211,6 +213,8 @@ class SessionController extends Notifier<SessionState> {
             firstName: firstName,
             lastName: lastName,
             contactPhone: contactPhone,
+            countryIso:countryIso,
+            subdivisionIso:subdivisionIso,
           );
       await _persist(tokens);
       if (tokens.user.isNewUser && tokens.user.email != null) {
@@ -365,6 +369,8 @@ class SessionController extends Notifier<SessionState> {
     String? firstName,
     String? lastName,
     String? contactPhone,
+    String? countryIso,
+    String? subdivisionIso,
     String? phone,
     String? email,
     String? code,
@@ -381,6 +387,8 @@ class SessionController extends Notifier<SessionState> {
               password: current.password,
               name: name,
               email: current.email,
+              firstName:firstName,lastName:lastName,contactPhone:contactPhone,
+              countryIso:countryIso,subdivisionIso:subdivisionIso,
             );
         await _persist(tokens);
         state = SessionSignedIn(tokens.user, tokens);
@@ -397,6 +405,8 @@ class SessionController extends Notifier<SessionState> {
           firstName: firstName,
           lastName: lastName,
           contactPhone: contactPhone,
+          countryIso:countryIso,
+          subdivisionIso:subdivisionIso,
         );
         return;
       }

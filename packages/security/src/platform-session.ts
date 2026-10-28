@@ -11,6 +11,9 @@ export interface PlatformAuthProfile {
   readonly email: string | null;
   readonly phone: string | null;
   readonly contactPhone?: string | null;
+  readonly countryIso?:string|null;
+  readonly subdivisionIso?:string|null;
+  readonly countrySource?:'user_selected'|'legacy_phone_hint'|null;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly locale: string;
@@ -60,7 +63,12 @@ export interface PlatformSessionRepository {
   createProfile(input: Readonly<{
     tenantId: TenantId; channel: PlatformAuthChannel; identifier: string; name: string; locale: string; createdAt: string;
     firstName?: string; lastName?: string; contactPhone?: string;
+    countryIso?:string;subdivisionIso?:string;
   }>): Promise<PlatformAuthProfile>;
+  updateContactGeography?(input:Readonly<{
+    tenantId:TenantId;userId:UserId;contactPhone:string;
+    countryIso:string;subdivisionIso?:string;
+  }>):Promise<PlatformAuthProfile>;
   setPasswordCredential(input: Readonly<{
     tenantId: TenantId; userId: UserId; passwordHash: string; createdAt: string;
   }>): Promise<void>;
