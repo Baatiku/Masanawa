@@ -31,7 +31,7 @@ CREATE UNIQUE INDEX paid_single_image_post ON feed.paid_image_uploads(tenant_id,
 -- Image proposals reuse the existing immutable-edit source checks.
 ALTER TABLE feed.promotion_edit_proposals ADD COLUMN proposed_media_ids text[];
 ALTER TABLE feed.promotion_edit_proposals ADD CONSTRAINT paid_edit_media_count
- CHECK(proposed_media_ids IS NULL OR cardinality(proposed_media_ids) BETWEEN 1 AND 10);
+ CHECK(proposed_media_ids IS NULL OR cardinality(proposed_media_ids) BETWEEN 0 AND 10);
 CREATE OR REPLACE FUNCTION feed.refuse_promotion_edit_proposal_changes()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
