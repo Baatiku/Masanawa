@@ -19,7 +19,8 @@ class StatusPostBoostAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!enabled || !post.boostEligible || onBoost == null) {
+    final boost = onBoost;
+    if (!enabled || !post.boostEligible || boost == null) {
       return const SizedBox.shrink();
     }
     final ha = Localizations.localeOf(context).languageCode == 'ha';
@@ -31,7 +32,7 @@ class StatusPostBoostAction extends StatelessWidget {
           minimumSize: const Size(0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
-        onPressed: () => onBoost!(post.id),
+        onPressed: () => boost(post.id),
         icon: const Icon(Icons.rocket_launch_outlined, size: 16),
         label: Text(ha ? 'Ƙara yaɗawa' : 'Boost', maxLines: 1),
       ),
