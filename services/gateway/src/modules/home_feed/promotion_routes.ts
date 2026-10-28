@@ -1,5 +1,5 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
-import {reviewedPromotionDestination} from './promotion_destination.js';
+import {reviewedPromotionDestination} from '@masanawa/feed';
 
 export interface PromotionPort {
  quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}):Promise<unknown>;
