@@ -89,6 +89,7 @@ class _AccountContactRegionScreenState extends ConsumerState<AccountContactRegio
           const Text('Contact phone'),const SizedBox(height:6),
           PhoneField(key:ValueKey('private-contact-${_country.iso}'),
             controller:_phone,initialCountry:_country,enabled:!_saving,
+            nationalEntry:true,
             onCountryChanged:(selected)=>setState((){
               _country=selected;_subdivision=null;
             })),
