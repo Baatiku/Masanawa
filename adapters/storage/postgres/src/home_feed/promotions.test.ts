@@ -782,14 +782,9 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const c=await service.confirm(t,'expiryowner',quote.quoteId,'timebound-confirm-001');
   await service.review(t,'different_editor',c.id,true,'Approved within window');
   expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:3});
-  await query(`UPDATE feed.promotion_campaigns SET expires_at=statement_timestamp()-interval '1 second'
-    WHERE tenant_id=$1 AND id=$2`,[t,c.id]).catch(async()=>{
-    // Immutable budget rules correctly prevent rewriting an original expiry.
-    await query(`UPDATE feed.promotion_drafts SET campaign_expires_at=statement_timestamp()-interval '1 second'
-       WHERE tenant_id=$1 AND id=$2`,[t,draft.draftId]);
-  });
-  // Deadline is immutable, so the worker cannot be fake-clock tested by
-  // rewriting the campaign. Assert the immutable guard and delayed recovery.
+  await expect(query(`UPDATE feed.promotion_campaigns
+    SET expires_at=statement_timestamp()-interval '1 second'
+    WHERE tenant_id=$1 AND id=$2`,[t,c.id])).rejects.toThrow(/economics/i);
   const current=await query(`SELECT state,expires_at FROM feed.promotion_campaigns WHERE id=$1`,[c.id]);
   expect(current.rows[0].state).toBe('active');
   expect((await service.expireCampaigns()).expired).toBe(0);
