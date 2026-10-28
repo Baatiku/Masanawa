@@ -187,7 +187,7 @@ void main() {
         data:MediaQuery.of(context).copyWith(textScaler:const TextScaler.linear(1.5)),
         child:Directionality(textDirection:TextDirection.rtl,child:child!)),
       home:Scaffold(body:SingleChildScrollView(child:PhoneField(
-        controller:controller,nationalEntry:true))));
+        controller:controller,nationalEntry:true)))));
     await tester.pump();
     expect(find.text('Sauran lambobin wayarka'),findsOneWidget);
     expect(tester.takeException(),isNull);

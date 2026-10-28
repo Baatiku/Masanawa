@@ -19,9 +19,14 @@ export function parseSignupContact(input:Readonly<{
  const raw=input.contactPhone.trim();
  if(!/^[+\d\s()-]+$/u.test(raw))throw new SignupContactError();
  const phone=raw.replace(/[\s()-]/gu,'');
- // Existing Nigerian-only clients send local digits; preserve their records.
- if(!input.countryIso&&!input.subdivisionIso&&/^0(?:70|80|81|90|91)\d{8}$/u.test(phone))
-  return {contactPhone:phone,countryIso:'NG'};
+ // Existing Nigerian-only clients sent local digits. Validate them using the
+ // same maintained phone metadata, but preserve their original storage shape
+ // and legacy/hint provenance. No hardcoded carrier-prefix allowlist.
+ if(!input.countryIso&&!input.subdivisionIso&&/^0\d{10}$/u.test(phone)){
+  const legacy=parsePhoneNumberFromString(phone,'NG');
+  if(legacy?.isValid()&&legacy.country==='NG')
+   return {contactPhone:phone,countryIso:'NG'};
+ }
  const country=input.countryIso;
  const metadata=country===undefined?undefined:contactCountries[country];
  const region=input.subdivisionIso??null;
