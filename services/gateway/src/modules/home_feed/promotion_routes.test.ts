@@ -165,4 +165,34 @@ describe('SPE promotion routes inherit the established principal and staff autho
   await server.close();
  });
 
+ it('rejects spoofed edit authority, requires original key and staff review for new copy',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'tenant',userId:'writer'}),
+   isEditor:async()=>true,enabled:()=>true});
+  const url='/v1/promotions/posts/post/revisions';
+  expect((await server.inject({method:'POST',url,payload:{body:'Edited',
+   expectedRevision:0,ownerId:'attacker'},headers:{'idempotency-key':'edit-key-001'}}))
+   .statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,payload:{body:'Edited',
+   expectedRevision:0,destinationUrl:'http://unsafe.example.org'},
+    headers:{'idempotency-key':'edit-key-001'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,
+   payload:{body:'A safe change',expectedRevision:0,
+    destinationUrl:'https://example.org/update'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,
+   payload:{body:'A safe change',expectedRevision:0,
+    destinationUrl:'https://example.org/update'},
+   headers:{'idempotency-key':'edit-key-001'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['edit','tenant','writer','post',
+   {body:'A safe change',expectedRevision:0,
+    idempotencyKey:'edit-key-001',destinationUrl:'https://example.org/update'}]);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/revisions'})).json())
+   .toEqual({pending:[]});
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/revisions/proposal/review',
+   payload:{decision:'approve',reason:'Reviewed destination'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['edit-review','tenant','writer','proposal',true,'Reviewed destination']);
+  await server.close();
+ });
+
 });
