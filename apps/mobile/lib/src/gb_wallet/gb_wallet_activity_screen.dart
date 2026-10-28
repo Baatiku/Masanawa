@@ -264,7 +264,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                 promotion.valueOrNull!.earnings.isEmpty)
               const ListTile(title:Text('No funded campaigns or referral allocations yet.'))
             else ...[
-              for(final c in promotion.valueOrNull!.campaigns.take(5))
+              for(final c in promotion!.valueOrNull!.campaigns.take(5))
                 ListTile(
                   key:ValueKey('wallet-promotion-${c.id}'),
                   leading:const Icon(Icons.campaign_outlined),
@@ -275,7 +275,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                     '${c.refundedUnusedMb} MB released\n'
                     'Campaign: ${c.id}'),
                   isThreeLine:true),
-              for(final e in promotion.valueOrNull!.earnings.take(5))
+              for(final e in promotion!.valueOrNull!.earnings.take(5))
                 ListTile(key:ValueKey('wallet-referral-${e.postId}'),
                   leading:const Icon(Icons.hourglass_bottom_outlined),
                   title:Text('${e.views} referred qualified views'),
