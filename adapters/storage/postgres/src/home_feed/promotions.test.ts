@@ -77,6 +77,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0013_campaign_drafts_and_expiry.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0014_paid_image_uploads.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0015_paid_policy_review_evidence.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0016_extension_quotes_and_reports.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
