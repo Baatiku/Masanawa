@@ -115,6 +115,21 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
           icon:const Icon(Icons.refresh),label:Text(label));
     if(loading){
       final ha=Localizations.localeOf(context).languageCode=='ha';
+      // A four-image mosaic tile can be shorter than 100 logical pixels,
+      // especially with large text. Preserve the accessible loading label,
+      // but keep the visual skeleton icon-only in that constrained square.
+      if(widget.tile)return frame(Semantics(
+        label:'Loading approved image preview',
+        child:ColoredBox(
+          color:Theme.of(context).colorScheme.surfaceContainerHigh,
+          child:Stack(fit:StackFit.expand,children:[
+            Center(child:Icon(Icons.image_outlined,size:24,
+              color:Theme.of(context).colorScheme.outline)),
+            const Align(alignment:Alignment.bottomCenter,
+              child:LinearProgressIndicator(minHeight:2)),
+          ]),
+        ),
+      ));
       return frame(Semantics(label:'Loading approved image preview',
         child:ColoredBox(color:Theme.of(context).colorScheme.surfaceContainerHigh,
           child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[

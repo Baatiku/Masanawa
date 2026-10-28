@@ -25,6 +25,28 @@ class RetryMediaApi implements FeedMediaApi {
 }
 
 void main() {
+  testWidgets('compact 136x96 mosaic tile loads without text overflow at 200 percent scale',
+      (tester) async {
+    final api=_PendingMediaApi();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MediaQuery(
+      data:const MediaQueryData(textScaler:TextScaler.linear(2)),
+      child:Center(child:SizedBox(width:136,height:96,
+        child:FeedInlineMediaCard(api:api,accountKey:'fan',
+          postId:'mosaic-post',mediaId:'mosaic-tile',mediaCount:4,
+          tile:true,renderer:(_)=>const Text('Approved tile')))),
+    ))));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator),findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined),findsOneWidget);
+    expect(tester.takeException(),isNull);
+    api.answer.complete(FeedMediaGrant(mediaId:'mosaic-tile',kind:'image',
+      url:Uri.parse('https://media.example.test/tile'),
+      expiresAt:DateTime.now().add(const Duration(minutes:2))));
+    await tester.pumpAndSettle();
+    expect(find.text('Approved tile'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('approved image uses a restrained loading skeleton until its scoped grant arrives',
       (tester) async {
     final api=_PendingMediaApi();
