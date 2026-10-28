@@ -317,6 +317,49 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
     feed.promotion_view_charges c WHERE c.campaign_id=$1`,[c.id]);
   expect(receipts.rows).toEqual([{sharer_id:'sharer',sharer_half_mb:1}]);
  });
+ it('stops new or in-flight suspended sharer rewards without rejecting unrelated viewers',async()=>{
+  await account('guardedpublisher',5);
+  await account('guardedsharer',1);
+  await account('guardedviewera',1);
+  await account('guardedviewerb',1);
+  const q=await service.quote({tenantId:t,sponsorId:'guardedpublisher',
+   body:'Never reward a suspended or frozen sharer',targetViews:3});
+  const c=await service.confirm(t,'guardedpublisher',q.quoteId,'guarded-sharer-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const shared=await service.share(t,'guardedsharer',c.postId);
+  expect(shared.earnable).toBe(true);
+  const token=new URL(shared.url).searchParams.get('r')!;
+  const pending=await service.beginView(t,'guardedviewera',c.postId,token);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[pending.challengeId]);
+  // A link that was sound at challenge issue must not pay after suspension.
+  await query(`UPDATE identity.users SET state='disabled'
+   WHERE tenant_id=$1 AND user_id='guardedsharer'`,[t]);
+  expect(await service.finishView(t,'guardedviewera',pending.challengeId,
+   {visibleFraction:0.9,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  expect(await service.share(t,'guardedsharer',c.postId)).toEqual({
+   url:`https://status.example.test/status/${c.postId}`,earnable:false});
+  await query(`UPDATE identity.users SET state='active'
+   WHERE tenant_id=$1 AND user_id='guardedsharer'`,[t]);
+  await query(`UPDATE gb_wallet.accounts SET frozen=true
+   WHERE tenant_id=$1 AND account_id='guardedsharer'`,[t]);
+  expect(await service.share(t,'guardedsharer',c.postId)).toMatchObject({earnable:false});
+  const frozen=await service.beginView(t,'guardedviewerb',c.postId,token);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[frozen.challengeId]);
+  expect(await service.finishView(t,'guardedviewerb',frozen.challengeId,
+   {visibleFraction:0.9,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  expect((await query(`SELECT sharer_id,platform_half_mb,sharer_half_mb
+   FROM feed.promotion_view_charges WHERE campaign_id=$1 ORDER BY view_id`,[c.id])).rows)
+   .toEqual([
+    {sharer_id:null,platform_half_mb:2,sharer_half_mb:0},
+    {sharer_id:null,platform_half_mb:2,sharer_half_mb:0},
+   ]);
+  expect((await service.mine(t,'guardedsharer')).sharingEarnings
+   .filter(x=>x.postId===c.postId)).toEqual([]);
+ });
  it('persists five odd referred charges across two real campaigns as five pending half-MB',async()=>{
   await account('mathpublisher',10);
   const ids:string[]=[],posts:string[]=[];
