@@ -6,7 +6,7 @@ import {
 } from "@masanawa/contracts";
 import { parseTraceparent } from "@masanawa/telemetry";
 import { createGatewayApp } from "./app.js";
-import type { CustomerAuthService } from "./customer_auth.js";
+import { CustomerAuthError, type CustomerAuthService } from "./customer_auth.js";
 import type { BillingCheckoutService } from "./billing_checkout.js";
 
 const apps: Array<ReturnType<typeof createGatewayApp>> = [];
@@ -97,6 +97,7 @@ describe("gateway service bootstrap", () => {
   });
 
   it("projects canonical OTP capabilities without delivery configuration", async () => {
+    let savedContact:{contactPhone:string;countryIso:string;subdivisionIso?:string}|null=null;
     const customerAuth: CustomerAuthService = {
       capabilities: () => ({ otpChannels: ["email"] }),
       async sendOtp() { throw new Error("unused"); },
@@ -124,9 +125,23 @@ describe("gateway service bootstrap", () => {
       async confirmBankStepUp() { throw new Error("unused"); },
       async consumeBankStepUp() { throw new Error("unused"); },
       async authorizeSensitiveMutation() {},
-      async contactGeography() {return {contactPhone:null,countryIso:null,
-        subdivisionIso:null,provenance:'not_provided' as const};},
-      async updateContactGeography() {throw new Error('unused');},
+      async contactGeography(input) {
+        if(input.authorizationHeader!=="Bearer owner")
+          throw new CustomerAuthError("AUTH_UNAVAILABLE",401);
+        return {contactPhone:savedContact?.contactPhone??null,
+          countryIso:savedContact?.countryIso??null,
+          subdivisionIso:savedContact?.subdivisionIso??null,
+          provenance:savedContact?'user_selected' as const:'not_provided' as const};
+      },
+      async updateContactGeography(input) {
+        if(input.authorizationHeader!=="Bearer owner")
+          throw new CustomerAuthError("AUTH_UNAVAILABLE",401);
+        savedContact={contactPhone:input.contactPhone,countryIso:input.countryIso,
+          ...(input.subdivisionIso?{subdivisionIso:input.subdivisionIso}:{})};
+        return {contactPhone:input.contactPhone,countryIso:input.countryIso,
+          subdivisionIso:input.subdivisionIso??null,
+          provenance:'user_selected' as const};
+      },
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);
@@ -137,6 +152,25 @@ describe("gateway service bootstrap", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ otpChannels: ["email"] });
+
+    const privateUrl='/v1/auth/profile/contact-geography';
+    const denied=await app.inject({method:'GET',url:privateUrl});
+    expect(denied.statusCode).toBe(401);
+    expect(denied.headers['cache-control']).toBe('private, no-store');
+    const saved=await app.inject({method:'PATCH',url:privateUrl,
+      headers:{authorization:'Bearer owner'},payload:{contactPhone:'+2348031234567',
+      countryIso:'NG',subdivisionIso:'NG-FC'}});
+    expect(saved.statusCode).toBe(200);
+    expect(saved.headers['cache-control']).toBe('private, no-store');
+    expect(saved.json()).toMatchObject({contactPhone:'+2348031234567',
+      countryIso:'NG',subdivisionIso:'NG-FC',provenance:'user_selected'});
+    const read=await app.inject({method:'GET',url:privateUrl,
+      headers:{authorization:'Bearer owner'}});
+    expect(read.statusCode).toBe(200);
+    expect(read.headers['cache-control']).toBe('private, no-store');
+    expect(read.json()).toEqual(saved.json());
+    expect((await app.inject({method:'PATCH',url:privateUrl,
+      payload:{contactPhone:'+2348031234567',countryIso:'NG'}})).statusCode).toBe(401);
   });
 
   it("retired bill quote routes remain absent with an injected legacy service", async () => {
