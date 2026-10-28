@@ -233,7 +233,7 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
     if (owner != null &&
         widget.enabled &&
         query.length >= 2 &&
-        query.length <= 160)
+        query.length <= 320)
       _timer = Timer(
         const Duration(milliseconds: 350),
         () => _search(owner, query),
@@ -294,7 +294,7 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
           onChanged: _changed,
           autocorrect: false,
           enableSuggestions: false,
-          maxLength: 160,
+          maxLength: 320,
           textInputAction: TextInputAction.search,
           onSubmitted: (_) {
             if (owner != null && query.length >= 2) _search(owner, query);
@@ -304,7 +304,7 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
             hintText: 'Name, @username, email or phone',
             counterText: '',
             helperText:
-                'Use a complete email or phone number. Choose a name below.',
+                'Use a complete email or a phone number with country code. Choose a name below.',
             helperMaxLines: 3,
             border: const OutlineInputBorder(),
             suffixIcon: _checking

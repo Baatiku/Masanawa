@@ -30,6 +30,9 @@ enter URL logs, returns no contacts, and respects tenant, active account,
 bilateral blocks, moderation and account restrictions. Selection fills the
 canonical username. The existing signed quote/review/explicit confirmation and
 original-operation receipt recovery remain authoritative; search moves no funds.
+Only this exact read-only POST may refresh/retry once after an expired session;
+account changes fence its private payload, and financial/username writes never
+receive automatic refresh replay.
 
 Settings → Username and Edit Profile → Username share a fresh-read editor with
 format guidance, debounced availability and explicit expected-version Save.

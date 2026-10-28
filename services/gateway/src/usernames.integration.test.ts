@@ -73,6 +73,10 @@ it('searches name/handle prefixes and exact private contacts only, honoring tena
  expect(await directory.search(actor,'Ami')).toMatchObject([{userId:'find',username:'amina',displayName:'Amina Yusuf'}]);
  expect(await directory.search(actor,'find@example.com')).toMatchObject([{userId:'find'}]);
  expect(await directory.search(actor,'find@exam')).toEqual([]);
+ const longEmail='a'.repeat(60)+'@'+'b'.repeat(60)+'.'+'c'.repeat(60)+'.com';
+ await user('long','Long Person','t','long.person');
+ await db.query('UPDATE security.platform_user_profiles SET email=$1 WHERE user_id=$2',[longEmail,'long']);
+ expect(await directory.search(actor,longEmail)).toMatchObject([{userId:'long'}]);
  expect(await directory.search(actor,'0803')).toEqual([]);
  expect((await directory.search(actor,'08031236428')).some(x=>x.userId==='find')).toBe(true);
  expect(await directory.search(actor,'send')).toEqual([]);

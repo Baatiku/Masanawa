@@ -57,7 +57,7 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
       const q=body?.q;
       if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='q'))
         return reply.code(422).send({error:{code:'invalid_recipient_search'}});
-      if(typeof q!=='string'||q.length<2||q.length>160)return reply.code(422).send({error:{code:'invalid_recipient_search'}});
+      if(typeof q!=='string'||q.length<2||q.length>320)return reply.code(422).send({error:{code:'invalid_recipient_search'}});
       if(!ports.searchRecipients)return reply.code(503).send({error:{code:'search_unavailable'}});
       const key=JSON.stringify([user.tenantId,user.userId]),now=Date.now();
       const previous=searches.get(key),window=previous&&now-previous.at<60000?previous:{at:now,count:0};

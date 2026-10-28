@@ -87,6 +87,13 @@ class ApiClient {
             handler.next(response);
           }
         },
+      ),
+    );
+    // A refresh retry may itself fail. A queued error handler would wait on
+    // its own retry's error queue forever; request/response fencing remains
+    // queued above, while single-flight refresh handles concurrent errors.
+    dio.interceptors.add(
+      InterceptorsWrapper(
         onError: (e, handler) async {
           final options = e.requestOptions;
           if (_isStale(options)) {
@@ -94,10 +101,12 @@ class ApiClient {
             return;
           }
           final path = options.path;
-          // No automatic replay of POST/PUT/PATCH/DELETE: a previously
-          // accepted mutation may still have yielded a stale-session 401.
+          // Never replay mutations after 401. This exact POST is a pure
+          // lookup using a body so private contacts stay out of URL logs.
+          final recipientSearch = options.method.toUpperCase() == 'POST' &&
+              path == '/v1/gb/wallet/recipients/search';
           final safeRead = options.method.toUpperCase() == 'GET' ||
-              options.method.toUpperCase() == 'HEAD';
+              options.method.toUpperCase() == 'HEAD' || recipientSearch;
           final canRefresh = safeRead &&
               onUnauthorized != null &&
               _isProtected(path) &&
