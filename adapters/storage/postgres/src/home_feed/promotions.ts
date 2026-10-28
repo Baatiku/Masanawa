@@ -205,9 +205,11 @@ export class PgStatusPromotions {
    if(p.sponsor_id===editor)fail('separate_reviewer_required',403);
    if(approve){
     const accepted=await c.query(`UPDATE feed.posts SET state='published',
-     published_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2
+     published_at=statement_timestamp(),paid_reviewed_destination_url=(
+       SELECT destination_url FROM feed.promotion_quotes WHERE tenant_id=$1 AND id=$3
+     ) WHERE tenant_id=$1 AND id=$2
      AND state='hidden' AND author_type='human' AND paid_disabled_at IS NULL
-     AND paid_purged_at IS NULL RETURNING id`,[t,p.post_id]);
+     AND paid_purged_at IS NULL RETURNING id`,[t,p.post_id,p.quote_id]);
     if(!accepted.rowCount)fail('post_no_longer_approvable',409);
    }else await this.refund(c,t,p);
    await c.query(`UPDATE feed.promotion_campaigns SET state=$3,reviewed_by=$4,
@@ -323,6 +325,115 @@ export class PgStatusPromotions {
   });
  }
 
+
+ /** Stage owner copy/destination edits; the approved live version is unchanged
+  * until an independent reviewer accepts a matching revision. */
+ async proposeEdit(t:string,owner:string,postId:string,input:{
+  expectedRevision:number;body:string;destinationUrl?:string;idempotencyKey:string;
+ }){
+  actor(t,owner);identifier(postId);
+  if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||
+    !keyPattern.test(input.idempotencyKey))fail('invalid_edit_revision');
+  const body=input.body?.trim();
+  if(typeof body!=='string'||!body||body.length>5000)fail('invalid_edit_body');
+  let destinationUrl:string|null=null;
+  try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
+  catch{fail('invalid_promotion_destination');}
+  const fingerprint=hash(JSON.stringify([postId,input.expectedRevision,body,destinationUrl]));
+  return serial(this.pool,async c=>{
+   const result=await c.query(`SELECT id,kind,body,author_user_id,paid_content_revision,
+    paid_reviewed_destination_url FROM feed.posts WHERE tenant_id=$1 AND id=$2
+    AND author_type='human' AND author_user_id=$3 AND state='published'
+    AND paid_purged_at IS NULL FOR UPDATE`,[t,postId,owner]);
+   const p=result.rows[0];
+   if(!p)fail('post_not_editable',404);
+   if(p.kind!=='text')fail('paid_image_edit_requires_media_review',409);
+   const previous=await c.query(`SELECT id,state,request_sha256
+    FROM feed.promotion_edit_proposals WHERE tenant_id=$1 AND owner_id=$2
+     AND idempotency_key=$3`,[t,owner,input.idempotencyKey]);
+   if(previous.rows[0]){
+    if(previous.rows[0].request_sha256!==fingerprint)fail('idempotency_conflict',409);
+    return {proposalId:String(previous.rows[0].id),state:String(previous.rows[0].state),
+     alreadySubmitted:true};
+   }
+   if(Number(p.paid_content_revision)!==input.expectedRevision)fail('stale_post_revision',409);
+   const original=await c.query(`SELECT 1 FROM feed.promotion_campaigns
+     WHERE tenant_id=$1 AND post_id=$2 AND kind='human_primary'
+      AND reviewed_at IS NOT NULL AND state<>'rejected'`,[t,postId]);
+   if(!original.rowCount)fail('approved_primary_required',403);
+   if(p.body===body&&(p.paid_reviewed_destination_url??null)===destinationUrl)
+    fail('edit_has_no_changes');
+   const already=await c.query(`SELECT 1 FROM feed.promotion_edit_proposals
+     WHERE tenant_id=$1 AND post_id=$2 AND state='pending'`,[t,postId]);
+   if(already.rowCount)fail('edit_review_already_pending',409);
+   const inserted=await c.query(`INSERT INTO feed.promotion_edit_proposals
+    (tenant_id,post_id,owner_id,original_revision,idempotency_key,
+      request_sha256,proposed_body,proposed_destination_url)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [t,postId,owner,input.expectedRevision,input.idempotencyKey,
+     fingerprint,body,destinationUrl]);
+   await this.audit(c,t,postId,owner,'paid_edit_submitted',null,
+    {proposalId:String(inserted.rows[0]!.id),originalRevision:input.expectedRevision});
+   return {proposalId:String(inserted.rows[0]!.id),state:'pending',
+    alreadySubmitted:false};
+  });
+ }
+ async myEdits(t:string,owner:string){actor(t,owner);
+  const r=await this.pool.query(`SELECT id,post_id,original_revision,
+    state,proposed_body,proposed_destination_url,resolution_reason,created_at,reviewed_at
+    FROM feed.promotion_edit_proposals WHERE tenant_id=$1 AND owner_id=$2
+    ORDER BY created_at DESC,id DESC LIMIT 100`,[t,owner]);
+  return {edits:r.rows.map(x=>({proposalId:String(x.id),postId:String(x.post_id),
+   originalRevision:count(x.original_revision),state:String(x.state),
+   body:String(x.proposed_body),destinationUrl:x.proposed_destination_url??null,
+   resolutionReason:x.resolution_reason??null,createdAt:x.created_at,reviewedAt:x.reviewed_at}))};
+ }
+ async adminEdits(t:string,editor:string){actor(t,editor);
+  const r=await this.pool.query(`SELECT id,post_id,owner_id,original_revision,
+    proposed_body,proposed_destination_url,created_at
+    FROM feed.promotion_edit_proposals WHERE tenant_id=$1 AND state='pending'
+    ORDER BY created_at,id LIMIT 100`,[t]);
+  return {pending:r.rows.map(x=>({proposalId:String(x.id),postId:String(x.post_id),
+   ownerId:String(x.owner_id),originalRevision:count(x.original_revision),
+   body:String(x.proposed_body),destinationUrl:x.proposed_destination_url??null,
+   createdAt:x.created_at}))};
+ }
+ async reviewEdit(t:string,editor:string,id:string,approve:boolean,reason:string){
+  actor(t,editor);identifier(id);
+  const rationale=reviewReason(reason,true);
+  if(rationale.length<5)fail('edit_review_reason_too_short');
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT * FROM feed.promotion_edit_proposals
+    WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,id]);
+   const edit=(r.rows[0] as Row|undefined)??fail('edit_proposal_not_found',404);
+   if(edit.owner_id===editor)fail('separate_reviewer_required',403);
+   if(edit.state!=='pending')fail('edit_already_reviewed',409);
+   if(approve){
+    const p=await c.query(`UPDATE feed.posts SET body=$4,
+      paid_reviewed_destination_url=$5,
+      paid_content_revision=paid_content_revision+1
+      WHERE tenant_id=$1 AND id=$2 AND author_type='human' AND state='published'
+       AND paid_purged_at IS NULL AND paid_content_revision=$3
+      RETURNING paid_content_revision`,
+     [t,edit.post_id,edit.original_revision,edit.proposed_body,
+      edit.proposed_destination_url]);
+    if(!p.rowCount)fail('edit_version_or_visibility_changed',409);
+   }
+   await c.query(`UPDATE feed.promotion_edit_proposals SET state=$3,
+    reviewer_id=$4,resolution_reason=$5,reviewed_at=statement_timestamp()
+    WHERE tenant_id=$1 AND id=$2`,
+    [t,id,approve?'approved':'rejected',editor,rationale]);
+   await this.audit(c,t,String(edit.post_id),editor,
+    approve?'paid_edit_approved':'paid_edit_rejected',null,
+    {proposalId:id,oldRevision:count(edit.original_revision),
+     newRevision:approve?count(edit.original_revision)+1:null,
+     proposedBodySha256:hash(String(edit.proposed_body)),
+     destinationUrl:edit.proposed_destination_url??null,reason:rationale});
+   return {proposalId:id,postId:String(edit.post_id),
+    state:approve?'approved':'rejected',
+    newRevision:approve?count(edit.original_revision)+1:null};
+  });
+ }
  /** A rejection appeal is a reviewable record, not new authorization to spend.
   * It never restores the previously refunded reserved MB or old campaign. */
  async appeal(t:string,owner:string,id:string,reason:string){
