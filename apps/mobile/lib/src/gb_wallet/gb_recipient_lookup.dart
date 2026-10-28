@@ -272,7 +272,12 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
     trailing: selected
         ? IconButton(
             tooltip: 'Clear recipient',
-            onPressed: widget.enabled ? () => setState(_invalidate) : null,
+            onPressed: widget.enabled ? () {
+              if (widget.owner == null || !_same(widget.owner!, _generation, widget.controller.text.trim())) return;
+              widget.controller.clear();
+              setState(_invalidate);
+              widget.onChanged('');
+            } : null,
             icon: const Icon(Icons.close),
           )
         : const Icon(Icons.chevron_right),

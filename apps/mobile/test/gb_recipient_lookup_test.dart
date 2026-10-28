@@ -243,6 +243,10 @@ void main() {
       expect(find.text('Bello Abubakar'), findsOneWidget);
       expect(find.text('@bello.user'), findsOneWidget);
       expect(find.textContaining('stable_123'), findsNothing);
+      await tester.tap(find.byTooltip('Clear recipient'));
+      await tester.pump();
+      expect(controller.text, isEmpty);
+      expect(find.text('Bello Abubakar'), findsNothing);
       await tester.enterText(find.byType(TextField), '@different.user');
       await tester.pump();
       expect(find.text('Bello Abubakar'), findsNothing);

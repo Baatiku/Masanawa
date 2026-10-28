@@ -1,12 +1,11 @@
-import {Pool} from 'pg';
-import {runMigrations,platformProductMigrationRoots,createPostgresPlatformSessionRepository} from '@masanawa/postgres';
+import {createPostgresPool,type Pool,runMigrations,platformProductMigrationRoots,createPostgresPlatformSessionRepository} from '@masanawa/postgres';
 import {createCanonicalId} from '@masanawa/contracts';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createUsernameStore} from './usernames.js';
 const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
 (connectionString?describe:describe.skip)('concurrent username ownership on PostgreSQL',()=>{
  let pool:Pool;
- beforeAll(async()=>{pool=new Pool({connectionString});await runMigrations(pool,platformProductMigrationRoots());});
+ beforeAll(async()=>{pool=createPostgresPool({connectionString:connectionString!,applicationName:'username-acceptance'});await runMigrations(pool,platformProductMigrationRoots());});
  afterAll(async()=>pool?.end());
  it('allocates distinct readable names under concurrent signup and serializes expected-version renames',async()=>{
   const tenantId=createCanonicalId('tenant'),repo=createPostgresPlatformSessionRepository(pool);
