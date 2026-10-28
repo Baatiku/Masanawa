@@ -7,6 +7,7 @@ import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
+import 'gb_wallet_holds_panel.dart';
 
 String _balanceStatus(GbActivityReconciliation? check){
   if(check==null)return 'Balance check unavailable';
@@ -429,6 +430,8 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                   ]),
               ],
             ]))),
+          const SizedBox(height:12),
+          GbWalletHoldsPanel(key:ValueKey(('wallet-holds',owner)),owner:owner),
           const SizedBox(height:12),
           if(initial==null && first?.isLoading==true)
             const ListTile(title:Text('Loading verified activity…'),
