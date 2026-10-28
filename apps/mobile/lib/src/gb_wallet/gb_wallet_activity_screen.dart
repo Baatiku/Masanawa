@@ -460,7 +460,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                             child: ChoiceChip(
                               key: ValueKey('activity-unit-${choice.key}'),
                               showCheckmark: false,
-                              visualDensity: VisualDensity.compact,
+                              visualDensity: VisualDensity.standard,
                               label: Text(choice.value),
                               selected: _unit == choice.key,
                               onSelected: (_) {
@@ -913,7 +913,7 @@ class _ActivityOverview extends StatelessWidget {
                     days,
                   )),
                   tilePadding: EdgeInsets.zero,
-                  minTileHeight: 44,
+                  minTileHeight: 48,
                   title: Text(
                     'Analysis',
                     style: theme.textTheme.labelLarge?.copyWith(

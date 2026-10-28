@@ -150,6 +150,8 @@ void main() {
     expect(find.textContaining('UTC '),findsNothing);
     expect(find.text('Posted activity totals'),findsNothing);
     expect(tester.getBottomRight(find.text('+₦100.00')).dy,lessThan(744));
+    expect(tester.getSize(find.byKey(const ValueKey('activity-unit-all'))).height,greaterThanOrEqualTo(48));
+    expect(tester.getSize(find.ancestor(of:find.text('Analysis'),matching:find.byType(ListTile))).height,greaterThanOrEqualTo(48));
     expect(tester.takeException(),isNull);
   });
 
