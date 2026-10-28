@@ -21,6 +21,15 @@ function text(x:unknown, min=1,max=160):string {
   if(typeof x!=="string"||x.length<min||x.length>max||x.trim()!==x) throw new BillstackProviderError("invalid_response");
   return x;
 }
+/** Shared preflight: reject unsupported applicants before any durable assignment. */
+export function assertBillstackApplicant(applicant:BillstackAccountApplicant):void {
+  if(!/^[A-Za-z0-9_-]{8,128}$/.test(applicant.reference)||
+    !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(applicant.email)||
+    !/^0(?:70|80|81|90|91)\d{8}$/.test(applicant.phone)||
+    !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.firstName)||
+    !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.lastName))
+    throw new BillstackProviderError("invalid_applicant");
+}
 /** Official v2 reserved account contract; current website also advertises one-time checkout accounts. */
 export function createBillstackReservedAccountClient(input:{secretKey:string; bankId?:BillstackBankId; fetcher?:Fetcher}) {
   if(typeof input.secretKey!=="string"||input.secretKey.trim().length<12) throw new TypeError("Missing Billstack server secret");
@@ -29,13 +38,7 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
   const fetcher=input.fetcher??fetch;
   return {
     async reserve(applicant:BillstackAccountApplicant):Promise<BillstackReservedAccount> {
-      if(!/^[A-Za-z0-9_-]{8,128}$/.test(applicant.reference)||
-        !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(applicant.email)||
-        !/^0(?:70|80|81|90|91)\d{8}$/.test(applicant.phone)||
-        !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.firstName)||
-        !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.lastName)) {
-        throw new BillstackProviderError("invalid_applicant");
-      }
+      assertBillstackApplicant(applicant);
       let response:Response;
       try {
         response=await fetcher(endpoint,{

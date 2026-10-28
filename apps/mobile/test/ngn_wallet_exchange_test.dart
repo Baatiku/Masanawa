@@ -403,6 +403,25 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(3));
     expect(tester.takeException(), isNull);
   });
+  testWidgets('invalid funding applicant refreshes the correction form without pending instructions', (tester)async{
+    final dio=Dio(BaseOptions(baseUrl:kApiBaseUrl));var posts=0,reads=0;
+    dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
+      posts++;
+      handler.reject(DioException(requestOptions:options,type:DioExceptionType.badResponse,
+        response:Response(requestOptions:options,statusCode:400,data:{'error':{'code':'invalid_applicant'}})));
+    }));
+    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio:dio)),
+      ngnWalletBalanceProvider.overrideWith((ref,owner)async=>const NgnWalletBalance(0,0,false,false)),
+      ngnBankAccountProvider.overrideWith((ref,owner)async=>NgnBankAccount('unassigned',
+        assignmentEnabled:true,applicantComplete:reads++==0))],
+      child:const MaterialApp(home:NgnFundingScreen())));
+    await tester.pumpAndSettle();await tester.tap(find.text('Get funding account'));await tester.pumpAndSettle();
+    expect(posts,1);expect(find.text('Complete your funding details'),findsOneWidget);
+    expect(find.text('Check your funding details and Nigerian contact phone. No account assignment was started.'),findsOneWidget);
+    expect(find.textContaining('Account assignment is pending.'),findsNothing);
+    expect(find.text('Get funding account'),findsNothing);expect(tester.takeException(),isNull);
+  });
   testWidgets(
     'Data uses three compact cards and only three periods, no cashback',
     (tester) async {

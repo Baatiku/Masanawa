@@ -24,6 +24,12 @@ const providerItem: FlutterwaveBillItem = {
 const live = [providerItem];
 
 describe("operator-reviewed Flutterwave whole-GB catalogue", () => {
+  it("rejects unqualified provider countries and non-NGN catalogue currencies",()=>{
+    for(const country of ["GH","US","CA","",null])
+      expect(()=>projectVerifiedWholeGbBundles([{...approval,country} as unknown as ApprovedWholeGbBundle],live,now)).toThrow();
+    for(const currency of ["USD","GHS",""])
+      expect(projectVerifiedWholeGbBundles([approval],[{...providerItem,currency} as unknown as FlutterwaveBillItem],now)).toEqual([]);
+  });
   it("uses explicit integer MB for approved fractional and small plans without rounding or bonus credit", () => {
     for (const allowanceMb of [40,100,350,500,750,1050,2500,3900,10800]) {
       const approved={...approval,allowanceMb,allowanceGb:allowanceMb/1000,
