@@ -341,7 +341,7 @@ export class PgStatusPromotions {
    const post=posts.rows[0];
    if(!post||post.paid_purged_at||
      (post.state!=='published'&&!(post.author_type==='human'&&post.state==='hidden'&&
-      (post.paid_purge_at==null||new Date(post.paid_purge_at).getTime()>Date.now()))))
+      (post.paid_purge_at!=null&&new Date(post.paid_purge_at).getTime()>Date.now()))))
     fail('post_not_resumable',409);
    await c.query(`UPDATE feed.promotion_campaigns SET state='active',
     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
@@ -425,6 +425,13 @@ export class PgStatusPromotions {
      AND id=$2 AND state='published' AND audience='public'
      AND paid_purged_at IS NULL FOR UPDATE`,[t,post]);
    if(!owner.rows[0])fail('post_unavailable',404);
+   // A publisher refreshing their own paid post is not a qualified audience
+   // exposure. In particular it must not exhaust an independent boost.
+   if(owner.rows[0].author_user_id===viewer){
+    await c.query(`UPDATE feed.view_challenges SET claimed_at=statement_timestamp()
+     WHERE tenant_id=$1 AND id=$2`,[t,id]);
+    return {qualified:false,selfView:true,payable:false};
+   }
    const inserted=await c.query(`INSERT INTO feed.qualified_views
     (tenant_id,post_id,viewer_digest,challenge_id) VALUES($1,$2,$3,$4)
     ON CONFLICT(tenant_id,post_id,viewer_digest) DO NOTHING RETURNING id`,
@@ -438,6 +445,9 @@ export class PgStatusPromotions {
       a.account_kind='human' AND a.account_id=b.sponsor_id
      WHERE b.tenant_id=$1 AND b.post_id=$2 AND b.state='active'
       AND b.remaining_views>0 AND b.sponsor_id<>$3 AND NOT a.frozen
+      AND NOT EXISTS (SELECT 1 FROM feed.promotion_campaigns own
+       WHERE own.tenant_id=b.tenant_id AND own.post_id=b.post_id
+        AND own.sponsor_id=$3)
      ORDER BY b.delivered_views::numeric/b.target_views,b.created_at,b.id
      LIMIT 1 FOR UPDATE OF b`,[t,post,viewer]);
    const selected=available.rows[0] as Row|undefined;

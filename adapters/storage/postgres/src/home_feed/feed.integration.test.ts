@@ -155,6 +155,65 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect((await paid.mine('tenant_test','fan_one')).inactivePosts).toEqual([
     expect.objectContaining({postId:campaign.postId})]);
  });
+ it('serializes two real-PG last views across independent Boost sponsors without overcharging',async()=>{
+  const pool=isolated.pool;
+  const t='tenant_boost_race';
+  await pool.query(`INSERT INTO identity.users(tenant_id,user_id,state) VALUES
+   ($1,'owner','active'),($1,'sponsor','active'),($1,'viewer_a','active'),($1,'viewer_b','active')`,[t]);
+  await pool.query(`INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name) VALUES
+   ($1,'owner','race_owner','Race owner'),($1,'sponsor','race_sponsor','Race sponsor')`,[t]);
+  await pool.query(`INSERT INTO gb_wallet.accounts(tenant_id,account_kind,account_id,purchased_mb)
+   VALUES($1,'human','owner',1),($1,'human','sponsor',1)`,[t]);
+  const payments=new PgStatusPromotions(pool,'boost-postgres-race-secret-with-real-entropy',
+   'https://status.example.test');
+  const originalQuote=await payments.quote({tenantId:t,sponsorId:'owner',
+   body:'Two independently funded qualified exposures',targetViews:1});
+  const original=await payments.confirm(t,'owner',originalQuote.quoteId,
+   'race-primary-confirm-001');
+  await payments.review(t,'independent_staff',original.id,true);
+  const boostQuote=await payments.quote({tenantId:t,sponsorId:'sponsor',
+   postId:original.postId,targetViews:1});
+  const boost=await payments.confirm(t,'sponsor',boostQuote.quoteId,
+   'race-boost-confirm-001');
+  const [first,second]=await Promise.all([
+   payments.beginView(t,'viewer_a',original.postId),
+   payments.beginView(t,'viewer_b',original.postId),
+  ]);
+  await pool.query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '7 seconds'
+   WHERE tenant_id=$1 AND id=ANY($2::uuid[])`,[t,[first.challengeId,second.challengeId]]);
+  const [a,b]=await Promise.all([
+   payments.finishView(t,'viewer_a',first.challengeId,
+    {visibleFraction:0.9,foreground:true,engaged:true}),
+   payments.finishView(t,'viewer_b',second.challengeId,
+    {visibleFraction:0.9,foreground:true,engaged:true}),
+  ]);
+  expect(a).toMatchObject({qualified:true,payable:true});
+  expect(b).toMatchObject({qualified:true,payable:true});
+  expect(await payments.finishView(t,'viewer_a',first.challengeId,
+   {visibleFraction:0.9,foreground:true,engaged:true}))
+   .toMatchObject({qualified:false,duplicate:true});
+  const totals=await pool.query(`SELECT c.campaign_id::text AS id,
+   count(*)::int AS charges,sum(c.platform_half_mb+c.sharer_half_mb)::int AS half_mb
+   FROM feed.promotion_view_charges c WHERE c.tenant_id=$1
+   GROUP BY c.campaign_id ORDER BY id`,[t]);
+  expect(totals.rows).toEqual(expect.arrayContaining([
+   {id:original.id,charges:1,half_mb:2},
+   {id:boost.id,charges:1,half_mb:2},
+  ]));
+  const balances=await pool.query(`SELECT account_id,purchased_mb::int AS purchased,
+   reserved_purchased_mb::int AS reserved FROM gb_wallet.accounts
+   WHERE tenant_id=$1 ORDER BY account_id`,[t]);
+  expect(balances.rows).toEqual([
+   {account_id:'owner',purchased:0,reserved:0},
+   {account_id:'sponsor',purchased:0,reserved:0},
+  ]);
+  const post=await pool.query(`SELECT state,
+   EXTRACT(EPOCH FROM (paid_purge_at-paid_disabled_at))::int AS grace_seconds
+   FROM feed.posts WHERE tenant_id=$1 AND id=$2`,[t,original.postId]);
+  expect(post.rows[0]).toEqual({state:'hidden',grace_seconds:259200});
+  await expect(payments.beginView(t,'viewer_a',original.postId))
+   .rejects.toMatchObject({code:'post_not_found'});
+ });
  it("following uses the authoritative masana.follows table",async()=>{
   await isolated.pool.query("INSERT INTO masana.follows(tenant_id,fan_user_id,character_id) VALUES($1,$2,$3)",["tenant_test","fan_one","masana_one"]);
   expect((await repo.list("tenant_test","fan_one","following",null,30))).toHaveLength(1);
