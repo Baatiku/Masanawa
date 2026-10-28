@@ -47,6 +47,7 @@ import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
+import {createApprovedPublicImageReader} from "./modules/home_feed/public_image.js";
 import {StatusRetentionWorker} from "./modules/home_feed/retention_worker.js";
 import {StatusMediaDeletionWorker} from './modules/home_feed/media_deletion_worker.js';
 import {validateMasanaProfile} from "@masanawa/masana";
@@ -1639,6 +1640,10 @@ export async function startGatewayService(
       !!env.MASANAWA_STATUS_PUBLIC_BASE_URL && !!database.featurePool;
     if(promotionsConfigured)statusPromotions=new PgStatusPromotions(database.featurePool!,
       env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!);
+    const publicPreview=statusPromotions?
+      new PgPublicStatusLanding(database.featurePool!):undefined;
+    const publicImages=publicPreview&&mediaConfiguration?
+      createApprovedPublicImageReader(publicPreview,mediaConfiguration):undefined;
     status = {
       sessions,
       feed: new FeedService(
@@ -1649,8 +1654,12 @@ export async function startGatewayService(
         promotions:statusPromotions,
         // Crawlers never obtain privileged feed/media access or create paid views.
         // Public navigation stays disabled until legal/privacy qualification.
-        publicLanding:{port:new PgPublicStatusLanding(database.featurePool!),
-          enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
+        publicLanding:{port:{
+          find:id=>publicPreview!.find(id),
+          validReferral:(post,token)=>publicPreview!.validReferral(post,token),
+          ...(publicImages?{readApprovedImage:publicImages}:{}),
+        },enabled:()=>false,imagesEnabled:()=>!!publicImages,
+          publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
         // Financial activation still requires a separately completed,
         // security-qualified full Status/public-web client composition.
         promotionsEnabled:()=>false,
