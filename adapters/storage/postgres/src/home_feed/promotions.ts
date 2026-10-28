@@ -322,6 +322,74 @@ export class PgStatusPromotions {
    return {postId:post,state:'removed',refundedMb};
   });
  }
+
+ /** A rejection appeal is a reviewable record, not new authorization to spend.
+  * It never restores the previously refunded reserved MB or old campaign. */
+ async appeal(t:string,owner:string,id:string,reason:string){
+  actor(t,owner);identifier(id);
+  const rationale=reviewReason(reason,true);
+  if(rationale.length<10)fail('appeal_reason_too_short');
+  return serial(this.pool,async c=>{
+   const original=await c.query(`SELECT post_id,kind,state FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,id,owner]);
+   const campaign=original.rows[0];
+   if(!campaign)fail('campaign_not_found',404);
+   if(campaign.kind!=='human_primary'||campaign.state!=='rejected')
+    fail('appeal_only_for_rejected_promotion',409);
+   const previous=await c.query(`SELECT id,created_at FROM feed.promotion_rejection_appeals
+    WHERE tenant_id=$1 AND campaign_id=$2 AND state='pending'`,[t,id]);
+   if(previous.rows[0])return {appealId:String(previous.rows[0].id),
+    campaignId:id,state:'pending',alreadySubmitted:true};
+   const added=await c.query(`INSERT INTO feed.promotion_rejection_appeals
+    (tenant_id,campaign_id,post_id,owner_id,reason) VALUES($1,$2,$3,$4,$5)
+    RETURNING id`,[t,id,campaign.post_id,owner,rationale]);
+   await this.audit(c,t,String(campaign.post_id),owner,'rejection_appeal_submitted',id,
+    {appealId:String(added.rows[0]!.id)});
+   return {appealId:String(added.rows[0]!.id),campaignId:id,state:'pending',
+    alreadySubmitted:false};
+  });
+ }
+ async myAppeals(t:string,owner:string){actor(t,owner);
+  const r=await this.pool.query(`SELECT id,campaign_id,state,reason,resolution_reason,
+    created_at,resolved_at FROM feed.promotion_rejection_appeals
+   WHERE tenant_id=$1 AND owner_id=$2 ORDER BY created_at DESC,id DESC LIMIT 100`,
+   [t,owner]);
+  return {appeals:r.rows.map(x=>({appealId:String(x.id),campaignId:String(x.campaign_id),
+   state:String(x.state),reason:String(x.reason),
+   resolutionReason:x.resolution_reason==null?null:String(x.resolution_reason),
+   submittedAt:x.created_at,resolvedAt:x.resolved_at}))};
+ }
+ async adminAppeals(t:string,reviewer:string){actor(t,reviewer);
+  const r=await this.pool.query(`SELECT id,campaign_id,post_id,owner_id,reason,created_at
+   FROM feed.promotion_rejection_appeals WHERE tenant_id=$1 AND state='pending'
+   ORDER BY created_at,id LIMIT 100`,[t]);
+  return {pending:r.rows.map(x=>({appealId:String(x.id),campaignId:String(x.campaign_id),
+   postId:String(x.post_id),ownerId:String(x.owner_id),
+   reason:String(x.reason),submittedAt:x.created_at}))};
+ }
+ async resolveAppeal(t:string,reviewer:string,id:string,accept:boolean,reason:string){
+  actor(t,reviewer);identifier(id);
+  const rationale=reviewReason(reason,true);
+  if(rationale.length<5)fail('appeal_resolution_reason_too_short');
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT * FROM feed.promotion_rejection_appeals
+    WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,id]);
+   const appeal=(r.rows[0] as Row|undefined)??fail('appeal_not_found',404);
+   if(appeal.owner_id===reviewer)fail('separate_reviewer_required',403);
+   if(appeal.state!=='pending')fail('appeal_already_resolved',409);
+   await c.query(`UPDATE feed.promotion_rejection_appeals
+    SET state=$3,reviewer_id=$4,resolution_reason=$5,
+      resolved_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,
+    [t,id,accept?'accepted':'denied',reviewer,rationale]);
+   await this.audit(c,t,String(appeal.post_id),reviewer,
+    accept?'rejection_appeal_accepted':'rejection_appeal_denied',
+    String(appeal.campaign_id),{appealId:id,reason:rationale,
+    // Acceptance permits manual resubmission; never unrefund or republish.
+    noAutomaticCampaignReactivation:true});
+   return {appealId:id,campaignId:String(appeal.campaign_id),
+    state:accept?'accepted':'denied',campaignReactivated:false};
+  });
+ }
  async cancel(t:string,s:string,id:string){actor(t,s);identifier(id);
   return serial(this.pool,async c=>{
    const r=await c.query(`SELECT * FROM feed.promotion_campaigns
