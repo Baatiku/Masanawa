@@ -101,7 +101,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
    ids.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)))
    fail('invalid_paid_image_ids');
   return {body:b.body as string,targetViews:b.targetViews as number,
-   ...(ids.length?{mediaIds:ids as string[]}:{}),
+   ...((ids as string[]).length?{mediaIds:ids as string[]}:{}),
    ...(destinationUrl!==null?{destinationUrl}:{}),
    ...(typeof b.campaignExpiresAt==='string'?{campaignExpiresAt:b.campaignExpiresAt}:{})};
  };
@@ -143,7 +143,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   const p=await who(r),b=body(r);
   fields(b,['imageBase64','altText','rightsConfirmed']);
   const key=r.headers['idempotency-key'];
-  if(!options.imageUpload)fail('paid_image_store_unavailable',503);
+  if(!options.imageUpload)return fail('paid_image_store_unavailable',503);
   if(typeof key!=='string'||typeof b.imageBase64!=='string'||
    typeof b.altText!=='string'||b.rightsConfirmed!==true)
    fail('invalid_paid_image');
@@ -166,7 +166,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.get('/v1/admin/promotions/posts/:postId/images/:mediaId/preview',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
   const p=await admin(r);
-  if(!options.imagePreview)fail('paid_image_store_unavailable',503);
+  if(!options.imagePreview)return fail('paid_image_store_unavailable',503);
   return options.imagePreview(p.tenantId,p.userId,params(r,'postId'),params(r,'mediaId'));
  });
  app.post('/v1/promotions/quotes',async(r,reply)=>{
@@ -187,7 +187,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
    ...(typeof b.postId==='string'?{postId:b.postId}:{}),
    ...(typeof b.body==='string'?{body:b.body}:{}),
    ...(destinationUrl!==null?{destinationUrl}:{}),
-   ...(ids.length?{mediaIds:ids as string[]}:{}),});
+   ...((ids as string[]).length?{mediaIds:ids as string[]}:{}),});
  });
  app.post('/v1/promotions/quotes/:quoteId/confirm',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);
