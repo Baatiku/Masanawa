@@ -8,6 +8,35 @@ import '../theme/masanawa_theme.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
 
+String _balanceStatus(GbActivityReconciliation? check){
+  if(check==null)return 'Balance check unavailable';
+  if(check.mb.state=='mismatch'||check.ngn.state=='mismatch')return 'Needs reconciliation';
+  if(check.mb.state=='uninitialized'&&check.ngn.state=='uninitialized')return 'Wallets not initialized';
+  return 'Recorded balances checked';
+}
+
+Widget _balanceCheck(BuildContext context,String unit,GbActivityBalanceReconciliation? check){
+  String amount(int n){
+    final sign=n<0?'−':'';
+    return unit=='MB'?'$sign${_groupActivity(n.abs())} MB':'$sign${_ngnActivity(n.abs())}';
+  }
+  if(check==null)return Text('$unit balance check unavailable. Refresh totals to retry.');
+  if(check.state=='uninitialized')return Text('No $unit wallet has been initialized.');
+  return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Text('$unit: ${check.state=='matched'?'Reconciled balance':'Balance needs reconciliation'}',
+      style:Theme.of(context).textTheme.titleSmall),
+    Wrap(spacing:18,runSpacing:8,children:[
+      Text('Opening: ${amount(check.opening)}'),Text('Posted closing: ${amount(check.closing)}'),
+      if(check.state=='matched')...[
+        Text('Available: ${amount(check.available!)}'),
+        if(unit=='MB')Text('Reserved: ${amount(check.reserved!)}'),
+        if(unit=='NGN'&&check.debt!>0)Text('Reversal debt: ${amount(check.debt!)}'),
+      ],
+    ]),
+    if(check.state=='mismatch')const Text('Available funds are not verified here. Check again or contact support.'),
+  ]);
+}
+
 GbWalletOwner? _ownerFor(WidgetRef ref) {
   final session=ref.watch(sessionProvider);
   return session is SessionSignedIn
@@ -387,6 +416,17 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                   Text('Received: +${_ngnActivity(totals.ngn.received)}'),
                   Text('Spent: −${_ngnActivity(totals.ngn.spent)}'),
                 ]),
+                ExpansionTile(key:PageStorageKey(('activity-balance-details',owner,_days)),
+                  tilePadding:EdgeInsets.zero,childrenPadding:const EdgeInsets.only(bottom:8),
+                  title:const Text('Balance details'),subtitle:Text(_balanceStatus(totals.reconciliation)),
+                  expandedCrossAxisAlignment:CrossAxisAlignment.start,
+                  children:[
+                    _balanceCheck(context,'MB',totals.reconciliation?.mb),
+                    const SizedBox(height:10),
+                    _balanceCheck(context,'NGN',totals.reconciliation?.ngn),
+                    const SizedBox(height:8),
+                    const Text('This checks internal posted balances, not external bank settlement or data delivery. Account and welcome-credit restrictions still apply.'),
+                  ]),
               ],
             ]))),
           const SizedBox(height:12),

@@ -14,7 +14,9 @@ function fixture() {
   const summary=vi.fn(async(_actor:typeof owner,days:7|30)=>({periodDays:days,
     fromAt:"2026-10-18T00:00:00.000Z",toAt:"2026-10-25T00:00:00.000Z",
     MB:{received:1000,spent:500,net:500},
-    NGN:{received:500050,spent:100,net:499950}}));
+    NGN:{received:500050,spent:100,net:499950},
+    reconciliation:{MB:{state:"matched" as const,opening:0,closing:500,recordedBalance:500,reserved:100,available:400,debt:0},
+      NGN:{state:"matched" as const,opening:0,closing:499950,recordedBalance:499950,reserved:0,available:499950,debt:0}}}));
   registerGbWalletActivityRoutes(app,{authorize,list,find,summary});
   return {app,authorize,list,find,summary};
 }
@@ -33,6 +35,7 @@ describe("account-fenced MB/NGN Activity HTTP",()=>{
       expect(total.headers["cache-control"]).toBe("no-store");
       expect(total.json().MB.net).toBe(500);
       expect(total.json().NGN.net).toBe(499950);
+      expect(total.json().reconciliation.MB).toMatchObject({state:"matched",reserved:100,available:400});
       expect(f.summary).toHaveBeenCalledWith(owner,30);
       expect((await f.app.inject({method:"GET",url:"/v1/gb/wallet/activity/summary?days=0",headers})).statusCode).toBe(422);
       f.summary.mockRejectedValueOnce(new Error("db_unavailable"));

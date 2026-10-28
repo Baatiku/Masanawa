@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import type { Pool } from "pg";
 import { describe, expect, it } from "vitest";
@@ -16,6 +17,9 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
           visible_in_user_app boolean,PRIMARY KEY(tenant_id,character_id));
         INSERT INTO talks.public_profiles VALUES('a','fan_b','Public Fan B','fan_b'),
           ('b','fan_b','Other tenant name','private_other_tenant');
+        CREATE TABLE gb_wallet.accounts(tenant_id text,account_kind text,account_id text,
+          purchased_mb bigint,welcome_mb bigint,reserved_purchased_mb bigint,reserved_welcome_mb bigint);
+        CREATE TABLE gb_wallet.ngn_accounts(tenant_id text,account_id text,balance_kobo bigint,debt_kobo bigint);
         CREATE TABLE gb_wallet.operations(
           tenant_id text,operation_id text,operation_kind text,state text);
         CREATE TABLE gb_wallet.movements(
@@ -112,5 +116,65 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
         exchangedMb:1050,exchangeKobo:500050,rateVersion:'rate-v1'});
       expect(rich.find(x=>x.unit==='MB')?.details).toMatchObject({sourceBucket:'issuance',targetBucket:'purchased'});
     } finally {await db.close();}
-  },15000);
+  },30000);
+  it("reconciles one PostgreSQL snapshot including held MB, releases and reversal debt",async()=>{
+    const db=new PGlite();
+    try{
+      for(const file of ["0200_gb_wallet_foundation.sql","0205_ngn_funding_wallet.sql"])
+        await db.exec(await readFile(new URL(`../../../../../packages/commerce/migrations/${file}`,import.meta.url),"utf8"));
+      const hash="a".repeat(64);
+      await db.exec(`
+        INSERT INTO gb_wallet.accounts(tenant_id,account_kind,account_id,purchased_mb,welcome_mb,reserved_purchased_mb,reserved_welcome_mb)
+          VALUES('a','human','fan_a',900,100,200,50),('b','human','fan_a',999999,0,0,0);
+        INSERT INTO gb_wallet.ngn_accounts(tenant_id,account_id,balance_kobo,debt_kobo)
+          VALUES('a','fan_a',0,90000),('b','fan_a',999999,0);
+      `);
+      for(const [tenant,id,kind,amount,state] of [
+        ["a","fund","verified_deposit",1400,"completed"],
+        ["a","welcome","welcome_grant",100,"completed"],
+        ["a","cash_exchange","ngn_exchange",1800,"completed"],
+        ["a","usage","connected_call",2300,"completed"],
+        ["a","held","connected_call",250,"reserved"],
+        ["a","released","reply",100,"failed"],
+        ["b","neighbor","verified_deposit",999999,"completed"],
+      ])await db.query(`INSERT INTO gb_wallet.operations(tenant_id,operation_id,actor_id,idempotency_key,request_sha256,operation_kind,amount_mb,state)
+        VALUES($1,$2,'fan_a',$2,$3,$4,$5,$6)`,[tenant,id,hash,kind,amount,state]);
+      await db.exec(`
+        INSERT INTO gb_wallet.movements(tenant_id,operation_id,from_kind,from_id,to_kind,to_id,source_bucket,target_bucket,amount_mb,created_at) VALUES
+          ('a','fund','issuance','backing','human','fan_a','issuance','purchased',1400,'2026-10-01T00:00:00Z'),
+          ('a','welcome','issuance','welcome','human','fan_a','issuance','welcome',100,'2026-10-01T00:00:00Z'),
+          ('a','cash_exchange','issuance','ngn','human','fan_a','issuance','purchased',1800,'2026-10-25T00:00:00Z'),
+          ('a','usage','human','fan_a','usage','call','purchased','usage',2300,'2026-10-25T00:00:00Z'),
+          ('b','neighbor','issuance','backing','human','fan_a','issuance','purchased',999999,'2026-10-25T00:00:00Z');
+        INSERT INTO gb_wallet.reservations(tenant_id,operation_id,account_kind,account_id,purchased_mb,welcome_mb,state,resolved_at) VALUES
+          ('a','held','human','fan_a',200,50,'reserved',NULL),
+          ('a','released','human','fan_a',100,0,'released','2026-10-25T00:00:00Z');
+        INSERT INTO gb_wallet.ngn_entries(tenant_id,operation_id,account_id,kind,delta_kobo,request_sha256,amount_mb,rate_version,reverses_operation_id,created_at) VALUES
+          ('a','cash_seed','fan_a','deposit',100000,'${hash}',NULL,NULL,NULL,'2026-10-01T00:00:00Z'),
+          ('a','cash_exchange','fan_a','exchange',-90000,'${hash}',1800,'rate-v1',NULL,'2026-10-25T00:00:00Z'),
+          ('a','cash_reversal','fan_a','deposit_reversal',-100000,'${hash}',NULL,NULL,'cash_seed','2026-10-25T00:00:00Z'),
+          ('b','cash_other','fan_a','deposit',999999,'${hash}',NULL,NULL,NULL,'2026-10-25T00:00:00Z');
+      `);
+      const repo=createGbWalletActivityRepository(db as unknown as Pick<Pool,"query">);
+      const actor={tenantId:"a",userId:"fan_a"};
+      const result=await repo.summary(actor,7,new Date("2026-10-26T00:00:00Z"));
+      expect(result.MB).toEqual({received:1800,spent:2300,net:-500});
+      expect(result.NGN).toEqual({received:0,spent:190000,net:-190000});
+      expect(result.reconciliation?.MB).toEqual({state:"matched",opening:1500,closing:1000,
+        recordedBalance:1000,reserved:250,available:750,debt:0});
+      expect(result.reconciliation?.NGN).toEqual({state:"matched",opening:100000,closing:-90000,
+        recordedBalance:-90000,reserved:0,available:0,debt:90000});
+      const absent=await repo.summary({tenantId:"a",userId:"unknown"},7);
+      expect(absent.reconciliation?.MB).toMatchObject({state:"uninitialized",recordedBalance:null,available:null});
+      expect(absent.reconciliation?.NGN.state).toBe("uninitialized");
+      const own=await repo.summary({tenantId:"b",userId:"fan_a"},7,new Date("2026-10-26T00:00:00Z"));
+      expect(own.reconciliation?.MB.closing).toBe(999999);
+      await db.exec("UPDATE gb_wallet.accounts SET purchased_mb=901 WHERE tenant_id='a' AND account_id='fan_a'");
+      expect((await repo.summary(actor,7)).reconciliation?.MB.state).toBe("mismatch");
+      await db.exec("SET TIME ZONE 'America/New_York'");
+      const dst=await repo.summary(actor,7,new Date("2026-11-03T00:00:00Z"));
+      expect(new Date(dst.toAt).getTime()-new Date(dst.fromAt).getTime()).toBe(7*86400000);
+    }finally{await db.close();}
+  },30000);
+
 });

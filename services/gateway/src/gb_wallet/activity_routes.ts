@@ -33,12 +33,19 @@ export interface GbActivityFacets {
   readonly reference: string;
   readonly snapshotAt: string;
 }
+export interface GbActivityBalanceReconciliation {
+  readonly state:"matched"|"mismatch"|"uninitialized";
+  readonly opening:number;readonly closing:number;
+  readonly recordedBalance:number|null;readonly reserved:number|null;
+  readonly available:number|null;readonly debt:number|null;
+}
 export interface GbActivityPeriodSummary {
   readonly periodDays: 7 | 30;
   readonly fromAt: string;
   readonly toAt: string;
   readonly MB: Readonly<{received:number;spent:number;net:number}>;
   readonly NGN: Readonly<{received:number;spent:number;net:number}>;
+  readonly reconciliation?:Readonly<{MB:GbActivityBalanceReconciliation;NGN:GbActivityBalanceReconciliation}>;
 }
 export interface GbActivityPorts {
   readonly authorize: (header: string | undefined) => Promise<GbActivityScope>;
