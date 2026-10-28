@@ -17,6 +17,8 @@ const image=/^image\/(jpeg|png|webp|gif)$/;
 const audio=/^audio\/(mpeg|mp4|ogg|aac|wav|webm)$/;
 /** Reuses cleared character_media + published feed membership. No cache or public key. */
 export function createStatusMediaRuntime(input:{eligibility:CanonicalMedia;published:PublishedMedia;
+ paid?:{approvedImageObject(tenant:string,post:string,mediaId:string):
+  Promise<{objectKey:string;altText:string}|null>};
  configuration?:StatusMediaConfiguration}){
  const configuration=input.configuration;
  const origins=new Set(configuration?.approvedDownloadOrigins??[]);
@@ -43,8 +45,20 @@ export function createStatusMediaRuntime(input:{eligibility:CanonicalMedia;publi
   approvedDownloadOrigin:origin=>origins.has(origin),
   sign:async post=>{
    if(!configuration||origins.size===0)throw new Error("status.media_store_unavailable");
-   const object=await validated(post.tenantId,post.authorMasanaId,post.mediaId,post.kind);
+   const object=post.authorMasanaId===''&&post.kind==='image'&&input.paid&&configuration
+    ?await (async()=>{
+      const registered=await input.paid!.approvedImageObject(post.tenantId,post.postId,post.mediaId);
+      if(!registered)return null;
+      const stat=await configuration!.objects.statObject(registered.objectKey);
+      if(!stat||stat.contentType!=='image/webp'||stat.bytes<1||stat.bytes>1048576)return null;
+      return {objectKey:registered.objectKey,contentType:'image/webp'};
+    })()
+    :await validated(post.tenantId,post.authorMasanaId,post.mediaId,post.kind);
    if(!object)return null;
+   if(post.authorMasanaId===''&&input.paid){
+    const latest=await input.paid.approvedImageObject(post.tenantId,post.postId,post.mediaId);
+    if(!latest||latest.objectKey!==object.objectKey)return null;
+   }
    const current=await input.published.find(post.tenantId,post.postId,post.mediaId);
    if(!current||current.authorMasanaId!==post.authorMasanaId||current.kind!==post.kind||
      current.tenantId!==post.tenantId||current.postId!==post.postId||current.mediaId!==post.mediaId)return null;

@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,vi} from 'vitest';
 import {registerPromotionRoutes,type PromotionPort} from './promotion_routes.js';
 
 describe('SPE promotion routes inherit the established principal and staff authority',()=>{
@@ -27,6 +27,16 @@ describe('SPE promotion routes inherit the established principal and staff autho
    discardDraft:async()=>({state:'discarded'}),
    quoteDraft:async(...args:unknown[])=>{events.push(['quoteDraft',...args]);return {quoteId:'quote'};},
    expireCampaigns:async()=>({expired:0,refundedMb:0}),
+   prepareImageUpload:async()=>({mediaId:'uuid',objectKey:'private-key',ready:true}),
+   completeImageUpload:async()=>({mediaId:'uuid',state:'ready'}),
+   reviewImage:async(...args:unknown[])=>{events.push(['reviewImage',...args]);return {state:'approved'};},
+   adminImagePreview:async()=>({objectKey:'opaque-key',altText:'Preview',reviewState:'pending'}),
+   approvedImageObject:async()=>null,
+   openDestination:async(...args:unknown[])=>{events.push(['openDestination',...args]);return {openMode:'external_browser'};},
+   extensionQuote:async(...args:unknown[])=>{events.push(['extensionQuote',...args]);return {quoteId:'new-quote'};},
+   reportPost:async(...args:unknown[])=>{events.push(['reportPost',...args]);return {state:'pending'};},
+   adminReports:async()=>({pending:[]}),
+   resolveReport:async(...args:unknown[])=>{events.push(['resolveReport',...args]);return {state:'removed'};},
    cancel:async()=>({}),
    pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
    resume:async(...args:unknown[])=>{events.push(['resume',...args]);return {state:'active'};},
@@ -223,6 +233,71 @@ describe('SPE promotion routes inherit the established principal and staff autho
   expect((await server.inject({method:'PUT',url:'/v1/promotions/drafts/draft',
    payload:{body:'Unauthorized',targetViews:3,expectedVersion:0,ownerId:'someone_else'}}))
    .statusCode).toBe(422);
+  await server.close();
+ });
+
+
+ it('image preview and moderation require staff; owner uploads inherit principal not forged IDs',async()=>{
+  const fakeImageUpload=vi.fn(async()=>({mediaId:'a-uuid',state:'ready'}));
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenantA',userId:'ownerA'}),
+   isEditor:async()=>true,enabled:()=>true,imageUpload:fakeImageUpload,
+   imagePreview:async()=>({url:'https://storage.example.test/private/nonce',reviewState:'pending'})});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/images',
+   headers:{'idempotency-key':'media-original-001'},
+   payload:{imageBase64:'AAAA',altText:'Valid descriptive media',rightsConfirmed:true,
+    ownerId:'attacker'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/images',
+   headers:{'idempotency-key':'media-original-001'},
+   payload:{imageBase64:'AAAA',altText:'Valid descriptive media',rightsConfirmed:true}})).statusCode).toBe(200);
+  expect(fakeImageUpload).toHaveBeenCalledWith({tenantId:'tenantA',ownerId:'ownerA',
+   imageBase64:'AAAA',altText:'Valid descriptive media',
+   rightsConfirmed:true,idempotencyKey:'media-original-001'});
+  expect((await server.inject({method:'GET',
+   url:'/v1/admin/promotions/posts/post/images/image/preview'})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/posts/post/images/image/review',
+   payload:{decision:'approve',reason:'Rights checked'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['reviewImage','tenantA','ownerA','post','image',true,'Rights checked']);
+  await server.close();
+ });
+
+
+ it('refuses unreviewed advertising approval, requires staff evidence and an explicit external intent',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'reviewer'}),
+   isEditor:async()=>true,enabled:()=>true});
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/campaign/review',
+   payload:{decision:'approve'}})).statusCode).toBe(422);
+  const policy={category:'financial',bodyChecked:true,rightsChecked:true,
+   destinationChecked:true,clearanceReference:'ARCON-finance-001',
+   evidenceNote:'Staff reviewed linked landing page, rights and required clearance'};
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/campaign/review',
+   payload:{decision:'approve',policy}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['review','tenant','reviewer','campaign',true,undefined,policy]);
+  expect((await server.inject({method:'GET',url:'/v1/posts/post/destination'})).json())
+   .toMatchObject({openMode:'external_browser'});
+  await server.close();
+ });
+ it('recovers extension quotes without implicit confirms and keeps reports available while spending is OFF',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'member'}),
+   isEditor:async()=>true,enabled:()=>false});
+  expect((await server.inject({method:'POST',
+   url:'/v1/promotions/campaign/extension-quotes',
+   payload:{targetViews:10},headers:{'idempotency-key':'extension-001'}})).statusCode).toBe(503);
+  expect((await server.inject({method:'POST',url:'/v1/posts/post/report',
+   payload:{reason:'Unsafe content requiring moderation'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/reports'})).json())
+   .toEqual({pending:[]});
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/reports/r1/resolve',
+   payload:{decision:'remove',reason:'Unsafe content'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['reportPost','tenant','member','post','Unsafe content requiring moderation']);
+  expect(events).toContainEqual(['resolveReport','tenant','member','r1',true,'Unsafe content']);
   await server.close();
  });
 

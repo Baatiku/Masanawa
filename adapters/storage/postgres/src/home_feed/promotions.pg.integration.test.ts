@@ -19,7 +19,8 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
   db=new Pool({connectionString:child.toString(),max:6});
   await db.query(`CREATE SCHEMA identity; CREATE SCHEMA talks; CREATE SCHEMA feed;
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
-   CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);`);
+   CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
+   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);`);
   for(const file of [
    '../../../../../packages/feed/migrations/0001_feed.sql',
    '../../../../../packages/feed/migrations/0006_human_public_status.sql',
@@ -31,6 +32,9 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
    '../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql',
    '../../../../../packages/feed/migrations/0012_reviewed_paid_post_edits.sql',
    '../../../../../packages/feed/migrations/0013_campaign_drafts_and_expiry.sql',
+   '../../../../../packages/feed/migrations/0014_paid_image_uploads.sql',
+   '../../../../../packages/feed/migrations/0015_paid_policy_review_evidence.sql',
+   '../../../../../packages/feed/migrations/0016_extension_quotes_and_reports.sql',
   ])await db.query(sql(file));
   service=new PgStatusPromotions(db,'race-test-secret-with-40-characters-minimum','https://status.example.org');
   for(const id of ['publisher','viewer_a','viewer_b']){

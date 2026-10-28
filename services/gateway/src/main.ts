@@ -46,6 +46,7 @@ import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
 import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modules/home_feed/media_runtime.js";
+import {createPaidPromotionImageUploader} from "./modules/home_feed/paid_image_upload.js";
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
 import {createApprovedPublicImageReader} from "./modules/home_feed/public_image.js";
@@ -1635,6 +1636,8 @@ export async function startGatewayService(
     const {feed,editorial,eligibility,published} = database.status;
     const mediaRuntime = createStatusMediaRuntime({
       eligibility,published,
+      paid:{approvedImageObject:(tenant,post,mediaId)=>
+        statusPromotions?statusPromotions.approvedImageObject(tenant,post,mediaId):Promise.resolve(null)},
       ...(mediaConfiguration ? {configuration:mediaConfiguration} : {}),
     });
     const author = (tenant:string,id:string) => eligibility.author(tenant,id);
@@ -1658,6 +1661,25 @@ export async function startGatewayService(
       ),
       ...(statusPromotions?{
         promotions:statusPromotions,
+        ...(mediaConfiguration?.objects.putObject?{
+          imageUpload:createPaidPromotionImageUploader(statusPromotions!,{
+            putObject:mediaConfiguration.objects.putObject,
+            statObject:mediaConfiguration.objects.statObject,
+          }),
+          imagePreview:async(t:string,editor:string,post:string,mediaId:string)=>{
+            const source=await statusPromotions!.adminImagePreview(t,editor,post,mediaId);
+            const grant=await mediaConfiguration!.objects.presignGet(source.objectKey,90);
+            const url=new URL(grant.url);
+            if(url.protocol!=='https:'||url.username||url.password||url.hash||
+               !mediaConfiguration!.approvedDownloadOrigins.includes(url.origin)||
+               Date.parse(grant.expiresAt)<=Date.now()||
+               Date.parse(grant.expiresAt)>Date.now()+91000)
+              throw new Error('paid_image_preview_unavailable');
+            return {mediaId,contentType:'image/webp',url:grant.url,
+              expiresAt:grant.expiresAt,altText:source.altText,
+              reviewState:source.reviewState};
+          },
+        }:{}),
         // Crawlers never obtain privileged feed/media access or create paid views.
         // Public navigation stays disabled until legal/privacy qualification.
         publicLanding:{port:{

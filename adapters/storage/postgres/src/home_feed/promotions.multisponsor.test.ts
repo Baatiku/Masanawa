@@ -47,6 +47,7 @@ describe('SPE-A13/A14/B15/B17/E09/E10: overlapping sponsors and editorial safety
   await db.exec(`CREATE SCHEMA identity; CREATE SCHEMA talks;
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
+   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);
    CREATE SCHEMA feed;`);
   await db.exec(migration('../../../../../packages/feed/migrations/0001_feed.sql'));
   await db.exec(migration('../../../../../packages/feed/migrations/0006_human_public_status.sql'));
@@ -56,7 +57,7 @@ describe('SPE-A13/A14/B15/B17/E09/E10: overlapping sponsors and editorial safety
   await db.exec(migration('../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql'));
   for(const name of ['0010_promotion_rejection_appeals.sql',
    '0011_promotion_budget_immutability.sql','0012_reviewed_paid_post_edits.sql',
-   '0013_campaign_drafts_and_expiry.sql'])
+   '0013_campaign_drafts_and_expiry.sql','0014_paid_image_uploads.sql','0015_paid_policy_review_evidence.sql','0016_extension_quotes_and_reports.sql'])
    await db.exec(migration('../../../../../packages/feed/migrations/'+name));
   promotions=new PgStatusPromotions(
    {query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool,

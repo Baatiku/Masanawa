@@ -63,6 +63,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(`CREATE SCHEMA identity;CREATE SCHEMA talks;
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
+   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);
    CREATE SCHEMA feed;`);
   await db.exec(sql('../../../../../packages/feed/migrations/0001_feed.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0006_human_public_status.sql'));
@@ -74,6 +75,9 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0012_reviewed_paid_post_edits.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0013_campaign_drafts_and_expiry.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0014_paid_image_uploads.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0015_paid_policy_review_evidence.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0016_extension_quotes_and_reports.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -236,8 +240,8 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
     body:'One archived image fixture',targetViews:2});
   const campaign=await service.confirm(t,'publisher',quote.quoteId,'media-cleanup-001');
   const media=await query(`INSERT INTO feed.paid_post_media_objects
-    (tenant_id,post_id,media_id,object_key,review_state)
-    VALUES($1,$2,gen_random_uuid(),'private/paid/media-cleanup-fixture.png','approved')
+    (tenant_id,post_id,media_id,object_key,review_state,reviewed_by,reviewed_at)
+    VALUES($1,$2,gen_random_uuid(),'private/paid/media-cleanup-fixture.png','approved','legacy_editor',statement_timestamp())
     RETURNING media_id`,[t,campaign.postId]);
   const mediaId=String((media.rows[0] as {media_id:string}).media_id);
   await service.deleteOwnPost(t,'publisher',campaign.postId);
@@ -544,7 +548,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
  it('invalidates a signed link after challenge start without denying a distinct organic visitor',async()=>{
   const q=await service.quote({tenantId:t,sponsorId:'publisher',
    body:'A reviewed link can be revoked while in foreground',targetViews:2});
-  const c=await service.confirm(t,'publisher',q.quoteId,'late-link-revocation-001');
+  const c=await service.confirm(t,'late_link_sponsor',q.quoteId,'late-link-revocation-001');
   await service.review(t,'distincteditor',c.id,true);
   const link=await service.share(t,'sharer',c.postId);
   const token=new URL(link.url).searchParams.get('r')!;
@@ -790,6 +794,181 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect((await service.expireCampaigns()).expired).toBe(0);
   await service.cancel(t,'expiryowner',c.id);
   expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:0});
+ });
+
+
+ it('keeps a paid human image hidden until private upload and independent media approval',async()=>{
+  await account('imageowner',10);
+  const digest='a'.repeat(64);
+  const upload=await service.prepareImageUpload(t,'imageowner',{
+   sha256:digest,bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true});
+  expect(upload.objectKey).toMatch(/^status-paid\//);
+  expect((await service.prepareImageUpload(t,'imageowner',{
+   sha256:digest,bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true})).mediaId)
+   .toBe(upload.mediaId);
+  await expect(service.prepareImageUpload(t,'imageowner',{
+   sha256:'b'.repeat(64),bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true}))
+    .rejects.toMatchObject({code:'idempotency_conflict'});
+  await service.completeImageUpload(t,'imageowner',upload.mediaId,digest,512);
+  await expect(service.quote({tenantId:t,sponsorId:'sharer',body:'Unowned image',
+   mediaIds:[upload.mediaId],targetViews:1}))
+   .rejects.toMatchObject({code:'paid_image_not_owned_or_ready'});
+  const quote=await service.quote({tenantId:t,sponsorId:'imageowner',
+   body:'Original image campaign',mediaIds:[upload.mediaId],targetViews:3});
+  const c=await service.confirm(t,'imageowner',quote.quoteId,'original-image-confirm-001');
+  const post=(await query(`SELECT kind,media_ids,state FROM feed.posts WHERE tenant_id=$1 AND id=$2`,
+   [t,c.postId])).rows[0];
+  expect(post).toMatchObject({kind:'image',media_ids:[upload.mediaId],state:'hidden'});
+  await expect(service.review(t,'different_editor',c.id,true,'Review pending'))
+   .rejects.toMatchObject({code:'paid_media_not_approved'});
+  await expect(service.reviewImage(t,'imageowner',c.postId,upload.mediaId,true,
+   'Attempt self-approval')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const preview=await service.adminImagePreview(t,'different_editor',c.postId,upload.mediaId);
+  expect(preview).toMatchObject({objectKey:upload.objectKey,reviewState:'pending'});
+  await service.reviewImage(t,'different_editor',c.postId,upload.mediaId,true,
+   'Licensed artwork accepted');
+  await service.review(t,'different_editor',c.id,true,'Final paid image review');
+  expect((await service.approvedImageObject(t,c.postId,upload.mediaId))?.objectKey)
+   .toBe(upload.objectKey);
+  await service.cancel(t,'imageowner',c.id);
+  expect(await service.approvedImageObject(t,c.postId,upload.mediaId)).toBeNull();
+  expect((await service.receipt(t,'imageowner',quote.quoteId)).campaign)
+   .toMatchObject({state:'cancelled',refundedUnusedMb:3});
+ });
+
+
+ it('records staff-only regulated advertising clearance and allows only current public HTTPS intents',async()=>{
+  await account('policyowner',9);
+  const quote=await service.quote({tenantId:t,sponsorId:'policyowner',
+   body:'Financial promotion with external destination',targetViews:2,
+   destinationUrl:'https://example.org/disclosure'});
+  const campaign=await service.confirm(t,'policyowner',quote.quoteId,'regulated-cta-001');
+  const policy={category:'financial' as const,bodyChecked:true as const,
+   rightsChecked:true as const,destinationChecked:true,evidenceNote:'Reviewed financial copy and linked landing page'};
+  await expect(service.review(t,'staff_reviewer',campaign.id,true,'Required policy verification',policy))
+   .rejects.toMatchObject({code:'advertising_clearance_required'});
+  await expect(service.review(t,'staff_reviewer',campaign.id,true,'Review without CTA checked',
+   {...policy,clearanceReference:'ARCON-reviewed-ref-001',destinationChecked:false}))
+   .rejects.toMatchObject({code:'advertiser_destination_not_reviewed'});
+  await service.review(t,'staff_reviewer',campaign.id,true,'Independent review accepted',
+   {...policy,clearanceReference:'ARCON-reviewed-ref-001'});
+  const evidence=await query(`SELECT policy_category,clearance_reference,reviewer_id
+    FROM feed.promotion_policy_reviews WHERE tenant_id=$1 AND campaign_id=$2`,
+   [t,campaign.id]);
+  expect(evidence.rows[0]).toMatchObject({
+   policy_category:'financial',clearance_reference:'ARCON-reviewed-ref-001',
+   reviewer_id:'staff_reviewer'});
+  await expect(query(`UPDATE feed.promotion_policy_reviews SET reviewer_id='owner'
+    WHERE tenant_id=$1 AND campaign_id=$2`,[t,campaign.id])).rejects.toThrow(/immutable/i);
+  expect(await service.openDestination(t,'viewerone',campaign.postId)).toMatchObject({
+   url:'https://example.org/disclosure',openMode:'external_browser',
+   noInAppHumanChat:true,noopener:true,noreferrer:true});
+  await service.cancel(t,'policyowner',campaign.id);
+  await expect(service.openDestination(t,'viewerone',campaign.postId))
+   .rejects.toMatchObject({code:'destination_unavailable'});
+  const receipt=await service.receipt(t,'policyowner',quote.quoteId);
+  expect(receipt.immutableHistory).toEqual(expect.arrayContaining([
+   expect.objectContaining({action:'approved'}),
+   expect.objectContaining({action:'cancelled'})
+  ]));
+ });
+ it('holds approved paid image creative while replacing assets through separate media/edit reviews',async()=>{
+  await account('editimageowner',11);
+  const mk=async(label:string)=>{
+   const x=await service.prepareImageUpload(t,'editimageowner',{sha256:label.repeat(64),
+    bytes:300,altText:'Original or replacement event illustration',
+    idempotencyKey:'image-proposal-'+label+'-001',rightsConfirmed:true});
+   await service.completeImageUpload(t,'editimageowner',x.mediaId,label.repeat(64),300);
+   return x.mediaId;
+  };
+  const original=await mk('c'),replacement=await mk('d');
+  const quoted=await service.quote({tenantId:t,sponsorId:'editimageowner',
+   body:'Original approved illustration',mediaIds:[original],targetViews:2});
+  const campaign=await service.confirm(t,'editimageowner',quoted.quoteId,'image-edit-primary-001');
+  await service.reviewImage(t,'media_editor',campaign.postId,original,true,'Original rights accepted');
+  await service.review(t,'media_editor',campaign.id,true,'Original artwork accepted');
+  const proposed=await service.proposeEdit(t,'editimageowner',campaign.postId,{
+   expectedRevision:0,body:'Updated human campaign illustration',mediaIds:[replacement],
+   idempotencyKey:'image-edit-proposal-001'});
+  expect((await query(`SELECT media_ids FROM feed.posts WHERE id=$1`,
+    [campaign.postId])).rows[0]).toMatchObject({media_ids:[original]});
+  await expect(service.reviewEdit(t,'second_editor',proposed.proposalId,true,
+   'Cannot publish unreviewed image')).rejects.toMatchObject({code:'paid_media_not_approved'});
+  await service.reviewImage(t,'media_editor',campaign.postId,replacement,true,
+   'Replacement rights accepted');
+  await service.reviewEdit(t,'second_editor',proposed.proposalId,true,
+   'Replacement image and copy approved');
+  expect((await query(`SELECT media_ids,paid_content_revision FROM feed.posts WHERE id=$1`,
+   [campaign.postId])).rows[0]).toMatchObject({media_ids:[replacement],paid_content_revision:1});
+  expect((await query(`SELECT media_id::text AS media_id FROM feed.paid_media_deletion_outbox
+   WHERE tenant_id=$1 AND post_id=$2`,[t,campaign.postId])).rows)
+   .toEqual(expect.arrayContaining([expect.objectContaining({media_id:original})]));
+ });
+
+
+ it('requires a fresh sponsor quote and independent confirmation for extra view budgets',async()=>{
+  await account('extendowner',13);
+  const originalQuote=await service.quote({tenantId:t,sponsorId:'extendowner',
+   body:'Approved original with immutable funded target',targetViews:2});
+  const original=await service.confirm(t,'extendowner',originalQuote.quoteId,'extension-primary-001');
+  await service.review(t,'independent_editor',original.id,true,'Original creative reviewed');
+  const next=await service.extensionQuote(t,'extendowner',original.id,4,'extension-original-001');
+  const repeated=await service.extensionQuote(t,'extendowner',original.id,4,'extension-original-001');
+  expect(next.quoteId).toBe(repeated.quoteId);
+  await expect(service.extensionQuote(t,'extendowner',original.id,5,'extension-original-001'))
+    .rejects.toMatchObject({code:'idempotency_conflict'});
+  await expect(service.extensionQuote(t,'sharer',original.id,4,'extension-forged-owner-001'))
+    .rejects.toMatchObject({code:'campaign_not_found'});
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:2});
+  const extra=await service.confirm(t,'extendowner',next.quoteId,'extension-confirm-001');
+  expect(extra).toMatchObject({kind:'boost',targetViews:4,state:'active',
+   postId:original.postId});
+  expect((await service.receipt(t,'extendowner',originalQuote.quoteId)).campaign)
+    .toMatchObject({targetViews:2,remainingViews:2});
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:6});
+  await service.cancel(t,'extendowner',extra.id);
+  await service.cancel(t,'extendowner',original.id);
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:0});
+ });
+ it('treats reports as staff decisions and blocks payable view challenges across a profile block',async()=>{
+  await account('reportowner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'reportowner',
+   body:'Reported claims needing a separate human review',targetViews:3});
+  const c=await service.confirm(t,'reportowner',q.quoteId,'report-primary-001');
+  await service.review(t,'reviewer_other',c.id,true,'Initial copy approved');
+  const ch=await service.beginView(t,'report_viewer',c.postId);
+  await query(`INSERT INTO talks.safety_preferences
+   (tenant_id,viewer_user_id,subject_user_id,blocked)
+   VALUES($1,'report_viewer','reportowner',true)`,[t]);
+  await query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '8 seconds'
+    WHERE tenant_id=$1 AND id=$2`,[t,ch.challengeId]);
+  await expect(service.finishView(t,'report_viewer',ch.challengeId,
+   {visibleFraction:0.8,foreground:true,engaged:true}))
+    .rejects.toMatchObject({code:'post_unavailable'});
+  await expect(service.beginView(t,'report_viewer',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
+  expect(await balance('reportowner')).toMatchObject({purchased:10,reserved:3});
+  const report=await service.reportPost(t,'report_viewer',c.postId,
+   'Suspected inaccurate commercial content');
+  const again=await service.reportPost(t,'report_viewer',c.postId,
+   'Suspected inaccurate commercial content');
+  expect(again).toMatchObject({reportId:report.reportId,alreadySubmitted:true});
+  expect((await service.adminReports(t,'independent_editor')).pending)
+   .toEqual(expect.arrayContaining([
+    expect.objectContaining({reportId:report.reportId,postId:c.postId})]));
+  await expect(service.resolveReport(t,'report_viewer',report.reportId,true,
+   'Self review attempted')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const resolved=await service.resolveReport(t,'independent_editor',report.reportId,true,
+   'Unsafe paid content, remove and refund');
+  expect(resolved.state).toBe('removed');
+  expect(await balance('reportowner')).toMatchObject({purchased:10,reserved:0});
+  await expect(service.beginView(t,'viewertwo',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
+  expect((await service.receipt(t,'reportowner',q.quoteId)).campaign)
+   .toMatchObject({state:'cancelled'});
  });
 
 });
