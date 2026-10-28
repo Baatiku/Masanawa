@@ -99,6 +99,40 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
     expect(identityRows.rows[0]).toEqual({ tenants: "1", users: "1" });
   });
 
+  it('persists confirmed international contact privately across sessions and treats repeat PATCH as a no-op',async()=>{
+    const repo=createPostgresPlatformSessionRepository(pool);
+    const tenantId=createCanonicalId('tenant');
+    const identifier=`country-${tenantId.slice(-8)}@example.com`;
+    const created=await repo.createProfile({tenantId,channel:'email',identifier,
+      name:'Amina Bello',contactPhone:'+2348031234567',countryIso:'NG',subdivisionIso:'NG-FC',
+      locale:'en-NG',createdAt:new Date().toISOString()});
+    expect(created).toMatchObject({email:identifier,phone:null,
+      contactPhone:'+2348031234567',countryIso:'NG',subdivisionIso:'NG-FC',
+      countrySource:'user_selected'});
+    const before=await pool.query<{updated_at:string}>(
+      'SELECT updated_at::text FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2',
+      [tenantId,created.userId]);
+    const same=await repo.updateContactGeography!({tenantId,userId:created.userId,
+      contactPhone:'+2348031234567',countryIso:'NG',subdivisionIso:'NG-FC'});
+    expect(same.subdivisionIso).toBe('NG-FC');
+    const unchanged=await pool.query<{updated_at:string}>(
+      'SELECT updated_at::text FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2',
+      [tenantId,created.userId]);
+    expect(unchanged.rows[0]?.updated_at).toEqual(before.rows[0]?.updated_at);
+    await repo.updateContactGeography!({tenantId,userId:created.userId,
+      contactPhone:'+14165550123',countryIso:'CA',subdivisionIso:'CA-ON'});
+    const restarted=createPostgresPlatformSessionRepository(pool);
+    const loaded=await restarted.resolveProfile({tenantId,channel:'email',identifier,
+      observedAt:new Date().toISOString()});
+    expect(loaded).toMatchObject({contactPhone:'+14165550123',countryIso:'CA',
+      subdivisionIso:'CA-ON',countrySource:'user_selected',email:identifier,phone:null});
+    const legacy=await restarted.createProfile({tenantId,channel:'email',
+      identifier:`legacy-${tenantId.slice(-8)}@example.com`,
+      name:'Legacy',contactPhone:'08012345678',locale:'en-NG',createdAt:new Date().toISOString()});
+    expect(legacy.subdivisionIso).toBeNull();
+    expect(legacy.countrySource).toBe('legacy_phone_hint');
+  });
+
   it("bounds OTP attempts and stores only the HMAC evidence", async () => {
     const repository = createPostgresPlatformSessionRepository(pool);
     const tenantId = createCanonicalId("tenant");

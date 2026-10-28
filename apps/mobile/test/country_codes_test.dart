@@ -30,6 +30,11 @@ void main() {
     test('unknown codes report an unknown region', () {
       expect(detectCountry('+999123456').iso, 'UN');
     });
+    test('shared +1 does not silently declare US or Canada', () {
+      expect(detectCountry('+1 416 555 0123').iso, 'UN');
+      expect(internationalCallingCode('+1 416 555 0123'), '1');
+      expect(kContactGeographyVersion, contains('iso-codes-4.20.1'));
+    });
   });
 
   group('normalizeE164', () {
@@ -52,6 +57,12 @@ void main() {
 
     test('strips the Nigerian trunk zero', () {
       expect(normalizeE164('08012345678'), '+2348012345678');
+      expect(normalizeE164('00234 08012345678'), '+2348012345678');
+    });
+    test('client only tests plausible length; the server owns number validity',(){
+      expect(isPlausibleSignupContact('+2348031234567',kDefaultCountry),isTrue);
+      expect(isPlausibleSignupContact('+234123',kDefaultCountry),isFalse);
+      expect(isPlausibleSignupContact('+234803123456789012',kDefaultCountry),isFalse);
     });
   });
 }

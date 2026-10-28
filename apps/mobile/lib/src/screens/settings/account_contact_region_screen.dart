@@ -67,10 +67,22 @@ class _AccountContactRegionScreenState extends ConsumerState<AccountContactRegio
     final epoch=_epoch;
     setState((){_saving=true;_error=null;});
     try{
-      await ref.read(apiClientProvider).updateContactGeography(contactPhone:phone,
-        countryIso:_country.iso,subdivisionIso:_subdivision);
+      final api=ref.read(apiClientProvider);
+      // A timed-out PATCH may already be committed. Read back the authoritative
+      // private record before calling it a failure or suggesting another save.
+      try{
+        await api.updateContactGeography(contactPhone:phone,
+          countryIso:_country.iso,subdivisionIso:_subdivision);
+      }catch(_){/* outcome unknown until the following authenticated GET */}
+      final saved=await api.contactGeography();
       if(!_same(epoch))return;
-      setState((){_provenance='user_selected';_saving=false;});
+      if(saved['contactPhone']!=phone||saved['countryIso']!=_country.iso||
+          saved['subdivisionIso']!=_subdivision){
+        setState((){_saving=false;
+          _error='Saved details differ from your changes. Refresh the record before retrying.';});
+        return;
+      }
+      setState((){_provenance=saved['provenance'] as String?;_saving=false;});
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Private contact region saved.')));
     }catch(_){if(_same(epoch))setState((){

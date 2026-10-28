@@ -271,7 +271,11 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       return withTransaction(pool,async client=>{
         const updated=await client.query(`UPDATE security.platform_user_profiles
           SET contact_phone=$3,country_iso=$4,subdivision_iso=$5,
-            country_source='user_selected',updated_at=statement_timestamp()
+            country_source='user_selected',
+            updated_at=CASE WHEN
+              (contact_phone,country_iso,subdivision_iso,country_source)
+                IS NOT DISTINCT FROM ($3::text,$4::text,$5::text,'user_selected'::text)
+              THEN updated_at ELSE statement_timestamp() END
           WHERE tenant_id=$1 AND user_id=$2 RETURNING user_id`,
           [input.tenantId,input.userId,input.contactPhone,input.countryIso,
             input.subdivisionIso??null]);

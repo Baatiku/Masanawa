@@ -142,4 +142,54 @@ void main() {
     expect(controller.text, '+444165550199');
     expect(tester.widget<TextField>(national).controller!.text, '4165550199');
   });
+
+  testWidgets('shared +1 international paste requires picker and never doubles prefix',
+      (tester)async{
+    final controller=TextEditingController(text:'+234');
+    addTearDown(controller.dispose);
+    PhoneCountry selected=kDefaultCountry;
+    await tester.pumpWidget(MaterialApp(
+      theme:buildMasanawaTheme(brightness:Brightness.light),
+      supportedLocales:MasanawaLocalization.supportedLocales,
+      localizationsDelegates:MasanawaLocalization.delegates,
+      home:Scaffold(body:PhoneField(controller:controller,nationalEntry:true,
+        onCountryChanged:(country)=>selected=country))));
+    final national=find.byKey(const Key('phone-national-number'));
+    await tester.enterText(national,'+1 (416) 555-0123');
+    await tester.pump();
+    expect(selected.iso,'UN');
+    expect(controller.text,'+14165550123');
+    await tester.tap(find.byKey(const Key('phone-country-picker')));
+    await tester.pumpAndSettle();
+    final canada=find.byKey(const Key('phone-country-CA'));
+    await tester.ensureVisible(canada);
+    await tester.tap(canada);
+    await tester.pumpAndSettle();
+    expect(selected.iso,'CA');
+    expect(controller.text,'+14165550123');
+    expect(tester.widget<TextField>(national).controller!.text,'4165550123');
+  });
+
+  testWidgets('national entry stays legible at large type in Hausa and RTL',
+      (tester)async{
+    tester.view.physicalSize=const Size(720,1440);
+    tester.view.devicePixelRatio=2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller=TextEditingController(text:'+234');
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme:buildMasanawaTheme(brightness:Brightness.light),
+      locale:const Locale('ha'),
+      supportedLocales:MasanawaLocalization.supportedLocales,
+      localizationsDelegates:MasanawaLocalization.delegates,
+      builder:(context,child)=>MediaQuery(
+        data:MediaQuery.of(context).copyWith(textScaler:const TextScaler.linear(1.5)),
+        child:Directionality(textDirection:TextDirection.rtl,child:child!)),
+      home:Scaffold(body:SingleChildScrollView(child:PhoneField(
+        controller:controller,nationalEntry:true))));
+    await tester.pump();
+    expect(find.text('Sauran lambobin wayarka'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
 }
