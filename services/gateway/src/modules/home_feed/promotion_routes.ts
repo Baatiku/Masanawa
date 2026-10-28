@@ -9,6 +9,10 @@ export interface PromotionPort {
  adminQueue(t:string,editor:string):Promise<unknown>;
  adminOverview(t:string,editor:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
+ appeal(t:string,owner:string,campaignId:string,reason:string):Promise<unknown>;
+ myAppeals(t:string,owner:string):Promise<unknown>;
+ adminAppeals(t:string,editor:string):Promise<unknown>;
+ resolveAppeal(t:string,editor:string,id:string,accept:boolean,reason:string):Promise<unknown>;
  cancel(t:string,s:string,id:string):Promise<unknown>;
  pause(t:string,s:string,id:string):Promise<unknown>;
  resume(t:string,s:string,id:string):Promise<unknown>;
@@ -81,6 +85,36 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.get('/v1/promotions/mine',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);
   return options.port.mine(p.tenantId,p.userId);
+ });
+
+ app.post('/v1/promotions/:campaignId/appeal',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  // OFF-state historical safety and appeal readback remains usable.
+  const p=await options.principal(r),b=body(r);
+  fields(b,['reason']);
+  if(typeof b.reason!=='string'||b.reason.trim().length<10||b.reason.length>500)
+   fail('invalid_appeal_reason');
+  return options.port.appeal(p.tenantId,p.userId,params(r,'campaignId'),b.reason);
+ });
+ app.get('/v1/promotions/appeals/mine',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r);
+  return options.port.myAppeals(p.tenantId,p.userId);
+ });
+ app.get('/v1/admin/promotions/appeals',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r);
+  return options.port.adminAppeals(p.tenantId,p.userId);
+ });
+ app.post('/v1/admin/promotions/appeals/:appealId/resolve',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r),b=body(r);
+  fields(b,['decision','reason']);
+  if((b.decision!=='accept'&&b.decision!=='deny')||
+    typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
+   fail('invalid_appeal_resolution');
+  return options.port.resolveAppeal(p.tenantId,p.userId,
+   params(r,'appealId'),b.decision==='accept',b.reason);
  });
  app.post('/v1/promotions/:campaignId/cancel',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
