@@ -1,5 +1,24 @@
 # Masanawa — canonical screen and journey contract
 
+**28 October Wallet read-only campaign-breakdown continuation (pending hosted
+source verification):** The existing Wallet → Balance details expansion keeps
+the summary's purchased-available and restricted-welcome MB separate and,
+where the Gateway supplies both fields, labels purchased and welcome holds
+individually. Older projections show only the authoritative combined reserved
+amount, never an invented split. The account-scoped, retryable Promotions read
+adds a separately labeled sponsor-campaign reserved total and exact pending
+half-MB Sharing Earnings total; both are **receipt projections**, not additions
+to the available balance. A failed/unavailable Promotions read leaves verified
+wallet funds untouched. No reward is marked released/redeemable without a
+separate authoritative settlement read. Wallet Activity continues showing
+posted entries separately; its review-only campaign detail displays only
+price/version terms that match the original confirmed campaign. Unrecognized
+versions direct users to the original receipt rather than guessing a rate.
+Wallet refresh invalidates both sources for the same identity epoch. The
+financial/public switches stay OFF; campaign/day grouping, receipt drilldown,
+released/rejected balances and notifications remain separate actionable SPE-D
+requirements, not completed by these surfaces.
+
 **Calls history filters and totals:** The existing Calls timeline offers All,
 Connected and No confirmed connection, plus All time/7 days/30 days. Search and
 filters apply on the server before pagination. Changing a filter cancels old

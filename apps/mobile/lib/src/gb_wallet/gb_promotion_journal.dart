@@ -15,6 +15,20 @@ class GbPromotionJournal {
   final List<GbPromotionPendingEarning> earnings;
   final List<GbPromotionNotice> notices;
 
+  /// Integer half-MB units avoid silently rounding away an odd referral.
+  /// The entire amount remains *pending*, not a spendable wallet balance.
+  int get pendingEarnedHalfMb => earnings.fold<int>(0,(sum,row) {
+    if(sum>9007199254740991-row.pendingHalfMb)
+      throw const FormatException('Invalid pending earnings total');
+    return sum+row.pendingHalfMb;
+  });
+  int get reservedCampaignMb => campaigns.fold<int>(0,(sum,row) {
+    if(sum>9007199254740991-row.reservedMb)
+      throw const FormatException('Invalid campaign reserve total');
+    return sum+row.reservedMb;
+  });
+  String get pendingEarnedLabel => halfMbLabel(pendingEarnedHalfMb);
+
   factory GbPromotionJournal.read(Object? raw) {
     if(raw is! Map)throw const FormatException('Unavailable promotion history');
     List<T> rows<T>(String key,int max,T Function(Object?) parse) {
@@ -28,6 +42,12 @@ class GbPromotionJournal {
       earnings:rows('sharingEarnings',100,GbPromotionPendingEarning.read),
       notices:rows('lifecycleNotifications',50,GbPromotionNotice.read));
   }
+}
+
+String halfMbLabel(int halfMb) {
+  if(halfMb<0||halfMb>9007199254740991)
+    throw const FormatException('Unverified half-MB amount');
+  return '${halfMb~/2}${halfMb.isOdd?'.5':''} MB';
 }
 
 String _reference(Object? raw) {
@@ -46,17 +66,22 @@ class GbPromotionCampaignSummary {
   const GbPromotionCampaignSummary({required this.id,required this.postId,
     required this.kind,required this.state,required this.targetViews,
     required this.deliveredViews,required this.spentMb,required this.reservedMb,
-    required this.refundedUnusedMb});
+    required this.refundedUnusedMb,this.priceVersion});
   final String id,postId,kind,state;
   final int targetViews,deliveredViews,spentMb,reservedMb,refundedUnusedMb;
+  final String? priceVersion;
   bool get isBoost=>kind=='boost';
+  bool get hasKnownOneMbRate=>priceVersion=='2026-10-27:1MB';
   factory GbPromotionCampaignSummary.read(Object? raw) {
     if(raw is! Map)throw const FormatException('Unverified campaign');
     final id=_reference(raw['id']),postId=_reference(raw['postId']),
       kind=_reference(raw['kind']),state=_reference(raw['state']),
       target=_count(raw['targetViews']),delivered=_count(raw['deliveredViews']),
       spent=_count(raw['spentMb']),reserved=_count(raw['reservedMb']),
-      refunded=_count(raw['refundedUnusedMb']);
+      refunded=_count(raw['refundedUnusedMb']),price=raw['priceVersion'];
+    if(price!=null&&(price is! String||price.length>80||
+      RegExp(r'[\x00-\x1f\x7f]').hasMatch(price)))
+      throw const FormatException('Unverified campaign price version');
     if(target<1||delivered>target||spent!=delivered||
       reserved+refunded>target-delivered||
       !const {'human_primary','boost'}.contains(kind)||
@@ -65,7 +90,8 @@ class GbPromotionCampaignSummary {
       throw const FormatException('Inconsistent campaign receipt');
     return GbPromotionCampaignSummary(id:id,postId:postId,kind:kind,
       state:state,targetViews:target,deliveredViews:delivered,
-      spentMb:spent,reservedMb:reserved,refundedUnusedMb:refunded);
+      spentMb:spent,reservedMb:reserved,refundedUnusedMb:refunded,
+      priceVersion:price as String?);
   }
 }
 
@@ -74,8 +100,7 @@ class GbPromotionPendingEarning {
     required this.views,required this.pendingHalfMb});
   final String postId;
   final int views,pendingHalfMb;
-  String get pendingMbLabel => '${pendingHalfMb~/2}'
-    '${pendingHalfMb.isOdd?'.5':''} MB pending · not redeemable';
+  String get pendingMbLabel => '${halfMbLabel(pendingHalfMb)} pending · not redeemable';
   factory GbPromotionPendingEarning.read(Object? raw){
     if(raw is! Map)throw const FormatException('Unverified referral');
     final post=_reference(raw['postId']),views=_count(raw['referredQualifiedViews']),

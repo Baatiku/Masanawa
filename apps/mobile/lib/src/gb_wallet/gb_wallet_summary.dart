@@ -15,6 +15,8 @@ class GbWalletBalance {
     required this.welcomeAvailableMb,
     required this.reservedMb,
     required this.frozen,
+    this.reservedPurchasedMb,
+    this.reservedWelcomeMb,
   });
 
   final int totalMb;
@@ -22,6 +24,10 @@ class GbWalletBalance {
   final int purchasedAvailableMb;
   final int welcomeAvailableMb;
   final int reservedMb;
+  /// These are ledger-wide holds, not only promotion budgets. Older Gateway
+  /// projections may omit both; the app must not manufacture a breakdown.
+  final int? reservedPurchasedMb;
+  final int? reservedWelcomeMb;
   final bool frozen;
 
   factory GbWalletBalance.fromJson(Object? response) {
@@ -47,8 +53,20 @@ class GbWalletBalance {
     final purchased = whole('purchasedAvailableMb');
     final welcome = whole('welcomeAvailableMb');
     final reserved = whole('reservedMb');
+    final rawPurchasedHold = raw['reservedPurchasedMb'];
+    final rawWelcomeHold = raw['reservedWelcomeMb'];
+    if ((rawPurchasedHold == null) != (rawWelcomeHold == null)) {
+      throw const FormatException('Incomplete authoritative MB reservations');
+    }
+    final reservedPurchased = rawPurchasedHold == null
+        ? null : whole('reservedPurchasedMb');
+    final reservedWelcome = rawWelcomeHold == null
+        ? null : whole('reservedWelcomeMb');
     if (total < available ||
         total - available != reserved ||
+        (reservedPurchased != null &&
+          (reservedPurchased + reservedWelcome! != reserved ||
+            purchased + reservedPurchased + welcome + reservedWelcome != total)) ||
         purchased > available ||
         welcome > available ||
         purchased + welcome != available ||
@@ -63,6 +81,8 @@ class GbWalletBalance {
       purchasedAvailableMb: purchased,
       welcomeAvailableMb: welcome,
       reservedMb: reserved,
+      reservedPurchasedMb: reservedPurchased,
+      reservedWelcomeMb: reservedWelcome,
       frozen: raw['frozen'] as bool,
     );
   }

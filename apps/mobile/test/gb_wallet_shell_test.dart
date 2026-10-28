@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:masanawa/src/state/session_state.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_summary.dart';
+import 'package:masanawa/src/gb_wallet/gb_promotion_journal.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
@@ -92,9 +93,21 @@ void main() {
             purchasedAvailableMb: 10375,
             welcomeAvailableMb: 475,
             reservedMb: 150,
+            reservedPurchasedMb: 125,
+            reservedWelcomeMb: 25,
             frozen: false,
           ),
         ),
+        gbPromotionJournalProvider.overrideWith((ref, owner) async =>
+          GbPromotionJournal.read({
+            'campaigns': [{'id':'campaign-1','postId':'post-1',
+              'kind':'boost','state':'active','targetViews':20,
+              'deliveredViews':5,'spentMb':5,'reservedMb':15,
+              'refundedUnusedMb':0,'priceVersion':'2026-10-27:1MB'}],
+            'sharingEarnings': [
+              {'postId':'post-2','referredQualifiedViews':3,'pendingHalfMb':3}],
+            'lifecycleNotifications': [],
+          })),
         gbActivityPageProvider.overrideWith((ref, request) async =>
           const GbActivityPage([],null)),
       ],
@@ -106,7 +119,13 @@ void main() {
     await tester.tap(find.text('Balance details'));
     await tester.pumpAndSettle();
     expect(find.text('475 MB'), findsOneWidget);
-    expect(find.text('150 MB'), findsOneWidget);
+    expect(find.text('125 MB'), findsOneWidget);
+    expect(find.text('25 MB'), findsOneWidget);
+    expect(find.text('Purchased available'), findsOneWidget);
+    expect(find.text('Welcome · restricted'), findsOneWidget);
+    expect(find.text('Campaign MB reserved · sponsor receipts'), findsOneWidget);
+    expect(find.text('15 MB'), findsOneWidget);
+    expect(find.text('1.5 MB'), findsOneWidget);
     expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -158,6 +177,10 @@ void main() {
       },
     };
     expect(GbWalletBalance.fromJson(valid).availableMb, 10850);
+    expect(GbWalletBalance.fromJson({...valid,'balance':{
+      ...(valid['balance'] as Map<String,dynamic>),
+      'reservedPurchasedMb':125,'reservedWelcomeMb':25,
+    }}).reservedPurchasedMb,125);
     expect(decimalGb(10001), '10.001');
     expect(decimalGb(500), '0.5');
     expect(groupedMb(1234567), '1,234,567');
@@ -169,6 +192,14 @@ void main() {
       ...valid,
       'balance': {...(valid['balance'] as Map<String, dynamic>), 'welcomeAvailableMb': 500},
     }), throwsFormatException);
+    expect(() => GbWalletBalance.fromJson({...valid,'balance':{
+      ...(valid['balance'] as Map<String,dynamic>),
+      'reservedPurchasedMb':151,'reservedWelcomeMb':0,
+    }}),throwsFormatException);
+    expect(() => GbWalletBalance.fromJson({...valid,'balance':{
+      ...(valid['balance'] as Map<String,dynamic>),
+      'reservedPurchasedMb':125,
+    }}),throwsFormatException);
   });
 
   testWidgets('Data enables reviewed approved bundles but never unreviewed purchase',
