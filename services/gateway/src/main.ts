@@ -1638,7 +1638,8 @@ export async function startGatewayService(
       !!env.MASANAWA_STATUS_ATTRIBUTION_SECRET &&
       !!env.MASANAWA_STATUS_PUBLIC_BASE_URL && !!database.featurePool;
     if(promotionsConfigured)statusPromotions=new PgStatusPromotions(database.featurePool!,
-      env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!);
+      env.MASANAWA_STATUS_ATTRIBUTION_SECRET!,env.MASANAWA_STATUS_PUBLIC_BASE_URL!,
+      (env.MASANAWA_STATUS_APPROVED_DESTINATIONS??'').split(',').map(x=>x.trim()).filter(Boolean));
     status = {
       sessions,
       feed: new FeedService(

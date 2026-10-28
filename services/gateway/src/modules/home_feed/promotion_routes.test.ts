@@ -12,6 +12,9 @@ describe('SPE promotion routes inherit the established principal and staff autho
    review:async(...args:unknown[])=>{events.push(['review',...args]);return {state:'approved'};},
    adminQueue:async(...args:unknown[])=>{events.push(['queue',...args]);return {pending:[]};},
    adminOverview:async(...args:unknown[])=>{events.push(['overview',...args]);return {pendingReview:0};},
+   appealRejection:async(...args:unknown[])=>{events.push(['appeal',...args]);return {state:'awaiting_review'};},
+   adminAppeals:async(...args:unknown[])=>{events.push(['appeals',...args]);return {appeals:[]};},
+   resolveAppeal:async(...args:unknown[])=>{events.push(['resolve',...args]);return {state:'resolved'};},
    adminTakedown:async(...args:unknown[])=>{events.push(['takedown',...args]);return {state:'removed'};},
    cancel:async()=>({}),
    pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
@@ -117,6 +120,30 @@ describe('SPE promotion routes inherit the established principal and staff autho
   expect((await server.inject({method:'POST',url:'/v1/admin/promotions/posts/post/takedown',
    payload:{reason:'Try takeover'}})).statusCode).toBe(403);
   expect(events).toHaveLength(0);
+  await server.close();
+ });
+ it('accepts only a reviewed URL field and preserves appeal/recovery access while money is off',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'trusted',userId:'owner'}),
+   isEditor:async()=>true,enabled:()=>true});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Approved learning',targetViews:3,
+    destinationUrl:'https://offers.example.com/course'}})).statusCode).toBe(200);
+  expect(events[0]).toMatchObject({tenantId:'trusted',sponsorId:'owner',
+   destinationUrl:'https://offers.example.com/course'});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Only if approved',targetViews:3,destinationUrl:42}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/id/rejection-appeal',
+   payload:{reason:'A documented disagreement'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/rejection-appeals'})).statusCode)
+   .toBe(200);
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/id/rejection-appeal/resolve',
+   payload:{decision:'accept',reason:'Verified new evidence'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['appeal','trusted','owner','id','A documented disagreement']);
+  expect(events).toContainEqual(['appeals','trusted','owner']);
+  expect(events).toContainEqual(['resolve','trusted','owner','id','accept','Verified new evidence']);
   await server.close();
  });
 });

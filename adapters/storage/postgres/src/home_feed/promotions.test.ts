@@ -3,7 +3,21 @@ import {createHash} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 import {readFileSync} from 'node:fs';
 import type {Pool} from 'pg';
-import {PgStatusPromotions,qualifiedViewAllocation} from './promotions.js';
+import {PgStatusPromotions,qualifiedViewAllocation,reviewedDestination} from './promotions.js';
+
+describe('SPE-A09 canonical advertiser destination admission',()=>{
+ it('refuses private hosts, IP literals, credentials, cleartext and fragments',()=>{
+  for(const url of ['http://example.com/offer','https://127.0.0.1/offer',
+   'https://[::1]/offer','https://localhost/offer','https://seller.local/offer',
+   'https://name:secret@example.com/offer','https://example.com:8443/offer',
+   'https://example.com/offer#secret','https://example.com\\@evil.com/',
+   'https://example.com/\nmalformed']){
+   expect(()=>reviewedDestination(url)).toThrow();
+  }
+  expect(reviewedDestination('https://offers.example.com/course?version=1'))
+   .toBe('https://offers.example.com/course?version=1');
+ });
+});
 
 describe('SPE-E01 exact integer half-MB allocation acceptance',()=>{
  it('allocates 10,000 funded views, including 1,500 organic and 8,500 referred, with no lost half-MB',()=>{
@@ -70,6 +84,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0007_paid_promotions.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0010_reviewed_promotion_destinations.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -197,6 +212,60 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const audit=await query(`SELECT details FROM feed.promotion_audit WHERE tenant_id=$1
    AND campaign_id=$2 AND action='rejected'`,[t,c.id]);
   expect(audit.rows[0]).toMatchObject({details:{reason:'Misleading educational claims'}});
+ });
+
+ it('holds every destination for exact independent URL clearance and snapshots approval',async()=>{
+  const destination='https://offers.example.com/course?version=1';
+  const quote=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'Learning programme',destinationUrl:destination,targetViews:2});
+  const funded=await service.confirm(t,'publisher',quote.quoteId,'reviewed-cta-0001');
+  await expect(service.review(t,'independent_editor',funded.id,true))
+   .rejects.toMatchObject({code:'destination_not_cleared',status:409});
+  expect((await service.adminQueue(t,'independent_editor')).pending)
+   .toContainEqual(expect.objectContaining({campaignId:funded.id,destinationUrl:destination}));
+  const allowed=new PgStatusPromotions({query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool,
+   'test-secret-with-forty-plus-characters-of-entropy','https://status.example.test',[destination]);
+  await allowed.review(t,'independent_editor',funded.id,true);
+  const r=await query(`SELECT p.approved_destination_url,c.approved_destination_url AS campaign_url,
+    c.approval_snapshot FROM feed.promotion_campaigns c
+    JOIN feed.posts p ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+    WHERE c.tenant_id=$1 AND c.id=$2`,[t,funded.id]);
+  expect(r.rows[0]).toMatchObject({approved_destination_url:destination,
+   campaign_url:destination,approval_snapshot:{destinationUrl:destination,
+    reviewer:'independent_editor',priceVersion:'2026-10-27:1MB'}});
+  expect((await allowed.receipt(t,'publisher',quote.quoteId)).campaign)
+   .toMatchObject({approvedDestinationUrl:destination});
+ });
+
+ it('lets only the rejected sponsor appeal once; independent reviewer cannot unrefund funds',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'Disputed educational promotion',targetViews:2});
+  const funded=await service.confirm(t,'publisher',q.quoteId,'rejection-appeal-0001');
+  await service.review(t,'independent_editor',funded.id,false,'Needs claim evidence');
+  const held=(await balance('publisher')).reserved;
+  await expect(service.appealRejection(t,'booster',funded.id,'Please inspect my claim'))
+   .rejects.toMatchObject({code:'campaign_not_found'});
+  const first=await service.appealRejection(t,'publisher',funded.id,'Documented evidence is available');
+  expect(first).toMatchObject({campaignId:funded.id,state:'awaiting_review'});
+  expect(await service.appealRejection(t,'publisher',funded.id,'Documented evidence is available'))
+   .toEqual(first);
+  await expect(service.appealRejection(t,'publisher',funded.id,'Different submission grounds'))
+   .rejects.toMatchObject({code:'appeal_already_submitted'});
+  const appeals=await service.adminAppeals(t,'independent_editor');
+  expect(appeals.appeals).toContainEqual(expect.objectContaining({
+   campaignId:funded.id,sponsorId:'publisher',resolution:null}));
+  await expect(service.resolveAppeal(t,'publisher',funded.id,'accept','Evidence is compelling'))
+   .rejects.toMatchObject({code:'separate_reviewer_required'});
+  const decision=await service.resolveAppeal(t,'independent_editor',funded.id,'accept',
+   'Evidence is compelling');
+  expect(decision).toMatchObject({nextStep:'new_quote_and_independent_moderation'});
+  expect(await service.resolveAppeal(t,'independent_editor',funded.id,'accept',
+   'Evidence is compelling')).toEqual(decision);
+  await expect(service.resolveAppeal(t,'independent_editor',funded.id,'uphold',
+   'We changed our mind')).rejects.toMatchObject({code:'appeal_already_resolved'});
+  expect((await balance('publisher')).reserved).toBe(held);
+  expect((await service.mine(t,'publisher')).campaigns.find(x=>x.id===funded.id)?.state)
+   .toBe('rejected');
  });
 
  it('permanently removes unsafe human content, refunds all boosters and revokes referral',async()=>{
