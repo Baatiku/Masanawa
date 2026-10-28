@@ -47,6 +47,7 @@ describe('SPE-A13/A14/B15/B17/E09/E10: overlapping sponsors and editorial safety
   await db.exec(`CREATE SCHEMA identity; CREATE SCHEMA talks;
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
+   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);
    CREATE SCHEMA feed;`);
   await db.exec(migration('../../../../../packages/feed/migrations/0001_feed.sql'));
   await db.exec(migration('../../../../../packages/feed/migrations/0006_human_public_status.sql'));
