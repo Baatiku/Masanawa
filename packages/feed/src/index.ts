@@ -126,3 +126,5 @@ export type {EditorialPost,EditorialRepository,EditorialAction,EditorialState,Dr
 
 export {SavedLibraryService, SavedError} from './saved.js';
 export type {SavedKind, SavedCursor, SavedItem, SavedRepository} from './saved.js';
+
+export {reviewedPromotionDestination} from './promotion_destination.js';
