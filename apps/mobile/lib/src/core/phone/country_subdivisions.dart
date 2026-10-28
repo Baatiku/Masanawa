@@ -8,8 +8,14 @@ class PhoneSubdivision {
 class CountrySubdivisions {
   CountrySubdivisions._(this._data);
   final Map<String,List<PhoneSubdivision>> _data;
-  static Future<CountrySubdivisions> load() async => fromJson(
-    await rootBundle.loadString('assets/country_subdivisions.json'));
+  static Future<CountrySubdivisions> load() async {
+    // This JSON is over Flutter's loadString isolate threshold. Decode the
+    // bundled asset directly so fake-async auth widget tests and startup do
+    // not wait on an out-of-band compute isolate.
+    final bytes=await rootBundle.load('assets/country_subdivisions.json');
+    return fromJson(utf8.decode(bytes.buffer.asUint8List(
+      bytes.offsetInBytes,bytes.lengthInBytes)));
+  }
   static CountrySubdivisions fromJson(String raw){
     final decoded=jsonDecode(raw) as Map<String,dynamic>;
     final regions=<String,List<PhoneSubdivision>>{};
