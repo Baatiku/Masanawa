@@ -677,7 +677,7 @@ export class PgStatusPromotions {
       AND audience='public' AND paid_purged_at IS NULL`,[t,post]);
    if(!p.rows[0])fail('post_not_found',404);
    const source=await c.query(`SELECT id FROM feed.promotion_campaigns WHERE tenant_id=$1
-    AND post_id=$2 AND sponsor_id<>$3 AND state='active' AND remaining_views>0
+    AND post_id=$2 AND sponsor_id<>$3 AND state='active' AND remaining_views>0 AND (expires_at IS NULL OR expires_at>statement_timestamp())
     ORDER BY created_at,id LIMIT 1`,[t,post,sharer]);
    const base=`${this.publicBaseUrl.replace(/\/$/,'')}/status/${post}`;
    if(!source.rows[0]||p.rows[0].author_user_id===sharer)
@@ -725,7 +725,8 @@ export class PgStatusPromotions {
         AND reward.account_kind='human' AND reward.account_id=l.sharer_id
       WHERE l.tenant_id=$1 AND l.post_id=$2 AND l.token_sha256=$3
        AND l.revoked_at IS NULL AND campaign.state='active'
-       AND campaign.remaining_views>0 AND COALESCE(reward.frozen,false)=false`,
+       AND campaign.remaining_views>0
+       AND (campaign.expires_at IS NULL OR campaign.expires_at>statement_timestamp()) AND COALESCE(reward.frozen,false)=false`,
       [t,post,hash(referral)]);
     if(r.rows[0])link=String(r.rows[0].id);
    }
