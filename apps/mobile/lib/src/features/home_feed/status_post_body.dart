@@ -70,7 +70,7 @@ class _StatusPostBodyState extends State<StatusPostBody> {
               onPressed: () => setState(() => expanded = !expanded),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 0),
-                minimumSize: const Size(0, 44),
+                minimumSize: const Size(0, 48),
               ),
               child: Text(expanded
                   ? t('See less', 'Nuna kadan')

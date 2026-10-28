@@ -7,11 +7,14 @@ import 'status_promotion_api.dart';
 /// The quote and eligible balance always come from the server, never the UI.
 class StatusPromotionSheet extends StatefulWidget {
   const StatusPromotionSheet({super.key,required this.api,this.postId,
-    this.onRecharge,this.draftStore});
+    this.onRecharge,this.draftStore,this.initialPhotoRequested=false});
   final StatusPromotionApi api;
   final String? postId;
   final Future<void> Function()? onRecharge;
   final StatusPromotionDraftStore? draftStore;
+  /// An honest media entry cue until an approved upload/rights pipeline exists.
+  /// Never attaches a fake image or permits a text quote to imply an upload.
+  final bool initialPhotoRequested;
   @override State<StatusPromotionSheet> createState()=>_StatusPromotionSheetState();
 }
 
@@ -109,9 +112,13 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
   }
   @override Widget build(BuildContext context){
     final theme=Theme.of(context),quote=reviewed;
+    // Keep the review sheet compact on tall handsets and scrollable when the
+    // keyboard, enlarged text or a short display reduces usable height.
+    final availableHeight=MediaQuery.sizeOf(context).height*0.68;
+    final sheetHeight=availableHeight<480?availableHeight:480.0;
     return SafeArea(child:Padding(
       padding:EdgeInsets.only(bottom:MediaQuery.viewInsetsOf(context).bottom),
-      child:ConstrainedBox(constraints:const BoxConstraints(maxHeight:560),
+      child:ConstrainedBox(constraints:BoxConstraints(maxHeight:sheetHeight),
         child:SingleChildScrollView(padding:const EdgeInsets.fromLTRB(18,12,18,18),
           child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,
             mainAxisSize:MainAxisSize.min,children:[
@@ -119,8 +126,8 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
               decoration:BoxDecoration(color:theme.colorScheme.outlineVariant,
                 borderRadius:BorderRadius.circular(6)))),
             const SizedBox(height:12),
-            Text(boost?t('Boost this post','Kara yada wannan labari'):
-              t('Promote a post','Yada sakonka'),
+            Text(boost?t('Boost this post','Ƙara yaɗa wannan labari'):
+              t('Promote a post','Yaɗa saƙonka'),
               style:theme.textTheme.titleLarge?.copyWith(fontWeight:FontWeight.w700)),
             const SizedBox(height:5),
             Text(t('Pay for up to the selected number of qualified views. '
@@ -128,12 +135,28 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
               'Ka biya don adadin ganin sako da aka tabbatar. Ba lallai a samu su nan take ba.'),
               style:theme.textTheme.bodySmall),
             if(!boost)...[
+              if(widget.initialPhotoRequested)
+                Padding(padding:const EdgeInsets.only(top:12),child:
+                  DecoratedBox(decoration:BoxDecoration(
+                    color:theme.colorScheme.surfaceContainerLow,
+                    borderRadius:BorderRadius.circular(12)),
+                    child:Padding(padding:const EdgeInsets.all(12),
+                      child:Row(crossAxisAlignment:CrossAxisAlignment.start,
+                        children:[
+                          const Icon(Icons.image_not_supported_outlined,size:22),
+                          const SizedBox(width:10),
+                          Expanded(child:Text(t(
+                            'Photo promotions are not available until reviewed image uploads are enabled. You can promote text now.',
+                            'Ba a fara karɓar hotunan talla da aka tantance ba tukuna. Za ku iya yaɗa rubutu yanzu.'),
+                            style:theme.textTheme.bodySmall)),
+                        ]))),
+                ),
               const SizedBox(height:12),
               TextField(controller:body,maxLines:3,minLines:2,maxLength:5000,
                 onChanged:(_){setState(()=>reviewed=null);_persistDraft();},
                 decoration:InputDecoration(isDense:true,
                   hintText:t('What would you like to promote?',
-                    'Me kake son yadawa?'),border:const OutlineInputBorder())),
+                    'Me kuke son yaɗawa?'),border:const OutlineInputBorder())),
             ],
             const SizedBox(height:12),
             Text(t('Qualified views','Ganin sako da aka tabbatar'),
