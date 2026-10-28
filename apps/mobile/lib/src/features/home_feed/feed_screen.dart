@@ -84,6 +84,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   bool promotionsAvailable = false;
   int generation = 0;
   final Set<String> pendingActions = {};
+  final Set<String> sharingPosts = {};
+  int shareGeneration = 0;
   String? pageError;
   void _onExternalSearchChanged() {
     if (!mounted) return;
@@ -101,6 +103,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     loading = false;
     fetchingMore = false;
     pendingActions.clear();
+    sharingPosts.clear();shareGeneration++;
     promotionsAvailable = false;
   }
 
@@ -188,6 +191,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       old.searchExpanded?.removeListener(_onExternalSearchChanged);
       widget.searchExpanded?.addListener(_onExternalSearchChanged);
     }
+    if(old.api!=widget.api){shareGeneration++;sharingPosts.clear();}
     // A refreshed auth token recreates the Status API wrapper but keeps the
     // same authorized account. Do not erase visible posts or refetch then.
     if (old.accountKey != widget.accountKey ||
@@ -269,6 +273,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       error = null;
       pageError = null;
       pendingActions.clear();
+      sharingPosts.clear();shareGeneration++;
     });
     try {
       final page = await listCurrent();
@@ -497,26 +502,27 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   Future<void> sharePost(FeedPost post) async {
-    if (!widget.enabled || widget.accountKey.isEmpty) return;
-    final account = widget.accountKey, scope = generation;
+    if (!widget.enabled || widget.accountKey.isEmpty || sharingPosts.contains(post.id)) return;
+    final account = widget.accountKey, scope = generation, shareScope=shareGeneration;
+    bool current()=>mounted&&scope==generation&&shareScope==shareGeneration&&widget.accountKey==account;
+    setState(()=>sharingPosts.add(post.id));
     try {
       // The original may have been hidden or removed after the feed loaded.
-      // Authorize it again before exporting any text from this account.
-      final current = widget.api is DioFeedApi
+      final currentPost = widget.api is DioFeedApi
           ? await (widget.api as DioFeedApi).detail(post.id) : post;
-      if (!mounted || scope != generation || widget.accountKey != account) return;
-      // A user-initiated public text excerpt. Do not export signed media URLs
-      // or invent a shareable deep link for a post that may lose visibility.
+      if (!current()) return;
       final linked=promotionsAvailable&&widget.promotions!=null
-        ?await widget.promotions!.share(current.id):null;
-      if(!mounted||scope!=generation||widget.accountKey!=account)return;
+        ?await widget.promotions!.share(currentPost.id):null;
+      if(!current())return;
       await SharePlus.instance.share(ShareParams(text:linked??
-        '${current.displayAuthor}\n\n${current.body}'));
+        '${currentPost.displayAuthor}\n\n${currentPost.body}'));
     } catch (_) {
-      if (!mounted) return;
+      if (!current()) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(t('Sharing unavailable.', 'Ba a samun hanyar rabawa.')),
       ));
+    } finally {
+      if(current())setState(()=>sharingPosts.remove(post.id));
     }
   }
 
@@ -1006,7 +1012,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                           ?t('Share & Earn','Raba ka samu MB')
                                           :t('Share', 'Raba'),
                                         Icons.share_outlined,
-                                        () => sharePost(post)),
+                                        sharingPosts.contains(post.id)?null:() => sharePost(post)),
                                   ]);
                                 }),
                               ),

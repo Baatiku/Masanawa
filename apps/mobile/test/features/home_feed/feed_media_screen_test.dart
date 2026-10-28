@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
+import 'package:masanawa/src/core/live_call_foreground.dart';
+import 'package:masanawa/src/core/status_audio_focus.dart';
 import 'package:masanawa/src/features/home_feed/feed_media_screen.dart';
 
 const post='381026c2-9d56-47b1-b73d-1784e24e41e2';
@@ -13,6 +15,52 @@ class MediaStub implements FeedMediaApi {
 FeedMediaGrant grant(String id)=>FeedMediaGrant(mediaId:id,kind:'image',
  url:Uri.parse('https://media.example.test/signed'),expiresAt:DateTime.now().add(const Duration(minutes:1)));
 void main(){
+ test('Status audio focus does not take an active call session',()async{
+   await LiveCallForeground.startOrThrow(android:false);addTearDown(LiveCallForeground.stop);
+   await expectLater(StatusAudioFocus.prepare(isAccountCurrent:()=>true),
+     throwsA(isA<StateError>().having((e)=>e.message,'cause','call_active')));
+ });
+ testWidgets('approved audio stays paused through a call and needs an explicit Play afterward',(t)async{
+   await LiveCallForeground.startOrThrow(android:false);addTearDown(LiveCallForeground.stop);
+   var focusRequests=0;
+   await t.pumpWidget(MaterialApp(home:FeedMediaScreen(
+     api:MediaStub((_,__)async=>FeedMediaGrant(mediaId:'media_audio',kind:'audio',url:Uri.parse('https://media.example.test/signed'),
+       expiresAt:DateTime.now().add(const Duration(minutes:1)),transcript:'Approved spoken post')),
+     accountKey:'a',postId:post,kind:'audio',mediaIds:const ['media_audio'],onBeforeAudio:()async{focusRequests++;})));
+   await t.pumpAndSettle();
+   expect(t.widget<FilledButton>(find.widgetWithText(FilledButton,'Play audio')).onPressed,isNull);
+   expect(find.text('Approved spoken post'),findsOneWidget);expect(focusRequests,0);
+   await LiveCallForeground.stop();await t.pumpAndSettle();
+   expect(t.widget<FilledButton>(find.widgetWithText(FilledButton,'Play audio')).onPressed,isNotNull);
+   expect(focusRequests,0);expect(t.takeException(),isNull);
+ });
+ testWidgets('a call beginning and ending while focus awaits still requires another Play',(t)async{
+   final focus=Completer<void>();
+   await t.pumpWidget(MaterialApp(home:FeedMediaScreen(
+     api:MediaStub((_,__)async=>FeedMediaGrant(mediaId:'media_audio',kind:'audio',url:Uri.parse('https://media.example.test/signed'),
+       expiresAt:DateTime.now().add(const Duration(minutes:1)))),
+     accountKey:'a',postId:post,kind:'audio',mediaIds:const ['media_audio'],onBeforeAudio:()=>focus.future)));
+   await t.pumpAndSettle();await t.tap(find.text('Play audio'));await t.pump();
+   await LiveCallForeground.startOrThrow(android:false);addTearDown(LiveCallForeground.stop);
+   await LiveCallForeground.stop();focus.complete();await t.pumpAndSettle();
+   expect(find.text('Audio playback failed. Try again.'),findsNothing);
+   expect(t.widget<FilledButton>(find.widgetWithText(FilledButton,'Play audio')).onPressed,isNotNull);
+   expect(t.takeException(),isNull);
+ });
+
+ testWidgets('long approved audio transcript scrolls at 320dp large text RTL without a fake seek range',(t)async{
+   t.view.physicalSize=const Size(320,760);t.view.devicePixelRatio=1;
+   addTearDown(t.view.resetPhysicalSize);addTearDown(t.view.resetDevicePixelRatio);
+   final transcript=List.filled(150,'Approved spoken words.').join(' ');
+   await t.pumpWidget(MaterialApp(home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),
+     child:Directionality(textDirection:TextDirection.rtl,child:FeedMediaScreen(
+       api:MediaStub((_,__)async=>FeedMediaGrant(mediaId:'media_audio',kind:'audio',url:Uri.parse('https://media.example.test/signed'),
+         expiresAt:DateTime.now().add(const Duration(minutes:1)),transcript:transcript)),
+       accountKey:'a',postId:post,kind:'audio',mediaIds:const ['media_audio'],onBeforeAudio:()async{})))));
+   await t.pumpAndSettle();
+   expect(find.byType(SingleChildScrollView),findsWidgets);expect(find.text(transcript),findsOneWidget);
+   expect(t.widget<Slider>(find.byType(Slider)).onChanged,isNull);expect(t.takeException(),isNull);
+ });
  testWidgets('C23 single post media cannot be rendered before server grant',(t)async{
    final pending=Completer<FeedMediaGrant>();
    await t.pumpWidget(MaterialApp(home:FeedMediaScreen(api:MediaStub((_,__)=>pending.future),
