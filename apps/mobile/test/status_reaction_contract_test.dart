@@ -99,7 +99,7 @@ void main(){
     expect(changed.withAction(saved:true).saved,isTrue);
     expect(changed.withAction(liked:true).currentReaction,'like');
   });
-  testWidgets('Status horizontal picker sends one type and clears the same selection',(tester)async{
+  testWidgets('Status bounded seven-reaction picker sends one type and clears the same selection',(tester)async{
     final api=_ReactionStub(_post({}));
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:
       MasanaFeedScreen(api:api,accountKey:'fan-a'))));
@@ -108,7 +108,9 @@ void main(){
     await tester.pumpAndSettle();
     expect(find.text('Love'),findsOneWidget);
     expect(find.text('Care'),findsOneWidget);
-    expect(find.text('Angry'),findsNothing);
+    for(final label in const ['Like','Haha','Wow','Sad','Angry']){
+      expect(find.text(label),findsWidgets);
+    }
     await tester.tap(find.text('Love'));
     await tester.pumpAndSettle();
     expect(api.reactions,['love']);
