@@ -368,6 +368,15 @@ export class PgStatusPromotions {
    const p=await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2
     AND state='published' AND paid_purged_at IS NULL`,[t,post]);
    if(!p.rowCount)fail('post_not_found',404);
+   // Issue quotas are per authenticated account digest, not shared IP: carrier
+   // NAT must not cause one person's requests to penalize unrelated users.
+   // At most 100 fresh starts in 5 minutes (well above 6s normal dwell) to
+   // bound challenge-table spam. This is not a paid-ad display/frequency cap.
+   const viewerDigest=this.digest(t,viewer);
+   const recent=await c.query<{issued:string}>(`SELECT count(*)::text AS issued
+    FROM feed.view_challenges WHERE tenant_id=$1 AND viewer_digest=$2
+      AND started_at>statement_timestamp()-interval '5 minutes'`,[t,viewerDigest]);
+   if(count(recent.rows[0]?.issued??0)>=100)fail('view_challenge_rate_limited',429);
    let link:string|null=null;
    if(referral&&referral.length<=128){
     const r=await c.query(`SELECT id FROM feed.share_links WHERE tenant_id=$1
@@ -376,7 +385,7 @@ export class PgStatusPromotions {
    }
    const added=await c.query(`INSERT INTO feed.view_challenges
     (tenant_id,post_id,viewer_digest,share_link_id)
-    VALUES($1,$2,$3,$4) RETURNING id,started_at`,[t,post,this.digest(t,viewer),link]);
+    VALUES($1,$2,$3,$4) RETURNING id,started_at`,[t,post,viewerDigest,link]);
    return {challengeId:String(added.rows[0]!.id),startedAt:added.rows[0]!.started_at,
     minimumDwellSeconds:6,minimumVisibleFraction:0.5};
   });
