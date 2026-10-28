@@ -33,6 +33,7 @@ describe('consented guest proof persists only reviewable, nonpayable evidence',(
    '../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql',
    '../../../../../packages/feed/migrations/0007_paid_promotions.sql',
    '../../../../../packages/feed/migrations/0020_status_guest_view_proof.sql',
+   '../../../../../packages/feed/migrations/0021_status_guest_manual_review.sql',
   ])await db.exec(sql(path));
   const post=await query(`INSERT INTO feed.posts
     (tenant_id,author_masana_id,kind,body,idempotency_key,published_by)
@@ -123,5 +124,32 @@ describe('consented guest proof persists only reviewable, nonpayable evidence',(
   expect((await query(`SELECT referral_link_id FROM feed.guest_view_proofs WHERE id=$1`,
    [id])).rows[0]!.referral_link_id).toBeNull();
   expect(await count('promotion_view_charges')).toBe(0);
+ });
+
+ it('permits tenant-scoped manual hold/reject only, no verify or payout',async()=>{
+  const queue=await service.listPending(tenant,25);
+  expect(queue).toHaveLength(1);
+  expect(queue[0]).toMatchObject({postId,hasReferral:false});
+  expect(JSON.stringify(queue)).not.toContain(actor('f').consentDigest);
+  expect(JSON.stringify(queue)).not.toContain(actor('f').viewerDigest);
+  expect(await service.listPending('different_tenant')).toEqual([]);
+  const proofId=queue[0]!.id;
+  await expect(service.review(tenant,'staff-editor',proofId,'held','arbitrary'))
+   .rejects.toMatchObject({code:'guest_review_invalid'});
+  expect(await service.review('different_tenant','other_staff',proofId,
+   'rejected','suspicious_automation')).toBeNull();
+  expect(await service.review(tenant,'staff-editor',proofId,
+   'held','invalid_referral')).toMatchObject({decision:'held',qualified:false,payable:false});
+  expect(await service.review(tenant,'staff-editor',proofId,
+   'rejected','suspicious_automation')).toBeNull();
+  expect(await service.listPending(tenant)).toEqual([]);
+  const row=await query(`SELECT review_decision,review_reason,reviewed_by
+   FROM feed.guest_view_proofs WHERE id=$1`,[proofId]);
+  expect(row.rows[0]).toMatchObject({review_decision:'held',
+   review_reason:'invalid_referral',reviewed_by:'staff-editor'});
+  expect(await count('qualified_views')).toBe(0);
+  expect(await count('promotion_view_charges')).toBe(0);
+  await service.withdraw(actor('f').consentDigest);
+  expect(await count('guest_view_proofs')).toBe(0);
  });
 });

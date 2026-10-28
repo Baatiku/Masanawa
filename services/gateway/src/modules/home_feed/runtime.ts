@@ -5,6 +5,7 @@ import {registerFeedMediaRoutes,type FeedMediaOptions} from "./media_routes.js";
 import {registerPromotionRoutes,type PromotionPort} from "./promotion_routes.js";
 import {registerPublicStatusLanding,type PublicStatusPost} from "./public_landing.js";
 import {registerStatusGuestProofRoutes,type GuestProofPort,GuestConsentSigner} from './guest_consent.js';
+import {registerStatusGuestReviewRoutes,type GuestReviewPort} from './guest_review.js';
 
 /** Structural port implemented by the existing platform customer-session
  * authorizer. The host supplies that authority, never an HTTP role header. */
@@ -27,6 +28,7 @@ export interface StatusRuntime {
    enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string};
  guestProof?:{port:GuestProofPort;signer:GuestConsentSigner;
    enabled:()=>boolean;publicBaseUrl:string};
+ guestReview?:{port:GuestReviewPort;enabled:()=>boolean};
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */
@@ -98,6 +100,11 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
     port:options.promotions,principal:resolve,
     isEditor:async session=>await options.isEditor?.(session)===true,
     enabled:options.promotionsEnabled??(()=>false),
+  });
+  if(options.guestReview)await registerStatusGuestReviewRoutes(scope,{
+    port:options.guestReview.port,principal:resolve,
+    isEditor:async session=>await options.isEditor?.(session)===true,
+    enabled:options.guestReview.enabled,
   });
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
   if(options.updateMediaAlt)scope.put('/v1/admin/feed/media/:mediaId/alt',async(request,reply)=>{
