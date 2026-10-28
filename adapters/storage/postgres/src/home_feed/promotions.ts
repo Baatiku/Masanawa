@@ -1033,7 +1033,11 @@ export class PgStatusPromotions {
   return serial(this.pool,async c=>{
    const p=await c.query(`SELECT author_user_id FROM feed.posts
     WHERE tenant_id=$1 AND id=$2 AND state='published'
-      AND audience='public' AND paid_purged_at IS NULL`,[t,post]);
+      AND audience='public' AND paid_purged_at IS NULL
+      AND (author_type='masana' OR NOT EXISTS(SELECT 1 FROM talks.safety_preferences b
+       WHERE b.tenant_id=feed.posts.tenant_id AND b.blocked
+        AND ((b.viewer_user_id=$3 AND b.subject_user_id=feed.posts.author_user_id)
+        OR (b.viewer_user_id=feed.posts.author_user_id AND b.subject_user_id=$3))))`,[t,post,sharer]);
    if(!p.rows[0])fail('post_not_found',404);
    const source=await c.query(`SELECT id FROM feed.promotion_campaigns WHERE tenant_id=$1
     AND post_id=$2 AND sponsor_id<>$3 AND state='active' AND remaining_views>0 AND (expires_at IS NULL OR expires_at>statement_timestamp())
@@ -1062,7 +1066,11 @@ export class PgStatusPromotions {
   return serial(this.pool,async c=>{
    const p=await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2
     AND state='published' AND audience='public'
-    AND paid_purged_at IS NULL`,[t,post]);
+    AND paid_purged_at IS NULL
+    AND (author_type='masana' OR NOT EXISTS(SELECT 1 FROM talks.safety_preferences b
+     WHERE b.tenant_id=feed.posts.tenant_id AND b.blocked
+      AND ((b.viewer_user_id=$3 AND b.subject_user_id=feed.posts.author_user_id)
+      OR (b.viewer_user_id=feed.posts.author_user_id AND b.subject_user_id=$3))))`,[t,post,viewer]);
    if(!p.rowCount)fail('post_not_found',404);
    // Issue quotas are per authenticated account digest, not shared IP: carrier
    // NAT must not cause one person's requests to penalize unrelated users.
@@ -1114,7 +1122,12 @@ export class PgStatusPromotions {
    const post=String(ch.post_id);
    const owner=await c.query(`SELECT author_user_id FROM feed.posts WHERE tenant_id=$1
      AND id=$2 AND state='published' AND audience='public'
-     AND paid_purged_at IS NULL FOR UPDATE`,[t,post]);
+     AND paid_purged_at IS NULL
+     AND (author_type='masana' OR NOT EXISTS(SELECT 1 FROM talks.safety_preferences b
+      WHERE b.tenant_id=feed.posts.tenant_id AND b.blocked
+       AND ((b.viewer_user_id=$3 AND b.subject_user_id=feed.posts.author_user_id)
+       OR (b.viewer_user_id=feed.posts.author_user_id AND b.subject_user_id=$3))))
+     FOR UPDATE`,[t,post,viewer]);
    if(!owner.rows[0])fail('post_unavailable',404);
    // A publisher refreshing their own paid post is not a qualified audience
    // exposure. In particular it must not exhaust an independent boost.
