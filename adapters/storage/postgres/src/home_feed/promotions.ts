@@ -192,7 +192,7 @@ export class PgStatusPromotions {
   return r.rows[0]?{objectKey:String(r.rows[0].object_key),altText:String(r.rows[0].alt_text)}:null;
  }
  async draft(t:string,owner:string,input:{body:string;targetViews:number;
-  destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}){
+  destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];idempotencyKey:string}){
   actor(t,owner);
   if(!keyPattern.test(input.idempotencyKey)||!Number.isSafeInteger(input.targetViews)||
    input.targetViews<1||input.targetViews>1000000||typeof input.body!=='string'||
@@ -204,24 +204,28 @@ export class PgStatusPromotions {
   if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
-  const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires]));
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+    mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
+  const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires,...(mediaIds.length?[mediaIds]:[])]));
   return serial(this.pool,async c=>{
    const saved=await c.query(`INSERT INTO feed.promotion_drafts
-    (tenant_id,owner_id,body,destination_url,target_views,campaign_expires_at,idempotency_key,request_sha256)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+    (tenant_id,owner_id,body,destination_url,target_views,campaign_expires_at,idempotency_key,request_sha256,media_ids)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT(tenant_id,owner_id,idempotency_key) DO NOTHING RETURNING *`,
-    [t,owner,body,destinationUrl,input.targetViews,expires,input.idempotencyKey,fingerprint]);
+    [t,owner,body,destinationUrl,input.targetViews,expires,input.idempotencyKey,fingerprint,mediaIds]);
    const row=saved.rows[0]??(await c.query(`SELECT * FROM feed.promotion_drafts
      WHERE tenant_id=$1 AND owner_id=$2 AND idempotency_key=$3`,
      [t,owner,input.idempotencyKey])).rows[0];
    if(!row||row.request_sha256!==fingerprint)fail('idempotency_conflict',409);
    return {draftId:String(row.id),state:String(row.state),version:count(row.version),
     targetViews:count(row.target_views),body:String(row.body),destinationUrl:row.destination_url??null,
+    mediaIds:row.media_ids??[],
     campaignExpiresAt:row.campaign_expires_at??null};
   });
  }
  async editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;
-  destinationUrl?:string;campaignExpiresAt?:string;expectedVersion:number}){
+  destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];expectedVersion:number}){
   actor(t,owner);identifier(id);
   if(!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||
    !Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000||
@@ -234,22 +238,25 @@ export class PgStatusPromotions {
   if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+   mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
   const body=input.body.trim();
   return serial(this.pool,async c=>{
    const r=await c.query(`UPDATE feed.promotion_drafts SET body=$4,target_views=$5,
-    destination_url=$6,campaign_expires_at=$7,version=version+1,
+    destination_url=$6,campaign_expires_at=$7,media_ids=$10,version=version+1,
     updated_at=statement_timestamp(),request_sha256=$8
     WHERE tenant_id=$1 AND id=$2 AND owner_id=$3 AND state='draft'
      AND version=$9 RETURNING id,version`,
     [t,id,owner,body,input.targetViews,destinationUrl,expires,
-     hash(JSON.stringify([body,input.targetViews,destinationUrl,expires])),input.expectedVersion]);
+     hash(JSON.stringify([body,input.targetViews,destinationUrl,expires,...(mediaIds.length?[mediaIds]:[])])),input.expectedVersion,mediaIds]);
    if(!r.rowCount)fail('draft_stale_or_submitted',409);
    return {draftId:id,state:'draft',version:count(r.rows[0]!.version)};
   });
  }
  async myDrafts(t:string,owner:string){actor(t,owner);
   const r=await this.pool.query(`SELECT d.id,d.state,d.version,d.body,d.target_views,
-    d.destination_url,d.campaign_expires_at,d.updated_at,q.id AS quote_id
+    d.destination_url,d.campaign_expires_at,d.media_ids,d.updated_at,q.id AS quote_id
     FROM feed.promotion_drafts d LEFT JOIN feed.promotion_quotes q
     ON q.tenant_id=d.tenant_id AND q.draft_id=d.id
     WHERE d.tenant_id=$1 AND d.owner_id=$2 AND d.state<>'discarded'
@@ -257,6 +264,7 @@ export class PgStatusPromotions {
   return {drafts:r.rows.map(x=>({draftId:String(x.id),state:String(x.state),
    version:count(x.version),body:String(x.body),targetViews:count(x.target_views),
    destinationUrl:x.destination_url??null,campaignExpiresAt:x.campaign_expires_at??null,
+   mediaIds:x.media_ids??[],
    quoteId:x.quote_id??null,updatedAt:x.updated_at}))};
  }
  async discardDraft(t:string,owner:string,id:string){actor(t,owner);identifier(id);
@@ -281,12 +289,19 @@ export class PgStatusPromotions {
       AND account_id=$2 AND NOT frozen`,[t,owner]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    if(!row&&d.state!=='draft')fail('draft_not_quotable',409);
+   const mediaIds=Array.isArray(d.media_ids)?d.media_ids as string[]:[];
+   if(!row&&mediaIds.length){
+    const ready=await c.query(`SELECT count(*)::int AS n FROM feed.paid_image_uploads
+      WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+       AND state='ready' AND post_id IS NULL`,[t,owner,mediaIds]);
+    if(Number(ready.rows[0]?.n)!==mediaIds.length)fail('paid_image_not_owned_or_ready',403);
+   }
    if(!row&&d.campaign_expires_at&&new Date(d.campaign_expires_at).getTime()<=Date.now()+3600000)
     fail('campaign_expiry_too_soon',409);
    const q=row??(await c.query(`INSERT INTO feed.promotion_quotes
-    (tenant_id,sponsor_id,kind,body,target_views,destination_url,draft_id,campaign_expires_at)
-    VALUES($1,$2,'human_primary',$3,$4,$5,$6,$7) RETURNING *`,
-    [t,owner,d.body,d.target_views,d.destination_url,id,d.campaign_expires_at])).rows[0];
+    (tenant_id,sponsor_id,kind,body,target_views,destination_url,draft_id,campaign_expires_at,media_ids)
+    VALUES($1,$2,'human_primary',$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [t,owner,d.body,d.target_views,d.destination_url,id,d.campaign_expires_at,mediaIds])).rows[0];
    if(!row)await c.query(`UPDATE feed.promotion_drafts SET state='quoted',
     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
    return {quoteId:String(q.id),draftId:id,expiresAt:q.expires_at,
