@@ -8,6 +8,8 @@ export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; pe
 export interface Post {id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean;
  verifiedViewCount?:number;promotionDeliveredViews?:number;promotionActive?:boolean;destinationUrl?:string|null;shareEarnEligible?:boolean;boostEligible?:boolean;
  viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>;
+ ownerCanonicalId?:string;disclosure?:"paid_promotion"|null;
+ moderationState?:"approved";campaignId?:string|null;
  author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId?:string|null;
  author?:{type:"human";id:string;handle:string;displayName:string}|null}
