@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
@@ -34,6 +35,17 @@ class _StaleImageGrants implements FeedMediaApi {
   @override Future<FeedMediaGrant> getGrant(String postId, String mediaId) {
     requests++;
     return requests == 1 ? first.future : second.future;
+  }
+}
+
+class _OfflineImageGrant implements FeedMediaApi {
+  int attempts=0;
+  @override Future<FeedMediaGrant> getGrant(String postId,String mediaId) async {
+    attempts++;
+    throw DioException(
+      requestOptions:RequestOptions(path:'/v1/posts/$postId/media/$mediaId'),
+      type:DioExceptionType.connectionError,
+    );
   }
 }
 
@@ -83,6 +95,8 @@ void main() {
             matching:find.byType(TextButton),
           );
           expect(socialActions,findsNWidgets(3));
+          expect(find.byTooltip(ha?'Raba':'Share'),findsOneWidget);
+          expect(find.byTooltip(ha?'Sharhi':'Comment'),findsOneWidget);
           for(final action in socialActions.evaluate()){
             expect(action.size!.height,greaterThanOrEqualTo(48));
           }
@@ -129,5 +143,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('second-owner.example.test'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('offline authorized-image failure is retryable, semantic and never a fake original',
+      (tester) async {
+    final semantics=tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    final offline=_OfflineImageGrant();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:
+      FeedInlineMediaCard(
+        api:offline,
+        accountKey:'authorized-owner',
+        postId:'post',mediaId:'image',mediaCount:1,
+        renderer:(_)=>const Text('Never present an offline original'),
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Image unavailable · retry preview'),findsOneWidget);
+    expect(find.text('Never present an offline original'),findsNothing);
+    expect(find.byType(CircularProgressIndicator),findsNothing);
+    expect(find.bySemanticsLabel(RegExp('Image unavailable')),findsOneWidget);
+    expect(find.byTooltip('Image unavailable · retry preview'),findsNothing,
+      reason:'Retry is a visible labelled button, not a hidden icon');
+    expect(offline.attempts,1);
+    await tester.tap(find.text('Image unavailable · retry preview'));
+    await tester.pumpAndSettle();
+    expect(offline.attempts,2,
+      reason:'Retry asks for a fresh scoped grant instead of displaying stale bytes');
+    expect(find.text('Never present an offline original'),findsNothing);
+    expect(tester.takeException(),isNull);
   });
 }
