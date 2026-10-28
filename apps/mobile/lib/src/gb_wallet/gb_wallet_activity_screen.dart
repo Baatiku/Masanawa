@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import 'gb_promotion_journal.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
 import 'gb_wallet_holds_panel.dart';
@@ -172,7 +173,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   String _unit='all';
   int _days=7;
   String _purpose='all',_status='all',_direction='all',_period='all',_reference='';
-  bool _badReference=false,_showFacets=false;
+  bool _badReference=false,_showFacets=false,_showPromotionHistory=false;
   final _referenceInput=TextEditingController();
 
   GbActivityFilters get _facets=>(purpose:_purpose,status:_status,
@@ -240,12 +241,16 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     if(owner!=_owner){
       _reset();_owner=owner;_unit='all';_days=7;_purpose='all';
       _status='all';_direction='all';_period='all';_reference='';
-      _badReference=false;_showFacets=false;_referenceInput.clear();
+      _badReference=false;_showFacets=false;_showPromotionHistory=false;
+      _referenceInput.clear();
     }
     final request=owner==null?null:(owner:owner,limit:20,unit:_unit,filters:_facets);
     final first=request==null?null:ref.watch(gbActivityPageProvider(request));
     final summaryRequest=owner==null?null:(owner:owner,days:_days);
     final summary=summaryRequest==null?null:ref.watch(gbActivitySummaryProvider(summaryRequest));
+    final promotion=owner==null||!_showPromotionHistory?null:
+      ref.watch(gbPromotionJournalProvider(owner));
+    final promotionJournal=promotion?.valueOrNull;
     final totals=summary?.valueOrNull;
     final initial=first?.valueOrNull;
     final entries=<GbActivityItem>[
@@ -261,6 +266,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       RefreshIndicator(onRefresh:() async {
         setState(_reset);
         ref.invalidate(gbActivityPageProvider(request!));
+        ref.invalidate(gbPromotionJournalProvider(owner));
         try{await ref.read(gbActivityPageProvider(request).future);}catch(_){/* retry state below */}
       },child:ListView(
         key:const PageStorageKey('gb-wallet-activity-all'),
@@ -270,6 +276,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           const Padding(padding:EdgeInsets.only(bottom:12),
             child:Text('Posted MB and NGN movements. Pending authorizations and '
               'reservations are not counted as completed payments.')),
+          const SizedBox(height:8),
           SingleChildScrollView(
             key:const ValueKey('wallet-activity-unit-filters'),
             scrollDirection:Axis.horizontal,
@@ -465,6 +472,56 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
             Center(child:TextButton.icon(
               onPressed:()=>_loadMore(owner,cursor),
               icon:const Icon(Icons.expand_more),label:const Text('Load more activity'))),
+          const Divider(height:24),
+          ListTile(
+            key:const ValueKey('wallet-promotion-history-toggle'),
+            title:const Text('Promotions & Share earnings'),
+            subtitle:const Text('Review reserved, spent and pending MB separately from posted activity.'),
+            trailing:Icon(_showPromotionHistory?Icons.expand_less:Icons.expand_more),
+            onTap:()=>setState(()=>_showPromotionHistory=!_showPromotionHistory)),
+          if(_showPromotionHistory && promotion?.isLoading==true)
+            const ListTile(title:Text('Loading private promotion history…')),
+          if(promotionJournal!=null &&
+              (promotionJournal.campaigns.isNotEmpty ||
+                promotionJournal.earnings.isNotEmpty))
+          Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            Text('Promotions & Share earnings',
+              style:Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height:4),
+            const Text('Review-only campaign activity. Reserved MB is not spent; '
+              'pending referral earnings are not redeemable or included in your balance.'),
+            ...[
+              for(final c in promotionJournal.campaigns.take(5))
+                ListTile(
+                  key:ValueKey('wallet-promotion-${c.id}'),
+                  leading:const Icon(Icons.campaign_outlined),
+                  title:Text('${c.isBoost?'Boost':'Promotion'} · ${c.state}'),
+                  subtitle:Text('${c.deliveredViews}/${c.targetViews} qualified views · '
+                    '${c.spentMb} MB delivered\n'
+                    '${c.reservedMb} MB still reserved · '
+                    '${c.refundedUnusedMb} MB released\n'
+                    'Campaign: ${c.id}'),
+                  isThreeLine:true),
+              for(final e in promotionJournal.earnings.take(5))
+                ListTile(key:ValueKey('wallet-referral-${e.postId}'),
+                  leading:const Icon(Icons.hourglass_bottom_outlined),
+                  title:Text('${e.views} referred qualified views'),
+                  subtitle:Text('${e.pendingMbLabel}\nPost: ${e.postId}'),
+                  isThreeLine:true),
+              if(promotionJournal.campaigns.length>5||
+                  promotionJournal.earnings.length>5)
+                const ListTile(title:Text('More campaign details are available in Home → My promotions.')),
+            ],
+          ]))),
+          if(_showPromotionHistory && promotionJournal!=null &&
+              promotionJournal.campaigns.isEmpty && promotionJournal.earnings.isEmpty)
+            const ListTile(title:Text('No funded campaigns or referral allocations yet.')),
+          if(_showPromotionHistory && promotion?.hasError==true)
+            ListTile(title:const Text('Promotion history unavailable.'),
+              subtitle:const Text('Posted MB and NGN activity remains available.'),
+              trailing:TextButton(onPressed:()=>ref.invalidate(gbPromotionJournalProvider(owner)),
+                child:const Text('Retry promotion history'))),
         ],
       )),
     );
