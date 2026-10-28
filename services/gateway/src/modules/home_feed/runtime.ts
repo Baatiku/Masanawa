@@ -20,8 +20,10 @@ export interface StatusRuntime {
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
  publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>;
-    validReferral?(id:string,token:string):Promise<boolean>};
-   enabled:()=>boolean;publicBaseUrl?:string};
+    validReferral?(id:string,token:string):Promise<boolean>;
+    readApprovedImage?(postId:string,mediaId:string):Promise<{
+      bytes:Buffer;contentType:'image/webp'}|null>};
+   enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string};
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */

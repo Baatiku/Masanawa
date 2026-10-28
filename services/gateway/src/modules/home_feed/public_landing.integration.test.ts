@@ -6,6 +6,8 @@ import {PgPublicStatusLanding} from './public_landing.js';
 const masa='27c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const paid='87c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const hidden='97c63eb3-0f5e-4849-8670-2eb62c8406bf';
+const image='a7c63eb3-0f5e-4849-8670-2eb62c8406bf';
+const humanImage='b7c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const campaign='37c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const token='TestValidForwardedLink0123456789abcdef';
 
@@ -28,6 +30,9 @@ describe('public Status unfurls only approved globally public funded content',()
    CREATE TABLE identity.characters(tenant_id text,character_id text,state text);
    CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text);
    CREATE TABLE masana.character_revisions(tenant_id text,character_id text,state text,profile jsonb);
+   CREATE TABLE masana.character_media(tenant_id text,character_id text,media_id text,
+    kind text,object_key text,rights_note text,approved_by text,status_alt_text text,
+    status_alt_approved_by text,status_alt_approved_at timestamptz);
    CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
    CREATE TABLE talks.safety_enforcement(tenant_id text,target_kind text,target_id text,visibility text);
    INSERT INTO identity.users VALUES('tenant','member','active');
@@ -38,9 +43,15 @@ describe('public Status unfurls only approved globally public funded content',()
    INSERT INTO feed.posts VALUES
      ('${masa}','tenant','published','text','Approved public lesson',ARRAY[]::text[],NULL,'masana',NULL,'teacher','public'),
      ('${paid}','tenant','published','text','Funded human lesson',ARRAY[]::text[],NULL,'human','member',NULL,'public'),
-     ('${hidden}','tenant','published','text','Private draft',ARRAY[]::text[],NULL,'human','member',NULL,'private');
+     ('${hidden}','tenant','published','text','Private draft',ARRAY[]::text[],NULL,'human','member',NULL,'private'),
+     ('${image}','tenant','published','image','Rights-cleared editorial image',ARRAY['media_approved']::text[],NULL,'masana',NULL,'teacher','public'),
+     ('${humanImage}','tenant','published','image','Human image awaiting independent review',ARRAY['media_human']::text[],NULL,'human','member',NULL,'public');
+   INSERT INTO masana.character_media VALUES
+     ('tenant','teacher','media_approved','cover','private/teacher/approved.webp',
+      'Verified licensed image','editor','A teacher at a desk with a book','reviewer',now());
    INSERT INTO feed.promotion_campaigns VALUES
      ('tenant','${campaign}','${paid}','active',2),
+     ('tenant','57c63eb3-0f5e-4849-8670-2eb62c8406bf','${humanImage}','active',2),
      ('tenant','47c63eb3-0f5e-4849-8670-2eb62c8406bf','${hidden}','active',2);`);
   await db.query(`INSERT INTO feed.share_links VALUES($1,$2,$3,$4,NULL)`,
    ['tenant',paid,campaign,createHash('sha256').update(token).digest('hex')]);
@@ -52,6 +63,24 @@ describe('public Status unfurls only approved globally public funded content',()
   expect(await repository.find(paid)).toMatchObject({id:paid,name:'Amina'});
   expect(await repository.find(hidden)).toBeNull();
   expect(await repository.find('not-an-id')).toBeNull();
+ });
+ it('offers only separately rights-cleared and alt-reviewed platform media',async()=>{
+  expect(await repository.find(image)).toMatchObject({id:image,kind:'image',
+   imagePreview:{id:'media_approved',altText:'A teacher at a desk with a book'}});
+  expect(await repository.findApprovedImage(image,'media_approved')).toEqual({
+   objectKey:'private/teacher/approved.webp'});
+  expect(await repository.find(humanImage)).toMatchObject({id:humanImage,
+   kind:'image',imageCount:1});
+  expect(await repository.find(humanImage)).not.toHaveProperty('imagePreview');
+  expect(await repository.findApprovedImage(humanImage,'media_human')).toBeNull();
+  expect(await repository.findApprovedImage(image,'../../private')).toBeNull();
+  await db.query('UPDATE masana.character_media SET status_alt_approved_at=NULL');
+  expect(await repository.findApprovedImage(image,'media_approved')).toBeNull();
+  expect(await repository.find(image)).not.toHaveProperty('imagePreview');
+  await db.query('UPDATE masana.character_media SET status_alt_approved_at=now()');
+  await db.query("UPDATE feed.posts SET state='hidden' WHERE id=$1",[image]);
+  expect(await repository.findApprovedImage(image,'media_approved')).toBeNull();
+  await db.query("UPDATE feed.posts SET state='published' WHERE id=$1",[image]);
  });
  it('hides human posts the instant budgets exhaust or profile moderation intervenes',async()=>{
   expect(await repository.validReferral(paid,token)).toBe(true);

@@ -15,6 +15,43 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(html).toContain('og:description');
   expect(html).toContain('?r=opaqueAlphaBeta012345678901');
  });
+ it('unfurls only explicitly reviewed imagery as a same-origin crawler asset',()=>{
+  const html=renderPublicStatusPage({id,name:'Teacher & Sons',
+   body:'Reviewed image',kind:'image',imageCount:1,
+   imagePreview:{id:'verified_media',altText:'A <book> on a table'}},undefined,
+   'https://status.example.test',true);
+  expect(html).toContain('og:image:type" content="image/webp"');
+  expect(html).toContain(`https://status.example.test/status/${id}/image/verified_media`);
+  expect(html).toContain('alt="A &lt;book&gt; on a table"');
+  expect(html).not.toContain('private/');
+  expect(renderPublicStatusPage({id,name:'Teacher',body:'Unreviewed',
+   kind:'image',imageCount:1},undefined,'https://status.example.test',true))
+   .not.toContain('og:image"');
+  expect(renderPublicStatusPage({id,name:'Teacher',body:'Approved',
+   kind:'image',imageCount:1,imagePreview:{id:'verified_media',altText:'A book'}},
+   undefined,'https://status.example.test',false)).not.toContain('og:image"');
+ });
+ it('serves approved sanitized image bytes only when both gates permit it',async()=>{
+  const image=Buffer.from('RIFFfakewebp');
+  const readApprovedImage=vi.fn(async()=>({bytes:image,contentType:'image/webp' as const}));
+  const app=Fastify();
+  await registerPublicStatusLanding(app,{port:{find:async()=>null,readApprovedImage},
+   enabled:()=>true,imagesEnabled:()=>true});
+  const served=await app.inject({url:`/status/${id}/image/verified_media`});
+  expect(served.statusCode).toBe(200);
+  expect(served.headers['content-type']).toContain('image/webp');
+  expect(served.headers['cache-control']).toBe('no-store');
+  expect(served.rawPayload).toEqual(image);
+  expect(readApprovedImage).toHaveBeenCalledWith(id,'verified_media');
+  await app.close();
+  const disabled=Fastify();
+  const noAccess=vi.fn();
+  await registerPublicStatusLanding(disabled,{port:{find:async()=>null,
+   readApprovedImage:noAccess},enabled:()=>true,imagesEnabled:()=>false});
+  expect((await disabled.inject({url:`/status/${id}/image/verified_media`})).statusCode).toBe(404);
+  expect(noAccess).not.toHaveBeenCalled();
+  await disabled.close();
+ });
  it('rejects unknown, purged and feature-disabled content without billing or reflecting forged tokens',async()=>{
   const find=vi.fn(async(post:string)=>post===id?
    {id,name:'Teacher',body:'Approved lesson',kind:'text' as const,imageCount:0}:null);
