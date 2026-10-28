@@ -139,4 +139,26 @@ describe('SPE promotion routes inherit the established principal and staff autho
   await server.close();
  });
 
+ it('keeps historical appeals available under the money kill switch and independent staff reviews',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'owner'}),
+   isEditor:async()=>true,enabled:()=>false});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/appeal',
+   payload:{reason:'short'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/appeal',
+   payload:{reason:'This content was misunderstood'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/promotions/appeals/mine'})).json())
+   .toEqual({appeals:[]});
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/appeals'})).json())
+   .toEqual({pending:[]});
+  const resolve=await server.inject({method:'POST',
+   url:'/v1/admin/promotions/appeals/appeal/resolve',
+   payload:{decision:'accept',reason:'Corrected on review'}});
+  expect(resolve.json()).toMatchObject({campaignReactivated:false});
+  expect(events).toContainEqual(['appeal','tenant','owner','campaign','This content was misunderstood']);
+  expect(events).toContainEqual(['resolve','tenant','owner','appeal',true,'Corrected on review']);
+  await server.close();
+ });
+
 });
