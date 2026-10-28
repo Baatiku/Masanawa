@@ -112,13 +112,13 @@ class GbWalletScreen extends ConsumerWidget {
               children: [
                 _WalletShortcut(
                   width: tileWidth,
-                  label: 'Redeem',
+                  label: 'Redeem Data',
                   icon: Icons.sim_card_outlined,
                   onTap: () => context.go('/home?tab=data'),
                 ),
                 _WalletShortcut(
                   width: tileWidth,
-                  label: 'Add data',
+                  label: 'Buy Data',
                   icon: Icons.add_circle_outline_rounded,
                   onTap: () => context.push('/wallet/add'),
                 ),
@@ -233,24 +233,41 @@ class _WalletShortcut extends StatelessWidget {
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-            child: Row(children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: colors.brand.withValues(alpha: .12),
-                child: Icon(icon, size: 21,
-                    color: onTap == null ? colors.textMuted : colors.brand),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(label, maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700)),
-              ),
-              if (onTap == null)
-                Icon(Icons.lock_outline_rounded,
-                  color: colors.textMuted, size: 14),
-            ]),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked =
+                    width < 155 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                final avatar = CircleAvatar(
+                  radius: 18,
+                  backgroundColor: colors.brand.withValues(alpha: .10),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: onTap == null ? colors.textMuted : colors.brand,
+                  ),
+                );
+                final text = Text(
+                  label,
+                  textAlign: stacked ? TextAlign.center : TextAlign.start,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                );
+                return stacked
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [avatar, const SizedBox(height: 9), text],
+                      )
+                    : Row(
+                        children: [
+                          avatar,
+                          const SizedBox(width: 9),
+                          Expanded(child: text),
+                        ],
+                      );
+              },
+            ),
           ),
         ),
       ),

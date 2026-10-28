@@ -82,35 +82,130 @@ List<Widget> _datedActivityTiles(BuildContext context,Iterable<GbActivityItem> i
 }
 
 class GbActivityTile extends StatelessWidget {
-  const GbActivityTile({super.key,required this.item});
+  const GbActivityTile({super.key, required this.item});
   final GbActivityItem item;
   @override
   Widget build(BuildContext context) {
-    final colors=context.masanawa;
-    final positive=item.amount>0;
-    final date=MaterialLocalizations.of(context)
-      .formatMediumDate(item.createdAt.toLocal());
-    final time=TimeOfDay.fromDateTime(item.createdAt.toLocal()).format(context);
-    final title=item.title;
-    return ListTile(
-      key:ValueKey('activity-${item.id}'),
-      onTap:()=>context.push('/wallet/activity/${Uri.encodeComponent(item.id)}'),
-      contentPadding:const EdgeInsets.symmetric(horizontal:4,vertical:3),
-      leading:CircleAvatar(
-        backgroundColor:(positive?colors.brand:colors.textMuted).withValues(alpha:.12),
-        child:Icon(positive?Icons.south_west_rounded:Icons.north_east_rounded,
-          color:positive?colors.brand:colors.textPrimary,size:21)),
-      title:Text(title,maxLines:2,overflow:TextOverflow.ellipsis),
-      subtitle:Text('$date · $time · ${item.status == 'reversed'?'Reversed':'Posted'}\n'
-        '${item.details?.counterpartyLabel==null?'':'${item.details!.counterpartyLabel}\n'}'
-        'Ref: ${item.operationId}',maxLines:3,overflow:TextOverflow.ellipsis),
-      isThreeLine:true,
-      trailing:ConstrainedBox(
-        constraints:const BoxConstraints(maxWidth:140),
-        child:Text(_amountText(item),textAlign:TextAlign.end,
-          softWrap:true,style:Theme.of(context).textTheme.titleSmall?.copyWith(
-            color:positive?colors.brandStrong:colors.textPrimary,
-            fontWeight:FontWeight.w700))),
+    final colors = context.masanawa;
+    final positive = item.amount > 0;
+    final date = MaterialLocalizations.of(
+      context,
+    ).formatMediumDate(item.createdAt.toLocal());
+    final time = TimeOfDay.fromDateTime(
+      item.createdAt.toLocal(),
+    ).format(context);
+    final status = item.status == 'reversed' ? 'Reversed' : 'Successful';
+    final counterparty =
+        item.details?.counterpartyName ?? item.details?.counterpartyHandle;
+    final title = counterparty == null
+        ? item.title
+        : '${item.title} · $counterparty';
+    final icon = switch (item.kind) {
+      'deposit' || 'verified_deposit' => Icons.south_west_rounded,
+      'exchange' || 'ngn_exchange' => Icons.swap_horiz_rounded,
+      'redeem' => Icons.sim_card_outlined,
+      'tip' => Icons.favorite_border_rounded,
+      'reply' => Icons.chat_bubble_outline_rounded,
+      'connected_call' => Icons.call_outlined,
+      'reversal' || 'deposit_reversal' => Icons.undo_rounded,
+      _ => positive ? Icons.south_west_rounded : Icons.north_east_rounded,
+    };
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color:
+            (item.status == 'reversed'
+                    ? Theme.of(context).colorScheme.error
+                    : colors.brand)
+                .withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: item.status == 'reversed'
+              ? Theme.of(context).colorScheme.error
+              : colors.brandStrong,
+        ),
+      ),
+    );
+    final amount = Text(
+      _amountText(item),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.end,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: positive ? colors.brandStrong : colors.textPrimary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('activity-${item.id}'),
+        onTap: () =>
+            context.push('/wallet/activity/${Uri.encodeComponent(item.id)}'),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 13),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked =
+                  constraints.maxWidth < 300 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.brand.withValues(alpha: .09),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: colors.brand, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '$date · $time',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.textMuted),
+                        ),
+                        if (stacked) ...[
+                          const SizedBox(height: 8),
+                          amount,
+                          const SizedBox(height: 4),
+                          badge,
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (!stacked) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [amount, const SizedBox(height: 5), badge],
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }
@@ -126,7 +221,7 @@ class GbWalletActivitySection extends ConsumerWidget {
       unit:'all',filters:gbActivityAllFilters)));
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Row(children:[
-        Expanded(child:Text('Activity',style:Theme.of(context).textTheme.titleMedium?.copyWith(
+        Expanded(child:Text('Recent transactions',style:Theme.of(context).textTheme.titleMedium?.copyWith(
           fontWeight:FontWeight.w700))),
         TextButton.icon(
           onPressed:owner==null?null:()=>context.push('/wallet/activity'),
@@ -160,7 +255,8 @@ class GbWalletActivitySection extends ConsumerWidget {
 class GbWalletActivityScreen extends ConsumerStatefulWidget {
   const GbWalletActivityScreen({super.key});
   @override
-  ConsumerState<GbWalletActivityScreen> createState()=>_GbWalletActivityScreenState();
+  ConsumerState<GbWalletActivityScreen> createState() =>
+      _GbWalletActivityScreenState();
 }
 
 class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen> {
@@ -238,266 +334,654 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
 
   @override
   Widget build(BuildContext context) {
-    final owner=_ownerFor(ref);
-    if(owner!=_owner){
-      _reset();_owner=owner;_unit='all';_days=7;_purpose='all';
-      _status='all';_direction='all';_period='all';_reference='';
-      _badReference=false;_showFacets=false;_showPromotionHistory=false;
+    final owner = _ownerFor(ref);
+    if (owner != _owner) {
+      _reset();
+      _owner = owner;
+      _unit = 'all';
+      _days = 7;
+      _purpose = 'all';
+      _status = 'all';
+      _direction = 'all';
+      _period = 'all';
+      _reference = '';
+      _badReference = false;
+      _showFacets = false;
+      _showPromotionHistory = false;
       _referenceInput.clear();
     }
-    final request=owner==null?null:(owner:owner,limit:20,unit:_unit,filters:_facets);
-    final first=request==null?null:ref.watch(gbActivityPageProvider(request));
-    final summaryRequest=owner==null?null:(owner:owner,days:_days);
-    final summary=summaryRequest==null?null:ref.watch(gbActivitySummaryProvider(summaryRequest));
-    final promotion=owner==null||!_showPromotionHistory?null:
-      ref.watch(gbPromotionJournalProvider(owner));
-    final promotionJournal=promotion?.valueOrNull;
-    final totals=summary?.valueOrNull;
-    final initial=first?.valueOrNull;
-    final entries=<GbActivityItem>[
+    final request = owner == null
+        ? null
+        : (owner: owner, limit: 20, unit: _unit, filters: _facets);
+    final first = request == null
+        ? null
+        : ref.watch(gbActivityPageProvider(request));
+    final summaryRequest = owner == null ? null : (owner: owner, days: _days);
+    final summary = summaryRequest == null
+        ? null
+        : ref.watch(gbActivitySummaryProvider(summaryRequest));
+    final promotion = owner == null || !_showPromotionHistory
+        ? null
+        : ref.watch(gbPromotionJournalProvider(owner));
+    final promotionJournal = promotion?.valueOrNull;
+    final totals = summary?.valueOrNull;
+    final initial = first?.valueOrNull;
+    final entries = <GbActivityItem>[
       ...?initial?.items,
-      if(initial!=null)..._more,
+      if (initial != null) ..._more,
     ];
-    final byId=<String,GbActivityItem>{};
-    for(final entry in entries)byId.putIfAbsent(entry.id,()=>entry);
-    final cursor=_loadedMore?_next:initial?.nextCursor;
+    final byId = <String, GbActivityItem>{};
+    for (final entry in entries) byId.putIfAbsent(entry.id, () => entry);
+    final cursor = _loadedMore ? _next : initial?.nextCursor;
     return Scaffold(
-      appBar:AppBar(title:const Text('Wallet activity')),
-      body:owner==null?const Center(child:Text('Sign in to view wallet activity.')):
-      RefreshIndicator(onRefresh:() async {
-        setState(_reset);
-        ref.invalidate(gbActivityPageProvider(request!));
-        ref.invalidate(gbPromotionJournalProvider(owner));
-        try{await ref.read(gbActivityPageProvider(request).future);}catch(_){/* retry state below */}
-      },child:ListView(
-        key:const PageStorageKey('gb-wallet-activity-all'),
-        physics:const AlwaysScrollableScrollPhysics(),
-        padding:const EdgeInsets.fromLTRB(16,12,16,32),
-        children:[
-          const Padding(padding:EdgeInsets.only(bottom:12),
-            child:Text('Posted MB and NGN movements. Pending authorizations and '
-              'reservations are not counted as completed payments.')),
-          const SizedBox(height:8),
-          SingleChildScrollView(
-            key:const ValueKey('wallet-activity-unit-filters'),
-            scrollDirection:Axis.horizontal,
-            child:Row(children:[
-              for(final choice in const <String,String>{
-                'all':'All activity','MB':'Data MB','NGN':'Naira NGN',
-              }.entries)
-                Padding(padding:const EdgeInsetsDirectional.only(end:8),
-                  child:ChoiceChip(
-                    key:ValueKey('activity-unit-${choice.key}'),
-                    label:Text(choice.value),selected:_unit==choice.key,
-                    onSelected:(_){if(_unit==choice.key)return;
-                      setState((){_reset();_unit=choice.key;});},
-                  )),
-            ])),
-          Wrap(crossAxisAlignment:WrapCrossAlignment.center,children:[
-            TextButton.icon(
-              key:const ValueKey('activity-toggle-more-filters'),
-              onPressed:()=>setState(()=>_showFacets=!_showFacets),
-              icon:Icon(_showFacets?Icons.keyboard_arrow_up:Icons.tune),
-              label:Text(_showFacets?'Hide filters':'More filters')),
-            if(_filtered)const Padding(padding:EdgeInsetsDirectional.only(start:8),
-              child:Text('Filtered',semanticsLabel:'History filters are active')),
-          ]),
-          if(_showFacets)...[
-          const SizedBox(height:8),
-          Text('Purpose',style:Theme.of(context).textTheme.labelLarge),
-          SingleChildScrollView(scrollDirection:Axis.horizontal,
-            key:const ValueKey('activity-purpose-filters'),
-            child:Row(children:[
-              for(final choice in const <String,String>{
-                'all':'Any purpose','funding':'Funding','transfers':'Transfers',
-                'masana':'Masana usage','data':'Data','reversals':'Reversals',
-                'other':'Other',
-              }.entries)
-                Padding(padding:const EdgeInsetsDirectional.only(end:6),
-                  child:ChoiceChip(key:ValueKey('activity-purpose-${choice.key}'),
-                    label:Text(choice.value),selected:_purpose==choice.key,
-                    onSelected:(_){if(_purpose!=choice.key)setState((){
-                      _reset();_purpose=choice.key;
-                    });})),
-            ])),
-          const SizedBox(height:10),
-          Text('Posting status',style:Theme.of(context).textTheme.labelLarge),
-          SingleChildScrollView(scrollDirection:Axis.horizontal,
-            child:Row(children:[
-              for(final choice in const <String,String>{
-                'all':'Any status','completed':'Posted','reversed':'Reversed',
-              }.entries)
-                Padding(padding:const EdgeInsetsDirectional.only(end:6),
-                  child:ChoiceChip(key:ValueKey('activity-status-${choice.key}'),
-                    label:Text(choice.value),selected:_status==choice.key,
-                    onSelected:(_){if(_status!=choice.key)setState((){
-                      _reset();_status=choice.key;
-                    });})),
-            ])),
-          const SizedBox(height:10),
-          Text('Direction',style:Theme.of(context).textTheme.labelLarge),
-          SingleChildScrollView(scrollDirection:Axis.horizontal,
-            child:Row(children:[
-              for(final choice in const <String,String>{
-                'all':'In & out','incoming':'Received','outgoing':'Spent',
-              }.entries)
-                Padding(padding:const EdgeInsetsDirectional.only(end:6),
-                  child:ChoiceChip(key:ValueKey('activity-direction-${choice.key}'),
-                    label:Text(choice.value),selected:_direction==choice.key,
-                    onSelected:(_){if(_direction!=choice.key)setState((){
-                      _reset();_direction=choice.key;
-                    });})),
-            ])),
-          const SizedBox(height:10),
-          Text('History period',style:Theme.of(context).textTheme.labelLarge),
-          SingleChildScrollView(scrollDirection:Axis.horizontal,
-            child:Row(children:[
-              for(final choice in const <String,String>{
-                'all':'All dates','7':'Last 7 days','30':'Last 30 days',
-              }.entries)
-                Padding(padding:const EdgeInsetsDirectional.only(end:6),
-                  child:ChoiceChip(key:ValueKey('activity-history-${choice.key}'),
-                    label:Text(choice.value),selected:_period==choice.key,
-                    onSelected:(_){if(_period!=choice.key)setState((){
-                      _reset();_period=choice.key;
-                    });})),
-            ])),
-          const SizedBox(height:10),
-          Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Expanded(child:TextField(
-              key:const ValueKey('activity-reference-input'),
-              controller:_referenceInput,maxLength:160,
-              textInputAction:TextInputAction.search,
-              decoration:InputDecoration(
-                labelText:'Exact operation reference',
-                hintText:'Paste original reference',
-                errorText:_badReference?'Use letters, numbers, _, ., : or -':null,
-                border:const OutlineInputBorder(),
-                isDense:true),
-              onChanged:(_){if(_badReference)setState(()=>_badReference=false);},
-              onSubmitted:(_)=>_submitReference())),
-            const SizedBox(width:8),
-            Padding(padding:const EdgeInsets.only(top:4),
-              child:IconButton.filledTonal(
-                key:const ValueKey('activity-reference-submit'),
-                tooltip:'Find exact operation',onPressed:_submitReference,
-                icon:const Icon(Icons.search))),
-          ]),
-          ],
-          if(_filtered)Align(alignment:AlignmentDirectional.centerEnd,
-            child:TextButton.icon(onPressed:_clearFilters,
-              icon:const Icon(Icons.filter_alt_off),label:const Text('Clear filters'))),
-          const SizedBox(height:12),
-          Card(child:Padding(padding:const EdgeInsets.all(14),
-            child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-              Text('Posted activity totals',style:Theme.of(context).textTheme.titleMedium),
-              const Text('These totals cover all purposes and statuses for the selected totals period, '
-                'independently of history filters. MB and NGN are never combined.'),
-              const SizedBox(height:8),
-              Wrap(spacing:8,runSpacing:4,children:[
-                for(final days in const [7,30])
-                  ChoiceChip(key:ValueKey('activity-period-$days'),
-                    label:Text('Last $days days'),selected:_days==days,
-                    onSelected:(_){if(_days!=days)setState(()=>_days=days);}),
-              ]),
-              if(totals==null && summary?.isLoading==true)
-                const Padding(padding:EdgeInsets.all(12),
-                  child:LinearProgressIndicator(semanticsLabel:'Loading period totals')),
-              if(totals==null && summary?.isLoading!=true)
-                Row(children:[
-                  const Expanded(child:Text('Period totals unavailable. No zero balance is assumed.')),
-                  TextButton(onPressed:()=>ref.invalidate(gbActivitySummaryProvider(summaryRequest!)),
-                    child:const Text('Retry totals')),
-                ]),
-              if(totals!=null)...[
-                Text('UTC ${totals.fromAt.toIso8601String()} – '
-                  '${totals.toAt.toIso8601String()}',
-                  style:Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height:12),
-                Text('Data MB',style:Theme.of(context).textTheme.titleSmall),
-                Wrap(spacing:18,runSpacing:8,children:[
-                  Text('Received: +${_groupActivity(totals.mb.received)} MB'),
-                  Text('Used: −${_groupActivity(totals.mb.spent)} MB'),
-                ]),
-                const SizedBox(height:10),
-                Text('Naira NGN',style:Theme.of(context).textTheme.titleSmall),
-                Wrap(spacing:18,runSpacing:8,children:[
-                  Text('Received: +${_ngnActivity(totals.ngn.received)}'),
-                  Text('Spent: −${_ngnActivity(totals.ngn.spent)}'),
-                ]),
-                ExpansionTile(key:PageStorageKey(('activity-balance-details',owner,_days)),
-                  tilePadding:EdgeInsets.zero,childrenPadding:const EdgeInsets.only(bottom:8),
-                  title:const Text('Balance details'),subtitle:Text(_balanceStatus(totals.reconciliation)),
-                  expandedCrossAxisAlignment:CrossAxisAlignment.start,
-                  children:[
-                    _balanceCheck(context,'MB',totals.reconciliation?.mb),
-                    const SizedBox(height:10),
-                    _balanceCheck(context,'NGN',totals.reconciliation?.ngn),
-                    const SizedBox(height:8),
-                    const Text('This checks internal posted balances, not external bank settlement or data delivery. Account and welcome-credit restrictions still apply.'),
-                  ]),
-              ],
-            ]))),
-          const SizedBox(height:12),
-          GbWalletHoldsPanel(key:ValueKey(('wallet-holds',owner)),owner:owner),
-          const SizedBox(height:12),
-          if(initial==null && first?.isLoading==true)
-            const ListTile(title:Text('Loading verified activity…'),
-              leading:CircularProgressIndicator()),
-          if(initial==null && first?.hasError==true)
-            ListTile(title:const Text('Could not verify wallet activity.'),
-              subtitle:const Text('Previous balances and funds are unchanged.'),
-              trailing:IconButton(icon:const Icon(Icons.refresh),
-                tooltip:'Retry wallet activity',onPressed:()=>
-                  ref.invalidate(gbActivityPageProvider(request!)))),
-          if(initial!=null && byId.isEmpty)
-            Padding(padding:const EdgeInsets.all(24),
-              child:Column(children:[
-                Text(_filtered?'No posted activity matches these filters.':
-                  'No posted MB or NGN activity yet.'),
-                if(_filtered)TextButton(onPressed:_clearFilters,
-                  child:const Text('Clear filters and show all')),
-              ])),
-          if(byId.isNotEmpty)Padding(padding:const EdgeInsetsDirectional.fromSTEB(4,10,4,0),
-            child:Text('${byId.length} verified ${byId.length==1?'entry':'entries'} loaded'
-              '${cursor!=null?' · more available':''}',
-              style:Theme.of(context).textTheme.bodySmall)),
-          ..._datedActivityTiles(context,byId.values),
-          if(_pageError && initial!=null)ListTile(
-            title:const Text('Could not load more activity. Previous rows are retained.'),
-            trailing:IconButton(tooltip:'Retry loading activity',
-              icon:const Icon(Icons.refresh),onPressed:cursor==null?null:()=>_loadMore(owner,cursor))),
-          if(_loadingMore && initial!=null)
-            const LinearProgressIndicator(semanticsLabel:'Loading more wallet activity'),
-          if(!_loadingMore && !_pageError && cursor!=null && initial!=null)
-            Center(child:TextButton.icon(
-              onPressed:()=>_loadMore(owner,cursor),
-              icon:const Icon(Icons.expand_more),label:const Text('Load more activity'))),
-          const Divider(height:24),
-          ListTile(
-            key:const ValueKey('wallet-promotion-history-toggle'),
-            title:const Text('Promotions & Share earnings'),
-            subtitle:const Text('Review reserved, spent and pending MB separately from posted activity.'),
-            trailing:Icon(_showPromotionHistory?Icons.expand_less:Icons.expand_more),
-            onTap:()=>setState(()=>_showPromotionHistory=!_showPromotionHistory)),
-          if(_showPromotionHistory && promotion?.isLoading==true)
-            const ListTile(title:Text('Loading private promotion history…')),
-          if(promotionJournal!=null &&
-              (promotionJournal.campaigns.isNotEmpty ||
-                promotionJournal.earnings.isNotEmpty))
-            GbPromotionActivityPanel(
-              key:ValueKey('promotion-history-${owner.accountId}-${owner.authorizationEpoch}'),
-              journal:promotionJournal),
-          if(_showPromotionHistory && promotionJournal!=null &&
-              promotionJournal.campaigns.isEmpty && promotionJournal.earnings.isEmpty)
-            const ListTile(title:Text('No funded campaigns or referral allocations yet.')),
-          if(_showPromotionHistory && promotion?.hasError==true)
-            ListTile(title:const Text('Promotion history unavailable.'),
-              subtitle:const Text('Posted MB and NGN activity remains available.'),
-              trailing:TextButton(onPressed:()=>ref.invalidate(gbPromotionJournalProvider(owner)),
-                child:const Text('Retry promotion history'))),
-        ],
-      )),
+      appBar: AppBar(title: const Text('Transactions')),
+      body: owner == null
+          ? const Center(child: Text('Sign in to view wallet activity.'))
+          : RefreshIndicator(
+              onRefresh: () async {
+                setState(_reset);
+                ref.invalidate(gbActivityPageProvider(request!));
+                ref.invalidate(gbActivitySummaryProvider(summaryRequest!));
+                ref.invalidate(gbPromotionJournalProvider(owner));
+                try {
+                  await ref.read(gbActivityPageProvider(request).future);
+                } catch (_) {
+                  /* retry state below */
+                }
+              },
+              child: ListView(
+                key: const PageStorageKey('gb-wallet-activity-all'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final category = _HistoryFilter(
+                        value: _purpose,
+                        label: 'Category',
+                        choices: const {
+                          'all': 'All categories',
+                          'funding': 'Funding',
+                          'transfers': 'Transfers',
+                          'masana': 'Masana usage',
+                          'data': 'Data',
+                          'reversals': 'Reversals',
+                          'other': 'Other',
+                        },
+                        onChanged: (value) => setState(() {
+                          _reset();
+                          _purpose = value;
+                        }),
+                      );
+                      final status = _HistoryFilter(
+                        value: _status,
+                        label: 'Status',
+                        choices: const {
+                          'all': 'All status',
+                          'completed': 'Successful',
+                          'reversed': 'Reversed',
+                        },
+                        onChanged: (value) => setState(() {
+                          _reset();
+                          _status = value;
+                        }),
+                      );
+                      return MediaQuery.textScalerOf(context).scale(1) > 1.3
+                          ? Column(
+                              children: [
+                                category,
+                                const SizedBox(height: 8),
+                                status,
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(child: category),
+                                const SizedBox(width: 10),
+                                Expanded(child: status),
+                              ],
+                            );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    key: const ValueKey('wallet-activity-unit-filters'),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final choice in const <String, String>{
+                          'all': 'All activity',
+                          'MB': 'Data MB',
+                          'NGN': 'Naira NGN',
+                        }.entries)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 8),
+                            child: ChoiceChip(
+                              key: ValueKey('activity-unit-${choice.key}'),
+                              showCheckmark: false,
+                              visualDensity: VisualDensity.compact,
+                              label: Text(choice.value),
+                              selected: _unit == choice.key,
+                              onSelected: (_) {
+                                if (_unit == choice.key) return;
+                                setState(() {
+                                  _reset();
+                                  _unit = choice.key;
+                                });
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        key: const ValueKey('activity-toggle-more-filters'),
+                        onPressed: () =>
+                            setState(() => _showFacets = !_showFacets),
+                        icon: Icon(
+                          _showFacets ? Icons.keyboard_arrow_up : Icons.tune,
+                        ),
+                        label: Text(
+                          _showFacets ? 'Hide filters' : 'More filters',
+                        ),
+                      ),
+                      if (_filtered)
+                        const Padding(
+                          padding: EdgeInsetsDirectional.only(start: 8),
+                          child: Text(
+                            'Filtered',
+                            semanticsLabel: 'History filters are active',
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_showFacets) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Direction',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final choice in const <String, String>{
+                            'all': 'In & out',
+                            'incoming': 'Received',
+                            'outgoing': 'Spent',
+                          }.entries)
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 6),
+                              child: ChoiceChip(
+                                key: ValueKey(
+                                  'activity-direction-${choice.key}',
+                                ),
+                                label: Text(choice.value),
+                                selected: _direction == choice.key,
+                                onSelected: (_) {
+                                  if (_direction != choice.key)
+                                    setState(() {
+                                      _reset();
+                                      _direction = choice.key;
+                                    });
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'History period',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final choice in const <String, String>{
+                            'all': 'All dates',
+                            '7': 'Last 7 days',
+                            '30': 'Last 30 days',
+                          }.entries)
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 6),
+                              child: ChoiceChip(
+                                key: ValueKey('activity-history-${choice.key}'),
+                                label: Text(choice.value),
+                                selected: _period == choice.key,
+                                onSelected: (_) {
+                                  if (_period != choice.key)
+                                    setState(() {
+                                      _reset();
+                                      _period = choice.key;
+                                    });
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('activity-reference-input'),
+                            controller: _referenceInput,
+                            maxLength: 160,
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              labelText: 'Exact operation reference',
+                              hintText: 'Paste original reference',
+                              errorText: _badReference
+                                  ? 'Use letters, numbers, _, ., : or -'
+                                  : null,
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (_) {
+                              if (_badReference)
+                                setState(() => _badReference = false);
+                            },
+                            onSubmitted: (_) => _submitReference(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: IconButton.filledTonal(
+                            key: const ValueKey('activity-reference-submit'),
+                            tooltip: 'Find exact operation',
+                            onPressed: _submitReference,
+                            icon: const Icon(Icons.search),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (_filtered)
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton.icon(
+                        onPressed: _clearFilters,
+                        icon: const Icon(Icons.filter_alt_off),
+                        label: const Text('Clear filters'),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  _ActivityOverview(
+                    owner: owner,
+                    days: _days,
+                    totals: totals,
+                    loading: summary?.isLoading == true,
+                    onPeriod: (days) {
+                      if (_days != days) setState(() => _days = days);
+                    },
+                    onRetry: () => ref.invalidate(
+                      gbActivitySummaryProvider(summaryRequest!),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (initial == null && first?.isLoading == true)
+                    const ListTile(
+                      title: Text('Loading verified activity…'),
+                      leading: CircularProgressIndicator(),
+                    ),
+                  if (initial == null && first?.hasError == true)
+                    ListTile(
+                      title: const Text('Could not verify wallet activity.'),
+                      subtitle: const Text(
+                        'Previous balances and funds are unchanged.',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Retry wallet activity',
+                        onPressed: () =>
+                            ref.invalidate(gbActivityPageProvider(request!)),
+                      ),
+                    ),
+                  if (initial != null && byId.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Text(
+                            _filtered
+                                ? 'No posted activity matches these filters.'
+                                : 'No posted MB or NGN activity yet.',
+                          ),
+                          if (_filtered)
+                            TextButton(
+                              onPressed: _clearFilters,
+                              child: const Text('Clear filters and show all'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ..._datedActivityTiles(context, byId.values),
+                  if (_pageError && initial != null)
+                    ListTile(
+                      title: const Text(
+                        'Could not load more activity. Previous rows are retained.',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Retry loading activity',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: cursor == null
+                            ? null
+                            : () => _loadMore(owner, cursor),
+                      ),
+                    ),
+                  if (_loadingMore && initial != null)
+                    const LinearProgressIndicator(
+                      semanticsLabel: 'Loading more wallet activity',
+                    ),
+                  if (!_loadingMore &&
+                      !_pageError &&
+                      cursor != null &&
+                      initial != null)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => _loadMore(owner, cursor),
+                        icon: const Icon(Icons.expand_more),
+                        label: const Text('Load more activity'),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  GbWalletHoldsPanel(
+                    key: ValueKey(('wallet-holds', owner)),
+                    owner: owner,
+                  ),
+                  const Divider(height: 24),
+                  ListTile(
+                    key: const ValueKey('wallet-promotion-history-toggle'),
+                    title: const Text('Promotions & Share earnings'),
+                    subtitle: const Text(
+                      'Review reserved, spent and pending MB separately from posted activity.',
+                    ),
+                    trailing: Icon(
+                      _showPromotionHistory
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                    ),
+                    onTap: () => setState(
+                      () => _showPromotionHistory = !_showPromotionHistory,
+                    ),
+                  ),
+                  if (_showPromotionHistory && promotion?.isLoading == true)
+                    const ListTile(
+                      title: Text('Loading private promotion history…'),
+                    ),
+                  if (promotionJournal != null &&
+                      (promotionJournal.campaigns.isNotEmpty ||
+                          promotionJournal.earnings.isNotEmpty))
+                    GbPromotionActivityPanel(
+                      key: ValueKey(
+                        'promotion-history-${owner.accountId}-${owner.authorizationEpoch}',
+                      ),
+                      journal: promotionJournal,
+                    ),
+                  if (_showPromotionHistory &&
+                      promotionJournal != null &&
+                      promotionJournal.campaigns.isEmpty &&
+                      promotionJournal.earnings.isEmpty)
+                    const ListTile(
+                      title: Text(
+                        'No funded campaigns or referral allocations yet.',
+                      ),
+                    ),
+                  if (_showPromotionHistory && promotion?.hasError == true)
+                    ListTile(
+                      title: const Text('Promotion history unavailable.'),
+                      subtitle: const Text(
+                        'Posted MB and NGN activity remains available.',
+                      ),
+                      trailing: TextButton(
+                        onPressed: () =>
+                            ref.invalidate(gbPromotionJournalProvider(owner)),
+                        child: const Text('Retry promotion history'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
+}
+
+class _HistoryFilter extends StatelessWidget {
+  const _HistoryFilter({
+    required this.value,
+    required this.label,
+    required this.choices,
+    required this.onChanged,
+  });
+  final String value, label;
+  final Map<String, String> choices;
+  final ValueChanged<String> onChanged;
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<String>(
+    key: ValueKey('activity-filter-$label-$value'),
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(
+      filled: true,
+      fillColor: context.masanawa.surfaceMuted,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    ),
+    icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+    items: [
+      for (final entry in choices.entries)
+        DropdownMenuItem(
+          value: entry.key,
+          child: Text(
+            entry.value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+    ],
+    onChanged: (next) {
+      if (next != null && next != value) onChanged(next);
+    },
+  );
+}
+
+class _ActivityOverview extends StatelessWidget {
+  const _ActivityOverview({
+    required this.owner,
+    required this.days,
+    required this.totals,
+    required this.loading,
+    required this.onPeriod,
+    required this.onRetry,
+  });
+  final GbWalletOwner owner;
+  final int days;
+  final GbActivityPeriodSummary? totals;
+  final bool loading;
+  final ValueChanged<int> onPeriod;
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = context.masanawa;
+    return Container(
+      key: const ValueKey('activity-overview'),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.structuralBorder),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Overview',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                PopupMenuButton<int>(
+                  tooltip: 'Choose totals period',
+                  onSelected: onPeriod,
+                  itemBuilder: (_) => [
+                    for (final period in const [7, 30])
+                      PopupMenuItem(
+                        key: ValueKey('activity-period-$period'),
+                        value: period,
+                        child: Text('Last $period days'),
+                      ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Last $days days',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: colors.brandStrong,
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (totals == null && loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(
+                  semanticsLabel: 'Loading period totals',
+                ),
+              ),
+            if (totals == null && !loading)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Period totals unavailable. No zero balance is assumed.',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onRetry,
+                    child: const Text('Retry totals'),
+                  ),
+                ],
+              ),
+            if (totals != null) ...[
+              _OverviewAmounts(
+                label: 'Data · MB',
+                incoming:
+                    'Received: ${totals!.mb.received > 0 ? '+' : ''}${_groupActivity(totals!.mb.received)} MB',
+                outgoing:
+                    'Used: ${totals!.mb.spent > 0 ? '−' : ''}${_groupActivity(totals!.mb.spent)} MB',
+              ),
+              const Divider(height: 16),
+              _OverviewAmounts(
+                label: 'Naira · NGN',
+                incoming:
+                    'Received: ${totals!.ngn.received > 0 ? '+' : ''}${_ngnActivity(totals!.ngn.received)}',
+                outgoing:
+                    'Spent: ${totals!.ngn.spent > 0 ? '−' : ''}${_ngnActivity(totals!.ngn.spent)}',
+              ),
+              Theme(
+                data: theme.copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: PageStorageKey((
+                    'activity-balance-details',
+                    owner,
+                    days,
+                  )),
+                  tilePadding: EdgeInsets.zero,
+                  minTileHeight: 44,
+                  title: Text(
+                    'Analysis',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: colors.brandStrong,
+                    ),
+                  ),
+                  childrenPadding: const EdgeInsets.only(bottom: 12),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Totals cover all posted activity in this period, independently of history filters. MB and NGN stay separate.',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'UTC ${totals!.fromAt.toIso8601String()} – ${totals!.toAt.toIso8601String()}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_balanceStatus(totals!.reconciliation)),
+                    const SizedBox(height: 8),
+                    _balanceCheck(context, 'MB', totals!.reconciliation?.mb),
+                    const SizedBox(height: 10),
+                    _balanceCheck(context, 'NGN', totals!.reconciliation?.ngn),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'This checks internal posted balances, not external bank settlement or data delivery. Account and welcome-credit restrictions still apply.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewAmounts extends StatelessWidget {
+  const _OverviewAmounts({
+    required this.label,
+    required this.incoming,
+    required this.outgoing,
+  });
+  final String label, incoming, outgoing;
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 12,
+    runSpacing: 5,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelMedium?.copyWith(color: context.masanawa.textMuted),
+      ),
+      Text(
+        incoming,
+        textDirection: TextDirection.ltr,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      Text(
+        outgoing,
+        textDirection: TextDirection.ltr,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
 }

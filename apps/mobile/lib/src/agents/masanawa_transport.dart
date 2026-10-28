@@ -19,7 +19,7 @@ const String kAgentBaseUrl = String.fromEnvironment(
 ApiException _replyStreamFailure(Map<String, dynamic> event) {
   return switch (event['code']) {
     'gb.wallet.insufficient_mb' => const ApiException(
-      'Not enough data MB for a reply. Add data and try again.',
+      'Not enough data MB for a reply. Buy Data and try again.',
       statusCode: 409,
       code: 'gb.wallet.insufficient_mb',
     ),

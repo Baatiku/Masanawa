@@ -296,7 +296,7 @@ class _RechargePackagesScreenState
               : null,
           title: Text(
             review == null
-                ? 'Add data'
+                ? 'Buy Data'
                 : _completed
                 ? 'Data added'
                 : 'Review exchange',
@@ -306,7 +306,7 @@ class _RechargePackagesScreenState
           padding: const EdgeInsets.all(16),
           children: [
             if (owner == null)
-              const Text('Sign in to add data.')
+              const Text('Sign in to buy data.')
             else ...[
               Text(
                 'NGN balance',
