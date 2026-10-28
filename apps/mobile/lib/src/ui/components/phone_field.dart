@@ -74,7 +74,8 @@ class _PhoneFieldState extends State<PhoneField> {
     final raw = widget.controller.text.trim();
     final detected=raw.startsWith('+') || raw.startsWith('00')
         ? detectCountry(raw):widget.initialCountry;
-    _country=detected.dialCode==widget.initialCountry.dialCode
+    _country=(detected.dialCode==widget.initialCountry.dialCode ||
+      (detected.iso=='UN' && internationalCallingCode(raw)==widget.initialCountry.dialCode))
       ?widget.initialCountry:detected;
     if (widget.nationalEntry) {
       _national.text = _nationalPart(raw, _country);
@@ -112,7 +113,9 @@ class _PhoneFieldState extends State<PhoneField> {
     if (_writingCombined) return;
     final raw = widget.controller.text;
     final detected = detectCountry(raw);
-    final country = detected.dialCode == _country.dialCode ? _country : detected;
+    final country = detected.dialCode == _country.dialCode ||
+      (detected.iso=='UN' && internationalCallingCode(raw)==_country.dialCode)
+      ? _country : detected;
     if (country.iso != _country.iso) {
       setState(() => _country = country);
       widget.onCountryChanged?.call(country);
@@ -126,7 +129,8 @@ class _PhoneFieldState extends State<PhoneField> {
     if (widget.nationalEntry) {
       if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
         final detected = detectCountry(trimmed);
-        final selected = detected.dialCode == _country.dialCode
+        final selected = detected.dialCode == _country.dialCode ||
+          (detected.iso=='UN' && internationalCallingCode(trimmed)==_country.dialCode)
             ? _country : detected;
         if (selected.iso != _country.iso) {
           setState(() => _country = selected);
@@ -155,6 +159,14 @@ class _PhoneFieldState extends State<PhoneField> {
     final previous = _country;
     setState(() => _country = country);
     if (widget.nationalEntry) {
+      // A pasted +1 number has no unique country. Keep its international
+      // digits until the user chooses US/Canada, then peel the code exactly
+      // once before combining with the now-confirmed picker prefix.
+      if(previous.iso=='UN'&&_national.text.startsWith(country.dialCode)){
+        final rest=_national.text.substring(country.dialCode.length);
+        _national.value=TextEditingValue(text:rest,
+          selection:TextSelection.collapsed(offset:rest.length));
+      }
       _writeCombined();
       widget.onCountryChanged?.call(country);
       return;

@@ -33,6 +33,7 @@ void main() {
   testWidgets('private contact saves selected country, state and normalized phone',
       (tester) async {
     Map<String,dynamic>? captured;
+    var patchCalls=0;
     final dio = Dio();
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
       if (!options.path.endsWith('/v1/auth/profile/contact-geography')) {
@@ -41,15 +42,19 @@ void main() {
         return;
       }
       if (options.method == 'PATCH') {
+        patchCalls++;
         captured = Map<String,dynamic>.from(options.data as Map);
-        handler.resolve(Response<Map<String,dynamic>>(requestOptions: options,
-          statusCode: 200, data: {...captured!, 'provenance': 'user_selected'}));
+        // The server committed, but the mobile connection lost the response.
+        handler.reject(DioException(requestOptions:options,
+          type:DioExceptionType.connectionError));
         return;
       }
       handler.resolve(Response<Map<String,dynamic>>(requestOptions: options,
         statusCode: 200,
-        data: const {'countryIso': 'NG', 'subdivisionIso': 'NG-FC',
-          'contactPhone': '+2348012345678', 'provenance': 'legacy_phone_hint'}));
+        data: captured==null
+          ? const {'countryIso': 'NG', 'subdivisionIso': 'NG-FC',
+            'contactPhone': '+2348012345678', 'provenance': 'legacy_phone_hint'}
+          : {...captured!, 'provenance': 'user_selected'}));
     }));
     addTearDown(() => dio.close(force: true));
     await tester.pumpWidget(ProviderScope(overrides: [
@@ -73,6 +78,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(captured, {'contactPhone': '+2348031234567',
       'countryIso': 'NG', 'subdivisionIso': 'NG-FC'});
+    expect(patchCalls,1,reason:'Uncertain response must trigger GET, not duplicate write');
     expect(find.text('Recorded source: Your selection'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
