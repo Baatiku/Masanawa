@@ -762,7 +762,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const q2=await service.quoteDraft(t,'draftowner',first.draftId);
   expect(q2.quoteId).toBe(q1.quoteId);
   expect((await query(`SELECT count(*)::int AS n FROM feed.promotion_quotes
-   WHERE tenant_id=$1 AND draft_id=$2`,[t,first.draftId])).rows[0].n).toBe(1);
+   WHERE tenant_id=$1 AND draft_id=$2`,[t,first.draftId])).rows[0] as {n:number}|undefined)?.n).toBe(1);
   expect(await balance('draftowner')).toEqual({purchased:12,reserved:0,welcome:500});
   await expect(service.editDraft(t,'draftowner',first.draftId,{
    body:'Edit after quote',targetViews:6,expectedVersion:1}))
@@ -786,7 +786,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
     SET expires_at=statement_timestamp()-interval '1 second'
     WHERE tenant_id=$1 AND id=$2`,[t,c.id])).rejects.toThrow(/economics/i);
   const current=await query(`SELECT state,expires_at FROM feed.promotion_campaigns WHERE id=$1`,[c.id]);
-  expect(current.rows[0].state).toBe('active');
+  expect((current.rows[0] as {state:string}|undefined)?.state).toBe('active');
   expect((await service.expireCampaigns()).expired).toBe(0);
   await service.cancel(t,'expiryowner',c.id);
   expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:0});
