@@ -155,6 +155,27 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect((await paid.mine('tenant_test','fan_one')).inactivePosts).toEqual([
     expect.objectContaining({postId:campaign.postId})]);
  });
+ it('reveals reviewed campaign CTA only after approval and only with eligible public post',async()=>{
+  const pool=isolated.pool;
+  const paid=new PgStatusPromotions(pool,'long-test-secret-for-real-postgres-qualified-home',
+   'https://status.example.test');
+  const q=await paid.quote({tenantId:'tenant_test',sponsorId:'fan_one',
+   body:'Reviewed destination content',targetViews:1,destinationUrl:'https://example.org/resources'});
+  const c=await paid.confirm('tenant_test','fan_one',q.quoteId,'original-cta-home-0001');
+  const mixed=new FeedService(repo,async()=>true,async()=>false,false);
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
+  await paid.review('tenant_test','distinct_staff',c.id,true,'External destination inspected');
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([
+      expect.objectContaining({id:c.postId,destinationUrl:'https://example.org/resources'})
+    ]);
+  expect((await mixed.list('tenant_other','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
+  await paid.cancel('tenant_test','fan_one',c.id);
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
+ });
  it("following uses the authoritative masana.follows table",async()=>{
   await isolated.pool.query("INSERT INTO masana.follows(tenant_id,fan_user_id,character_id) VALUES($1,$2,$3)",["tenant_test","fan_one","masana_one"]);
   expect((await repo.list("tenant_test","fan_one","following",null,30))).toHaveLength(1);
