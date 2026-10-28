@@ -13,7 +13,10 @@ describe('SPE promotion routes inherit the established principal and staff autho
    adminQueue:async(...args:unknown[])=>{events.push(['queue',...args]);return {pending:[]};},
    adminOverview:async(...args:unknown[])=>{events.push(['overview',...args]);return {pendingReview:0};},
    adminTakedown:async(...args:unknown[])=>{events.push(['takedown',...args]);return {state:'removed'};},
-   cancel:async()=>({}),share:async()=>({url:'https://example.test/status/post'}),
+   cancel:async()=>({}),
+   pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
+   resume:async(...args:unknown[])=>{events.push(['resume',...args]);return {state:'active'};},
+   share:async()=>({url:'https://example.test/status/post'}),
    beginView:async()=>({challengeId:'challenge'}),finishView:async()=>({qualified:true}),
    mine:async()=>({campaigns:[]}),deleteOwnPost:async()=>({}),
    purgeExpired:async()=>({purged:0}),
@@ -84,6 +87,10 @@ describe('SPE promotion routes inherit the established principal and staff autho
    .toBe(200);
   expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/cancel',
    payload:{}})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/pause',
+   payload:{}})).statusCode).toBe(200);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/resume',
+   payload:{}})).statusCode).toBe(503);
   expect((await server.inject({method:'POST',url:'/v1/promotions/posts/post/delete',
    payload:{}})).statusCode).toBe(200);
   expect((await server.inject({method:'GET',url:'/v1/admin/promotions/review'})).statusCode).toBe(200);

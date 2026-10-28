@@ -31,6 +31,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0006_human_public_status.sql'));
   await db.exec(sql('../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0007_paid_promotions.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -169,5 +170,44 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    'Verified harmful advertising')).toMatchObject({alreadyRemoved:true});
   await expect(service.beginView(t,'viewertwo',c.postId))
    .rejects.toMatchObject({code:'post_not_found'});
+ });
+
+ it('enqueues private objects atomically before wiping expired paid source',async()=>{
+  const quote=await service.quote({tenantId:t,sponsorId:'publisher',
+    body:'One archived image fixture',targetViews:2});
+  const campaign=await service.confirm(t,'publisher',quote.quoteId,'media-cleanup-001');
+  const media=await query(`INSERT INTO feed.paid_post_media_objects
+    (tenant_id,post_id,media_id,object_key,review_state)
+    VALUES($1,$2,gen_random_uuid(),'private/paid/media-cleanup-fixture.png','approved')
+    RETURNING media_id`,[t,campaign.postId]);
+  const mediaId=String((media.rows[0] as {media_id:string}).media_id);
+  await service.deleteOwnPost(t,'publisher',campaign.postId);
+  const [job]=await service.claimMediaDeletions();
+  expect(job).toMatchObject({tenantId:t,postId:campaign.postId,mediaId,
+    objectKey:'private/paid/media-cleanup-fixture.png'});
+  expect((await query(`SELECT state,body FROM feed.posts WHERE id=$1`,
+    [campaign.postId])).rows[0]).toMatchObject({state:'removed',body:''});
+  await service.settleMediaDeletion(job!,false);
+  expect((await query(`SELECT completed_at FROM feed.paid_media_deletion_outbox
+    WHERE media_id=$1`,[mediaId])).rows[0]).toMatchObject({completed_at:null});
+ });
+ it('lets sponsor pause and resume within retention and exposes private audit updates',async()=>{
+  const quote=await service.quote({tenantId:t,sponsorId:'publisher',
+    body:'Sponsor pause control',targetViews:3});
+  const campaign=await service.confirm(t,'publisher',quote.quoteId,'pause-test-original-001');
+  await service.review(t,'independent_editor',campaign.id,true);
+  expect((await service.pause(t,'publisher',campaign.id)).state).toBe('paused');
+  const hidden=await query(`SELECT state,paid_purge_at FROM feed.posts WHERE id=$1`,
+    [campaign.postId]);
+  expect(hidden.rows[0]).toMatchObject({state:'hidden'});
+  expect((await service.resume(t,'publisher',campaign.id)).state).toBe('active');
+  const visible=await query(`SELECT state,paid_purge_at FROM feed.posts WHERE id=$1`,
+    [campaign.postId]);
+  expect(visible.rows[0]).toMatchObject({state:'published',paid_purge_at:null});
+  expect((await service.mine(t,'publisher')).lifecycleNotifications)
+    .toEqual(expect.arrayContaining([expect.objectContaining({kind:'paused'}),
+      expect.objectContaining({kind:'resumed'})]));
+  await expect(service.pause(t,'sharer',campaign.id))
+    .rejects.toMatchObject({code:'campaign_not_found'});
  });
 });

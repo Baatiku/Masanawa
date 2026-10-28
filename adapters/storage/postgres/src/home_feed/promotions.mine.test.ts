@@ -17,6 +17,11 @@ describe('inactive paid post ownership and server-authoritative retention clock'
    }
    if(statement.includes('FROM feed.promotion_view_charges'))return {rows:[]};
    if(statement.includes('statement_timestamp() AS now_utc'))return {rows:[{now_utc:'2026-10-27T12:00:00Z'}]};
+   if(statement.includes('FROM feed.promotion_audit a')&&statement.includes('JOIN feed.posts p')){
+     expect(statement).toContain('p.author_user_id=$2 OR c.sponsor_id=$2');
+     expect(params).toEqual(['tenant','owner']);
+     return {rows:[]};
+   }
    throw new Error('Unexpected promotion query');
   });
   const engine=new PgStatusPromotions({query} as never,'x'.repeat(32),'https://masanawa.com');
@@ -25,7 +30,8 @@ describe('inactive paid post ownership and server-authoritative retention clock'
   expect(mine.inactivePosts).toEqual([{postId:'post-1',body:'My inactive campaign',kind:'text',
     disabledAt:'2026-10-27T11:00:00Z',purgeAt:'2026-10-30T11:00:00Z',
     historicalVerifiedViews:17}]);
-  expect(query).toHaveBeenCalledTimes(4);
+  expect(mine.lifecycleNotifications).toEqual([]);
+  expect(query).toHaveBeenCalledTimes(5);
   await expect(engine.mine('tenant','bad actor !')).rejects.toMatchObject({code:'invalid_actor'});
  });
 });
