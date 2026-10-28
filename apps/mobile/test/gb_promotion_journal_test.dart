@@ -28,7 +28,8 @@ void main(){
     event['reason']=List<String>.filled(500,'r').join();
     expect(GbPromotionJournal.read(ordinary).notices.single.reason,hasLength(500));
     event['reason']=String.fromCharCodes([65,10,66]);
-    expect(GbPromotionJournal.read(ordinary).notices.single.reason,'A\\nB');
+    expect(GbPromotionJournal.read(ordinary).notices.single.reason,
+      String.fromCharCodes([65,10,66]));
     event['reason']=List<String>.filled(501,'r').join();
     expect(()=>GbPromotionJournal.read(ordinary),throwsFormatException);
   });
