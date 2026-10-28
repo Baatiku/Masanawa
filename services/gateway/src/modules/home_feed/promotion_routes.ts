@@ -63,7 +63,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   if(typeof b.targetViews!=='number'||!Number.isSafeInteger(b.targetViews)||
     (b.postId!==undefined&&typeof b.postId!=='string')||
     (b.body!==undefined&&typeof b.body!=='string'))fail('invalid_quote');
-  let destinationUrl:string|null;
+  let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}catch{fail('invalid_promotion_destination');}
   if(b.postId!==undefined&&destinationUrl!==null)fail('boost_cannot_edit_post');
   return options.port.quote({tenantId:p.tenantId,sponsorId:p.userId,
