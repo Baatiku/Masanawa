@@ -19,7 +19,8 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
   db=new Pool({connectionString:child.toString(),max:6});
   await db.query(`CREATE SCHEMA identity; CREATE SCHEMA talks; CREATE SCHEMA feed;
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
-   CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);`);
+   CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
+   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);`);
   for(const file of [
    '../../../../../packages/feed/migrations/0001_feed.sql',
    '../../../../../packages/feed/migrations/0006_human_public_status.sql',
