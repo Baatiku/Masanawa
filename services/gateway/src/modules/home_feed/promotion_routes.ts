@@ -12,11 +12,15 @@ export interface PromotionPort {
  reviewImage(t:string,editor:string,post:string,mediaId:string,approve:boolean,reason:string):Promise<unknown>;
  adminImagePreview(t:string,editor:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string;reviewState:string}>;
  approvedImageObject(t:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string}|null>;
+ openDestination(t:string,viewer:string,post:string):Promise<unknown>;
  expireCampaigns(limit?:number):Promise<unknown>;
  quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;mediaIds?:readonly string[];targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
- review(t:string,editor:string,id:string,approved:boolean,reason?:string):Promise<unknown>;
+ review(t:string,editor:string,id:string,approved:boolean,reason?:string,policy?:{
+  category:'general'|'financial'|'health'|'political'|'employment'|'regulated_other';
+  bodyChecked:true;rightsChecked:true;destinationChecked:boolean;
+  clearanceReference?:string;evidenceNote:string}):Promise<unknown>;
  adminQueue(t:string,editor:string):Promise<unknown>;
  adminOverview(t:string,editor:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
@@ -280,6 +284,11 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
   return options.port.deleteOwnPost(p.tenantId,p.userId,params(r,'postId'));
  });
+ app.get('/v1/posts/:postId/destination',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await who(r);
+  return options.port.openDestination(p.tenantId,p.userId,params(r,'postId'));
+ });
  app.post('/v1/posts/:postId/share-link',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);fields(body(r),[]);
   return options.port.share(p.tenantId,p.userId,params(r,'postId'));
@@ -300,12 +309,35 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  });
  app.post('/v1/admin/promotions/:campaignId/review',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
-  fields(b,['decision','reason']);if(b.decision!=='approve'&&b.decision!=='reject')fail('invalid_review');
+  fields(b,['decision','reason','policy']);if(b.decision!=='approve'&&b.decision!=='reject')fail('invalid_review');
   if(b.decision==='approve'&&!options.enabled())fail('status_financial_qualification_missing',503);
   if(b.reason!==undefined&&typeof b.reason!=='string')fail('invalid_review_reason');
   if(b.decision==='reject'&&(typeof b.reason!=='string'||!b.reason.trim()))fail('review_reason_required');
+  let policy:undefined|{
+   category:'general'|'financial'|'health'|'political'|'employment'|'regulated_other';
+   bodyChecked:true;rightsChecked:true;destinationChecked:boolean;
+   clearanceReference?:string;evidenceNote:string};
+  if(b.decision==='approve'){
+   const x=b.policy;
+   if(!x||typeof x!=='object'||Array.isArray(x))fail('advertising_policy_review_required');
+   const v=x as Record<string,unknown>;
+   if(Object.keys(v).some(k=>!['category','bodyChecked','rightsChecked',
+    'destinationChecked','clearanceReference','evidenceNote'].includes(k))||
+    !['general','financial','health','political','employment','regulated_other'].includes(String(v.category))||
+    v.bodyChecked!==true||v.rightsChecked!==true||typeof v.destinationChecked!=='boolean'||
+    typeof v.evidenceNote!=='string'||v.evidenceNote.trim().length<10||
+    v.evidenceNote.trim().length>500||
+    (v.clearanceReference!==undefined&&typeof v.clearanceReference!=='string')||
+    (v.category!=='general'&&
+     (typeof v.clearanceReference!=='string'||v.clearanceReference.trim().length<6)))
+    fail('invalid_advertising_policy_evidence');
+   policy={category:v.category as NonNullable<typeof policy>['category'],
+    bodyChecked:true,rightsChecked:true,destinationChecked:v.destinationChecked as boolean,
+    evidenceNote:v.evidenceNote as string,
+    ...(typeof v.clearanceReference==='string'?{clearanceReference:v.clearanceReference}:{})};
+  }else if(b.policy!==undefined)fail('invalid_review');
   return options.port.review(p.tenantId,p.userId,params(r,'campaignId'),b.decision==='approve',
-   b.reason as string|undefined);
+   b.reason as string|undefined,policy);
  });
  app.get('/v1/admin/promotions/review',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r);
