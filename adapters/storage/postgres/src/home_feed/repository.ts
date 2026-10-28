@@ -16,7 +16,7 @@ function item(r:Row){
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),
   media:(r.visible_media_ids??r.media_ids) as string[],
   ownerCanonicalId:human?String(r.author_user_id):authorMasanaId,
-  disclosure:human?'paid_promotion':null,moderationState:'approved' as const,
+  disclosure:human?'paid_promotion' as const:null,moderationState:'approved' as const,
   campaignId:r.visible_campaign_id==null?null:String(r.visible_campaign_id),transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
