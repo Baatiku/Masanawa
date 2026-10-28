@@ -2,7 +2,43 @@ import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {readFileSync} from 'node:fs';
 import type {Pool} from 'pg';
-import {PgStatusPromotions} from './promotions.js';
+import {PgStatusPromotions,qualifiedViewAllocation} from './promotions.js';
+
+describe('SPE-E01 exact integer half-MB allocation acceptance',()=>{
+ it('allocates 10,000 funded views, including 1,500 organic and 8,500 referred, with no lost half-MB',()=>{
+  let platformHalfMb=0,sharerHalfMb=0;
+  for(let view=0;view<10000;view++){
+   const allocated=qualifiedViewAllocation(view>=1500);
+   expect(allocated.platformHalfMb+allocated.sharerHalfMb).toBe(2);
+   platformHalfMb+=allocated.platformHalfMb;
+   sharerHalfMb+=allocated.sharerHalfMb;
+  }
+  expect({chargedMb:10000,sharerLiabilityMb:sharerHalfMb/2,
+   platformAllocationMb:platformHalfMb/2}).toEqual({
+    chargedMb:10000,sharerLiabilityMb:4250,platformAllocationMb:5750});
+  expect(platformHalfMb+sharerHalfMb).toBe(20000);
+ });
+
+ it('retains odd referrals as half-MB across campaigns, not rounded away per campaign',()=>{
+  const campaigns=[
+   [true,true,true,false], // 3 referred = 1.5 MB liability
+   [false,true,true],      // 2 referred = 1 MB liability
+  ];
+  const totals=campaigns.map(views=>views.reduce((sum,referred)=>{
+   const allocation=qualifiedViewAllocation(referred);
+   return {platformHalfMb:sum.platformHalfMb+allocation.platformHalfMb,
+    sharerHalfMb:sum.sharerHalfMb+allocation.sharerHalfMb};
+  },{platformHalfMb:0,sharerHalfMb:0}));
+  expect(totals).toEqual([
+   {platformHalfMb:5,sharerHalfMb:3},
+   {platformHalfMb:4,sharerHalfMb:2},
+  ]);
+  const pendingHalfMb=totals.reduce((n,group)=>n+group.sharerHalfMb,0);
+  expect({pendingHalfMb,redeemableWholeMbIfSettled:Math.floor(pendingHalfMb/2),
+   fractionalCarryHalfMb:pendingHalfMb%2}).toEqual({
+    pendingHalfMb:5,redeemableWholeMbIfSettled:2,fractionalCarryHalfMb:1});
+ });
+});
 
 const sql=(file:string)=>readFileSync(new URL(file,import.meta.url),'utf8');
 let db:PGlite,service:PgStatusPromotions;
@@ -78,6 +114,9 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
     FROM feed.promotion_view_charges`);
   expect(charged.rows).toEqual([{platform_half_mb:1,sharer_half_mb:1,sharer_id:'sharer'}]);
   expect((await service.mine(t,'sharer')).sharingEarnings[0]).toMatchObject({pendingHalfMb:1});
+  expect(await service.adminOverview(t,'independent_editor')).toMatchObject({
+   billedQualifiedViews:1,referredQualifiedViews:1,
+   pendingSharerHalfMb:1,allocatedPlatformHalfMb:1});
   await expect(query(`DELETE FROM feed.promotion_view_charges`)).rejects.toThrow();
  });
 
@@ -228,7 +267,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
 
  it('rejects hidden post sharing and refuses a pending challenge after visibility changes',async()=>{
   const q=await service.quote({tenantId:t,sponsorId:'publisher',
-    body:'A reviewed public offer may become private',targetViews:3});
+    body:'A reviewed public offer may become hidden',targetViews:3});
   const c=await service.confirm(t,'publisher',q.quoteId,'private-race-001');
   await service.review(t,'distincteditor',c.id,true);
   const link=await service.share(t,'sharer',c.postId);
@@ -276,5 +315,48 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const receipts=await query(`SELECT c.sharer_id,c.sharer_half_mb FROM
     feed.promotion_view_charges c WHERE c.campaign_id=$1`,[c.id]);
   expect(receipts.rows).toEqual([{sharer_id:'sharer',sharer_half_mb:1}]);
+ });
+ it('persists five odd referred charges across two real campaigns as five pending half-MB',async()=>{
+  await account('mathpublisher',10);
+  const ids:string[]=[],posts:string[]=[];
+  for(const [index,views] of [3,2].entries()){
+   const quote=await service.quote({tenantId:t,sponsorId:'mathpublisher',
+    body:`Arithmetic campaign ${index}`,targetViews:views});
+   const campaign=await service.confirm(t,'mathpublisher',quote.quoteId,
+    `math-arithmetic-campaign-${index}`);
+   await service.review(t,'independent_editor',campaign.id,true);
+   ids.push(campaign.id);
+   posts.push(campaign.postId);
+   const referral=await service.share(t,'sharer',campaign.postId);
+   expect(referral.earnable).toBe(true);
+   const token=new URL(referral.url).searchParams.get('r')!;
+   for(let i=0;i<views;i++){
+    const viewer=`arithmeticviewer${index}${i}`;
+    await account(viewer);
+    const challenge=await service.beginView(t,viewer,campaign.postId,token);
+    await query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '7 seconds'
+     WHERE id=$1`,[challenge.challengeId]);
+    expect(await service.finishView(t,viewer,challenge.challengeId,
+     {visibleFraction:0.9,foreground:true,engaged:true}))
+      .toMatchObject({qualified:true,payable:true});
+   }
+  }
+  const charges=await query(`SELECT campaign_id::text AS id,
+   count(*)::int AS views,sum(sharer_half_mb)::int AS sharer_half_mb,
+   sum(platform_half_mb)::int AS platform_half_mb
+   FROM feed.promotion_view_charges WHERE tenant_id=$1 AND campaign_id=ANY($2::uuid[])
+   GROUP BY campaign_id ORDER BY views DESC`,[t,ids]);
+  const rows=charges.rows as Array<{id:string;views:number;
+   sharer_half_mb:number;platform_half_mb:number}>;
+  expect(rows).toEqual([
+   {id:ids[0],views:3,sharer_half_mb:3,platform_half_mb:3},
+   {id:ids[1],views:2,sharer_half_mb:2,platform_half_mb:2},
+  ]);
+  const pendingHalfMb=rows.reduce((sum,row)=>sum+row.sharer_half_mb,0);
+  expect({pendingHalfMb,wholeMb:Math.floor(pendingHalfMb/2),
+   carryHalfMb:pendingHalfMb%2}).toEqual({pendingHalfMb:5,wholeMb:2,carryHalfMb:1});
+  const earn=(await service.mine(t,'sharer')).sharingEarnings;
+  expect(earn.filter(x=>posts.includes(String(x.postId)))
+   .map(x=>x.pendingHalfMb).sort()).toEqual([2,3]);
  });
 });

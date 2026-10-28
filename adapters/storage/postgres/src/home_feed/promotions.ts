@@ -18,6 +18,14 @@ function reviewReason(reason:string|undefined,required:boolean){
  return value;
 }
 const count=(v:unknown)=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<0)throw Error('corrupt_promotion_balance');return n;};
+/** Each payable view consumes exactly one purchased MB. Keep allocation in
+ * integer half-MB units so odd referrals retain their fractional liability
+ * across campaigns without floating-point rounding or per-campaign truncation. */
+export function qualifiedViewAllocation(hasEligibleSharer:boolean){
+ return hasEligibleSharer?
+  {platformHalfMb:1 as const,sharerHalfMb:1 as const}:
+  {platformHalfMb:2 as const,sharerHalfMb:0 as const};
+}
 function actor(t:string,u:string){if(!principal.test(t)||!principal.test(u))fail('invalid_actor');}
 function identifier(id:string){if(!uuid.test(id))fail('invalid_identifier');}
 function campaign(r:Row){
@@ -461,9 +469,11 @@ export class PgStatusPromotions {
      from_kind,from_id,to_kind,to_id,source_bucket,target_bucket,amount_mb)
      VALUES($1,$2,'human',$3,'usage','promotion','purchased','usage',1)`,
       [t,operation,selected.sponsor_id]);
+    const allocation=qualifiedViewAllocation(sharer!==null);
     await c.query(`INSERT INTO feed.promotion_view_charges
      (tenant_id,view_id,campaign_id,wallet_operation_id,platform_half_mb,sharer_half_mb,sharer_id)
-     VALUES($1,$2,$3,$4,$5,$6,$7)`,[t,view,selected.id,operation,sharer?1:2,sharer?1:0,sharer]);
+     VALUES($1,$2,$3,$4,$5,$6,$7)`,[t,view,selected.id,operation,
+      allocation.platformHalfMb,allocation.sharerHalfMb,sharer]);
     await c.query(`UPDATE feed.qualified_views SET campaign_id=$3,sharer_id=$4
      WHERE tenant_id=$1 AND id=$2`,[t,view,selected.id,sharer]);
     await c.query(`UPDATE feed.promotion_campaigns SET remaining_views=remaining_views-1,
