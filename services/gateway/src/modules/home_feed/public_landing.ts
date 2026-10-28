@@ -124,13 +124,16 @@ const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,c=>({
 /** Render a crawler-safe, JS-free preview. Fetching, unfurling and link
  * scanning never invoke view challenges or create commission liabilities. */
 export function renderPublicStatusPage(post:Extract<PublicStatusPost,{gone?:false}>,
-  referral?:string,publicBaseUrl='https://masanawa.com',imagesEnabled=false):string {
+  referral?:string,publicBaseUrl='https://masanawa.com',imagesEnabled=false,
+  guestVerificationEnabled=false):string {
  const name=escapeHtml(post.name.slice(0,130));
  const description=escapeHtml(post.body.replace(/\s+/g,' ').slice(0,240));
  const body=escapeHtml(post.body).replace(/\r?\n/g,'<p></p>');
  const source=new URL(`/status/${encodeURIComponent(post.id)}`,publicBaseUrl).toString();
  const valid=referral&&/^[A-Za-z0-9_-]{20,128}$/.test(referral)?referral:null;
  const href=escapeHtml(source+(valid?`?r=${encodeURIComponent(valid)}`:''));
+ const verification=escapeHtml(new URL(`/status/${encodeURIComponent(post.id)}/verify`,
+  publicBaseUrl).toString()+(valid?`?r=${encodeURIComponent(valid)}`:''));
  const canonical=escapeHtml(source);
  const approved=imagesEnabled?post.imagePreview:undefined;
  const imageUrl=approved?escapeHtml(new URL(
@@ -165,6 +168,7 @@ ${valid?`<p class="fine">This shared link includes an opaque referral code. If y
 and later complete an eligible verified view, the original sharer may earn a pending reward.
 The code is not your identity; you can choose to open without referral attribution.</p>`:''}
 <a rel="nofollow noopener" href="${href}">${valid?'Open with referral attribution':'Open in Masanawa'}</a>
+${guestVerificationEnabled?`<a class="secondary" rel="nofollow noopener" href="${verification}">Optional web view verification</a>`:''}
 ${valid?`<a class="secondary" rel="nofollow noopener" href="${canonical}">Open without referral attribution</a>`:''}
 <p class="fine">A qualified view requires a verified in-app or separately consented web session;
 link previews, crawlers and this page alone never count.</p>
@@ -177,6 +181,7 @@ export async function registerPublicStatusLanding(app:FastifyInstance,options:{
     readApprovedImage?(postId:string,mediaId:string):Promise<{
       bytes:Buffer;contentType:'image/webp'}|null>};
   enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string;
+  guestVerificationEnabled?:()=>boolean;
 }){
  app.get('/status/:postId/image/:mediaId',async(req,reply)=>{
   reply.header('Cache-Control','no-store');
@@ -208,6 +213,7 @@ export async function registerPublicStatusLanding(app:FastifyInstance,options:{
   const referral=typeof token==='string'&&/^[A-Za-z0-9_-]{20,128}$/.test(token)&&
     await options.port.validReferral?.(id,token)?token:undefined;
   return reply.type('text/html; charset=utf-8').send(renderPublicStatusPage(post,
-    referral,options.publicBaseUrl,options.imagesEnabled?.()===true));
+    referral,options.publicBaseUrl,options.imagesEnabled?.()===true,
+    options.guestVerificationEnabled?.()===true));
  });
 }

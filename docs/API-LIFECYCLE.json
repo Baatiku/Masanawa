@@ -53,6 +53,7 @@
       "/search",
       "/status/:postId",
       "/status/:postId/image/:mediaId",
+      "/status/:postId/verify",
       "/talks",
       "/talks/:talkId",
       "/talks/:talkId/ai-seat-quotes",

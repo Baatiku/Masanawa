@@ -6,6 +6,7 @@ import {registerPromotionRoutes,type PromotionPort} from "./promotion_routes.js"
 import {registerPublicStatusLanding,type PublicStatusPost} from "./public_landing.js";
 import {registerStatusGuestProofRoutes,type GuestProofPort,GuestConsentSigner} from './guest_consent.js';
 import {registerStatusGuestReviewRoutes,type GuestReviewPort} from './guest_review.js';
+import {registerGuestExperience} from './guest_experience.js';
 
 /** Structural port implemented by the existing platform customer-session
  * authorizer. The host supplies that authority, never an HTTP role header. */
@@ -25,7 +26,11 @@ export interface StatusRuntime {
     validReferral?(id:string,token:string):Promise<boolean>;
     readApprovedImage?(postId:string,mediaId:string):Promise<{
       bytes:Buffer;contentType:'image/webp'}|null>};
-   enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string};
+   enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string;
+   guestVerificationEnabled?:()=>boolean};
+ guestExperience?:{port:{find(id:string):Promise<PublicStatusPost|null>;
+   validReferral?(id:string,token:string):Promise<boolean>};
+   enabled:()=>boolean;imagesEnabled?:()=>boolean};
  guestProof?:{port:GuestProofPort;signer:GuestConsentSigner;
    enabled:()=>boolean;publicBaseUrl:string};
  guestReview?:{port:GuestReviewPort;enabled:()=>boolean};
@@ -41,6 +46,7 @@ export interface StatusRuntime {
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
  // This route is a read-only crawler preview outside the signed-in fan scope.
  if(options.publicLanding)await registerPublicStatusLanding(app,options.publicLanding);
+ if(options.guestExperience)await registerGuestExperience(app,options.guestExperience);
  if(options.guestProof)await registerStatusGuestProofRoutes(app,options.guestProof);
  await app.register(async scope=>{
   scope.setErrorHandler((error,_request,reply)=>{

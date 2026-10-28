@@ -1665,7 +1665,12 @@ export async function startGatewayService(
           validReferral:(post,token)=>publicPreview!.validReferral(post,token),
           ...(publicImages?{readApprovedImage:publicImages}:{}),
         },enabled:()=>false,imagesEnabled:()=>!!publicImages,
+          guestVerificationEnabled:()=>false,
           publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
+        guestExperience:{port:{
+          find:id=>publicPreview!.find(id),
+          validReferral:(post,token)=>publicPreview!.validReferral(post,token),
+        },enabled:()=>false,imagesEnabled:()=>!!publicImages},
         ...(statusGuestProofs?{guestProof:{port:statusGuestProofs,
           signer:new GuestConsentSigner(env.MASANAWA_STATUS_ATTRIBUTION_SECRET!),
           enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
