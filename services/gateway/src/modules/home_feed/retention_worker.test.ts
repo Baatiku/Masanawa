@@ -69,4 +69,18 @@ describe('account-independent paid post expiry sweeper',()=>{
   expect(pruneExpiredGuestEvidence).toHaveBeenCalledTimes(3);
   await worker.stop();
  });
+
+ it('expires purchases before paid-post purge and retries remaining campaign deadlines',async()=>{
+  vi.useFakeTimers();
+  const sequence:string[]=[];
+  const expireCampaigns=vi.fn().mockImplementationOnce(async()=>{
+   sequence.push('expire');return {expired:100,refundedMb:10};
+  }).mockImplementation(async()=>{sequence.push('expire');return {expired:2,refundedMb:0};});
+  const purgeExpired=vi.fn(async()=>{sequence.push('purge');return {purged:0};});
+  const worker=new StatusRetentionWorker({expireCampaigns,purgeExpired});
+  worker.start();await worker.sweep();
+  expect(sequence).toEqual(['expire','expire','purge']);
+  await worker.stop();
+ });
+
 });
