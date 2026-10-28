@@ -404,4 +404,97 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await expect(service.share(t,'sharer',c.postId))
     .rejects.toMatchObject({code:'post_not_found'});
  });
+
+ it('keeps an organic first exposure organic after app relaunch and a later forwarded link',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'Organic first, future tracking never wins',targetViews:3});
+  const c=await service.confirm(t,'publisher',q.quoteId,'organic-first-replay-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const first=await service.beginView(t,'viewertwo',c.postId);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[first.challengeId]);
+  expect(await service.finishView(t,'viewertwo',first.challengeId,
+   {visibleFraction:0.75,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true,verifiedViews:1});
+  const forwarded=await service.share(t,'sharer',c.postId);
+  const other=await service.share(t,'booster',c.postId);
+  for(const url of [forwarded.url,other.url]){
+   // A new signed session or a second app/browser visit still resolves to
+   // this viewer's stable authenticated digest, never a second paid view.
+   const reopened=await service.beginView(t,'viewertwo',c.postId,
+    new URL(url).searchParams.get('r')!);
+   await query(`UPDATE feed.view_challenges SET started_at=
+    statement_timestamp()-interval '7 seconds' WHERE id=$1`,[reopened.challengeId]);
+   expect(await service.finishView(t,'viewertwo',reopened.challengeId,
+    {visibleFraction:0.75,foreground:true,engaged:true}))
+    .toMatchObject({qualified:false,duplicate:true});
+  }
+  expect((await query(`SELECT count(*)::int AS n FROM feed.qualified_views
+   WHERE post_id=$1`,[c.postId])).rows[0]).toMatchObject({n:1});
+  expect((await query(`SELECT platform_half_mb,sharer_half_mb FROM
+   feed.promotion_view_charges WHERE campaign_id=$1`,[c.id])).rows)
+   .toEqual([{platform_half_mb:2,sharer_half_mb:0}]);
+  expect((await service.mine(t,'sharer')).sharingEarnings
+   .filter(x=>x.postId===c.postId)).toEqual([]);
+ });
+
+ it('denies owner self-referral rebates and rejects unqualified or expired challenges',async()=>{
+  await account('fraudmatrixowner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'fraudmatrixowner',
+   body:'No self-rebate, scanners or rapid bot credit',targetViews:4});
+  const c=await service.confirm(t,'fraudmatrixowner',q.quoteId,'owner-referral-abuse-001');
+  await service.review(t,'distincteditor',c.id,true);
+  expect(await service.share(t,'fraudmatrixowner',c.postId)).toEqual({
+   url:`https://status.example.test/status/${c.postId}`,earnable:false});
+  const link=await service.share(t,'sharer',c.postId);
+  const token=new URL(link.url).searchParams.get('r')!;
+  const self=await service.beginView(t,'sharer',c.postId,token);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[self.challengeId]);
+  expect(await service.finishView(t,'sharer',self.challengeId,
+   {visibleFraction:0.75,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  expect((await query(`SELECT sharer_id,sharer_half_mb FROM
+   feed.promotion_view_charges WHERE campaign_id=$1`,[c.id])).rows)
+   .toEqual([{sharer_id:null,sharer_half_mb:0}]);
+  const bot=await service.beginView(t,'viewertwo',c.postId,token);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[bot.challengeId]);
+  for(const visibility of [
+   {visibleFraction:0.49,foreground:true,engaged:true},
+   {visibleFraction:1,foreground:false,engaged:true},
+   {visibleFraction:1,foreground:true,engaged:false},
+  ])await expect(service.finishView(t,'viewertwo',bot.challengeId,visibility))
+   .rejects.toMatchObject({code:'view_not_qualified'});
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '301 seconds' WHERE id=$1`,[bot.challengeId]);
+  await expect(service.finishView(t,'viewertwo',bot.challengeId,
+   {visibleFraction:1,foreground:true,engaged:true}))
+   .rejects.toMatchObject({code:'view_challenge_expired'});
+  expect((await query(`SELECT count(*)::int AS n FROM feed.qualified_views
+   WHERE post_id=$1`,[c.postId])).rows[0]).toMatchObject({n:1});
+  expect((await query(`SELECT remaining_views AS remaining FROM
+   feed.promotion_campaigns WHERE id=$1`,[c.id])).rows[0]).toMatchObject({remaining:3});
+ });
+
+ it('invalidates a signed link after challenge start without denying a distinct organic visitor',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+   body:'A reviewed link can be revoked while in foreground',targetViews:2});
+  const c=await service.confirm(t,'publisher',q.quoteId,'late-link-revocation-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const link=await service.share(t,'sharer',c.postId);
+  const token=new URL(link.url).searchParams.get('r')!;
+  const ch=await service.beginView(t,'viewertwo',c.postId,token);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[ch.challengeId]);
+  await query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
+   WHERE tenant_id=$1 AND post_id=$2 AND token_sha256=$3`,
+   [t,c.postId,createHash('sha256').update(token).digest('hex')]);
+  expect(await service.finishView(t,'viewertwo',ch.challengeId,
+   {visibleFraction:0.8,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  expect((await query(`SELECT sharer_id,platform_half_mb,sharer_half_mb
+   FROM feed.promotion_view_charges WHERE campaign_id=$1`,[c.id])).rows)
+   .toEqual([{sharer_id:null,platform_half_mb:2,sharer_half_mb:0}]);
+ });
 });
