@@ -92,6 +92,8 @@ void main() {
     expect(tester.widget<Text>(find.text('Redeem Data')).maxLines,isNull);
     expect(find.text('Buy Data'),findsNWidgets(2));
     expect(find.text('Add data'),findsNothing);expect(find.text('Redeem'),findsNothing);
+    await tester.dragUntilVisible(find.text('Recent transactions'),find.byType(ListView),const Offset(0,-180));
+    await tester.pumpAndSettle();
     expect(tester.takeException(),isNull);
   });
 

@@ -220,9 +220,10 @@ class GbWalletActivitySection extends ConsumerWidget {
     final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5,
       unit:'all',filters:gbActivityAllFilters)));
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      Row(children:[
-        Expanded(child:Text('Recent transactions',style:Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight:FontWeight.w700))),
+      Wrap(alignment:WrapAlignment.spaceBetween,
+        crossAxisAlignment:WrapCrossAlignment.center,children:[
+        Text('Recent transactions',style:Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight:FontWeight.w700)),
         TextButton.icon(
           onPressed:owner==null?null:()=>context.push('/wallet/activity'),
           label:const Text('See all'),icon:const Icon(Icons.chevron_right)),
