@@ -60,9 +60,10 @@ export interface PlatformSessionRepository {
   resolveProfile(input: Readonly<{
     tenantId: TenantId; channel: PlatformAuthChannel; identifier: string; observedAt: string;
   }>): Promise<PlatformAuthProfile | null>;
+  canAllocateUsername?(input:Readonly<{tenantId:TenantId;name:string;firstName?:string;lastName?:string;contactPhone?:string;username?:string}>):Promise<boolean>;
   createProfile(input: Readonly<{
     tenantId: TenantId; channel: PlatformAuthChannel; identifier: string; name: string; locale: string; createdAt: string;
-    firstName?: string; lastName?: string; contactPhone?: string;
+    firstName?: string; lastName?: string; contactPhone?: string; username?:string;
     countryIso?:string;subdivisionIso?:string;
   }>): Promise<PlatformAuthProfile>;
   updateContactGeography?(input:Readonly<{

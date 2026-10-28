@@ -34,7 +34,7 @@ class _Adapter implements HttpClientAdapter {
 }
 
 Future<void> _flush() async {
-  for (var i = 0; i < 8; i++) {
+  for (var i = 0; i < 24; i++) {
     await Future<void>.delayed(Duration.zero);
   }
 }
@@ -95,6 +95,46 @@ void main() {
     expect(api.accessToken, 'a1');
   });
 
+  test('private recipient lookup refreshes once without retrying financial writes', () async {
+    login('fan-a', 'a1');var rotations=0;
+    api.onUnauthorized=() async {rotations++;return 'a2';};
+    final result=api.dio.post('/v1/gb/wallet/recipients/search',data:{'q':'amina@example.com'});
+    await _flush();adapter.complete(0,401);await _flush();
+    expect(adapter.requests,hasLength(2));expect(adapter.requests[1].data,{'q':'amina@example.com'});
+    expect(adapter.requests[1].headers['Authorization'],'Bearer a2');
+    adapter.complete(1,401);await expectLater(result,throwsA(isA<DioException>()));
+    expect(rotations,1);expect(adapter.requests,hasLength(2));
+  });
+  test('concurrent read failures share one refresh and retain each original lookup', () async {
+    login('fan-a','a1');var rotations=0;final rotated=Completer<String?>();
+    api.onUnauthorized=(){rotations++;return rotated.future;};
+    final first=api.dio.get('/v1/account/username');
+    final second=api.dio.post('/v1/gb/wallet/recipients/search',data:{'q':'amina@example.com'});
+    await _flush();expect(adapter.requests,hasLength(2));
+    adapter.complete(0,401);adapter.complete(1,401);await _flush();expect(rotations,1);
+    rotated.complete('a2');await _flush();expect(adapter.requests,hasLength(4));
+    for(var i=2;i<4;i++){
+      expect(adapter.requests[i].headers['Authorization'],'Bearer a2');
+      adapter.complete(i,200,data:{'username':'amina','recipients':[]});
+    }
+    expect(await Future.wait([first,second]),hasLength(2));expect(rotations,1);
+  });
+  test('late private recipient lookup cannot refresh or leak after account replacement', () async {
+    login('fan-a','a1');var rotations=0;api.onUnauthorized=()async{rotations++;return 'a2';};
+    final result=api.dio.post('/v1/gb/wallet/recipients/search',data:{'q':'amina@example.com'});
+    await _flush();login('fan-b','b1');adapter.complete(0,401);
+    await expectLater(result,throwsA(isA<DioException>().having((e)=>e.type,'type',DioExceptionType.cancel)));
+    expect(rotations,0);expect(adapter.requests,hasLength(1));
+  });
+  test('Send quote, confirm and username changes are never refresh-replayed', () async {
+    login('fan-a','a1');var rotations=0;api.onUnauthorized=()async{rotations++;return 'a2';};
+    final paths=['/v1/gb/wallet/send/quote','/v1/gb/wallet/send/confirm','/v1/account/username'];
+    for(var i=0;i<paths.length;i++){
+      final result=api.dio.request(paths[i],data:{'draft':'original'},options:Options(method:i==2?'PATCH':'POST'));
+      await _flush();adapter.complete(i,401);await expectLater(result,throwsA(isA<DioException>()));
+    }
+    expect(rotations,0);expect(adapter.requests,hasLength(3));
+  });
   test('nonfinancial mutations also require an explicit retry after 401', () async {
     login('fan-a', 'a1');
     api.onUnauthorized = () async => 'a2';

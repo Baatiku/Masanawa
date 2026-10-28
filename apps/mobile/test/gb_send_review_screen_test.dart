@@ -68,12 +68,13 @@ void main() {
     final store=_MemorySendStore();
     final dio=Dio(BaseOptions(baseUrl:kApiBaseUrl));
     dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
-      if(options.method=='GET' && options.path.startsWith('/v1/gb/wallet/recipients/')) {
+      if(options.method=='POST' && options.path=='/v1/gb/wallet/recipients/search') {
         handler.resolve(Response(requestOptions:options,statusCode:200,data:{
-          'recipient':{'id':'fan-b','username':'bello.user','displayName':'Bello'}}));
+          'recipients':[{'id':'fan-b','username':'bello.user','displayName':'Bello'}]}));
         return;
       }
       if(options.method=='POST' && options.path=='/v1/gb/wallet/send/quote') {
+        expect((options.data as Map)['username'],'@bello.user');
         handler.resolve(Response(requestOptions:options,statusCode:200,
           data:_quote(DateTime.now().toUtc().add(const Duration(minutes:4)).toIso8601String())));
         return;
@@ -106,12 +107,15 @@ void main() {
           reservedMb:0,frozen:false)),
     ],child:const MaterialApp(home:GbSendScreen())));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first,'@bello.user');
+    await tester.enterText(find.byType(TextField).first,'bello@example.com');
     await tester.enterText(find.byKey(const ValueKey('send-custom-mb')),'250');
-    // The shared exact-handle readback is debounced. Let its identity check
-    // finish before entering the signed transfer review flow.
+    // Private-contact suggestions must be selected before signed review.
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Bello'));
+    await tester.tap(find.text('Bello'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text,'@bello.user');
     await tester.dragUntilVisible(find.text('Review recipient and amount'),
       find.byType(ListView),const Offset(0,-150));
     await tester.tap(find.text('Review recipient and amount'));
@@ -236,7 +240,7 @@ void main() {
     final posts=<String>[];
     final dio=Dio(BaseOptions(baseUrl:kApiBaseUrl));
     dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
-      if(options.method=='POST')posts.add(options.path);
+      if(options.method=='POST' && options.path.startsWith('/v1/gb/wallet/send/'))posts.add(options.path);
       if(options.path=='/v1/gb/wallet/send/quote') {
         handler.resolve(Response(requestOptions:options,statusCode:200,
           data:_quote(DateTime.now().toUtc().add(const Duration(minutes:4)).toIso8601String())));
@@ -244,7 +248,7 @@ void main() {
       }
       if(options.path.startsWith('/v1/gb/wallet/recipients/')) {
         handler.resolve(Response(requestOptions:options,statusCode:200,data:{
-          'recipient':{'id':'fan-b','username':'bello.user','displayName':'Bello'}}));
+          'recipients':[{'id':'fan-b','username':'bello.user','displayName':'Bello'}]}));
         return;
       }
       handler.reject(DioException(requestOptions:options,

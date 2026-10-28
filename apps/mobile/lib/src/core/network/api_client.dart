@@ -87,6 +87,13 @@ class ApiClient {
             handler.next(response);
           }
         },
+      ),
+    );
+    // A refresh retry may itself fail. A queued error handler would wait on
+    // its own retry's error queue forever; request/response fencing remains
+    // queued above, while single-flight refresh handles concurrent errors.
+    dio.interceptors.add(
+      InterceptorsWrapper(
         onError: (e, handler) async {
           final options = e.requestOptions;
           if (_isStale(options)) {
@@ -94,10 +101,12 @@ class ApiClient {
             return;
           }
           final path = options.path;
-          // No automatic replay of POST/PUT/PATCH/DELETE: a previously
-          // accepted mutation may still have yielded a stale-session 401.
+          // Never replay mutations after 401. This exact POST is a pure
+          // lookup using a body so private contacts stay out of URL logs.
+          final recipientSearch = options.method.toUpperCase() == 'POST' &&
+              path == '/v1/gb/wallet/recipients/search';
           final safeRead = options.method.toUpperCase() == 'GET' ||
-              options.method.toUpperCase() == 'HEAD';
+              options.method.toUpperCase() == 'HEAD' || recipientSearch;
           final canRefresh = safeRead &&
               onUnauthorized != null &&
               _isProtected(path) &&
@@ -275,13 +284,13 @@ class ApiClient {
   }
 
   Future<AuthTokens> otpVerify(String code,
-      {String? phone, String? email, String? name, String? firstName,
+      {String? phone, String? email, String? name, String? username, String? firstName,
         String? lastName, String? contactPhone,String? countryIso,
         String? subdivisionIso,String? deviceId}) async {
     final data = await _post(
       '/auth/verify',
       {
-        ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name,
+        ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name, username:username,
           firstName:firstName,lastName:lastName,contactPhone:contactPhone,
           countryIso:countryIso,subdivisionIso:subdivisionIso)
           .toJson(),
@@ -1326,6 +1335,7 @@ String? _legacyCode(String? value) {
     'OTP_CHANNEL_UNAVAILABLE',
     'PHONE_PASSWORD_REQUIRED',
     'OTP_DELIVERY_UNAVAILABLE',
+    'USERNAME_CHOICE_REQUIRED', 'USERNAME_TAKEN', 'USERNAME_INVALID',
     'NAME_REQUIRED_ON_SIGNUP',
     'SESSION_NOT_FOUND',
     'UNAUTHORIZED',
@@ -1388,6 +1398,12 @@ String _friendlyMessage({
       return 'Use your six-digit password to sign in by phone, or choose Forgot password.';
     case 'OTP_DELIVERY_UNAVAILABLE':
       return 'We could not send the code right now. Please try again.';
+    case 'USERNAME_CHOICE_REQUIRED':
+      return 'Choose an available username below to finish creating your account.';
+    case 'USERNAME_TAKEN':
+      return 'That username is already in use. Choose another username.';
+    case 'USERNAME_INVALID':
+      return 'Use a username of 2–40 letters, numbers, dots or underscores, starting with a letter.';
     case 'NAME_REQUIRED_ON_SIGNUP':
       return 'Please enter your name to continue.';
     case 'SESSION_NOT_FOUND':

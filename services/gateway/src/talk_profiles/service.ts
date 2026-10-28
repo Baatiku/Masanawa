@@ -1,3 +1,4 @@
+import {normalizeUsername} from '@masanawa/security';
 import type { PlatformSessionIdentity } from "@masanawa/security";
 import type {
   HumanContactPage,
@@ -144,7 +145,8 @@ export function createTalkProfileService(input: Readonly<{
 
     async createSelf(request) {
       const viewer = await identity(request.authorizationHeader);
-      const handle = normalizeHandle(request.handle);
+      let handle:string;
+      try{handle=normalizeUsername(request.handle);}catch{throw new TalkProfileError('profiles.handle_invalid',400);}
       const displayName = request.displayName.trim().replace(/\s+/gu, " ");
       const bio = request.bio.trim();
       if (displayName.length < 2 || displayName.length > 80) {

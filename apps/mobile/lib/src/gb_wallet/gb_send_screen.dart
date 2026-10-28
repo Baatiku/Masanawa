@@ -50,7 +50,7 @@ class GbSendQuote {
         recipientId is! String || recipientId.isEmpty ||
         name is! String || name.trim().isEmpty ||
         handle is! String ||
-        !RegExp(r'^[a-z0-9_][a-z0-9_.-]{2,63}$').hasMatch(handle) ||
+        !RegExp(r'^[a-z0-9_][a-z0-9_.-]{1,63}$').hasMatch(handle) ||
         reviewToken is! String || reviewToken.length < 40 ||
         reviewToken.length > 4096 || operationId is! String ||
         !RegExp(r'^send_[A-Za-z0-9_-]{22,128}$').hasMatch(operationId) ||
@@ -229,7 +229,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   }
 
   bool get _validHandle =>
-      RegExp(r'^@?[a-zA-Z0-9_][a-zA-Z0-9_.-]{2,63}$')
+      RegExp(r'^@?[a-zA-Z0-9_][a-zA-Z0-9_.-]{1,63}$')
           .hasMatch(_username.text.trim());
 
   Future<void> _review(GbWalletOwner owner) async {
@@ -493,7 +493,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
             owner: owner,
             enabled: owner != null && !_busy && _quote == null,
             onChanged: (_) => setState(_clearReview),
-            label: 'Recipient username',
+            label: 'Find recipient',
           ),
           const SizedBox(height: 12),
           Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(

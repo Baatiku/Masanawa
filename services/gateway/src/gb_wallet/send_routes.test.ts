@@ -32,6 +32,22 @@ function setup(overrides:Partial<GbSendPorts>={}) {
   return {app,transfer,readTransfer};
 }
 describe("exact whole-MB internal Send review",()=>{
+  it('provides private authenticated suggestions without money writes and rate limits lookups',async()=>{
+    const search=vi.fn(async()=>[target,{...target,userId:actor.userId},
+      {...target,userId:'disabled',active:false}]);
+    const {app,transfer}=setup({searchRecipients:search});const headers={authorization:'Bearer current'};
+    const url='/v1/gb/wallet/recipients/search';
+    expect((await app.inject({method:'POST',url,payload:{q:'be'}})).statusCode).toBe(401);
+    expect((await app.inject({method:'POST',url,headers,payload:{q:'be',tenantId:'other'}})).statusCode).toBe(422);
+    const result=await app.inject({method:'POST',url,headers,payload:{q:'bello@example.com'}});
+    expect(result.statusCode).toBe(200);expect(result.headers['cache-control']).toBe('no-store');
+    expect(result.json()).toEqual({recipients:[{id:'recipient-b',username:'bello.user',displayName:'Bello'}]});
+    expect(search).toHaveBeenCalledWith(actor,'bello@example.com');
+    for(let count=1;count<60;count++)expect((await app.inject({method:'POST',url,headers,payload:{q:'be'}})).statusCode).toBe(200);
+    expect((await app.inject({method:'POST',url,headers,payload:{q:'be'}})).statusCode).toBe(429);
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
   it("reads the original operation as the debit actor only without POST replay",async()=>{
     const {app,transfer,readTransfer}=setup();
     readTransfer.mockImplementation(async(_actor,operationId)=>({operationId,amountMb:200,state:"completed"}));
@@ -59,7 +75,7 @@ describe("exact whole-MB internal Send review",()=>{
     expect(read.headers["cache-control"]).toBe("no-store");
     expect(read.json()).toEqual({recipient:{id:"recipient-b",username:"bello.user",displayName:"Bello"}});
     expect(resolution).toHaveBeenCalledWith(actor,"bello.user");
-    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/recipients/bo",headers})).statusCode).toBe(422);
+    expect((await app.inject({method:"GET",url:"/v1/gb/wallet/recipients/b",headers})).statusCode).toBe(422);
     expect(transfer).not.toHaveBeenCalled();
     const self=setup({resolveRecipient:async()=>({...target,userId:actor.userId})});
     expect((await self.app.inject({method:"GET",url:path,headers})).statusCode).toBe(404);

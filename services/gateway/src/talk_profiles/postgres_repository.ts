@@ -124,7 +124,8 @@ const humanSelect = `
               AND f.followed_user_id = p.user_id
          ) AS is_following
     FROM talks.public_profiles p
-   WHERE p.tenant_id = $1 AND p.handle = $3
+   WHERE p.tenant_id = $1 AND (p.handle = $3 OR EXISTS(
+     SELECT 1 FROM talks.username_claims c WHERE c.tenant_id=p.tenant_id AND c.user_id=p.user_id AND c.handle=$3))
      AND (p.user_id=$2 OR (${publicHumanAccess}))
      AND NOT EXISTS (
        SELECT 1 FROM talks.safety_enforcement se

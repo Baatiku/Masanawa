@@ -7,3 +7,4 @@ export * from "./platform-session.js";
 export * from "./customer-channel.js";
 
 export * from "./policy-bootstrap.js";
+export * from './usernames.js';

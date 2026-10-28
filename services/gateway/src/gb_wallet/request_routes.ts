@@ -58,7 +58,7 @@ export function registerGbRequestRoutes(
   });
   app.post("/v1/gb/wallet/requests",{
     schema: {body: Type.Object({
-      username: Type.String({minLength:3,maxLength:80}),
+      username: Type.String({minLength:2,maxLength:80}),
       amountMb: Type.Integer({minimum:1,maximum:1000000000}),
       idempotencyKey: Type.String({minLength:12,maxLength:128}),
     },{additionalProperties:false})},
@@ -68,7 +68,7 @@ export function registerGbRequestRoutes(
       const owner=await actor(request.headers.authorization);
       const body=request.body as {username:string;amountMb:number;idempotencyKey:string};
       const handle=body.username.trim().replace(/^@/,"").toLowerCase();
-      if (!/^[a-z0-9_][a-z0-9_.-]{2,63}$/.test(handle)) {
+      if (!/^[a-z0-9_][a-z0-9_.-]{1,63}$/.test(handle)) {
         throw new GbRequestStoreError(422,"invalid_username");
       }
       const payer=await ports.resolveRecipient(owner,handle);

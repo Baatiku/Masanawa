@@ -1,3 +1,4 @@
+import '../settings/username_screen.dart';
 import 'package:dio/dio.dart';
 import '../../finance/identity_details_screen.dart';
 import '../settings/account_security_screen.dart';
@@ -313,16 +314,30 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                         ),
                       const SizedBox(height: 22),
-                      Text('Public profile', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Public profile',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 6),
-                      const Text('Your name, photo and bio are visible on your public profile.'),
+                      const Text(
+                        'Your name, photo and bio are visible on your public profile.',
+                      ),
                       if (profile != null)
-                        ListTile(contentPadding: EdgeInsets.zero,
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.visibility_outlined),
                           title: const Text('View public profile'),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: _saving ? null : () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(builder: (_) => PersonProfileScreen(handle: profile.handle)))),
+                          onTap: _saving
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => PersonProfileScreen(
+                                      handle: profile.handle,
+                                    ),
+                                  ),
+                                ),
+                        ),
                       const SizedBox(height: 12),
                       TextFormField(
                         key: const ValueKey('profile-edit-name'),
@@ -383,10 +398,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.alternate_email_rounded),
                           title: Text('@${profile!.handle}'),
-                          subtitle: const Text(
-                            'Your handle is fixed until linked Talk '
-                            'and invitation references can be migrated safely.',
-                          ),
+                          trailing: const Icon(Icons.edit_outlined),
+                          onTap: _saving || _requiresReload || _changed ? null : () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const UsernameScreen(),
+                              ),
+                            );
+                            if (mounted) _load();
+                          },
+                          subtitle: Text(_changed
+                            ? 'Save your profile changes before editing your username.'
+                            : 'Change your username. Previous profile links stay connected to you.'),
                         ),
                       if (_error != null) ...[
                         Padding(
@@ -427,21 +450,50 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               ),
                       ),
                       const SizedBox(height: 28),
-                      Text('Your account', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Your account',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 6),
-                      const Text('Private details and controls. These do not appear on your public profile.'),
+                      const Text(
+                        'Private details and controls. These do not appear on your public profile.',
+                      ),
                       const SizedBox(height: 8),
                       for (final entry in <(String, IconData, Widget)>[
-                        ('Identity details', Icons.verified_user_outlined, const IdentityDetailsScreen()),
-                        ('Account security', Icons.lock_outline, const AccountSecurityScreen()),
-                        ('Notifications', Icons.notifications_outlined, const NotificationPreferencesScreen()),
-                        ('Account data & privacy', Icons.manage_accounts_outlined, const AccountDataScreen()),
+                        (
+                          'Identity details',
+                          Icons.verified_user_outlined,
+                          const IdentityDetailsScreen(),
+                        ),
+                        (
+                          'Account security',
+                          Icons.lock_outline,
+                          const AccountSecurityScreen(),
+                        ),
+                        (
+                          'Notifications',
+                          Icons.notifications_outlined,
+                          const NotificationPreferencesScreen(),
+                        ),
+                        (
+                          'Account data & privacy',
+                          Icons.manage_accounts_outlined,
+                          const AccountDataScreen(),
+                        ),
                       ])
-                        ListTile(contentPadding: EdgeInsets.zero,
-                          leading: Icon(entry.$2), title: Text(entry.$1),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(entry.$2),
+                          title: Text(entry.$1),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: _saving ? null : () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(builder: (_) => entry.$3))),
+                          onTap: _saving
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => entry.$3,
+                                  ),
+                                ),
+                        ),
                     ],
                   ),
                 ),

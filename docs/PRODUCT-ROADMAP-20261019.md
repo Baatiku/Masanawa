@@ -1,5 +1,7 @@
 # Masanawa — canonical product roadmap
 
+**28 October username/Send correction:** Readable automatic usernames, private full-contact recipient search with live name/handle suggestions, and Settings username editing are implemented in the scoped username batch. See [source contract and verification](USERNAME-RECIPIENT-SEARCH-20261028.md). Existing chosen names, canonical IDs, immutable money/history, blocks and moderation remain protected; deployment/new-app-build availability is separate from source acceptance.
+
 **Owner scope reset: 24 October 2026.** This document replaces the prior feature-by-feature requirements for the original multi-asset/Rooms/human-messaging product in this repository. Original history remains in Git and in the separate untouched `Baatiku/Masanawa-App`. The owner-supplied refactor handoff is the decision source. Remote reset SHA `895e86a5` was not found on 24 October; source migration uses additive branches, not history reset.
 
 ## Outcome and non-negotiables

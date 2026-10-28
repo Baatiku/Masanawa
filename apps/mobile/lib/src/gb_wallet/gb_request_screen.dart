@@ -180,7 +180,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
   }
 
   bool get _validHandle => RegExp(
-    r'^@?[a-zA-Z0-9_][a-zA-Z0-9_.-]{2,63}$',
+    r'^@?[a-zA-Z0-9_][a-zA-Z0-9_.-]{1,63}$',
   ).hasMatch(_recipient.text.trim());
 
   Future<void> _create(_Owner owner) async {
@@ -354,7 +354,7 @@ class _GbRequestScreenState extends ConsumerState<GbRequestScreen> {
                 _createKey = null;
                 setState(() {});
               },
-              label: 'Request from @username',
+              label: 'Find payer',
             ),
             const SizedBox(height: 10),
             Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(

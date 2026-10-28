@@ -48,8 +48,28 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
       return {receipt};
     }catch(error){return errorResponse(error,reply);}
   });
-  // An exact public handle is required: never enumerate profiles by display
-  // name, phone, partial prefix or private contact list. The same active,
+  const searches=new Map<string,{at:number;count:number}>();
+  app.post('/v1/gb/wallet/recipients/search',async(request,reply)=>{
+    reply.header('cache-control','no-store');
+    try{
+      const user=await actor(request.headers.authorization);
+      const body=request.body as {q?:unknown}|null;
+      const q=body?.q;
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='q'))
+        return reply.code(422).send({error:{code:'invalid_recipient_search'}});
+      if(typeof q!=='string'||q.length<2||q.length>320)return reply.code(422).send({error:{code:'invalid_recipient_search'}});
+      if(!ports.searchRecipients)return reply.code(503).send({error:{code:'search_unavailable'}});
+      const key=JSON.stringify([user.tenantId,user.userId]),now=Date.now();
+      const previous=searches.get(key),window=previous&&now-previous.at<60000?previous:{at:now,count:0};
+      if(window.count>=60)return reply.code(429).header('retry-after','60').send({error:{code:'search_rate_limited'}});
+      if(searches.size>=10000&&!searches.has(key))searches.delete(searches.keys().next().value!);
+      window.count++;searches.set(key,window);
+      const found=await ports.searchRecipients(user,q);
+      return {recipients:found.filter(r=>r.active&&r.userId!==user.userId).slice(0,8).map(r=>({
+       id:r.userId,username:r.username,displayName:r.displayName,...(r.avatarUrl?{avatarUrl:r.avatarUrl}:{})}))};
+    }catch(error){return errorResponse(error,reply);}
+  });
+  // Legacy exact-handle preview remains compatible. The same active,
   // self-excluding and bilateral-blocked resolver backs signed Send review.
   app.get("/v1/gb/wallet/recipients/:username",async(request,reply)=>{
     reply.header("cache-control","no-store");
@@ -57,7 +77,7 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
       const user=await actor(request.headers.authorization);
       const raw=(request.params as {username?:unknown}).username;
       const handle=typeof raw==="string"?raw.trim().replace(/^@/,"").toLowerCase():"";
-      if(!/^[a-z0-9_][a-z0-9_.-]{2,63}$/.test(handle))
+      if(!/^[a-z0-9_][a-z0-9_.-]{1,63}$/.test(handle))
         return reply.code(422).send({error:{code:"invalid_recipient_handle"}});
       const recipient=await ports.resolveRecipient(user,handle);
       if(!recipient?.active || recipient.userId===user.userId ||
@@ -70,7 +90,7 @@ export function registerGbSendReviewRoutes(app: FastifyInstance,ports:GbSendPort
   });
   app.post("/v1/gb/wallet/send/quote",{
     schema:{body:Type.Object({
-      username:Type.String({minLength:3,maxLength:80}),
+      username:Type.String({minLength:2,maxLength:80}),
       amountMb:Type.Integer({minimum:1,maximum:1_000_000_000}),
     },{additionalProperties:false})},
   },async(request,reply)=>{
