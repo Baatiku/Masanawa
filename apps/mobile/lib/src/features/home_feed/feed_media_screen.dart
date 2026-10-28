@@ -13,19 +13,22 @@ typedef OriginalMediaRenderer = Widget Function(FeedMediaGrant grant);
 class FeedMediaScreen extends StatefulWidget {
   const FeedMediaScreen({super.key,required this.api,required this.accountKey,
     required this.postId,required this.mediaIds,required this.kind,
-    this.initialMediaId,this.onBeforeAudio,this.mediaRenderer,this.enabled=true});
+    this.initialMediaId,this.onBeforeAudio,this.mediaRenderer,this.playerFactory,this.enabled=true});
   final FeedMediaApi api;
   final String accountKey,postId,kind;
   final List<String> mediaIds;
   final String? initialMediaId;
   final Future<void> Function()? onBeforeAudio;
   final OriginalMediaRenderer? mediaRenderer;
+  /// The view owns and disposes this player; injectable for playback tests.
+  final AudioPlayer Function()? playerFactory;
   final bool enabled;
   @override State<FeedMediaScreen> createState()=>_FeedMediaScreenState();
 }
 class _FeedMediaScreenState extends State<FeedMediaScreen>
     with WidgetsBindingObserver {
-  late final AudioPlayer player=AudioPlayer();
+  late final AudioPlayer player=widget.playerFactory?.call()??AudioPlayer();
+  String? loadedAudioUrl;
   late int index;
   FeedMediaGrant? grant;
   String? error;
@@ -36,7 +39,7 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
   Timer? _grantExpiry;
 
   void _discardGrant() {
-    playGeneration++;starting=false;
+    playGeneration++;starting=false;loadedAudioUrl=null;
     _grantExpiry?.cancel();
     _grantExpiry = null;
     final previous = grant;
@@ -140,7 +143,13 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
       if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
       if(LiveCallForeground.active)throw StateError('call_active');
       if(current.expiresAt.isBefore(DateTime.now().add(const Duration(seconds:10)))){await load();return;}
-      await player.setUrl(current.url.toString());
+      if(loadedAudioUrl!=current.url.toString()){
+        await player.setUrl(current.url.toString());
+        if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
+        loadedAudioUrl=current.url.toString();
+      }else if(player.processingState==ProcessingState.completed){
+        await player.seek(Duration.zero);
+      }
       if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
       if(LiveCallForeground.active){await player.pause();throw StateError('call_active');}
       unawaited(player.play().catchError((Object _) {

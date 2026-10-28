@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/core/live_call_foreground.dart';
 import 'package:masanawa/src/core/status_audio_focus.dart';
@@ -14,6 +15,27 @@ class MediaStub implements FeedMediaApi {
 }
 FeedMediaGrant grant(String id)=>FeedMediaGrant(mediaId:id,kind:'image',
  url:Uri.parse('https://media.example.test/signed'),expiresAt:DateTime.now().add(const Duration(minutes:1)));
+class PlaybackFake extends Fake implements AudioPlayer {
+  final states=StreamController<PlayerState>.broadcast(),positions=StreamController<Duration>.broadcast();
+  final loaded=<String>[],seeks=<Duration?>[];
+  Duration? total;Duration position=Duration.zero;bool playing=false;Completer<void>? decoding;
+  ProcessingState state=ProcessingState.idle;
+  @override Stream<PlayerState> get playerStateStream=>states.stream;
+  @override Stream<Duration> get positionStream=>positions.stream;
+  @override Duration? get duration=>total;
+  @override ProcessingState get processingState=>state;
+  void emit(){states.add(PlayerState(playing,state));positions.add(position);}
+  @override Future<Duration?> setUrl(String url,{Map<String,String>? headers,Duration? initialPosition,bool preload=true,dynamic tag})async{
+    loaded.add(url);await decoding?.future;total=const Duration(minutes:2);position=initialPosition??Duration.zero;state=ProcessingState.ready;emit();return total;
+  }
+  @override Future<void> play()async{playing=true;emit();}
+  @override Future<void> pause()async{playing=false;emit();}
+  @override Future<void> stop()async{playing=false;state=ProcessingState.idle;emit();}
+  @override Future<void> seek(Duration? value,{int? index})async{seeks.add(value);position=value??Duration.zero;state=ProcessingState.ready;emit();}
+  @override Future<void> setSpeed(double value)async{}
+  @override Future<void> dispose()async{await states.close();await positions.close();}
+}
+
 void main(){
  test('Status audio focus does not take an active call session',()async{
    await LiveCallForeground.startOrThrow(android:false);addTearDown(LiveCallForeground.stop);
@@ -60,6 +82,36 @@ void main(){
    await t.pumpAndSettle();
    expect(find.byType(SingleChildScrollView),findsWidgets);expect(find.text(transcript),findsOneWidget);
    expect(t.widget<Slider>(find.byType(Slider)).onChanged,isNull);expect(t.takeException(),isNull);
+ });
+ testWidgets('Pause and Play retain the decoded source and position; a finished clip explicitly restarts',(t)async{
+   final playback=PlaybackFake();
+   await t.pumpWidget(MaterialApp(home:FeedMediaScreen(
+     api:MediaStub((_,__)async=>FeedMediaGrant(mediaId:'media_audio',kind:'audio',url:Uri.parse('https://media.example.test/signed'),
+       expiresAt:DateTime.now().add(const Duration(minutes:2)))),
+     accountKey:'a',postId:post,kind:'audio',mediaIds:const ['media_audio'],onBeforeAudio:()async{},playerFactory:()=>playback)));
+   await t.pumpAndSettle();await t.tap(find.text('Play audio'));await t.pumpAndSettle();
+   expect(playback.loaded,hasLength(1));expect(playback.playing,isTrue);
+   playback.position=const Duration(seconds:42);playback.emit();await t.pump();
+   await t.tap(find.text('Pause'));await t.pumpAndSettle();expect(playback.playing,isFalse);
+   await t.tap(find.text('Play audio'));await t.pumpAndSettle();
+   expect(playback.loaded,hasLength(1));expect(playback.position,const Duration(seconds:42));
+   playback.state=ProcessingState.completed;playback.playing=false;playback.position=playback.total!;playback.emit();await t.pumpAndSettle();
+   await t.tap(find.text('Play audio'));await t.pumpAndSettle();
+   expect(playback.loaded,hasLength(1));expect(playback.seeks.last,Duration.zero);expect(playback.playing,isTrue);
+   expect(t.takeException(),isNull);
+ });
+ testWidgets('call takeover during source decoding cancels old playback even after the call ends',(t)async{
+   final playback=PlaybackFake()..decoding=Completer<void>();
+   await t.pumpWidget(MaterialApp(home:FeedMediaScreen(
+     api:MediaStub((_,__)async=>FeedMediaGrant(mediaId:'media_audio',kind:'audio',url:Uri.parse('https://media.example.test/signed'),
+       expiresAt:DateTime.now().add(const Duration(minutes:2)))),accountKey:'a',postId:post,kind:'audio',
+     mediaIds:const ['media_audio'],onBeforeAudio:()async{},playerFactory:()=>playback)));
+   await t.pumpAndSettle();await t.tap(find.text('Play audio'));await t.pump();
+   expect(playback.loaded,hasLength(1));
+   await LiveCallForeground.startOrThrow(android:false);addTearDown(LiveCallForeground.stop);
+   await LiveCallForeground.stop();playback.decoding!.complete();await t.pumpAndSettle();
+   expect(playback.playing,isFalse);expect(t.takeException(),isNull);
+   await t.tap(find.text('Play audio'));await t.pumpAndSettle();expect(playback.playing,isTrue);
  });
  testWidgets('C23 single post media cannot be rendered before server grant',(t)async{
    final pending=Completer<FeedMediaGrant>();
