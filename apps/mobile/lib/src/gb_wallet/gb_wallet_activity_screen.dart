@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_promotion_journal.dart';
+import 'gb_promotion_activity_panel.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
 import 'gb_wallet_holds_panel.dart';
@@ -484,51 +485,9 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           if(promotionJournal!=null &&
               (promotionJournal.campaigns.isNotEmpty ||
                 promotionJournal.earnings.isNotEmpty))
-          Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
-            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-            Text('Promotions & Share earnings',
-              style:Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height:4),
-            const Text('Review-only campaign activity. Reserved MB is not spent; '
-              'pending referral earnings are not redeemable or included in your balance.'),
-            ListTile(key:const ValueKey('wallet-pending-sharing-total'),
-              title:const Text('Sharing earnings · pending shown'),
-              subtitle:const Text('Across the available private earning records. '
-                'Not released, spendable or redeemable.'),
-              trailing:Text(promotionJournal.pendingEarnedLabel)),
-            ListTile(key:const ValueKey('wallet-campaign-reserved-total'),
-              title:const Text('Campaign budget reserved · shown'),
-              subtitle:const Text('Sponsor receipt projection; not a posted payment.'),
-              trailing:Text('${groupedMb(promotionJournal.reservedCampaignMb)} MB')),
-            ...[
-              for(final c in promotionJournal.campaigns.take(5))
-                ListTile(
-                  key:ValueKey('wallet-promotion-${c.id}'),
-                  leading:const Icon(Icons.campaign_outlined),
-                  title:Text('${c.isBoost?'Boost':'Promotion'} · ${c.state}'),
-                  subtitle:Text('${c.deliveredViews}/${c.targetViews} qualified views · '
-                    '${c.spentMb} MB delivered\n'
-                    '${c.reservedMb} MB still reserved · '
-                    '${c.refundedUnusedMb} MB released\n'
-                    '${c.hasKnownOneMbRate?'Quoted at 1 MB per qualified view · '
-                      'up to ${c.targetViews} views.':'Original price terms: '
-                      '${c.priceVersion??'unavailable'}; check the original receipt.'}\n'
-                    '${c.hasKnownOneMbRate?'Referred eligible views allocate '
-                      '0.5 MB pending to the sharer, subject to review.':
-                      'Reward terms require the original receipt.'}\n'
-                    'Campaign: ${c.id}'),
-                  isThreeLine:true),
-              for(final e in promotionJournal.earnings.take(5))
-                ListTile(key:ValueKey('wallet-referral-${e.postId}'),
-                  leading:const Icon(Icons.hourglass_bottom_outlined),
-                  title:Text('${e.views} referred qualified views'),
-                  subtitle:Text('${e.pendingMbLabel}\nPost: ${e.postId}'),
-                  isThreeLine:true),
-              if(promotionJournal.campaigns.length>5||
-                  promotionJournal.earnings.length>5)
-                const ListTile(title:Text('More campaign details are available in Home → My promotions.')),
-            ],
-          ]))),
+            GbPromotionActivityPanel(
+              key:ValueKey('promotion-history-${owner.accountId}-${owner.authorizationEpoch}'),
+              journal:promotionJournal),
           if(_showPromotionHistory && promotionJournal!=null &&
               promotionJournal.campaigns.isEmpty && promotionJournal.earnings.isEmpty)
             const ListTile(title:Text('No funded campaigns or referral allocations yet.')),
