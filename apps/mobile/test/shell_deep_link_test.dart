@@ -65,6 +65,28 @@ void main() {
     }
   });
 
+  test('signed Status referrals survive trusted web and custom app links only', () {
+    const token = 'OpaqueShareToken0123456789_AbCdEfGhIjKl';
+    const target = '/status/post_123?r=$token';
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://masanawa.com/status/post_123?r=$token')), target);
+    expect(shellDeepLinkRoute(Uri.parse(
+      'masanawa://status/post_123?r=$token')), target);
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://masanawa.com/status/post_123?r=bad')), '/status/post_123');
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://masanawa.com/status/post_123?r=$token&r=other')),
+      '/status/post_123');
+    expect(shellDeepLinkRoute(Uri.parse(
+      'masanawa://status/post_123?r=%3Cscript%3E')), '/status/post_123');
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://masanawa.com/status/post_123?r=$token&admin=1')), isNull);
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://evil.example/status/post_123?r=$token')), isNull);
+    expect(shellDeepLinkRoute(Uri.parse(
+      'https://masanawa.com/transaction/order_123?r=$token')), isNull);
+  });
+
   test('resource routes reject injection and unauthorized query parameters', () {
     for (final raw in [
       'masanawa://rooms/room_abc?accessToken=secret',
