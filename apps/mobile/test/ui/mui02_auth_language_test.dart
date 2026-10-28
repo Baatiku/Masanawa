@@ -256,6 +256,10 @@ void main() {
   testWidgets('expired code during name completion returns to OTP recovery', (
     tester,
   ) async {
+    // The signup country now follows the device locale suggestion. Pin this
+    // Nigeria-specific region scenario rather than relying on CI host locale.
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en', 'NG');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
     final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
     await preference.load();
     final router = _router('/name');
