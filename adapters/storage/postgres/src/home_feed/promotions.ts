@@ -39,10 +39,10 @@ function campaign(r:Row){
   // Ended campaigns retain immutable target/delivery maths in their rows;
   // unused views have already been released from the sponsor reservation.
   reservedMb:['active','pending_review','paused'].includes(state)?remaining:0,
-  refundedUnusedMb:['cancelled','rejected'].includes(state)?remaining:0,
+  refundedUnusedMb:['cancelled','rejected','expired'].includes(state)?remaining:0,
   ...(typeof r.review_reason==='string'&&r.review_reason?
     {reviewReason:r.review_reason}:{}),
-  priceVersion:String(r.price_version)};
+  priceVersion:String(r.price_version),expiresAt:r.expires_at??null};
 }
 async function serial<T>(pool:Pool,fn:(c:PoolClient)=>Promise<T>):Promise<T>{
  for(let i=0;i<4;i++)try{return await withTransaction(pool,fn,{isolation:'serializable'});}
@@ -89,6 +89,113 @@ export class PgStatusPromotions {
    SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
     WHERE tenant_id=$1 AND post_id=$2
    ON CONFLICT (tenant_id,post_id,media_id) DO NOTHING`,[t,post]);
+ }
+
+
+ /** A draft is private, retryable, and never reserves or consumes purchased MB. */
+ async draft(t:string,owner:string,input:{body:string;targetViews:number;
+  destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}){
+  actor(t,owner);
+  if(!keyPattern.test(input.idempotencyKey)||!Number.isSafeInteger(input.targetViews)||
+   input.targetViews<1||input.targetViews>1000000||typeof input.body!=='string'||
+   !input.body.trim()||input.body.trim().length>5000)fail('invalid_campaign_draft');
+  let destinationUrl:string|null=null;
+  try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
+  catch{fail('invalid_promotion_destination');}
+  const expires=input.campaignExpiresAt??null;
+  if(expires!==null&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(expires)||
+   !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
+   Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
+  const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires]));
+  return serial(this.pool,async c=>{
+   const saved=await c.query(`INSERT INTO feed.promotion_drafts
+    (tenant_id,owner_id,body,destination_url,target_views,campaign_expires_at,idempotency_key,request_sha256)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT(tenant_id,owner_id,idempotency_key) DO NOTHING RETURNING *`,
+    [t,owner,body,destinationUrl,input.targetViews,expires,input.idempotencyKey,fingerprint]);
+   const row=saved.rows[0]??(await c.query(`SELECT * FROM feed.promotion_drafts
+     WHERE tenant_id=$1 AND owner_id=$2 AND idempotency_key=$3`,
+     [t,owner,input.idempotencyKey])).rows[0];
+   if(!row||row.request_sha256!==fingerprint)fail('idempotency_conflict',409);
+   return {draftId:String(row.id),state:String(row.state),version:count(row.version),
+    targetViews:count(row.target_views),body:String(row.body),destinationUrl:row.destination_url??null,
+    campaignExpiresAt:row.campaign_expires_at??null};
+  });
+ }
+ async editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;
+  destinationUrl?:string;campaignExpiresAt?:string;expectedVersion:number}){
+  actor(t,owner);identifier(id);
+  if(!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||
+   !Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000||
+   typeof input.body!=='string'||!input.body.trim()||input.body.trim().length>5000)
+   fail('invalid_campaign_draft');
+  let destinationUrl:string|null=null;
+  try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
+  catch{fail('invalid_promotion_destination');}
+  const expires=input.campaignExpiresAt??null;
+  if(expires!==null&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(expires)||
+   !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
+   Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
+  const body=input.body.trim();
+  return serial(this.pool,async c=>{
+   const r=await c.query(`UPDATE feed.promotion_drafts SET body=$4,target_views=$5,
+    destination_url=$6,campaign_expires_at=$7,version=version+1,
+    updated_at=statement_timestamp(),request_sha256=$8
+    WHERE tenant_id=$1 AND id=$2 AND owner_id=$3 AND state='draft'
+     AND version=$9 RETURNING id,version`,
+    [t,id,owner,body,input.targetViews,destinationUrl,expires,
+     hash(JSON.stringify([body,input.targetViews,destinationUrl,expires])),input.expectedVersion]);
+   if(!r.rowCount)fail('draft_stale_or_submitted',409);
+   return {draftId:id,state:'draft',version:count(r.rows[0]!.version)};
+  });
+ }
+ async myDrafts(t:string,owner:string){actor(t,owner);
+  const r=await this.pool.query(`SELECT d.id,d.state,d.version,d.body,d.target_views,
+    d.destination_url,d.campaign_expires_at,d.updated_at,q.id AS quote_id
+    FROM feed.promotion_drafts d LEFT JOIN feed.promotion_quotes q
+    ON q.tenant_id=d.tenant_id AND q.draft_id=d.id
+    WHERE d.tenant_id=$1 AND d.owner_id=$2 AND d.state<>'discarded'
+    ORDER BY d.updated_at DESC,d.id DESC LIMIT 100`,[t,owner]);
+  return {drafts:r.rows.map(x=>({draftId:String(x.id),state:String(x.state),
+   version:count(x.version),body:String(x.body),targetViews:count(x.target_views),
+   destinationUrl:x.destination_url??null,campaignExpiresAt:x.campaign_expires_at??null,
+   quoteId:x.quote_id??null,updatedAt:x.updated_at}))};
+ }
+ async discardDraft(t:string,owner:string,id:string){actor(t,owner);identifier(id);
+  const r=await this.pool.query(`UPDATE feed.promotion_drafts SET state='discarded',
+    updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2 AND owner_id=$3
+     AND state='draft' RETURNING id`,[t,id,owner]);
+  if(!r.rowCount)fail('draft_not_discardable',409);
+  return {draftId:id,state:'discarded'};
+ }
+ async quoteDraft(t:string,owner:string,id:string){
+  actor(t,owner);identifier(id);
+  return serial(this.pool,async c=>{
+   const found=await c.query(`SELECT * FROM feed.promotion_drafts
+    WHERE tenant_id=$1 AND id=$2 AND owner_id=$3 FOR UPDATE`,[t,id,owner]);
+   const d=found.rows[0];
+   if(!d||d.state==='discarded')fail('draft_not_found',404);
+   const existing=await c.query(`SELECT * FROM feed.promotion_quotes
+    WHERE tenant_id=$1 AND draft_id=$2`,[t,id]);
+   const row=existing.rows[0];
+   const balance=await c.query(`SELECT (purchased_mb-reserved_purchased_mb)::text AS free
+    FROM gb_wallet.accounts WHERE tenant_id=$1 AND account_kind='human'
+      AND account_id=$2 AND NOT frozen`,[t,owner]);
+   const available=balance.rows[0]?count(balance.rows[0].free):0;
+   if(!row&&d.state!=='draft')fail('draft_not_quotable',409);
+   if(!row&&d.campaign_expires_at&&new Date(d.campaign_expires_at).getTime()<=Date.now()+3600000)
+    fail('campaign_expiry_too_soon',409);
+   const q=row??(await c.query(`INSERT INTO feed.promotion_quotes
+    (tenant_id,sponsor_id,kind,body,target_views,destination_url,draft_id,campaign_expires_at)
+    VALUES($1,$2,'human_primary',$3,$4,$5,$6,$7) RETURNING *`,
+    [t,owner,d.body,d.target_views,d.destination_url,id,d.campaign_expires_at])).rows[0];
+   if(!row)await c.query(`UPDATE feed.promotion_drafts SET state='quoted',
+    updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
+   return {quoteId:String(q.id),draftId:id,expiresAt:q.expires_at,
+    targetViews:count(q.target_views),totalMb:count(q.target_views),eligibleMb:available,
+    insufficientMb:available<count(q.target_views),
+    priceVersion:String(q.price_version),campaignExpiresAt:q.campaign_expires_at??null};
+  });
  }
 
  async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}){
@@ -148,6 +255,8 @@ export class PgStatusPromotions {
     return campaign(previous.rows[0] as Row);
    }
    if(new Date(String(q.expires_at)).getTime()<=Date.now())fail('quote_expired',409);
+   if(q.campaign_expires_at&&new Date(String(q.campaign_expires_at)).getTime()<=Date.now())
+    fail('campaign_expired',409);
    let post=q.post_id==null?null:String(q.post_id);
    if(post){
     const current=await c.query(`SELECT state,author_type,paid_purged_at,
@@ -176,9 +285,9 @@ export class PgStatusPromotions {
    const state=q.kind==='human_primary'?'pending_review':'active';
    const inserted=await c.query(`INSERT INTO feed.promotion_campaigns
     (tenant_id,quote_id,post_id,sponsor_id,kind,idempotency_key,fingerprint,
-     state,target_views,remaining_views,price_version)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10) RETURNING *`,
-    [t,qid,post,s,q.kind,key,fp,state,q.target_views,q.price_version]);
+     state,target_views,remaining_views,price_version,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$11) RETURNING *`,
+    [t,qid,post,s,q.kind,key,fp,state,q.target_views,q.price_version,q.campaign_expires_at]);
    if(state==='active')await c.query(`UPDATE feed.posts SET state='published',
     paid_disabled_at=NULL,paid_purge_at=NULL
     WHERE tenant_id=$1 AND id=$2 AND author_type='human'`,[t,post]);
@@ -510,7 +619,7 @@ export class PgStatusPromotions {
    const r=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,id,s]);
    const p=(r.rows[0] as Row|undefined)??fail('campaign_not_found',404);
-   if(['completed','cancelled','rejected'].includes(String(p.state)))return campaign(p);
+   if(['completed','cancelled','rejected','expired'].includes(String(p.state)))return campaign(p);
    await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,p.post_id]);
    await this.refund(c,t,p);
    await c.query(`UPDATE feed.promotion_campaigns SET state='cancelled',
@@ -666,7 +775,7 @@ export class PgStatusPromotions {
      JOIN gb_wallet.accounts a ON a.tenant_id=b.tenant_id AND
       a.account_kind='human' AND a.account_id=b.sponsor_id
      WHERE b.tenant_id=$1 AND b.post_id=$2 AND b.state='active'
-      AND b.remaining_views>0 AND b.sponsor_id<>$3 AND NOT a.frozen
+      AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp()) AND b.sponsor_id<>$3 AND NOT a.frozen
       AND NOT EXISTS (SELECT 1 FROM feed.promotion_campaigns own
        WHERE own.tenant_id=b.tenant_id AND own.post_id=b.post_id
         AND own.sponsor_id=$3)
@@ -800,6 +909,31 @@ export class PgStatusPromotions {
   });
  }
 
+ /** Reap reached campaign deadlines under serializable row locks. A funded
+  * view checks the same server deadline, so worker downtime cannot overbill. */
+ async expireCampaigns(limit=100){
+  if(!Number.isSafeInteger(limit)||limit<1||limit>500)fail('invalid_limit');
+  return serial(this.pool,async c=>{
+   const due=await c.query(`SELECT * FROM feed.promotion_campaigns
+    WHERE expires_at<=statement_timestamp() AND state IN ('pending_review','active','paused')
+    ORDER BY expires_at,id LIMIT $1 FOR UPDATE SKIP LOCKED`,[limit]);
+   let refundedMb=0;
+   for(const b of due.rows){
+    const t=String(b.tenant_id),post=String(b.post_id);
+    await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,post]);
+    await this.refund(c,t,b as Row);
+    refundedMb+=count(b.remaining_views);
+    await c.query(`UPDATE feed.promotion_campaigns SET state='expired',
+     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,b.id]);
+    await c.query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
+     WHERE tenant_id=$1 AND campaign_id=$2 AND revoked_at IS NULL`,[t,b.id]);
+    await this.disable(c,t,post);
+    await this.audit(c,t,post,'system','campaign_expired',String(b.id),
+     {releasedMb:count(b.remaining_views),expiryAt:b.expires_at});
+   }
+   return {expired:due.rowCount??0,refundedMb};
+  });
+ }
  async purgeExpired(limit=100){if(!Number.isInteger(limit)||limit<1||limit>500)fail('invalid_limit');
   return serial(this.pool,async c=>{
    const posts=await c.query(`SELECT tenant_id,id FROM feed.posts WHERE author_type='human'
