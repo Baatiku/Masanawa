@@ -32,6 +32,11 @@ describe('SPE promotion routes inherit the established principal and staff autho
    reviewImage:async(...args:unknown[])=>{events.push(['reviewImage',...args]);return {state:'approved'};},
    adminImagePreview:async()=>({objectKey:'opaque-key',altText:'Preview',reviewState:'pending'}),
    approvedImageObject:async()=>null,
+   openDestination:async(...args:unknown[])=>{events.push(['openDestination',...args]);return {openMode:'external_browser'};},
+   extensionQuote:async(...args:unknown[])=>{events.push(['extensionQuote',...args]);return {quoteId:'new-quote'};},
+   reportPost:async(...args:unknown[])=>{events.push(['reportPost',...args]);return {state:'pending'};},
+   adminReports:async()=>({pending:[]}),
+   resolveReport:async(...args:unknown[])=>{events.push(['resolveReport',...args]);return {state:'removed'};},
    cancel:async()=>({}),
    pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
    resume:async(...args:unknown[])=>{events.push(['resume',...args]);return {state:'active'};},
@@ -255,6 +260,44 @@ describe('SPE promotion routes inherit the established principal and staff autho
    url:'/v1/admin/promotions/posts/post/images/image/review',
    payload:{decision:'approve',reason:'Rights checked'}})).statusCode).toBe(200);
   expect(events).toContainEqual(['reviewImage','tenantA','ownerA','post','image',true,'Rights checked']);
+  await server.close();
+ });
+
+
+ it('refuses unreviewed advertising approval, requires staff evidence and an explicit external intent',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'reviewer'}),
+   isEditor:async()=>true,enabled:()=>true});
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/campaign/review',
+   payload:{decision:'approve'}})).statusCode).toBe(422);
+  const policy={category:'financial',bodyChecked:true,rightsChecked:true,
+   destinationChecked:true,clearanceReference:'ARCON-finance-001',
+   evidenceNote:'Staff reviewed linked landing page, rights and required clearance'};
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/campaign/review',
+   payload:{decision:'approve',policy}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['review','tenant','reviewer','campaign',true,undefined,policy]);
+  expect((await server.inject({method:'GET',url:'/v1/posts/post/destination'})).json())
+   .toMatchObject({openMode:'external_browser'});
+  await server.close();
+ });
+ it('recovers extension quotes without implicit confirms and keeps reports available while spending is OFF',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'member'}),
+   isEditor:async()=>true,enabled:()=>false});
+  expect((await server.inject({method:'POST',
+   url:'/v1/promotions/campaign/extension-quotes',
+   payload:{targetViews:10},headers:{'idempotency-key':'extension-001'}})).statusCode).toBe(503);
+  expect((await server.inject({method:'POST',url:'/v1/posts/post/report',
+   payload:{reason:'Unsafe content requiring moderation'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/reports'})).json())
+   .toEqual({pending:[]});
+  expect((await server.inject({method:'POST',url:'/v1/admin/promotions/reports/r1/resolve',
+   payload:{decision:'remove',reason:'Unsafe content'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['reportPost','tenant','member','post','Unsafe content requiring moderation']);
+  expect(events).toContainEqual(['resolveReport','tenant','member','r1',true,'Unsafe content']);
   await server.close();
  });
 
