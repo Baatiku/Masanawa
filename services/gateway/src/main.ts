@@ -1668,7 +1668,8 @@ export async function startGatewayService(
           publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
         ...(statusGuestProofs?{guestProof:{port:statusGuestProofs,
           signer:new GuestConsentSigner(env.MASANAWA_STATUS_ATTRIBUTION_SECRET!),
-          enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!}}:{}),
+          enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
+          guestReview:{port:statusGuestProofs,enabled:()=>false}}:{}),
         // Financial activation still requires a separately completed,
         // security-qualified full Status/public-web client composition.
         promotionsEnabled:()=>false,

@@ -147,6 +147,43 @@ export class PgStatusGuestProofs {
   });
  }
 
+ /** Staff review never returns a viewer pseudonym, nonce, sharer identity,
+  * network header, account mapping or reward authority. */
+ async listPending(tenantId:string,limit=25){
+  if(!tenantId||tenantId.length>200||!Number.isSafeInteger(limit)||limit<1||limit>100)
+   fail('guest_review_invalid');
+  const r=await this.pool.query(`SELECT id,post_id,started_at,observed_at,
+    (referral_link_id IS NOT NULL) AS has_referral
+   FROM feed.guest_view_proofs
+   WHERE tenant_id=$1 AND review_state='pending_review' AND review_decision='none'
+   ORDER BY observed_at,id LIMIT $2`,[tenantId,limit]);
+  return r.rows.map(row=>({id:String(row.id),postId:String(row.post_id),
+   startedAt:row.started_at,observedAt:row.observed_at,
+   hasReferral:row.has_referral===true}));
+ }
+
+ /** One reason-coded decision, restricted to the authorized staff tenant.
+  * Held and rejected are final for this ephemeral, unverified evidence.
+  * No positive approval, reward or public view-count pathway exists. */
+ async review(tenantId:string,reviewerId:string,id:string,
+  decision:'held'|'rejected',reason:string){
+  if(!tenantId||tenantId.length>200||!reviewerId||reviewerId.length>200||
+   !uuid.test(id)||!['held','rejected'].includes(decision)||
+   !['suspicious_automation','invalid_referral','duplicate_exposure','other_risk']
+     .includes(reason))fail('guest_review_invalid');
+  return transaction(this.pool,async c=>{
+   const r=await c.query(`UPDATE feed.guest_view_proofs
+    SET review_decision=$4,review_reason=$5,reviewed_by=$2,
+     reviewed_at=statement_timestamp()
+    WHERE tenant_id=$1 AND id=$3 AND review_state='pending_review'
+     AND review_decision='none'
+    RETURNING id,post_id,review_decision`,[tenantId,reviewerId,id,decision,reason]);
+   if(!r.rowCount)return null;
+   return {id:String(r.rows[0]!.id),postId:String(r.rows[0]!.post_id),
+    decision:String(r.rows[0]!.review_decision),qualified:false as const,payable:false as const};
+  });
+ }
+
  /** Bounded, replica-safe deletion with no guest evidence retained >24h
   * after its start under normal minute-by-minute maintenance. */
  async pruneExpired(limit=100){
