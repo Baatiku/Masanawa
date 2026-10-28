@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../account/conversation_archive.dart';
 import '../../state/session_state.dart';
 import 'verify_account_email_screen.dart';
+import 'account_contact_region_screen.dart';
 
 /// Account-owned exports remain local until the user chooses a share target.
 class AccountDataScreen extends ConsumerStatefulWidget {
@@ -240,6 +241,12 @@ class _AccountDataScreenState extends ConsumerState<AccountDataScreen> {
             ()=>Navigator.of(context).push(MaterialPageRoute<void>(
               builder:(_)=>const VerifyAccountEmailScreen(),
             )).then((_)=>(_refresh()))),
+          ListTile(leading:const Icon(Icons.public),
+            title:const Text('Private country, phone and state'),
+            subtitle:const Text('Review or change your region; no ad targeting is enabled'),
+            trailing:const Icon(Icons.chevron_right),
+            onTap:()=>Navigator.of(context).push(MaterialPageRoute<void>(
+              builder:(_)=>const AccountContactRegionScreen()))),
           const SizedBox(height:24),
           Text('Request an account export',style:Theme.of(context).textTheme.titleLarge),
           const SizedBox(height:8),

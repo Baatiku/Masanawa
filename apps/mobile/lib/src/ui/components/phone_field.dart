@@ -37,9 +37,10 @@ class _PhoneFieldState extends State<PhoneField> {
   void initState() {
     super.initState();
     final raw = widget.controller.text.trim();
-    _country = raw.startsWith('+') || raw.startsWith('00')
-        ? detectCountry(raw)
-        : widget.initialCountry;
+    final detected=raw.startsWith('+') || raw.startsWith('00')
+        ? detectCountry(raw):widget.initialCountry;
+    _country=detected.dialCode==widget.initialCountry.dialCode
+      ?widget.initialCountry:detected;
     widget.controller.addListener(_onControllerChanged);
   }
 
@@ -65,6 +66,8 @@ class _PhoneFieldState extends State<PhoneField> {
     final trimmed = value.trim();
     if (!trimmed.startsWith('+') && !trimmed.startsWith('00')) return;
     final detected = detectCountry(value);
+    // +1 is shared. Do not undo an explicit Canada/USA selection.
+    if(_country.dialCode.isNotEmpty&&detected.dialCode==_country.dialCode)return;
     if (detected.iso != _country.iso ||
         detected.dialCode != _country.dialCode) {
       setState(() => _country = detected);

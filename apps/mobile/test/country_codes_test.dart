@@ -44,6 +44,12 @@ void main() {
       expect(normalizeE164('0044 20 7946 0000'), '+442079460000');
     });
 
+    test('ignores trunk zero after prefilled +234 while preserving Italy', () {
+      expect(normalizeE164('+23408012345678'), '+2348012345678');
+      const italy=PhoneCountry(dialCode:'39',iso:'IT',name:'Italy',flag:'🇮🇹');
+      expect(normalizeE164('+390612345678',country:italy), '+390612345678');
+    });
+
     test('strips the Nigerian trunk zero', () {
       expect(normalizeE164('08012345678'), '+2348012345678');
     });

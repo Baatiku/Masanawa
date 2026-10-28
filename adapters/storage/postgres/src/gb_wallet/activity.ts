@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import {createGbWalletHoldRepository} from "./activity_holds.js";
 
 export interface GbActivityActor {
   readonly tenantId: string;
@@ -47,7 +48,15 @@ type Row = {
   created_at: string;
   receipt_metadata?:unknown;
 };
-type SummaryRow = {unit:string;received:string;spent:string};
+type SummaryRow = {unit:string;received:string;spent:string;opening:string;closing:string;
+  recorded_balance:string|null;reserved:string|null;available:string|null;debt:string|null;
+  account_exists:boolean;posted_count:string;from_at:string;to_at:string};
+export interface GbActivityBalanceReconciliation {
+  readonly state:"matched"|"mismatch"|"uninitialized";
+  readonly opening:number;readonly closing:number;
+  readonly recordedBalance:number|null;readonly reserved:number|null;
+  readonly available:number|null;readonly debt:number|null;
+}
 
 export interface GbActivityPeriodTotals {
   readonly periodDays: 7 | 30;
@@ -55,6 +64,7 @@ export interface GbActivityPeriodTotals {
   readonly toAt: string;
   readonly MB: Readonly<{received:number;spent:number;net:number}>;
   readonly NGN: Readonly<{received:number;spent:number;net:number}>;
+  readonly reconciliation?:Readonly<{MB:GbActivityBalanceReconciliation;NGN:GbActivityBalanceReconciliation}>;
 }
 
 const validActor = (v: string) =>
@@ -143,52 +153,98 @@ function project(row: Row): GbActivityEntry {
 /** Read-only projection of immutable NEW ledgers. Do not join Credits/MSNW. */
 export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
   return Object.freeze({
+    ...createGbWalletHoldRepository(db),
     async summary(actor:GbActivityActor,days:7|30,
-      now:Date=new Date()):Promise<GbActivityPeriodTotals> {
+      now?:Date):Promise<GbActivityPeriodTotals> {
       if(!validActor(actor.tenantId)||!validActor(actor.userId)||
-         (days!==7&&days!==30)||!Number.isFinite(now.getTime()))
+         (days!==7&&days!==30)||(now!==undefined&&!Number.isFinite(now.getTime())))
         throw new TypeError("invalid_activity_summary");
-      const toAt=now.toISOString();
-      const fromAt=new Date(now.getTime()-days*86400000).toISOString();
+      // The production cutoff is PostgreSQL's statement clock, not an earlier
+      // application timestamp. All ledger/account values share this snapshot.
       const result=await db.query<SummaryRow>(`
-        WITH posted AS (
+        WITH bounds AS (
+          SELECT cutoff-(($4::integer * 24) * interval '1 hour') AS from_at,cutoff AS to_at
+          FROM (SELECT COALESCE($3::timestamptz,statement_timestamp()) AS cutoff) b
+        ), posted AS (
           SELECT 'MB'::text AS unit,
             (CASE WHEN m.to_kind='human' AND m.to_id=$2
-              THEN m.amount_mb ELSE -m.amount_mb END) AS amount,
-            m.created_at
+              THEN m.amount_mb ELSE -m.amount_mb END) AS amount,m.created_at
           FROM gb_wallet.movements m
-          JOIN gb_wallet.operations o ON o.tenant_id=m.tenant_id
-            AND o.operation_id=m.operation_id
-          WHERE m.tenant_id=$1 AND (
-            (m.from_kind='human' AND m.from_id=$2) OR
-            (m.to_kind='human' AND m.to_id=$2))
+          JOIN gb_wallet.operations o ON o.tenant_id=m.tenant_id AND o.operation_id=m.operation_id
+          WHERE m.tenant_id=$1 AND ((m.from_kind='human' AND m.from_id=$2)
+            OR (m.to_kind='human' AND m.to_id=$2))
           UNION ALL
-          SELECT 'NGN'::text AS unit,n.delta_kobo AS amount,n.created_at
-          FROM gb_wallet.ngn_entries n
+          SELECT 'NGN'::text,n.delta_kobo,n.created_at FROM gb_wallet.ngn_entries n
           WHERE n.tenant_id=$1 AND n.account_id=$2
+        ), flows AS (
+          SELECT u.unit,b.from_at,b.to_at,
+            COALESCE(SUM(p.amount) FILTER(WHERE p.created_at<b.from_at),0)::text AS opening,
+            COALESCE(SUM(p.amount) FILTER(WHERE p.created_at<b.to_at),0)::text AS closing,
+            COALESCE(SUM(p.amount) FILTER(WHERE p.amount>0 AND p.created_at>=b.from_at AND p.created_at<b.to_at),0)::text AS received,
+            COALESCE(SUM(-p.amount) FILTER(WHERE p.amount<0 AND p.created_at>=b.from_at AND p.created_at<b.to_at),0)::text AS spent,
+            COUNT(p.unit)::text AS posted_count
+          FROM (VALUES ('MB'::text),('NGN'::text)) u(unit) CROSS JOIN bounds b
+          LEFT JOIN posted p ON p.unit=u.unit
+          GROUP BY u.unit,b.from_at,b.to_at
         )
-        SELECT unit,
-          COALESCE(SUM(CASE WHEN amount>0 THEN amount ELSE 0 END),0)::text AS received,
-          COALESCE(SUM(CASE WHEN amount<0 THEN -amount ELSE 0 END),0)::text AS spent
-        FROM posted
-        WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz
-        GROUP BY unit
-      `,[actor.tenantId,actor.userId,fromAt,toAt]);
-      const totals={MB:{received:0,spent:0,net:0},NGN:{received:0,spent:0,net:0}};
+        SELECT f.unit,f.opening,f.closing,f.received,f.spent,f.posted_count,
+          f.from_at::text,f.to_at::text,
+          CASE WHEN f.unit='MB' THEN a.account_id IS NOT NULL ELSE n.account_id IS NOT NULL END AS account_exists,
+          CASE WHEN f.unit='MB' THEN a.purchased_mb::numeric+a.welcome_mb
+            ELSE n.balance_kobo::numeric-n.debt_kobo END::text AS recorded_balance,
+          CASE WHEN f.unit='MB' THEN a.reserved_purchased_mb::numeric+a.reserved_welcome_mb
+            WHEN n.account_id IS NOT NULL THEN 0 END::text AS reserved,
+          CASE WHEN f.unit='MB' THEN a.purchased_mb::numeric+a.welcome_mb-a.reserved_purchased_mb-a.reserved_welcome_mb
+            ELSE n.balance_kobo END::text AS available,
+          CASE WHEN f.unit='NGN' THEN n.debt_kobo WHEN a.account_id IS NOT NULL THEN 0 END::text AS debt
+        FROM flows f
+        LEFT JOIN gb_wallet.accounts a ON f.unit='MB' AND a.tenant_id=$1 AND a.account_kind='human' AND a.account_id=$2
+        LEFT JOIN gb_wallet.ngn_accounts n ON f.unit='NGN' AND n.tenant_id=$1 AND n.account_id=$2
+      `,[actor.tenantId,actor.userId,now?.toISOString()??null,days]);
+      if(result.rows.length!==2)throw new TypeError("invalid_activity_summary_row");
+      const totals={} as Record<"MB"|"NGN",{received:number;spent:number;net:number}>;
+      const reconciliation={} as Record<"MB"|"NGN",GbActivityBalanceReconciliation>;
+      let fromAt="",toAt="";
       const seen=new Set<string>();
+      function integer(raw:unknown,nonnegative=false):number {
+        if(typeof raw!=="string"||!(/^-?\d+$/).test(raw))throw new TypeError("invalid_activity_summary_amount");
+        const value=Number(raw);
+        if(!Number.isSafeInteger(value)||(nonnegative&&value<0))throw new TypeError("invalid_activity_summary_amount");
+        return value;
+      }
       for(const row of result.rows){
-        if((row.unit!=="MB"&&row.unit!=="NGN")||seen.has(row.unit))
+        if((row.unit!=="MB"&&row.unit!=="NGN")||seen.has(row.unit)||
+          typeof row.account_exists!=="boolean"||!/^\d+$/.test(row.posted_count))
           throw new TypeError("invalid_activity_summary_row");
         seen.add(row.unit);
-        const received=Number(row.received),spent=Number(row.spent);
-        const net=received-spent;
-        if(!Number.isSafeInteger(received)||received<0||
-           !Number.isSafeInteger(spent)||spent<0||!Number.isSafeInteger(net))
+        const from=new Date(row.from_at),to=new Date(row.to_at);
+        if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||
+          to.getTime()-from.getTime()!==days*86400000||
+          (fromAt&&fromAt!==from.toISOString())||(toAt&&toAt!==to.toISOString()))
+          throw new TypeError("invalid_activity_summary_window");
+        fromAt=from.toISOString();toAt=to.toISOString();
+        const received=integer(row.received,true),spent=integer(row.spent,true),net=received-spent;
+        const opening=integer(row.opening),closing=integer(row.closing);
+        if(!Number.isSafeInteger(net)||BigInt(opening)+BigInt(received)-BigInt(spent)!==BigInt(closing))
           throw new TypeError("invalid_activity_summary_amount");
+        let recordedBalance:number|null=null,reserved:number|null=null,available:number|null=null,debt:number|null=null;
+        let state:GbActivityBalanceReconciliation["state"]="mismatch";
+        if(row.account_exists){
+          recordedBalance=integer(row.recorded_balance);reserved=integer(row.reserved,true);
+          available=integer(row.available,true);debt=integer(row.debt,true);
+          if(closing===recordedBalance&&BigInt(available)+BigInt(reserved)-BigInt(debt)===BigInt(recordedBalance)&&
+            (row.unit!=="MB"||debt===0)&&(row.unit!=="NGN"||(reserved===0&&(available===0||debt===0))))state="matched";
+        }else{
+          if([row.recorded_balance,row.reserved,row.available,row.debt].some(v=>v!==null))
+            throw new TypeError("invalid_activity_summary_row");
+          if(BigInt(row.posted_count)===0n&&opening===0&&closing===0&&received===0&&spent===0)state="uninitialized";
+        }
         totals[row.unit]={received,spent,net};
+        reconciliation[row.unit]=Object.freeze({state,opening,closing,recordedBalance,reserved,available,debt});
       }
       return Object.freeze({periodDays:days,fromAt,toAt,
-        MB:Object.freeze(totals.MB),NGN:Object.freeze(totals.NGN)});
+        MB:Object.freeze(totals.MB),NGN:Object.freeze(totals.NGN),
+        reconciliation:Object.freeze(reconciliation)});
     },
     async list(actor: GbActivityActor, limit: number,
         cursor: GbActivityCursor | null,

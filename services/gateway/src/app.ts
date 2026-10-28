@@ -494,6 +494,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
               lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
               contactPhone: Type.Optional(Type.String({ minLength: 11, maxLength: 24 })),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
               deviceId: Type.Optional(Type.String({minLength:32,maxLength:32})),
             },
             { additionalProperties: false },
@@ -516,6 +518,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             ...(request.body.firstName === undefined ? {} : {firstName:request.body.firstName}),
             ...(request.body.lastName === undefined ? {} : {lastName:request.body.lastName}),
             ...(request.body.contactPhone === undefined ? {} : {contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
             ...(request.body.deviceId===undefined?{}:{deviceId:request.body.deviceId}),
             clientLabel:authClientLabel({
               platformHeader:request.headers["x-masanawa-client-platform"],
@@ -620,6 +624,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               password: Type.String({ minLength: 6, maxLength: 6 }),
               name: Type.String({ minLength: 1, maxLength: 160 }),
               email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+              firstName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              lastName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              contactPhone:Type.Optional(Type.String({minLength:7,maxLength:24})),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
             },
             { additionalProperties: false },
           ),
@@ -635,6 +644,11 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             ...(request.body.email === undefined
               ? {}
               : { email: request.body.email }),
+            ...(request.body.firstName===undefined?{}:{firstName:request.body.firstName}),
+            ...(request.body.lastName===undefined?{}:{lastName:request.body.lastName}),
+            ...(request.body.contactPhone===undefined?{}:{contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
             clientLabel:authClientLabel({
               platformHeader:request.headers["x-masanawa-client-platform"],
               userAgent:request.headers["user-agent"],
@@ -645,6 +659,26 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         }
       },
     );
+
+    app.get('/v1/auth/profile/contact-geography',async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.contactGeography({authorizationHeader:request.headers.authorization});}
+      catch(error){return authError(error,reply);}
+    });
+    app.patch('/v1/auth/profile/contact-geography',{
+      schema:{body:Type.Object({
+        contactPhone:Type.String({minLength:7,maxLength:24}),
+        countryIso:Type.String({minLength:2,maxLength:2}),
+        subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.updateContactGeography({
+        authorizationHeader:request.headers.authorization,
+        contactPhone:request.body.contactPhone,countryIso:request.body.countryIso,
+        ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+      });}catch(error){return authError(error,reply);}
+    });
 
     app.post(
       "/auth/refresh",

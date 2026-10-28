@@ -276,12 +276,14 @@ class ApiClient {
 
   Future<AuthTokens> otpVerify(String code,
       {String? phone, String? email, String? name, String? firstName,
-        String? lastName, String? contactPhone, String? deviceId}) async {
+        String? lastName, String? contactPhone,String? countryIso,
+        String? subdivisionIso,String? deviceId}) async {
     final data = await _post(
       '/auth/verify',
       {
         ...OtpVerifyRequest(phone: phone, email: email, code: code, name: name,
-          firstName:firstName,lastName:lastName,contactPhone:contactPhone)
+          firstName:firstName,lastName:lastName,contactPhone:contactPhone,
+          countryIso:countryIso,subdivisionIso:subdivisionIso)
           .toJson(),
         if(deviceId!=null)'deviceId':deviceId,
       },
@@ -348,6 +350,8 @@ class ApiClient {
     required String password,
     required String name,
     String? email,
+    String? firstName,String? lastName,String? contactPhone,
+    String? countryIso,String? subdivisionIso,
   }) async {
     final data = await _post(
       '/v1/auth/password/setup',
@@ -357,10 +361,21 @@ class ApiClient {
         password: password,
         name: name,
         email: email,
+        firstName:firstName,lastName:lastName,contactPhone:contactPhone,
+        countryIso:countryIso,subdivisionIso:subdivisionIso,
       ).toJson(),
     );
     return AuthTokens.fromJson(data);
   }
+
+  Future<Map<String,dynamic>> contactGeography()=>
+    _get('/v1/auth/profile/contact-geography');
+  Future<Map<String,dynamic>> updateContactGeography({required String contactPhone,
+    required String countryIso,String? subdivisionIso})=>
+    _patch('/v1/auth/profile/contact-geography',{
+      'contactPhone':contactPhone,'countryIso':countryIso,
+      if(subdivisionIso!=null)'subdivisionIso':subdivisionIso,
+    });
 
   Future<AuthTokens> refresh(String refreshToken) async {
     final data = await _post('/auth/refresh', {'refreshToken': refreshToken});

@@ -6,6 +6,8 @@ import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'status_post_boost_action.dart';
+import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
@@ -20,6 +22,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     this.authorDirectory = const {},
     this.mediaApi,
     this.inlineMediaRenderer,
+    this.onBoostPost,
   });
 
   final SavedStatusLibraryApi api;
@@ -29,6 +32,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final Map<String, AgentDirectoryEntry> authorDirectory;
   final FeedMediaApi? mediaApi;
   final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
+  final ValueChanged<String>? onBoostPost;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -347,9 +351,21 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     renderer: widget.inlineMediaRenderer,
                                     onOpen: canOpen ? (_) => open(item) : null,
                                   ),
+                                if (item.post != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                    child: StatusPostSocialProof(post: item.post!),
+                                  ),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
+                                    if (item.post != null)
+                                      Flexible(child: StatusPostBoostAction(
+                                        post: item.post!,
+                                        enabled: current,
+                                        onBoost: widget.onBoostPost,
+                                      )),
                                     TextButton.icon(
                                       onPressed: pending.contains(_itemKey(item)) ||
                                               uncertainRemovals.contains(_itemKey(item))

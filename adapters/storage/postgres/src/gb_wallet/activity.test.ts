@@ -8,6 +8,13 @@ function fixture(rows: unknown[] = []) {
   return {query,repo:createGbWalletActivityRepository({query} as unknown as Pick<Pool,"query">)};
 }
 
+function summaryRow(unit:"MB"|"NGN",received="0",spent="0",extra:Record<string,unknown>={}){
+  const net=BigInt(received)-BigInt(spent);
+  return {unit,received,spent,opening:"0",closing:String(net),recorded_balance:String(net),
+    reserved:"0",available:String(net<0n?0n:net),debt:String(net<0n?-net:0n),
+    account_exists:true,posted_count:"1",from_at:"2026-10-19T00:00:00Z",to_at:"2026-10-26T00:00:00Z",...extra};
+}
+
 describe("read-only NGN and MB wallet activity",()=>{
   it("projects only bounded receipt fields and never invents missing exchange amounts",async()=>{
     const row={entry_id:"ngn:exchange_1",operation_id:"exchange_1",unit:"NGN",
@@ -21,8 +28,7 @@ describe("read-only NGN and MB wallet activity",()=>{
       await expect(fixture([{...row,receipt_metadata:{exchangedMb:invalid}}]).repo.find(scope,"ngn:exchange_1")).rejects.toThrow("invalid_activity_receipt");
   });
   it("totals only authorized posted units in an exact UTC window, rejecting overflow",async()=>{
-    const f=fixture([{unit:"MB",received:"1000",spent:"400"},
-      {unit:"NGN",received:"500050",spent:"50"}]);
+    const f=fixture([summaryRow("MB","1000","400"),summaryRow("NGN","500050","50")]);
     const result=await f.repo.summary(scope,7,new Date("2026-10-26T00:00:00.000Z"));
     expect(result.MB).toEqual({received:1000,spent:400,net:600});
     expect(result.NGN).toEqual({received:500050,spent:50,net:500000});
@@ -31,10 +37,30 @@ describe("read-only NGN and MB wallet activity",()=>{
     expect(sql).toContain("gb_wallet.ngn_entries");
     expect(sql).not.toMatch(/credits|msnw|ledger\.journal/i);
     expect(args).toEqual(["tenant_one","fan_one",
-      "2026-10-19T00:00:00.000Z","2026-10-26T00:00:00.000Z"]);
+      "2026-10-26T00:00:00.000Z",7]);
     await expect(f.repo.summary(scope,1 as 7)).rejects.toThrow();
-    const invalid=fixture([{unit:"MB",received:"9007199254740992",spent:"0"}]);
+    const invalid=fixture([summaryRow("MB","9007199254740992"),summaryRow("NGN")]);
     await expect(invalid.repo.summary(scope,7)).rejects.toThrow("invalid_activity_summary_amount");
+  });
+  it("keeps reservations, debt, missing accounts and discrepancies distinct",async()=>{
+    const f=fixture([summaryRow("MB","1000","400",{reserved:"200",available:"400"}),
+      summaryRow("NGN","0","90000",{opening:"100000",closing:"10000",recorded_balance:"10000",available:"10000",debt:"0"})]);
+    const r=await f.repo.summary(scope,7);
+    expect(r.reconciliation?.MB).toMatchObject({state:"matched",closing:600,reserved:200,available:400});
+    expect(r.reconciliation?.NGN).toMatchObject({state:"matched",opening:100000,closing:10000});
+    const missing={account_exists:false,posted_count:"0",recorded_balance:null,reserved:null,available:null,debt:null};
+    const empty=await fixture([summaryRow("MB","0","0",missing),summaryRow("NGN","0","0",missing)]).repo.summary(scope,7);
+    expect(empty.reconciliation?.MB).toMatchObject({state:"uninitialized",recordedBalance:null,available:null});
+    const mismatch=await fixture([summaryRow("MB","1000","400",{recorded_balance:"601",available:"601"}),summaryRow("NGN")]).repo.summary(scope,7);
+    expect(mismatch.reconciliation?.MB.state).toBe("mismatch");
+    const debt=await fixture([summaryRow("MB"),summaryRow("NGN","0","90000")]).repo.summary(scope,7);
+    expect(debt.reconciliation?.NGN).toMatchObject({state:"matched",closing:-90000,available:0,debt:90000});
+    for(const extra of [{closing:"601"},{recorded_balance:"9007199254740992"},{reserved:"-1"}])
+      await expect(fixture([summaryRow("MB","1000","400",extra),summaryRow("NGN")]).repo.summary(scope,7)).rejects.toThrow();
+    expect(f.query).toHaveBeenCalledTimes(1);
+    const [sql,args]=f.query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("statement_timestamp()");expect(sql).toContain("gb_wallet.accounts");
+    expect(sql).toContain("gb_wallet.ngn_accounts");expect(args).toEqual(["tenant_one","fan_one",null,7]);
   });
   it("reads only owned immutable entries in exact tenant/user scope",async()=>{
     const f=fixture([

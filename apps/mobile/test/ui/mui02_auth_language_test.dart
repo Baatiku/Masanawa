@@ -134,6 +134,8 @@ class _ExpiredOtpClient extends _TestAuthClient {
     String? firstName,
     String? lastName,
     String? contactPhone,
+    String? countryIso,
+    String? subdivisionIso,
     String? deviceId,
   }) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
@@ -272,6 +274,16 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), 'Ada');
     await tester.enterText(find.byType(TextField).at(1), 'Obi');
     await tester.enterText(find.byType(TextField).at(2), '08012345678');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    final region=find.byKey(const ValueKey('signup-subdivision-NG'));
+    expect(region,findsOneWidget);
+    await tester.ensureVisible(region);
+    await tester.tap(region);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Abuja Federal Capital Territory').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Continue'));
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.byType(OtpScreen), findsOneWidget);

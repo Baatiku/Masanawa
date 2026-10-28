@@ -6,6 +6,8 @@ import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'status_post_boost_action.dart';
+import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
@@ -16,7 +18,7 @@ class FeedPostDetailScreen extends StatefulWidget {
     this.loadMoreThread,
     required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,
     this.mediaApi,this.inlineMediaRenderer,this.audioPlaybackAvailable=false,
-    this.authorDirectory = const {},
+    this.authorDirectory = const {},this.onBoostPost,
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
@@ -30,6 +32,7 @@ class FeedPostDetailScreen extends StatefulWidget {
   final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
   final bool audioPlaybackAvailable;
   final Map<String, AgentDirectoryEntry> authorDirectory;
+  final ValueChanged<String>? onBoostPost;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
 }
@@ -229,6 +232,10 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               mediaApi:widget.mediaApi,renderer:widget.inlineMediaRenderer,
               onOpen:widget.onMedia,
               audioPlaybackAvailable:widget.audioPlaybackAvailable),
+            Padding(padding:const EdgeInsets.symmetric(vertical:8),
+              child:StatusPostSocialProof(post:p)),
+            StatusPostBoostAction(post:p,enabled:widget.onBoostPost!=null,
+              onBoost:widget.onBoostPost),
             Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
             Row(children:[
               ChoiceChip(label:Text(t('Newest','Sabbi')),selected:sort=='newest',
