@@ -21,6 +21,12 @@ describe('SPE promotion routes inherit the established principal and staff autho
    myAppeals:async()=>({appeals:[]}),
    adminAppeals:async()=>({pending:[]}),
    resolveAppeal:async(...args:unknown[])=>{events.push(['resolve',...args]);return {state:'accepted',campaignReactivated:false};},
+   draft:async(...args:unknown[])=>{events.push(['draft',...args]);return {draftId:'draft'};},
+   editDraft:async(...args:unknown[])=>{events.push(['editDraft',...args]);return {version:1};},
+   myDrafts:async()=>({drafts:[]}),
+   discardDraft:async()=>({state:'discarded'}),
+   quoteDraft:async(...args:unknown[])=>{events.push(['quoteDraft',...args]);return {quoteId:'quote'};},
+   expireCampaigns:async()=>({expired:0,refundedMb:0}),
    cancel:async()=>({}),
    pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
    resume:async(...args:unknown[])=>{events.push(['resume',...args]);return {state:'active'};},
@@ -192,6 +198,31 @@ describe('SPE promotion routes inherit the established principal and staff autho
    url:'/v1/admin/promotions/revisions/proposal/review',
    payload:{decision:'approve',reason:'Reviewed destination'}})).statusCode).toBe(200);
   expect(events).toContainEqual(['edit-review','tenant','writer','proposal',true,'Reviewed destination']);
+  await server.close();
+ });
+
+
+ it('allows an unpaid owner draft while the financial kill-switch is off, but never quotes',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'trusted',userId:'owner'}),
+   isEditor:async()=>false,enabled:()=>false});
+  const response=await server.inject({method:'POST',url:'/v1/promotions/drafts',
+   headers:{'idempotency-key':'draft-owner-key-001'},
+   payload:{body:'Privately prepared announcement',targetViews:2}});
+  expect(response.statusCode).toBe(200);
+  expect(events).toContainEqual(['draft','trusted','owner',
+   {body:'Privately prepared announcement',targetViews:2,idempotencyKey:'draft-owner-key-001'}]);
+  expect((await server.inject({method:'GET',url:'/v1/promotions/drafts/mine'})).json())
+   .toEqual({drafts:[]});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/drafts/draft/quote',
+   payload:{}})).statusCode).toBe(503);
+  expect((await server.inject({method:'PUT',url:'/v1/promotions/drafts/draft',
+   payload:{body:'Owner-controlled changes',targetViews:3,expectedVersion:0}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['editDraft','trusted','owner','draft',
+   {body:'Owner-controlled changes',targetViews:3,expectedVersion:0}]);
+  expect((await server.inject({method:'PUT',url:'/v1/promotions/drafts/draft',
+   payload:{body:'Unauthorized',targetViews:3,expectedVersion:0,ownerId:'someone_else'}}))
+   .statusCode).toBe(422);
   await server.close();
  });
 

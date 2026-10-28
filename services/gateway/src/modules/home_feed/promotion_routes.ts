@@ -2,6 +2,12 @@ import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {reviewedPromotionDestination} from '@masanawa/feed';
 
 export interface PromotionPort {
+ draft(t:string,owner:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}):Promise<unknown>;
+ editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;expectedVersion:number}):Promise<unknown>;
+ myDrafts(t:string,owner:string):Promise<unknown>;
+ discardDraft(t:string,owner:string,id:string):Promise<unknown>;
+ quoteDraft(t:string,owner:string,id:string):Promise<unknown>;
+ expireCampaigns(limit?:number):Promise<unknown>;
  quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
@@ -63,6 +69,53 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   if(!await options.isEditor(p))fail('editorial_permission_denied',403);
   return p;
  };
+
+ // Drafts never reserve money. Quote and confirm remain kill-switch gated.
+ const draftInput=(b:Record<string,unknown>)=>{
+  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt']);
+  if(typeof b.body!=='string'||typeof b.targetViews!=='number'||
+    !Number.isSafeInteger(b.targetViews)||b.targetViews<1||b.targetViews>1000000||
+    (b.campaignExpiresAt!==undefined&&typeof b.campaignExpiresAt!=='string'))
+   fail('invalid_campaign_draft');
+  let destinationUrl:string|null=null;
+  try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}
+  catch{fail('invalid_promotion_destination');}
+  return {body:b.body as string,targetViews:b.targetViews as number,
+   ...(destinationUrl!==null?{destinationUrl}:{}),
+   ...(typeof b.campaignExpiresAt==='string'?{campaignExpiresAt:b.campaignExpiresAt}:{})};
+ };
+ app.post('/v1/promotions/drafts',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r),data=draftInput(body(r));
+  const key=r.headers['idempotency-key'];
+  if(typeof key!=='string')fail('idempotency_key_required');
+  return options.port.draft(p.tenantId,p.userId,{...data,idempotencyKey:key as string});
+ });
+ app.get('/v1/promotions/drafts/mine',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r);
+  return options.port.myDrafts(p.tenantId,p.userId);
+ });
+ app.put('/v1/promotions/drafts/:draftId',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r),b=body(r);
+  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt','expectedVersion']);
+  if(typeof b.expectedVersion!=='number'||!Number.isSafeInteger(b.expectedVersion)||
+   b.expectedVersion<0)fail('invalid_campaign_draft');
+  const {expectedVersion,...values}=b;
+  return options.port.editDraft(p.tenantId,p.userId,params(r,'draftId'),
+   {...draftInput(values),expectedVersion:expectedVersion as number});
+ });
+ app.post('/v1/promotions/drafts/:draftId/discard',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r);fields(body(r),[]);
+  return options.port.discardDraft(p.tenantId,p.userId,params(r,'draftId'));
+ });
+ app.post('/v1/promotions/drafts/:draftId/quote',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await who(r);fields(body(r),[]);
+  return options.port.quoteDraft(p.tenantId,p.userId,params(r,'draftId'));
+ });
  app.post('/v1/promotions/quotes',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r),b=body(r);
   fields(b,['postId','body','targetViews','destinationUrl']);

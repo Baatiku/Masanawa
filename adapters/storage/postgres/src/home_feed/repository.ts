@@ -46,7 +46,7 @@ const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.
         AND enforcement.target_id=hp.handle AND enforcement.visibility<>'public')
     AND EXISTS (SELECT 1 FROM feed.promotion_campaigns paid
       WHERE paid.tenant_id=p.tenant_id AND paid.post_id=p.id
-        AND paid.state='active' AND paid.remaining_views>0)
+        AND paid.state='active' AND paid.remaining_views>0 AND (paid.expires_at IS NULL OR paid.expires_at>statement_timestamp()))
     AND p.paid_purged_at IS NULL
     AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences block
       WHERE block.tenant_id=p.tenant_id AND block.blocked AND
@@ -72,10 +72,10 @@ const projection=`p.*,
   ON b.tenant_id=c.tenant_id AND b.id=c.campaign_id
   WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id) AS promotion_delivered_views,
  EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id
-  AND b.post_id=p.id AND b.state='active' AND b.remaining_views>0) AS promotion_active,
+  AND b.post_id=p.id AND b.state='active' AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp())) AS promotion_active,
  p.paid_reviewed_destination_url AS reviewed_destination_url,
  EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
-   AND b.state='active' AND b.remaining_views>0 AND b.sponsor_id IS DISTINCT FROM $2
+   AND b.state='active' AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp()) AND b.sponsor_id IS DISTINCT FROM $2
    AND (p.author_type='masana' OR p.author_user_id IS DISTINCT FROM $2)) AS share_earn_eligible,
  (p.paid_purged_at IS NULL AND p.state='published') AS boost_eligible,
  EXISTS(SELECT 1 FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.fan_id=$2 AND l.reaction_kind='like') AS viewer_liked,

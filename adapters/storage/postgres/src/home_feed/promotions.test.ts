@@ -73,6 +73,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0010_promotion_rejection_appeals.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0012_reviewed_paid_post_edits.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0013_campaign_drafts_and_expiry.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -734,6 +735,61 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(await service.confirm(t,'legacy_quote_user',q.quoteId,'legacy-no-cta-001'))
    .toEqual(c);
   expect(await balance('legacy_quote_user')).toMatchObject({purchased:5,reserved:2});
+ });
+
+
+ it('stores unpaid drafts, version-fences edits and returns one stable quote on retries',async()=>{
+  await account('draftowner',12);
+  const input={body:'Public scholarship update',targetViews:4,
+   destinationUrl:'https://example.org/scholarships',idempotencyKey:'draft-original-001'};
+  const first=await service.draft(t,'draftowner',input);
+  expect(first).toMatchObject({state:'draft',version:0,targetViews:4});
+  expect(await service.draft(t,'draftowner',input)).toEqual(first);
+  await expect(service.draft(t,'draftowner',{...input,targetViews:5}))
+   .rejects.toMatchObject({code:'idempotency_conflict'});
+  expect((await service.myDrafts(t,'draftowner')).drafts).toEqual(expect.arrayContaining([
+   expect.objectContaining({draftId:first.draftId,state:'draft'})]));
+  expect((await service.myDrafts(t,'sharer')).drafts).not.toEqual(expect.arrayContaining([
+   expect.objectContaining({draftId:first.draftId})]));
+  await expect(service.editDraft(t,'sharer',first.draftId,{body:'Hijack',targetViews:3,expectedVersion:0}))
+   .rejects.toMatchObject({code:'draft_stale_or_submitted'});
+  const updated=await service.editDraft(t,'draftowner',first.draftId,{
+   body:'Updated scholarship promotion',targetViews:5,expectedVersion:0});
+  expect(updated.version).toBe(1);
+  await expect(service.editDraft(t,'draftowner',first.draftId,{
+   body:'Stale',targetViews:4,expectedVersion:0})).rejects.toMatchObject({code:'draft_stale_or_submitted'});
+  const q1=await service.quoteDraft(t,'draftowner',first.draftId);
+  const q2=await service.quoteDraft(t,'draftowner',first.draftId);
+  expect(q2.quoteId).toBe(q1.quoteId);
+  expect(((await query(`SELECT count(*)::int AS n FROM feed.promotion_quotes
+   WHERE tenant_id=$1 AND draft_id=$2`,[t,first.draftId])).rows[0] as {n:number}|undefined)?.n).toBe(1);
+  expect(await balance('draftowner')).toEqual({purchased:12,reserved:0,welcome:500});
+  await expect(service.editDraft(t,'draftowner',first.draftId,{
+   body:'Edit after quote',targetViews:6,expectedVersion:1}))
+   .rejects.toMatchObject({code:'draft_stale_or_submitted'});
+  const c=await service.confirm(t,'draftowner',q1.quoteId,'draft-confirm-001');
+  expect(c).toMatchObject({state:'pending_review',targetViews:5});
+  expect((await service.receipt(t,'draftowner',q1.quoteId)).campaign)
+   .toMatchObject({id:c.id,state:'pending_review'});
+  expect(await balance('draftowner')).toEqual({purchased:12,reserved:5,welcome:500});
+ });
+ it('expires a funded campaign at a server deadline, refunds once and preserves audit',async()=>{
+  await account('expiryowner',10);
+  const deadline=new Date(Date.now()+4*3600000).toISOString().replace(/\.\d{3}Z$/,'Z');
+  const draft=await service.draft(t,'expiryowner',{body:'Time bound public lesson',
+   targetViews:3,campaignExpiresAt:deadline,idempotencyKey:'timebound-draft-001'});
+  const quote=await service.quoteDraft(t,'expiryowner',draft.draftId);
+  const c=await service.confirm(t,'expiryowner',quote.quoteId,'timebound-confirm-001');
+  await service.review(t,'different_editor',c.id,true,'Approved within window');
+  expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:3});
+  await expect(query(`UPDATE feed.promotion_campaigns
+    SET expires_at=statement_timestamp()-interval '1 second'
+    WHERE tenant_id=$1 AND id=$2`,[t,c.id])).rejects.toThrow(/economics/i);
+  const current=await query(`SELECT state,expires_at FROM feed.promotion_campaigns WHERE id=$1`,[c.id]);
+  expect((current.rows[0] as {state:string}|undefined)?.state).toBe('active');
+  expect((await service.expireCampaigns()).expired).toBe(0);
+  await service.cancel(t,'expiryowner',c.id);
+  expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:0});
  });
 
 });

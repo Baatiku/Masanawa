@@ -30,6 +30,7 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
    '../../../../../packages/feed/migrations/0010_promotion_rejection_appeals.sql',
    '../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql',
    '../../../../../packages/feed/migrations/0012_reviewed_paid_post_edits.sql',
+   '../../../../../packages/feed/migrations/0013_campaign_drafts_and_expiry.sql',
   ])await db.query(sql(file));
   service=new PgStatusPromotions(db,'race-test-secret-with-40-characters-minimum','https://status.example.org');
   for(const id of ['publisher','viewer_a','viewer_b']){
@@ -161,6 +162,43 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
   const audit=await db.query(`SELECT action,details FROM feed.promotion_audit
    WHERE tenant_id=$1 AND campaign_id=$2 ORDER BY id`,[tenant,c.id]);
   expect(audit.rows.map(x=>x.action)).toContain('rejected');
+ });
+
+
+ it('refuses expired budgets before worker sweep and restores only unused sponsor reservations',async()=>{
+  const deadline=new Date(Date.now()+2*3600000).toISOString().replace(/\\.\\d{3}Z$/,'Z');
+  const draft=await service.draft(tenant,'publisher',{
+   body:'Expiring campaign without orphan debits',targetViews:2,
+   campaignExpiresAt:deadline,idempotencyKey:'pg-race-expire-draft-001'});
+  const quoted=await service.quoteDraft(tenant,'publisher',draft.draftId);
+  const campaign=await service.confirm(tenant,'publisher',quoted.quoteId,'pg-expire-confirm-001');
+  await service.review(tenant,'independent_editor',campaign.id,true);
+  const exposure=await service.beginView(tenant,'viewer_b',campaign.postId);
+  await db.query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '8 seconds'
+   WHERE tenant_id=$1 AND id=$2`,[tenant,exposure.challengeId]);
+  const before=await db.query(`SELECT purchased_mb::int AS purchased,
+   reserved_purchased_mb::int AS reserved FROM gb_wallet.accounts
+   WHERE tenant_id=$1 AND account_id='publisher'`,[tenant]);
+  // Disposable PG-only fake-clock fixture: bypass the immutability trigger
+  // momentarily to simulate the server reaching an original future deadline.
+  await db.query('ALTER TABLE feed.promotion_campaigns DISABLE TRIGGER promotion_campaign_economics_immutable');
+  try{await db.query(`UPDATE feed.promotion_campaigns
+   SET expires_at=statement_timestamp()-interval '1 second'
+   WHERE tenant_id=$1 AND id=$2`,[tenant,campaign.id]);}
+  finally{await db.query('ALTER TABLE feed.promotion_campaigns ENABLE TRIGGER promotion_campaign_economics_immutable');}
+  const stopped=await service.finishView(tenant,'viewer_b',exposure.challengeId,
+   {visibleFraction:0.8,foreground:true,engaged:true});
+  expect(stopped.payable).toBe(false);
+  const swept=await service.expireCampaigns();
+  expect(swept).toMatchObject({expired:1,refundedMb:2});
+  expect((await service.expireCampaigns()).expired).toBe(0);
+  const after=await db.query(`SELECT purchased_mb::int AS purchased,
+   reserved_purchased_mb::int AS reserved FROM gb_wallet.accounts
+   WHERE tenant_id=$1 AND account_id='publisher'`,[tenant]);
+  expect(after.rows[0]).toEqual({purchased:before.rows[0].purchased,
+   reserved:before.rows[0].reserved-2});
+  expect((await service.receipt(tenant,'publisher',quoted.quoteId)).campaign)
+   .toMatchObject({state:'expired',refundedUnusedMb:2,spentMb:0});
  });
 
 });

@@ -42,7 +42,7 @@ export class PgSavedLibraryRepository {
             WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id),
           'promotionActive',EXISTS(SELECT 1 FROM feed.promotion_campaigns b
             WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
-              AND b.state='active' AND b.remaining_views>0),
+              AND b.state='active' AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp())),
           'shareEarnEligible',EXISTS(SELECT 1 FROM feed.promotion_campaigns b
             WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id AND b.state='active'
               AND b.remaining_views>0 AND b.sponsor_id<>$2
