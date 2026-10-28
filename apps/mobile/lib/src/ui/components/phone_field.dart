@@ -18,6 +18,7 @@ class PhoneField extends StatefulWidget {
     this.onCountryChanged,
     this.enabled = true,
     this.initialCountry = kDefaultCountry,
+    this.nationalEntry = false,
   });
 
   final TextEditingController controller;
@@ -25,6 +26,9 @@ class PhoneField extends StatefulWidget {
   final ValueChanged<PhoneCountry>? onCountryChanged;
   final bool enabled;
   final PhoneCountry initialCountry;
+  /// Present the calling code as a fixed picker prefix and let the person
+  /// edit only national digits. The public [controller] still holds E.164.
+  final bool nationalEntry;
 
   @override
   State<PhoneField> createState() => _PhoneFieldState();
@@ -32,6 +36,37 @@ class PhoneField extends StatefulWidget {
 
 class _PhoneFieldState extends State<PhoneField> {
   PhoneCountry _country = kDefaultCountry;
+  final _national = TextEditingController();
+  bool _writingCombined = false;
+
+  String _nationalPart(String raw, PhoneCountry country) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
+      // Strip separators *before* comparing the calling code. Pasted forms
+      // such as "+ 44 ..." and "00 44 ..." must not become +4444....
+      final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+      final internationalDigits = trimmed.startsWith('00')
+          ? digits.replaceFirst(RegExp(r'^00'), '') : digits;
+      if (country.dialCode.isNotEmpty &&
+          internationalDigits.startsWith(country.dialCode)) {
+        return internationalDigits.substring(country.dialCode.length);
+      }
+      return internationalDigits;
+    }
+    return trimmed.replaceAll(RegExp(r'\D'), '');
+  }
+
+  void _writeCombined() {
+    if (!widget.nationalEntry) return;
+    final digits = _national.text.replaceAll(RegExp(r'\D'), '');
+    final combined = _country.dialCode.isEmpty
+        ? (digits.isEmpty ? '' : '+$digits')
+        : '+${_country.dialCode}$digits';
+    if (widget.controller.text == combined) return;
+    _writingCombined = true;
+    widget.controller.text = combined;
+    _writingCombined = false;
+  }
 
   @override
   void initState() {
@@ -41,6 +76,10 @@ class _PhoneFieldState extends State<PhoneField> {
         ? detectCountry(raw):widget.initialCountry;
     _country=detected.dialCode==widget.initialCountry.dialCode
       ?widget.initialCountry:detected;
+    if (widget.nationalEntry) {
+      _national.text = _nationalPart(raw, _country);
+      _writeCombined();
+    }
     widget.controller.addListener(_onControllerChanged);
   }
 
@@ -52,18 +91,54 @@ class _PhoneFieldState extends State<PhoneField> {
       widget.controller.addListener(_onControllerChanged);
       _onControllerChanged();
     }
+    if (widget.nationalEntry != oldWidget.nationalEntry) {
+      _national.text = _nationalPart(widget.controller.text, _country);
+      if (widget.nationalEntry) _writeCombined();
+    }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
+    _national.dispose();
     super.dispose();
   }
 
-  void _onControllerChanged() => _onChanged(widget.controller.text);
+  void _onControllerChanged() {
+    if (!widget.nationalEntry) {
+      _onChanged(widget.controller.text);
+      return;
+    }
+    if (_writingCombined) return;
+    final raw = widget.controller.text;
+    final detected = detectCountry(raw);
+    final country = detected.dialCode == _country.dialCode ? _country : detected;
+    if (country.iso != _country.iso) {
+      setState(() => _country = country);
+      widget.onCountryChanged?.call(country);
+    }
+    final national = _nationalPart(raw, country);
+    if (_national.text != national) _national.text = national;
+  }
 
   void _onChanged(String value) {
     final trimmed = value.trim();
+    if (widget.nationalEntry) {
+      if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
+        final detected = detectCountry(trimmed);
+        final selected = detected.dialCode == _country.dialCode
+            ? _country : detected;
+        if (selected.iso != _country.iso) {
+          setState(() => _country = selected);
+          widget.onCountryChanged?.call(selected);
+        }
+        final national = _nationalPart(trimmed, selected);
+        _national.value = TextEditingValue(text: national,
+          selection: TextSelection.collapsed(offset: national.length));
+      }
+      _writeCombined();
+      return;
+    }
     if (!trimmed.startsWith('+') && !trimmed.startsWith('00')) return;
     final detected = detectCountry(value);
     // +1 is shared. Do not undo an explicit Canada/USA selection.
@@ -79,6 +154,11 @@ class _PhoneFieldState extends State<PhoneField> {
     final raw = widget.controller.text.trim();
     final previous = _country;
     setState(() => _country = country);
+    if (widget.nationalEntry) {
+      _writeCombined();
+      widget.onCountryChanged?.call(country);
+      return;
+    }
     widget.onCountryChanged?.call(country);
     if ((raw.startsWith('+') || raw.startsWith('00')) &&
         previous.dialCode.isNotEmpty) {
@@ -103,7 +183,8 @@ class _PhoneFieldState extends State<PhoneField> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
-          controller: widget.controller,
+          key: widget.nationalEntry ? const Key('phone-national-number') : null,
+          controller: widget.nationalEntry ? _national : widget.controller,
           enabled: widget.enabled,
           autofocus: widget.autofocus,
           keyboardType: TextInputType.phone,
@@ -151,7 +232,10 @@ class _PhoneFieldState extends State<PhoneField> {
                 ],
               ),
             ),
-            hintText: '${_country.displayCode} …',
+            hintText: widget.nationalEntry
+                ? (Localizations.localeOf(context).languageCode == 'ha'
+                    ? 'Sauran lambobin wayarka' : 'National phone number')
+                : '${_country.displayCode} …',
             hintStyle: TextStyle(color: u.textMuted),
             filled: true,
             fillColor: u.surfaceCard,
@@ -171,7 +255,11 @@ class _PhoneFieldState extends State<PhoneField> {
         ),
         const SizedBox(height: 6),
         Text(
-          _country.displayCode.isEmpty
+          widget.nationalEntry
+              ? (Localizations.localeOf(context).languageCode == 'ha'
+                  ? 'Shigar da sauran lambobin wayarka. Za ka iya canja ƙasa.'
+                  : 'Enter the rest of your number; country is editable.')
+              : _country.displayCode.isEmpty
               ? l10n.unknownCountryDialCode
               : '${_country.flag} ${l10n.countryDialCode(_country.displayCode)}',
           style: TextStyle(

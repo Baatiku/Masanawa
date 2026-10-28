@@ -21,6 +21,8 @@ import 'status_promotion_api.dart';
 import 'status_promotion_sheet.dart';
 import 'my_status_promotions_screen.dart';
 import 'status_qualified_view_observer.dart';
+import 'status_reaction_picker.dart';
+import 'status_post_action_row.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -43,10 +45,14 @@ class MasanaFeedScreen extends StatefulWidget {
     this.wrapAccountRoute,
     this.searchExpanded,
     this.promotions,
+    this.ownerName,
   });
   final FeedApi api;
   /// Financial controls appear only after server capability discovery.
   final StatusPromotionApi? promotions;
+  /// Current authenticated owner's display name for a truthful composer avatar.
+  /// Not used as a post-author identity or a financial account key.
+  final String? ownerName;
   final StatusTipFlow? statusTips;
   final VoidCallback? onTipCompleted;
   /// Header-owned search affordance for the Status root.
@@ -229,14 +235,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }catch(_){/* An accepted server event is not undone by a stale read. */}
   }
 
-  Future<void> openPromotion({String? postId}) async {
+  Future<void> openPromotion({String? postId,bool photoRequested=false}) async {
     final api=widget.promotions;
     if(api==null||!promotionsAvailable||widget.accountKey.isEmpty)return;
     final scope=generation,account=widget.accountKey;
     final result=await showModalBottomSheet<StatusPromotionCampaign>(
       context:context,isScrollControlled:true,showDragHandle:false,
       builder:(ctx)=>StatusPromotionSheet(api:api,postId:postId,
-        onRecharge:()async{await ctx.push<void>('/wallet');}),
+        initialPhotoRequested:photoRequested,
+        // Go directly to the existing Add MB/packages journey; the parent
+        // sheet keeps its local draft and re-quotes only after returning.
+        onRecharge:()async{await ctx.push<void>('/wallet/add');}),
     );
     if(!mounted||scope!=generation||widget.accountKey!=account||result==null)return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
@@ -251,7 +260,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if(api==null||widget.accountKey.isEmpty)return;
     final account=widget.accountKey,scope=generation;
     final page=MyStatusPromotionsScreen(api:api,canBoost:promotionsAvailable,
-      onBoostAgain:(postId)=>openPromotion(postId:postId));
+      onBoostAgain:(postId)=>openPromotion(postId:postId),
+      onCreatePromotion:()=>openPromotion());
     await Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>
       widget.wrapAccountRoute?.call(page)??page));
     if(mounted&&scope==generation&&account==widget.accountKey)await refresh();
@@ -490,6 +500,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             audioPlaybackAvailable: widget.audioPlaybackAvailable,
             authorDirectory: widget.authorDirectory,
             onBoostPost: promotionsAvailable ? (id) => openPromotion(postId: id) : null,
+            engagementApi: feed,
+            onSharePost: sharePost,
+            shareEarnEnabled: promotionsAvailable,
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
@@ -621,38 +634,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (pendingActions.contains(post.id) || widget.api is! ReactionFeedApi) {
       return;
     }
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final target = anchor.findRenderObject() as RenderBox?;
-    if (overlay == null || target == null) return;
-    final origin = target.localToGlobal(Offset.zero, ancestor: overlay);
-    final rect = Rect.fromLTWH(origin.dx, origin.dy, target.size.width,
-        target.size.height);
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
-      items: [
-        PopupMenuItem<String>(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Builder(builder: (menuContext) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final kind in const ['like', 'love', 'care'])
-                TextButton(
-                  onPressed: () => Navigator.pop(menuContext, kind),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(FeedPost.reactionEmoji[kind]!,
-                          style: const TextStyle(fontSize: 23)),
-                      Text(kind[0].toUpperCase() + kind.substring(1)),
-                    ],
-                  ),
-                ),
-            ],
-          )),
-        ),
-      ],
-    );
+    final choice = await showStatusReactionPicker(context, anchor);
     if (!mounted || choice == null) return;
     await react(post, choice == post.currentReaction ? null : choice);
   }
@@ -686,22 +668,45 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           Padding(padding:const EdgeInsets.fromLTRB(12,4,12,8),
             child:Material(color:Theme.of(context).colorScheme.surface,
               borderRadius:BorderRadius.circular(14),
-              child:Padding(padding:const EdgeInsets.all(10),child:Row(children:[
-                CircleAvatar(radius:19,child:const Icon(Icons.person_outline,size:21)),
-                const SizedBox(width:10),
-                Expanded(child:OutlinedButton(
-                  onPressed:()=>openPromotion(),
-                  style:OutlinedButton.styleFrom(alignment:Alignment.centerLeft,
-                    minimumSize:const Size(0,44)),
-                  child:Text(t('What would you like to promote?',
-                    'Me kake son yadawa?'),maxLines:1,
-                    overflow:TextOverflow.ellipsis))),
-                IconButton(tooltip:t('Promote post','Yada sako'),
-                  onPressed:()=>openPromotion(),
-                  icon:const Icon(Icons.add_photo_alternate_outlined)),
-                IconButton(tooltip:t('My promotions','Tallace-tallacena'),
-                  onPressed:openMyPromotions,
-                  icon:const Icon(Icons.campaign_outlined)),
+              child:Padding(padding:const EdgeInsets.all(10),child:Column(
+                crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Row(children:[
+                  CircleAvatar(radius:20,
+                    child:(widget.ownerName?.trim().isNotEmpty??false)
+                      ? Text(widget.ownerName!.trim().characters.first.toUpperCase())
+                      :const Icon(Icons.person_outline,size:21)),
+                  const SizedBox(width:10),
+                  Expanded(child:OutlinedButton(
+                    key:const Key('status-composer-prompt'),
+                    onPressed:()=>openPromotion(),
+                    style:OutlinedButton.styleFrom(
+                      alignment:AlignmentDirectional.centerStart,
+                      minimumSize:const Size(0,48)),
+                    child:Text(t('What would you like to promote?',
+                      'Me kuke son yaɗawa?'),maxLines:1,
+                      overflow:TextOverflow.ellipsis))),
+                ]),
+                const SizedBox(height:5),
+                Wrap(alignment:WrapAlignment.spaceBetween,
+                  crossAxisAlignment:WrapCrossAlignment.center,
+                  spacing:6,runSpacing:4,children:[
+                  TextButton.icon(
+                    key:const Key('status-composer-photo'),
+                    style:TextButton.styleFrom(minimumSize:const Size(0,48)),
+                    onPressed:()=>openPromotion(photoRequested:true),
+                    icon:const Icon(Icons.photo_library_outlined,size:19),
+                    label:Text(t('Photo','Hoto'))),
+                  IconButton(
+                    key:const Key('status-composer-manage'),
+                    tooltip:t('My promotions','Tallace-tallacena'),
+                    onPressed:openMyPromotions,
+                    icon:const Icon(Icons.receipt_long_outlined,size:20)),
+                  FilledButton(
+                    key:const Key('status-composer-promote'),
+                    style:FilledButton.styleFrom(minimumSize:const Size(0,48)),
+                    onPressed:()=>openPromotion(),
+                    child:Text(t('Promote','Yaɗa'))),
+                ]),
               ]))),
           ),
         // Incident mode: new spending stays OFF, but the owner must still be
@@ -930,59 +935,17 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 ]),
                               ),
                               const Divider(height: 1),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 5),
-                                child: LayoutBuilder(builder: (context, constraints) {
-                                  final compact = constraints.maxWidth < 290 ||
-                                      MediaQuery.textScalerOf(context).scale(14) > 20;
-                                  final pending = pendingActions.contains(post.id);
-                                  Widget actionButton(String label, IconData icon,
-                                      VoidCallback? onPressed) => Expanded(
-                                    child: TextButton.icon(
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                                        minimumSize: const Size(0, 48),
-                                      ),
-                                      onPressed: onPressed,
-                                      icon: Icon(icon, size: 20),
-                                      label: compact
-                                          ? const SizedBox.shrink()
-                                          : Text(label, maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                    ),
-                                  );
-                                  return Row(children: [
-                                    Builder(builder: (anchor) => Expanded(
-                                      child: GestureDetector(
-                                        onLongPress: widget.api is ReactionFeedApi && !pending
-                                            ? () => showReactions(anchor, post)
-                                            : null,
-                                        child: TextButton.icon(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                                            minimumSize: const Size(0, 48),
-                                          ),
-                                          onPressed: pending ? null
-                                              : () => likePost(post),
-                                          icon: Icon(post.currentReaction == 'like'
-                                              ? Icons.thumb_up_rounded
-                                              : Icons.thumb_up_outlined, size: 20),
-                                          label: compact ? const SizedBox.shrink()
-                                              : Text(t('Like', 'So'), maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis),
-                                        ),
-                                      ),
-                                    )),
-                                    actionButton(t('Comment', 'Sharhi'),
-                                        Icons.mode_comment_outlined,
-                                        () => openComments(post)),
-                                    actionButton(post.shareEarnEligible&&promotionsAvailable
-                                          ?t('Share & Earn','Raba ka samu MB')
-                                          :t('Share', 'Raba'),
-                                        Icons.share_outlined,
-                                        sharingPosts.contains(post.id)?null:() => sharePost(post)),
-                                  ]);
-                                }),
+                              StatusPostActionRow(
+                                post: post,
+                                pending: pendingActions.contains(post.id),
+                                shareEarnEnabled: promotionsAvailable,
+                                onLike: () => likePost(post),
+                                onComment: () => openComments(post),
+                                onShare: sharingPosts.contains(post.id) ? null : () => sharePost(post),
+                                onLongLike: widget.api is ReactionFeedApi
+                                    ? (anchor) => showReactions(anchor, post)
+                                    : null,
+
                               ),
                             ],
                           ),

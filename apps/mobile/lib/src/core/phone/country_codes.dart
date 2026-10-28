@@ -103,6 +103,17 @@ PhoneCountry detectCountry(String raw) {
 final List<PhoneCountry> _byLengthDesc = [...kPhoneCountries]
   ..sort((a, b) => b.dialCode.length.compareTo(a.dialCode.length));
 
+/// A weak, editable first-signup suggestion from the device's language/region
+/// settings. Locale does not establish where a person resides.
+PhoneCountry suggestPhoneCountryFromLocale(String? region) {
+  if (region == null) return kDefaultCountry;
+  final iso = region.trim().toUpperCase();
+  for (final country in kPhoneCountries) {
+    if (country.iso == iso) return country;
+  }
+  return kDefaultCountry;
+}
+
 /// Normalizes free-typed input to `+`-prefixed E.164.
 String normalizeE164(String raw, {PhoneCountry country = kDefaultCountry}) {
   final trimmed = raw.trim();

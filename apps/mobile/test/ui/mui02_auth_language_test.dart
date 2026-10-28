@@ -256,6 +256,10 @@ void main() {
   testWidgets('expired code during name completion returns to OTP recovery', (
     tester,
   ) async {
+    // The signup country now follows the device locale suggestion. Pin this
+    // Nigeria-specific region scenario rather than relying on CI host locale.
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en', 'NG');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
     final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
     await preference.load();
     final router = _router('/name');
@@ -288,6 +292,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(OtpScreen), findsOneWidget);
     expect(find.byType(NameScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('signup country switch replaces region options and clears selection',
+      (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en', 'NG');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
+    final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+    await preference.load();
+    final router = _router('/name');
+    addTearDown(router.dispose);
+    addTearDown(preference.dispose);
+    await tester.pumpWidget(_app(router, preference, _sessionFor('/name'),
+      textScale: 1, api: _PhoneAndEmailClient()));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('signup-subdivision-NG')), findsOneWidget);
+    final phone = find.byKey(const Key('phone-national-number'));
+    expect(tester.widget<TextField>(phone).controller!.text, isEmpty);
+
+    await tester.tap(find.byKey(const Key('phone-country-picker')));
+    await tester.pumpAndSettle();
+    final ghana = find.byKey(const Key('phone-country-GH'));
+    await tester.ensureVisible(ghana);
+    await tester.tap(ghana);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('signup-subdivision-NG')), findsNothing);
+    final ghRegion = find.byKey(const ValueKey('signup-subdivision-GH'));
+    expect(ghRegion, findsOneWidget);
+    expect(tester.widget<DropdownButtonFormField<String>>(ghRegion).initialValue,
+      isNull, reason: 'The old state must never carry to another country');
+    expect(find.text('Selected country: Ghana. Change it if the phone prefix suggests the wrong country.'),
+      findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

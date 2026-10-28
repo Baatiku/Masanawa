@@ -39,8 +39,9 @@ class _Session extends SessionController {
   }
 }
 
-class _Feed implements FeedApi, SearchFeedApi {
+class _Feed implements FeedApi, SearchFeedApi, ReactionFeedApi {
   String message = 'A verified Masana update';
+  String? selectedReaction;
   Completer<FeedPage>? pending;
   bool fail = false;
   int requests = 0;
@@ -55,6 +56,9 @@ class _Feed implements FeedApi, SearchFeedApi {
   Future<FeedPage> searchPosts({required String mode, required String query, String? cursor}) async =>
     FeedPage([_post('Result for $query')], null);
   @override Future<void> like(String id, bool enabled) async {}
+  @override Future<void> react(String id, String? kind) async {
+    selectedReaction = kind;
+  }
   @override Future<void> save(String id, bool enabled) async {}
   @override Future<void> comment(String id, String body, String key) async {}
   @override Future<List<FeedComment>> comments(String id) async => const [];
@@ -85,6 +89,46 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Feed feed, {bool shell = 
 }
 
 void main() {
+  testWidgets('Home card keeps exactly Like / Comment / Share and all seven compact reactions',
+      (tester) async {
+    final feed = _Feed();
+    await _mount(tester, feed);
+    expect(find.text('Like'), findsOneWidget);
+    expect(find.text('Comment'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('Save'), findsNothing);
+    expect(find.byTooltip('Tip MB'), findsOneWidget);
+    await tester.longPress(find.text('Like'));
+    await tester.pumpAndSettle();
+    for (final reaction in const ['Like','Love','Care','Haha','Wow','Sad','Angry']) {
+      expect(find.text(reaction), findsWidgets);
+    }
+    await tester.tap(find.text('Love'));
+    await tester.pumpAndSettle();
+    expect(feed.selectedReaction, 'love');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('320dp Home actions preserve 48dp touch targets and accessible labels',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await _mount(tester, _Feed());
+    for (final action in const ['Like','Comment','Share']) {
+      final tooltip = find.byTooltip(action);
+      expect(tooltip, findsOneWidget);
+      final button = find.descendant(of: tooltip, matching: find.byType(TextButton));
+      expect(button, findsOneWidget);
+      expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+    }
+    expect(find.byTooltip('Tip MB'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('real mounted Home tab displays the same Masana feed without Talk publishing', (tester) async {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);

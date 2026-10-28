@@ -40,7 +40,11 @@ class _NameScreenState extends ConsumerState<NameScreen> {
       _phone.text=registeredPhone;
       _country=detectCountry(registeredPhone);
     }else{
-      // Prefill the actual calling prefix: the person enters the national part.
+      // The device's locale is only a suggestion, not residence or a verified
+      // location. Always leave the country picker editable and require the
+      // actual contact phone and state to be confirmed by the person.
+      final localeCountry=WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+      _country=suggestPhoneCountryFromLocale(localeCountry);
       _phone.text='+${_country.dialCode}';
     }
     _loadRegionChoices();
@@ -204,6 +208,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           const Text('Contact phone (not verified)'),
           const SizedBox(height:6),
           PhoneField(controller:_phone,enabled:!_saving,initialCountry:_country,
+            nationalEntry:true,
             onCountryChanged:_onCountryChanged),
           const SizedBox(height:6),
           Text('Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',

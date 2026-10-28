@@ -51,8 +51,18 @@ String? shellDeepLinkRoute(Uri uri) {
     }
   }
 
+  // The one opaque Status referral parameter is a navigation/attribution
+  // hint, never access authority. All other caller-supplied queries remain
+  // rejected, and the destination revalidates the token server-side.
+  if (uri.scheme == 'masanawa' &&
+      uri.host == 'status' &&
+      uri.pathSegments.length == 1 &&
+      _validResourceId(uri.pathSegments.single)) {
+    return _statusResourceRoute(uri, uri.pathSegments.single);
+  }
+
   // Navigation hints never grant access. The target screen loads its own
-  // authorized resource after sign-in; no caller-supplied tokens or queries.
+  // authorized resource after sign-in; no arbitrary tokens or queries.
   if (uri.scheme == 'masanawa' && uri.queryParameters.isEmpty) {
     final segments = uri.pathSegments;
     if (uri.host == 'rooms' &&
@@ -64,11 +74,6 @@ String? shellDeepLinkRoute(Uri uri) {
         segments.length == 1 &&
         _validCharacterId(segments.single)) {
       return '/masana/${Uri.encodeComponent(segments.single)}';
-    }
-    if (uri.host == 'status' &&
-        segments.length == 1 &&
-        _validResourceId(segments.single)) {
-      return '/status/${Uri.encodeComponent(segments.single)}';
     }
     if (uri.host == 'calls' &&
         segments.length == 1 &&
@@ -120,20 +125,20 @@ String? shellDeepLinkRoute(Uri uri) {
 
   if (uri.scheme == 'https') {
     if (uri.host.toLowerCase() != 'masanawa.com' ||
-        uri.queryParameters.isNotEmpty ||
         uri.pathSegments.length != 2) {
       return null;
     }
     final kind = uri.pathSegments.first;
     final id = uri.pathSegments[1];
+    if (kind == 'status' && _validResourceId(id)) {
+      return _statusResourceRoute(uri, id);
+    }
+    if (uri.queryParameters.isNotEmpty) return null;
     if (kind == 'room' && _validResourceId(id)) {
       return '/home?tab=status';
     }
     if (kind == 'masana' && _validCharacterId(id)) {
       return '/masana/${Uri.encodeComponent(id)}';
-    }
-    if (kind == 'status' && _validResourceId(id)) {
-      return '/status/${Uri.encodeComponent(id)}';
     }
     if (kind == 'transaction' && _validTransactionId(id)) {
       return '/home?tab=wallet';
@@ -201,6 +206,22 @@ String? shellDeepLinkRoute(Uri uri) {
 
   if (!_validCharacterId(characterId)) return null;
   return '/chat/${Uri.encodeComponent(characterId)}';
+}
+
+String? _statusResourceRoute(Uri uri, String postId) {
+  final destination = '/status/${Uri.encodeComponent(postId)}';
+  if (uri.queryParameters.isEmpty) return destination;
+  // Unknown query keys could be forged privileges and must not be forwarded.
+  if (uri.queryParameters.keys.any((key) => key != 'r')) return null;
+  final values = uri.queryParametersAll['r'];
+  if (values == null || values.length != 1) return destination;
+  final token = values.single;
+  // Malformed or duplicated opaque referrals still open permitted content,
+  // but never reach the view challenge as an earnable attribution claim.
+  if (!RegExp(r'^[A-Za-z0-9_-]{20,128}$').hasMatch(token)) {
+    return destination;
+  }
+  return '$destination?r=${Uri.encodeQueryComponent(token)}';
 }
 
 bool _validTransactionId(String value) =>

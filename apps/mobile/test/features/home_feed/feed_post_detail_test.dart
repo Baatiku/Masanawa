@@ -20,7 +20,47 @@ final sample=FeedPost(id:'381026c2-9d56-47b1-b73d-1784e24e41e2',
 final root=FeedComment(id:'9b8c8884-7a31-49d9-aee5-521364b54aef',body:'A question',
   state:'visible',createdAt:DateTime.utc(2026));
 
+class _DetailReactions implements FeedApi, ReactionFeedApi {
+  final writes=<(String,String?)>[];
+  @override Future<void> react(String postId,String? kind) async {
+    writes.add((postId,kind));
+  }
+  @override Future<FeedPage> list({required String mode,String? cursor}) async =>
+    FeedPage([sample],null);
+  @override Future<void> like(String id,bool enabled) async {}
+  @override Future<void> save(String id,bool enabled) async {}
+  @override Future<void> comment(String id,String body,String key) async {}
+  @override Future<List<FeedComment>> comments(String id) async => [];
+}
+
 void main(){
+ testWidgets('original detail has the Home action strip and preserves accepted reaction on stale GET',
+     (tester) async {
+   final api=_DetailReactions(),shared=<String>[];
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:sample,accountKey:'fan',engagementApi:api,
+     loadPost:(_) async => sample,
+     loadThread:(_,__) async =>[],
+     sendComment:(_,__,___,____) async {},
+     onSharePost:(post) async => shared.add(post.id),
+   )));
+   await tester.pumpAndSettle();
+   await tester.ensureVisible(find.text('Like'));
+   await tester.tap(find.text('Like'));
+   await tester.pumpAndSettle();
+   expect(api.writes,[(sample.id,'like')]);
+   expect(find.byIcon(Icons.thumb_up_rounded),findsOneWidget,
+     reason:'A stale reaction GET must not visually undo an accepted PUT');
+   await tester.tap(find.text('Share'));
+   expect(shared,[sample.id]);
+   await tester.longPress(find.text('Like'));
+   await tester.pumpAndSettle();
+   await tester.tap(find.text('Love'));
+   await tester.pumpAndSettle();
+   expect(api.writes.last,(sample.id,'love'));
+   expect(tester.takeException(),isNull);
+ });
+
  testWidgets('detail shares the feed multi-image mosaic and preserves exact media entry', (tester) async {
    final gallery=FeedPost(id:'status-gallery',authorMasanaId:'masana_owner',
      kind:'image',body:'Approved photos',mediaIds:const ['image-first','image-second'],

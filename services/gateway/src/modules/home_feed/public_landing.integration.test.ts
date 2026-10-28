@@ -1,10 +1,13 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {createHash} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 import {PgPublicStatusLanding} from './public_landing.js';
 
 const masa='27c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const paid='87c63eb3-0f5e-4849-8670-2eb62c8406bf';
 const hidden='97c63eb3-0f5e-4849-8670-2eb62c8406bf';
+const campaign='37c63eb3-0f5e-4849-8670-2eb62c8406bf';
+const token='TestValidForwardedLink0123456789abcdef';
 
 describe('public Status unfurls only approved globally public funded content',()=>{
  const db=new PGlite();
@@ -18,7 +21,9 @@ describe('public Status unfurls only approved globally public funded content',()
    CREATE TABLE feed.posts(id uuid,tenant_id text,state text,kind text,
     body text,media_ids text[],paid_purged_at timestamptz,
     author_type text,author_user_id text,author_masana_id text,audience text);
-   CREATE TABLE feed.promotion_campaigns(tenant_id text,post_id uuid,state text,remaining_views int);
+   CREATE TABLE feed.promotion_campaigns(tenant_id text,id uuid,post_id uuid,state text,remaining_views int);
+   CREATE TABLE feed.share_links(tenant_id text,post_id uuid,campaign_id uuid,
+    token_sha256 text,revoked_at timestamptz);
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE identity.characters(tenant_id text,character_id text,state text);
    CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text);
@@ -35,7 +40,10 @@ describe('public Status unfurls only approved globally public funded content',()
      ('${paid}','tenant','published','text','Funded human lesson',ARRAY[]::text[],NULL,'human','member',NULL,'public'),
      ('${hidden}','tenant','published','text','Private draft',ARRAY[]::text[],NULL,'human','member',NULL,'private');
    INSERT INTO feed.promotion_campaigns VALUES
-     ('tenant','${paid}','active',2),('tenant','${hidden}','active',2);`);
+     ('tenant','${campaign}','${paid}','active',2),
+     ('tenant','47c63eb3-0f5e-4849-8670-2eb62c8406bf','${hidden}','active',2);`);
+  await db.query(`INSERT INTO feed.share_links VALUES($1,$2,$3,$4,NULL)`,
+   ['tenant',paid,campaign,createHash('sha256').update(token).digest('hex')]);
  });
  afterAll(async()=>db.close());
 
@@ -46,13 +54,23 @@ describe('public Status unfurls only approved globally public funded content',()
   expect(await repository.find('not-an-id')).toBeNull();
  });
  it('hides human posts the instant budgets exhaust or profile moderation intervenes',async()=>{
+  expect(await repository.validReferral(paid,token)).toBe(true);
   await db.query('UPDATE feed.promotion_campaigns SET remaining_views=0 WHERE post_id=$1',[paid]);
   expect(await repository.find(paid)).toBeNull();
+  expect(await repository.validReferral(paid,token)).toBe(false);
   await db.query('UPDATE feed.promotion_campaigns SET remaining_views=1 WHERE post_id=$1',[paid]);
   await db.query("INSERT INTO talks.safety_enforcement VALUES('tenant','profile','member_valid','blocked')");
   expect(await repository.find(paid)).toBeNull();
   await db.query('DELETE FROM talks.safety_enforcement');
   expect(await repository.find(paid)).toMatchObject({id:paid});
+ });
+ it('preserves only active original-sharer links, never forged or revoked tokens',async()=>{
+  expect(await repository.validReferral(paid,token)).toBe(true);
+  expect(await repository.validReferral(paid,'SomeOtherOpaqueForwardedToken12345')).toBe(false);
+  expect(await repository.validReferral(paid,'<script>')).toBe(false);
+  expect(await repository.validReferral(hidden,token)).toBe(false);
+  await db.query('UPDATE feed.share_links SET revoked_at=now() WHERE post_id=$1',[paid]);
+  expect(await repository.validReferral(paid,token)).toBe(false);
  });
  it('returns only a tombstone after purge and no arbitrary cross-tenant UUID',async()=>{
   await db.query("UPDATE feed.posts SET paid_purged_at=now(),state='removed',body='' WHERE id=$1",[paid]);

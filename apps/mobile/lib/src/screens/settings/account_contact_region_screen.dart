@@ -19,15 +19,19 @@ class _AccountContactRegionScreenState extends ConsumerState<AccountContactRegio
   String? _subdivision,_error,_provenance;
   bool _loading=true,_saving=false;
   String? _owner;
+  int? _ownerAuthorizationEpoch;
   int _epoch=0;
   bool _same(int epoch){
     final session=ref.read(sessionProvider);
     return mounted&&epoch==_epoch&&session is SessionSignedIn&&
-      session.user.id==_owner;
+      session.user.id==_owner&&
+      ref.read(sessionProvider.notifier).authorizationEpoch==_ownerAuthorizationEpoch;
   }
   @override void initState(){super.initState();
     final session=ref.read(sessionProvider);
     _owner=session is SessionSignedIn?session.user.id:null;
+    _ownerAuthorizationEpoch=session is SessionSignedIn
+      ?ref.read(sessionProvider.notifier).authorizationEpoch:null;
     WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)_load();});
   }
   @override void dispose(){_epoch++;_phone.dispose();super.dispose();}
@@ -75,7 +79,8 @@ class _AccountContactRegionScreenState extends ConsumerState<AccountContactRegio
   }
   @override Widget build(BuildContext context){
     ref.listen(sessionProvider,(previous,next){
-      if(next is! SessionSignedIn||next.user.id!=_owner){
+      if(next is! SessionSignedIn||next.user.id!=_owner||
+          ref.read(sessionProvider.notifier).authorizationEpoch!=_ownerAuthorizationEpoch){
         _epoch++;Navigator.of(context).maybePop();
       }
     });
@@ -89,6 +94,7 @@ class _AccountContactRegionScreenState extends ConsumerState<AccountContactRegio
           const Text('Contact phone'),const SizedBox(height:6),
           PhoneField(key:ValueKey('private-contact-${_country.iso}'),
             controller:_phone,initialCountry:_country,enabled:!_saving,
+            nationalEntry:true,
             onCountryChanged:(selected)=>setState((){
               _country=selected;_subdivision=null;
             })),
