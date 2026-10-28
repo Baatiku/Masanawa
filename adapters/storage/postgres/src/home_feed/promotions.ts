@@ -454,7 +454,13 @@ export class PgStatusPromotions {
    LEFT JOIN feed.promotion_campaigns c ON c.tenant_id=q.tenant_id AND c.quote_id=q.id
    WHERE q.tenant_id=$1 AND q.sponsor_id=$2 AND q.id=$3`,[t,s,id]);
   if(!r.rows[0])fail('quote_not_found',404);
-  return {campaign:r.rows[0].id?campaign(r.rows[0] as Row):null};
+  const id=r.rows[0].id==null?null:String(r.rows[0].id);
+  const audit=id?await this.pool.query(`SELECT id,action,details,occurred_at
+   FROM feed.promotion_audit WHERE tenant_id=$1 AND campaign_id=$2
+   ORDER BY id LIMIT 1000`,[t,id]):{rows:[] as Row[]};
+  return {campaign:id?campaign(r.rows[0] as Row):null,
+   immutableHistory:audit.rows.map(x=>({receiptId:String(x.id),action:String(x.action),
+    at:x.occurred_at,details:x.details}))};
  }
  async review(t:string,editor:string,id:string,approve:boolean,reason?:string,policy?:PromotionPolicyEvidence){actor(t,editor);identifier(id);
   const rationale=reviewReason(reason,!approve);
@@ -1127,7 +1133,7 @@ export class PgStatusPromotions {
     WHERE a.tenant_id=$1 AND (p.author_user_id=$2 OR c.sponsor_id=$2)
       AND a.action IN ('budget_reserved','approved','rejected','cancelled','paused',
        'resumed','campaign_completed','post_disabled','moderation_takedown',
-       'owner_deleted','paid_post_purged')
+       'owner_deleted','paid_post_purged','campaign_expired')
     ORDER BY a.occurred_at DESC,a.id DESC LIMIT 50`,[t,u]);
   return {serverNow:serverClock.rows[0]!.now_utc,
    lifecycleNotifications:notices.rows.map(n=>({id:String(n.id),kind:String(n.action),
