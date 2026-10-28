@@ -56,4 +56,17 @@ describe('account-independent paid post expiry sweeper',()=>{
   await vi.advanceTimersByTimeAsync(60_000);
   expect(pruneExpiredViewChallenges).toHaveBeenCalledTimes(3);
  });
+ it('purges nonpayable guest consent evidence in bounded replica-safe sweeps',async()=>{
+  vi.useFakeTimers();
+  const pruneExpiredGuestEvidence=vi.fn().mockResolvedValueOnce({pruned:100})
+   .mockResolvedValueOnce({pruned:1}).mockResolvedValue({pruned:0});
+  const worker=new StatusRetentionWorker({purgeExpired:async()=>({purged:0}),
+   pruneExpiredGuestEvidence});
+  worker.start();await worker.sweep();
+  expect(pruneExpiredGuestEvidence).toHaveBeenCalledTimes(2);
+  expect(pruneExpiredGuestEvidence).toHaveBeenCalledWith(100);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(pruneExpiredGuestEvidence).toHaveBeenCalledTimes(3);
+  await worker.stop();
+ });
 });

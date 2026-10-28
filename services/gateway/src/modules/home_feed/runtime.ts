@@ -4,6 +4,7 @@ import {registerAdminFeedReviewRoutes,type AdminReviewRoutesOptions} from "./adm
 import {registerFeedMediaRoutes,type FeedMediaOptions} from "./media_routes.js";
 import {registerPromotionRoutes,type PromotionPort} from "./promotion_routes.js";
 import {registerPublicStatusLanding,type PublicStatusPost} from "./public_landing.js";
+import {registerStatusGuestProofRoutes,type GuestProofPort,GuestConsentSigner} from './guest_consent.js';
 
 /** Structural port implemented by the existing platform customer-session
  * authorizer. The host supplies that authority, never an HTTP role header. */
@@ -24,6 +25,8 @@ export interface StatusRuntime {
     readApprovedImage?(postId:string,mediaId:string):Promise<{
       bytes:Buffer;contentType:'image/webp'}|null>};
    enabled:()=>boolean;imagesEnabled?:()=>boolean;publicBaseUrl?:string};
+ guestProof?:{port:GuestProofPort;signer:GuestConsentSigner;
+   enabled:()=>boolean;publicBaseUrl:string};
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */
@@ -36,6 +39,7 @@ export interface StatusRuntime {
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
  // This route is a read-only crawler preview outside the signed-in fan scope.
  if(options.publicLanding)await registerPublicStatusLanding(app,options.publicLanding);
+ if(options.guestProof)await registerStatusGuestProofRoutes(app,options.guestProof);
  await app.register(async scope=>{
   scope.setErrorHandler((error,_request,reply)=>{
    const problem=error as {status?:number;statusCode?:number;code?:string};
