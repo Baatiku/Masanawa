@@ -244,7 +244,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
             child:Text('Posted MB and NGN movements. Pending authorizations and '
               'reservations are not counted as completed payments.')),
           if(promotion?.valueOrNull!=null &&
-              (promotion!.valueOrNull!.campaigns.isNotEmpty ||
+              (promotion.valueOrNull!.campaigns.isNotEmpty ||
                 promotion.valueOrNull!.earnings.isNotEmpty))
           Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
             crossAxisAlignment:CrossAxisAlignment.stretch,children:[
