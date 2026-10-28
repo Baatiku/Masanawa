@@ -1,12 +1,15 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 
 export interface PromotionPort {
- quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}):Promise<unknown>;
+ quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
  review(t:string,editor:string,id:string,approved:boolean,reason?:string):Promise<unknown>;
  adminQueue(t:string,editor:string):Promise<unknown>;
  adminOverview(t:string,editor:string):Promise<unknown>;
+ appealRejection(t:string,s:string,id:string,reason:string):Promise<unknown>;
+ adminAppeals(t:string,editor:string):Promise<unknown>;
+ resolveAppeal(t:string,editor:string,id:string,decision:'uphold'|'accept',reason:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
  cancel(t:string,s:string,id:string):Promise<unknown>;
  pause(t:string,s:string,id:string):Promise<unknown>;
@@ -54,14 +57,16 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  };
  app.post('/v1/promotions/quotes',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r),b=body(r);
-  fields(b,['postId','body','targetViews']);
+  fields(b,['postId','body','targetViews','destinationUrl']);
   if(typeof b.targetViews!=='number'||!Number.isSafeInteger(b.targetViews)||
     (b.postId!==undefined&&typeof b.postId!=='string')||
-    (b.body!==undefined&&typeof b.body!=='string'))fail('invalid_quote');
+    (b.body!==undefined&&typeof b.body!=='string')||
+    (b.destinationUrl!==undefined&&typeof b.destinationUrl!=='string'))fail('invalid_quote');
   return options.port.quote({tenantId:p.tenantId,sponsorId:p.userId,
    targetViews:b.targetViews as number,
    ...(typeof b.postId==='string'?{postId:b.postId}:{}),
-   ...(typeof b.body==='string'?{body:b.body}:{})});
+   ...(typeof b.body==='string'?{body:b.body}:{}),
+   ...(typeof b.destinationUrl==='string'?{destinationUrl:b.destinationUrl}:{})});
  });
  app.post('/v1/promotions/quotes/:quoteId/confirm',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);
@@ -88,6 +93,11 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.post('/v1/promotions/:campaignId/resume',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);
   fields(body(r),[]);return options.port.resume(p.tenantId,p.userId,params(r,'campaignId'));
+ });
+ app.post('/v1/promotions/:campaignId/rejection-appeal',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r),b=body(r);
+  fields(b,['reason']);if(typeof b.reason!=='string')fail('invalid_appeal_reason');
+  return options.port.appealRejection(p.tenantId,p.userId,params(r,'campaignId'),b.reason as string);
  });
  app.post('/v1/promotions/posts/:postId/delete',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
@@ -127,6 +137,18 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.get('/v1/admin/promotions/overview',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r);
   return options.port.adminOverview(p.tenantId,p.userId);
+ });
+ app.get('/v1/admin/promotions/rejection-appeals',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await admin(r);
+  return options.port.adminAppeals(p.tenantId,p.userId);
+ });
+ app.post('/v1/admin/promotions/:campaignId/rejection-appeal/resolve',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);
+  fields(b,['decision','reason']);
+  if((b.decision!=='uphold'&&b.decision!=='accept')||typeof b.reason!=='string')
+   fail('invalid_appeal_resolution');
+  return options.port.resolveAppeal(p.tenantId,p.userId,params(r,'campaignId'),
+   b.decision as 'uphold'|'accept',b.reason as string);
  });
  app.post('/v1/admin/promotions/posts/:postId/takedown',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r),b=body(r);

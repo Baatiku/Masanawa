@@ -1,4 +1,5 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
+import {isIP} from 'node:net';
 import type {Pool,PoolClient} from 'pg';
 import {withTransaction} from '../transaction.js';
 
@@ -12,6 +13,23 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const principal=/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/;
 const keyPattern=/^[A-Za-z0-9][A-Za-z0-9:_-]{7,127}$/;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+/** A destination is reviewable only as a literal, canonical HTTPS URL. This
+ * deliberately refuses IP literals, local names, credentials, odd ports and
+ * URL fragments. Redirect/phishing clearance still needs human review and an
+ * exact server-side allowlist; parsing is not a reputation oracle. */
+export function reviewedDestination(value:string){
+ if(value.length>2048||!value||/[\u0000-\u001f\u007f\\]/.test(value)||value.trim()!==value)
+  fail('invalid_destination_url');
+ let url:URL;
+ try{url=new URL(value);}catch{return fail('invalid_destination_url');}
+ const host=url.hostname.toLowerCase();
+ if(url.protocol!=='https:'||url.username||url.password||url.port||url.hash||
+  !host.includes('.')||host.endsWith('.')||isIP(host)!==0||
+  /(?:^|\.)(?:localhost|local|internal|invalid|test)$/.test(host)||
+  !/^[a-z0-9.-]+$/.test(host)||!/[a-z]{2,}$/.test(host.split('.').at(-1)??''))
+  fail('invalid_destination_url');
+ return url.toString();
+}
 function reviewReason(reason:string|undefined,required:boolean){
  const value=reason?.trim()??'';
  if((required&&!value)||value.length>500)fail('invalid_review_reason');
@@ -41,6 +59,8 @@ function campaign(r:Row){
   refundedUnusedMb:['cancelled','rejected'].includes(state)?remaining:0,
   ...(typeof r.review_reason==='string'&&r.review_reason?
     {reviewReason:r.review_reason}:{}),
+  ...(typeof r.approved_destination_url==='string'&&r.approved_destination_url?
+    {approvedDestinationUrl:r.approved_destination_url}:{}),
   priceVersion:String(r.price_version)};
 }
 async function serial<T>(pool:Pool,fn:(c:PoolClient)=>Promise<T>):Promise<T>{
@@ -52,11 +72,13 @@ async function serial<T>(pool:Pool,fn:(c:PoolClient)=>Promise<T>):Promise<T>{
 /** Funded purchased-MB accounting, never welcome MB. Live activation must
  * remain separately disabled until fraud, media and provider qualification. */
 export class PgStatusPromotions {
+ private readonly approvedDestinations:Set<string>;
  constructor(private readonly pool:Pool,private readonly secret:string,
-  private readonly publicBaseUrl:string){
+  private readonly publicBaseUrl:string,approvedDestinations:readonly string[]=[]){
   if(Buffer.byteLength(secret)<32)throw Error('promotion_secret_required');
   const url=new URL(publicBaseUrl);
   if(url.protocol!=='https:'||url.username||url.password)throw Error('promotion_https_required');
+  this.approvedDestinations=new Set(approvedDestinations.map(reviewedDestination));
  }
  private digest(t:string,u:string){return createHmac('sha256',this.secret).update(`${t}\0${u}`).digest('hex');}
  private audit(c:PoolClient,t:string,p:string,who:string,action:string,id:string|null=null,details:object={}){
@@ -90,7 +112,7 @@ export class PgStatusPromotions {
    ON CONFLICT (tenant_id,post_id,media_id) DO NOTHING`,[t,post]);
  }
 
- async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}){
+ async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}){
   const {tenantId:t,sponsorId:s}=input;actor(t,s);
   if(!Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000)
    fail('invalid_view_target');
@@ -99,6 +121,8 @@ export class PgStatusPromotions {
   const body=input.body?.trim();
   if(!isBoost&&(!body||body.length>5000))fail('promotion_body_required');
   if(isBoost&&body!==undefined)fail('boost_cannot_edit_post');
+  if(isBoost&&input.destinationUrl!==undefined)fail('boost_cannot_edit_post');
+  const destination=input.destinationUrl===undefined?null:reviewedDestination(input.destinationUrl);
   return serial(this.pool,async c=>{
    if(isBoost){
     const post=await c.query(`SELECT 1 FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$2
@@ -117,9 +141,9 @@ export class PgStatusPromotions {
     WHERE tenant_id=$1 AND account_kind='human' AND account_id=$2 AND NOT frozen`,[t,s]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    const quote=await c.query(`INSERT INTO feed.promotion_quotes
-     (tenant_id,sponsor_id,post_id,kind,body,target_views)
-     VALUES($1,$2,$3,$4,$5,$6) RETURNING id,expires_at`,
-     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews]);
+     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,expires_at`,
+     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destination]);
    return {quoteId:String(quote.rows[0]!.id),expiresAt:quote.rows[0]!.expires_at,
     targetViews:input.targetViews,totalMb:input.targetViews,eligibleMb:available,
     insufficientMb:available<input.targetViews,priceVersion:'2026-10-27:1MB'};
@@ -132,7 +156,7 @@ export class PgStatusPromotions {
    const quotes=await c.query(`SELECT * FROM feed.promotion_quotes
     WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,qid,s]);
    const q=(quotes.rows[0] as Row|undefined)??fail('quote_not_found',404);
-   const fp=hash(JSON.stringify([qid,s,q.kind,q.post_id,q.body,q.target_views]));
+   const fp=hash(JSON.stringify([qid,s,q.kind,q.post_id,q.body,q.target_views,q.destination_url]));
    const previous=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 AND idempotency_key=$3`,[t,s,key]);
    if(previous.rows[0]){
@@ -200,11 +224,26 @@ export class PgStatusPromotions {
    if(p.state!=='pending_review')fail('campaign_not_pending',409);
    if(p.sponsor_id===editor)fail('separate_reviewer_required',403);
    if(approve){
+    // No unreviewed outbound CTA is made available by an approval event.
+    // The exact canonical URL must be explicitly approved by configuration;
+    // host-only matches and redirect assumptions are insufficient.
+    const quoted=await c.query(`SELECT q.body,q.media_ids,q.destination_url,q.price_version
+     FROM feed.promotion_quotes q WHERE q.tenant_id=$1 AND q.id=$2`,[t,p.quote_id]);
+    const snapshot=quoted.rows[0];
+    if(!snapshot)throw Error('promotion_quote_missing');
+    const destination=snapshot.destination_url as string|null;
+    if(destination&&!this.approvedDestinations.has(reviewedDestination(destination)))
+     fail('destination_not_cleared',409);
     const accepted=await c.query(`UPDATE feed.posts SET state='published',
-     published_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2
+     published_at=statement_timestamp(),approved_destination_url=$3
+     WHERE tenant_id=$1 AND id=$2
      AND state='hidden' AND author_type='human' AND paid_disabled_at IS NULL
-     AND paid_purged_at IS NULL RETURNING id`,[t,p.post_id]);
+     AND paid_purged_at IS NULL RETURNING id`,[t,p.post_id,destination]);
     if(!accepted.rowCount)fail('post_no_longer_approvable',409);
+    await c.query(`UPDATE feed.promotion_campaigns SET approved_destination_url=$3,
+     approval_snapshot=$4::jsonb WHERE tenant_id=$1 AND id=$2`,[t,id,destination,
+     JSON.stringify({body:snapshot.body,mediaIds:snapshot.media_ids,
+      destinationUrl:destination,priceVersion:snapshot.price_version,reviewer:editor})]);
    }else await this.refund(c,t,p);
    await c.query(`UPDATE feed.promotion_campaigns SET state=$3,reviewed_by=$4,
     reviewed_at=statement_timestamp(),updated_at=statement_timestamp()
@@ -222,15 +261,18 @@ export class PgStatusPromotions {
  async adminQueue(t:string,editor:string){actor(t,editor);
   const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
    c.target_views,c.remaining_views,c.delivered_views,c.created_at,
-   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state
+   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state,
+   q.destination_url
    FROM feed.promotion_campaigns c JOIN feed.posts p
     ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+   JOIN feed.promotion_quotes q ON q.tenant_id=c.tenant_id AND q.id=c.quote_id
    WHERE c.tenant_id=$1 AND c.state='pending_review'
    ORDER BY c.created_at,c.id LIMIT 100`,[t]);
   return {pending:r.rows.map(x=>({campaignId:String(x.id),postId:String(x.post_id),
    sponsorId:String(x.sponsor_id),authorId:String(x.author_user_id),
    campaignKind:String(x.kind),contentKind:String(x.content_kind),
    body:String(x.body??''),postState:String(x.post_state),
+   destinationUrl:x.destination_url==null?null:String(x.destination_url),
    targetViews:count(x.target_views),remainingViews:count(x.remaining_views),
    deliveredViews:count(x.delivered_views),submittedAt:x.created_at}))};
  }
@@ -260,6 +302,75 @@ export class PgStatusPromotions {
    allocatedPlatformHalfMb:count(l.allocated_platform_half_mb),
    rewardSettlementEnabled:false,
    fundingQualification:'not_qualified'};
+ }
+
+ /** Appeals are review requests, never permission to restore a rejected
+  * campaign or silently re-reserve funds. A fresh approval always requires a
+  * separately quoted and confirmed campaign. */
+ async appealRejection(t:string,s:string,id:string,reason:string){
+  actor(t,s);identifier(id);const rationale=reviewReason(reason,true);
+  if(rationale.length<10)fail('appeal_reason_too_short');
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT state FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,id,s]);
+   if(!r.rows[0])fail('campaign_not_found',404);
+   if(r.rows[0].state!=='rejected')fail('campaign_not_rejected',409);
+   const prior=await c.query(`SELECT reason,created_at FROM feed.promotion_appeals
+    WHERE tenant_id=$1 AND campaign_id=$2`,[t,id]);
+   if(prior.rows[0]){
+    if(prior.rows[0].reason!==rationale)fail('appeal_already_submitted',409);
+    return {campaignId:id,state:'awaiting_review',submittedAt:prior.rows[0].created_at};
+   }
+   const inserted=await c.query(`INSERT INTO feed.promotion_appeals
+    (tenant_id,campaign_id,sponsor_id,reason) VALUES($1,$2,$3,$4) RETURNING created_at`,
+    [t,id,s,rationale]);
+   const p=await c.query(`SELECT post_id FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2`,[t,id]);
+   await this.audit(c,t,String(p.rows[0]!.post_id),s,'rejection_appeal_submitted',id,
+    {reason:rationale});
+   return {campaignId:id,state:'awaiting_review',submittedAt:inserted.rows[0]!.created_at};
+  });
+ }
+ async adminAppeals(t:string,editor:string){actor(t,editor);
+  const r=await this.pool.query(`SELECT a.campaign_id,a.sponsor_id,a.reason,a.created_at,
+   c.post_id,c.state,
+   (SELECT audit.details FROM feed.promotion_audit audit WHERE audit.tenant_id=a.tenant_id
+    AND audit.campaign_id=a.campaign_id AND audit.action='rejection_appeal_resolved'
+    ORDER BY audit.id DESC LIMIT 1) AS resolution
+   FROM feed.promotion_appeals a JOIN feed.promotion_campaigns c
+     ON c.tenant_id=a.tenant_id AND c.id=a.campaign_id
+   WHERE a.tenant_id=$1 ORDER BY a.created_at DESC,a.campaign_id DESC LIMIT 100`,[t]);
+  return {appeals:r.rows.map(a=>({campaignId:String(a.campaign_id),
+   sponsorId:String(a.sponsor_id),postId:String(a.post_id),
+   originalCampaignState:String(a.state),reason:String(a.reason),
+   submittedAt:a.created_at,
+   resolution:a.resolution??null}))};
+ }
+ async resolveAppeal(t:string,editor:string,id:string,decision:'uphold'|'accept',reason:string){
+  actor(t,editor);identifier(id);const rationale=reviewReason(reason,true);
+  if(!['uphold','accept'].includes(decision))fail('invalid_appeal_decision');
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT a.sponsor_id,c.post_id,c.state FROM feed.promotion_appeals a
+    JOIN feed.promotion_campaigns c ON c.tenant_id=a.tenant_id AND c.id=a.campaign_id
+    WHERE a.tenant_id=$1 AND a.campaign_id=$2 FOR UPDATE OF a`,[t,id]);
+   const a=r.rows[0];if(!a)fail('appeal_not_found',404);
+   if(a.sponsor_id===editor)fail('separate_reviewer_required',403);
+   if(a.state!=='rejected')fail('campaign_not_rejected',409);
+   const past=await c.query(`SELECT details FROM feed.promotion_audit
+    WHERE tenant_id=$1 AND campaign_id=$2 AND action='rejection_appeal_resolved'
+    ORDER BY id DESC LIMIT 1`,[t,id]);
+   const details={decision,reason:rationale,
+    nextStep:decision==='accept'?'new_quote_and_independent_moderation':'rejection_upheld'};
+   if(past.rows[0]){
+    const saved=past.rows[0].details as Record<string,unknown>;
+    if(saved.decision!==details.decision||saved.reason!==details.reason||
+     saved.nextStep!==details.nextStep)
+     fail('appeal_already_resolved',409);
+    return {campaignId:id,...details};
+   }
+   await this.audit(c,t,String(a.post_id),editor,'rejection_appeal_resolved',id,details);
+   return {campaignId:id,...details};
+  });
  }
 
  /** Permanent safety takedown is owned by an independent editor, not a

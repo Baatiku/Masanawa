@@ -19,6 +19,8 @@ function item(r:Row){
   promotionDeliveredViews:Number(r.promotion_delivered_views??0),
   promotionActive:Boolean(r.promotion_active),
   shareEarnEligible:Boolean(r.share_earn_eligible),boostEligible:Boolean(r.boost_eligible),
+  // Only a server-approved snapshot is ever projected, never a raw draft URL.
+  approvedDestinationUrl:r.approved_destination_url==null?null:String(r.approved_destination_url),
   viewerLiked:Boolean(r.viewer_liked),viewerSaved:Boolean(r.viewer_saved),
   viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
   reactionCounts:(r.reaction_counts??{}) as Record<string,number>};
