@@ -163,6 +163,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('same-user credential replacement hides a pushed private post route', (tester)async{
+    final feed=_Feed();final container=await _mount(tester,feed);
+    await tester.tap(find.text('A verified Masana update'));await tester.pumpAndSettle();
+    expect(find.text('A verified Masana update'),findsOneWidget);
+    (container.read(sessionProvider.notifier) as _Session).switchAccount('status-fan-a');
+    await tester.pumpAndSettle();
+    expect(find.text('Go back and reopen this view from your current account.'),findsOneWidget);
+    expect(find.text('A verified Masana update'),findsNothing);expect(tester.takeException(),isNull);
+    await tester.tap(find.byTooltip('Back'));await tester.pumpAndSettle();
+    expect(find.text('A verified Masana update'),findsOneWidget);
+  });
+
   testWidgets('Status request failure never masquerades as empty feed', (tester) async {
     final feed = _Feed()..fail = true;
     await _mount(tester, feed);

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
+import '../../core/live_call_foreground.dart';
 import 'feed_media_api.dart';
 
 typedef OriginalMediaRenderer = Widget Function(FeedMediaGrant grant);
@@ -12,29 +13,33 @@ typedef OriginalMediaRenderer = Widget Function(FeedMediaGrant grant);
 class FeedMediaScreen extends StatefulWidget {
   const FeedMediaScreen({super.key,required this.api,required this.accountKey,
     required this.postId,required this.mediaIds,required this.kind,
-    this.initialMediaId,this.onBeforeAudio,this.mediaRenderer,this.enabled=true});
+    this.initialMediaId,this.onBeforeAudio,this.mediaRenderer,this.playerFactory,this.enabled=true});
   final FeedMediaApi api;
   final String accountKey,postId,kind;
   final List<String> mediaIds;
   final String? initialMediaId;
   final Future<void> Function()? onBeforeAudio;
   final OriginalMediaRenderer? mediaRenderer;
+  /// The view owns and disposes this player; injectable for playback tests.
+  final AudioPlayer Function()? playerFactory;
   final bool enabled;
   @override State<FeedMediaScreen> createState()=>_FeedMediaScreenState();
 }
 class _FeedMediaScreenState extends State<FeedMediaScreen>
     with WidgetsBindingObserver {
-  late final AudioPlayer player=AudioPlayer();
+  late final AudioPlayer player=widget.playerFactory?.call()??AudioPlayer();
+  String? loadedAudioUrl;
   late int index;
   FeedMediaGrant? grant;
   String? error;
   bool loading=false,offline=false,starting=false;
-  int generation=0;
+  int generation=0,playGeneration=0;
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
   StreamSubscription<void>? _becomingNoisy;
   Timer? _grantExpiry;
 
   void _discardGrant() {
+    playGeneration++;starting=false;loadedAudioUrl=null;
     _grantExpiry?.cancel();
     _grantExpiry = null;
     final previous = grant;
@@ -45,10 +50,21 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
       unawaited(NetworkImage(previous.url.toString()).evict());
     }
   }
+  void _interruptPlay(){
+    if(!mounted||widget.kind!='audio')return;
+    playGeneration++;
+    unawaited(player.pause());
+    setState(()=>starting=false);
+  }
+  void _callChanged(){
+    if(!mounted||widget.kind!='audio')return;
+    if(LiveCallForeground.active){_interruptPlay();}else{setState((){});}
+  }
   String tr(String en,String ha)=>Localizations.localeOf(context).languageCode=='ha'?ha:en;
   @override void initState(){
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    LiveCallForeground.activity.addListener(_callChanged);
     unawaited(_listenForAudioInterruptions());
     final requested=widget.mediaIds.indexOf(widget.initialMediaId??'');
     index=requested<0?0:requested;
@@ -58,11 +74,9 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
     final session=await AudioSession.instance;
     if(!mounted)return;
     _interruptions=session.interruptionEventStream.listen((event) {
-      if(event.begin) unawaited(player.pause());
+      if(event.begin) _interruptPlay();
     });
-    _becomingNoisy=session.becomingNoisyEventStream.listen((_) {
-      unawaited(player.pause());
-    });
+    _becomingNoisy=session.becomingNoisyEventStream.listen((_) {_interruptPlay();});
   }
   @override void didUpdateWidget(covariant FeedMediaScreen old){
     super.didUpdateWidget(old);
@@ -82,7 +96,7 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
     }
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state){
-    if(state!=AppLifecycleState.resumed)unawaited(player.pause());
+    if(state!=AppLifecycleState.resumed)_interruptPlay();
   }
   Future<void> load() async {
     if(!mounted||!widget.enabled||widget.mediaIds.isEmpty)return;
@@ -121,28 +135,37 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
     }
   }
   Future<void> play() async {
-    if(starting||widget.onBeforeAudio==null||grant==null||grant!.kind!='audio')return;
-    final current=grant!,ticket=generation;
+    if(starting||LiveCallForeground.active||widget.onBeforeAudio==null||grant==null||grant!.kind!='audio')return;
+    final current=grant!,ticket=generation,playTicket=++playGeneration;
     setState(()=>starting=true);
     try{
       await widget.onBeforeAudio!();
-      if(!mounted||ticket!=generation)return;
+      if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
+      if(LiveCallForeground.active)throw StateError('call_active');
       if(current.expiresAt.isBefore(DateTime.now().add(const Duration(seconds:10)))){await load();return;}
-      await player.setUrl(current.url.toString());
-      if(!mounted||ticket!=generation){await player.stop();return;}
+      if(loadedAudioUrl!=current.url.toString()){
+        await player.setUrl(current.url.toString());
+        if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
+        loadedAudioUrl=current.url.toString();
+      }else if(player.processingState==ProcessingState.completed){
+        await player.seek(Duration.zero);
+      }
+      if(!mounted||ticket!=generation||playTicket!=playGeneration)return;
+      if(LiveCallForeground.active){await player.pause();throw StateError('call_active');}
       unawaited(player.play().catchError((Object _) {
-        if(mounted&&ticket==generation)setState(()=>error=tr('Audio playback failed. Try again.','An kasa kunna sauti. Sake gwadawa.'));
+        if(mounted&&ticket==generation&&playTicket==playGeneration)setState(()=>error=tr('Audio playback failed. Try again.','An kasa kunna sauti. Sake gwadawa.'));
       }));
     }catch(_){
-      if(mounted&&ticket==generation)setState(()=>
+      if(mounted&&ticket==generation&&playTicket==playGeneration)setState(()=>
         error=tr('Audio playback failed. Try again.','An kasa kunna sauti. Sake gwadawa.'));
-    }finally{if(mounted&&ticket==generation)setState(()=>starting=false);}
+    }finally{if(mounted&&ticket==generation&&playTicket==playGeneration)setState(()=>starting=false);}
   }
   void select(int next){
     if(next<0||next>=widget.mediaIds.length||next==index)return;
     index=next;load();
   }
   @override void dispose(){
+    LiveCallForeground.activity.removeListener(_callChanged);
     generation++;
     _discardGrant();
     WidgetsBinding.instance.removeObserver(this);
@@ -180,11 +203,11 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
                     child:SelectableText(grant!.altText!,
                       textAlign:TextAlign.center)),
               ])
-              :Column(mainAxisSize:MainAxisSize.min,children:[
+              :SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
                 const Icon(Icons.graphic_eq,size:64),
                 StreamBuilder<PlayerState>(stream:player.playerStateStream,
                   builder:(ctx,snapshot)=>FilledButton.icon(
-                    onPressed:widget.onBeforeAudio==null||starting?null:
+                    onPressed:LiveCallForeground.active||widget.onBeforeAudio==null||starting?null:
                       snapshot.data?.playing==true?()=>unawaited(player.pause()):play,
                     icon:Icon(snapshot.data?.playing==true?Icons.pause:Icons.play_arrow),
                     label:Text(snapshot.data?.playing==true?tr('Pause','Dakatar'):
@@ -194,21 +217,24 @@ class _FeedMediaScreenState extends State<FeedMediaScreen>
                   final position=snapshot.data??Duration.zero;
                   final max=total.inMilliseconds.toDouble().clamp(1.0,double.infinity).toDouble();
                   return Slider(value:position.inMilliseconds.toDouble().clamp(0.0,max).toDouble(),
-                    max:max,onChanged:widget.onBeforeAudio==null?null:
+                    max:max,onChanged:LiveCallForeground.active||widget.onBeforeAudio==null||total<=Duration.zero?null:
                       (value)=>unawaited(player.seek(Duration(milliseconds:value.round()))));
                 }),
                 Wrap(spacing:8,children:[
                   for(final speed in [1.0,1.5,2.0])
-                    TextButton(onPressed:()=>player.setSpeed(speed),
+                    TextButton(onPressed:LiveCallForeground.active?null:()=>player.setSpeed(speed),
                       child:Text('${speed}x')),
                 ]),
                 if(grant!.transcript!=null&&grant!.transcript!.trim().isNotEmpty)
                   Semantics(label:tr('Audio transcript','Rubutaccen sauti'),
                     child:Padding(padding:const EdgeInsets.all(16),
                       child:SelectableText(grant!.transcript!))),
+                if(LiveCallForeground.active)
+                  Text(tr('Audio is paused during a call. Tap Play after the call ends.',
+                    'An dakatar da sauti yayin kira. Danna Kunna idan kiran ya kare.')),
                 if(widget.onBeforeAudio==null)
                   Text(tr('Audio player unavailable.','Ba a samun mai kunna sauti.')),
-              ])))),
+              ]))))),
           if(widget.mediaIds.length>1)Padding(
             padding:const EdgeInsets.all(8),child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[
               IconButton(tooltip:tr('Previous','Na baya'),onPressed:index==0?null:()=>select(index-1),
