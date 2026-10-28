@@ -73,14 +73,7 @@ const projection=`p.*,
   WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id) AS promotion_delivered_views,
  EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id
   AND b.post_id=p.id AND b.state='active' AND b.remaining_views>0) AS promotion_active,
- CASE WHEN p.author_type='human' THEN (SELECT q.destination_url
-   FROM feed.promotion_campaigns b JOIN feed.promotion_quotes q
-    ON q.tenant_id=b.tenant_id AND q.id=b.quote_id
-   WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
-    AND b.kind='human_primary' AND b.reviewed_at IS NOT NULL
-    AND b.state IN ('active','paused','completed','cancelled')
-   ORDER BY b.reviewed_at DESC LIMIT 1)
- ELSE NULL END AS reviewed_destination_url,
+ p.paid_reviewed_destination_url AS reviewed_destination_url,
  EXISTS (SELECT 1 FROM feed.promotion_campaigns b WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id
    AND b.state='active' AND b.remaining_views>0 AND b.sponsor_id IS DISTINCT FROM $2
    AND (p.author_type='masana' OR p.author_user_id IS DISTINCT FROM $2)) AS share_earn_eligible,
