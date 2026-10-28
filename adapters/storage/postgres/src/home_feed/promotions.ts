@@ -536,6 +536,104 @@ export class PgStatusPromotions {
 
  /** External navigation is an explicit authenticated, no-redirect intent. A
   * hidden/revoked/expired paid creative is never an openable CTA. */
+
+ /** Extension quotes never increase a confirmed campaign's target. A
+  * separate original-key confirmation reserves the additional eligible MB. */
+ async extensionQuote(t:string,sponsor:string,id:string,targetViews:number,key:string){
+  actor(t,sponsor);identifier(id);
+  if(!keyPattern.test(key)||!Number.isSafeInteger(targetViews)||targetViews<1||
+   targetViews>1000000)fail('invalid_extension');
+  return serial(this.pool,async c=>{
+   const original=await c.query(`SELECT c.post_id,c.kind,c.state,
+    p.state AS post_state,p.author_type,p.paid_purged_at,
+    (p.paid_purge_at>statement_timestamp()) AS within_grace
+    FROM feed.promotion_campaigns c JOIN feed.posts p
+     ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+    WHERE c.tenant_id=$1 AND c.id=$2 AND c.sponsor_id=$3 FOR UPDATE OF c,p`,
+    [t,id,sponsor]);
+   const x=original.rows[0];
+   if(!x)fail('campaign_not_found',404);
+   if(x.state==='rejected'||x.paid_purged_at||
+    !(x.post_state==='published'||(x.author_type==='human'&&x.post_state==='hidden'&&
+      x.within_grace===true)))fail('extension_not_available',409);
+   const previous=await c.query(`SELECT e.target_views,q.id,q.expires_at,q.price_version
+    FROM feed.promotion_extension_quotes e
+    JOIN feed.promotion_quotes q ON q.tenant_id=e.tenant_id AND q.id=e.quote_id
+    WHERE e.tenant_id=$1 AND e.sponsor_id=$2 AND e.idempotency_key=$3`,
+    [t,sponsor,key]);
+   if(previous.rows[0]&&Number(previous.rows[0].target_views)!==targetViews)
+    fail('idempotency_conflict',409);
+   const q=previous.rows[0]??(await c.query(`INSERT INTO feed.promotion_quotes
+    (tenant_id,sponsor_id,post_id,kind,target_views)
+    VALUES($1,$2,$3,'boost',$4)
+    RETURNING id,expires_at,price_version`,[t,sponsor,x.post_id,targetViews])).rows[0];
+   if(!previous.rows[0]){
+    await c.query(`INSERT INTO feed.promotion_extension_quotes
+      (tenant_id,source_campaign_id,sponsor_id,idempotency_key,target_views,quote_id)
+      VALUES($1,$2,$3,$4,$5,$6)`,[t,id,sponsor,key,targetViews,q.id]);
+    await this.audit(c,t,String(x.post_id),sponsor,'extension_quoted',id,
+     {extensionQuoteId:String(q.id),targetViews});
+   }
+   const balance=await c.query(`SELECT (purchased_mb-reserved_purchased_mb)::text AS free
+    FROM gb_wallet.accounts WHERE tenant_id=$1 AND account_kind='human'
+     AND account_id=$2 AND NOT frozen`,[t,sponsor]);
+   const available=balance.rows[0]?count(balance.rows[0].free):0;
+   return {quoteId:String(q.id),sourceCampaignId:id,postId:String(x.post_id),
+    targetViews,totalMb:targetViews,eligibleMb:available,
+    insufficientMb:available<targetViews,priceVersion:String(q.price_version),
+    expiresAt:q.expires_at,requiresExplicitConfirm:true};
+  });
+ }
+ async reportPost(t:string,reporter:string,post:string,reason:string){
+  actor(t,reporter);identifier(post);
+  const rationale=reviewReason(reason,true);
+  if(rationale.length<10)fail('invalid_report_reason');
+  return serial(this.pool,async c=>{
+   const p=await c.query(`SELECT id FROM feed.posts WHERE tenant_id=$1 AND id=$2
+     AND author_type='human' AND state='published' AND paid_purged_at IS NULL`,[t,post]);
+   if(!p.rowCount)fail('reportable_post_not_found',404);
+   const report=await c.query(`INSERT INTO feed.promotion_reports
+    (tenant_id,post_id,reporter_id,reason) VALUES($1,$2,$3,$4)
+    ON CONFLICT(tenant_id,post_id,reporter_id) DO NOTHING RETURNING id`,
+    [t,post,reporter,rationale]);
+   const id=String(report.rows[0]?.id??(await c.query(`SELECT id
+    FROM feed.promotion_reports WHERE tenant_id=$1 AND post_id=$2
+     AND reporter_id=$3`,[t,post,reporter])).rows[0]!.id);
+   if(report.rowCount)await this.audit(c,t,post,reporter,'promotion_reported',null,{reportId:id});
+   return {reportId:id,state:'pending',alreadySubmitted:!report.rowCount};
+  });
+ }
+ async adminReports(t:string,editor:string){actor(t,editor);
+  const rows=await this.pool.query(`SELECT r.id,r.post_id,r.reporter_id,
+   r.reason,r.reported_at,p.author_user_id,p.body FROM feed.promotion_reports r
+   JOIN feed.posts p ON p.tenant_id=r.tenant_id AND p.id=r.post_id
+   WHERE r.tenant_id=$1 AND r.status='pending'
+   ORDER BY r.reported_at,r.id LIMIT 100`,[t]);
+  return {pending:rows.rows.map(r=>({reportId:String(r.id),postId:String(r.post_id),
+   reporterId:String(r.reporter_id),authorId:String(r.author_user_id),
+   reason:String(r.reason),body:String(r.body??''),reportedAt:r.reported_at}))};
+ }
+ async resolveReport(t:string,editor:string,id:string,remove:boolean,reason:string){
+  actor(t,editor);identifier(id);
+  const rationale=reviewReason(reason,true);
+  if(rationale.length<5)fail('invalid_report_resolution');
+  const r=await this.pool.query(`SELECT reporter_id,post_id,status
+    FROM feed.promotion_reports WHERE tenant_id=$1 AND id=$2`,[t,id]);
+  if(!r.rows[0])fail('report_not_found',404);
+  if(r.rows[0].reporter_id===editor)fail('separate_reviewer_required',403);
+  if(r.rows[0].status!=='pending')fail('report_already_reviewed',409);
+  if(remove)await this.adminTakedown(t,editor,String(r.rows[0].post_id),rationale);
+  return serial(this.pool,async c=>{
+   const done=await c.query(`UPDATE feed.promotion_reports SET
+    status=$3,reviewed_by=$4,reviewed_at=statement_timestamp(),resolution_reason=$5
+    WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING post_id`,
+    [t,id,remove?'removed':'dismissed',editor,rationale]);
+   if(!done.rowCount)fail('report_already_reviewed',409);
+   await this.audit(c,t,String(done.rows[0]!.post_id),editor,
+    remove?'report_removed':'report_dismissed',null,{reportId:id,reason:rationale});
+   return {reportId:id,state:remove?'removed':'dismissed'};
+  });
+ }
  async openDestination(t:string,viewer:string,post:string){
   actor(t,viewer);identifier(post);
   const rows=await this.pool.query(`SELECT p.paid_reviewed_destination_url AS url
