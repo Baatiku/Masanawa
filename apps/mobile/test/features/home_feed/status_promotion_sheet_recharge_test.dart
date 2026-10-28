@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -33,6 +34,7 @@ class _QuoteStub extends StatusPromotionApi {
   final requests=<({String? postId,String? body,int views})>[];
   int confirmations=0;
   bool funded=false;
+  Future<StatusPromotionCampaign>? heldConfirmation;
 
   @override Future<StatusPromotionQuote> quote({String? postId,String? body,
       required int targetViews}) async {
@@ -45,6 +47,7 @@ class _QuoteStub extends StatusPromotionApi {
 
   @override Future<StatusPromotionCampaign> confirm(StatusPromotionQuote quote) async {
     confirmations++;
+    if(heldConfirmation!=null)return heldConfirmation!;
     return StatusPromotionCampaign(id:'campaign',quoteId:quote.id,
       postId:'post',state:'pending_review',kind:'human_primary',
       targetViews:quote.targetViews,deliveredViews:0,
@@ -77,7 +80,7 @@ void main() {
     await tester.tap(find.text('Open composer'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first,'Support education in Nigeria');
-    await tester.testTextInput.hide();
+    tester.testTextInput.hide();
     await tester.tap(find.text('500'));
     await tester.pump(const Duration(milliseconds:350));
     expect(drafts.drafts['new-post']?.body,'Support education in Nigeria');
@@ -110,6 +113,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved campaign'),findsOneWidget);
     expect(find.text('1000 views × 1 MB = 1000 MB'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('Boost is a compact existing-post quote with one explicit confirmed submit',
+      (tester) async {
+    final api=_QuoteStub()..funded=true;
+    final drafts=_MemoryDraftStore();
+    final finishing=Completer<StatusPromotionCampaign>();
+    api.heldConfirmation=finishing.future;
+    StatusPromotionCampaign? receipt;
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Builder(
+      builder:(ctx)=>FilledButton(onPressed:() async {
+        receipt=await showModalBottomSheet<StatusPromotionCampaign>(context:ctx,
+          isScrollControlled:true,builder:(_)=>StatusPromotionSheet(
+            api:api,postId:'original-post',draftStore:drafts));
+      },child:const Text('Boost post')),
+    ))));
+    await tester.tap(find.text('Boost post'));
+    await tester.pumpAndSettle();
+    expect(find.text('Boost this post'),findsOneWidget);
+    expect(find.byType(TextField),findsOneWidget,
+      reason:'Boost cannot modify another person\'s post body');
+    await tester.tap(find.text('500'));
+    await tester.ensureVisible(find.text('Review price'));
+    await tester.tap(find.text('Review price'));
+    await tester.pumpAndSettle();
+    expect(api.requests.single,(postId:'original-post',body:null,views:500));
+    expect(find.text('Confirm 500 MB'),findsOneWidget);
+    await tester.tap(find.text('Confirm 500 MB'));
+    await tester.pump();
+    expect(api.confirmations,1);
+    expect(find.text('Confirming…'),findsOneWidget);
+    // Even a second synthetic tap cannot issue a second financial request.
+    await tester.tap(find.text('Confirming…'));
+    await tester.pump();
+    expect(api.confirmations,1);
+    finishing.complete(const StatusPromotionCampaign(id:'boost-receipt',
+      quoteId:'quote-1',postId:'original-post',state:'active',kind:'boost',
+      targetViews:500,deliveredViews:0,remainingViews:500));
+    await tester.pumpAndSettle();
+    expect(receipt?.id,'boost-receipt');
+    expect(api.confirmations,1);
     expect(tester.takeException(),isNull);
   });
 }

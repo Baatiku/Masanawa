@@ -101,6 +101,10 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
     if(campaignFilter=='all')return true;
     return campaign['state']==campaignFilter;
   }
+  int activeRemainingViews(Map<String,dynamic> campaign)=>
+    const {'active','paused','pending_review'}.contains(campaign['state'])&&
+      campaign['remainingViews'] is int
+        ?campaign['remainingViews'] as int:0;
   Future<void> campaignDetails(String id) async {
     if(pending.contains(id))return;
     setState(()=>pending.add(id));
@@ -126,6 +130,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
               const SizedBox(height:10),
               Text('${c['kind']=='boost'?'Boost':'Promotion'} · ${c['state']??'Unknown'}'),
               Text('Qualified views: ${c['deliveredViews']??0} / ${c['targetViews']??0}'),
+              Text('Remaining funded views: ${activeRemainingViews(c)}'),
               Text('Direct: ${c['directViews']??0} · Referred: ${c['referredViews']??0}'),
               Text('Actually spent: ${c['spentMb']??c['deliveredViews']??0} MB'),
               Text('Still reserved: ${c['reservedMb']??0} MB'),
@@ -195,6 +200,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
           Card(child:Column(children:[ListTile(
             title:Text('${c['kind']=='boost'?'Boost':'Promotion'} · ${c['state']??'Unknown'}'),
             subtitle:Text('${c['deliveredViews']??0}/${c['targetViews']??0} qualified views · '
+              '${activeRemainingViews(c)} still funded · '
               '${c['directViews']??0} direct / ${c['referredViews']??0} referred\n'
               '${c['spentMb']??c['deliveredViews']??0} MB spent · '
               '${c['reservedMb']??0} MB still reserved'
