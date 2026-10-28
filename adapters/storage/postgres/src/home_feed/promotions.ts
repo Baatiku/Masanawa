@@ -103,7 +103,7 @@ export class PgStatusPromotions {
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
   const expires=input.campaignExpiresAt??null;
-  if(expires!==null&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(expires)||
+  if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
   const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires]));
@@ -133,7 +133,7 @@ export class PgStatusPromotions {
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
   const expires=input.campaignExpiresAt??null;
-  if(expires!==null&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(expires)||
+  if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
   const body=input.body.trim();
