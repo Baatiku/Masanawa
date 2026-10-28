@@ -119,4 +119,20 @@ describe('SPE promotion routes inherit the established principal and staff autho
   expect(events).toHaveLength(0);
   await server.close();
  });
+ it('validates HTTPS destinations and never accepts a CTA on a booster quote',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'tenant',userId:'publisher'}),
+   isEditor:async()=>false,enabled:()=>true});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Learn safely',targetViews:10,
+     destinationUrl:'https://example.org/articles?source=home'}})).statusCode).toBe(200);
+  expect(events).toContainEqual({tenantId:'tenant',sponsorId:'publisher',body:'Learn safely',
+   targetViews:10,destinationUrl:'https://example.org/articles?source=home'});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Unsafe',targetViews:10,destinationUrl:'http://example.org'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{postId:'existing',targetViews:10,destinationUrl:'https://example.org'}})).statusCode).toBe(422);
+  await server.close();
+ });
+
 });
