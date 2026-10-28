@@ -22,7 +22,7 @@ export interface FeedMediaOptions {
   approvedDownloadOrigin:(origin:string)=>boolean;
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const media=/^media_[A-Za-z0-9_-]{8,128}$/;
+const media=/^(?:media_[A-Za-z0-9_-]{8,128}|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 const tenantId=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const bad=(code:string)=>({code});
 export async function registerFeedMediaRoutes(app:FastifyInstance,options:FeedMediaOptions){

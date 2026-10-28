@@ -13,7 +13,11 @@ function item(r:Row){
   avatarUrl:r.author_avatar==null?null:String(r.author_avatar),
  }:{type:'masana' as const,id:authorMasanaId,displayName:authorName};
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
-  kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
+  kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),
+  media:(r.visible_media_ids??r.media_ids) as string[],
+  ownerCanonicalId:human?String(r.author_user_id):authorMasanaId,
+  disclosure:human?'paid_promotion':null,moderationState:'approved' as const,
+  campaignId:r.visible_campaign_id==null?null:String(r.visible_campaign_id),transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
   promotionDeliveredViews:Number(r.promotion_delivered_views??0),
@@ -48,6 +52,11 @@ const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.
       WHERE paid.tenant_id=p.tenant_id AND paid.post_id=p.id
         AND paid.state='active' AND paid.remaining_views>0 AND (paid.expires_at IS NULL OR paid.expires_at>statement_timestamp()))
     AND p.paid_purged_at IS NULL
+    AND (p.kind<>'image' OR (cardinality(p.media_ids)>0 AND NOT EXISTS(
+      SELECT 1 FROM unnest(p.media_ids) AS image_id
+      WHERE NOT EXISTS(SELECT 1 FROM feed.paid_post_media_objects o
+       WHERE o.tenant_id=p.tenant_id AND o.post_id=p.id
+        AND o.media_id::text=image_id AND o.review_state='approved'))))
     AND NOT EXISTS (SELECT 1 FROM talks.safety_preferences block
       WHERE block.tenant_id=p.tenant_id AND block.blocked AND
         ((block.viewer_user_id=$2 AND block.subject_user_id=p.author_user_id)
@@ -56,6 +65,16 @@ const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.
 // A JS Date discards PostgreSQL microseconds and can skip tied older rows.
 // Serialize UTC in SQL before the driver parses timestamptz into a Date.
 const projection=`p.*,
+ CASE WHEN p.author_type='human' AND p.kind='image' THEN
+  ARRAY(SELECT o.media_id::text FROM feed.paid_post_media_objects o
+   WHERE o.tenant_id=p.tenant_id AND o.post_id=p.id
+     AND o.review_state='approved' AND o.media_id::text=ANY(p.media_ids)
+   ORDER BY array_position(p.media_ids,o.media_id::text))
+ ELSE p.media_ids END AS visible_media_ids,
+ (SELECT b.id FROM feed.promotion_campaigns b
+  WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id AND b.state='active'
+   AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp())
+  ORDER BY b.created_at,b.id LIMIT 1) AS visible_campaign_id,
  to_char(p.published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published_at_exact,
  CASE WHEN p.author_type='human'
   THEN (SELECT hp.display_name FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id)

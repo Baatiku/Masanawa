@@ -4,6 +4,9 @@ import {withTransaction} from '../transaction.js';
 import {reviewedPromotionDestination} from '@masanawa/feed';
 
 type Row=Record<string,unknown>;
+type PromotionPolicyEvidence={category:'general'|'financial'|'health'|'political'|'employment'|'regulated_other';
+ bodyChecked:true;rightsChecked:true;destinationChecked:boolean;
+ clearanceReference?:string;evidenceNote:string};
 export class PromotionError extends Error {
  readonly statusCode:number;
  constructor(readonly status:number,readonly code:string){super(code);this.statusCode=status;}
@@ -93,8 +96,110 @@ export class PgStatusPromotions {
 
 
  /** A draft is private, retryable, and never reserves or consumes purchased MB. */
+
+ /** Reserve server-generated private object key before S3 upload. The key
+  * never appears in an authenticated owner's API response. */
+ async prepareImageUpload(t:string,owner:string,input:{sha256:string;bytes:number;
+  altText:string;idempotencyKey:string;rightsConfirmed:boolean}){
+  actor(t,owner);
+  if(!keyPattern.test(input.idempotencyKey)||!input.rightsConfirmed||
+   !/^[0-9a-f]{64}$/.test(input.sha256)||!Number.isSafeInteger(input.bytes)||
+   input.bytes<1||input.bytes>1048576||typeof input.altText!=='string'||
+   input.altText.trim().length<5||input.altText.trim().length>280)
+   fail('invalid_paid_image');
+  return serial(this.pool,async c=>{
+   const existing=await c.query(`SELECT * FROM feed.paid_image_uploads WHERE
+    tenant_id=$1 AND owner_id=$2 AND idempotency_key=$3 FOR UPDATE`,
+    [t,owner,input.idempotencyKey]);
+   if(existing.rows[0]){
+    const row=existing.rows[0];
+    if(row.request_sha256!==input.sha256||Number(row.bytes)!==input.bytes||
+     row.alt_text!==input.altText.trim())fail('idempotency_conflict',409);
+    if(row.state==='rejected')fail('image_rejected',409);
+    return {mediaId:String(row.id),objectKey:String(row.object_key),ready:row.state==='ready'};
+   }
+   const ownerDigest=hash(t+'\0'+owner);
+   const objectKey='status-paid/'+ownerDigest.slice(0,20)+'/'+randomBytes(16).toString('hex')+'.webp';
+   const added=await c.query(`INSERT INTO feed.paid_image_uploads
+    (tenant_id,owner_id,idempotency_key,request_sha256,object_key,bytes,rights_confirmed,alt_text)
+    VALUES($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
+    [t,owner,input.idempotencyKey,input.sha256,objectKey,input.bytes,input.altText.trim()]);
+   return {mediaId:String(added.rows[0]!.id),objectKey,ready:false};
+  });
+ }
+ async completeImageUpload(t:string,owner:string,id:string,sha256:string,bytes:number){
+  actor(t,owner);identifier(id);
+  const r=await this.pool.query(`UPDATE feed.paid_image_uploads
+   SET state='ready',uploaded_at=statement_timestamp()
+   WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND request_sha256=$4
+    AND bytes=$5 AND state='staging' RETURNING id`,[t,owner,id,sha256,bytes]);
+  if(!r.rowCount){
+   const ready=await this.pool.query(`SELECT 1 FROM feed.paid_image_uploads
+    WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND request_sha256=$4
+     AND bytes=$5 AND state='ready'`,[t,owner,id,sha256,bytes]);
+   if(!ready.rowCount)fail('image_upload_not_owned',404);
+  }
+  return {mediaId:id,state:'ready'};
+ }
+ async reviewImage(t:string,editor:string,post:string,mediaId:string,approve:boolean,reason:string){
+  actor(t,editor);identifier(post);identifier(mediaId);
+  const rationale=reviewReason(reason,true);if(rationale.length<5)fail('invalid_media_review_reason');
+  return serial(this.pool,async c=>{
+   const original=await c.query(`SELECT p.author_user_id,p.state,u.owner_id,u.state AS upload_state,
+    o.review_state FROM feed.posts p
+    JOIN feed.paid_post_media_objects o ON o.tenant_id=p.tenant_id AND o.post_id=p.id
+    JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+    WHERE p.tenant_id=$1 AND p.id=$2 AND p.author_type='human'
+     AND o.media_id=$3 FOR UPDATE OF p,o`,[t,post,mediaId]);
+   const x=original.rows[0];
+   if(!x)fail('paid_media_not_found',404);
+   if(x.author_user_id===editor||x.owner_id===editor)fail('separate_reviewer_required',403);
+   if(x.upload_state!=='ready'||x.review_state!=='pending')fail('paid_media_not_pending',409);
+   await c.query(`UPDATE feed.paid_post_media_objects SET review_state=$4,
+    reviewed_by=$5,reviewed_at=statement_timestamp(),review_reason=$6
+    WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3`,
+    [t,post,mediaId,approve?'approved':'rejected',editor,rationale]);
+   if(!approve){
+    await c.query(`UPDATE feed.paid_image_uploads SET state='rejected'
+      WHERE tenant_id=$1 AND id=$2`,[t,mediaId]);
+    await c.query(`INSERT INTO feed.paid_media_deletion_outbox
+      (tenant_id,post_id,media_id,object_key)
+      SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
+      WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3
+      ON CONFLICT DO NOTHING`,[t,post,mediaId]);
+   }
+   await this.audit(c,t,post,editor,approve?'paid_image_approved':'paid_image_rejected',null,
+    {mediaId,reason:rationale});
+   return {mediaId,postId:post,state:approve?'approved':'rejected'};
+  });
+ }
+ async adminImagePreview(t:string,editor:string,post:string,mediaId:string){
+  actor(t,editor);identifier(post);identifier(mediaId);
+  const r=await this.pool.query(`SELECT o.object_key,u.alt_text,o.review_state
+   FROM feed.paid_post_media_objects o
+   JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+   WHERE o.tenant_id=$1 AND o.post_id=$2 AND o.media_id=$3`,[t,post,mediaId]);
+  if(!r.rows[0])fail('paid_media_not_found',404);
+  return {objectKey:String(r.rows[0].object_key),altText:String(r.rows[0].alt_text),
+   reviewState:String(r.rows[0].review_state)};
+ }
+ async approvedImageObject(t:string,post:string,mediaId:string){
+  actor(t,'system');identifier(post);identifier(mediaId);
+  const r=await this.pool.query(`SELECT o.object_key,u.alt_text FROM feed.posts p
+   JOIN feed.paid_post_media_objects o ON o.tenant_id=p.tenant_id AND o.post_id=p.id
+   JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+   WHERE p.tenant_id=$1 AND p.id=$2 AND o.media_id=$3
+    AND p.state='published' AND p.author_type='human' AND p.kind='image'
+    AND p.paid_purged_at IS NULL AND $3::text=ANY(p.media_ids)
+    AND o.review_state='approved' AND u.state='ready'
+    AND EXISTS(SELECT 1 FROM feed.promotion_campaigns b
+      WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id AND b.state='active'
+      AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp()))`,
+    [t,post,mediaId]);
+  return r.rows[0]?{objectKey:String(r.rows[0].object_key),altText:String(r.rows[0].alt_text)}:null;
+ }
  async draft(t:string,owner:string,input:{body:string;targetViews:number;
-  destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}){
+  destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];idempotencyKey:string}){
   actor(t,owner);
   if(!keyPattern.test(input.idempotencyKey)||!Number.isSafeInteger(input.targetViews)||
    input.targetViews<1||input.targetViews>1000000||typeof input.body!=='string'||
@@ -106,24 +211,28 @@ export class PgStatusPromotions {
   if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
-  const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires]));
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+    mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
+  const body=input.body.trim(),fingerprint=hash(JSON.stringify([body,input.targetViews,destinationUrl,expires,...(mediaIds.length?[mediaIds]:[])]));
   return serial(this.pool,async c=>{
    const saved=await c.query(`INSERT INTO feed.promotion_drafts
-    (tenant_id,owner_id,body,destination_url,target_views,campaign_expires_at,idempotency_key,request_sha256)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+    (tenant_id,owner_id,body,destination_url,target_views,campaign_expires_at,idempotency_key,request_sha256,media_ids)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT(tenant_id,owner_id,idempotency_key) DO NOTHING RETURNING *`,
-    [t,owner,body,destinationUrl,input.targetViews,expires,input.idempotencyKey,fingerprint]);
+    [t,owner,body,destinationUrl,input.targetViews,expires,input.idempotencyKey,fingerprint,mediaIds]);
    const row=saved.rows[0]??(await c.query(`SELECT * FROM feed.promotion_drafts
      WHERE tenant_id=$1 AND owner_id=$2 AND idempotency_key=$3`,
      [t,owner,input.idempotencyKey])).rows[0];
    if(!row||row.request_sha256!==fingerprint)fail('idempotency_conflict',409);
    return {draftId:String(row.id),state:String(row.state),version:count(row.version),
     targetViews:count(row.target_views),body:String(row.body),destinationUrl:row.destination_url??null,
+    mediaIds:row.media_ids??[],
     campaignExpiresAt:row.campaign_expires_at??null};
   });
  }
  async editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;
-  destinationUrl?:string;campaignExpiresAt?:string;expectedVersion:number}){
+  destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];expectedVersion:number}){
   actor(t,owner);identifier(id);
   if(!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||
    !Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000||
@@ -136,22 +245,25 @@ export class PgStatusPromotions {
   if(expires!==null&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(expires)||
    !Number.isFinite(Date.parse(expires))||Date.parse(expires)<=Date.now()+3600000||
    Date.parse(expires)>Date.now()+180*86400000))fail('invalid_campaign_expiry');
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+   mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
   const body=input.body.trim();
   return serial(this.pool,async c=>{
    const r=await c.query(`UPDATE feed.promotion_drafts SET body=$4,target_views=$5,
-    destination_url=$6,campaign_expires_at=$7,version=version+1,
+    destination_url=$6,campaign_expires_at=$7,media_ids=$10,version=version+1,
     updated_at=statement_timestamp(),request_sha256=$8
     WHERE tenant_id=$1 AND id=$2 AND owner_id=$3 AND state='draft'
      AND version=$9 RETURNING id,version`,
     [t,id,owner,body,input.targetViews,destinationUrl,expires,
-     hash(JSON.stringify([body,input.targetViews,destinationUrl,expires])),input.expectedVersion]);
+     hash(JSON.stringify([body,input.targetViews,destinationUrl,expires,...(mediaIds.length?[mediaIds]:[])])),input.expectedVersion,mediaIds]);
    if(!r.rowCount)fail('draft_stale_or_submitted',409);
    return {draftId:id,state:'draft',version:count(r.rows[0]!.version)};
   });
  }
  async myDrafts(t:string,owner:string){actor(t,owner);
   const r=await this.pool.query(`SELECT d.id,d.state,d.version,d.body,d.target_views,
-    d.destination_url,d.campaign_expires_at,d.updated_at,q.id AS quote_id
+    d.destination_url,d.campaign_expires_at,d.media_ids,d.updated_at,q.id AS quote_id
     FROM feed.promotion_drafts d LEFT JOIN feed.promotion_quotes q
     ON q.tenant_id=d.tenant_id AND q.draft_id=d.id
     WHERE d.tenant_id=$1 AND d.owner_id=$2 AND d.state<>'discarded'
@@ -159,6 +271,7 @@ export class PgStatusPromotions {
   return {drafts:r.rows.map(x=>({draftId:String(x.id),state:String(x.state),
    version:count(x.version),body:String(x.body),targetViews:count(x.target_views),
    destinationUrl:x.destination_url??null,campaignExpiresAt:x.campaign_expires_at??null,
+   mediaIds:x.media_ids??[],
    quoteId:x.quote_id??null,updatedAt:x.updated_at}))};
  }
  async discardDraft(t:string,owner:string,id:string){actor(t,owner);identifier(id);
@@ -183,12 +296,19 @@ export class PgStatusPromotions {
       AND account_id=$2 AND NOT frozen`,[t,owner]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    if(!row&&d.state!=='draft')fail('draft_not_quotable',409);
+   const mediaIds=Array.isArray(d.media_ids)?d.media_ids as string[]:[];
+   if(!row&&mediaIds.length){
+    const ready=await c.query(`SELECT count(*)::int AS n FROM feed.paid_image_uploads
+      WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+       AND state='ready' AND post_id IS NULL`,[t,owner,mediaIds]);
+    if(Number(ready.rows[0]?.n)!==mediaIds.length)fail('paid_image_not_owned_or_ready',403);
+   }
    if(!row&&d.campaign_expires_at&&new Date(d.campaign_expires_at).getTime()<=Date.now()+3600000)
     fail('campaign_expiry_too_soon',409);
    const q=row??(await c.query(`INSERT INTO feed.promotion_quotes
-    (tenant_id,sponsor_id,kind,body,target_views,destination_url,draft_id,campaign_expires_at)
-    VALUES($1,$2,'human_primary',$3,$4,$5,$6,$7) RETURNING *`,
-    [t,owner,d.body,d.target_views,d.destination_url,id,d.campaign_expires_at])).rows[0];
+    (tenant_id,sponsor_id,kind,body,target_views,destination_url,draft_id,campaign_expires_at,media_ids)
+    VALUES($1,$2,'human_primary',$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [t,owner,d.body,d.target_views,d.destination_url,id,d.campaign_expires_at,mediaIds])).rows[0];
    if(!row)await c.query(`UPDATE feed.promotion_drafts SET state='quoted',
     updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
    return {quoteId:String(q.id),draftId:id,expiresAt:q.expires_at,
@@ -198,11 +318,15 @@ export class PgStatusPromotions {
   });
  }
 
- async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}){
+ async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;mediaIds?:readonly string[];targetViews:number}){
   const {tenantId:t,sponsorId:s}=input;actor(t,s);
   if(!Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000)
    fail('invalid_view_target');
   const isBoost=input.postId!==undefined;
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+    mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
+  if(isBoost&&mediaIds.length)fail('boost_cannot_edit_post');
   if(isBoost)identifier(input.postId!);
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}catch{fail('invalid_promotion_destination');}
@@ -223,14 +347,20 @@ export class PgStatusPromotions {
       WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active'`,[t,s]);
     if(!person.rowCount)fail('public_profile_required',403);
    }
+   if(mediaIds.length){
+    const valid=await c.query(`SELECT count(*)::int AS n FROM feed.paid_image_uploads
+     WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+       AND state='ready' AND post_id IS NULL AND rights_confirmed`,[t,s,mediaIds]);
+    if(Number(valid.rows[0]?.n)!==mediaIds.length)fail('paid_image_not_owned_or_ready',403);
+   }
    const balance=await c.query<{free:string}>(`SELECT
     (purchased_mb-reserved_purchased_mb)::text AS free FROM gb_wallet.accounts
     WHERE tenant_id=$1 AND account_kind='human' AND account_id=$2 AND NOT frozen`,[t,s]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    const quote=await c.query(`INSERT INTO feed.promotion_quotes
-     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url)
-     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,expires_at`,
-     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destinationUrl]);
+     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url,media_ids)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,expires_at`,
+     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destinationUrl,mediaIds]);
    return {quoteId:String(quote.rows[0]!.id),expiresAt:quote.rows[0]!.expires_at,
     targetViews:input.targetViews,totalMb:input.targetViews,eligibleMb:available,
     insufficientMb:available<input.targetViews,priceVersion:'2026-10-27:1MB'};
@@ -246,8 +376,9 @@ export class PgStatusPromotions {
    // Preserve the original hash for all historic quotes without a CTA.
    // Only quotes with a new, reviewed destination extend the fingerprint.
    const quoted=[qid,s,q.kind,q.post_id,q.body,q.target_views];
-   const fp=hash(JSON.stringify(q.destination_url==null?quoted:
-    [...quoted,q.destination_url]));
+   const extra=q.destination_url==null?quoted:[...quoted,q.destination_url];
+   const fp=hash(JSON.stringify(Array.isArray(q.media_ids)&&q.media_ids.length?
+    [...extra,q.media_ids]:extra));
    const previous=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 AND idempotency_key=$3`,[t,s,key]);
    if(previous.rows[0]){
@@ -275,12 +406,29 @@ export class PgStatusPromotions {
     AND purchased_mb-reserved_purchased_mb>=$3 RETURNING account_id`,[t,s,q.target_views]);
    if(!reserved.rowCount)fail('insufficient_eligible_mb',409);
    if(!post){
+    const mediaIds=Array.isArray(q.media_ids)?q.media_ids as string[]:[];
+    if(mediaIds.length){
+     const valid=await c.query(`SELECT id FROM feed.paid_image_uploads WHERE
+      tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[]) AND state='ready'
+       AND post_id IS NULL FOR UPDATE`,[t,s,mediaIds]);
+     if(valid.rows.length!==mediaIds.length)fail('paid_image_not_owned_or_ready',409);
+    }
     const created=await c.query(`INSERT INTO feed.posts
      (tenant_id,author_masana_id,author_type,author_user_id,kind,body,media_ids,
       transcript,state,idempotency_key,published_by)
-     VALUES($1,NULL,'human',$2,'text',$3,'{}',NULL,'hidden',$4,$2) RETURNING id`,
-     [t,s,q.body,`promotion:${qid}`]);
+     VALUES($1,NULL,'human',$2,$5,$3,$6,NULL,'hidden',$4,$2) RETURNING id`
+     [t,s,q.body,`promotion:${qid}`,mediaIds.length?'image':'text',mediaIds]);
     post=String(created.rows[0]!.id);
+    if(mediaIds.length){
+     await c.query(`UPDATE feed.paid_image_uploads SET post_id=$4
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND state='ready' AND post_id IS NULL`,[t,s,mediaIds,post]);
+     await c.query(`INSERT INTO feed.paid_post_media_objects
+      (tenant_id,post_id,media_id,object_key,review_state)
+      SELECT tenant_id,post_id,id,object_key,'pending'
+      FROM feed.paid_image_uploads WHERE tenant_id=$1 AND owner_id=$2
+       AND post_id=$3 AND id::text=ANY($4::text[])`,[t,s,post,mediaIds]);
+    }
    }
    const state=q.kind==='human_primary'?'pending_review':'active';
    const inserted=await c.query(`INSERT INTO feed.promotion_campaigns
@@ -306,9 +454,15 @@ export class PgStatusPromotions {
    LEFT JOIN feed.promotion_campaigns c ON c.tenant_id=q.tenant_id AND c.quote_id=q.id
    WHERE q.tenant_id=$1 AND q.sponsor_id=$2 AND q.id=$3`,[t,s,id]);
   if(!r.rows[0])fail('quote_not_found',404);
-  return {campaign:r.rows[0].id?campaign(r.rows[0] as Row):null};
+  const id=r.rows[0].id==null?null:String(r.rows[0].id);
+  const audit=id?await this.pool.query(`SELECT id,action,details,occurred_at
+   FROM feed.promotion_audit WHERE tenant_id=$1 AND campaign_id=$2
+   ORDER BY id LIMIT 1000`,[t,id]):{rows:[] as Row[]};
+  return {campaign:id?campaign(r.rows[0] as Row):null,
+   immutableHistory:audit.rows.map(x=>({receiptId:String(x.id),action:String(x.action),
+    at:x.occurred_at,details:x.details}))};
  }
- async review(t:string,editor:string,id:string,approve:boolean,reason?:string){actor(t,editor);identifier(id);
+ async review(t:string,editor:string,id:string,approve:boolean,reason?:string,policy?:PromotionPolicyEvidence){actor(t,editor);identifier(id);
   const rationale=reviewReason(reason,!approve);
   return serial(this.pool,async c=>{
    const r=await c.query(`SELECT * FROM feed.promotion_campaigns
@@ -316,6 +470,27 @@ export class PgStatusPromotions {
    const p=(r.rows[0] as Row|undefined)??fail('campaign_not_found',404);
    if(p.state!=='pending_review')fail('campaign_not_pending',409);
    if(p.sponsor_id===editor)fail('separate_reviewer_required',403);
+   if(approve&&policy){
+    if(!['general','financial','health','political','employment','regulated_other'].includes(policy.category)||
+      policy.bodyChecked!==true||policy.rightsChecked!==true||
+      typeof policy.destinationChecked!=='boolean'||
+      typeof policy.evidenceNote!=='string'||policy.evidenceNote.trim().length<10||
+      policy.evidenceNote.trim().length>500)fail('invalid_advertising_policy_evidence');
+    const q=await c.query(`SELECT destination_url FROM feed.promotion_quotes
+      WHERE tenant_id=$1 AND id=$2`,[t,p.quote_id]);
+    if(q.rows[0]?.destination_url&&!policy.destinationChecked)
+     fail('advertiser_destination_not_reviewed',409);
+    if(policy.category!=='general'&&(!policy.clearanceReference||
+      policy.clearanceReference.trim().length<6||
+      policy.clearanceReference.trim().length>160))
+     fail('advertising_clearance_required',409);
+    await c.query(`INSERT INTO feed.promotion_policy_reviews
+     (tenant_id,campaign_id,post_id,reviewer_id,policy_category,body_checked,
+      rights_checked,destination_checked,clearance_reference,evidence_note)
+     VALUES($1,$2,$3,$4,$5,true,true,$6,$7,$8)`,
+     [t,id,p.post_id,editor,policy.category,policy.destinationChecked,
+      policy.clearanceReference?.trim()??null,policy.evidenceNote.trim()]);
+   }
    if(approve){
     const accepted=await c.query(`UPDATE feed.posts SET state='published',
      published_at=statement_timestamp(),paid_reviewed_destination_url=(
@@ -346,7 +521,9 @@ export class PgStatusPromotions {
    await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id,
     approve?{bodySha256:hash(String(approval?.body??'')),
      destinationUrl:approval?.destination_url??null,
-     reviewedMediaIds:approval?.media_ids??[],reason:rationale||null}:
+     reviewedMediaIds:approval?.media_ids??[],reason:rationale||null,
+     policyCategory:policy?.category??null,
+     clearanceReference:policy?.clearanceReference??null}:
      {reason:rationale});
    if(!approve)await this.disable(c,t,String(p.post_id));
    return {campaignId:id,state:approve?'active':'rejected',
@@ -356,10 +533,40 @@ export class PgStatusPromotions {
 
  /** Tenant-scoped content review. Staff authorization is checked by the
   * Gateway before this method; never include viewer identities or tokens. */
+
+ /** External navigation is an explicit authenticated, no-redirect intent. A
+  * hidden/revoked/expired paid creative is never an openable CTA. */
+ async openDestination(t:string,viewer:string,post:string){
+  actor(t,viewer);identifier(post);
+  const rows=await this.pool.query(`SELECT p.paid_reviewed_destination_url AS url
+    FROM feed.posts p
+    JOIN identity.users author ON author.tenant_id=p.tenant_id
+      AND author.user_id=p.author_user_id AND author.state='active'
+    WHERE p.tenant_id=$1 AND p.id=$2 AND p.author_type='human'
+      AND p.state='published' AND p.audience='public' AND p.paid_purged_at IS NULL
+      AND p.paid_reviewed_destination_url IS NOT NULL
+      AND EXISTS(SELECT 1 FROM feed.promotion_campaigns campaign
+       WHERE campaign.tenant_id=p.tenant_id AND campaign.post_id=p.id
+        AND campaign.state='active' AND campaign.remaining_views>0
+        AND campaign.reviewed_by IS NOT NULL
+        AND (campaign.expires_at IS NULL OR campaign.expires_at>statement_timestamp()))
+      AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences blocked
+       WHERE blocked.tenant_id=p.tenant_id AND blocked.blocked AND
+        ((blocked.viewer_user_id=$3 AND blocked.subject_user_id=p.author_user_id)
+        OR (blocked.viewer_user_id=p.author_user_id AND blocked.subject_user_id=$3)))`,
+    [t,post,viewer]);
+  if(!rows.rows[0])fail('destination_unavailable',404);
+  let url:string|null;
+  try{url=reviewedPromotionDestination(rows.rows[0].url);}
+  catch{fail('destination_unavailable',404);}
+  if(!url)fail('destination_unavailable',404);
+  return {url,openMode:'external_browser' as const,
+   noInAppHumanChat:true,noopener:true,noreferrer:true};
+ }
  async adminQueue(t:string,editor:string){actor(t,editor);
   const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
    c.target_views,c.remaining_views,c.delivered_views,c.created_at,
-   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state,q.destination_url AS destination_url
+   p.author_user_id,p.kind AS content_kind,p.body,p.media_ids,p.state AS post_state,q.destination_url AS destination_url
    FROM feed.promotion_campaigns c JOIN feed.promotion_quotes q
     ON q.tenant_id=c.tenant_id AND q.id=c.quote_id
    JOIN feed.posts p
@@ -369,7 +576,7 @@ export class PgStatusPromotions {
   return {pending:r.rows.map(x=>({campaignId:String(x.id),postId:String(x.post_id),
    sponsorId:String(x.sponsor_id),authorId:String(x.author_user_id),
    campaignKind:String(x.kind),contentKind:String(x.content_kind),
-   body:String(x.body??''),postState:String(x.post_state),
+   body:String(x.body??''),mediaIds:x.media_ids??[],postState:String(x.post_state),
    destinationUrl:x.destination_url==null?null:String(x.destination_url),
    targetViews:count(x.target_views),remainingViews:count(x.remaining_views),
    deliveredViews:count(x.delivered_views),submittedAt:x.created_at}))};
@@ -442,7 +649,7 @@ export class PgStatusPromotions {
  /** Stage owner copy/destination edits; the approved live version is unchanged
   * until an independent reviewer accepts a matching revision. */
  async proposeEdit(t:string,owner:string,postId:string,input:{
-  expectedRevision:number;body:string;destinationUrl?:string;idempotencyKey:string;
+  expectedRevision:number;body:string;destinationUrl?:string;mediaIds?:readonly string[];idempotencyKey:string;
  }){
   actor(t,owner);identifier(postId);
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||
@@ -452,15 +659,20 @@ export class PgStatusPromotions {
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
-  const fingerprint=hash(JSON.stringify([postId,input.expectedRevision,body,destinationUrl]));
+  const mediaIds=input.mediaIds??null;
+  if(mediaIds!==null&&(!Array.isArray(mediaIds)||mediaIds.length>10||
+   new Set(mediaIds).size!==mediaIds.length||
+   mediaIds.some(x=>typeof x!=='string'||!uuid.test(x))))fail('invalid_paid_image_ids');
+  const fingerprint=hash(JSON.stringify([postId,input.expectedRevision,body,destinationUrl,
+   ...(mediaIds===null?[]:[mediaIds])]));
   return serial(this.pool,async c=>{
    const result=await c.query(`SELECT id,kind,body,author_user_id,paid_content_revision,
-    paid_reviewed_destination_url FROM feed.posts WHERE tenant_id=$1 AND id=$2
+    paid_reviewed_destination_url,media_ids FROM feed.posts WHERE tenant_id=$1 AND id=$2
     AND author_type='human' AND author_user_id=$3 AND state='published'
     AND paid_purged_at IS NULL FOR UPDATE`,[t,postId,owner]);
    const p=result.rows[0];
    if(!p)fail('post_not_editable',404);
-   if(p.kind!=='text')fail('paid_image_edit_requires_media_review',409);
+   if(p.kind!=='text'&&p.kind!=='image')fail('post_not_editable',409);
    const previous=await c.query(`SELECT id,state,request_sha256
     FROM feed.promotion_edit_proposals WHERE tenant_id=$1 AND owner_id=$2
      AND idempotency_key=$3`,[t,owner,input.idempotencyKey]);
@@ -474,19 +686,40 @@ export class PgStatusPromotions {
      WHERE tenant_id=$1 AND post_id=$2 AND kind='human_primary'
       AND reviewed_at IS NOT NULL AND state<>'rejected'`,[t,postId]);
    if(!original.rowCount)fail('approved_primary_required',403);
-   if(p.body===body&&(p.paid_reviewed_destination_url??null)===destinationUrl)
-    fail('edit_has_no_changes');
+   const previousMedia=Array.isArray(p.media_ids)?p.media_ids as string[]:[];
+   const desiredMedia=mediaIds??previousMedia;
+   if(p.body===body&&(p.paid_reviewed_destination_url??null)===destinationUrl&&
+    JSON.stringify(desiredMedia)===JSON.stringify(previousMedia))fail('edit_has_no_changes');
+   if(mediaIds!==null){
+    const newIds=mediaIds.filter(id=>!previousMedia.includes(id));
+    if(newIds.length){
+     const ready=await c.query(`SELECT id FROM feed.paid_image_uploads
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND state='ready' AND post_id IS NULL FOR UPDATE`,[t,owner,newIds]);
+     if(ready.rows.length!==newIds.length)fail('paid_image_not_owned_or_ready',403);
+     await c.query(`UPDATE feed.paid_image_uploads SET post_id=$4
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND post_id IS NULL`,[t,owner,newIds,postId]);
+     await c.query(`INSERT INTO feed.paid_post_media_objects
+       (tenant_id,post_id,media_id,object_key,review_state)
+       SELECT tenant_id,post_id,id,object_key,'pending'
+       FROM feed.paid_image_uploads
+       WHERE tenant_id=$1 AND post_id=$2 AND id::text=ANY($3::text[])`,
+       [t,postId,newIds]);
+    }
+   }
    const already=await c.query(`SELECT 1 FROM feed.promotion_edit_proposals
      WHERE tenant_id=$1 AND post_id=$2 AND state='pending'`,[t,postId]);
    if(already.rowCount)fail('edit_review_already_pending',409);
    const inserted=await c.query(`INSERT INTO feed.promotion_edit_proposals
     (tenant_id,post_id,owner_id,original_revision,idempotency_key,
-      request_sha256,proposed_body,proposed_destination_url)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      request_sha256,proposed_body,proposed_destination_url,proposed_media_ids)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
     [t,postId,owner,input.expectedRevision,input.idempotencyKey,
-     fingerprint,body,destinationUrl]);
+     fingerprint,body,destinationUrl,mediaIds]);
    await this.audit(c,t,postId,owner,'paid_edit_submitted',null,
-    {proposalId:String(inserted.rows[0]!.id),originalRevision:input.expectedRevision});
+    {proposalId:String(inserted.rows[0]!.id),originalRevision:input.expectedRevision,
+     proposedMediaIds:mediaIds});
    return {proposalId:String(inserted.rows[0]!.id),state:'pending',
     alreadySubmitted:false};
   });
@@ -521,16 +754,43 @@ export class PgStatusPromotions {
    const edit=(r.rows[0] as Row|undefined)??fail('edit_proposal_not_found',404);
    if(edit.owner_id===editor)fail('separate_reviewer_required',403);
    if(edit.state!=='pending')fail('edit_already_reviewed',409);
+   const proposedMedia=Array.isArray(edit.proposed_media_ids)?edit.proposed_media_ids as string[]:null;
    if(approve){
-    const p=await c.query(`UPDATE feed.posts SET body=$4,
+    if(proposedMedia?.length){
+     const check=await c.query(`SELECT count(*)::int AS accepted
+       FROM feed.paid_post_media_objects o
+       JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+       WHERE o.tenant_id=$1 AND o.post_id=$2
+        AND o.media_id::text=ANY($3::text[])
+        AND o.review_state='approved' AND u.state='ready'`,
+       [t,edit.post_id,proposedMedia]);
+     if(Number(check.rows[0]?.accepted)!==proposedMedia.length)
+      fail('paid_media_not_approved',409);
+    }
+    const previous=await c.query(`SELECT media_ids FROM feed.posts
+       WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,edit.post_id]);
+    const oldMedia=Array.isArray(previous.rows[0]?.media_ids)?
+      previous.rows[0]!.media_ids as string[]:[];
+    const updated=await c.query(`UPDATE feed.posts SET body=$4,
       paid_reviewed_destination_url=$5,
+      kind=CASE WHEN $6::text[] IS NULL THEN kind
+         WHEN cardinality($6::text[])=0 THEN 'text' ELSE 'image' END,
+      media_ids=COALESCE($6::text[],media_ids),
       paid_content_revision=paid_content_revision+1
       WHERE tenant_id=$1 AND id=$2 AND author_type='human' AND state='published'
        AND paid_purged_at IS NULL AND paid_content_revision=$3
       RETURNING paid_content_revision`,
      [t,edit.post_id,edit.original_revision,edit.proposed_body,
-      edit.proposed_destination_url]);
-    if(!p.rowCount)fail('edit_version_or_visibility_changed',409);
+      edit.proposed_destination_url,proposedMedia]);
+    if(!updated.rowCount)fail('edit_version_or_visibility_changed',409);
+    if(proposedMedia!==null){
+     const obsolete=oldMedia.filter(id=>!proposedMedia.includes(id));
+     if(obsolete.length)await c.query(`INSERT INTO feed.paid_media_deletion_outbox
+       (tenant_id,post_id,media_id,object_key)
+       SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
+       WHERE tenant_id=$1 AND post_id=$2 AND media_id::text=ANY($3::text[])
+       ON CONFLICT DO NOTHING`,[t,edit.post_id,obsolete]);
+    }
    }
    await c.query(`UPDATE feed.promotion_edit_proposals SET state=$3,
     reviewer_id=$4,resolution_reason=$5,reviewed_at=statement_timestamp()
@@ -541,7 +801,8 @@ export class PgStatusPromotions {
     {proposalId:id,oldRevision:count(edit.original_revision),
      newRevision:approve?count(edit.original_revision)+1:null,
      proposedBodySha256:hash(String(edit.proposed_body)),
-     destinationUrl:edit.proposed_destination_url??null,reason:rationale});
+     destinationUrl:edit.proposed_destination_url??null,
+     mediaIds:proposedMedia,reason:rationale});
    return {proposalId:id,postId:String(edit.post_id),
     state:approve?'approved':'rejected',
     newRevision:approve?count(edit.original_revision)+1:null};
@@ -872,7 +1133,7 @@ export class PgStatusPromotions {
     WHERE a.tenant_id=$1 AND (p.author_user_id=$2 OR c.sponsor_id=$2)
       AND a.action IN ('budget_reserved','approved','rejected','cancelled','paused',
        'resumed','campaign_completed','post_disabled','moderation_takedown',
-       'owner_deleted','paid_post_purged')
+       'owner_deleted','paid_post_purged','campaign_expired')
     ORDER BY a.occurred_at DESC,a.id DESC LIMIT 50`,[t,u]);
   return {serverNow:serverClock.rows[0]!.now_utc,
    lifecycleNotifications:notices.rows.map(n=>({id:String(n.id),kind:String(n.action),
