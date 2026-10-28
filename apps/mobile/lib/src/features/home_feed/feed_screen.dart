@@ -13,6 +13,7 @@ import 'feed_media_api.dart';
 import 'status_post_media.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'status_post_boost_action.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'status_promotion_api.dart';
@@ -482,6 +483,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             inlineMediaRenderer: widget.inlineMediaRenderer,
             audioPlaybackAvailable: widget.audioPlaybackAvailable,
             authorDirectory: widget.authorDirectory,
+            onBoostPost: promotionsAvailable ? (id) => openPromotion(postId: id) : null,
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
@@ -943,16 +945,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                       ]),
                                     ],
                                   ),
-                                  if(promotionsAvailable&&post.boostEligible)
-                                    Align(alignment:AlignmentDirectional.centerEnd,
-                                      child:OutlinedButton.icon(
-                                        style:OutlinedButton.styleFrom(
-                                          minimumSize:const Size(0,44),
-                                          padding:const EdgeInsets.symmetric(horizontal:9)),
-                                        onPressed:()=>openPromotion(postId:post.id),
-                                        icon:const Icon(Icons.rocket_launch_outlined,size:16),
-                                        label:Text(t('Boost','Kara yada'),maxLines:1),
-                                      )),
+                                  StatusPostBoostAction(
+                                    post: post,
+                                    enabled: promotionsAvailable,
+                                    onBoost: (id) => openPromotion(postId: id),
+                                  ),
                                 ]),
                               ),
                               const Divider(height: 1),
