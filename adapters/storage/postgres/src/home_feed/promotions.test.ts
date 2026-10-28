@@ -793,4 +793,47 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(await balance('expiryowner')).toMatchObject({purchased:10,reserved:0});
  });
 
+
+ it('keeps a paid human image hidden until private upload and independent media approval',async()=>{
+  await account('imageowner',10);
+  const digest='a'.repeat(64);
+  const upload=await service.prepareImageUpload(t,'imageowner',{
+   sha256:digest,bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true});
+  expect(upload.objectKey).toMatch(/^status-paid\//);
+  expect((await service.prepareImageUpload(t,'imageowner',{
+   sha256:digest,bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true})).mediaId)
+   .toBe(upload.mediaId);
+  await expect(service.prepareImageUpload(t,'imageowner',{
+   sha256:'b'.repeat(64),bytes:512,altText:'A reviewed scholarship event illustration',
+   idempotencyKey:'image-upload-original-001',rightsConfirmed:true}))
+    .rejects.toMatchObject({code:'idempotency_conflict'});
+  await service.completeImageUpload(t,'imageowner',upload.mediaId,digest,512);
+  await expect(service.quote({tenantId:t,sponsorId:'sharer',body:'Unowned image',
+   mediaIds:[upload.mediaId],targetViews:1}))
+   .rejects.toMatchObject({code:'paid_image_not_owned_or_ready'});
+  const quote=await service.quote({tenantId:t,sponsorId:'imageowner',
+   body:'Original image campaign',mediaIds:[upload.mediaId],targetViews:3});
+  const c=await service.confirm(t,'imageowner',quote.quoteId,'original-image-confirm-001');
+  const post=(await query(`SELECT kind,media_ids,state FROM feed.posts WHERE tenant_id=$1 AND id=$2`,
+   [t,c.postId])).rows[0];
+  expect(post).toMatchObject({kind:'image',media_ids:[upload.mediaId],state:'hidden'});
+  await expect(service.review(t,'different_editor',c.id,true,'Review pending'))
+   .rejects.toMatchObject({code:'paid_media_not_approved'});
+  await expect(service.reviewImage(t,'imageowner',c.postId,upload.mediaId,true,
+   'Attempt self-approval')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const preview=await service.adminImagePreview(t,'different_editor',c.postId,upload.mediaId);
+  expect(preview).toMatchObject({objectKey:upload.objectKey,reviewState:'pending'});
+  await service.reviewImage(t,'different_editor',c.postId,upload.mediaId,true,
+   'Licensed artwork accepted');
+  await service.review(t,'different_editor',c.id,true,'Final paid image review');
+  expect((await service.approvedImageObject(t,c.postId,upload.mediaId))?.objectKey)
+   .toBe(upload.objectKey);
+  await service.cancel(t,'imageowner',c.id);
+  expect(await service.approvedImageObject(t,c.postId,upload.mediaId)).toBeNull();
+  expect((await service.receipt(t,'imageowner',quote.quoteId)).campaign)
+   .toMatchObject({state:'cancelled',refundedUnusedMb:3});
+ });
+
 });
