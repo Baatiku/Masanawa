@@ -9,7 +9,40 @@ class _MemoryJournal implements StatusPromotionJournal {
   @override Future<void> write(String? data)async{}
 }
 
+class _Draft implements StatusPromotionDraftStore {
+  @override Future<StatusPromotionDraft?> read(String? postId) async =>
+    postId==null?const StatusPromotionDraft(body:'Unpublished school offer',
+      targetViews:250):null;
+  @override Future<void> write(String? postId,StatusPromotionDraft draft) async {}
+  @override Future<void> clear(String? postId) async {}
+}
+
 void main(){
+ testWidgets('private Draft remains non-spendable and resumes only on owner action',
+  (tester)async{
+   final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
+   dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
+     handler.resolve(Response(requestOptions:options,statusCode:200,data:{
+       'serverNow':'2026-10-28T00:00:00Z','campaigns':<dynamic>[],
+       'inactivePosts':<dynamic>[],'sharingEarnings':<dynamic>[],
+     }));
+   }));
+   addTearDown(()=>dio.close(force:true));
+   final api=StatusPromotionApi(dio:dio,accessToken:()async=>'session',
+     ownerAccount:'owner',currentAccount:()=> 'owner',journal:_MemoryJournal());
+   var resumed=0;
+   await tester.pumpWidget(MaterialApp(home:MyStatusPromotionsScreen(
+     api:api,draftStore:_Draft(),onCreatePromotion:() async{resumed++;},
+     onBoostAgain:(_)async{})));
+   await tester.pumpAndSettle();
+   expect(find.text('Draft · Promotion'),findsOneWidget);
+   expect(find.textContaining('250 selected views · no budget reserved yet'),findsOneWidget);
+   expect(resumed,0);
+   await tester.tap(find.text('Continue'));
+   await tester.pumpAndSettle();
+   expect(resumed,1);
+   expect(tester.takeException(),isNull);
+ });
  testWidgets('owner can review original inactive content, historical views and 72h grace',
   (tester)async{
    final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
@@ -75,6 +108,18 @@ void main(){
    expect(find.textContaining('5 MB still reserved'),findsNothing);
    expect(find.textContaining('5 MB released'),findsOneWidget);
    expect(find.textContaining('Review reason: Unsafe advertising claim'),findsOneWidget);
+   await tester.tap(find.text('Rejected'));
+   await tester.pumpAndSettle();
+   expect(find.textContaining('3/8 qualified views'),findsNothing);
+   expect(find.textContaining('Review reason: Unsafe advertising claim'),findsOneWidget);
+   await tester.tap(find.text('Details').first);
+   await tester.pumpAndSettle();
+   expect(find.text('Original campaign receipt'),findsOneWidget);
+   expect(find.text('Actually spent: 0 MB'),findsOneWidget);
+   expect(find.text('Unused budget released: 2 MB'),findsOneWidget);
+   expect(find.textContaining('Campaign reference: campaign-2'),findsOneWidget);
+   await tester.tap(find.text('Close'));
+   await tester.pumpAndSettle();
    await tester.pumpWidget(const SizedBox.shrink());
  });
 }

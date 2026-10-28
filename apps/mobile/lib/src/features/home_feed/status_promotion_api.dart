@@ -78,6 +78,63 @@ abstract interface class StatusPromotionJournal {
   Future<void> write(String? data);
 }
 
+/// A draft is not a quote or a spending authorization. Store only the text
+/// and requested views, scoped to the account and exact post being boosted.
+class StatusPromotionDraft {
+  const StatusPromotionDraft({required this.body,required this.targetViews});
+  final String body;
+  final int targetViews;
+}
+
+abstract interface class StatusPromotionDraftStore {
+  Future<StatusPromotionDraft?> read(String? postId);
+  Future<void> write(String? postId,StatusPromotionDraft draft);
+  Future<void> clear(String? postId);
+}
+
+class SecureStatusPromotionDraftStore implements StatusPromotionDraftStore {
+  const SecureStatusPromotionDraftStore(this.account);
+  final String account;
+  static const _storage=FlutterSecureStorage();
+  String _key(String? postId)=>
+    'status_promotion_draft_v1_${sha256.convert(utf8.encode('$account\u0000${postId??''}'))}';
+
+  @override Future<StatusPromotionDraft?> read(String? postId) async {
+    final raw=await _storage.read(key:_key(postId));
+    if(raw==null)return null;
+    try {
+      final value=jsonDecode(raw);
+      if(value is! Map||value['v']!=1||value['account']!=account||
+        value['postId']!=postId||value['body'] is! String||
+        value['targetViews'] is! int||value['savedAt'] is! String){
+        throw const FormatException('Unrecognized promotion draft');
+      }
+      final body=(value['body'] as String),views=value['targetViews'] as int;
+      final saved=DateTime.tryParse(value['savedAt'] as String);
+      if(saved==null||saved.isAfter(DateTime.now().add(const Duration(minutes:1)))||
+         DateTime.now().difference(saved)>const Duration(days:7)||
+         body.length>5000||views<1||views>1000000){
+        throw const FormatException('Expired promotion draft');
+      }
+      return StatusPromotionDraft(body:body,targetViews:views);
+    } catch (_) {
+      await clear(postId);
+      return null;
+    }
+  }
+
+  @override Future<void> write(String? postId,StatusPromotionDraft draft) async {
+    if(draft.targetViews<1||draft.targetViews>1000000||draft.body.length>5000)
+      throw ArgumentError('Invalid promotion draft');
+    await _storage.write(key:_key(postId),value:jsonEncode({
+      'v':1,'account':account,'postId':postId,'body':draft.body,
+      'targetViews':draft.targetViews,'savedAt':DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+  @override Future<void> clear(String? postId) async =>
+    _storage.delete(key:_key(postId));
+}
+
 class SecureStatusPromotionJournal implements StatusPromotionJournal {
   SecureStatusPromotionJournal(this.account);
   final String account;

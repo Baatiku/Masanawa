@@ -117,6 +117,8 @@ Use one owner for shared feed widgets, one for money/migrations/financial compos
 
 **C19 source progress (not completion):** The authenticated My Promotions management view now reads original owner-only inactive body, historic verified count and `serverNow` plus `purgeAt` for a drift-resistant retention countdown, preserving Boost Again/Delete. A fully unified personal-profile My Posts entry, supported image/media review, all state labels and broad Flutter visual/semantics verification are still required.
 
+28 October next Status UI owner workstream (10 reserved IDs; 
+
 **C11/D03/D14 source progress (not completion):** Campaign readback now distinguishes the amount actually debited for delivered qualified views, the amount still reserved in a live/pending/paused campaign, and the unused amount already returned on rejection/cancellation. The signed-in My Promotions view shows direct/referred delivery and an immutable rejection reason rather than mislabelling refunded views as funds still held. This does not supply unified Wallet Activity grouping, spend/refund double-entry receipts or economic settlement, and these items remain unchecked.
 
 ### Batch D — Wallet, redemption and admin finishing pass
