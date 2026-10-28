@@ -134,6 +134,8 @@ class _ExpiredOtpClient extends _TestAuthClient {
     String? firstName,
     String? lastName,
     String? contactPhone,
+    String? countryIso,
+    String? subdivisionIso,
     String? deviceId,
   }) async {
     throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
