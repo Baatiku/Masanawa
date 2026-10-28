@@ -20,6 +20,22 @@ financial/public switches stay OFF; campaign/day grouping, receipt drilldown,
 released/rejected balances and notifications remain separate actionable SPE-D
 requirements, not completed by these surfaces.
 
+**28 October Wallet Activity history filters (separate source batch):** The
+existing Activity screen keeps posted MB and NGN filters and period totals as
+the canonical journal. Its on-demand **Promotions & Share earnings** expansion
+uses a responsive, account-epoch-resetting choice of All, Promotions, Boosts,
+Earnings and Released holds. These filters operate only on the bounded private
+campaign/earnings receipt projection; they do not mutate wallet funds, claim a
+refund has been posted, change the posted ledger filters or manufacture an
+unavailable total. Always distinguish actually spent MB, sponsor-reserved MB,
+unused reservation released and nonredeemable pending half-MB earnings.
+Unknown campaign rate versions link the user conceptually to the original
+receipt rather than assuming today's price. Missing/empty private history
+retains the existing Retry/empty states. At 320dp/large text the filter chips
+wrap, and a new account/authorization epoch resets the selection. Full
+campaign/day aggregation, itemized financial receipts and backend settlement
+remain open SPE-D source requirements.
+
 **Calls history filters and totals:** The existing Calls timeline offers All,
 Connected and No confirmed connection, plus All time/7 days/30 days. Search and
 filters apply on the server before pagination. Changing a filter cancels old
