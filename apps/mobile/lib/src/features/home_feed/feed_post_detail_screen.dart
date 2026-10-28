@@ -76,7 +76,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     setState((){reacting=true;post=before.withReaction(kind);});
     try {
       if(api is ReactionFeedApi){
-        await api.react(before.id,kind);
+        await (api as ReactionFeedApi).react(before.id,kind);
       } else {
         await api.like(before.id,kind=='like');
       }

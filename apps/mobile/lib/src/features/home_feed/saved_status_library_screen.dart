@@ -262,7 +262,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
     });
     try{
       if(api is ReactionFeedApi){
-        await api.react(item.id,kind);
+        await (api as ReactionFeedApi).react(item.id,kind);
       }else{
         await api.like(item.id,kind=='like');
       }
