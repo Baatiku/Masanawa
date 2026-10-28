@@ -201,4 +201,29 @@ describe('SPE promotion routes inherit the established principal and staff autho
   await server.close();
  });
 
+
+ it('allows an unpaid owner draft while the financial kill-switch is off, but never quotes',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'trusted',userId:'owner'}),
+   isEditor:async()=>false,enabled:()=>false});
+  const response=await server.inject({method:'POST',url:'/v1/promotions/drafts',
+   headers:{'idempotency-key':'draft-owner-key-001'},
+   payload:{body:'Privately prepared announcement',targetViews:2}});
+  expect(response.statusCode).toBe(200);
+  expect(events).toContainEqual(['draft','trusted','owner',
+   {body:'Privately prepared announcement',targetViews:2,idempotencyKey:'draft-owner-key-001'}]);
+  expect((await server.inject({method:'GET',url:'/v1/promotions/drafts/mine'})).json())
+   .toEqual({drafts:[]});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/drafts/draft/quote',
+   payload:{}})).statusCode).toBe(503);
+  expect((await server.inject({method:'PUT',url:'/v1/promotions/drafts/draft',
+   payload:{body:'Owner-controlled changes',targetViews:3,expectedVersion:0}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['editDraft','trusted','owner','draft',
+   {body:'Owner-controlled changes',targetViews:3,expectedVersion:0}]);
+  expect((await server.inject({method:'PUT',url:'/v1/promotions/drafts/draft',
+   payload:{body:'Unauthorized',targetViews:3,expectedVersion:0,ownerId:'someone_else'}}))
+   .statusCode).toBe(422);
+  await server.close();
+ });
+
 });
