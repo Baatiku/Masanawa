@@ -128,17 +128,59 @@ class GbActivityAmounts {
     if(raw is! Map)throw const FormatException('Invalid posted totals');
     final received=raw['received'],spent=raw['spent'],net=raw['net'];
     if(received is! int||spent is! int||net is! int||received<0||spent<0||
+       received>9007199254740991||spent>9007199254740991||(net< -9007199254740991||net>9007199254740991)||
        net!=received-spent)throw const FormatException('Invalid posted units');
     return GbActivityAmounts(received,spent,net);
   }
 }
 
+class GbActivityBalanceReconciliation {
+  const GbActivityBalanceReconciliation({required this.state,required this.opening,
+    required this.closing,this.recordedBalance,this.reserved,this.available,this.debt});
+  final String state;
+  final int opening,closing;
+  final int? recordedBalance,reserved,available,debt;
+  factory GbActivityBalanceReconciliation.read(Object? raw,String unit,GbActivityAmounts flows){
+    if(raw is! Map)throw const FormatException('Invalid balance check');
+    int value(Object? n){
+      if(n is! int||(n< -9007199254740991||n>9007199254740991))throw const FormatException('Invalid balance units');
+      return n;
+    }
+    final state=raw['state'],opening=value(raw['opening']),closing=value(raw['closing']);
+    if(!const {'matched','mismatch','uninitialized'}.contains(state)||
+      BigInt.from(opening)+BigInt.from(flows.net)!=BigInt.from(closing))
+      throw const FormatException('Unreconciled period amounts');
+    final recorded=raw['recordedBalance'],held=raw['reserved'],usable=raw['available'],owed=raw['debt'];
+    int? balance,reserved,available,debt;
+    if(recorded==null){
+      if(held!=null||usable!=null||owed!=null||state=='matched')throw const FormatException('Missing recorded balance');
+    }else{
+      balance=value(recorded);reserved=value(held);available=value(usable);debt=value(owed);
+      if(reserved<0||available<0||debt<0)throw const FormatException('Invalid account buckets');
+      if(state=='matched'&&(closing!=balance||
+        BigInt.from(available)+BigInt.from(reserved)-BigInt.from(debt)!=BigInt.from(balance)||
+        (unit=='MB'&&debt!=0)||(unit=='NGN'&&(reserved!=0||(available!=0&&debt!=0)))))
+        throw const FormatException('Unverified matched balance');
+    }
+    if(state=='uninitialized'&&(balance!=null||opening!=0||closing!=0||flows.received!=0||flows.spent!=0))
+      throw const FormatException('Unverified empty wallet');
+    return GbActivityBalanceReconciliation(state:state as String,opening:opening,closing:closing,
+      recordedBalance:balance,reserved:reserved,available:available,debt:debt);
+  }
+}
+
+class GbActivityReconciliation {
+  const GbActivityReconciliation({required this.mb,required this.ngn});
+  final GbActivityBalanceReconciliation mb,ngn;
+}
+
 class GbActivityPeriodSummary {
   const GbActivityPeriodSummary({required this.days,required this.fromAt,
-    required this.toAt,required this.mb,required this.ngn});
+    required this.toAt,required this.mb,required this.ngn,this.reconciliation});
   final int days;
   final DateTime fromAt,toAt;
   final GbActivityAmounts mb,ngn;
+  final GbActivityReconciliation? reconciliation;
 
   factory GbActivityPeriodSummary.read(Object? raw,int expectedDays) {
     if(raw is! Map||raw['periodDays']!=expectedDays||
@@ -151,8 +193,13 @@ class GbActivityPeriodSummary {
        !toAt.isAfter(fromAt)||
        toAt.difference(fromAt)!=Duration(days:expectedDays))
       throw const FormatException('Invalid activity window');
-    return GbActivityPeriodSummary(days:expectedDays,fromAt:fromAt,toAt:toAt,
-      mb:GbActivityAmounts.read(raw['MB']),ngn:GbActivityAmounts.read(raw['NGN']));
+    final mb=GbActivityAmounts.read(raw['MB']),ngn=GbActivityAmounts.read(raw['NGN']);
+    final check=raw['reconciliation'];
+    if(check!=null&&check is! Map)throw const FormatException('Invalid balance check');
+    return GbActivityPeriodSummary(days:expectedDays,fromAt:fromAt,toAt:toAt,mb:mb,ngn:ngn,
+      reconciliation:check==null?null:GbActivityReconciliation(
+        mb:GbActivityBalanceReconciliation.read((check as Map)['MB'],'MB',mb),
+        ngn:GbActivityBalanceReconciliation.read(check['NGN'],'NGN',ngn)));
   }
 }
 
