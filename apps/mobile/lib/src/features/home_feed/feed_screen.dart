@@ -14,6 +14,7 @@ import 'status_post_media.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
+import 'status_post_social_proof.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'status_promotion_api.dart';
@@ -914,37 +915,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                  Wrap(
-                                    spacing: 12, runSpacing: 6,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      if (post.totalReactions > 0)
-                                        Text(
-                                          '${FeedPost.reactionKinds.where((kind) =>
-                                            (post.effectiveReactionCounts[kind] ?? 0) > 0)
-                                            .map((kind) => FeedPost.reactionEmoji[kind] ?? '')
-                                            .join(' ')} ${post.totalReactions}',
-                                          style: Theme.of(context).textTheme.bodySmall,
-                                        ),
-                                      if (post.commentCount > 0)
-                                        Text('${post.commentCount} ${t('comments','sharhi')}',
-                                          style: Theme.of(context).textTheme.bodySmall),
-                                      Row(mainAxisSize:MainAxisSize.min,children:[
-                                        Icon(Icons.visibility_outlined,size:15,
-                                          color:context.masanawa.textMuted),
-                                        const SizedBox(width:4),
-                                        ConstrainedBox(
-                                          constraints:BoxConstraints(maxWidth:
-                                            (MediaQuery.sizeOf(context).width - 100).clamp(120.0, 480.0).toDouble()),
-                                          child:Text(post.verifiedViewCount == null
-                                            ?t('Views unavailable','Ba a samu adadin kallo ba')
-                                            :'${post.verifiedViewCount} ${t('views','kallo')}',
-                                            softWrap:true,
-                                            style:Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color:context.masanawa.textMuted))),
-                                      ]),
-                                    ],
-                                  ),
+                                  StatusPostSocialProof(post: post),
                                   StatusPostBoostAction(
                                     post: post,
                                     enabled: promotionsAvailable,

@@ -7,6 +7,7 @@ import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
+import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
@@ -231,6 +232,8 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               mediaApi:widget.mediaApi,renderer:widget.inlineMediaRenderer,
               onOpen:widget.onMedia,
               audioPlaybackAvailable:widget.audioPlaybackAvailable),
+            Padding(padding:const EdgeInsets.symmetric(vertical:8),
+              child:StatusPostSocialProof(post:p)),
             StatusPostBoostAction(post:p,enabled:widget.onBoostPost!=null,
               onBoost:widget.onBoostPost),
             Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),

@@ -7,6 +7,7 @@ import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
+import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
@@ -349,6 +350,12 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     mediaApi: widget.mediaApi,
                                     renderer: widget.inlineMediaRenderer,
                                     onOpen: canOpen ? (_) => open(item) : null,
+                                  ),
+                                if (item.post != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                    child: StatusPostSocialProof(post: item.post!),
                                   ),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
