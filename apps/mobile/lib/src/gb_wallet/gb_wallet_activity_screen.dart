@@ -431,7 +431,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
               ],
             ]))),
           const SizedBox(height:12),
-          if(owner!=null)GbWalletHoldsPanel(key:ValueKey(('wallet-holds',owner)),owner:owner),
+          GbWalletHoldsPanel(key:ValueKey(('wallet-holds',owner)),owner:owner),
           const SizedBox(height:12),
           if(initial==null && first?.isLoading==true)
             const ListTile(title:Text('Loading verified activity…'),
