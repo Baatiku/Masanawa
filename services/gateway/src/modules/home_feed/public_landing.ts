@@ -150,13 +150,20 @@ main{max-width:600px;margin:32px auto;padding:22px;border-radius:16px;background
 h1{font-size:21px;margin:0 0 12px}article{white-space:pre-wrap;overflow-wrap:anywhere}
 .post-image{display:block;max-width:100%;height:auto;margin:16px 0;border-radius:12px}
 a{display:inline-block;margin-top:16px;padding:11px 20px;border-radius:10px;background:#167346;color:white;text-decoration:none}
+a.secondary{margin-left:8px;background:#eef3f0;color:#1b2c23}
 .fine{color:#5c6961;font-size:13px;margin-top:24px}
 </style></head><body><main><h1>${name}</h1><article>${body}</article>
 ${imageUrl?`<img class="post-image" src="${imageUrl}" alt="${imageAlt}" loading="lazy">`:
   post.imageCount>0?'<p class="fine">This image is available only after media approval in the app.</p>':''}
-<a rel="nofollow noopener" href="${href}">Open in Masanawa</a>
-<p class="fine">Viewing a shared page or link preview does not automatically earn rewards.
-Qualified views require a verified in-app or consented web session. No app installation is required to read this text.</p>
+<p class="fine">This public page does not set cookies, run visitor analytics, record a paid view, or initiate a reward.
+The server may retain necessary security request logs. Reading this page does not require an app installation.</p>
+${valid?`<p class="fine">This shared link includes an opaque referral code. If you choose referral attribution
+and later complete an eligible verified view, the original sharer may earn a pending reward.
+The code is not your identity; you can choose to open without referral attribution.</p>`:''}
+<a rel="nofollow noopener" href="${href}">${valid?'Open with referral attribution':'Open in Masanawa'}</a>
+${valid?`<a class="secondary" rel="nofollow noopener" href="${canonical}">Open without referral attribution</a>`:''}
+<p class="fine">A qualified view requires a verified in-app or separately consented web session;
+link previews, crawlers and this page alone never count.</p>
 </main></body></html>`;
 }
 

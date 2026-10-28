@@ -14,6 +14,11 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(html).not.toContain('<img src=x');
   expect(html).toContain('og:description');
   expect(html).toContain('?r=opaqueAlphaBeta012345678901');
+  expect(html).toContain('Open with referral attribution');
+  expect(html).toContain('Open without referral attribution');
+  expect(html).toContain(`href="https://masanawa.com/status/${id}">Open without referral`);
+  expect(html).toContain('does not set cookies, run visitor analytics, record a paid view');
+  expect(html).not.toMatch(/<script\b|<iframe\b|<form\b/i);
  });
  it('unfurls only explicitly reviewed imagery as a same-origin crawler asset',()=>{
   const html=renderPublicStatusPage({id,name:'Teacher & Sons',
@@ -66,6 +71,7 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(reply.statusCode).toBe(200);
   expect(reply.headers['content-security-policy']).toContain("default-src 'none'");
   expect(reply.headers['cache-control']).toBe('no-store');
+  expect(reply.headers['set-cookie']).toBeUndefined();
   expect(reply.body).not.toContain('?r=%3Cscript%3E');
   expect(validReferral).not.toHaveBeenCalled();
   const forwarded=await app.inject({method:'GET',
@@ -78,6 +84,8 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(validReferral).toHaveBeenCalledWith(id,'opaqueAlphaBeta012345678901');
   const stale=await app.inject({method:'GET',url:`/status/${id}?r=InactiveButWellFormedOpaqueLink123456`});
   expect(stale.body).not.toContain('InactiveButWellFormedOpaqueLink123456');
+  expect(stale.body).not.toContain('Open with referral attribution');
+  expect(stale.body).toContain('Open in Masanawa');
   expect(stale.headers['permissions-policy']).toContain('geolocation=()');
   expect(find).toHaveBeenCalledTimes(4);
   await app.close();
