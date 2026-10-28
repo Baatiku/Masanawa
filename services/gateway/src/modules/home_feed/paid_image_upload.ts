@@ -23,7 +23,7 @@ export async function sanitizePaidPromotionImage(base64:string){
  const raw=Buffer.from(base64,'base64');
  if(raw.length<1||raw.length>5*1024*1024||raw.toString('base64')!==base64)
   fail('paid_image_too_large');
- let bytes:Buffer;
+ let bytes=Buffer.alloc(0);
  try{
   const decoder=sharp(raw,{animated:false,failOn:'error',limitInputPixels:20_000_000});
   const meta=await decoder.metadata();
