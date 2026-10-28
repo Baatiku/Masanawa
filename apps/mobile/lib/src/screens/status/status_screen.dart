@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
 import '../../core/startup_metrics.dart';
@@ -211,6 +212,28 @@ class StatusSavedScreen extends ConsumerWidget {
       }
     }
 
+    Future<void> shareOriginal(FeedPost post) async {
+      if(currentAccount()!=account)return;
+      try{
+        // Saved is a historical bookmark, never an export entitlement.
+        // Reauthorize the current original before sharing its text or link.
+        final fresh=await feed.detail(post.id);
+        if(!context.mounted||currentAccount()!=account)return;
+        String? link;
+        if(await promotions.available()){
+          link=await promotions.share(fresh.id);
+        }
+        if(!context.mounted||currentAccount()!=account)return;
+        await SharePlus.instance.share(ShareParams(text:link??
+          '${fresh.displayAuthor}\n\n${fresh.body}'));
+      }catch(_){
+        if(context.mounted&&currentAccount()==account){
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:Text('Sharing is unavailable. Refresh the original post.')));
+        }
+      }
+    }
+
     Future<void> openPost(
       FeedPost post,
       bool boostAvailable,
@@ -241,6 +264,9 @@ class StatusSavedScreen extends ConsumerWidget {
             mediaApi: media,
             audioPlaybackAvailable: true,
             authorDirectory: authors,
+            engagementApi: feed,
+            onSharePost: shareOriginal,
+            shareEarnEnabled: boostAvailable,
             onBoostPost: boostAvailable
                 ? (id) => unawaited(boostAction(id))
                 : null,
@@ -279,6 +305,9 @@ class StatusSavedScreen extends ConsumerWidget {
         authorDirectory: authors,
         mediaApi: media,
         onOpenMedia: openMedia,
+        engagementApi: feed,
+        onSharePost: shareOriginal,
+        shareEarnEnabled: ability.data == true,
         onHumanProfile: openHuman,
         onMasanaProfile: openMasana,
         onBoostPost: ability.data == true
