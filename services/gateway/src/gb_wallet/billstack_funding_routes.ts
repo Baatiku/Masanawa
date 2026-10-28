@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import type {FastifyInstance} from "fastify";
-import {BillstackProviderError,verifyBillstackWebhook,type BillstackReceivedPayment,type BillstackBankId} from "./billstack_provider.js";
+import {assertBillstackApplicant,BillstackProviderError,verifyBillstackWebhook,type BillstackReceivedPayment,type BillstackBankId} from "./billstack_provider.js";
 
 export interface BillstackFundingActor {tenantId:string;userId:string}
 export interface BillstackAccount {
@@ -54,10 +54,19 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   try{person=await actor(request.headers.authorization);}catch{
     reply.code(401);return {error:{code:"unauthorized"}};
   }
-  try{return {account:safe(await ports.read(person)),
-    fundingEnabled:ports.ready?.()??false,
-    assignmentEnabled:ports.canAssign?.()??ports.ready?.()??false,
-    applicantComplete:ports.applicantComplete?await ports.applicantComplete(person):false};}catch{
+  try{
+    const account=await ports.read(person);
+    let applicantComplete=!account&&ports.applicantComplete?await ports.applicantComplete(person):false;
+    if(!account&&applicantComplete){
+      try{assertBillstackApplicant(await ports.applicant(person,"gbreadiness"));}
+      catch(error){
+        if(error instanceof BillstackProviderError&&error.code==="invalid_applicant")applicantComplete=false;
+        else throw error;
+      }
+    }
+    return {account:safe(account),fundingEnabled:ports.ready?.()??false,
+      assignmentEnabled:ports.canAssign?.()??ports.ready?.()??false,applicantComplete};
+  }catch{
     reply.code(503);return {error:{code:"bank_account_unavailable"}};
   }
  });
@@ -95,6 +104,12 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
     if(existing)return {account:safe(existing)};
     const ref="gb"+randomUUID().replaceAll("-","");
     const applicant=await ports.applicant(person,ref);
+    try{assertBillstackApplicant(applicant);}catch(error){
+      if(error instanceof BillstackProviderError&&error.code==="invalid_applicant"){
+        reply.code(400);return {error:{code:"invalid_applicant",message:"Check your names, email and Nigerian contact phone before assigning an account."}};
+      }
+      throw error;
+    }
     const first=await ports.start(person,ref);
     if(!first.created)return {account:safe(first.account)};
     // Provider create is a financial write: never automatically retry after

@@ -153,11 +153,15 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
                         NgnBankAccount.fromJson(response.data);
                         if (!mounted || _owner != owner) return;
                         refresh();
-                      } catch (_) {
+                      } catch (error) {
                         if (!mounted || _owner != owner) return;
+                        final data=error is DioException?error.response?.data:null;
+                        final invalid=data is Map&&data['error'] is Map&&
+                          data['error']['code']=='invalid_applicant';
                         setState(
-                          () => _error =
-                              'Account assignment unavailable. Check status before retrying.',
+                          () => _error = invalid
+                              ? 'Check your funding details and Nigerian contact phone. No account assignment was started.'
+                              : 'Account assignment unavailable. Check status before retrying.',
                         );
                         refresh();
                       } finally {

@@ -411,3 +411,5 @@ of a permanent IP or data delivery. No provider keys or wholesale diagnostic log
 are exposed on customer screens.
 
 27 October retirement audit: the disconnected mobile group-creation/token transport is removed after its final detail-screen reference is retired. Durable historical paid-voice reconciliation/outbox code and its tests remain: retiring a group UI must not discard financial recovery records.
+
+27 October Billstack applicant admission: before creating a pending assignment, validate the existing provider-qualified Nigerian applicant contract. Invalid/foreign stored phone or incomplete identity keeps the unassigned account editable; authenticated status read shows the correction form, and creation returns invalid_applicant without a financial/provider write. Assigned/pending historical readback is preserved regardless of later profile changes; transient profile read failure is unavailable, not invalid identity. No international bank account or funding qualification is implied.
