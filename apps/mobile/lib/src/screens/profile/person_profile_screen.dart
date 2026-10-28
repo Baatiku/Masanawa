@@ -9,6 +9,10 @@ import '../../state/talk_social_profile_state.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_profile_skeleton.dart';
+import '../../core/providers.dart';
+import '../../features/home_feed/my_status_promotions_screen.dart';
+import '../../features/home_feed/status_promotion_api.dart';
+import '../../features/home_feed/status_promotion_sheet.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -25,7 +29,69 @@ class PersonProfileScreen extends ConsumerStatefulWidget {
 
 class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
   bool _followBusy = false;
+  bool _postsOpening = false;
   int _operation = 0;
+
+  Future<void> _openMyPosts() async {
+    if (_postsOpening) return;
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final owner = session.user.id;
+    final authEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    String? currentAccount() {
+      if (!mounted || ref.read(sessionProvider.notifier).authorizationEpoch != authEpoch)
+        return null;
+      final current = ref.read(sessionProvider);
+      return current is SessionSignedIn ? current.user.id : null;
+    }
+    setState(() => _postsOpening = true);
+    try {
+      final client = ref.read(apiClientProvider);
+      final promotions = StatusPromotionApi(
+        dio: client.dio, ownerAccount: owner,
+        currentAccount: currentAccount,
+        accessToken: () async => ref.read(apiClientProvider).accessToken,
+        journal: SecureStatusPromotionJournal(owner),
+      );
+      // The read-only owner ledger must remain reachable during a new-spend
+      // freeze; only Boost Again requires a positive server capability.
+      bool canBoost = false;
+      try { canBoost = await promotions.available(); } catch (_) {}
+      if (!mounted || currentAccount() != owner) return;
+      final spendingEnabled = canBoost;
+      await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) =>
+        Consumer(builder: (context, routeRef, __) {
+          final current = routeRef.watch(sessionProvider);
+          if (current is! SessionSignedIn || current.user.id != owner ||
+              routeRef.read(sessionProvider.notifier).authorizationEpoch != authEpoch) {
+            return const Scaffold(body: Center(child: Text(
+              'This account changed. Go back to reopen your own posts.')));
+          }
+          return MyStatusPromotionsScreen(
+            api: promotions, canBoost: spendingEnabled,
+            onBoostAgain: (postId) async {
+              if (!spendingEnabled || currentAccount() != owner) return;
+              await showModalBottomSheet<StatusPromotionCampaign>(
+                context: context, isScrollControlled: true,
+                builder: (sheetContext) => Consumer(builder: (sheetContext, sheetRef, _) {
+                  final active = sheetRef.watch(sessionProvider);
+                  if (active is! SessionSignedIn || active.user.id != owner ||
+                      sheetRef.read(sessionProvider.notifier).authorizationEpoch != authEpoch) {
+                    return const SafeArea(child: Padding(padding: EdgeInsets.all(24),
+                      child: Text('Session changed. Close and reopen your own posts.')));
+                  }
+                  return StatusPromotionSheet(api: promotions, postId: postId,
+                    onRecharge: () async { await sheetContext.push<void>('/wallet'); });
+                }),
+              );
+            },
+          );
+        }),
+      ));
+    } finally {
+      if (mounted) setState(() => _postsOpening = false);
+    }
+  }
 
   @override
   void didUpdateWidget(covariant PersonProfileScreen oldWidget) {
@@ -106,6 +172,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
           followBusy: _followBusy,
           onFollow: () => _toggleFollow(profile),
           onRefresh: _refresh,
+          onMyPosts: profile.isSelf && !_postsOpening ? _openMyPosts : null,
         );
       },
     );
@@ -118,12 +185,14 @@ class _PersonProfileBody extends StatelessWidget {
     required this.followBusy,
     required this.onFollow,
     required this.onRefresh,
+    this.onMyPosts,
   });
 
   final HumanProfile profile;
   final bool followBusy;
   final VoidCallback onFollow;
   final Future<void> Function() onRefresh;
+  final VoidCallback? onMyPosts;
 
   @override
   Widget build(BuildContext context) {
@@ -249,6 +318,12 @@ class _PersonProfileBody extends StatelessWidget {
                     onPressed: () => context.push('/profile'),
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit profile'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('person-profile-my-posts'),
+                    onPressed: onMyPosts,
+                    icon: const Icon(Icons.article_outlined),
+                    label: const Text('My Posts / Inactive'),
                   ),
                 ],
               )
