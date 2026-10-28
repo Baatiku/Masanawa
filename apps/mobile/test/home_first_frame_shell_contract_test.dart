@@ -63,8 +63,7 @@ void main(){
     debugPrint=(String? message,{int? wrapWidth}){
       if(message!=null)emitted.add(message);
     };
-    addTearDown(()=>debugPrint=original);
-
+    try {
     await tester.pumpWidget(ProviderScope(overrides:[
       sessionProvider.overrideWith(_SignedIn.new),
       statusFeedApiProvider.overrideWithValue(_EmptyStatus()),
@@ -93,6 +92,10 @@ void main(){
     expect(emitted.any((message)=>message.contains('home-fan')),isFalse,
       reason:'Startup telemetry cannot contain an account identity');
     expect(tester.takeException(),isNull);
+    } finally {
+      // Flutter verifies its global debug bindings before test tearDowns.
+      debugPrint=original;
+    }
   });
 
   testWidgets('Notifications push and Back restore the same Home tab',
