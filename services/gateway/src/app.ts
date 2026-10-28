@@ -1,3 +1,4 @@
+import {registerUsernameRoutes,type UsernamePorts} from './usernames.js';
 import {MbCallAdmissionRequiredError} from "./gb_calls/public_token_policy.js";
 import {replyWalletFailure} from "./gb_wallet/reply_errors.js";
 import {registerNgnWalletRoutes} from "./gb_wallet/ngn_routes.js";
@@ -114,6 +115,7 @@ export interface GatewayAppOptions {
   readonly gbWalletSummary?: GbWalletSummaryPorts;
   readonly gbWalletActivity?: GbActivityPorts;
   /** New review-confirmed purchased-MB transfer; no legacy Credits. */
+  readonly usernames?:UsernamePorts;
   readonly gbSendReview?: GbSendPorts;
   readonly gbStatusTips?: StatusTipPorts;
   readonly gbRequests?: GbRequestPorts;
@@ -386,6 +388,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   if (options.gbWalletActivity) registerGbWalletActivityRoutes(app,options.gbWalletActivity);
+  if(options.usernames)registerUsernameRoutes(app,options.usernames);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbStatusTips) registerGbStatusTipRoutes(app, options.gbStatusTips);
   if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
@@ -490,6 +493,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               phone: Type.Optional(Type.String({ minLength: 7, maxLength: 40 })),
               email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
               code: Type.String({ minLength: 6, maxLength: 6 }),
+              username:Type.Optional(Type.String({minLength:2,maxLength:40})),
               name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
               firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
               lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
@@ -512,6 +516,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
               ? {}
               : { email: request.body.email }),
             code: request.body.code,
+            ...(request.body.username===undefined?{}:{username:request.body.username}),
             ...(request.body.name === undefined
               ? {}
               : { name: request.body.name }),

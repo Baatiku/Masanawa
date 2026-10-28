@@ -52,6 +52,24 @@ class _Lookup implements GbRecipientLookupTransport {
   Completer<GbRecipientIdentity>? pending;
   GbRecipientIdentity? result;
   bool offline = false;
+  List<GbRecipientIdentity>? suggestions;
+  @override
+  Future<List<GbRecipientIdentity>> search(
+    String query, {
+    CancelToken? cancellation,
+  }) async {
+    if (suggestions != null) {
+      requested.add(query);
+      return suggestions!;
+    }
+    return [
+      await lookup(
+        exactGbRecipientHandle(query) ?? query,
+        cancellation: cancellation,
+      ),
+    ];
+  }
+
   @override
   Future<GbRecipientIdentity> lookup(
     String exactHandle, {
@@ -65,9 +83,67 @@ class _Lookup implements GbRecipientLookupTransport {
 }
 
 void main() {
+  testWidgets(
+    'prefix and private contact suggestions require selection and fill canonical username',
+    (tester) async {
+      final fake = _Lookup()
+        ..suggestions = [
+          const GbRecipientIdentity('b', 'bello', 'Bello Musa'),
+          const GbRecipientIdentity('c', 'bello.ali', 'Bello Ali'),
+        ];
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_Session.new),
+            gbRecipientLookupTransportProvider.overrideWithValue(fake),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) => GbRecipientField(
+                  controller: controller,
+                  owner: (
+                    accountId: 'sender_a',
+                    authorizationEpoch: ref
+                        .read(sessionProvider.notifier)
+                        .authorizationEpoch,
+                  ),
+                  label: 'Find recipient',
+                  enabled: true,
+                  onChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'bel');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(find.text('Bello Musa'), findsOneWidget);
+      expect(find.text('Bello Ali'), findsOneWidget);
+      await tester.tap(find.text('Bello Ali'));
+      await tester.pump();
+      expect(controller.text, '@bello.ali');
+      expect(find.text('Bello Musa'), findsNothing);
+      fake.suggestions = [
+        const GbRecipientIdentity('b', 'bello', 'Bello Musa'),
+      ];
+      await tester.enterText(find.byType(TextField), 'bello@example.com');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(fake.requested.last, 'bello@example.com');
+      await tester.tap(find.text('Bello Musa'));
+      await tester.pump();
+      expect(controller.text, '@bello');
+    },
+  );
+
   test('accepts only complete exact handles and matching server identity', () {
     expect(exactGbRecipientHandle('@BELLO.User'), 'bello.user');
-    expect(exactGbRecipientHandle('Be'), isNull);
+    expect(exactGbRecipientHandle('Be'), 'be');
     expect(exactGbRecipientHandle('a..'), 'a..');
     expect(exactGbRecipientHandle('someone@example.com'), isNull);
     expect(
@@ -166,7 +242,7 @@ void main() {
       expect(fake.requested, ['bello.user']);
       expect(find.text('Bello Abubakar'), findsOneWidget);
       expect(find.text('@bello.user'), findsOneWidget);
-      expect(find.textContaining('stable_123'), findsOneWidget);
+      expect(find.textContaining('stable_123'), findsNothing);
       await tester.enterText(find.byType(TextField), '@different.user');
       await tester.pump();
       expect(find.text('Bello Abubakar'), findsNothing);

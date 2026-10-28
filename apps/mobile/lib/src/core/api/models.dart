@@ -48,14 +48,14 @@ class OtpSendResponse {
 }
 
 class OtpVerifyRequest {
-  const OtpVerifyRequest({this.phone, this.email, required this.code, this.name,
+  const OtpVerifyRequest({this.phone, this.email, required this.code, this.name, this.username,
     this.firstName, this.lastName, this.contactPhone,this.countryIso,this.subdivisionIso})
       : assert(phone != null || email != null, 'Provide exactly one of phone or email');
 
   final String? phone;
   final String? email;
   final String code;
-  final String? name;
+  final String? name, username;
   final String? firstName, lastName, contactPhone;
   final String? countryIso,subdivisionIso;
 
@@ -64,6 +64,7 @@ class OtpVerifyRequest {
         if (email != null) 'email': email,
         'code': code,
         if (name != null) 'name': name,
+    if (username != null) 'username': username,
         if (firstName != null) 'firstName': firstName,
         if (lastName != null) 'lastName': lastName,
         if (contactPhone != null) 'contactPhone': contactPhone,

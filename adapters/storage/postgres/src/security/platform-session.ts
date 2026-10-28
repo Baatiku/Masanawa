@@ -1,3 +1,5 @@
+import {normalizeUsername,usernameCandidates} from '@masanawa/security';
+import {allocateReadableUsername} from './usernames.js';
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -94,24 +96,10 @@ async function loadProfile(
   return result.rows[0] ? profile(result.rows[0]) : null;
 }
 
-/** One durable, unique handle in the existing public profile authority. */
-export async function ensureSignupUsername(client: Pick<PoolClient,"query">, input: Readonly<{
-  tenantId: TenantId; userId: UserId; name: string;
-}>): Promise<string> {
-  const stem=input.name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/gu,"").slice(0,12) || "masanawa";
-  for(let attempt=0;attempt<8;attempt++) {
-    const suffix=createHash("sha256").update(`${input.tenantId}:${input.userId}:${attempt}`).digest("hex").slice(0,16);
-    const inserted=await client.query<{handle:string}>(
-      `INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name,bio,talks_json,updated_at)
-       VALUES($1,$2,$3,$4,'','[]'::jsonb,clock_timestamp()) ON CONFLICT DO NOTHING RETURNING handle`,
-      [input.tenantId,input.userId,`${stem}_${suffix}`,input.name]);
-    if(inserted.rows[0]) return inserted.rows[0].handle;
-    const existing=await client.query<{handle:string}>(
-      "SELECT handle FROM talks.public_profiles WHERE tenant_id=$1 AND user_id=$2",[input.tenantId,input.userId]);
-    if(existing.rows[0])return existing.rows[0].handle;
-  }
-  throw new Error("auth.username_allocation_failed");
-}
+/** Durable readable username; existing deliberate choices are preserved. */
+export async function ensureSignupUsername(client:Pick<PoolClient,"query">,input:Readonly<{
+ tenantId:TenantId;userId:UserId;name:string;username?:string;
+}>):Promise<string>{return allocateReadableUsername(client,input);}
 
 function sameHash(left: string, right: string): boolean {
   if (!/^[0-9a-f]{64}$/u.test(left) || !/^[0-9a-f]{64}$/u.test(right)) return false;
@@ -212,6 +200,14 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       }, { isolation: "repeatable read", readOnly: true });
     },
 
+    async canAllocateUsername(input){
+      const candidates=input.username?[normalizeUsername(input.username)]:usernameCandidates(input);
+      const available=await pool.query(`SELECT candidate FROM unnest($2::text[]) AS candidate
+        WHERE NOT EXISTS(SELECT 1 FROM talks.username_claims WHERE tenant_id=$1 AND handle=candidate) LIMIT 1`,
+        [input.tenantId,candidates]);
+      return available.rows.length>0;
+    },
+
     async createProfile(input) {
       const name = input.name.trim();
       if (!name || name.length > 160) throw new TypeError("auth.name_invalid");
@@ -262,7 +258,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
             input.locale,input.createdAt,
           ],
         );
-        const username=await ensureSignupUsername(client,{tenantId:input.tenantId,userId,name});
+        const username=await ensureSignupUsername(client,{tenantId:input.tenantId,userId,name,...(input.username?{username:input.username}:{})});
         return profile({...inserted.rows[0]!,username});
       });
     },

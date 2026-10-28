@@ -1,3 +1,4 @@
+import '../../core/username_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,50 +23,68 @@ class NameScreen extends ConsumerStatefulWidget {
 }
 
 class _NameScreenState extends ConsumerState<NameScreen> {
+  final _username = TextEditingController();
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _phone = TextEditingController();
-  PhoneCountry _country=kDefaultCountry;
+  PhoneCountry _country = kDefaultCountry;
   CountrySubdivisions? _regions;
   String? _subdivision;
   String? _regionLoadError;
   bool _saving = false;
 
-  @override void initState(){super.initState();
-    final session=ref.read(sessionProvider);
-    final registeredPhone=session is SessionRegisterProfile?session.phone:
-      session is SessionNameRequired&&session.channel==OtpChannel.sms
-        ?session.identifier:null;
-    if(registeredPhone!=null){
-      _phone.text=registeredPhone;
-      _country=detectCountry(registeredPhone);
-    }else{
+  @override
+  void initState() {
+    super.initState();
+    final session = ref.read(sessionProvider);
+    final registeredPhone = session is SessionRegisterProfile
+        ? session.phone
+        : session is SessionNameRequired && session.channel == OtpChannel.sms
+        ? session.identifier
+        : null;
+    if (registeredPhone != null) {
+      _phone.text = registeredPhone;
+      _country = detectCountry(registeredPhone);
+    } else {
       // The device's locale is only a suggestion, not residence or a verified
       // location. Always leave the country picker editable and require the
       // actual contact phone and state to be confirmed by the person.
-      final localeCountry=WidgetsBinding.instance.platformDispatcher.locale.countryCode;
-      _country=suggestPhoneCountryFromLocale(localeCountry);
-      _phone.text='+${_country.dialCode}';
+      final localeCountry =
+          WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+      _country = suggestPhoneCountryFromLocale(localeCountry);
+      _phone.text = '+${_country.dialCode}';
     }
     _loadRegionChoices();
   }
 
   Future<void> _loadRegionChoices() async {
-    setState(()=>_regionLoadError=null);
+    setState(() => _regionLoadError = null);
     try {
-      final loaded=await CountrySubdivisions.load();
-      if(mounted)setState((){_regions=loaded;_regionLoadError=null;});
+      final loaded = await CountrySubdivisions.load();
+      if (mounted)
+        setState(() {
+          _regions = loaded;
+          _regionLoadError = null;
+        });
     } catch (_) {
-      if(mounted)setState(()=>_regionLoadError='State and region list is unavailable. Retry.');
+      if (mounted)
+        setState(
+          () =>
+              _regionLoadError = 'State and region list is unavailable. Retry.',
+        );
     }
   }
 
-  void _onCountryChanged(PhoneCountry next){setState((){
-    _country=next;_subdivision=null;
-  });}
+  void _onCountryChanged(PhoneCountry next) {
+    setState(() {
+      _country = next;
+      _subdivision = null;
+    });
+  }
 
   @override
   void dispose() {
+    _username.dispose();
     _first.dispose();
     _last.dispose();
     _phone.dispose();
@@ -91,13 +110,23 @@ class _NameScreenState extends ConsumerState<NameScreen> {
 
     final first = _first.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     final last = _last.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final phone=normalizeE164(_phone.text,country:_country);
-    final states=_regions?.forCountry(_country.iso)??const <PhoneSubdivision>[];
+    final phone = normalizeE164(_phone.text, country: _country);
+    final states =
+        _regions?.forCountry(_country.iso) ?? const <PhoneSubdivision>[];
     if (first.isEmpty ||
         last.isEmpty ||
-        !isPlausibleSignupContact(phone,_country)||_regions==null||
-        (states.isNotEmpty&&!states.any((s)=>s.code==_subdivision))) {
+        !isPlausibleSignupContact(phone, _country) ||
+        _regions == null ||
+        (states.isNotEmpty && !states.any((s) => s.code == _subdivision))) {
       _snack('Enter a valid contact phone and select your state or region.');
+      return;
+    }
+    if (current is SessionNameRequired &&
+        _username.text.trim().isNotEmpty &&
+        !validEditableUsername(_username.text)) {
+      _snack(
+        'Choose a username of 2–40 letters, numbers, dots or underscores, starting with a letter.',
+      );
       return;
     }
     if (_saving) return;
@@ -106,11 +135,15 @@ class _NameScreenState extends ConsumerState<NameScreen> {
         .read(sessionProvider.notifier)
         .submitProfile(
           name: '$first $last',
+          username:
+              current is SessionNameRequired && _username.text.trim().isNotEmpty
+              ? normalizedUsername(_username.text)
+              : null,
           firstName: first,
           lastName: last,
           contactPhone: phone,
-          countryIso:_country.iso,
-          subdivisionIso:_subdivision,
+          countryIso: _country.iso,
+          subdivisionIso: _subdivision,
         );
     if (mounted) setState(() => _saving = false);
   }
@@ -124,7 +157,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
         _snack(
           AuthErrorLocalizer.message(
             AppLocalizations.of(context),
-            code: null,
+            code: next.failureCode,
             stage: AuthFailureStage.completeProfile,
           ),
         );
@@ -206,34 +239,73 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           ),
           const SizedBox(height: 12),
           const Text('Contact phone (not verified)'),
-          const SizedBox(height:6),
-          PhoneField(controller:_phone,enabled:!_saving,initialCountry:_country,
-            nationalEntry:true,
-            onCountryChanged:_onCountryChanged),
-          const SizedBox(height:6),
-          Text('Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',
-            style:Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height:12),
-          if(_regions==null && _regionLoadError==null)
+          const SizedBox(height: 6),
+          PhoneField(
+            controller: _phone,
+            enabled: !_saving,
+            initialCountry: _country,
+            nationalEntry: true,
+            onCountryChanged: _onCountryChanged,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (_regions == null && _regionLoadError == null)
             const Text('Loading state and region choices…')
-          else if(_regions==null)...[
-            Text(_regionLoadError??'State and region list is unavailable.'),
-            TextButton.icon(onPressed:_saving?null:_loadRegionChoices,
-              icon:const Icon(Icons.refresh),label:const Text('Retry region list')),
-          ]
-          else if(_regions!.forCountry(_country.iso).isNotEmpty)
+          else if (_regions == null) ...[
+            Text(_regionLoadError ?? 'State and region list is unavailable.'),
+            TextButton.icon(
+              onPressed: _saving ? null : _loadRegionChoices,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry region list'),
+            ),
+          ] else if (_regions!.forCountry(_country.iso).isNotEmpty)
             DropdownButtonFormField<String>(
-              key:ValueKey('signup-subdivision-${_country.iso}'),
-              initialValue:_subdivision,isExpanded:true,
-              decoration:const InputDecoration(labelText:'State / province / region',
-                border:OutlineInputBorder()),
-              items:[for(final state in _regions!.forCountry(_country.iso))
-                DropdownMenuItem(value:state.code,
-                  child:Text(state.name,overflow:TextOverflow.ellipsis))],
-              onChanged:_saving?null:(value)=>setState(()=>_subdivision=value),
+              key: ValueKey('signup-subdivision-${_country.iso}'),
+              initialValue: _subdivision,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'State / province / region',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final state in _regions!.forCountry(_country.iso))
+                  DropdownMenuItem(
+                    value: state.code,
+                    child: Text(state.name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _subdivision = value),
             )
-          else const Text('No listed states for this country.'),
+          else
+            const Text('No listed states for this country.'),
           const SizedBox(height: 24),
+          if (ref.watch(sessionProvider) is! SessionRegisterProfile) ...[
+            const Text(
+              'We choose a username from your first name, then your full name and phone suffix if needed. You can choose one now or change it in Settings.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('signup-username'),
+              controller: _username,
+              enabled: !_saving,
+              autocorrect: false,
+              enableSuggestions: false,
+              maxLength: 40,
+              decoration: const InputDecoration(
+                labelText: 'Username (optional)',
+                prefixText: '@',
+                hintText: 'Leave blank to choose automatically',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           PrimaryButton(
             label: _saving ? l10n.finishingSignIn : l10n.continueAction,
             loading: _saving,

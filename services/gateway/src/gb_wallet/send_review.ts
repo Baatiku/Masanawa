@@ -22,6 +22,7 @@ export interface GbSendPorts {
   readonly resolveRecipient: (
     actor: GbSendActor, username: string,
   ) => Promise<GbSendRecipient | null>;
+  readonly searchRecipients?: (actor:GbSendActor,query:string)=>Promise<readonly GbSendRecipient[]>;
   readonly balance: (actor: GbSendActor) => Promise<GbWalletSnapshot | null>;
   readonly transfer: (request: GbTransferRequest) => Promise<GbReceipt>;
   readonly readTransfer: (actor:GbSendActor,operationId:string) => Promise<GbReceipt|null>;
@@ -52,7 +53,7 @@ export class GbSendError extends Error {
 const validAccount = (text: string) =>
   /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(text);
 const validHandle = (text: string) =>
-  /^[a-z0-9_][a-z0-9_.-]{2,63}$/.test(text);
+  /^[a-z0-9_][a-z0-9_.-]{1,63}$/.test(text);
 const validNonce = (text: string) =>
   /^[A-Za-z0-9_-]{22,128}$/.test(text);
 

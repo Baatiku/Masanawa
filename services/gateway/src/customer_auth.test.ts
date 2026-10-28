@@ -470,6 +470,26 @@ describe("platform-session Agent authorization", () => {
 });
 
 describe("customer authentication", () => {
+  it('keeps OTP usable when automatic names are exhausted or a preferred name is taken',async()=>{
+    const repository=new MemorySessions();let code='';let available=false;
+    const canAllocateUsername=async()=>available;
+    Object.assign(repository,{canAllocateUsername});
+    const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),
+      otpPepper:'p'.repeat(48),emailDelivery:{async send(input){code=input.code;}}});
+    await service.sendOtp({email:'names@example.com'});
+    const details={email:'names@example.com',code,firstName:'Zainab',lastName:'Bala',contactPhone:'08031236428'};
+    await expect(service.verifyOtp(details)).rejects.toMatchObject({code:'USERNAME_CHOICE_REQUIRED'});
+    expect(repository.challenge?.consumed).toBe(false);
+    await expect(service.verifyOtp({...details,username:'zainab'})).rejects.toMatchObject({code:'USERNAME_TAKEN'});
+    expect(repository.challenge?.consumed).toBe(false);
+    await expect(service.verifyOtp({...details,username:'admin'})).rejects.toMatchObject({code:'USERNAME_INVALID'});
+    expect(repository.challenge?.consumed).toBe(false);
+    available=true;const create=repository.createProfile.bind(repository);let preferred:string|undefined;
+    repository.createProfile=async input=>{preferred=input.username;return create(input);};
+    await expect(service.verifyOtp({...details,username:'zainab.chosen'})).resolves.toMatchObject({user:{isNewUser:true}});
+    expect(preferred).toBe('zainab.chosen');expect(repository.challenge?.consumed).toBe(true);
+  });
+
   it("reports session storage outages as retryable availability failures", async () => {
     const repository = new MemorySessions();
     repository.resolveAccess = async () => { throw new Error("private database credential"); };

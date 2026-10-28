@@ -63,7 +63,9 @@ class SessionNameRequired extends SessionState {
     this.identifier,
     this.code, {
     this.message,
+    this.failureCode,
   });
+  final String? failureCode;
   final OtpChannel channel;
   final String identifier;
   final String code;
@@ -191,6 +193,7 @@ class SessionController extends Notifier<SessionState> {
     String? phone,
     String? email,
     String? name,
+    String? username,
     String? firstName,
     String? lastName,
     String? contactPhone,
@@ -210,11 +213,12 @@ class SessionController extends Notifier<SessionState> {
             phone: phone,
             email: email,
             name: name,
+            username: username,
             firstName: firstName,
             lastName: lastName,
             contactPhone: contactPhone,
-            countryIso:countryIso,
-            subdivisionIso:subdivisionIso,
+            countryIso: countryIso,
+            subdivisionIso: subdivisionIso,
           );
       await _persist(tokens);
       if (tokens.user.isNewUser && tokens.user.email != null) {
@@ -246,6 +250,7 @@ class SessionController extends Notifier<SessionState> {
           identifier,
           code,
           message: err.message,
+          failureCode: err.code,
         );
         return;
       }
@@ -366,6 +371,7 @@ class SessionController extends Notifier<SessionState> {
   /// original verified identifier; a different phone/email is not proof.
   Future<void> submitProfile({
     required String name,
+    String? username,
     String? firstName,
     String? lastName,
     String? contactPhone,
@@ -387,8 +393,11 @@ class SessionController extends Notifier<SessionState> {
               password: current.password,
               name: name,
               email: current.email,
-              firstName:firstName,lastName:lastName,contactPhone:contactPhone,
-              countryIso:countryIso,subdivisionIso:subdivisionIso,
+              firstName: firstName,
+              lastName: lastName,
+              contactPhone: contactPhone,
+              countryIso: countryIso,
+              subdivisionIso: subdivisionIso,
             );
         await _persist(tokens);
         state = SessionSignedIn(tokens.user, tokens);
@@ -402,11 +411,12 @@ class SessionController extends Notifier<SessionState> {
               ? current.identifier
               : null,
           name: name,
+          username: username,
           firstName: firstName,
           lastName: lastName,
           contactPhone: contactPhone,
-          countryIso:countryIso,
-          subdivisionIso:subdivisionIso,
+          countryIso: countryIso,
+          subdivisionIso: subdivisionIso,
         );
         return;
       }

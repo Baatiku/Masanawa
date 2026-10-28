@@ -9,7 +9,7 @@ import { registerTalkProfileRoutes } from '../talk_profile_routes.js';
 const db = new PGlite();
 const app = Fastify();
 beforeAll(async () => {
-  await db.exec('CREATE SCHEMA talks; CREATE SCHEMA identity; CREATE TABLE identity.users(tenant_id text,user_id text,state text);');
+  await db.exec('CREATE SCHEMA talks; CREATE TABLE talks.username_claims(tenant_id text,handle text,user_id text); CREATE SCHEMA identity; CREATE TABLE identity.users(tenant_id text,user_id text,state text);');
   for (const name of ['0003_talk_profiles.sql', '0009_talk_safety.sql', '0015_human_communication.sql']) {
     await db.exec(await readFile(new URL('../../../../packages/talks/migrations/' + name, import.meta.url), 'utf8'));
   }

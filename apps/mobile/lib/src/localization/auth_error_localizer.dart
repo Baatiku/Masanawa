@@ -12,11 +12,18 @@ abstract final class AuthErrorLocalizer {
     required AuthFailureStage stage,
   }) {
     return switch (code) {
+      'USERNAME_CHOICE_REQUIRED' =>
+        'Choose an available username below to finish creating your account.',
+      'USERNAME_TAKEN' =>
+        'That username is already in use. Choose another username.',
+      'USERNAME_INVALID' =>
+        'Start with a letter and use 2–40 letters, numbers, dots or underscores.',
       'OTP_INVALID' => l10n.authCodeInvalid,
       'OTP_LOCKED' => l10n.authCodeLocked,
       'OTP_EXPIRED' => l10n.authCodeExpired,
-      'OTP_RATE_LIMITED' || 'RATE_LIMITED' || 'TOO_MANY_REQUESTS' =>
-        l10n.authRateLimited,
+      'OTP_RATE_LIMITED' ||
+      'RATE_LIMITED' ||
+      'TOO_MANY_REQUESTS' => l10n.authRateLimited,
       'AUTH_UNAVAILABLE' => l10n.signInMethodsUnavailable,
       'ACCOUNT_SUSPENDED' || 'ACCOUNT_INACTIVE' =>
         'This account is suspended. Contact Masanawa support for help.',

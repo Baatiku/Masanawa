@@ -2,6 +2,7 @@ import {
   createPostgresPool,
   platformProductMigrationRoots,
   runMigrations,
+  backfillReadableUsernames,
 } from "@masanawa/postgres";
 import { readRequiredEnv } from "@masanawa/contracts";
 
@@ -21,6 +22,8 @@ const pool = createPostgresPool({
 
 try {
   const applied = await runMigrations(pool, platformProductMigrationRoots());
+  const usernames=await backfillReadableUsernames(pool);
+  process.stdout.write(JSON.stringify({event:'usernames.backfill.complete',...usernames})+'\n');
   process.stdout.write(
     `${JSON.stringify({
       event: "database.migrations.complete",

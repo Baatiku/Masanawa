@@ -1,5 +1,7 @@
 # Continue Masanawa — lightweight five-tab GB product
 
+**28 October username/Send correction:** Readable automatic usernames, private full-contact recipient search with live name/handle suggestions, and Settings username editing are implemented in the scoped username batch. See [source contract and verification](docs/USERNAME-RECIPIENT-SEARCH-20261028.md). Existing chosen names, canonical IDs, immutable money/history, blocks and moderation remain protected; deployment/new-app-build availability is separate from source acceptance.
+
 **Owner authorization, 24 October 2026.** The latest approved refactor replaces the original multi-asset Rooms/human-communication app with Masana-only Chats and Calls, Masana-authored Status, new MB Wallet and Flutterwave Data redemption. The original `Baatiku/Masanawa-App` repository is private and MUST NOT be modified. Reset commit `895e86a5` was not found on either GitHub remote; do not rewrite main history to chase it.
 
 Read `AGENTS.md`, `docs/PRODUCT-ROADMAP-20261019.md` and `docs/SCREEN-JOURNEYS.md` — these replace the former 177-screen/820-item old product. Keep this one handoff as a status checkpoint; source, exact Git SHA, tests and provider verification are independently authoritative.

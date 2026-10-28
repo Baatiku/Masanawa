@@ -1,3 +1,4 @@
+import 'username_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -87,8 +88,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _showFeedback(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _chooseSupportAgent({
@@ -463,7 +465,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       : _notificationController.loading ||
                             _notificationController.saving
                       ? 'Checking notification permission…'
-                      : _notificationController.error ?? 'Device permission; delivery also requires a connection',
+                      : _notificationController.error ??
+                            'Device permission; delivery also requires a connection',
                 ),
                 value:
                     MobilePushService.instance.configured &&
@@ -587,6 +590,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     : () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const AccountSecurityScreen(),
+                        ),
+                      ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                key: const Key('settings-username'),
+                leading: Icon(Icons.alternate_email_rounded, color: u.brand),
+                title: const Text('Username'),
+                subtitle: const Text('View or change your @username'),
+                onTap: user == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const UsernameScreen(),
                         ),
                       ),
               ),

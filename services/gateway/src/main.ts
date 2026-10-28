@@ -1,3 +1,5 @@
+import {createUsernameStore} from './usernames.js';
+import {createGbRecipientDirectory} from './gb_wallet/recipient_directory.js';
 import {flutterwaveTransportConfiguration} from "./gb_data/transport_configuration.js";
 import {reviewedMbCallRequired} from "./gb_calls/public_token_policy.js";
 import {qualifiedNgnExchange} from "./gb_wallet/ngn_qualification.js";
@@ -1862,39 +1864,8 @@ export async function startGatewayService(
         mbSendReviewSecret && Buffer.byteLength(mbSendReviewSecret, "utf8") >= 32
       ? {
           authorize: resolveFeatureFan,
-          resolveRecipient: async (actor, username) => {
-            // Server-only resolution; do not infer ownership from a display
-            // name, user-provided ID, unverified contact or human chat.
-            // Active user + mutual block + operator-safety checks are required.
-            const result = await featurePool.query<{
-              user_id: string; handle: string; display_name: string; avatar_url:string|null;
-            }>(`
-              SELECT p.user_id,p.handle,p.display_name,p.avatar_url
-              FROM talks.public_profiles p
-              JOIN identity.users u
-                ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id
-              WHERE p.tenant_id=$1 AND p.handle=$3
-                AND u.state='active' AND p.user_id <> $2
-                AND NOT EXISTS (
-                  SELECT 1 FROM talks.safety_preferences b
-                  WHERE b.tenant_id=p.tenant_id AND b.blocked=true
-                    AND ((b.viewer_user_id=$2 AND b.subject_user_id=p.user_id)
-                      OR (b.subject_user_id=$2 AND b.viewer_user_id=p.user_id))
-                )
-                AND NOT EXISTS (
-                  SELECT 1 FROM talks.safety_enforcement se
-                  WHERE se.tenant_id=p.tenant_id
-                    AND se.target_kind='profile' AND se.target_id=p.handle
-                    AND se.visibility IN ('restricted','blocked')
-                )
-              LIMIT 1
-            `, [actor.tenantId,actor.userId,username]);
-            const row = result.rows[0];
-            return row ? {
-              userId: row.user_id, username: row.handle,
-              displayName: row.display_name, active: true,avatarUrl:row.avatar_url,
-            } : null;
-          },
+          resolveRecipient: createGbRecipientDirectory(featurePool).resolve,
+          searchRecipients: createGbRecipientDirectory(featurePool).search,
           balance: createPostgresGbWalletRepository(featurePool).read,
           transfer: createPostgresGbWalletRepository(featurePool).transfer,
           readTransfer: createPostgresGbWalletRepository(featurePool).readTransfer,
@@ -2117,6 +2088,7 @@ export async function startGatewayService(
         : {}),
       ...(accountDeletion ? { accountDeletion } : {}),
       ...(composedTalkProfiles ? { talkProfiles: composedTalkProfiles } : {}),
+      ...(featurePool&&sessions&&featureTenant?{usernames:{authorize:resolveFeatureFan,...createUsernameStore(featurePool)}}:{}),
       ...(composedTalkSafety ? { talkSafety: composedTalkSafety } : {}),
       ...(composedBillingFinancial ? { billingFinancial: composedBillingFinancial } : {}),
       ...(composedBillingCheckout ? { billingCheckout: composedBillingCheckout } : {}),

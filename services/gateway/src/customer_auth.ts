@@ -4,6 +4,7 @@ import {parseSignupContact,SignupContactError} from './signup_contact.js';
 export { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 import {
   createOtpCode,
+  normalizeUsername,
   hashDevicePassword,
   hashOtpCode,
   hashPlatformSessionToken,
@@ -85,6 +86,7 @@ export interface CustomerAuthService {
     email?: string;
     code: string;
     name?: string;
+    username?:string;
     firstName?: string;
     lastName?: string;
     contactPhone?: string;
@@ -458,6 +460,17 @@ export function createCustomerAuthService(input: Readonly<{
          !contact))
         throw new CustomerAuthError("SIGNUP_DETAILS_REQUIRED",400);
 
+      let requestedUsername:string|undefined;
+      if(!profile&&request.username!==undefined){
+        try{requestedUsername=normalizeUsername(request.username);}catch{throw new CustomerAuthError('USERNAME_INVALID',400);}
+      }
+      if(!profile&&input.repository.canAllocateUsername&&
+        !await input.repository.canAllocateUsername({tenantId:input.tenantId,name:name!,
+          ...(firstName?{firstName}:{}),...(lastName?{lastName}:{}),
+          ...(contact?{contactPhone:contact.contactPhone}:{}),
+          ...(requestedUsername?{username:requestedUsername}:{})}))
+        throw new CustomerAuthError(requestedUsername?'USERNAME_TAKEN':'USERNAME_CHOICE_REQUIRED',409);
+
       // Consume atomically only when this request can actually complete sign-in.
       const consumed = await input.repository.consumeOtpChallenge({
         tenantId: input.tenantId,
@@ -477,15 +490,20 @@ export function createCustomerAuthService(input: Readonly<{
           })
         : false;
       if (!profile) {
-        profile = await input.repository.createProfile({
+        try{profile = await input.repository.createProfile({
           tenantId: input.tenantId,
           channel: normalized.channel,
           identifier: normalized.identifier,
           name: name!,
+          ...(requestedUsername?{username:requestedUsername}:{}),
           ...(firstName&&lastName&&contact?{firstName,lastName,...contact}:{}),
           locale: "en-NG",
           createdAt: verifiedAt,
-        });
+        });}catch(error){
+          if(error instanceof TypeError&&['username.taken','username.choice_required'].includes(error.message))
+            throw new CustomerAuthError(error.message==='username.taken'?'USERNAME_TAKEN':'USERNAME_CHOICE_REQUIRED',409);
+          throw error;
+        }
       }
       const tokens=await issueTokens(
         Object.freeze({ tenantId: profile.tenantId, userId: profile.userId, profile }),
