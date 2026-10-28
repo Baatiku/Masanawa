@@ -38,7 +38,7 @@ describe('SPE-B14 guarded Masana editorial vs temporary human-funded Boost',()=>
    await db.exec(sql('../../../../../packages/feed/migrations/'+name));
   for(const name of ['0010_promotion_rejection_appeals.sql',
    '0011_promotion_budget_immutability.sql','0012_reviewed_paid_post_edits.sql',
-   '0013_campaign_drafts_and_expiry.sql','0014_paid_image_uploads.sql','0015_paid_policy_review_evidence.sql'])
+   '0013_campaign_drafts_and_expiry.sql','0014_paid_image_uploads.sql','0015_paid_policy_review_evidence.sql','0016_extension_quotes_and_reports.sql'])
    await db.exec(sql('../../../../../packages/feed/migrations/'+name));
   for(const user of ['booster','sharer','viewerone','viewertwo','viewerthree','viewerfour']){
    await query(`INSERT INTO identity.users VALUES($1,$2,'active')`,[tenant,user]);
