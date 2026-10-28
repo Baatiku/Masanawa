@@ -1,7 +1,8 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
+import {reviewedPromotionDestination} from './promotion_destination.js';
 
 export interface PromotionPort {
- quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}):Promise<unknown>;
+ quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
  review(t:string,editor:string,id:string,approved:boolean,reason?:string):Promise<unknown>;
@@ -54,14 +55,18 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  };
  app.post('/v1/promotions/quotes',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r),b=body(r);
-  fields(b,['postId','body','targetViews']);
+  fields(b,['postId','body','targetViews','destinationUrl']);
   if(typeof b.targetViews!=='number'||!Number.isSafeInteger(b.targetViews)||
     (b.postId!==undefined&&typeof b.postId!=='string')||
     (b.body!==undefined&&typeof b.body!=='string'))fail('invalid_quote');
+  let destinationUrl:string|null;
+  try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}catch{fail('invalid_promotion_destination');}
+  if(b.postId!==undefined&&destinationUrl!==null)fail('boost_cannot_edit_post');
   return options.port.quote({tenantId:p.tenantId,sponsorId:p.userId,
    targetViews:b.targetViews as number,
    ...(typeof b.postId==='string'?{postId:b.postId}:{}),
-   ...(typeof b.body==='string'?{body:b.body}:{})});
+   ...(typeof b.body==='string'?{body:b.body}:{}),
+   ...(destinationUrl!==null?{destinationUrl}:{}),});
  });
  app.post('/v1/promotions/quotes/:quoteId/confirm',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);
