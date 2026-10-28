@@ -908,4 +908,67 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    .toEqual(expect.arrayContaining([expect.objectContaining({media_id:original})]));
  });
 
+
+ it('requires a fresh sponsor quote and independent confirmation for extra view budgets',async()=>{
+  await account('extendowner',13);
+  const originalQuote=await service.quote({tenantId:t,sponsorId:'extendowner',
+   body:'Approved original with immutable funded target',targetViews:2});
+  const original=await service.confirm(t,'extendowner',originalQuote.quoteId,'extension-primary-001');
+  await service.review(t,'independent_editor',original.id,true,'Original creative reviewed');
+  const next=await service.extensionQuote(t,'extendowner',original.id,4,'extension-original-001');
+  const repeated=await service.extensionQuote(t,'extendowner',original.id,4,'extension-original-001');
+  expect(next.quoteId).toBe(repeated.quoteId);
+  await expect(service.extensionQuote(t,'extendowner',original.id,5,'extension-original-001'))
+    .rejects.toMatchObject({code:'idempotency_conflict'});
+  await expect(service.extensionQuote(t,'sharer',original.id,4,'extension-forged-owner-001'))
+    .rejects.toMatchObject({code:'campaign_not_found'});
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:2});
+  const extra=await service.confirm(t,'extendowner',next.quoteId,'extension-confirm-001');
+  expect(extra).toMatchObject({kind:'boost',targetViews:4,state:'active',
+   postId:original.postId});
+  expect((await service.receipt(t,'extendowner',originalQuote.quoteId)).campaign)
+    .toMatchObject({targetViews:2,remainingViews:2});
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:6});
+  await service.cancel(t,'extendowner',extra.id);
+  await service.cancel(t,'extendowner',original.id);
+  expect(await balance('extendowner')).toMatchObject({purchased:13,reserved:0});
+ });
+ it('treats reports as staff decisions and blocks payable view challenges across a profile block',async()=>{
+  await account('reportowner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'reportowner',
+   body:'Reported claims needing a separate human review',targetViews:3});
+  const c=await service.confirm(t,'reportowner',q.quoteId,'report-primary-001');
+  await service.review(t,'reviewer_other',c.id,true,'Initial copy approved');
+  const ch=await service.beginView(t,'viewerone',c.postId);
+  await query(`INSERT INTO talks.safety_preferences
+   (tenant_id,viewer_user_id,subject_user_id,blocked)
+   VALUES($1,'viewerone','reportowner',true)`,[t]);
+  await query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '8 seconds'
+    WHERE tenant_id=$1 AND id=$2`,[t,ch.challengeId]);
+  await expect(service.finishView(t,'viewerone',ch.challengeId,
+   {visibleFraction:0.8,foreground:true,engaged:true}))
+    .rejects.toMatchObject({code:'post_unavailable'});
+  await expect(service.beginView(t,'viewerone',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
+  expect(await balance('reportowner')).toMatchObject({purchased:10,reserved:3});
+  const report=await service.reportPost(t,'viewerone',c.postId,
+   'Suspected inaccurate commercial content');
+  const again=await service.reportPost(t,'viewerone',c.postId,
+   'Suspected inaccurate commercial content');
+  expect(again).toMatchObject({reportId:report.reportId,alreadySubmitted:true});
+  expect((await service.adminReports(t,'independent_editor')).pending)
+   .toEqual(expect.arrayContaining([
+    expect.objectContaining({reportId:report.reportId,postId:c.postId})]));
+  await expect(service.resolveReport(t,'viewerone',report.reportId,true,
+   'Self review attempted')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const resolved=await service.resolveReport(t,'independent_editor',report.reportId,true,
+   'Unsafe paid content, remove and refund');
+  expect(resolved.state).toBe('removed');
+  expect(await balance('reportowner')).toMatchObject({purchased:10,reserved:0});
+  await expect(service.beginView(t,'viewertwo',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
+  expect((await service.receipt(t,'reportowner',q.quoteId)).campaign)
+   .toMatchObject({state:'cancelled'});
+ });
+
 });
