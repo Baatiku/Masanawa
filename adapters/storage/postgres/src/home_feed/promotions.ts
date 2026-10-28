@@ -97,7 +97,7 @@ export class PgStatusPromotions {
    fail('invalid_view_target');
   const isBoost=input.postId!==undefined;
   if(isBoost)identifier(input.postId!);
-  let destinationUrl:string|null;
+  let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}catch{fail('invalid_promotion_destination');}
   if(isBoost&&destinationUrl!==null)fail('boost_cannot_edit_post');
   const body=input.body?.trim();
