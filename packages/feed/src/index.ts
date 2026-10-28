@@ -6,7 +6,7 @@ export const reactionKinds:readonly ReactionKind[] = ["like","love","care","haha
 
 export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; permissions?:readonly string[]; approved?:boolean};
 export interface Post {id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean;
- verifiedViewCount?:number;promotionDeliveredViews?:number;promotionActive?:boolean;shareEarnEligible?:boolean;boostEligible?:boolean;
+ verifiedViewCount?:number;promotionDeliveredViews?:number;promotionActive?:boolean;destinationUrl?:string|null;shareEarnEligible?:boolean;boostEligible?:boolean;
  viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>;
  author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible";createdAt:string;parentId?:string|null;
