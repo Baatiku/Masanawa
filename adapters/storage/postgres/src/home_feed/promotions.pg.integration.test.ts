@@ -28,6 +28,7 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
    '../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql',
    '../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql',
    '../../../../../packages/feed/migrations/0010_promotion_rejection_appeals.sql',
+   '../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql',
   ])await db.query(sql(file));
   service=new PgStatusPromotions(db,'race-test-secret-with-40-characters-minimum','https://status.example.org');
   for(const id of ['publisher','viewer_a','viewer_b']){
