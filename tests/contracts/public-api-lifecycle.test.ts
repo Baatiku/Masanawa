@@ -210,9 +210,12 @@ describe("public API lifecycle", () => {
     const offenders: string[] = [];
 
     // One canonical HTML document URL for Android App Links and public
-    // OpenGraph previews; never widen the compatibility prefixes for APIs.
+    // OpenGraph previews, plus its same-origin vetted-image asset route.
+    // Never widen the compatibility prefixes for JSON or mutating APIs.
     expect(lifecycle.http.compatibilityUnversionedPaths.filter(path =>
-      path.startsWith('/status'))).toEqual(['/status/:postId']);
+      path.startsWith('/status'))).toEqual([
+      '/status/:postId','/status/:postId/image/:mediaId',
+    ]);
 
     for (const file of sourceFiles(path.resolve("services")).filter(file=>!/\.(?:test|spec)\./u.test(file))) {
       const source = fs.readFileSync(file, "utf8");
