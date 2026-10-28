@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 import 'package:masanawa/src/core/providers.dart';
+import 'package:masanawa/src/localization/masanawa_localization.dart';
+import 'package:masanawa/src/theme/masanawa_theme.dart';
 import 'package:masanawa/src/screens/settings/account_contact_region_screen.dart';
 import 'package:masanawa/src/state/session_state.dart';
 
@@ -48,7 +50,11 @@ void main() {
     await tester.pumpWidget(ProviderScope(overrides: [
       sessionProvider.overrideWith(_Session.new),
       apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
-    ], child: MaterialApp(home: Scaffold(body: Builder(builder: (context) =>
+    ], child: MaterialApp(
+      theme: buildMasanawaTheme(brightness: Brightness.light),
+      supportedLocales: MasanawaLocalization.supportedLocales,
+      localizationsDelegates: MasanawaLocalization.delegates,
+      home: Scaffold(body: Builder(builder: (context) =>
       ElevatedButton(onPressed: () => Navigator.of(context).push<void>(
         MaterialPageRoute(builder: (_) => const AccountContactRegionScreen())),
         child: const Text('Open private details')))))));
