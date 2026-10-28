@@ -6,8 +6,9 @@ the summary's purchased-available and restricted-welcome MB separate and,
 where the Gateway supplies both fields, labels purchased and welcome holds
 individually. Older projections show only the authoritative combined reserved
 amount, never an invented split. The account-scoped, retryable Promotions read
-adds a separately labeled sponsor-campaign reserved total and exact pending
-half-MB Sharing Earnings total; both are **receipt projections**, not additions
+adds separately labeled sponsor-campaign reserved and pending half-MB Sharing
+Earnings subtotals from its bounded recent records; both are **receipt
+projections**, not all-time ledger totals or additions
 to the available balance. A failed/unavailable Promotions read leaves verified
 wallet funds untouched. No reward is marked released/redeemable without a
 separate authoritative settlement read. Wallet Activity continues showing

@@ -492,12 +492,12 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
             const Text('Review-only campaign activity. Reserved MB is not spent; '
               'pending referral earnings are not redeemable or included in your balance.'),
             ListTile(key:const ValueKey('wallet-pending-sharing-total'),
-              title:const Text('Sharing earnings · pending'),
+              title:const Text('Sharing earnings · pending shown'),
               subtitle:const Text('Across the available private earning records. '
                 'Not released, spendable or redeemable.'),
               trailing:Text(promotionJournal.pendingEarnedLabel)),
             ListTile(key:const ValueKey('wallet-campaign-reserved-total'),
-              title:const Text('Campaign budget still reserved'),
+              title:const Text('Campaign budget reserved · shown'),
               subtitle:const Text('Sponsor receipt projection; not a posted payment.'),
               trailing:Text('${groupedMb(promotionJournal.reservedCampaignMb)} MB')),
             ...[

@@ -186,19 +186,20 @@ class _PromotionBalanceDetails extends ConsumerWidget {
     );
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Divider(),
-      _BalanceBreakdown('Campaign MB reserved · sponsor receipts',
+      _BalanceBreakdown('Campaign MB reserved · loaded receipts',
         journal.reservedCampaignMb),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: Row(children: [
-          const Expanded(child: Text('Sharing earnings · pending')),
+          const Expanded(child: Text('Sharing earnings · pending shown')),
           const SizedBox(width: 12),
           Text(journal.pendingEarnedLabel,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         ])),
       const Padding(padding: EdgeInsets.symmetric(horizontal: 8),
-        child: Text('Campaign reservations are a separate receipt projection, '
-          'not an additional balance. Pending half-MB earnings cannot be sent '
-          'or redeemed. Released rewards are not reported by this view.')),
+        child: Text('These figures cover up to 100 recent campaigns and 100 '
+          'earning groups, not an all-time ledger total. Campaign reservations '
+          'are not an additional balance; pending half-MB earnings cannot be '
+          'sent or redeemed. Released rewards are not reported here.')),
     ]);
   }
 }

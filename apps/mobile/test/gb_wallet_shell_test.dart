@@ -123,7 +123,7 @@ void main() {
     expect(find.text('25 MB'), findsOneWidget);
     expect(find.text('Purchased available'), findsOneWidget);
     expect(find.text('Welcome · restricted'), findsOneWidget);
-    expect(find.text('Campaign MB reserved · sponsor receipts'), findsOneWidget);
+    expect(find.text('Campaign MB reserved · loaded receipts'), findsOneWidget);
     expect(find.text('15 MB'), findsOneWidget);
     expect(find.text('1.5 MB'), findsOneWidget);
     expect(find.text('Exact MB balance unavailable'), findsNothing);
