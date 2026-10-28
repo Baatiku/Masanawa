@@ -70,6 +70,9 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/feed/migrations/0007_paid_promotions.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0010_promotion_rejection_appeals.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0011_promotion_budget_immutability.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0012_reviewed_paid_post_edits.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -588,4 +591,149 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await expect(service.pruneExpiredViewChallenges(501))
    .rejects.toMatchObject({code:'invalid_limit'});
  });
+ it('quotes a reviewed HTTPS CTA and records its immutable moderation snapshot',async()=>{
+  await account('advertiser',15);
+  await expect(service.quote({tenantId:t,sponsorId:'advertiser',body:'Message',
+    targetViews:2,destinationUrl:'http://example.org'}))
+   .rejects.toMatchObject({code:'invalid_promotion_destination'});
+  const q=await service.quote({tenantId:t,sponsorId:'advertiser',
+   body:'Visit for details',targetViews:3,destinationUrl:'https://example.org/details'});
+  const stored=(await query(`SELECT destination_url FROM feed.promotion_quotes WHERE id=$1`,
+   [q.quoteId])).rows[0] as {destination_url:string};
+  expect(stored.destination_url).toBe('https://example.org/details');
+  const campaign=await service.confirm(t,'advertiser',q.quoteId,'advertiser-cta-001');
+  expect(campaign.state).toBe('pending_review');
+  const queue=await service.adminQueue(t,'distincteditor');
+  expect(queue.pending).toEqual(expect.arrayContaining([
+   expect.objectContaining({campaignId:campaign.id,
+    destinationUrl:'https://example.org/details'})
+  ]));
+  await service.review(t,'distincteditor',campaign.id,true,'Verified public CTA');
+  const audit=(await query(`SELECT details FROM feed.promotion_audit
+    WHERE tenant_id=$1 AND campaign_id=$2 AND action='approved'`,
+    [t,campaign.id])).rows[0] as {details:{destinationUrl:string;bodySha256:string}};
+  expect(audit.details.destinationUrl).toBe('https://example.org/details');
+  expect(audit.details.bodySha256).toMatch(/^[0-9a-f]{64}$/);
+  expect((await service.receipt(t,'advertiser',q.quoteId)).campaign)
+   .toMatchObject({id:campaign.id,state:'active'});
+  expect(await balance('advertiser')).toEqual({purchased:15,reserved:3,welcome:500});
+ });
+
+ it('retains rejected campaign appeals without replaying refunds or self-approval',async()=>{
+  await account('appealing_owner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'appealing_owner',
+   body:'Appealable human campaign',targetViews:4});
+  const campaign=await service.confirm(t,'appealing_owner',q.quoteId,'appeal-original-001');
+  await service.review(t,'different_editor',campaign.id,false,'Needs documentary evidence');
+  expect(await balance('appealing_owner')).toMatchObject({purchased:10,reserved:0});
+  await expect(service.appeal(t,'sharer',campaign.id,'Try to impersonate this owner'))
+   .rejects.toMatchObject({code:'campaign_not_found'});
+  const appeal=await service.appeal(t,'appealing_owner',campaign.id,
+   'I can supply the documentary evidence');
+  expect(appeal).toMatchObject({state:'pending',alreadySubmitted:false});
+  const repeated=await service.appeal(t,'appealing_owner',campaign.id,
+   'Different text must not duplicate the pending appeal');
+  expect(repeated).toMatchObject({appealId:appeal.appealId,alreadySubmitted:true});
+  expect((await service.myAppeals(t,'appealing_owner')).appeals)
+   .toEqual(expect.arrayContaining([
+     expect.objectContaining({appealId:appeal.appealId,state:'pending'})
+   ]));
+  expect((await service.adminAppeals(t,'independent_editor')).pending)
+   .toEqual(expect.arrayContaining([
+     expect.objectContaining({appealId:appeal.appealId,ownerId:'appealing_owner'})
+   ]));
+  await expect(service.resolveAppeal(t,'appealing_owner',appeal.appealId,
+   true,'Approval after response')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const resolved=await service.resolveAppeal(t,'independent_editor',appeal.appealId,
+   true,'Reviewed evidence, may resubmit');
+  expect(resolved).toMatchObject({state:'accepted',campaignReactivated:false});
+  expect((await service.myAppeals(t,'appealing_owner')).appeals[0])
+   .toMatchObject({state:'accepted',resolutionReason:'Reviewed evidence, may resubmit'});
+  await expect(service.resolveAppeal(t,'independent_editor',appeal.appealId,
+   true,'No second decision')).rejects.toMatchObject({code:'appeal_already_resolved'});
+  expect((await service.receipt(t,'appealing_owner',q.quoteId)).campaign)
+   .toMatchObject({state:'rejected'});
+  expect(await balance('appealing_owner')).toMatchObject({purchased:10,reserved:0});
+ });
+
+ it('forbids changes to quoted or reserved campaign economics at SQL level',async()=>{
+  await account('immutability_owner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'immutability_owner',
+   body:'Immutable price and view target',targetViews:2});
+  const c=await service.confirm(t,'immutability_owner',q.quoteId,'immutable-quote-001');
+  await expect(query(`UPDATE feed.promotion_quotes SET target_views=3 WHERE id=$1`,
+   [q.quoteId])).rejects.toThrow(/immutable/i);
+  await expect(query(`DELETE FROM feed.promotion_quotes WHERE id=$1`,
+   [q.quoteId])).rejects.toThrow(/immutable/i);
+  await expect(query(`UPDATE feed.promotion_campaigns SET sponsor_id='someone_else'
+    WHERE id=$1`,[c.id])).rejects.toThrow(/economics/i);
+  await expect(query(`UPDATE feed.promotion_campaigns SET target_views=3,remaining_views=3
+    WHERE id=$1`,[c.id])).rejects.toThrow(/economics/i);
+  await expect(query(`DELETE FROM feed.promotion_campaigns WHERE id=$1`,
+   [c.id])).rejects.toThrow(/immutable/i);
+  expect((await service.receipt(t,'immutability_owner',q.quoteId)).campaign)
+   .toMatchObject({targetViews:2,remainingViews:2,priceVersion:'2026-10-27:1MB'});
+ });
+
+ it('stages edits privately and changes only independently approved copy without MB debit',async()=>{
+  await account('editing_owner',12);
+  const quote=await service.quote({tenantId:t,sponsorId:'editing_owner',
+   body:'Original approved text',targetViews:4,destinationUrl:'https://example.org/original'});
+  const c=await service.confirm(t,'editing_owner',quote.quoteId,'editing-original-001');
+  await service.review(t,'moderator_one',c.id,true,'Original text and link reviewed');
+  const first=await query(`SELECT body,paid_reviewed_destination_url,
+    paid_content_revision FROM feed.posts WHERE id=$1`,[c.postId]);
+  expect(first.rows[0]).toMatchObject({body:'Original approved text',
+   paid_reviewed_destination_url:'https://example.org/original',paid_content_revision:0});
+  const edit=await service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Revised text after review',
+   destinationUrl:'https://example.org/revised',idempotencyKey:'editing-request-001'});
+  expect(edit.state).toBe('pending');
+  expect((await query(`SELECT body,paid_reviewed_destination_url
+    FROM feed.posts WHERE id=$1`,[c.postId])).rows[0]).toMatchObject({
+     body:'Original approved text',paid_reviewed_destination_url:'https://example.org/original'});
+  expect((await service.myEdits(t,'editing_owner')).edits).toEqual(expect.arrayContaining([
+   expect.objectContaining({proposalId:edit.proposalId,state:'pending'})
+  ]));
+  expect((await service.adminEdits(t,'moderator_two')).pending).toEqual(expect.arrayContaining([
+   expect.objectContaining({proposalId:edit.proposalId,ownerId:'editing_owner'})
+  ]));
+  await expect(service.reviewEdit(t,'editing_owner',edit.proposalId,true,'Self approve'))
+   .rejects.toMatchObject({code:'separate_reviewer_required'});
+  const decided=await service.reviewEdit(t,'moderator_two',edit.proposalId,
+   true,'Content and destination approved');
+  expect(decided).toMatchObject({state:'approved',newRevision:1});
+  expect((await query(`SELECT body,paid_reviewed_destination_url,
+    paid_content_revision FROM feed.posts WHERE id=$1`,[c.postId])).rows[0])
+   .toMatchObject({body:'Revised text after review',
+    paid_reviewed_destination_url:'https://example.org/revised',paid_content_revision:1});
+  expect((await service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Revised text after review',
+   destinationUrl:'https://example.org/revised',idempotencyKey:'editing-request-001'})).proposalId)
+   .toBe(edit.proposalId);
+  await expect(service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Stale revision',idempotencyKey:'editing-request-002'}))
+    .rejects.toMatchObject({code:'stale_post_revision'});
+  expect(await balance('editing_owner')).toMatchObject({purchased:12,reserved:4});
+  expect((await service.receipt(t,'editing_owner',quote.quoteId)).campaign)
+   .toMatchObject({targetViews:4,remainingViews:4,state:'active'});
+ });
+
+ it('keeps original no-CTA campaign fingerprints replay-compatible',async()=>{
+  await account('legacy_quote_user',5);
+  const q=await service.quote({tenantId:t,sponsorId:'legacy_quote_user',
+    body:'Historic promotion without CTA',targetViews:2});
+  const c=await service.confirm(t,'legacy_quote_user',q.quoteId,'legacy-no-cta-001');
+  const oldFingerprint=createHash('sha256').update(JSON.stringify([
+   q.quoteId,'legacy_quote_user','human_primary',null,
+   'Historic promotion without CTA',2
+  ])).digest('hex');
+  const saved=await query(`SELECT fingerprint FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2`,[t,c.id]);
+  expect(saved.rows[0]).toMatchObject({fingerprint:oldFingerprint});
+  expect(await service.confirm(t,'legacy_quote_user',q.quoteId,'legacy-no-cta-001'))
+   .toEqual(c);
+  expect(await balance('legacy_quote_user')).toMatchObject({purchased:5,reserved:2});
+ });
+
 });

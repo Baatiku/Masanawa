@@ -54,6 +54,9 @@ describe('SPE-A13/A14/B15/B17/E09/E10: overlapping sponsors and editorial safety
   await db.exec(migration('../../../../../packages/feed/migrations/0007_paid_promotions.sql'));
   await db.exec(migration('../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql'));
   await db.exec(migration('../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql'));
+  for(const name of ['0010_promotion_rejection_appeals.sql',
+   '0011_promotion_budget_immutability.sql','0012_reviewed_paid_post_edits.sql'])
+   await db.exec(migration('../../../../../packages/feed/migrations/'+name));
   promotions=new PgStatusPromotions(
    {query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool,
    'multi-sponsor-test-key-with-more-than-thirty-two-bytes',

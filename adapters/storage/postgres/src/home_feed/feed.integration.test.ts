@@ -48,6 +48,13 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(humanMigration); // historic Masana IDs retained and idempotent
   await pool.query(readFileSync(new URL("../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql",import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0007_paid_promotions.sql",import.meta.url),"utf8"));
+  // The real PostgreSQL feed integration fixture must mirror every active
+  // forward-only paid promotion migration before querying reviewed CTA fields.
+  for(const name of [
+   "0008_paid_media_deletion_outbox.sql","0009_view_challenge_abuse_index.sql",
+   "0010_promotion_rejection_appeals.sql","0011_promotion_budget_immutability.sql",
+   "0012_reviewed_paid_post_edits.sql",
+  ])await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/"+name,import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -213,6 +220,27 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect(post.rows[0]).toEqual({state:'hidden',grace_seconds:259200});
   await expect(payments.beginView(t,'viewer_a',original.postId))
    .rejects.toMatchObject({code:'post_not_found'});
+ });
+ it('reveals reviewed campaign CTA only after approval and only with eligible public post',async()=>{
+  const pool=isolated.pool;
+  const paid=new PgStatusPromotions(pool,'long-test-secret-for-real-postgres-qualified-home',
+   'https://status.example.test');
+  const q=await paid.quote({tenantId:'tenant_test',sponsorId:'fan_one',
+   body:'Reviewed destination content',targetViews:1,destinationUrl:'https://example.org/resources'});
+  const c=await paid.confirm('tenant_test','fan_one',q.quoteId,'original-cta-home-0001');
+  const mixed=new FeedService(repo,async()=>true,async()=>false,false);
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
+  await paid.review('tenant_test','distinct_staff',c.id,true,'External destination inspected');
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([
+      expect.objectContaining({id:c.postId,destinationUrl:'https://example.org/resources'})
+    ]);
+  expect((await mixed.list('tenant_other','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
+  await paid.cancel('tenant_test','fan_one',c.id);
+  expect((await mixed.list('tenant_test','fan_other','for_you',undefined,undefined,
+    'Reviewed destination content')).items).toEqual([]);
  });
  it("following uses the authoritative masana.follows table",async()=>{
   await isolated.pool.query("INSERT INTO masana.follows(tenant_id,fan_user_id,character_id) VALUES($1,$2,$3)",["tenant_test","fan_one","masana_one"]);
