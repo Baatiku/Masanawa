@@ -643,7 +643,7 @@ export class PgStatusPromotions {
  /** Stage owner copy/destination edits; the approved live version is unchanged
   * until an independent reviewer accepts a matching revision. */
  async proposeEdit(t:string,owner:string,postId:string,input:{
-  expectedRevision:number;body:string;destinationUrl?:string;idempotencyKey:string;
+  expectedRevision:number;body:string;destinationUrl?:string;mediaIds?:readonly string[];idempotencyKey:string;
  }){
   actor(t,owner);identifier(postId);
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||
@@ -653,15 +653,20 @@ export class PgStatusPromotions {
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
-  const fingerprint=hash(JSON.stringify([postId,input.expectedRevision,body,destinationUrl]));
+  const mediaIds=input.mediaIds??null;
+  if(mediaIds!==null&&(!Array.isArray(mediaIds)||mediaIds.length>10||
+   new Set(mediaIds).size!==mediaIds.length||
+   mediaIds.some(x=>typeof x!=='string'||!uuid.test(x))))fail('invalid_paid_image_ids');
+  const fingerprint=hash(JSON.stringify([postId,input.expectedRevision,body,destinationUrl,
+   ...(mediaIds===null?[]:[mediaIds])]));
   return serial(this.pool,async c=>{
    const result=await c.query(`SELECT id,kind,body,author_user_id,paid_content_revision,
-    paid_reviewed_destination_url FROM feed.posts WHERE tenant_id=$1 AND id=$2
+    paid_reviewed_destination_url,media_ids FROM feed.posts WHERE tenant_id=$1 AND id=$2
     AND author_type='human' AND author_user_id=$3 AND state='published'
     AND paid_purged_at IS NULL FOR UPDATE`,[t,postId,owner]);
    const p=result.rows[0];
    if(!p)fail('post_not_editable',404);
-   if(p.kind!=='text')fail('paid_image_edit_requires_media_review',409);
+   if(p.kind!=='text'&&p.kind!=='image')fail('post_not_editable',409);
    const previous=await c.query(`SELECT id,state,request_sha256
     FROM feed.promotion_edit_proposals WHERE tenant_id=$1 AND owner_id=$2
      AND idempotency_key=$3`,[t,owner,input.idempotencyKey]);
@@ -675,19 +680,40 @@ export class PgStatusPromotions {
      WHERE tenant_id=$1 AND post_id=$2 AND kind='human_primary'
       AND reviewed_at IS NOT NULL AND state<>'rejected'`,[t,postId]);
    if(!original.rowCount)fail('approved_primary_required',403);
-   if(p.body===body&&(p.paid_reviewed_destination_url??null)===destinationUrl)
-    fail('edit_has_no_changes');
+   const previousMedia=Array.isArray(p.media_ids)?p.media_ids as string[]:[];
+   const desiredMedia=mediaIds??previousMedia;
+   if(p.body===body&&(p.paid_reviewed_destination_url??null)===destinationUrl&&
+    JSON.stringify(desiredMedia)===JSON.stringify(previousMedia))fail('edit_has_no_changes');
+   if(mediaIds!==null){
+    const newIds=mediaIds.filter(id=>!previousMedia.includes(id));
+    if(newIds.length){
+     const ready=await c.query(`SELECT id FROM feed.paid_image_uploads
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND state='ready' AND post_id IS NULL FOR UPDATE`,[t,owner,newIds]);
+     if(ready.rows.length!==newIds.length)fail('paid_image_not_owned_or_ready',403);
+     await c.query(`UPDATE feed.paid_image_uploads SET post_id=$4
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND post_id IS NULL`,[t,owner,newIds,postId]);
+     await c.query(`INSERT INTO feed.paid_post_media_objects
+       (tenant_id,post_id,media_id,object_key,review_state)
+       SELECT tenant_id,post_id,id,object_key,'pending'
+       FROM feed.paid_image_uploads
+       WHERE tenant_id=$1 AND post_id=$2 AND id::text=ANY($3::text[])`,
+       [t,postId,newIds]);
+    }
+   }
    const already=await c.query(`SELECT 1 FROM feed.promotion_edit_proposals
      WHERE tenant_id=$1 AND post_id=$2 AND state='pending'`,[t,postId]);
    if(already.rowCount)fail('edit_review_already_pending',409);
    const inserted=await c.query(`INSERT INTO feed.promotion_edit_proposals
     (tenant_id,post_id,owner_id,original_revision,idempotency_key,
-      request_sha256,proposed_body,proposed_destination_url)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      request_sha256,proposed_body,proposed_destination_url,proposed_media_ids)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
     [t,postId,owner,input.expectedRevision,input.idempotencyKey,
-     fingerprint,body,destinationUrl]);
+     fingerprint,body,destinationUrl,mediaIds]);
    await this.audit(c,t,postId,owner,'paid_edit_submitted',null,
-    {proposalId:String(inserted.rows[0]!.id),originalRevision:input.expectedRevision});
+    {proposalId:String(inserted.rows[0]!.id),originalRevision:input.expectedRevision,
+     proposedMediaIds:mediaIds});
    return {proposalId:String(inserted.rows[0]!.id),state:'pending',
     alreadySubmitted:false};
   });
@@ -722,16 +748,43 @@ export class PgStatusPromotions {
    const edit=(r.rows[0] as Row|undefined)??fail('edit_proposal_not_found',404);
    if(edit.owner_id===editor)fail('separate_reviewer_required',403);
    if(edit.state!=='pending')fail('edit_already_reviewed',409);
+   const proposedMedia=Array.isArray(edit.proposed_media_ids)?edit.proposed_media_ids as string[]:null;
    if(approve){
-    const p=await c.query(`UPDATE feed.posts SET body=$4,
+    if(proposedMedia?.length){
+     const check=await c.query(`SELECT count(*)::int AS accepted
+       FROM feed.paid_post_media_objects o
+       JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+       WHERE o.tenant_id=$1 AND o.post_id=$2
+        AND o.media_id::text=ANY($3::text[])
+        AND o.review_state='approved' AND u.state='ready'`,
+       [t,edit.post_id,proposedMedia]);
+     if(Number(check.rows[0]?.accepted)!==proposedMedia.length)
+      fail('paid_media_not_approved',409);
+    }
+    const previous=await c.query(`SELECT media_ids FROM feed.posts
+       WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,edit.post_id]);
+    const oldMedia=Array.isArray(previous.rows[0]?.media_ids)?
+      previous.rows[0]!.media_ids as string[]:[];
+    const updated=await c.query(`UPDATE feed.posts SET body=$4,
       paid_reviewed_destination_url=$5,
+      kind=CASE WHEN $6::text[] IS NULL THEN kind
+         WHEN cardinality($6::text[])=0 THEN 'text' ELSE 'image' END,
+      media_ids=COALESCE($6::text[],media_ids),
       paid_content_revision=paid_content_revision+1
       WHERE tenant_id=$1 AND id=$2 AND author_type='human' AND state='published'
        AND paid_purged_at IS NULL AND paid_content_revision=$3
       RETURNING paid_content_revision`,
      [t,edit.post_id,edit.original_revision,edit.proposed_body,
-      edit.proposed_destination_url]);
-    if(!p.rowCount)fail('edit_version_or_visibility_changed',409);
+      edit.proposed_destination_url,proposedMedia]);
+    if(!updated.rowCount)fail('edit_version_or_visibility_changed',409);
+    if(proposedMedia!==null){
+     const obsolete=oldMedia.filter(id=>!proposedMedia.includes(id));
+     if(obsolete.length)await c.query(`INSERT INTO feed.paid_media_deletion_outbox
+       (tenant_id,post_id,media_id,object_key)
+       SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
+       WHERE tenant_id=$1 AND post_id=$2 AND media_id::text=ANY($3::text[])
+       ON CONFLICT DO NOTHING`,[t,edit.post_id,obsolete]);
+    }
    }
    await c.query(`UPDATE feed.promotion_edit_proposals SET state=$3,
     reviewer_id=$4,resolution_reason=$5,reviewed_at=statement_timestamp()
@@ -742,7 +795,8 @@ export class PgStatusPromotions {
     {proposalId:id,oldRevision:count(edit.original_revision),
      newRevision:approve?count(edit.original_revision)+1:null,
      proposedBodySha256:hash(String(edit.proposed_body)),
-     destinationUrl:edit.proposed_destination_url??null,reason:rationale});
+     destinationUrl:edit.proposed_destination_url??null,
+     mediaIds:proposedMedia,reason:rationale});
    return {proposalId:id,postId:String(edit.post_id),
     state:approve?'approved':'rejected',
     newRevision:approve?count(edit.original_revision)+1:null};
