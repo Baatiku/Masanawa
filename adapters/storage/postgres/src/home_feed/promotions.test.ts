@@ -32,6 +32,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await db.exec(sql('../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0007_paid_promotions.sql'));
   await db.exec(sql('../../../../../packages/feed/migrations/0008_paid_media_deletion_outbox.sql'));
+  await db.exec(sql('../../../../../packages/feed/migrations/0009_view_challenge_abuse_index.sql'));
   // Embedded PG SQL simulation; not a multi-connection PostgreSQL race test.
   const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
   service=new PgStatusPromotions(pool,'test-secret-with-forty-plus-characters-of-entropy',
@@ -78,6 +79,20 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(charged.rows).toEqual([{platform_half_mb:1,sharer_half_mb:1,sharer_id:'sharer'}]);
   expect((await service.mine(t,'sharer')).sharingEarnings[0]).toMatchObject({pendingHalfMb:1});
   await expect(query(`DELETE FROM feed.promotion_view_charges`)).rejects.toThrow();
+ });
+
+ it('bounds signed-in viewer challenge spam without rate-limiting a shared IP',async()=>{
+  const post=(await service.mine(t,'publisher')).campaigns[0]!.postId;
+  const first=await query(`SELECT viewer_digest FROM feed.view_challenges
+    WHERE tenant_id=$1 AND post_id=$2 LIMIT 1`,[t,post]);
+  const digest=(first.rows[0] as {viewer_digest:string}).viewer_digest;
+  await query(`INSERT INTO feed.view_challenges(tenant_id,post_id,viewer_digest)
+    SELECT $1,$2,$3 FROM generate_series(1,99)`,[t,post,digest]);
+  await expect(service.beginView(t,'viewerone',post)).rejects.toMatchObject({
+    code:'view_challenge_rate_limited',status:429,statusCode:429});
+  // Another authenticated account is independent even on a shared carrier IP.
+  await expect(service.beginView(t,'viewertwo',post)).resolves.toMatchObject({
+    minimumDwellSeconds:6});
  });
 
  it('boosts canonical content without transferring ownership, then enforces exactly 72h grace',async()=>{
