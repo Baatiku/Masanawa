@@ -57,6 +57,46 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(noAccess).not.toHaveBeenCalled();
   await disabled.close();
  });
+ it('works over real external HTTP requests with no JavaScript or visitor session',async()=>{
+  const preview={id,name:'Editorial teacher',body:'Approved public image body',
+   kind:'image' as const,imageCount:1,
+   imagePreview:{id:'media_reviewed_abcdefgh',altText:'A teacher reading a book'}};
+  const find=vi.fn(async()=>preview);
+  const readApprovedImage=vi.fn(async()=>({bytes:Buffer.from('RIFFsafewebp'),
+   contentType:'image/webp' as const}));
+  const validReferral=vi.fn(async()=>true);
+  const app=Fastify();
+  await registerPublicStatusLanding(app,{port:{find,readApprovedImage,validReferral},
+   enabled:()=>true,imagesEnabled:()=>true,publicBaseUrl:'https://status.example.test'});
+  const origin=await app.listen({host:'127.0.0.1',port:0});
+  try{
+   // Only ordinary HTTP/HTML is involved, as with an external browser with
+   // scripting disabled. A crawler's GET cannot start a paid view challenge.
+   const html=await fetch(`${origin}/status/${id}?r=opaqueAlphaBeta012345678901`);
+   expect(html.status).toBe(200);
+   expect(html.headers.get('set-cookie')).toBeNull();
+   expect(html.headers.get('cache-control')).toBe('no-store');
+   expect(html.headers.get('content-security-policy')).toContain("default-src 'none'");
+   const document=await html.text();
+   expect(document).toContain('property="og:title"');
+   expect(document).toContain('property="og:description"');
+   expect(document).toContain('property="og:image"');
+   expect(document).toContain('name="twitter:card"');
+   expect(document).not.toMatch(/<script\b|<iframe\b|navigator\.sendBeacon|fetch\(/i);
+   expect(document).toContain('Open without referral attribution');
+   expect(document).toContain(`href="https://status.example.test/status/${id}"`);
+   expect(document).not.toContain('private/approved/');
+   expect(readApprovedImage).not.toHaveBeenCalled();
+   const approved=await fetch(`${origin}/status/${id}/image/media_reviewed_abcdefgh`);
+   expect(approved.status).toBe(200);
+   expect(approved.headers.get('content-type')).toContain('image/webp');
+   expect(approved.headers.get('cache-control')).toBe('no-store');
+   expect(Buffer.from(await approved.arrayBuffer())).toEqual(Buffer.from('RIFFsafewebp'));
+   expect(readApprovedImage).toHaveBeenCalledTimes(1);
+   expect(find).toHaveBeenCalledTimes(1);
+   expect(validReferral).toHaveBeenCalledTimes(1);
+  }finally{await app.close();}
+ });
  it('rejects unknown, purged and feature-disabled content without billing or reflecting forged tokens',async()=>{
   const find=vi.fn(async(post:string)=>post===id?
    {id,name:'Teacher',body:'Approved lesson',kind:'text' as const,imageCount:0}:null);
