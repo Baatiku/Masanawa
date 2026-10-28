@@ -596,6 +596,22 @@ export class PgStatusPromotions {
   });
  }
 
+ /** Unused authenticated view challenges are short-lived pseudonymous proof,
+  * not immutable financial events. Remove them 24 hours after issue (far
+  * beyond their five-minute acceptance window) using the existing partial
+  * expiry index. Claimed challenges remain for qualified-view audit/FKs. */
+ async pruneExpiredViewChallenges(limit=100){
+  if(!Number.isSafeInteger(limit)||limit<1||limit>500)fail('invalid_limit');
+  return serial(this.pool,async c=>{
+   const stale=await c.query(`SELECT tenant_id,id FROM feed.view_challenges
+    WHERE claimed_at IS NULL AND started_at<statement_timestamp()-interval '24 hours'
+    ORDER BY started_at,id LIMIT $1 FOR UPDATE SKIP LOCKED`,[limit]);
+   for(const row of stale.rows)await c.query(`DELETE FROM feed.view_challenges
+    WHERE tenant_id=$1 AND id=$2 AND claimed_at IS NULL`,[row.tenant_id,row.id]);
+   return {pruned:stale.rowCount??0};
+  });
+ }
+
  async claimMediaDeletions(limit=20){
   if(!Number.isSafeInteger(limit)||limit<1||limit>100)fail('invalid_limit');
   return serial(this.pool,async c=>{

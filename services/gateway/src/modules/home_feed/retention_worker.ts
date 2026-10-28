@@ -7,6 +7,7 @@
 import type {StatusMediaDeletionWorker} from './media_deletion_worker.js';
 export interface StatusExpiryPort {
   purgeExpired(limit:number):Promise<{purged:number}>;
+  pruneExpiredViewChallenges?(limit:number):Promise<{pruned:number}>;
 }
 
 export class StatusRetentionWorker {
@@ -37,6 +38,15 @@ export class StatusRetentionWorker {
           throw new Error('status_retention_invalid_batch');
         if(purged<100)break;
       }
+      // Detached unclaimed challenges never become charge/commission records.
+      // Bound stale HMAC viewer proofs even if no further visitor arrives.
+      if(!this.stopped&&this.port.pruneExpiredViewChallenges)
+       for(let i=0;i<5&&!this.stopped;i++){
+        const {pruned}=await this.port.pruneExpiredViewChallenges(100);
+        if(!Number.isSafeInteger(pruned)||pruned<0||pruned>100)
+         throw new Error('status_challenge_retention_invalid_batch');
+        if(pruned<100)break;
+       }
       if(!this.stopped)await this.mediaDeletion?.sweep();
     })();
     const settled=work.catch(()=>{this.reportFailure();})
