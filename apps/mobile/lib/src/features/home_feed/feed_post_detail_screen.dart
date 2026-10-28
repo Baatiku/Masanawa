@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import 'feed_api.dart';
@@ -9,6 +10,8 @@ import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
 import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
+import 'status_post_action_row.dart';
+import 'status_reaction_picker.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
 /// AF00 owns root/deep-link registration. This screen never exposes fan publishing.
@@ -19,6 +22,7 @@ class FeedPostDetailScreen extends StatefulWidget {
     required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,
     this.mediaApi,this.inlineMediaRenderer,this.audioPlaybackAvailable=false,
     this.authorDirectory = const {},this.onBoostPost,
+    this.engagementApi,this.onSharePost,this.shareEarnEnabled=false,
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
@@ -33,6 +37,9 @@ class FeedPostDetailScreen extends StatefulWidget {
   final bool audioPlaybackAvailable;
   final Map<String, AgentDirectoryEntry> authorDirectory;
   final ValueChanged<String>? onBoostPost;
+  final FeedApi? engagementApi;
+  final Future<void> Function(FeedPost)? onSharePost;
+  final bool shareEarnEnabled;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
 }
@@ -43,6 +50,8 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
   String? error,replyTo,pendingBody,pendingKey,pendingParent;
   String sort='newest';
   bool loading=true,sending=false,offline=false,denied=false;
+  bool reacting=false;
+  final _commentFocus=FocusNode();
   bool loadingMore=false,hasMore=false;
   String? pageError,commentCursor;
   int generation=0;
@@ -54,10 +63,74 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     if(old.accountKey!=widget.accountKey||old.initialPost.id!=widget.initialPost.id){
       generation++;post=null;comments=[];error=null;replyTo=null;
       pendingBody=null;pendingKey=null;pendingParent=null;sending=false;input.clear();
+      reacting=false;
       loadingMore=false;hasMore=false;commentCursor=null;pageError=null;refresh();
     }else if(!old.enabled&&widget.enabled){refresh();}
   }
-  @override void dispose(){generation++;input.dispose();super.dispose();}
+  @override void dispose(){generation++;input.dispose();_commentFocus.dispose();super.dispose();}
+
+  Future<void> _changeReaction(String? kind) async {
+    final before=post,api=widget.engagementApi;
+    if(before==null||api==null||reacting||loading||!widget.enabled)return;
+    final version=generation;
+    setState((){reacting=true;post=before.withReaction(kind);});
+    try {
+      if(api is ReactionFeedApi){
+        await api.react(before.id,kind);
+      } else {
+        await api.like(before.id,kind=='like');
+      }
+      if(!mounted||version!=generation)return;
+      // A successful write is authoritative even when an immediately
+      // following replica GET has not caught up. Never invite a duplicate
+      // toggle by rolling an accepted reaction back on stale readback.
+      try {
+        final fresh=await widget.loadPost(before.id);
+        if(!mounted||version!=generation)return;
+        if(fresh.currentReaction==kind){
+          setState(()=>post=fresh);
+        }else{
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+            'Reaction saved; counts may be delayed. Pull to refresh.',
+            'An ajiye martani. Adadin na iya jinkiri. Ja ƙasa don sabuntawa.'))));
+        }
+      }on DioException catch(e){
+        if(!mounted||version!=generation)return;
+        if(const [401,403,404,410].contains(e.response?.statusCode)){
+          setState((){post=null;denied=true;comments=[];});
+        }else{
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:Text('Reaction saved; counts may be delayed.')));
+        }
+      }catch(_){
+        if(mounted&&version==generation)ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content:Text('Reaction saved; refresh counts later.')));
+      }
+    }catch(e){
+      if(mounted&&version==generation){
+        final revoked=e is DioException&&
+          const [401,403,404,410].contains(e.response?.statusCode) ||
+          e is StateError&&e.message=='account_changed';
+        if(revoked){
+          setState((){post=null;comments=[];denied=true;});
+        }else{
+          setState(()=>post=before);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+            'Reaction not confirmed. Retry.', 'Ba a tabbatar da martani ba. Sake gwadawa.'))));
+        }
+      }
+    }finally{
+      if(mounted&&version==generation)setState(()=>reacting=false);
+    }
+  }
+
+  Future<void> _chooseReaction(BuildContext anchor) async {
+    if(reacting||loading||widget.engagementApi is! ReactionFeedApi)return;
+    final choice=await showStatusReactionPicker(context,anchor);
+    final current=post;
+    if(!mounted||current==null||choice==null)return;
+    await _changeReaction(choice==current.currentReaction?null:choice);
+  }
   Future<void> refresh() async {
     if(!widget.enabled)return;
     final ticket=++generation;
@@ -236,6 +309,16 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               child:StatusPostSocialProof(post:p)),
             StatusPostBoostAction(post:p,enabled:widget.onBoostPost!=null,
               onBoost:widget.onBoostPost),
+            const Divider(height:12),
+            StatusPostActionRow(post:p,pending:reacting||loading,
+              shareEarnEnabled:widget.shareEarnEnabled,
+              onLike:widget.engagementApi==null?null:
+                ()=>unawaited(_changeReaction(p.currentReaction=='like'?null:'like')),
+              onComment:widget.canReply?()=>_commentFocus.requestFocus():null,
+              onShare:widget.onSharePost==null?null:
+                ()=>unawaited(widget.onSharePost!(p)),
+              onLongLike:widget.engagementApi is ReactionFeedApi?
+                (anchor)=>unawaited(_chooseReaction(anchor)):null),
             Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
             Row(children:[
               ChoiceChip(label:Text(t('Newest','Sabbi')),selected:sort=='newest',
@@ -261,7 +344,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
             IconButton(tooltip:t('Cancel reply','Soke amsa'),
               onPressed:()=>setState(()=>replyTo=null),icon:const Icon(Icons.close))]),
           Row(children:[
-            Expanded(child:TextField(controller:input,maxLength:1000,minLines:1,maxLines:3,
+            Expanded(child:TextField(controller:input,focusNode:_commentFocus,maxLength:1000,minLines:1,maxLines:3,
               enabled:!sending,decoration:InputDecoration(
                 hintText:t('Write a comment','Rubuta sharhi')))),
             IconButton(tooltip:t('Send','Aika'),onPressed:sending?null:submit,

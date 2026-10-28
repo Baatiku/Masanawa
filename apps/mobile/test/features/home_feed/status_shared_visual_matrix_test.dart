@@ -8,6 +8,7 @@ import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/status_post_body.dart';
 import 'package:masanawa/src/features/home_feed/status_post_boost_action.dart';
 import 'package:masanawa/src/features/home_feed/status_post_social_proof.dart';
+import 'package:masanawa/src/features/home_feed/status_post_action_row.dart';
 import 'package:masanawa/src/localization/masanawa_localization.dart';
 
 const _id = '7d0e6c21-8c4f-48cc-a92a-8c53a74b61e5';
@@ -65,6 +66,8 @@ void main() {
                     StatusPostSocialProof(post: post),
                     StatusPostBoostAction(post: post, enabled: true,
                       onBoost: boosted.add),
+                    StatusPostActionRow(post:post,
+                      onLike:(){},onComment:(){},onShare:(){}),
                   ]),
                 )),
               ),
@@ -75,6 +78,14 @@ void main() {
           expect(find.text(ha ? 'Ƙara yaɗawa' : 'Boost'), findsOneWidget);
           final boost = find.byKey(const ValueKey('status-boost-$_id'));
           expect(tester.getSize(boost).height, greaterThanOrEqualTo(48));
+          final socialActions=find.descendant(
+            of:find.byType(StatusPostActionRow),
+            matching:find.byType(TextButton),
+          );
+          expect(socialActions,findsNWidgets(3));
+          for(final action in socialActions.evaluate()){
+            expect(action.size!.height,greaterThanOrEqualTo(48));
+          }
           await tester.tap(boost);
           expect(boosted.last, _id);
           expect(tester.takeException(), isNull);

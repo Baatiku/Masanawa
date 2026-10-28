@@ -68,6 +68,7 @@ class SavedStub implements SavedStatusLibraryApi {
 }
 
 class FeedStub extends SavedStub implements FeedApi {
+  final likeWrites = <(String,bool)>[];
   @override
   Future<FeedPage> list({required String mode, String? cursor}) async =>
       FeedPage([
@@ -76,7 +77,9 @@ class FeedStub extends SavedStub implements FeedApi {
         ),
       ], null);
   @override
-  Future<void> like(String postId, bool enabled) async {}
+  Future<void> like(String postId, bool enabled) async {
+    likeWrites.add((postId,enabled));
+  }
   @override
   Future<void> save(String postId, bool enabled) async {}
   @override
@@ -85,7 +88,45 @@ class FeedStub extends SavedStub implements FeedApi {
   Future<List<FeedComment>> comments(String postId) async => [];
 }
 
+class _ReactionsFeedStub extends FeedStub implements ReactionFeedApi {
+  final reactions=<(String,String?)>[];
+  @override Future<void> react(String id,String? kind) async {
+    reactions.add((id,kind));
+  }
+}
+
 void main() {
+  testWidgets('Saved shares the three 48dp Home actions and seven authorized reactions',
+      (tester) async {
+    final api=_ReactionsFeedStub();
+    final shares=<String>[],comments=<String>[];
+    await tester.pumpWidget(MaterialApp(home:SavedStatusLibraryScreen(
+      api:api,engagementApi:api,accountKey:'fan',
+      isAccountCurrent:()=>true,
+      openPost:(post) async =>comments.add(post.id),
+      onSharePost:(post) async =>shares.add(post.id),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Like'),findsNWidgets(2));
+    expect(find.text('Comment'),findsNWidgets(2));
+    expect(find.text('Share'),findsNWidgets(2));
+    await tester.tap(find.text('Like').first);
+    await tester.pump();
+    expect(api.reactions,[( _postId,'like')]);
+    await tester.tap(find.text('Share').first);
+    expect(shares,[_postId]);
+    await tester.tap(find.text('Comment').first);
+    await tester.pumpAndSettle();
+    expect(comments,[_postId]);
+    await tester.longPress(find.text('Like').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Love'),findsOneWidget);
+    await tester.tap(find.text('Love'));
+    await tester.pumpAndSettle();
+    expect(api.reactions.last,(_postId,'love'));
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('Saved exposes eligible Boost and opens the approved media viewer',
       (tester) async {
     final mediaApi = _SavedImageGrant();

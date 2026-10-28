@@ -11,6 +11,8 @@ import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
 import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
+import 'status_post_action_row.dart';
+import 'status_reaction_picker.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
@@ -29,6 +31,9 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     this.onMasanaProfile,
     this.onHumanProfile,
     this.onOpenMedia,
+    this.engagementApi,
+    this.onSharePost,
+    this.shareEarnEnabled = false,
   });
 
   final SavedStatusLibraryApi api;
@@ -41,6 +46,9 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final ValueChanged<String>? onBoostPost;
   final ValueChanged<String>? onMasanaProfile,onHumanProfile;
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
+  final FeedApi? engagementApi;
+  final Future<void> Function(FeedPost)? onSharePost;
+  final bool shareEarnEnabled;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -56,6 +64,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   bool offline = false;
   int epoch = 0;
   final Set<String> pending = {};
+  final Set<String> pendingReactions = {};
   // A timed-out DELETE/PUT may have reached the server. Do not encourage a
   // second toggle until a successful owner-scoped collection read confirms it.
   final Set<String> uncertainRemovals = {};
@@ -82,6 +91,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       cursor = null;
       error = null;
       pending.clear();
+      pendingReactions.clear();
       uncertainRemovals.clear();
       loading = false;
       loadingMore = false;
@@ -98,12 +108,13 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   Future<void> refresh() async {
     // A read racing a still-in-flight removal cannot establish the outcome of
     // that write; wait for it to settle before the verification refresh.
-    if (!current || pending.isNotEmpty) return;
+    if (!current || pending.isNotEmpty || pendingReactions.isNotEmpty) return;
     final ticket = ++epoch;
     setState(() {
       loading = true;
       loadingMore = false;
       pending.clear();
+      pendingReactions.clear();
       // A saved item may have become private, retired or blocked since the last
       // read. Never keep old content visible while authorization is unknown.
       items = [];
@@ -136,7 +147,8 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   }
 
   Future<void> nextPage() async {
-    if (!current || loading || loadingMore || cursor == null) return;
+    if (!current || loading || loadingMore || pendingReactions.isNotEmpty ||
+        cursor == null) return;
     final ticket = epoch;
     final after = cursor;
     setState(() {
@@ -235,6 +247,84 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       );
     }
     if (mounted && current) await refresh();
+  }
+
+  Future<void> reactSaved(SavedStatusItem item, String? kind) async {
+    final original=item.post,api=widget.engagementApi;
+    if(original==null||api==null||!current||
+        pendingReactions.contains(item.id))return;
+    final ticket=epoch;
+    setState(() {
+      pendingReactions.add(item.id);
+      final index=items.indexWhere((row)=>row.id==item.id);
+      if(index>=0)items[index]=SavedStatusItem(
+        id:item.id,savedAt:item.savedAt,post:original.withReaction(kind));
+    });
+    try{
+      if(api is ReactionFeedApi){
+        await api.react(item.id,kind);
+      }else{
+        await api.like(item.id,kind=='like');
+      }
+      if(!mounted||ticket!=epoch||!current)return;
+      if(api is DioFeedApi){
+        try{
+          final fresh=await api.detail(item.id);
+          if(!mounted||ticket!=epoch||!current)return;
+          if(fresh.currentReaction==kind){
+            setState(() {
+              final index=items.indexWhere((row)=>row.id==item.id);
+              if(index>=0)items[index]=SavedStatusItem(
+                id:item.id,savedAt:item.savedAt,post:fresh);
+            });
+          }else{
+            _savedReactionDelayed();
+          }
+        }on DioException catch(e){
+          if(!mounted||ticket!=epoch||!current)return;
+          if(const [401,403,404,410].contains(e.response?.statusCode)){
+            setState((){items=[];cursor=null;error='Saved post unavailable. Refresh to verify.';});
+          }else{_savedReactionDelayed();}
+        }catch(_){if(mounted&&ticket==epoch&&current)_savedReactionDelayed();}
+      }
+    }on DioException catch(e){
+      if(!mounted||ticket!=epoch||!current)return;
+      if(const [401,403,404,410].contains(e.response?.statusCode)){
+        setState((){items=[];cursor=null;error='Saved access changed. Refresh to verify.';});
+      }else{
+        _restoreReaction(item,original);
+      }
+    }catch(_){
+      if(mounted&&ticket==epoch&&current)_restoreReaction(item,original);
+    }finally{
+      if(mounted&&ticket==epoch&&current){
+        setState(()=>pendingReactions.remove(item.id));
+      }
+    }
+  }
+
+  void _savedReactionDelayed(){
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content:Text('Reaction saved; counts may be delayed. Pull to refresh.')));
+  }
+
+  void _restoreReaction(SavedStatusItem item,FeedPost original){
+    setState(() {
+      final index=items.indexWhere((row)=>row.id==item.id);
+      if(index>=0)items[index]=SavedStatusItem(
+        id:item.id,savedAt:item.savedAt,post:original);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content:Text('Reaction not confirmed. Retry.')));
+  }
+
+  Future<void> pickReaction(SavedStatusItem item,BuildContext anchor) async {
+    final original=item.post;
+    if(original==null||!current||pendingReactions.contains(item.id)||
+       widget.engagementApi is! ReactionFeedApi)return;
+    final choice=await showStatusReactionPicker(context,anchor);
+    if(!mounted||!current||choice==null)return;
+    await reactSaved(item,choice==original.currentReaction?null:choice);
   }
 
   @override
@@ -387,6 +477,22 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                       horizontal: 12, vertical: 8),
                                     child: StatusPostSocialProof(post: item.post!),
                                   ),
+                                if(item.post!=null)...[
+                                  const Divider(height:1),
+                                  StatusPostActionRow(
+                                    post:item.post!,
+                                    pending:pendingReactions.contains(item.id),
+                                    shareEarnEnabled:widget.shareEarnEnabled,
+                                    onLike:widget.engagementApi==null?null:
+                                      ()=>unawaited(reactSaved(item,
+                                        item.post!.currentReaction=='like'?null:'like')),
+                                    onComment:()=>unawaited(open(item)),
+                                    onShare:widget.onSharePost==null?null:
+                                      ()=>unawaited(widget.onSharePost!(item.post!)),
+                                    onLongLike:widget.engagementApi is ReactionFeedApi?
+                                      (anchor)=>unawaited(pickReaction(item,anchor)):null,
+                                  ),
+                                ],
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
@@ -398,6 +504,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                       )),
                                     TextButton.icon(
                                       onPressed: pending.contains(_itemKey(item)) ||
+                                              pendingReactions.contains(item.id) ||
                                               uncertainRemovals.contains(_itemKey(item))
                                           ? null
                                           : () => remove(item),

@@ -21,6 +21,8 @@ import 'status_promotion_api.dart';
 import 'status_promotion_sheet.dart';
 import 'my_status_promotions_screen.dart';
 import 'status_qualified_view_observer.dart';
+import 'status_reaction_picker.dart';
+import 'status_post_action_row.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -493,6 +495,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             audioPlaybackAvailable: widget.audioPlaybackAvailable,
             authorDirectory: widget.authorDirectory,
             onBoostPost: promotionsAvailable ? (id) => openPromotion(postId: id) : null,
+            engagementApi: feed,
+            onSharePost: sharePost,
+            shareEarnEnabled: promotionsAvailable,
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
@@ -623,52 +628,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if (pendingActions.contains(post.id) || widget.api is! ReactionFeedApi) {
       return;
     }
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final target = anchor.findRenderObject() as RenderBox?;
-    if (overlay == null || target == null) return;
-    final origin = target.localToGlobal(Offset.zero, ancestor: overlay);
-    final rect = Rect.fromLTWH(origin.dx, origin.dy, target.size.width,
-        target.size.height);
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
-      items: [
-        PopupMenuItem<String>(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Builder(builder: (menuContext) => SizedBox(
-            width: 260,
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (final kind in FeedPost.reactionKinds)
-                  SizedBox(
-                    width: 60,
-                    height: 58,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 1),
-                      ),
-                      onPressed: () => Navigator.pop(menuContext, kind),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(FeedPost.reactionEmoji[kind]!,
-                              style: const TextStyle(fontSize: 23)),
-                          Text(kind[0].toUpperCase() + kind.substring(1),
-                              maxLines: 1,overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          )),
-        ),
-      ],
-    );
+    final choice = await showStatusReactionPicker(context, anchor);
     if (!mounted || choice == null) return;
     await react(post, choice == post.currentReaction ? null : choice);
   }
@@ -969,67 +929,16 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 ]),
                               ),
                               const Divider(height: 1),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 5),
-                                child: LayoutBuilder(builder: (context, constraints) {
-                                  final compact = constraints.maxWidth < 290 ||
-                                      MediaQuery.textScalerOf(context).scale(14) > 20;
-                                  final pending = pendingActions.contains(post.id);
-                                  Widget actionButton(String label, IconData icon,
-                                      VoidCallback? onPressed,{String? tooltip}) => Expanded(
-                                    child: Tooltip(message:tooltip??label, child: TextButton.icon(
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                                        minimumSize: const Size(0, 48),
-                                      ),
-                                      onPressed: onPressed,
-                                      icon: Icon(icon, size: 20),
-                                      label: compact
-                                          ? const SizedBox.shrink()
-                                          : Text(label, maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                    )),
-                                  );
-                                  return Row(children: [
-                                    Builder(builder: (anchor) => Expanded(
-                                      child: GestureDetector(
-                                        onLongPress: widget.api is ReactionFeedApi && !pending
-                                            ? () => showReactions(anchor, post)
-                                            : null,
-                                        // The gesture is reserved for reactions. Tooltip's
-                                        // default long-press recognizer must not steal it.
-                                        child: Tooltip(message:t('Like', 'So'),
-                                        triggerMode:TooltipTriggerMode.manual,
-                                        child: TextButton.icon(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                                            minimumSize: const Size(0, 48),
-                                          ),
-                                          onPressed: pending ? null
-                                              : () => likePost(post),
-                                          icon: Icon(post.currentReaction == 'like'
-                                              ? Icons.thumb_up_rounded
-                                              : Icons.thumb_up_outlined, size: 20),
-                                          label: compact ? const SizedBox.shrink()
-                                              : Text(t('Like', 'So'), maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis),
-                                        )),
-                                      ),
-                                    )),
-                                    actionButton(t('Comment', 'Sharhi'),
-                                        Icons.mode_comment_outlined,
-                                        () => openComments(post)),
-                                    actionButton(post.shareEarnEligible&&promotionsAvailable
-                                          ?t('Share & Earn','Raba ka samu MB')
-                                          :t('Share', 'Raba'),
-                                        Icons.share_outlined,
-                                        () => sharePost(post),
-                                        tooltip:post.shareEarnEligible&&promotionsAvailable
-                                          ?t('Share & Earn: 0.5 MB pending for each approved qualified view',
-                                            'Raba ka samu MB 0.5 a kan kowane kallo da aka tabbatar')
-                                          :null),
-                                  ]);
-                                }),
+                              StatusPostActionRow(
+                                post: post,
+                                pending: pendingActions.contains(post.id),
+                                shareEarnEnabled: promotionsAvailable,
+                                onLike: () => likePost(post),
+                                onComment: () => openComments(post),
+                                onShare: () => sharePost(post),
+                                onLongLike: widget.api is ReactionFeedApi
+                                    ? (anchor) => showReactions(anchor, post)
+                                    : null,
                               ),
                             ],
                           ),
