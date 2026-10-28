@@ -391,8 +391,11 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
     evidenceNote:v.evidenceNote as string,
     ...(typeof v.clearanceReference==='string'?{clearanceReference:v.clearanceReference}:{})};
   }else if(b.policy!==undefined)fail('invalid_review');
-  return options.port.review(p.tenantId,p.userId,params(r,'campaignId'),b.decision==='approve',
-   b.reason as string|undefined,policy);
+  return policy
+   ?options.port.review(p.tenantId,p.userId,params(r,'campaignId'),true,
+     b.reason as string|undefined,policy)
+   :options.port.review(p.tenantId,p.userId,params(r,'campaignId'),false,
+     b.reason as string|undefined);
  });
  app.get('/v1/admin/promotions/review',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await admin(r);
