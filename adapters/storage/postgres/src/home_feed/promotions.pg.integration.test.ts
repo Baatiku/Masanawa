@@ -136,12 +136,6 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
    FROM feed.promotion_campaigns WHERE tenant_id=$1 AND id=$2`,[tenant,c.id]);
   expect(state.rows[0]).toMatchObject({state:'cancelled',delivered_views:charged,
    remaining_views:2-charged});
-  const charges=await db.query(`SELECT count(*)::int AS n FROM gb_wallet.operations
-   WHERE tenant_id=$1 AND operation_kind='promotion_view'
-    AND reference_id=$2`,[tenant,c.id]);
-  // The immutable charge table is the exact accounting authority; external
-  // operation reference formats may differ and are independently audited.
-  expect(charges.rows[0].n).toBeGreaterThanOrEqual(0);
  });
  it('recovers rejected confirmation and refund by original quote, never another account',async()=>{
   const before=await db.query(`SELECT reserved_purchased_mb::int AS reserved
