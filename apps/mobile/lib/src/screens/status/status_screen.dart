@@ -365,6 +365,12 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     super.dispose();
   }
 
+  Widget _closedPrivateView(String title)=>Scaffold(
+    appBar:AppBar(title:Text(title)),
+    body:const Center(child:Padding(padding:EdgeInsets.all(24),
+      child:Text('Go back and reopen this view from your current account.'))),
+  );
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
@@ -377,6 +383,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       );
     }
     final account = session.user.id;
+    final credentials = session.tokens;
     final feed = ref.watch(statusFeedApiProvider);
     final directory = ref.watch(agentDirectoryProvider);
     final authorDirectory = {
@@ -386,7 +393,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     String? currentAccount() {
       try {
         final active = ref.read(sessionProvider);
-        return active is SessionSignedIn ? active.user.id : null;
+        return active is SessionSignedIn&&identical(active.tokens,credentials) ? active.user.id : null;
       } catch (_) {
         return null;
       }
@@ -414,10 +421,8 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
           builder: (_) => Consumer(
             builder: (context, ref, _) {
               final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account) {
-                return const Scaffold(
-                  body: Center(child: Text('Sign in to view this profile.')),
-                );
+              if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
+                return _closedPrivateView('Home update');
               }
               return MasanaProfileScreen(agent: profileAgent);
             },
@@ -433,10 +438,8 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
           builder: (_) => Consumer(
             builder: (context, ref, _) {
               final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account) {
-                return const Scaffold(
-                  body: Center(child: Text('Sign in to view this profile.')),
-                );
+              if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
+                return _closedPrivateView('Home update');
               }
               return PersonProfileScreen(handle: handle);
             },
@@ -477,10 +480,8 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
           builder: (_) => Consumer(
             builder: (context, ref, _) {
               final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account) {
-                return const Scaffold(
-                  body: Center(child: Text('Sign in to view this update.')),
-                );
+              if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
+                return _closedPrivateView('Home update');
               }
               return FeedMediaScreen(
                 key: ValueKey(
@@ -509,10 +510,8 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     Widget accountRouteGuard(Widget content) => Consumer(
       builder: (routeContext, routeRef, _) {
         final active = routeRef.watch(sessionProvider);
-        if (active is! SessionSignedIn || active.user.id != account) {
-          return const Scaffold(
-            body: Center(child: Text('Sign in to view this Home update.')),
-          );
+        if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
+          return _closedPrivateView('Home update');
         }
         return content;
       },
