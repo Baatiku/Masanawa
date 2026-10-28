@@ -113,9 +113,22 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
           icon:const Icon(Icons.refresh),iconSize:28)
       :TextButton.icon(onPressed:_retryPreview,
           icon:const Icon(Icons.refresh),label:Text(label));
-    if(loading)return frame(Center(
-      child:Semantics(label:'Loading approved image preview',
-        child:const CircularProgressIndicator(strokeWidth:2))));
+    if(loading){
+      final ha=Localizations.localeOf(context).languageCode=='ha';
+      return frame(Semantics(label:'Loading approved image preview',
+        child:ColoredBox(color:Theme.of(context).colorScheme.surfaceContainerHigh,
+          child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+            Icon(Icons.image_outlined,size:32,
+              color:Theme.of(context).colorScheme.outline),
+            const SizedBox(height:8),
+            Text(ha?'Ana loda hoton da aka amince da shi':'Loading approved image',
+              textAlign:TextAlign.center,
+              style:Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height:8),
+            const SizedBox(width:112,child:LinearProgressIndicator(minHeight:2)),
+          ])),
+        )));
+    }
     if(current==null||error!=null||!current.expiresAt.isAfter(DateTime.now())){
       return frame(Center(child:retry(error==null||error=='Preview unavailable'
         ? 'Image unavailable · retry preview'

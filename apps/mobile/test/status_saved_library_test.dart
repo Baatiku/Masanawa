@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
 import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
+import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/saved_status_library_screen.dart';
 
 const _postId = '381026c2-9d56-47b1-b73d-1784e24e41e2';
@@ -85,6 +86,62 @@ class FeedStub extends SavedStub implements FeedApi {
 }
 
 void main() {
+  testWidgets('Saved exposes eligible Boost and opens the approved media viewer',
+      (tester) async {
+    final mediaApi = _SavedImageGrant();
+    final saved = savedPost();
+    saved['post'] = {
+      ...(saved['post'] as Map),
+      'kind': 'image',
+      'media': ['approved-1'],
+      'boostEligible': true,
+    };
+    final stub = SavedStub()
+      ..page = SavedStatusPage([SavedStatusItem.fromJson(saved)], null);
+    final boosts = <String>[];
+    final mediaOpens = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: SavedStatusLibraryScreen(
+        api: stub,
+        accountKey: 'fan',
+        isAccountCurrent: () => true,
+        openPost: (_) async {},
+        mediaApi: mediaApi,
+        inlineMediaRenderer: (_) => const Text('Approved thumbnail'),
+        onOpenMedia: (post, mediaId) =>
+            mediaOpens.add('${post.id}:$mediaId'),
+        onBoostPost: boosts.add,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Approved thumbnail'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey(
+      'status-boost-381026c2-9d56-47b1-b73d-1784e24e41e2')));
+    expect(boosts, [_postId]);
+    await tester.tap(find.text('Approved thumbnail'));
+    expect(mediaOpens, ['$_postId:approved-1']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('historical Saved cards reuse floating Home surfaces and approved author navigation',
+      (tester) async {
+    final opened=<String>[];
+    await tester.pumpWidget(MaterialApp(home:SavedStatusLibraryScreen(
+      api:SavedStub(),accountKey:'fan',isAccountCurrent:()=>true,
+      openPost:(_) async {},onMasanaProfile:opened.add)));
+    await tester.pumpAndSettle();
+    final card=tester.widget<Card>(find.byKey(const ValueKey(
+      'saved-true-381026c2-9d56-47b1-b73d-1784e24e41e2')));
+    expect(card.elevation,3);
+    expect(card.clipBehavior,Clip.antiAlias);
+    expect((card.shape as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(16));
+    await tester.tap(find.text('Amina').first);
+    await tester.pump();
+    expect(opened,['fan']);
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('pushed post detail is replaced on live account revocation', (
     tester,
   ) async {
@@ -453,4 +510,15 @@ void main() {
     expect(find.text('Hello Status'), findsOneWidget);
     expect(find.byType(SavedStatusLibraryScreen), findsNothing);
   });
+}
+
+class _SavedImageGrant implements FeedMediaApi {
+  @override
+  Future<FeedMediaGrant> getGrant(String postId, String mediaId) async =>
+      FeedMediaGrant(
+        mediaId: mediaId,
+        kind: 'image',
+        url: Uri.parse('https://media.example.test/approved'),
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
 }

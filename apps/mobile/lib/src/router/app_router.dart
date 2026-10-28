@@ -20,6 +20,7 @@ import '../core/startup_metrics.dart';
 import '../screens/chat/masana_list_screen.dart';
 import '../screens/search/unified_search_screen.dart';
 import '../screens/search/resource_link_screens.dart';
+import '../screens/status/status_screen.dart';
 import '../screens/twin/shell_tab.dart';
 import '../shell/five_tab_shell.dart';
 import '../shell/startup_gate.dart';
@@ -256,6 +257,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/masana/:id',
         builder: (_, state) =>
             MasanaResourceLinkScreen(characterId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/status/saved',
+        builder: (_, __) => const StatusSavedScreen(),
       ),
       GoRoute(
         path: '/status/:postId',
