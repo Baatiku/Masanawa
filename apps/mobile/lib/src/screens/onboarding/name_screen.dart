@@ -28,6 +28,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
   PhoneCountry _country=kDefaultCountry;
   CountrySubdivisions? _regions;
   String? _subdivision;
+  String? _regionLoadError;
   bool _saving = false;
 
   @override void initState(){super.initState();
@@ -42,11 +43,17 @@ class _NameScreenState extends ConsumerState<NameScreen> {
       // Prefill the actual calling prefix: the person enters the national part.
       _phone.text='+${_country.dialCode}';
     }
-    CountrySubdivisions.load().then((regions){
-      if(mounted)setState(()=>_regions=regions);
-    }).catchError((Object _){
-      if(mounted)_snack('Unable to load states. Please retry signup.');
-    });
+    _loadRegionChoices();
+  }
+
+  Future<void> _loadRegionChoices() async {
+    setState(()=>_regionLoadError=null);
+    try {
+      final loaded=await CountrySubdivisions.load();
+      if(mounted)setState((){_regions=loaded;_regionLoadError=null;});
+    } catch (_) {
+      if(mounted)setState(()=>_regionLoadError='State and region list is unavailable. Retry.');
+    }
   }
 
   void _onCountryChanged(PhoneCountry next){setState((){
@@ -202,7 +209,12 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           Text('Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',
             style:Theme.of(context).textTheme.bodySmall),
           const SizedBox(height:12),
-          if(_regions==null)const LinearProgressIndicator()
+          if(_regions==null && _regionLoadError==null)const LinearProgressIndicator()
+          else if(_regions==null)...[
+            Text(_regionLoadError??'State and region list is unavailable.'),
+            TextButton.icon(onPressed:_saving?null:_loadRegionChoices,
+              icon:const Icon(Icons.refresh),label:const Text('Retry region list')),
+          ]
           else if(_regions!.forCountry(_country.iso).isNotEmpty)
             DropdownButtonFormField<String>(
               key:ValueKey('signup-subdivision-${_country.iso}'),
