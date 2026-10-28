@@ -93,6 +93,104 @@ export class PgStatusPromotions {
 
 
  /** A draft is private, retryable, and never reserves or consumes purchased MB. */
+
+ /** Reserve server-generated private object key before S3 upload. The key
+  * never appears in an authenticated owner's API response. */
+ async prepareImageUpload(t:string,owner:string,input:{sha256:string;bytes:number;
+  altText:string;idempotencyKey:string;rightsConfirmed:boolean}){
+  actor(t,owner);
+  if(!keyPattern.test(input.idempotencyKey)||!input.rightsConfirmed||
+   !/^[0-9a-f]{64}$/.test(input.sha256)||!Number.isSafeInteger(input.bytes)||
+   input.bytes<1||input.bytes>1048576||typeof input.altText!=='string'||
+   input.altText.trim().length<5||input.altText.trim().length>280)
+   fail('invalid_paid_image');
+  return serial(this.pool,async c=>{
+   const existing=await c.query(`SELECT * FROM feed.paid_image_uploads WHERE
+    tenant_id=$1 AND owner_id=$2 AND idempotency_key=$3 FOR UPDATE`,
+    [t,owner,input.idempotencyKey]);
+   if(existing.rows[0]){
+    const row=existing.rows[0];
+    if(row.request_sha256!==input.sha256||Number(row.bytes)!==input.bytes||
+     row.alt_text!==input.altText.trim())fail('idempotency_conflict',409);
+    if(row.state==='rejected')fail('image_rejected',409);
+    return {mediaId:String(row.id),objectKey:String(row.object_key),ready:row.state==='ready'};
+   }
+   const ownerDigest=hash(t+'\0'+owner);
+   const objectKey='status-paid/'+ownerDigest.slice(0,20)+'/'+randomBytes(16).toString('hex')+'.webp';
+   const added=await c.query(`INSERT INTO feed.paid_image_uploads
+    (tenant_id,owner_id,idempotency_key,request_sha256,object_key,bytes,rights_confirmed,alt_text)
+    VALUES($1,$2,$3,$4,$5,$6,true,$7) RETURNING id`,
+    [t,owner,input.idempotencyKey,input.sha256,objectKey,input.bytes,input.altText.trim()]);
+   return {mediaId:String(added.rows[0]!.id),objectKey,ready:false};
+  });
+ }
+ async completeImageUpload(t:string,owner:string,id:string,sha256:string,bytes:number){
+  actor(t,owner);identifier(id);
+  const r=await this.pool.query(`UPDATE feed.paid_image_uploads
+   SET state='ready',uploaded_at=statement_timestamp()
+   WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND request_sha256=$4
+    AND bytes=$5 AND state='staging' RETURNING id`,[t,owner,id,sha256,bytes]);
+  if(!r.rowCount){
+   const ready=await this.pool.query(`SELECT 1 FROM feed.paid_image_uploads
+    WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND request_sha256=$4
+     AND bytes=$5 AND state='ready'`,[t,owner,id,sha256,bytes]);
+   if(!ready.rowCount)fail('image_upload_not_owned',404);
+  }
+  return {mediaId:id,state:'ready'};
+ }
+ async reviewImage(t:string,editor:string,post:string,mediaId:string,approve:boolean,reason:string){
+  actor(t,editor);identifier(post);identifier(mediaId);
+  const rationale=reviewReason(reason,true);if(rationale.length<5)fail('invalid_media_review_reason');
+  return serial(this.pool,async c=>{
+   const original=await c.query(`SELECT p.author_user_id,p.state,u.owner_id,u.state AS upload_state,
+    o.review_state FROM feed.posts p
+    JOIN feed.paid_post_media_objects o ON o.tenant_id=p.tenant_id AND o.post_id=p.id
+    JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+    WHERE p.tenant_id=$1 AND p.id=$2 AND p.author_type='human'
+     AND o.media_id=$3 FOR UPDATE OF p,o`,[t,post,mediaId]);
+   const x=original.rows[0];
+   if(!x)fail('paid_media_not_found',404);
+   if(x.author_user_id===editor||x.owner_id===editor)fail('separate_reviewer_required',403);
+   if(x.upload_state!=='ready'||x.review_state!=='pending')fail('paid_media_not_pending',409);
+   await c.query(`UPDATE feed.paid_post_media_objects SET review_state=$4,
+    reviewed_by=$5,reviewed_at=statement_timestamp(),review_reason=$6
+    WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3`,
+    [t,post,mediaId,approve?'approved':'rejected',editor,rationale]);
+   if(!approve){
+    await c.query(`UPDATE feed.paid_image_uploads SET state='rejected'
+      WHERE tenant_id=$1 AND id=$2`,[t,mediaId]);
+    await this.enqueueMediaDeletion(c,t,post);
+   }
+   await this.audit(c,t,post,editor,approve?'paid_image_approved':'paid_image_rejected',null,
+    {mediaId,reason:rationale});
+   return {mediaId,postId:post,state:approve?'approved':'rejected'};
+  });
+ }
+ async adminImagePreview(t:string,editor:string,post:string,mediaId:string){
+  actor(t,editor);identifier(post);identifier(mediaId);
+  const r=await this.pool.query(`SELECT o.object_key,u.alt_text,o.review_state
+   FROM feed.paid_post_media_objects o
+   JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+   WHERE o.tenant_id=$1 AND o.post_id=$2 AND o.media_id=$3`,[t,post,mediaId]);
+  if(!r.rows[0])fail('paid_media_not_found',404);
+  return {objectKey:String(r.rows[0].object_key),altText:String(r.rows[0].alt_text),
+   reviewState:String(r.rows[0].review_state)};
+ }
+ async approvedImageObject(t:string,post:string,mediaId:string){
+  actor(t,'system');identifier(post);identifier(mediaId);
+  const r=await this.pool.query(`SELECT o.object_key,u.alt_text FROM feed.posts p
+   JOIN feed.paid_post_media_objects o ON o.tenant_id=p.tenant_id AND o.post_id=p.id
+   JOIN feed.paid_image_uploads u ON u.tenant_id=o.tenant_id AND u.id=o.media_id
+   WHERE p.tenant_id=$1 AND p.id=$2 AND o.media_id=$3
+    AND p.state='published' AND p.author_type='human' AND p.kind='image'
+    AND p.paid_purged_at IS NULL AND $3::text=ANY(p.media_ids)
+    AND o.review_state='approved' AND u.state='ready'
+    AND EXISTS(SELECT 1 FROM feed.promotion_campaigns b
+      WHERE b.tenant_id=p.tenant_id AND b.post_id=p.id AND b.state='active'
+      AND b.remaining_views>0 AND (b.expires_at IS NULL OR b.expires_at>statement_timestamp()))`,
+    [t,post,mediaId]);
+  return r.rows[0]?{objectKey:String(r.rows[0].object_key),altText:String(r.rows[0].alt_text)}:null;
+ }
  async draft(t:string,owner:string,input:{body:string;targetViews:number;
   destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}){
   actor(t,owner);
@@ -198,11 +296,15 @@ export class PgStatusPromotions {
   });
  }
 
- async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}){
+ async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;mediaIds?:readonly string[];targetViews:number}){
   const {tenantId:t,sponsorId:s}=input;actor(t,s);
   if(!Number.isSafeInteger(input.targetViews)||input.targetViews<1||input.targetViews>1000000)
    fail('invalid_view_target');
   const isBoost=input.postId!==undefined;
+  const mediaIds=input.mediaIds??[];
+  if(!Array.isArray(mediaIds)||mediaIds.length>10||new Set(mediaIds).size!==mediaIds.length||
+    mediaIds.some(id=>typeof id!=='string'||!uuid.test(id)))fail('invalid_paid_image_ids');
+  if(isBoost&&mediaIds.length)fail('boost_cannot_edit_post');
   if(isBoost)identifier(input.postId!);
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(input.destinationUrl);}catch{fail('invalid_promotion_destination');}
@@ -223,14 +325,20 @@ export class PgStatusPromotions {
       WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active'`,[t,s]);
     if(!person.rowCount)fail('public_profile_required',403);
    }
+   if(mediaIds.length){
+    const valid=await c.query(`SELECT count(*)::int AS n FROM feed.paid_image_uploads
+     WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+       AND state='ready' AND post_id IS NULL AND rights_confirmed`,[t,s,mediaIds]);
+    if(Number(valid.rows[0]?.n)!==mediaIds.length)fail('paid_image_not_owned_or_ready',403);
+   }
    const balance=await c.query<{free:string}>(`SELECT
     (purchased_mb-reserved_purchased_mb)::text AS free FROM gb_wallet.accounts
     WHERE tenant_id=$1 AND account_kind='human' AND account_id=$2 AND NOT frozen`,[t,s]);
    const available=balance.rows[0]?count(balance.rows[0].free):0;
    const quote=await c.query(`INSERT INTO feed.promotion_quotes
-     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url)
-     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,expires_at`,
-     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destinationUrl]);
+     (tenant_id,sponsor_id,post_id,kind,body,target_views,destination_url,media_ids)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,expires_at`,
+     [t,s,input.postId??null,isBoost?'boost':'human_primary',isBoost?null:body,input.targetViews,destinationUrl,mediaIds]);
    return {quoteId:String(quote.rows[0]!.id),expiresAt:quote.rows[0]!.expires_at,
     targetViews:input.targetViews,totalMb:input.targetViews,eligibleMb:available,
     insufficientMb:available<input.targetViews,priceVersion:'2026-10-27:1MB'};
@@ -246,8 +354,9 @@ export class PgStatusPromotions {
    // Preserve the original hash for all historic quotes without a CTA.
    // Only quotes with a new, reviewed destination extend the fingerprint.
    const quoted=[qid,s,q.kind,q.post_id,q.body,q.target_views];
-   const fp=hash(JSON.stringify(q.destination_url==null?quoted:
-    [...quoted,q.destination_url]));
+   const extra=q.destination_url==null?quoted:[...quoted,q.destination_url];
+   const fp=hash(JSON.stringify(Array.isArray(q.media_ids)&&q.media_ids.length?
+    [...extra,q.media_ids]:extra));
    const previous=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 AND idempotency_key=$3`,[t,s,key]);
    if(previous.rows[0]){
@@ -275,12 +384,29 @@ export class PgStatusPromotions {
     AND purchased_mb-reserved_purchased_mb>=$3 RETURNING account_id`,[t,s,q.target_views]);
    if(!reserved.rowCount)fail('insufficient_eligible_mb',409);
    if(!post){
+    const mediaIds=Array.isArray(q.media_ids)?q.media_ids as string[]:[];
+    if(mediaIds.length){
+     const valid=await c.query(`SELECT id FROM feed.paid_image_uploads WHERE
+      tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[]) AND state='ready'
+       AND post_id IS NULL FOR UPDATE`,[t,s,mediaIds]);
+     if(valid.rows.length!==mediaIds.length)fail('paid_image_not_owned_or_ready',409);
+    }
     const created=await c.query(`INSERT INTO feed.posts
      (tenant_id,author_masana_id,author_type,author_user_id,kind,body,media_ids,
       transcript,state,idempotency_key,published_by)
-     VALUES($1,NULL,'human',$2,'text',$3,'{}',NULL,'hidden',$4,$2) RETURNING id`,
-     [t,s,q.body,`promotion:${qid}`]);
+     VALUES($1,NULL,'human',$2,$5,$3,$6,NULL,'hidden',$4,$2) RETURNING id`
+     [t,s,q.body,`promotion:${qid}`,mediaIds.length?'image':'text',mediaIds]);
     post=String(created.rows[0]!.id);
+    if(mediaIds.length){
+     await c.query(`UPDATE feed.paid_image_uploads SET post_id=$4
+       WHERE tenant_id=$1 AND owner_id=$2 AND id::text=ANY($3::text[])
+        AND state='ready' AND post_id IS NULL`,[t,s,mediaIds,post]);
+     await c.query(`INSERT INTO feed.paid_post_media_objects
+      (tenant_id,post_id,media_id,object_key,review_state)
+      SELECT tenant_id,post_id,id,object_key,'pending'
+      FROM feed.paid_image_uploads WHERE tenant_id=$1 AND owner_id=$2
+       AND post_id=$3 AND id::text=ANY($4::text[])`,[t,s,post,mediaIds]);
+    }
    }
    const state=q.kind==='human_primary'?'pending_review':'active';
    const inserted=await c.query(`INSERT INTO feed.promotion_campaigns
@@ -359,7 +485,7 @@ export class PgStatusPromotions {
  async adminQueue(t:string,editor:string){actor(t,editor);
   const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
    c.target_views,c.remaining_views,c.delivered_views,c.created_at,
-   p.author_user_id,p.kind AS content_kind,p.body,p.state AS post_state,q.destination_url AS destination_url
+   p.author_user_id,p.kind AS content_kind,p.body,p.media_ids,p.state AS post_state,q.destination_url AS destination_url
    FROM feed.promotion_campaigns c JOIN feed.promotion_quotes q
     ON q.tenant_id=c.tenant_id AND q.id=c.quote_id
    JOIN feed.posts p
@@ -369,7 +495,7 @@ export class PgStatusPromotions {
   return {pending:r.rows.map(x=>({campaignId:String(x.id),postId:String(x.post_id),
    sponsorId:String(x.sponsor_id),authorId:String(x.author_user_id),
    campaignKind:String(x.kind),contentKind:String(x.content_kind),
-   body:String(x.body??''),postState:String(x.post_state),
+   body:String(x.body??''),mediaIds:x.media_ids??[],postState:String(x.post_state),
    destinationUrl:x.destination_url==null?null:String(x.destination_url),
    targetViews:count(x.target_views),remainingViews:count(x.remaining_views),
    deliveredViews:count(x.delivered_views),submittedAt:x.created_at}))};
