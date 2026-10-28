@@ -433,4 +433,41 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(await balance('advertiser')).toEqual({purchased:15,reserved:3,welcome:500});
  });
 
+ it('retains rejected campaign appeals without replaying refunds or self-approval',async()=>{
+  await account('appealing_owner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'appealing_owner',
+   body:'Appealable human campaign',targetViews:4});
+  const campaign=await service.confirm(t,'appealing_owner',q.quoteId,'appeal-original-001');
+  await service.review(t,'different_editor',campaign.id,false,'Needs documentary evidence');
+  expect(await balance('appealing_owner')).toMatchObject({purchased:10,reserved:0});
+  await expect(service.appeal(t,'sharer',campaign.id,'Try to impersonate this owner'))
+   .rejects.toMatchObject({code:'campaign_not_found'});
+  const appeal=await service.appeal(t,'appealing_owner',campaign.id,
+   'I can supply the documentary evidence');
+  expect(appeal).toMatchObject({state:'pending',alreadySubmitted:false});
+  const repeated=await service.appeal(t,'appealing_owner',campaign.id,
+   'Different text must not duplicate the pending appeal');
+  expect(repeated).toMatchObject({appealId:appeal.appealId,alreadySubmitted:true});
+  expect((await service.myAppeals(t,'appealing_owner')).appeals)
+   .toEqual(expect.arrayContaining([
+     expect.objectContaining({appealId:appeal.appealId,state:'pending'})
+   ]));
+  expect((await service.adminAppeals(t,'independent_editor')).pending)
+   .toEqual(expect.arrayContaining([
+     expect.objectContaining({appealId:appeal.appealId,ownerId:'appealing_owner'})
+   ]));
+  await expect(service.resolveAppeal(t,'appealing_owner',appeal.appealId,
+   true,'Approval after response')).rejects.toMatchObject({code:'separate_reviewer_required'});
+  const resolved=await service.resolveAppeal(t,'independent_editor',appeal.appealId,
+   true,'Reviewed evidence, may resubmit');
+  expect(resolved).toMatchObject({state:'accepted',campaignReactivated:false});
+  expect((await service.myAppeals(t,'appealing_owner')).appeals[0])
+   .toMatchObject({state:'accepted',resolutionReason:'Reviewed evidence, may resubmit'});
+  await expect(service.resolveAppeal(t,'independent_editor',appeal.appealId,
+   true,'No second decision')).rejects.toMatchObject({code:'appeal_already_resolved'});
+  expect((await service.receipt(t,'appealing_owner',q.quoteId)).campaign)
+   .toMatchObject({state:'rejected'});
+  expect(await balance('appealing_owner')).toMatchObject({purchased:10,reserved:0});
+ });
+
 });
