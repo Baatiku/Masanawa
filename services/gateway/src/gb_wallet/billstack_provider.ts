@@ -13,6 +13,12 @@ export class BillstackProviderError extends Error {
   }
 }
 type Fetcher = typeof fetch;
+/** Account creation stays Nigeria-only. The signed-in contact may now be
+ * stored as E.164; Billstack's existing applicant payload remains 0XXXXXXXXXX. */
+function billstackLocalPhone(phone:string):string|null{
+  const local=phone.startsWith('+234')?`0${phone.slice(4)}`:phone;
+  return /^0(?:70|80|81|90|91)\d{8}$/u.test(local)?local:null;
+}
 function object(x: unknown): Record<string,unknown> {
   if(!x || typeof x!=="object" || Array.isArray(x)) throw new BillstackProviderError("invalid_response");
   return x as Record<string,unknown>;
@@ -25,7 +31,7 @@ function text(x:unknown, min=1,max=160):string {
 export function assertBillstackApplicant(applicant:BillstackAccountApplicant):void {
   if(!/^[A-Za-z0-9_-]{8,128}$/.test(applicant.reference)||
     !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(applicant.email)||
-    !/^0(?:70|80|81|90|91)\d{8}$/.test(applicant.phone)||
+    billstackLocalPhone(applicant.phone)===null||
     !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.firstName)||
     !/^[\p{L}\p{M} .'-]{1,80}$/u.test(applicant.lastName))
     throw new BillstackProviderError("invalid_applicant");
@@ -44,7 +50,7 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
         response=await fetcher(endpoint,{
           method:"POST",
           headers:{authorization:"Bearer "+input.secretKey,"content-type":"application/json",accept:"application/json"},
-          body:JSON.stringify({...applicant,bank:bankId}),
+          body:JSON.stringify({...applicant,phone:billstackLocalPhone(applicant.phone),bank:bankId}),
           signal:AbortSignal.timeout(15000),redirect:"error",
         });
       } catch { throw new BillstackProviderError("outcome_unknown"); }
