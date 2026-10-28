@@ -152,8 +152,6 @@ class _NotificationPreferencesScreenState
     final account = session is SessionSignedIn ? session.user.id : null;
     final epoch = account == null ? null
         : ref.read(sessionProvider.notifier).authorizationEpoch;
-    final promotionHistory = account == null || epoch == null ? null :
-        ref.watch(gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)));
     if (account == _owner && epoch == _ownerEpoch) return;
     ++_generation;
     ++_preferencesRequest;
@@ -312,6 +310,8 @@ class _NotificationPreferencesScreenState
     final account = session is SessionSignedIn ? session.user.id : null;
     final epoch = account == null ? null
         : ref.read(sessionProvider.notifier).authorizationEpoch;
+    final promotionHistory = account == null || epoch == null ? null :
+        ref.watch(gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch)));
     if (_owner != account || _ownerEpoch != epoch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) { setState(() => _bind(ref.read(sessionProvider))); }
@@ -333,7 +333,7 @@ class _NotificationPreferencesScreenState
           ? const Center(child: Text('Sign in to manage notifications.'))
           : TabBarView(children: [
               RefreshIndicator(onRefresh: () async {
-                  ref.invalidate(gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)));
+                  ref.invalidate(gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch)));
                   await _refreshHistory();
                 },child:ListView(children:[
                   const ListTile(title:Text('Promotion updates',
@@ -346,7 +346,7 @@ class _NotificationPreferencesScreenState
                     ListTile(title:const Text('Promotion updates unavailable.'),
                       trailing:IconButton(tooltip:'Retry promotion updates',
                         icon:const Icon(Icons.refresh),onPressed:()=>ref.invalidate(
-                          gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)))))
+                          gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch)))))
                   else if(promotionHistory.valueOrNull!.notices.isEmpty)
                     const ListTile(title:Text('No campaign updates yet.'))
                   else for(final update in promotionHistory.valueOrNull!.notices.take(20))
