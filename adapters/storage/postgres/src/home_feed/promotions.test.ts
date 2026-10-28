@@ -761,7 +761,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const q1=await service.quoteDraft(t,'draftowner',first.draftId);
   const q2=await service.quoteDraft(t,'draftowner',first.draftId);
   expect(q2.quoteId).toBe(q1.quoteId);
-  expect((await query(`SELECT count(*)::int AS n FROM feed.promotion_quotes
+  expect(((await query(`SELECT count(*)::int AS n FROM feed.promotion_quotes
    WHERE tenant_id=$1 AND draft_id=$2`,[t,first.draftId])).rows[0] as {n:number}|undefined)?.n).toBe(1);
   expect(await balance('draftowner')).toEqual({purchased:12,reserved:0,welcome:500});
   await expect(service.editDraft(t,'draftowner',first.draftId,{
