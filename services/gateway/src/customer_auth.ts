@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
+import {parseSignupContact,SignupContactError} from './signup_contact.js';
 export { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 import {
   createOtpCode,
@@ -87,6 +88,8 @@ export interface CustomerAuthService {
     firstName?: string;
     lastName?: string;
     contactPhone?: string;
+    countryIso?:string;
+    subdivisionIso?:string;
     deviceId?: string;
     clientLabel?: string;
   }>): Promise<AuthTokensView>;
@@ -111,6 +114,8 @@ export interface CustomerAuthService {
     name: string;
     email?: string;
     clientLabel?: string;
+    firstName?:string;lastName?:string;contactPhone?:string;
+    countryIso?:string;subdivisionIso?:string;
   }>): Promise<AuthTokensView>;
   refresh(input: Readonly<{ refreshToken: string }>): Promise<AuthTokensView>;
   logout(input: Readonly<{ authorizationHeader: string | undefined }>): Promise<void>;
@@ -131,6 +136,16 @@ export interface CustomerAuthService {
   confirmBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;code:string}>): Promise<Readonly<{stepUpToken:string}>>;
   consumeBankStepUp(input: Readonly<{authorizationHeader:string|undefined;bankCode:string;accountNumber:string;stepUpToken:string|undefined}>): Promise<void>;
   authorizeSensitiveMutation(input: Readonly<{authorizationHeader:string|undefined}>): Promise<void>;
+  contactGeography(input:Readonly<{authorizationHeader:string|undefined}>):Promise<Readonly<{
+   contactPhone:string|null;countryIso:string|null;subdivisionIso:string|null;
+   provenance:'user_selected'|'legacy_phone_hint'|'not_provided';
+  }>>;
+  updateContactGeography(input:Readonly<{authorizationHeader:string|undefined;
+   contactPhone:string;countryIso:string;subdivisionIso?:string;
+  }>):Promise<Readonly<{
+   contactPhone:string|null;countryIso:string|null;subdivisionIso:string|null;
+   provenance:'user_selected';
+  }>>;
 }
 
 export interface AuthUserView {
@@ -139,6 +154,8 @@ export interface AuthUserView {
   readonly username?: string;
   readonly phone: string | null;
   readonly contactPhone?: string | null;
+  readonly countryIso?:string|null;
+  readonly subdivisionIso?:string|null;
   readonly email: string | null;
   readonly locale: string;
   readonly status:"ACTIVE"|"RESTRICTED"|"RECOVERY";
@@ -163,6 +180,8 @@ function authUser(profile: PlatformAuthProfile, isNewUser: boolean): AuthUserVie
     ...(profile.username ? {username:profile.username} : {}),
     phone: profile.phone,
     contactPhone: profile.contactPhone ?? null,
+    countryIso:profile.countryIso??null,
+    subdivisionIso:profile.subdivisionIso??null,
     email: profile.email,
     locale: profile.locale,
     status: profile.accountState==="restricted"?"RESTRICTED" as const:
@@ -421,13 +440,22 @@ export function createCustomerAuthService(input: Readonly<{
       });
       const firstName=request.firstName?.trim();
       const lastName=request.lastName?.trim();
-      const contactPhone=request.contactPhone?.replace(/[\s()-]/gu,"");
+      let contact:ReturnType<typeof parseSignupContact>=null;
+      if(!profile)try{
+        contact=parseSignupContact({
+          ...(request.contactPhone===undefined?{}:{contactPhone:request.contactPhone}),
+          ...(request.countryIso===undefined?{}:{countryIso:request.countryIso}),
+          ...(request.subdivisionIso===undefined?{}:{subdivisionIso:request.subdivisionIso})});
+      }catch(error){
+        if(error instanceof SignupContactError)throw new CustomerAuthError('SIGNUP_DETAILS_REQUIRED',400);
+        throw error;
+      }
       const name=firstName&&lastName?`${firstName} ${lastName}`:request.name?.trim();
       if (!profile && !name) throw new CustomerAuthError("NAME_REQUIRED_ON_SIGNUP", 400);
       if (!profile && normalized.channel==="email" &&
         (!firstName || !lastName || !/^[\p{L}\p{M} .'-]{1,80}$/u.test(firstName) ||
          !/^[\p{L}\p{M} .'-]{1,80}$/u.test(lastName) ||
-         !contactPhone || !/^0(?:70|80|81|90|91)\d{8}$/u.test(contactPhone)))
+         !contact))
         throw new CustomerAuthError("SIGNUP_DETAILS_REQUIRED",400);
 
       // Consume atomically only when this request can actually complete sign-in.
@@ -454,7 +482,7 @@ export function createCustomerAuthService(input: Readonly<{
           channel: normalized.channel,
           identifier: normalized.identifier,
           name: name!,
-          ...(firstName&&lastName&&contactPhone?{firstName,lastName,contactPhone}:{}),
+          ...(firstName&&lastName&&contact?{firstName,lastName,...contact}:{}),
           locale: "en-NG",
           createdAt: verifiedAt,
         });
@@ -593,6 +621,16 @@ export function createCustomerAuthService(input: Readonly<{
       const password = assertPassword(request.password);
       const name = request.name.trim();
       if (!name || name.length > 160) throw new CustomerAuthError("VALIDATION_FAILED", 400);
+      let contact:ReturnType<typeof parseSignupContact>=null;
+      try{
+        contact=parseSignupContact({
+          ...(request.contactPhone===undefined?{}:{contactPhone:request.contactPhone}),
+          ...(request.countryIso===undefined?{}:{countryIso:request.countryIso}),
+          ...(request.subdivisionIso===undefined?{}:{subdivisionIso:request.subdivisionIso})});
+      }catch(error){
+        if(error instanceof SignupContactError)throw new CustomerAuthError('SIGNUP_DETAILS_REQUIRED',400);
+        throw error;
+      }
       // Validate the optional address, but do not bind it to a login identity.
       // Email linking requires explicit possession proof after registration.
       if (request.email !== undefined) {
@@ -612,6 +650,9 @@ export function createCustomerAuthService(input: Readonly<{
         channel: normalized.channel,
         identifier: normalized.identifier,
         name,
+        ...(contact?{...contact}:{}),
+        ...(request.firstName?{firstName:request.firstName}:{}),
+        ...(request.lastName?{lastName:request.lastName}:{}),
         locale: "en-NG",
         createdAt,
       });
@@ -803,6 +844,32 @@ export function createCustomerAuthService(input: Readonly<{
       if(state==="suspended")throw new CustomerAuthError("ACCOUNT_SUSPENDED",403);
       if(state==="restricted")throw new CustomerAuthError("ACCOUNT_RESTRICTED",403);
       if(state==="recovery")throw new CustomerAuthError("ACCOUNT_RECOVERY_HOLD",403);
+    },
+
+    async contactGeography(request){
+      const {identity}=await requireSession(request.authorizationHeader);
+      const {profile}=identity;
+      return {contactPhone:profile.contactPhone??null,countryIso:profile.countryIso??null,
+       subdivisionIso:profile.subdivisionIso??null,
+       provenance:profile.countrySource??'not_provided'};
+    },
+
+    async updateContactGeography(request){
+      await this.authorizeSensitiveMutation({authorizationHeader:request.authorizationHeader});
+      const {identity}=await requireSession(request.authorizationHeader);
+      if(!input.repository.updateContactGeography)
+        throw new CustomerAuthError('AUTH_UNAVAILABLE',503);
+      let contact:ReturnType<typeof parseSignupContact>;
+      try{contact=parseSignupContact({contactPhone:request.contactPhone,
+        countryIso:request.countryIso,
+        ...(request.subdivisionIso===undefined?{}:{subdivisionIso:request.subdivisionIso})});}
+      catch(error){if(error instanceof SignupContactError)
+        throw new CustomerAuthError('SIGNUP_CONTACT_INVALID',400);throw error;}
+      if(!contact)throw new CustomerAuthError('SIGNUP_CONTACT_INVALID',400);
+      const latest=await input.repository.updateContactGeography({
+        tenantId:identity.tenantId,userId:identity.userId,...contact});
+      return {contactPhone:latest.contactPhone??null,countryIso:latest.countryIso??null,
+        subdivisionIso:latest.subdivisionIso??null,provenance:'user_selected'};
     },
 
     async beginWithdrawalStepUp(request) {

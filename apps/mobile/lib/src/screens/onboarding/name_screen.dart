@@ -6,8 +6,12 @@ import '../../../l10n/app_localizations.dart';
 import '../../localization/auth_error_localizer.dart';
 import '../../localization/language_picker_button.dart';
 import '../../state/session_state.dart';
+import '../../core/api/models.dart' show OtpChannel;
+import '../../core/phone/country_codes.dart';
+import '../../core/phone/country_subdivisions.dart';
 import '../../tokens/masanawa_tokens.dart';
 import '../../ui/components/onboarding_scaffold.dart';
+import '../../ui/components/phone_field.dart';
 import '../../ui/components/primary_button.dart';
 
 class NameScreen extends ConsumerStatefulWidget {
@@ -21,7 +25,33 @@ class _NameScreenState extends ConsumerState<NameScreen> {
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _phone = TextEditingController();
+  PhoneCountry _country=kDefaultCountry;
+  CountrySubdivisions? _regions;
+  String? _subdivision;
   bool _saving = false;
+
+  @override void initState(){super.initState();
+    final session=ref.read(sessionProvider);
+    final registeredPhone=session is SessionRegisterProfile?session.phone:
+      session is SessionNameRequired&&session.channel==OtpChannel.sms
+        ?session.identifier:null;
+    if(registeredPhone!=null){
+      _phone.text=registeredPhone;
+      _country=detectCountry(registeredPhone);
+    }else{
+      // Prefill the actual calling prefix: the person enters the national part.
+      _phone.text='+${_country.dialCode}';
+    }
+    CountrySubdivisions.load().then((regions){
+      if(mounted)setState(()=>_regions=regions);
+    }).catchError((Object _){
+      if(mounted)_snack('Unable to load states. Please retry signup.');
+    });
+  }
+
+  void _onCountryChanged(PhoneCountry next){setState((){
+    _country=next;_subdivision=null;
+  });}
 
   @override
   void dispose() {
@@ -50,11 +80,13 @@ class _NameScreenState extends ConsumerState<NameScreen> {
 
     final first = _first.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     final last = _last.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final phone = _phone.text.replaceAll(RegExp(r'[\s()-]'), '');
+    final phone=normalizeE164(_phone.text,country:_country);
+    final states=_regions?.forCountry(_country.iso)??const <PhoneSubdivision>[];
     if (first.isEmpty ||
         last.isEmpty ||
-        !RegExp(r'^0(70|80|81|90|91)\d{8}$').hasMatch(phone)) {
-      _snack(AppLocalizations.of(context).fullNameRequired);
+        !isPlausibleSignupContact(phone,_country)||_regions==null||
+        (states.isNotEmpty&&!states.any((s)=>s.code==_subdivision))) {
+      _snack('Enter a valid contact phone and select your state or region.');
       return;
     }
     if (_saving) return;
@@ -66,6 +98,8 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           firstName: first,
           lastName: last,
           contactPhone: phone,
+          countryIso:_country.iso,
+          subdivisionIso:_subdivision,
         );
     if (mounted) setState(() => _saving = false);
   }
@@ -160,17 +194,27 @@ class _NameScreenState extends ConsumerState<NameScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _phone,
-            enabled: !_saving,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Contact phone for data bundles',
-              hintText: '08012345678',
-              prefixIcon: Icon(Icons.phone_outlined),
-              border: OutlineInputBorder(),
-            ),
-          ),
+          const Text('Contact phone (not verified)'),
+          const SizedBox(height:6),
+          PhoneField(controller:_phone,enabled:!_saving,initialCountry:_country,
+            onCountryChanged:_onCountryChanged),
+          const SizedBox(height:6),
+          Text('Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',
+            style:Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height:12),
+          if(_regions==null)const LinearProgressIndicator()
+          else if(_regions!.forCountry(_country.iso).isNotEmpty)
+            DropdownButtonFormField<String>(
+              key:ValueKey('signup-subdivision-${_country.iso}'),
+              initialValue:_subdivision,isExpanded:true,
+              decoration:const InputDecoration(labelText:'State / province / region',
+                border:OutlineInputBorder()),
+              items:[for(final state in _regions!.forCountry(_country.iso))
+                DropdownMenuItem(value:state.code,
+                  child:Text(state.name,overflow:TextOverflow.ellipsis))],
+              onChanged:_saving?null:(value)=>setState(()=>_subdivision=value),
+            )
+          else const Text('No listed states for this country.'),
           const SizedBox(height: 24),
           PrimaryButton(
             label: _saving ? l10n.finishingSignIn : l10n.continueAction,

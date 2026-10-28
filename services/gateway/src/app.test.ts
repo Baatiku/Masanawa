@@ -124,6 +124,9 @@ describe("gateway service bootstrap", () => {
       async confirmBankStepUp() { throw new Error("unused"); },
       async consumeBankStepUp() { throw new Error("unused"); },
       async authorizeSensitiveMutation() {},
+      async contactGeography() {return {contactPhone:null,countryIso:null,
+        subdivisionIso:null,provenance:'not_provided' as const};},
+      async updateContactGeography() {throw new Error('unused');},
     };
     const app = createGatewayApp({ customerAuth });
     apps.push(app);

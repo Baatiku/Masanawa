@@ -63,7 +63,8 @@ const List<PhoneCountry> kPhoneCountries = [
   PhoneCountry(dialCode: '212', iso: 'MA', name: 'Morocco', flag: '🇲🇦'),
   PhoneCountry(dialCode: '213', iso: 'DZ', name: 'Algeria', flag: '🇩🇿'),
   PhoneCountry(dialCode: '216', iso: 'TN', name: 'Tunisia', flag: '🇹🇳'),
-  PhoneCountry(dialCode: '1', iso: 'US', name: 'USA / Canada', flag: '🇺🇸'),
+  PhoneCountry(dialCode: '1', iso: 'US', name: 'United States', flag: '🇺🇸'),
+  PhoneCountry(dialCode: '1', iso: 'CA', name: 'Canada', flag: '🇨🇦'),
   PhoneCountry(dialCode: '44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧'),
   PhoneCountry(dialCode: '353', iso: 'IE', name: 'Ireland', flag: '🇮🇪'),
   PhoneCountry(dialCode: '33', iso: 'FR', name: 'France', flag: '🇫🇷'),
@@ -120,4 +121,15 @@ String normalizeE164(String raw, {PhoneCountry country = kDefaultCountry}) {
       : digits.replaceFirst(RegExp(r'^0+'), '');
   if (national.isEmpty || country.dialCode.isEmpty) return '';
   return '+${country.dialCode}$national';
+}
+
+/// Preliminary client plausibility check; the Gateway independently validates
+/// full E.164 metadata. Contact is not verified phone authentication.
+bool isPlausibleSignupContact(String e164, PhoneCountry country) {
+  if (!RegExp(r'^\+[1-9]\d{6,14}$').hasMatch(e164) ||
+      country.dialCode.isEmpty ||
+      !e164.startsWith('+${country.dialCode}')) return false;
+  final national=e164.substring(country.dialCode.length+1);
+  if(country.iso=='NG')return RegExp(r'^(70|80|81|90|91)\d{8}$').hasMatch(national);
+  return national.length>=5&&national.length<=14;
 }

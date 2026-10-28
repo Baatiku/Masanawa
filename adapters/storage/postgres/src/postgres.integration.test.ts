@@ -230,6 +230,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0113_masanawa_account_number.sql",
       "security/0114_assign_masanawa_account_numbers.sql",
       "security/0115_email_signup_contact.sql",
+      "security/0116_signup_contact_geography.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",
