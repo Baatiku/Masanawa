@@ -368,7 +368,9 @@ class _NotificationPreferencesScreenState
                     const ListTile(title:Text('No recent alerts yet.')),
                   if(_historyError!=null&&_history.isNotEmpty)
                     ListTile(leading:Icon(Icons.refresh,color:colors.brand),
-                      title:Text(_historyError!),onTap:_refreshHistory),
+                      title:Text(_historyError!),
+                      subtitle:const Text('Recent alerts remain available'),
+                      onTap:_refreshHistory),
                   for(final event in _history)...[
                     const Divider(height:1),
                     ListTile(

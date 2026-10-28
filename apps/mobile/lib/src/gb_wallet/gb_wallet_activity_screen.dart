@@ -243,6 +243,9 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           const Padding(padding:EdgeInsets.only(bottom:12),
             child:Text('Posted MB and NGN movements. Pending authorizations and '
               'reservations are not counted as completed payments.')),
+          if(promotion?.valueOrNull!=null &&
+              (promotion!.valueOrNull!.campaigns.isNotEmpty ||
+                promotion.valueOrNull!.earnings.isNotEmpty))
           Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
             crossAxisAlignment:CrossAxisAlignment.stretch,children:[
             Text('Promotions & Share earnings',
@@ -466,6 +469,11 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
             Center(child:TextButton.icon(
               onPressed:()=>_loadMore(owner,cursor),
               icon:const Icon(Icons.expand_more),label:const Text('Load more activity'))),
+          if(promotion?.hasError==true)
+            ListTile(title:const Text('Promotion history unavailable.'),
+              subtitle:const Text('Posted MB and NGN activity remains available.'),
+              trailing:TextButton(onPressed:()=>ref.invalidate(gbPromotionJournalProvider(owner)),
+                child:const Text('Retry promotion history'))),
         ],
       )),
     );
