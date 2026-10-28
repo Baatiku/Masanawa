@@ -20,6 +20,9 @@ export interface StatusRuntime {
  enabled?:()=>boolean;
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
+ imageUpload?:(input:{tenantId:string;ownerId:string;imageBase64:string;altText:string;
+  rightsConfirmed:boolean;idempotencyKey:string})=>Promise<unknown>;
+ imagePreview?:(t:string,editor:string,post:string,mediaId:string)=>Promise<unknown>;
  publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>;
     validReferral?(id:string,token:string):Promise<boolean>;
     readApprovedImage?(postId:string,mediaId:string):Promise<{
@@ -98,6 +101,8 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
     port:options.promotions,principal:resolve,
     isEditor:async session=>await options.isEditor?.(session)===true,
     enabled:options.promotionsEnabled??(()=>false),
+    ...(options.imageUpload?{imageUpload:options.imageUpload}:{}),
+    ...(options.imagePreview?{imagePreview:options.imagePreview}:{}),
   });
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
   if(options.updateMediaAlt)scope.put('/v1/admin/feed/media/:mediaId/alt',async(request,reply)=>{
