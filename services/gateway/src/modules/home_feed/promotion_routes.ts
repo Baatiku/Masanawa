@@ -9,6 +9,12 @@ export interface PromotionPort {
  adminQueue(t:string,editor:string):Promise<unknown>;
  adminOverview(t:string,editor:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
+ proposeEdit(t:string,owner:string,postId:string,input:{
+  expectedRevision:number;body:string;destinationUrl?:string;idempotencyKey:string
+ }):Promise<unknown>;
+ myEdits(t:string,owner:string):Promise<unknown>;
+ adminEdits(t:string,editor:string):Promise<unknown>;
+ reviewEdit(t:string,editor:string,id:string,approve:boolean,reason:string):Promise<unknown>;
  appeal(t:string,owner:string,campaignId:string,reason:string):Promise<unknown>;
  myAppeals(t:string,owner:string):Promise<unknown>;
  adminAppeals(t:string,editor:string):Promise<unknown>;
@@ -87,6 +93,45 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   return options.port.mine(p.tenantId,p.userId);
  });
 
+
+ app.post('/v1/promotions/posts/:postId/revisions',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await who(r),b=body(r);
+  fields(b,['expectedRevision','body','destinationUrl']);
+  if(typeof b.body!=='string'||typeof b.expectedRevision!=='number'||
+    !Number.isSafeInteger(b.expectedRevision)||b.expectedRevision<0)
+   fail('invalid_edit');
+  let destinationUrl:string|null=null;
+  try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}
+  catch{fail('invalid_promotion_destination');}
+  const key=r.headers['idempotency-key'];
+  if(typeof key!=='string')fail('idempotency_key_required');
+  return options.port.proposeEdit(p.tenantId,p.userId,params(r,'postId'),{
+   body:b.body,expectedRevision:b.expectedRevision as number,
+   idempotencyKey:key,...(destinationUrl!==null?{destinationUrl}:{})});
+ });
+ app.get('/v1/promotions/revisions/mine',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r);
+  return options.port.myEdits(p.tenantId,p.userId);
+ });
+ app.get('/v1/admin/promotions/revisions',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r);
+  return options.port.adminEdits(p.tenantId,p.userId);
+ });
+ app.post('/v1/admin/promotions/revisions/:revisionId/review',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r),b=body(r);
+  fields(b,['decision','reason']);
+  if((b.decision!=='approve'&&b.decision!=='reject')||
+    typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
+   fail('invalid_edit_review');
+  if(b.decision==='approve'&&!options.enabled())
+   fail('status_financial_qualification_missing',503);
+  return options.port.reviewEdit(p.tenantId,p.userId,params(r,'revisionId'),
+   b.decision==='approve',b.reason);
+ });
  app.post('/v1/promotions/:campaignId/appeal',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
   // OFF-state historical safety and appeal readback remains usable.
