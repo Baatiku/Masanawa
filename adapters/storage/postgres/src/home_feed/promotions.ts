@@ -159,7 +159,11 @@ export class PgStatusPromotions {
    if(!approve){
     await c.query(`UPDATE feed.paid_image_uploads SET state='rejected'
       WHERE tenant_id=$1 AND id=$2`,[t,mediaId]);
-    await this.enqueueMediaDeletion(c,t,post);
+    await c.query(`INSERT INTO feed.paid_media_deletion_outbox
+      (tenant_id,post_id,media_id,object_key)
+      SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
+      WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3
+      ON CONFLICT DO NOTHING`,[t,post,mediaId]);
    }
    await this.audit(c,t,post,editor,approve?'paid_image_approved':'paid_image_rejected',null,
     {mediaId,reason:rationale});
