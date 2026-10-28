@@ -25,7 +25,7 @@ export interface PromotionPort {
  adminOverview(t:string,editor:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
  proposeEdit(t:string,owner:string,postId:string,input:{
-  expectedRevision:number;body:string;destinationUrl?:string;idempotencyKey:string
+  expectedRevision:number;body:string;destinationUrl?:string;mediaIds?:readonly string[];idempotencyKey:string
  }):Promise<unknown>;
  myEdits(t:string,owner:string):Promise<unknown>;
  adminEdits(t:string,editor:string):Promise<unknown>;
@@ -204,18 +204,23 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.post('/v1/promotions/posts/:postId/revisions',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
   const p=await who(r),b=body(r);
-  fields(b,['expectedRevision','body','destinationUrl']);
+  fields(b,['expectedRevision','body','destinationUrl','mediaIds']);
   if(typeof b.body!=='string'||typeof b.expectedRevision!=='number'||
     !Number.isSafeInteger(b.expectedRevision)||b.expectedRevision<0)
    fail('invalid_edit');
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
+  const ids=b.mediaIds??null;
+  if(ids!==null&&(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length||
+   ids.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id))))
+    fail('invalid_paid_image_ids');
   const key=r.headers['idempotency-key'];
   if(typeof key!=='string')fail('idempotency_key_required');
   return options.port.proposeEdit(p.tenantId,p.userId,params(r,'postId'),{
    body:b.body as string,expectedRevision:b.expectedRevision as number,
-   idempotencyKey:key as string,...(destinationUrl!==null?{destinationUrl}:{})});
+   idempotencyKey:key as string,...(destinationUrl!==null?{destinationUrl}:{}),
+   ...(ids!==null?{mediaIds:ids as string[]}:{}),});
  });
  app.get('/v1/promotions/revisions/mine',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
