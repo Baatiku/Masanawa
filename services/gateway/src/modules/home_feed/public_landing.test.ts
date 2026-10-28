@@ -18,8 +18,11 @@ describe('anonymous Status text landing without false advertising views',()=>{
  it('rejects unknown, purged and feature-disabled content without billing or reflecting forged tokens',async()=>{
   const find=vi.fn(async(post:string)=>post===id?
    {id,name:'Teacher',body:'Approved lesson',kind:'text' as const,imageCount:0}:null);
+  const validReferral=vi.fn(async(_post:string,token:string)=>
+    token==='opaqueAlphaBeta012345678901');
   const app=Fastify();
-  await registerPublicStatusLanding(app,{port:{find},enabled:()=>true});
+  await registerPublicStatusLanding(app,{port:{find,validReferral},enabled:()=>true,
+    publicBaseUrl:'https://status.example.test'});
   const notFound=await app.inject({method:'GET',url:'/status/not-a-uuid'});
   expect(notFound.statusCode).toBe(404);
   const reply=await app.inject({method:'GET',url:`/status/${id}?r=%3Cscript%3E`});
@@ -27,7 +30,19 @@ describe('anonymous Status text landing without false advertising views',()=>{
   expect(reply.headers['content-security-policy']).toContain("default-src 'none'");
   expect(reply.headers['cache-control']).toBe('no-store');
   expect(reply.body).not.toContain('?r=%3Cscript%3E');
-  expect(find).toHaveBeenCalledTimes(2);
+  expect(validReferral).not.toHaveBeenCalled();
+  const forwarded=await app.inject({method:'GET',
+    url:`/status/${id}?r=opaqueAlphaBeta012345678901`});
+  expect(forwarded.body).toContain('https://status.example.test/status/');
+  expect(forwarded.body).toContain('?r=opaqueAlphaBeta012345678901');
+  expect(forwarded.body).toContain('rel="canonical"');
+  expect(forwarded.body).toContain('og:url');
+  expect(forwarded.body).not.toContain('og:url" content="https://status.example.test/status/'+id+'?r=');
+  expect(validReferral).toHaveBeenCalledWith(id,'opaqueAlphaBeta012345678901');
+  const stale=await app.inject({method:'GET',url:`/status/${id}?r=InactiveButWellFormedOpaqueLink123456`});
+  expect(stale.body).not.toContain('InactiveButWellFormedOpaqueLink123456');
+  expect(stale.headers['permissions-policy']).toContain('geolocation=()');
+  expect(find).toHaveBeenCalledTimes(4);
   await app.close();
 
   const gone=Fastify();
