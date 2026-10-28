@@ -136,7 +136,11 @@ export class PgStatusPromotions {
    const quotes=await c.query(`SELECT * FROM feed.promotion_quotes
     WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,qid,s]);
    const q=(quotes.rows[0] as Row|undefined)??fail('quote_not_found',404);
-   const fp=hash(JSON.stringify([qid,s,q.kind,q.post_id,q.body,q.target_views,q.destination_url]));
+   // Preserve the original hash for all historic quotes without a CTA.
+   // Only quotes with a new, reviewed destination extend the fingerprint.
+   const quoted=[qid,s,q.kind,q.post_id,q.body,q.target_views];
+   const fp=hash(JSON.stringify(q.destination_url==null?quoted:
+    [...quoted,q.destination_url]));
    const previous=await c.query(`SELECT * FROM feed.promotion_campaigns
     WHERE tenant_id=$1 AND sponsor_id=$2 AND idempotency_key=$3`,[t,s,key]);
    if(previous.rows[0]){
