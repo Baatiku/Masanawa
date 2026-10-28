@@ -21,7 +21,7 @@ class StatusPromotionSheet extends StatefulWidget {
 class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
   final body=TextEditingController(),custom=TextEditingController();
   int views=100;
-  bool busy=false;
+  bool busy=false,recharging=false;
   String? error;
   StatusPromotionQuote? reviewed;
   late final StatusPromotionDraftStore _draftStore;
@@ -67,7 +67,12 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
   void changeViews(int n){if(n<1||n>1000000)return;
     setState((){views=n;reviewed=null;error=null;});_persistDraft();}
   Future<void> review() async {
-    if(busy)return;
+    if(busy||recharging)return;
+    if(widget.api.currentAccount()!=widget.api.ownerAccount){
+      setState(()=>error=t('Account changed. Reopen this promotion to continue.',
+        'An canza asusu. Sake buɗe tallar don ci gaba.'));
+      return;
+    }
     final text=body.text.trim();
     if(!boost&&(text.isEmpty||text.length>5000)){
       setState(()=>error=t('Write a short promotion first.','Rubuta sakon talla tukuna.'));
@@ -85,7 +90,8 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
     finally{if(mounted)setState(()=>busy=false);}
   }
   Future<void> confirm() async {
-    final quote=reviewed;if(quote==null||quote.insufficient||busy)return;
+    final quote=reviewed;
+    if(quote==null||quote.insufficient||busy||recharging)return;
     setState((){busy=true;error=null;});
     try{
       final receipt=await widget.api.confirm(quote);
@@ -103,14 +109,53 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
     finally{if(mounted)setState(()=>busy=false);}
   }
   Future<void> recharge() async {
-    if(busy||widget.onRecharge==null)return;
-    await widget.onRecharge!();
-    if(!mounted)return;
-    // Returning from Wallet requires a fresh authoritative quote and a
-    // separate user confirmation. This cannot auto-submit a purchase.
+    if(busy||recharging||widget.onRecharge==null)return;
+    if(widget.api.currentAccount()!=widget.api.ownerAccount){
+      setState(()=>error=t('Account changed. Reopen this promotion to continue.',
+        'An canza asusu. Sake buɗe tallar don ci gaba.'));
+      return;
+    }
+    setState((){recharging=true;error=null;reviewed=null;});
+    // Flush the exact owner/post-bound draft before leaving this route. The
+    // return journey must not rely on a pending debounce or a signed URL.
+    _draftTimer?.cancel();
+    final snapshot=StatusPromotionDraft(body:boost?'':body.text,targetViews:views);
+    var draftSaved=false;
+    try{
+      await _draftWrites;
+      await _draftStore.write(widget.postId,snapshot);
+      draftSaved=true;
+      if(!mounted||widget.api.currentAccount()!=widget.api.ownerAccount)return;
+      await widget.onRecharge!();
+      if(!mounted||widget.api.currentAccount()!=widget.api.ownerAccount)return;
+    }catch(_){
+      if(mounted)setState(()=>error=t(
+        draftSaved?'Could not return from Add MB. Your promotion draft is saved.'
+          :'Could not securely save this draft. Stay here and try again.',
+        draftSaved?'Ba a samu komawa daga ƙara MB ba. An ajiye daftarin tallarku.'
+          :'Ba a iya ajiye daftarin nan cikin aminci ba. Ku dakata ku sake gwadawa.'));
+      return;
+    }finally{
+      if(mounted)setState(()=>recharging=false);
+    }
+    // Always fetch a NEW authoritative balance and price after returning.
+    // The earlier quote is cleared, and confirming remains a separate tap.
     await review();
   }
   @override Widget build(BuildContext context){
+    if(widget.api.currentAccount()!=widget.api.ownerAccount){
+      return SafeArea(child:Padding(padding:const EdgeInsets.all(20),
+        child:Column(mainAxisSize:MainAxisSize.min,children:[
+          const Icon(Icons.lock_outline,size:28),
+          const SizedBox(height:10),
+          Text(t('Account changed. Reopen this promotion to continue.',
+            'An canza asusu. Sake buɗe tallar don ci gaba.'),
+            textAlign:TextAlign.center),
+          if(Navigator.canPop(context))TextButton(
+            onPressed:()=>Navigator.pop(context),
+            child:Text(t('Close','Rufe'))),
+        ])));
+    }
     final theme=Theme.of(context),quote=reviewed;
     // Keep the review sheet compact on tall handsets and scrollable when the
     // keyboard, enlarged text or a short display reduces usable height.
@@ -164,7 +209,7 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
             Wrap(spacing:8,runSpacing:2,children:[
               for(final n in const [50,100,500,1000])
                 ChoiceChip(label:Text('$n'),selected:views==n,
-                  onSelected:busy?null:(_)=>changeViews(n)),
+                  onSelected:busy||recharging?null:(_)=>changeViews(n)),
             ]),
             Row(children:[
               Expanded(child:TextField(controller:custom,
@@ -173,7 +218,7 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
                 onSubmitted:(value){final n=int.tryParse(value.trim());
                   if(n!=null)changeViews(n);},
               )),const SizedBox(width:8),
-              TextButton(onPressed:busy?null:(){
+              TextButton(onPressed:busy||recharging?null:(){
                 final n=int.tryParse(custom.text.trim());
                 if(n==null||n<1||n>1000000){
                   setState(()=>error=t('Enter 1–1,000,000 views.','Shigar da adadi daga 1 zuwa 1,000,000.'));
@@ -188,11 +233,15 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
               child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                 Text('$views ${t('views','kallon sako')} × 1 MB = $views MB',
                   style:theme.textTheme.titleMedium),
+                const SizedBox(height:3),
+                Text(t('Budget for up to $views qualified views, not guaranteed views.',
+                  'Wannan kasafin zai iya samar da har kallo $views da aka tabbatar, amma ba a yi alƙawarin samun su ba.'),
+                  style:theme.textTheme.bodySmall),
                 if(quote!=null)...[
                   const SizedBox(height:4),
                   Text('${t('Eligible purchased balance','MB da za a iya amfani da su')}: ${quote.eligibleMb} MB'),
                   if(quote.insufficient)Text(t('Not enough purchased MB. Add data to continue.',
-                    'MB da aka saya ba su isa ba. Kara MB don ci gaba.'),
+                    'MB da aka saya ba su isa ba. Ƙara MB don ci gaba.'),
                     style:TextStyle(color:theme.colorScheme.error)),
                 ],
               ])),
@@ -200,15 +249,16 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
               child:Text(error!,style:TextStyle(color:theme.colorScheme.error))),
             const SizedBox(height:12),
             if(quote==null)
-              FilledButton(onPressed:busy?null:review,
+              FilledButton(onPressed:busy||recharging?null:review,
                 child:Text(busy?t('Checking…','Ana dubawa…'):
                   t('Review price','Duba farashi')))
             else if(quote.insufficient)
-              FilledButton.icon(onPressed:busy?null:widget.onRecharge==null?null:recharge,
+              FilledButton.icon(onPressed:busy||recharging?null:widget.onRecharge==null?null:recharge,
                 icon:const Icon(Icons.add_circle_outline),
-                label:Text(t('Add MB','Kara MB')))
+                label:Text(recharging?t('Opening Add MB…','Ana buɗe ƙara MB…'):
+                  t('Add MB','Ƙara MB')))
             else
-              FilledButton(onPressed:busy?null:confirm,
+              FilledButton(onPressed:busy||recharging?null:confirm,
                 child:Text(busy?t('Confirming…','Ana tabbatarwa…'):
                   t('Confirm ${quote.totalMb} MB','Tabbatar da ${quote.totalMb} MB'))),
             TextButton(onPressed:busy?null:()=>Navigator.pop(context),

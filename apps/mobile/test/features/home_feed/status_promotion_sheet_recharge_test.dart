@@ -27,8 +27,8 @@ class _MemoryDraftStore implements StatusPromotionDraftStore {
 }
 
 class _QuoteStub extends StatusPromotionApi {
-  _QuoteStub() : super(dio:Dio(),accessToken:() async => 'synthetic',
-    ownerAccount:'fan-one',currentAccount:()=> 'fan-one',
+  _QuoteStub({String Function()? activeAccount}) : super(dio:Dio(),accessToken:() async => 'synthetic',
+    ownerAccount:'fan-one',currentAccount:activeAccount??(()=>'fan-one'),
     journal:_MemoryJournal());
 
   final requests=<({String? postId,String? body,int views})>[];
@@ -100,6 +100,97 @@ void main() {
     expect(find.text('Support education in Nigeria'),findsOneWidget);
     expect(find.text('Confirm 500 MB'),findsOneWidget);
     expect(api.confirmations,0);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('Add MB navigation is single-flight, saves the exact owner draft, and never spends on return',
+      (tester) async {
+    final api=_QuoteStub(),drafts=_MemoryDraftStore();
+    final returned=Completer<void>();
+    var launches=0;
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:
+      StatusPromotionSheet(api:api,draftStore:drafts,onRecharge:() async {
+        launches++;
+        await returned.future;
+        api.funded=true;
+      }))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first,'Keep my education promotion');
+    await tester.tap(find.text('50'));
+    await tester.ensureVisible(find.text('Review price'));
+    await tester.tap(find.text('Review price'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add MB'));
+    await tester.tap(find.text('Add MB'));
+    await tester.pump();
+    await tester.pump();
+    expect(launches,1);
+    expect(drafts.drafts['new-post'],isNotNull,
+      reason:'Leaving for Wallet flushes the debounce immediately');
+    expect(drafts.drafts['new-post']?.body,'Keep my education promotion');
+    expect(drafts.drafts['new-post']?.targetViews,50);
+    expect(find.text('Add MB'),findsNothing);
+    expect(api.requests.length,1);
+    expect(api.confirmations,0);
+    returned.complete();
+    await tester.pumpAndSettle();
+    expect(launches,1);
+    expect(api.requests.length,2);
+    expect(find.text('Confirm 50 MB'),findsOneWidget);
+    expect(api.confirmations,0);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('failed Wallet route preserves the saved composer and offers recovery',
+      (tester) async {
+    final api=_QuoteStub(),drafts=_MemoryDraftStore();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:
+      StatusPromotionSheet(api:api,draftStore:drafts,onRecharge:() async {
+        throw StateError('route unavailable');
+      }))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first,'A safe draft');
+    await tester.ensureVisible(find.text('Review price'));
+    await tester.tap(find.text('Review price'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add MB'));
+    await tester.tap(find.text('Add MB'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not return from Add MB. Your promotion draft is saved.'),
+      findsOneWidget);
+    expect(drafts.drafts['new-post']?.body,'A safe draft');
+    expect(api.requests.length,1);
+    expect(api.confirmations,0);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('account switching while in Add MB never re-quotes or charges the old account',
+      (tester) async {
+    var active='fan-one';
+    final api=_QuoteStub(activeAccount:()=>active),drafts=_MemoryDraftStore();
+    final returned=Completer<void>();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:
+      StatusPromotionSheet(api:api,draftStore:drafts,onRecharge:()=>returned.future))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first,'Owner private text');
+    await tester.ensureVisible(find.text('Review price'));
+    await tester.tap(find.text('Review price'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add MB'));
+    await tester.tap(find.text('Add MB'));
+    await tester.pump();
+    await tester.pump();
+    active='fan-two';
+    returned.complete();
+    await tester.pumpAndSettle();
+    expect(api.requests.length,1,
+      reason:'An old sheet must not fetch a new quote under a different account');
+    expect(api.confirmations,0);
+    expect(drafts.drafts['new-post']?.body,'Owner private text');
+    expect(find.text('Owner private text'),findsNothing,
+      reason:'An old account promotion draft must not remain visible');
+    expect(find.text('Account changed. Reopen this promotion to continue.'),
+      findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 
