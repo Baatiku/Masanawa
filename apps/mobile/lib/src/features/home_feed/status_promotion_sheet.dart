@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'status_promotion_api.dart';
 
@@ -5,10 +7,11 @@ import 'status_promotion_api.dart';
 /// The quote and eligible balance always come from the server, never the UI.
 class StatusPromotionSheet extends StatefulWidget {
   const StatusPromotionSheet({super.key,required this.api,this.postId,
-    this.onRecharge});
+    this.onRecharge,this.draftStore});
   final StatusPromotionApi api;
   final String? postId;
   final Future<void> Function()? onRecharge;
+  final StatusPromotionDraftStore? draftStore;
   @override State<StatusPromotionSheet> createState()=>_StatusPromotionSheetState();
 }
 
@@ -18,11 +21,48 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
   bool busy=false;
   String? error;
   StatusPromotionQuote? reviewed;
+  late final StatusPromotionDraftStore _draftStore;
+  Timer? _draftTimer;
+  Future<void> _draftWrites=Future<void>.value();
+  int _draftRevision=0;
+  bool _confirmed=false;
   bool get boost=>widget.postId!=null;
   String t(String en,String ha)=>Localizations.localeOf(context).languageCode=='ha'?ha:en;
-  @override void dispose(){body.dispose();custom.dispose();super.dispose();}
+  @override void initState(){super.initState();
+    _draftStore=widget.draftStore??SecureStatusPromotionDraftStore(widget.api.ownerAccount);
+    unawaited(_restoreDraft());
+  }
+  Future<void> _restoreDraft() async {
+    final revision=_draftRevision;
+    try{
+      final draft=await _draftStore.read(widget.postId);
+      if(!mounted||revision!=_draftRevision||draft==null||
+        widget.api.currentAccount()!=widget.api.ownerAccount)return;
+      setState((){body.text=draft.body;views=draft.targetViews;reviewed=null;});
+    }catch(_){/* Draft storage failure must never authorize a quote or charge. */}
+  }
+  void _persistDraft(){
+    _draftRevision++;
+    _draftTimer?.cancel();
+    final snapshot=StatusPromotionDraft(body:boost?'':body.text,targetViews:views);
+    _draftTimer=Timer(const Duration(milliseconds:250),(){
+      _draftWrites=_draftWrites.then((_)async{
+        if(widget.api.currentAccount()!=widget.api.ownerAccount||_confirmed)return;
+        await _draftStore.write(widget.postId,snapshot);
+      }).catchError((Object _){/* Confirmation does not depend on draft persistence. */});
+    });
+  }
+  @override void dispose(){
+    _draftTimer?.cancel();
+    if(!_confirmed&&widget.api.currentAccount()==widget.api.ownerAccount){
+      final snapshot=StatusPromotionDraft(body:boost?'':body.text,targetViews:views);
+      unawaited(_draftWrites.then((_)=>_draftStore.write(widget.postId,snapshot))
+        .catchError((Object _){}));
+    }
+    body.dispose();custom.dispose();super.dispose();
+  }
   void changeViews(int n){if(n<1||n>1000000)return;
-    setState((){views=n;reviewed=null;error=null;});}
+    setState((){views=n;reviewed=null;error=null;});_persistDraft();}
   Future<void> review() async {
     if(busy)return;
     final text=body.text.trim();
@@ -46,7 +86,14 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
     setState((){busy=true;error=null;});
     try{
       final receipt=await widget.api.confirm(quote);
-      if(mounted)Navigator.of(context).pop(receipt);
+      if(mounted){
+        _confirmed=true;
+        _draftTimer?.cancel();
+        // Financial confirmation must not wait on optional secure draft IO.
+        unawaited(_draftWrites.then((_)=>_draftStore.clear(widget.postId))
+          .catchError((Object _){}));
+        Navigator.of(context).pop(receipt);
+      }
     }catch(_){if(mounted)setState(()=>error=t(
       'Not confirmed. Check your original receipt before another payment.',
       'Ba a tabbatar ba. Duba takardar asali kafin wani biya.'));}
@@ -83,7 +130,7 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
             if(!boost)...[
               const SizedBox(height:12),
               TextField(controller:body,maxLines:3,minLines:2,maxLength:5000,
-                onChanged:(_)=>setState(()=>reviewed=null),
+                onChanged:(_){setState(()=>reviewed=null);_persistDraft();},
                 decoration:InputDecoration(isDense:true,
                   hintText:t('What would you like to promote?',
                     'Me kake son yadawa?'),border:const OutlineInputBorder())),

@@ -232,7 +232,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     final result=await showModalBottomSheet<StatusPromotionCampaign>(
       context:context,isScrollControlled:true,showDragHandle:false,
       builder:(ctx)=>StatusPromotionSheet(api:api,postId:postId,
-        onRecharge:()async{await ctx.push<void>('/wallet');}),
+        // Go directly to the existing Add MB/packages journey; the parent
+        // sheet keeps its local draft and re-quotes only after returning.
+        onRecharge:()async{await ctx.push<void>('/wallet/add');}),
     );
     if(!mounted||scope!=generation||widget.accountKey!=account||result==null)return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
@@ -247,7 +249,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if(api==null||widget.accountKey.isEmpty)return;
     final account=widget.accountKey,scope=generation;
     final page=MyStatusPromotionsScreen(api:api,canBoost:promotionsAvailable,
-      onBoostAgain:(postId)=>openPromotion(postId:postId));
+      onBoostAgain:(postId)=>openPromotion(postId:postId),
+      onCreatePromotion:()=>openPromotion());
     await Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>
       widget.wrapAccountRoute?.call(page)??page));
     if(mounted&&scope==generation&&account==widget.accountKey)await refresh();
