@@ -53,7 +53,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   for(const name of [
    "0008_paid_media_deletion_outbox.sql","0009_view_challenge_abuse_index.sql",
    "0010_promotion_rejection_appeals.sql","0011_promotion_budget_immutability.sql",
-   "0012_reviewed_paid_post_edits.sql",
+   "0012_reviewed_paid_post_edits.sql","0013_campaign_drafts_and_expiry.sql",
   ])await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/"+name,import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
