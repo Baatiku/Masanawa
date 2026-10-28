@@ -15,7 +15,7 @@ const selection=`SELECT p.user_id,p.handle,p.display_name,p.avatar_url FROM talk
  JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id`;
 export function recipientSearchTerm(raw:string):{kind:'name'|'username'|'email'|'phone';value:string;localPhone?:string}|null{
  const value=raw.trim();if(value.length<2||value.length>320)return null;
- if(value.includes('@')&&!value.startsWith('@'))return /^[^@\s%]+@[^@\s%]+\.[^@\s%.]{2,}$/u.test(value)
+ if(value.includes('@')&&!value.startsWith('@'))return /^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$/u.test(value)
   ?{kind:'email',value:value.toLowerCase()}:null;
  if(/^[+\d\s()-]+$/u.test(value)){
   const compact=value.replace(/[\s()-]/gu,'');

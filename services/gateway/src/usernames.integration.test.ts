@@ -77,6 +77,8 @@ it('searches name/handle prefixes and exact private contacts only, honoring tena
  await user('long','Long Person','t','long.person');
  await db.query('UPDATE security.platform_user_profiles SET email=$1 WHERE user_id=$2',[longEmail,'long']);
  expect(await directory.search(actor,longEmail)).toMatchObject([{userId:'long'}]);
+ await db.query('UPDATE security.platform_user_profiles SET email=$1 WHERE user_id=$2',['find+tag%alias@example.com','long']);
+ expect(await directory.search(actor,'find+tag%alias@example.com')).toMatchObject([{userId:'long'}]);
  expect(await directory.search(actor,'0803')).toEqual([]);
  expect((await directory.search(actor,'08031236428')).some(x=>x.userId==='find')).toBe(true);
  expect(await directory.search(actor,'send')).toEqual([]);
