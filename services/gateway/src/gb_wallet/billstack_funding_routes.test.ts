@@ -42,7 +42,7 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   expect(p.json().account).toEqual({state:"pending"});
  });
  it("rejects foreign/invalid profile applicants before pending storage or provider writes",async()=>{
-  for(const phone of ["+12025550123","+233241234567","+2348012345678","07112345678",""]){
+  for(const phone of ["+12025550123","+233241234567","+2346012345678","07112345678",""]){
     const start=vi.fn(async()=>{throw new Error("must not write");});
     const f=setup({applicantComplete:async()=>true,start,
       applicant:async(_actor,reference)=>({reference,email:"fan@example.com",phone,firstName:"Fan",lastName:"Masanawa"})});
@@ -56,6 +56,13 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  });
  it("allows corrected Nigerian applicants and keeps assigned history independent of profile validity",async()=>{
   const headers={authorization:"Bearer session"};
+  const nationalE164=setup({applicantComplete:async()=>true,
+    applicant:async(_actor,reference)=>({reference,email:'fan@example.com',
+      phone:'+2348031234567',firstName:'Fan',lastName:'Masanawa'})});
+  expect((await nationalE164.app.inject({url:'/v1/gb/wallet/virtual-account',headers}))
+    .json().applicantComplete).toBe(true);
+  expect((await nationalE164.app.inject({method:'POST',
+    url:'/v1/gb/wallet/virtual-account',headers})).statusCode).toBe(200);
   const corrected=setup({applicantComplete:async()=>true});
   expect((await corrected.app.inject({url:"/v1/gb/wallet/virtual-account",headers})).json().applicantComplete).toBe(true);
   expect((await corrected.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(200);

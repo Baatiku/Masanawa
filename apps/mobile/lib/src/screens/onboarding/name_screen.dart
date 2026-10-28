@@ -209,7 +209,8 @@ class _NameScreenState extends ConsumerState<NameScreen> {
           Text('Selected country: ${_country.name}. Change it if the phone prefix suggests the wrong country.',
             style:Theme.of(context).textTheme.bodySmall),
           const SizedBox(height:12),
-          if(_regions==null && _regionLoadError==null)const LinearProgressIndicator()
+          if(_regions==null && _regionLoadError==null)
+            const Text('Loading state and region choices…')
           else if(_regions==null)...[
             Text(_regionLoadError??'State and region list is unavailable.'),
             TextButton.icon(onPressed:_saving?null:_loadRegionChoices,
