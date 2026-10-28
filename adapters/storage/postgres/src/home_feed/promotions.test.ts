@@ -497,4 +497,35 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    FROM feed.promotion_view_charges WHERE campaign_id=$1`,[c.id])).rows)
    .toEqual([{sharer_id:null,platform_half_mb:2,sharer_half_mb:0}]);
  });
+
+ it('prunes expired unclaimed viewer proofs but retains immutable paid-view evidence',async()=>{
+  await account('retentionowner',3);
+  await account('retentionviewera',1);
+  await account('retentionviewerb',1);
+  const q=await service.quote({tenantId:t,sponsorId:'retentionowner',
+   body:'Privacy retention does not alter receipts',targetViews:3});
+  const c=await service.confirm(t,'retentionowner',q.quoteId,'privacy-retention-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const abandoned=await service.beginView(t,'retentionviewera',c.postId);
+  const completed=await service.beginView(t,'retentionviewerb',c.postId);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[completed.challengeId]);
+  expect(await service.finishView(t,'retentionviewerb',completed.challengeId,
+   {visibleFraction:0.75,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '25 hours' WHERE id IN ($1,$2)`,
+   [abandoned.challengeId,completed.challengeId]);
+  expect(await service.pruneExpiredViewChallenges(10)).toEqual({pruned:1});
+  const remaining=await query(`SELECT id,claimed_at FROM feed.view_challenges
+   WHERE id IN ($1,$2)`,[abandoned.challengeId,completed.challengeId]);
+  expect(remaining.rows).toHaveLength(1);
+  expect(remaining.rows[0]).toMatchObject({id:completed.challengeId});
+  expect((remaining.rows[0] as {claimed_at:unknown}).claimed_at).not.toBeNull();
+  expect((await query(`SELECT count(*)::int AS n FROM feed.promotion_view_charges
+   WHERE campaign_id=$1`,[c.id])).rows[0]).toMatchObject({n:1});
+  expect(await service.pruneExpiredViewChallenges(10)).toEqual({pruned:0});
+  await expect(service.pruneExpiredViewChallenges(501))
+   .rejects.toMatchObject({code:'invalid_limit'});
+ });
 });

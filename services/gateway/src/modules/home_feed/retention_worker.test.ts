@@ -40,4 +40,20 @@ describe('account-independent paid post expiry sweeper',()=>{
   expect(purgeExpired).toHaveBeenCalledTimes(3);
   await worker.stop();
  });
+
+ it('runs independent bounded expired-proof pruning on startup/ticks',async()=>{
+  vi.useFakeTimers();
+  const purgeExpired=vi.fn().mockResolvedValue({purged:0});
+  const pruneExpiredViewChallenges=vi.fn().mockResolvedValueOnce({pruned:100})
+   .mockResolvedValueOnce({pruned:2}).mockResolvedValue({pruned:0});
+  const worker=new StatusRetentionWorker({purgeExpired,pruneExpiredViewChallenges});
+  worker.start();await worker.sweep();
+  expect(pruneExpiredViewChallenges).toHaveBeenCalledTimes(2);
+  expect(pruneExpiredViewChallenges).toHaveBeenCalledWith(100);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(pruneExpiredViewChallenges).toHaveBeenCalledTimes(3);
+  await worker.stop();
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(pruneExpiredViewChallenges).toHaveBeenCalledTimes(3);
+ });
 });
