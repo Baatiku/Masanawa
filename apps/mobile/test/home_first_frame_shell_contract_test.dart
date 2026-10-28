@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:masanawa/l10n/app_localizations.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/shell_deep_link.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
+import 'package:masanawa/src/localization/masanawa_localization.dart';
 import 'package:masanawa/src/screens/status/status_screen.dart';
 import 'package:masanawa/src/screens/settings/notification_preferences_screen.dart';
 import 'package:masanawa/src/screens/twin/shell_tab.dart';
@@ -71,8 +71,8 @@ void main(){
     ],child:MaterialApp(
       locale:const Locale('ha'),
       theme:buildMasanawaTheme(brightness:Brightness.light),
-      localizationsDelegates:AppLocalizations.localizationsDelegates,
-      supportedLocales:AppLocalizations.supportedLocales,
+      localizationsDelegates:MasanawaLocalization.delegates,
+      supportedLocales:MasanawaLocalization.supportedLocales,
       home:const FiveTabShell(),
     )));
     await tester.pumpAndSettle();
@@ -121,8 +121,8 @@ void main(){
     ],child:MaterialApp.router(
       routerConfig:router,locale:const Locale('ha'),
       theme:buildMasanawaTheme(brightness:Brightness.light),
-      localizationsDelegates:AppLocalizations.localizationsDelegates,
-      supportedLocales:AppLocalizations.supportedLocales,
+      localizationsDelegates:MasanawaLocalization.delegates,
+      supportedLocales:MasanawaLocalization.supportedLocales,
     )));
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,0);
