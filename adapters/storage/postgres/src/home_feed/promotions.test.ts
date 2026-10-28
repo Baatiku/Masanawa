@@ -295,11 +295,13 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    sum(platform_half_mb)::int AS platform_half_mb
    FROM feed.promotion_view_charges WHERE tenant_id=$1 AND campaign_id=ANY($2::uuid[])
    GROUP BY campaign_id ORDER BY views DESC`,[t,ids]);
-  expect(charges.rows).toEqual([
+  const rows=charges.rows as Array<{id:string;views:number;
+   sharer_half_mb:number;platform_half_mb:number}>;
+  expect(rows).toEqual([
    {id:ids[0],views:3,sharer_half_mb:3,platform_half_mb:3},
    {id:ids[1],views:2,sharer_half_mb:2,platform_half_mb:2},
   ]);
-  const pendingHalfMb=charges.rows.reduce((sum,row)=>sum+Number(row.sharer_half_mb),0);
+  const pendingHalfMb=rows.reduce((sum,row)=>sum+row.sharer_half_mb,0);
   expect({pendingHalfMb,wholeMb:Math.floor(pendingHalfMb/2),
    carryHalfMb:pendingHalfMb%2}).toEqual({pendingHalfMb:5,wholeMb:2,carryHalfMb:1});
   const earn=(await service.mine(t,'sharer')).sharingEarnings;
