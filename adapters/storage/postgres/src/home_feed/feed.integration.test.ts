@@ -48,6 +48,10 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(humanMigration); // historic Masana IDs retained and idempotent
   await pool.query(readFileSync(new URL("../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql",import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0007_paid_promotions.sql",import.meta.url),"utf8"));
+  // Production migration discovery applies the full forward-only feed chain.
+  // The isolated PostgreSQL integration fixture must do the same before its
+  // promotion-review test uses approved_destination_url.
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0010_reviewed_promotion_destinations.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
