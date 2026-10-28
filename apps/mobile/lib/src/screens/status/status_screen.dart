@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/startup_metrics.dart';
@@ -10,7 +11,10 @@ import '../../features/home_feed/status_tip_flow.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
 import '../../features/home_feed/feed_screen.dart';
+import '../../features/home_feed/feed_post_detail_screen.dart';
+import '../../features/home_feed/saved_status_library_screen.dart';
 import '../../features/home_feed/status_promotion_api.dart';
+import '../../features/home_feed/status_promotion_sheet.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
@@ -115,6 +119,173 @@ class AccountBoundFeedMediaApi implements FeedMediaApi {
       throw StateError('account_changed');
     }
     return grant;
+  }
+}
+
+/// Secondary, private Saved destination. It does not add a sixth root tab,
+/// restore a header bookmark or make protected posts available offline.
+/// Every visit and post transition is authorized afresh for its owner.
+class StatusSavedScreen extends ConsumerWidget {
+  const StatusSavedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    if (session is! SessionSignedIn) {
+      return const Scaffold(
+        body: Center(child: Text('Sign in to see your saved updates.')),
+      );
+    }
+    final account = session.user.id;
+    final feed = ref.watch(statusFeedApiProvider);
+    if (feed is! AccountBoundFeedApi) {
+      return const Scaffold(
+        body: Center(child: Text('Saved updates are unavailable.')),
+      );
+    }
+    final client = ref.watch(apiClientProvider);
+    final directory = ref.watch(agentDirectoryProvider);
+    final authors = {
+      for (final agent in directory.agents) agent.characterId: agent,
+    };
+    String? currentAccount() {
+      try {
+        final active = ref.read(sessionProvider);
+        return active is SessionSignedIn ? active.user.id : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final media = AccountBoundFeedMediaApi(
+      delegate: DioFeedMediaApi(client.dio, () async => client.accessToken),
+      ownerAccount: account,
+      currentAccount: currentAccount,
+    );
+    final promotions = StatusPromotionApi(
+      dio: client.dio,
+      ownerAccount: account,
+      currentAccount: currentAccount,
+      accessToken: () async => client.accessToken,
+      journal: SecureStatusPromotionJournal(account),
+    );
+
+    void openMedia(FeedPost post, String mediaId) {
+      if (currentAccount() != account ||
+          !const {'image', 'audio'}.contains(post.kind)) return;
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Consumer(builder: (routeContext, routeRef, __) {
+          final active = routeRef.watch(sessionProvider);
+          if (active is! SessionSignedIn || active.user.id != account) {
+            return const Scaffold(
+              body: Center(child: Text('Sign in to view this update.')),
+            );
+          }
+          return FeedMediaScreen(
+            key: ValueKey('saved-media-$account-${post.id}-$mediaId'),
+            api: media,
+            accountKey: account,
+            postId: post.id,
+            mediaIds: post.mediaIds,
+            initialMediaId: mediaId,
+            kind: post.kind,
+            onBeforeAudio: post.kind == 'audio'
+                ? () => StatusAudioFocus.prepare(
+                    isAccountCurrent: () => currentAccount() == account,
+                  )
+                : null,
+          );
+        }),
+      ));
+    }
+
+    void openHuman(String handle) {
+      if (currentAccount() == account) {
+        context.push('/u/${Uri.encodeComponent(handle)}');
+      }
+    }
+
+    void openMasana(String id) {
+      if (currentAccount() == account) {
+        context.push('/masana/${Uri.encodeComponent(id)}');
+      }
+    }
+
+    Future<void> openPost(
+      FeedPost post,
+      bool boostAvailable,
+      Future<void> Function(String) boostAction,
+    ) async {
+      if (currentAccount() != account) return;
+      final latest = await feed.detail(post.id);
+      if (!context.mounted || currentAccount() != account) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Consumer(builder: (routeContext, routeRef, __) {
+          final active = routeRef.watch(sessionProvider);
+          if (active is! SessionSignedIn || active.user.id != account) {
+            return const Scaffold(
+              body: Center(child: Text('Sign in to view this update.')),
+            );
+          }
+          return FeedPostDetailScreen(
+            initialPost: latest,
+            accountKey: account,
+            loadPost: feed.detail,
+            loadThread: feed.thread,
+            loadMoreThread: (id, sort, before) =>
+                feed.threadPage(id, sort, before: before),
+            sendComment: feed.sendThreadComment,
+            onHumanProfile: openHuman,
+            onMasanaProfile: openMasana,
+            onMedia: (mediaId) => openMedia(latest, mediaId),
+            mediaApi: media,
+            audioPlaybackAvailable: true,
+            authorDirectory: authors,
+            onBoostPost: boostAvailable
+                ? (id) => unawaited(boostAction(id))
+                : null,
+          );
+        }),
+      ));
+    }
+
+    Future<void> boost(String postId) async {
+      if (currentAccount() != account) return;
+      // Repeat capability discovery at the moment of an attempted spend.
+      if (!await promotions.available()) return;
+      if (!context.mounted || currentAccount() != account) return;
+      await showModalBottomSheet<StatusPromotionCampaign>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) => StatusPromotionSheet(
+          api: promotions,
+          postId: postId,
+          onRecharge: () async {
+            await sheetContext.push<void>('/wallet/add');
+          },
+        ),
+      );
+    }
+
+    return FutureBuilder<bool>(
+      key: ValueKey('saved-promotion-$account'),
+      future: promotions.available(),
+      builder: (context, ability) => SavedStatusLibraryScreen(
+        key: ValueKey('saved-owner-$account'),
+        api: feed,
+        accountKey: account,
+        isAccountCurrent: () => currentAccount() == account,
+        openPost: (post) => openPost(post, ability.data == true, boost),
+        authorDirectory: authors,
+        mediaApi: media,
+        onOpenMedia: openMedia,
+        onHumanProfile: openHuman,
+        onMasanaProfile: openMasana,
+        onBoostPost: ability.data == true
+            ? (id) => unawaited(boost(id))
+            : null,
+      ),
+    );
   }
 }
 

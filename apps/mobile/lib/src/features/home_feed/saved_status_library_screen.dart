@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +11,7 @@ import 'status_post_body.dart';
 import 'status_post_boost_action.dart';
 import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
+import '../../theme/masanawa_theme.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
 /// The app never retains a cross-account/offline copy of these items.
@@ -23,6 +26,9 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     this.mediaApi,
     this.inlineMediaRenderer,
     this.onBoostPost,
+    this.onMasanaProfile,
+    this.onHumanProfile,
+    this.onOpenMedia,
   });
 
   final SavedStatusLibraryApi api;
@@ -33,6 +39,8 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final FeedMediaApi? mediaApi;
   final Widget Function(FeedMediaGrant)? inlineMediaRenderer;
   final ValueChanged<String>? onBoostPost;
+  final ValueChanged<String>? onMasanaProfile,onHumanProfile;
+  final void Function(FeedPost post, String mediaId)? onOpenMedia;
 
   @override
   State<SavedStatusLibraryScreen> createState() =>
@@ -309,10 +317,17 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                           final canOpen = item.isPost;
                           return Card(
                             key: ValueKey('saved-${item.isPost}-${item.id}'),
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 5,
-                            ),
+                            margin: const EdgeInsets.fromLTRB(12,8,12,8),
+                            color:context.masanawa.surfaceCard,
+                            elevation:3,
+                            shadowColor:Theme.of(context).colorScheme.shadow
+                              .withValues(alpha:0.17),
+                            surfaceTintColor:Colors.transparent,
+                            shape:RoundedRectangleBorder(
+                              borderRadius:BorderRadius.circular(16),
+                              side:BorderSide(color:context.masanawa.structuralBorder
+                                .withValues(alpha:0.38))),
+                            clipBehavior:Clip.antiAlias,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -323,6 +338,12 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                       post: item.post!,
                                       agent: widget.authorDirectory[
                                           item.post!.authorMasanaId],
+                                      onProfile:item.post!.isHuman
+                                        ?(item.post!.authorHandle==null||
+                                           widget.onHumanProfile==null?null:
+                                           ()=>widget.onHumanProfile!(item.post!.authorHandle!))
+                                        :(widget.onMasanaProfile==null?null:
+                                           ()=>widget.onMasanaProfile!(item.post!.authorMasanaId)),
                                     ),
                                   ),
                                 InkWell(
@@ -349,7 +370,16 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     accountKey: widget.accountKey,
                                     mediaApi: widget.mediaApi,
                                     renderer: widget.inlineMediaRenderer,
-                                    onOpen: canOpen ? (_) => open(item) : null,
+                                    audioPlaybackAvailable: true,
+                                    onOpen: canOpen
+                                        ? (id) {
+                                            if (widget.onOpenMedia != null) {
+                                              widget.onOpenMedia!(item.post!, id);
+                                            } else {
+                                              unawaited(open(item));
+                                            }
+                                          }
+                                        : null,
                                   ),
                                 if (item.post != null)
                                   Padding(

@@ -432,6 +432,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _Card(
             children: [
               ListTile(
+                key: const Key('settings-saved-home-updates'),
+                leading: Icon(Icons.bookmark_border_rounded, color: u.brand),
+                title: const Text('Saved Home updates'),
+                subtitle: const Text(
+                  'Your private, up-to-date bookmarked posts',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: user == null
+                    ? null
+                    : () => context.push('/status/saved'),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: Icon(Icons.privacy_tip_outlined, color: u.brand),
                 title: const Text('Privacy'),
                 subtitle: const Text(

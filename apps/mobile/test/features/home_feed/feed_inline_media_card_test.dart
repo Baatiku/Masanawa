@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_inline_media_card.dart';
@@ -23,6 +25,47 @@ class RetryMediaApi implements FeedMediaApi {
 }
 
 void main() {
+  testWidgets('compact 136x96 mosaic tile loads without text overflow at 200 percent scale',
+      (tester) async {
+    final api=_PendingMediaApi();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MediaQuery(
+      data:const MediaQueryData(textScaler:TextScaler.linear(2)),
+      child:Center(child:SizedBox(width:136,height:96,
+        child:FeedInlineMediaCard(api:api,accountKey:'fan',
+          postId:'mosaic-post',mediaId:'mosaic-tile',mediaCount:4,
+          tile:true,renderer:(_)=>const Text('Approved tile')))),
+    ))));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator),findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined),findsOneWidget);
+    expect(tester.takeException(),isNull);
+    api.answer.complete(FeedMediaGrant(mediaId:'mosaic-tile',kind:'image',
+      url:Uri.parse('https://media.example.test/tile'),
+      expiresAt:DateTime.now().add(const Duration(minutes:2))));
+    await tester.pumpAndSettle();
+    expect(find.text('Approved tile'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('approved image uses a restrained loading skeleton until its scoped grant arrives',
+      (tester) async {
+    final api=_PendingMediaApi();
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:FeedInlineMediaCard(
+      api:api,accountKey:'owner',postId:'approved-post',mediaId:'original-image',
+      mediaCount:1,renderer:(_)=>const Text('Authorized image body')))));
+    await tester.pump();
+    expect(find.text('Loading approved image'),findsOneWidget);
+    expect(find.byType(LinearProgressIndicator),findsOneWidget);
+    expect(find.text('Authorized image body'),findsNothing);
+    api.answer.complete(FeedMediaGrant(mediaId:'original-image',kind:'image',
+      url:Uri.parse('https://media.example.test/scoped-original'),
+      expiresAt:DateTime.now().add(const Duration(minutes:2))));
+    await tester.pumpAndSettle();
+    expect(find.text('Authorized image body'),findsOneWidget);
+    expect(find.text('Loading approved image'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
   test('signed media alt parser allows only bounded reviewed copy',(){
     final now=DateTime.now().add(const Duration(minutes:2)).toUtc().toIso8601String();
     final base={'mediaId':'media_abcdefgh','kind':'image',
@@ -147,6 +190,11 @@ void main() {
     expect(find.text('Preview expired · retry preview'), findsOneWidget);
     expect(api.requests, 1);
   });
+}
+
+class _PendingMediaApi implements FeedMediaApi {
+  final answer=Completer<FeedMediaGrant>();
+  @override Future<FeedMediaGrant> getGrant(String postId,String mediaId)=>answer.future;
 }
 
 class _ShortMediaApi implements FeedMediaApi {
