@@ -13,6 +13,10 @@ export interface PromotionPort {
  adminImagePreview(t:string,editor:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string;reviewState:string}>;
  approvedImageObject(t:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string}|null>;
  openDestination(t:string,viewer:string,post:string):Promise<unknown>;
+ extensionQuote(t:string,sponsor:string,id:string,targetViews:number,key:string):Promise<unknown>;
+ reportPost(t:string,reporter:string,post:string,reason:string):Promise<unknown>;
+ adminReports(t:string,editor:string):Promise<unknown>;
+ resolveReport(t:string,editor:string,id:string,remove:boolean,reason:string):Promise<unknown>;
  expireCampaigns(limit?:number):Promise<unknown>;
  quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;mediaIds?:readonly string[];targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
@@ -272,6 +276,52 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
    fail('invalid_appeal_resolution');
   return options.port.resolveAppeal(p.tenantId,p.userId,
    params(r,'appealId'),b.decision==='accept',b.reason as string);
+ });
+
+ app.post('/v1/promotions/:campaignId/extension-quotes',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await who(r),b=body(r);
+  fields(b,['targetViews']);
+  const key=r.headers['idempotency-key'];
+  if(typeof b.targetViews!=='number'||!Number.isSafeInteger(b.targetViews)||
+   b.targetViews<1||b.targetViews>1000000||typeof key!=='string')
+   fail('invalid_extension');
+  return options.port.extensionQuote(p.tenantId,p.userId,
+   params(r,'campaignId'),b.targetViews as number,key as string);
+ });
+ app.post('/v1/posts/:postId/report',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await options.principal(r),b=body(r);
+  fields(b,['reason']);
+  if(typeof b.reason!=='string'||b.reason.trim().length<10||b.reason.length>500)
+    fail('invalid_report_reason');
+  return options.port.reportPost(p.tenantId,p.userId,params(r,'postId'),b.reason as string);
+ });
+ app.get('/v1/admin/promotions/reports',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r);
+  return options.port.adminReports(p.tenantId,p.userId);
+ });
+ app.post('/v1/admin/promotions/reports/:reportId/resolve',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r),b=body(r);
+  fields(b,['decision','reason']);
+  if(!['remove','dismiss'].includes(String(b.decision))||
+    typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
+    fail('invalid_report_resolution');
+  return options.port.resolveReport(p.tenantId,p.userId,
+   params(r,'reportId'),b.decision==='remove',b.reason as string);
+ });
+ app.post('/v1/admin/promotions/posts/:postId/images/:mediaId/revoke',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r),b=body(r);
+  fields(b,['reason']);
+  if(typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
+    fail('invalid_media_revocation');
+  // The conservative safety response revokes every charge and link of the
+  // parent paid post, not just the browser's revoked image.
+  return options.port.adminTakedown(p.tenantId,p.userId,
+   params(r,'postId'),b.reason as string);
  });
  app.post('/v1/promotions/:campaignId/cancel',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
