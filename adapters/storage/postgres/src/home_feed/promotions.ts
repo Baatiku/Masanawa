@@ -368,9 +368,10 @@ export class PgStatusPromotions {
    // A revoked/suspended person or frozen reward account may still read a
    // public post, but must not issue a fresh commission-bearing token.
    const eligible=await c.query(`SELECT 1 FROM identity.users u
-    JOIN gb_wallet.accounts reward ON reward.tenant_id=u.tenant_id
+    LEFT JOIN gb_wallet.accounts reward ON reward.tenant_id=u.tenant_id
       AND reward.account_kind='human' AND reward.account_id=u.user_id
-    WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active' AND NOT reward.frozen`,
+    WHERE u.tenant_id=$1 AND u.user_id=$2 AND u.state='active'
+      AND COALESCE(reward.frozen,false)=false`,
     [t,sharer]);
    if(!eligible.rowCount)return {url:base,earnable:false};
    const token=randomBytes(32).toString('base64url');
@@ -403,12 +404,12 @@ export class PgStatusPromotions {
        AND campaign.id=l.campaign_id AND campaign.post_id=l.post_id
       JOIN identity.users sharer ON sharer.tenant_id=l.tenant_id
         AND sharer.user_id=l.sharer_id AND sharer.state='active'
-      JOIN gb_wallet.accounts reward ON reward.tenant_id=l.tenant_id
+      LEFT JOIN gb_wallet.accounts reward ON reward.tenant_id=l.tenant_id
         AND reward.account_kind='human' AND reward.account_id=l.sharer_id
-        AND NOT reward.frozen
       WHERE l.tenant_id=$1 AND l.post_id=$2 AND l.token_sha256=$3
        AND l.revoked_at IS NULL AND campaign.state='active'
-       AND campaign.remaining_views>0`,[t,post,hash(referral)]);
+       AND campaign.remaining_views>0 AND COALESCE(reward.frozen,false)=false`,
+      [t,post,hash(referral)]);
     if(r.rows[0])link=String(r.rows[0].id);
    }
    const added=await c.query(`INSERT INTO feed.view_challenges
@@ -468,11 +469,11 @@ export class PgStatusPromotions {
         AND origin.id=l.campaign_id
        JOIN identity.users sharer ON sharer.tenant_id=l.tenant_id
         AND sharer.user_id=l.sharer_id AND sharer.state='active'
-       JOIN gb_wallet.accounts reward ON reward.tenant_id=l.tenant_id
+       LEFT JOIN gb_wallet.accounts reward ON reward.tenant_id=l.tenant_id
         AND reward.account_kind='human' AND reward.account_id=l.sharer_id
-        AND NOT reward.frozen
        WHERE l.tenant_id=$1 AND l.id=$2 AND l.post_id=$3
-        AND l.revoked_at IS NULL AND origin.state='active' AND origin.remaining_views>0`,
+        AND l.revoked_at IS NULL AND origin.state='active' AND origin.remaining_views>0
+        AND COALESCE(reward.frozen,false)=false`,
        [t,ch.share_link_id,post]);
      const candidate=link.rows[0]?.sharer_id as string|undefined;
      if(candidate&&candidate!==viewer&&candidate!==selected.sponsor_id&&

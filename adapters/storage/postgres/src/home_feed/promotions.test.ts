@@ -322,6 +322,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await account('guardedsharer',1);
   await account('guardedviewera',1);
   await account('guardedviewerb',1);
+  await account('guardedviewerc',1);
   const q=await service.quote({tenantId:t,sponsorId:'guardedpublisher',
    body:'Never reward a suspended or frozen sharer',targetViews:3});
   const c=await service.confirm(t,'guardedpublisher',q.quoteId,'guarded-sharer-001');
@@ -359,6 +360,22 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    ]);
   expect((await service.mine(t,'guardedsharer')).sharingEarnings
    .filter(x=>x.postId===c.postId)).toEqual([]);
+  // Sharing cannot require a purchased-MB Wallet row: a newly signed-up
+  // eligible human can legitimately earn pending MB before ever recharging.
+  await query(`INSERT INTO identity.users VALUES($1,'walletlesssharer','active')`,[t]);
+  await query(`INSERT INTO talks.public_profiles VALUES
+   ($1,'walletlesssharer','walletlesssharer','New user')`,[t]);
+  const walletless=await service.share(t,'walletlesssharer',c.postId);
+  expect(walletless.earnable).toBe(true);
+  const third=await service.beginView(t,'guardedviewerc',c.postId,
+   new URL(walletless.url).searchParams.get('r')!);
+  await query(`UPDATE feed.view_challenges SET started_at=
+   statement_timestamp()-interval '7 seconds' WHERE id=$1`,[third.challengeId]);
+  expect(await service.finishView(t,'guardedviewerc',third.challengeId,
+   {visibleFraction:0.9,foreground:true,engaged:true}))
+   .toMatchObject({qualified:true,payable:true});
+  expect((await service.mine(t,'walletlesssharer')).sharingEarnings[0])
+   .toMatchObject({pendingHalfMb:1});
  });
  it('persists five odd referred charges across two real campaigns as five pending half-MB',async()=>{
   await account('mathpublisher',10);
