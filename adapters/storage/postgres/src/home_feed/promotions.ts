@@ -416,7 +416,7 @@ export class PgStatusPromotions {
     const created=await c.query(`INSERT INTO feed.posts
      (tenant_id,author_masana_id,author_type,author_user_id,kind,body,media_ids,
       transcript,state,idempotency_key,published_by)
-     VALUES($1,NULL,'human',$2,$5,$3,$6,NULL,'hidden',$4,$2) RETURNING id`
+     VALUES($1,NULL,'human',$2,$5,$3,$6,NULL,'hidden',$4,$2) RETURNING id`,
      [t,s,q.body,`promotion:${qid}`,mediaIds.length?'image':'text',mediaIds]);
     post=String(created.rows[0]!.id);
     if(mediaIds.length){
@@ -454,11 +454,11 @@ export class PgStatusPromotions {
    LEFT JOIN feed.promotion_campaigns c ON c.tenant_id=q.tenant_id AND c.quote_id=q.id
    WHERE q.tenant_id=$1 AND q.sponsor_id=$2 AND q.id=$3`,[t,s,id]);
   if(!r.rows[0])fail('quote_not_found',404);
-  const id=r.rows[0].id==null?null:String(r.rows[0].id);
-  const audit=id?await this.pool.query(`SELECT id,action,details,occurred_at
+  const campaignId=r.rows[0].id==null?null:String(r.rows[0].id);
+  const audit=campaignId?await this.pool.query(`SELECT id,action,details,occurred_at
    FROM feed.promotion_audit WHERE tenant_id=$1 AND campaign_id=$2
-   ORDER BY id LIMIT 1000`,[t,id]):{rows:[] as Row[]};
-  return {campaign:id?campaign(r.rows[0] as Row):null,
+   ORDER BY id LIMIT 1000`,[t,campaignId]):{rows:[] as Row[]};
+  return {campaign:campaignId?campaign(r.rows[0] as Row):null,
    immutableHistory:audit.rows.map(x=>({receiptId:String(x.id),action:String(x.action),
     at:x.occurred_at,details:x.details}))};
  }
@@ -654,7 +654,7 @@ export class PgStatusPromotions {
         OR (blocked.viewer_user_id=p.author_user_id AND blocked.subject_user_id=$3)))`,
     [t,post,viewer]);
   if(!rows.rows[0])fail('destination_unavailable',404);
-  let url:string|null;
+  let url:string|null=null;
   try{url=reviewedPromotionDestination(rows.rows[0].url);}
   catch{fail('destination_unavailable',404);}
   if(!url)fail('destination_unavailable',404);
