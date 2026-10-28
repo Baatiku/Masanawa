@@ -9,6 +9,8 @@ export interface PromotionPort {
  adminOverview(t:string,editor:string):Promise<unknown>;
  adminTakedown(t:string,editor:string,post:string,reason:string):Promise<unknown>;
  cancel(t:string,s:string,id:string):Promise<unknown>;
+ pause(t:string,s:string,id:string):Promise<unknown>;
+ resume(t:string,s:string,id:string):Promise<unknown>;
  share(t:string,sharer:string,post:string):Promise<unknown>;
  beginView(t:string,viewer:string,post:string,referral?:string):Promise<unknown>;
  finishView(t:string,viewer:string,id:string,report:{visibleFraction:number;foreground:boolean;engaged:boolean}):Promise<unknown>;
@@ -78,6 +80,14 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.post('/v1/promotions/:campaignId/cancel',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
   return options.port.cancel(p.tenantId,p.userId,params(r,'campaignId'));
+ });
+ app.post('/v1/promotions/:campaignId/pause',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await options.principal(r);
+  fields(body(r),[]);return options.port.pause(p.tenantId,p.userId,params(r,'campaignId'));
+ });
+ app.post('/v1/promotions/:campaignId/resume',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');const p=await who(r);
+  fields(body(r),[]);return options.port.resume(p.tenantId,p.userId,params(r,'campaignId'));
  });
  app.post('/v1/promotions/posts/:postId/delete',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);

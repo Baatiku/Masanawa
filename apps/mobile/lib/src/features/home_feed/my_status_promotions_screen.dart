@@ -57,6 +57,15 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
     catch(_){if(mounted)setState(()=>error='Cancellation was not confirmed. Refresh the receipt.');}
     finally{if(mounted)setState(()=>pending.remove(id));}
   }
+  Future<void> changePause(String id,{required bool resume}) async {
+    if(pending.contains(id))return;
+    setState(()=>pending.add(id));
+    try{
+      if(resume)await widget.api.resume(id);else await widget.api.pause(id);
+      await refresh();
+    }catch(_){if(mounted)setState(()=>error='The campaign change was not confirmed. Refresh its receipt.');}
+    finally{if(mounted)setState(()=>pending.remove(id));}
+  }
   Future<void> delete(String postId) async {
     final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
       title:const Text('Delete this post?'),
@@ -75,7 +84,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
   }
   @override Widget build(BuildContext context){
     final campaigns=rows('campaigns'),inactive=rows('inactivePosts'),
-      earnings=rows('sharingEarnings');
+      earnings=rows('sharingEarnings'),notices=rows('lifecycleNotifications');
     return Scaffold(appBar:AppBar(title:const Text('My promotions & earnings')),
       body:RefreshIndicator(onRefresh:refresh,child:ListView(
         padding:const EdgeInsets.all(16),children:[
@@ -89,7 +98,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
         Text('My campaigns',style:Theme.of(context).textTheme.titleLarge),
         if(campaigns.isEmpty&&!loading)const ListTile(title:Text('No campaigns yet')),
         for(final c in campaigns)
-          Card(child:ListTile(
+          Card(child:Column(children:[ListTile(
             title:Text('${c['kind']=='boost'?'Boost':'Promotion'} · ${c['state']??'Unknown'}'),
             subtitle:Text('${c['deliveredViews']??0}/${c['targetViews']??0} qualified views · '
               '${c['directViews']??0} direct / ${c['referredViews']??0} referred\n'
@@ -101,10 +110,32 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
                 'Review reason: ${c['reviewReason']}\n':''}'
               'Reference: ${c['id']??''}'),
             isThreeLine:true,
-            trailing:const {'active','pending_review','paused'}.contains(c['state'])
-              ?TextButton(onPressed:pending.contains(c['id'])?null:
-                  ()=>cancel('${c['id']}'),child:const Text('Cancel')):null,
-          )),
+            trailing:c['state']=='active' && c['remainingViews'] is int &&
+              c['remainingViews']<=10
+              ?const Icon(Icons.notifications_active_outlined,
+                semanticLabel:'Budget nearly exhausted'):null,
+          ),if(const {'active','pending_review','paused'}.contains(c['state']))
+            Padding(padding:const EdgeInsets.only(right:8,bottom:6),child:Row(
+              mainAxisAlignment:MainAxisAlignment.end,children:[
+              if(c['state']=='active')TextButton(
+                onPressed:pending.contains(c['id'])?null:()=>changePause('${c['id']}',resume:false),
+                child:const Text('Pause')),
+              if(c['state']=='paused')TextButton(
+                onPressed:pending.contains(c['id'])||!widget.canBoost?null:
+                  ()=>changePause('${c['id']}',resume:true),
+                child:const Text('Resume')),
+              TextButton(onPressed:pending.contains(c['id'])?null:
+                ()=>cancel('${c['id']}'),child:const Text('Cancel')),
+            ]))])),
+        const SizedBox(height:16),
+        Text('Promotion updates',style:Theme.of(context).textTheme.titleLarge),
+        if(notices.isEmpty&&!loading)const ListTile(title:Text('No updates yet')),
+        for(final n in notices.take(20))ListTile(
+          leading:const Icon(Icons.notifications_none),
+          title:Text(_eventTitle('${n['kind']??''}')),
+          subtitle:Text('${n['reason'] is String?'Reason: ${n['reason']}\n':''}'
+            'Post: ${n['postId']??''}'),
+          isThreeLine:n['reason'] is String),
         const SizedBox(height:16),
         Text('Inactive posts',style:Theme.of(context).textTheme.titleLarge),
         if(inactive.isEmpty&&!loading)const ListTile(title:Text('No posts awaiting expiry')),
@@ -145,4 +176,18 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
           style:Theme.of(context).textTheme.bodySmall),
       ])));
   }
+  String _eventTitle(String kind)=>switch(kind){
+    'budget_reserved'=>'Promotion submitted for review',
+    'approved'=>'Promotion approved',
+    'rejected'=>'Promotion rejected · budget released',
+    'cancelled'=>'Promotion cancelled · unused budget released',
+    'paused'=>'Promotion paused',
+    'resumed'=>'Promotion resumed',
+    'campaign_completed'=>'Promotion budget finished',
+    'post_disabled'=>'Post hidden · 72-hour retention started',
+    'paid_post_purged'=>'Expired post deleted',
+    'owner_deleted'=>'Post deleted by owner',
+    'moderation_takedown'=>'Post removed by moderation',
+    _=>'Promotion updated',
+  };
 }

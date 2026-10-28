@@ -241,6 +241,14 @@ class StatusPromotionApi implements StatusQualifiedViewApi {
     await dio.post<void>('/v1/promotions/${Uri.encodeComponent(campaignId)}/cancel',
       data:const <String,dynamic>{},options:await _options());_owner();
   }
+  Future<void> pause(String campaignId) async {
+    await dio.post<void>('/v1/promotions/${Uri.encodeComponent(campaignId)}/pause',
+      data:const <String,dynamic>{},options:await _options());_owner();
+  }
+  Future<void> resume(String campaignId) async {
+    await dio.post<void>('/v1/promotions/${Uri.encodeComponent(campaignId)}/resume',
+      data:const <String,dynamic>{},options:await _options());_owner();
+  }
   Future<void> deleteOwnPost(String postId) async {
     await dio.post<void>('/v1/promotions/posts/${Uri.encodeComponent(postId)}/delete',
       data:const <String,dynamic>{},options:await _options());_owner();
