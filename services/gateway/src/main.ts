@@ -48,6 +48,7 @@ import { createStatusMediaRuntime, type StatusMediaConfiguration } from "./modul
 import { createConfiguredStatusMedia } from "./modules/home_feed/media_environment.js";
 import {PgPublicStatusLanding} from "./modules/home_feed/public_landing.js";
 import {StatusRetentionWorker} from "./modules/home_feed/retention_worker.js";
+import {StatusMediaDeletionWorker} from './modules/home_feed/media_deletion_worker.js';
 import {validateMasanaProfile} from "@masanawa/masana";
 import {createApprovedMasanaMediaPort} from "./modules/masana/profile_media.js";
 import {createMasanaQualityFeedbackPort} from "./modules/masana/quality_feedback.js";
@@ -2199,7 +2200,11 @@ export async function startGatewayService(
     statusRetention=new StatusRetentionWorker(statusPromotions,()=>{
       // Nothing about post content, account IDs or viewer identity enters logs.
       console.error(JSON.stringify({event:'status.retention_sweep_failed',code:'retry_later'}));
-    });
+    },mediaConfiguration?.objects.deleteObject
+      ?new StatusMediaDeletionWorker(statusPromotions,{
+        deleteObject:mediaConfiguration.objects.deleteObject,
+        statObject:mediaConfiguration.objects.statObject,
+      }):undefined);
     statusRetention.start();
   }
 

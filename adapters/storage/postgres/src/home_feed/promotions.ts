@@ -64,9 +64,22 @@ export class PgStatusPromotions {
  private disable(c:PoolClient,t:string,post:string){return c.query(`UPDATE feed.posts
   SET state='hidden',paid_disabled_at=statement_timestamp(),
   paid_purge_at=statement_timestamp()+interval '72 hours'
-  WHERE tenant_id=$1 AND id=$2 AND author_type='human' AND state='published'
+  WHERE tenant_id=$1 AND id=$2 AND author_type='human'
+   AND state IN ('published','hidden') AND paid_disabled_at IS NULL
+   AND paid_purged_at IS NULL
    AND NOT EXISTS(SELECT 1 FROM feed.promotion_campaigns x WHERE x.tenant_id=$1 AND x.post_id=$2
-    AND x.state='active' AND x.remaining_views>0)`,[t,post]);}
+    AND x.state='active' AND x.remaining_views>0)
+  RETURNING paid_purge_at`,[t,post]);}
+
+ /** Enqueue deletion before references are scrubbed in the same transaction.
+  * Objects stay private and inaccessible while storage cleanup retries. */
+ private enqueueMediaDeletion(c:PoolClient,t:string,post:string){
+  return c.query(`INSERT INTO feed.paid_media_deletion_outbox
+    (tenant_id,post_id,media_id,object_key)
+   SELECT tenant_id,post_id,media_id,object_key FROM feed.paid_post_media_objects
+    WHERE tenant_id=$1 AND post_id=$2
+   ON CONFLICT (tenant_id,post_id,media_id) DO NOTHING`,[t,post]);
+ }
 
  async quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;targetViews:number}){
   const {tenantId:t,sponsorId:s}=input;actor(t,s);
@@ -189,6 +202,7 @@ export class PgStatusPromotions {
     WHERE tenant_id=$1 AND id=$2`,[t,id,approve?'active':'rejected',editor]);
    await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id,
     rationale?{reason:rationale}:{});
+   if(!approve)await this.disable(c,t,String(p.post_id));
    return {campaignId:id,state:approve?'active':'rejected',
     ...(rationale?{reason:rationale}:{})};
   });
@@ -263,6 +277,7 @@ export class PgStatusPromotions {
     await this.audit(c,t,post,editor,'moderation_refund',String(b.id),
      {releasedMb:count(b.remaining_views)});
    }
+   await this.enqueueMediaDeletion(c,t,post);
    await c.query(`UPDATE feed.posts SET state='removed',body='',media_ids='{}',
     transcript=NULL,paid_purged_at=statement_timestamp(),
     paid_purge_at=NULL WHERE tenant_id=$1 AND id=$2`,[t,post]);
@@ -286,6 +301,46 @@ export class PgStatusPromotions {
    await this.disable(c,t,String(p.post_id));
    await this.audit(c,t,String(p.post_id),s,'cancelled',id,{releasedMb:p.remaining_views});
    return campaign({...p,state:'cancelled'});
+  });
+ }
+
+ async pause(t:string,s:string,id:string){actor(t,s);identifier(id);
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT * FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,id,s]);
+   const p=(r.rows[0] as Row|undefined)??fail('campaign_not_found',404);
+   if(p.state==='paused')return campaign(p);
+   if(p.state!=='active')fail('campaign_not_active',409);
+   await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,p.post_id]);
+   await c.query(`UPDATE feed.promotion_campaigns SET state='paused',
+    updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
+   await this.disable(c,t,String(p.post_id));
+   await this.audit(c,t,String(p.post_id),s,'paused',id,{remainingViews:count(p.remaining_views)});
+   return campaign({...p,state:'paused'});
+  });
+ }
+
+ async resume(t:string,s:string,id:string){actor(t,s);identifier(id);
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT * FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2 AND sponsor_id=$3 FOR UPDATE`,[t,id,s]);
+   const p=(r.rows[0] as Row|undefined)??fail('campaign_not_found',404);
+   if(p.state==='active')return campaign(p);
+   if(p.state!=='paused'||count(p.remaining_views)===0)fail('campaign_not_resumable',409);
+   const posts=await c.query(`SELECT state,paid_purged_at,paid_purge_at,author_type
+    FROM feed.posts WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[t,p.post_id]);
+   const post=posts.rows[0];
+   if(!post||post.paid_purged_at||
+     (post.state!=='published'&&!(post.author_type==='human'&&post.state==='hidden'&&
+      (post.paid_purge_at==null||new Date(post.paid_purge_at).getTime()>Date.now()))))
+    fail('post_not_resumable',409);
+   await c.query(`UPDATE feed.promotion_campaigns SET state='active',
+    updated_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
+   await c.query(`UPDATE feed.posts SET state='published',
+    paid_disabled_at=NULL,paid_purge_at=NULL
+    WHERE tenant_id=$1 AND id=$2 AND author_type='human'`,[t,p.post_id]);
+   await this.audit(c,t,String(p.post_id),s,'resumed',id);
+   return campaign({...p,state:'active'});
   });
  }
 
@@ -402,7 +457,11 @@ export class PgStatusPromotions {
       [t,selected.id,sharer?0:1,sharer?1:0]);
     await this.audit(c,t,post,'system','qualified_view',String(selected.id),
       {viewId:view,referral:!!sharer,chargedMb:1});
-    if(count(selected.remaining_views)===1)await this.disable(c,t,post);
+    if(count(selected.remaining_views)===1){
+     await this.audit(c,t,post,'system','campaign_completed',String(selected.id));
+     if((await this.disable(c,t,post)).rowCount)
+      await this.audit(c,t,post,'system','post_disabled',String(selected.id));
+    }
    }
    const counted=await c.query<{n:string}>(`SELECT count(*)::text AS n FROM
     feed.qualified_views WHERE tenant_id=$1 AND post_id=$2`,[t,post]);
@@ -432,7 +491,19 @@ export class PgStatusPromotions {
     WHERE c.tenant_id=$1 AND c.sharer_id=$2 GROUP BY b.post_id
     ORDER BY views DESC LIMIT 100`,[t,u]);
   const serverClock=await this.pool.query(`SELECT statement_timestamp() AS now_utc`);
+  const notices=await this.pool.query(`SELECT a.id,a.action,a.post_id,a.campaign_id,
+    a.occurred_at,a.details->>'reason' AS reason FROM feed.promotion_audit a
+    JOIN feed.posts p ON p.tenant_id=a.tenant_id AND p.id=a.post_id
+    LEFT JOIN feed.promotion_campaigns c ON c.tenant_id=a.tenant_id AND c.id=a.campaign_id
+    WHERE a.tenant_id=$1 AND (p.author_user_id=$2 OR c.sponsor_id=$2)
+      AND a.action IN ('budget_reserved','approved','rejected','cancelled','paused',
+       'resumed','campaign_completed','post_disabled','moderation_takedown',
+       'owner_deleted','paid_post_purged')
+    ORDER BY a.occurred_at DESC,a.id DESC LIMIT 50`,[t,u]);
   return {serverNow:serverClock.rows[0]!.now_utc,
+   lifecycleNotifications:notices.rows.map(n=>({id:String(n.id),kind:String(n.action),
+    postId:String(n.post_id),campaignId:n.campaign_id==null?null:String(n.campaign_id),
+    at:n.occurred_at,...(n.reason?{reason:String(n.reason)}:{})})),
    campaigns:campaigns.rows.map(x=>campaign(x as Row)),
    inactivePosts:inactive.rows.map(x=>({postId:String(x.id),purgeAt:x.paid_purge_at,
     disabledAt:x.paid_disabled_at,kind:x.kind,body:String(x.body??''),
@@ -455,6 +526,7 @@ export class PgStatusPromotions {
     await c.query(`UPDATE feed.promotion_campaigns SET state='cancelled' WHERE tenant_id=$1 AND id=$2`,[t,b.id]);
     await this.audit(c,t,post,u,'owner_delete_refund',String(b.id),{releasedMb:b.remaining_views});
    }
+   await this.enqueueMediaDeletion(c,t,post);
    await c.query(`UPDATE feed.posts SET state='removed',body='',media_ids='{}',
      transcript=NULL,paid_purged_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,post]);
    await c.query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
@@ -476,6 +548,7 @@ export class PgStatusPromotions {
      await c.query(`UPDATE feed.promotion_campaigns SET state='cancelled'
       WHERE tenant_id=$1 AND id=$2`,[t,b.id]);
     }
+    await this.enqueueMediaDeletion(c,t,id);
     await c.query(`UPDATE feed.posts SET state='removed',body='',media_ids='{}',
      transcript=NULL,paid_purged_at=statement_timestamp() WHERE tenant_id=$1 AND id=$2`,[t,id]);
     await c.query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
@@ -484,5 +557,34 @@ export class PgStatusPromotions {
    }
    return {purged:posts.rowCount??0};
   });
+ }
+
+ async claimMediaDeletions(limit=20){
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100)fail('invalid_limit');
+  return serial(this.pool,async c=>{
+   const r=await c.query(`SELECT tenant_id,post_id,media_id,object_key
+    FROM feed.paid_media_deletion_outbox WHERE completed_at IS NULL
+      AND retry_after<=statement_timestamp()
+      AND (lease_until IS NULL OR lease_until<=statement_timestamp())
+    ORDER BY retry_after,post_id,media_id LIMIT $1 FOR UPDATE SKIP LOCKED`,[limit]);
+   for(const row of r.rows)await c.query(`UPDATE feed.paid_media_deletion_outbox
+     SET lease_until=statement_timestamp()+interval '3 minutes',attempt_count=attempt_count+1
+     WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3`,
+     [row.tenant_id,row.post_id,row.media_id]);
+   return r.rows.map(row=>({tenantId:String(row.tenant_id),postId:String(row.post_id),
+    mediaId:String(row.media_id),objectKey:String(row.object_key)}));
+  });
+ }
+ async settleMediaDeletion(input:{tenantId:string;postId:string;mediaId:string},success:boolean){
+  const {tenantId,postId,mediaId}=input;actor(tenantId,'system');identifier(postId);identifier(mediaId);
+  return this.pool.query(`UPDATE feed.paid_media_deletion_outbox SET
+    lease_until=NULL,
+    completed_at=CASE WHEN $4 THEN statement_timestamp() ELSE completed_at END,
+    retry_after=CASE WHEN $4 THEN retry_after ELSE
+      statement_timestamp()+make_interval(secs=>LEAST(86400,
+       CAST(POWER(2,LEAST(attempt_count,16)) AS integer)*30)) END
+    WHERE tenant_id=$1 AND post_id=$2 AND media_id=$3
+      AND completed_at IS NULL AND lease_until>statement_timestamp()`,
+    [tenantId,postId,mediaId,success]);
  }
 }

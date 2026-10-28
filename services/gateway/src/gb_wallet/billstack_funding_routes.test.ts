@@ -41,6 +41,40 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   const p=await pending.app.inject({method:"GET",url:"/v1/gb/wallet/virtual-account",headers:{authorization:"Bearer session"}});
   expect(p.json().account).toEqual({state:"pending"});
  });
+ it("rejects foreign/invalid profile applicants before pending storage or provider writes",async()=>{
+  for(const phone of ["+12025550123","+233241234567","+2348012345678","07112345678",""]){
+    const start=vi.fn(async()=>{throw new Error("must not write");});
+    const f=setup({applicantComplete:async()=>true,start,
+      applicant:async(_actor,reference)=>({reference,email:"fan@example.com",phone,firstName:"Fan",lastName:"Masanawa"})});
+    const headers={authorization:"Bearer session"};
+    const status=await f.app.inject({url:"/v1/gb/wallet/virtual-account",headers});
+    expect(status.statusCode).toBe(200);expect(status.json()).toMatchObject({account:{state:"unassigned"},applicantComplete:false});
+    const result=await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers});
+    expect(result.statusCode).toBe(400);expect(result.json().error.code).toBe("invalid_applicant");
+    expect(start).not.toHaveBeenCalled();expect(f.create).not.toHaveBeenCalled();
+  }
+ });
+ it("allows corrected Nigerian applicants and keeps assigned history independent of profile validity",async()=>{
+  const headers={authorization:"Bearer session"};
+  const corrected=setup({applicantComplete:async()=>true});
+  expect((await corrected.app.inject({url:"/v1/gb/wallet/virtual-account",headers})).json().applicantComplete).toBe(true);
+  expect((await corrected.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(200);
+  const historical=setup({applicantComplete:async()=>{throw Error("private profile offline");},
+    applicant:async()=>{throw Error("private profile offline");},
+    read:async()=>({state:"assigned",reference:"original_ref",bankId:"9PSB",accountNumber:"0000000100",accountName:"Original",bankName:"9PSB Bank"})});
+  const response=await historical.app.inject({url:"/v1/gb/wallet/virtual-account",headers});
+  expect(response.statusCode).toBe(200);expect(response.json().account.accountName).toBe("Original");
+  expect((await historical.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(200);
+  expect(historical.create).not.toHaveBeenCalled();
+ });
+ it("keeps transient applicant read failure unavailable without creating an assignment",async()=>{
+  const start=vi.fn(async()=>{throw Error("must not write");});
+  const f=setup({applicantComplete:async()=>true,start,applicant:async()=>{throw Error("profile offline");}});
+  const headers={authorization:"Bearer session"};
+  expect((await f.app.inject({url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(503);
+  expect((await f.app.inject({method:"POST",url:"/v1/gb/wallet/virtual-account",headers})).statusCode).toBe(503);
+  expect(start).not.toHaveBeenCalled();expect(f.create).not.toHaveBeenCalled();
+ });
  it("requires raw-body HMAC and passes exact bank reference to ledger once",async()=>{
   const {app,credit}=setup();
   const time="1792886400",payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{

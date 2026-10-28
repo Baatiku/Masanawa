@@ -1,8 +1,10 @@
 /** A bounded, recoverable sweep for server-owned paid-post retention.
  * Feed and owner read policies enforce the exact expiry timestamp; this
  * worker physically scrubs source text/media references after the deadline.
- * Remote object/CDN deletion remains a separately gated implementation.
+ * Private object cleanup runs from the durable deletion outbox when a
+ * configured storage provider is present; no public CDN purge is assumed.
  */
+import type {StatusMediaDeletionWorker} from './media_deletion_worker.js';
 export interface StatusExpiryPort {
   purgeExpired(limit:number):Promise<{purged:number}>;
 }
@@ -12,7 +14,8 @@ export class StatusRetentionWorker {
   private running:Promise<void>|null=null;
   private stopped=true;
   constructor(private readonly port:StatusExpiryPort,
-    private readonly reportFailure:()=>void=()=>{}){}
+    private readonly reportFailure:()=>void=()=>{},
+    private readonly mediaDeletion?:StatusMediaDeletionWorker){}
 
   start(){
     if(this.timer||!this.stopped)throw new Error('status_retention_already_started');
@@ -34,6 +37,7 @@ export class StatusRetentionWorker {
           throw new Error('status_retention_invalid_batch');
         if(purged<100)break;
       }
+      if(!this.stopped)await this.mediaDeletion?.sweep();
     })();
     const settled=work.catch(()=>{this.reportFailure();})
       .finally(()=>{if(this.running===settled)this.running=null;});
