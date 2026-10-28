@@ -4,6 +4,9 @@ import {withTransaction} from '../transaction.js';
 import {reviewedPromotionDestination} from '@masanawa/feed';
 
 type Row=Record<string,unknown>;
+type PromotionPolicyEvidence={category:'general'|'financial'|'health'|'political'|'employment'|'regulated_other';
+ bodyChecked:true;rightsChecked:true;destinationChecked:boolean;
+ clearanceReference?:string;evidenceNote:string};
 export class PromotionError extends Error {
  readonly statusCode:number;
  constructor(readonly status:number,readonly code:string){super(code);this.statusCode=status;}
@@ -453,7 +456,7 @@ export class PgStatusPromotions {
   if(!r.rows[0])fail('quote_not_found',404);
   return {campaign:r.rows[0].id?campaign(r.rows[0] as Row):null};
  }
- async review(t:string,editor:string,id:string,approve:boolean,reason?:string){actor(t,editor);identifier(id);
+ async review(t:string,editor:string,id:string,approve:boolean,reason?:string,policy?:PromotionPolicyEvidence){actor(t,editor);identifier(id);
   const rationale=reviewReason(reason,!approve);
   return serial(this.pool,async c=>{
    const r=await c.query(`SELECT * FROM feed.promotion_campaigns
@@ -461,6 +464,27 @@ export class PgStatusPromotions {
    const p=(r.rows[0] as Row|undefined)??fail('campaign_not_found',404);
    if(p.state!=='pending_review')fail('campaign_not_pending',409);
    if(p.sponsor_id===editor)fail('separate_reviewer_required',403);
+   if(approve&&policy){
+    if(!['general','financial','health','political','employment','regulated_other'].includes(policy.category)||
+      policy.bodyChecked!==true||policy.rightsChecked!==true||
+      typeof policy.destinationChecked!=='boolean'||
+      typeof policy.evidenceNote!=='string'||policy.evidenceNote.trim().length<10||
+      policy.evidenceNote.trim().length>500)fail('invalid_advertising_policy_evidence');
+    const q=await c.query(`SELECT destination_url FROM feed.promotion_quotes
+      WHERE tenant_id=$1 AND id=$2`,[t,p.quote_id]);
+    if(q.rows[0]?.destination_url&&!policy.destinationChecked)
+     fail('advertiser_destination_not_reviewed',409);
+    if(policy.category!=='general'&&(!policy.clearanceReference||
+      policy.clearanceReference.trim().length<6||
+      policy.clearanceReference.trim().length>160))
+     fail('advertising_clearance_required',409);
+    await c.query(`INSERT INTO feed.promotion_policy_reviews
+     (tenant_id,campaign_id,post_id,reviewer_id,policy_category,body_checked,
+      rights_checked,destination_checked,clearance_reference,evidence_note)
+     VALUES($1,$2,$3,$4,$5,true,true,$6,$7,$8)`,
+     [t,id,p.post_id,editor,policy.category,policy.destinationChecked,
+      policy.clearanceReference?.trim()??null,policy.evidenceNote.trim()]);
+   }
    if(approve){
     const accepted=await c.query(`UPDATE feed.posts SET state='published',
      published_at=statement_timestamp(),paid_reviewed_destination_url=(
@@ -491,7 +515,9 @@ export class PgStatusPromotions {
    await this.audit(c,t,String(p.post_id),editor,approve?'approved':'rejected',id,
     approve?{bodySha256:hash(String(approval?.body??'')),
      destinationUrl:approval?.destination_url??null,
-     reviewedMediaIds:approval?.media_ids??[],reason:rationale||null}:
+     reviewedMediaIds:approval?.media_ids??[],reason:rationale||null,
+     policyCategory:policy?.category??null,
+     clearanceReference:policy?.clearanceReference??null}:
      {reason:rationale});
    if(!approve)await this.disable(c,t,String(p.post_id));
    return {campaignId:id,state:approve?'active':'rejected',
@@ -501,6 +527,36 @@ export class PgStatusPromotions {
 
  /** Tenant-scoped content review. Staff authorization is checked by the
   * Gateway before this method; never include viewer identities or tokens. */
+
+ /** External navigation is an explicit authenticated, no-redirect intent. A
+  * hidden/revoked/expired paid creative is never an openable CTA. */
+ async openDestination(t:string,viewer:string,post:string){
+  actor(t,viewer);identifier(post);
+  const rows=await this.pool.query(`SELECT p.paid_reviewed_destination_url AS url
+    FROM feed.posts p
+    JOIN identity.users author ON author.tenant_id=p.tenant_id
+      AND author.user_id=p.author_user_id AND author.state='active'
+    WHERE p.tenant_id=$1 AND p.id=$2 AND p.author_type='human'
+      AND p.state='published' AND p.audience='public' AND p.paid_purged_at IS NULL
+      AND p.paid_reviewed_destination_url IS NOT NULL
+      AND EXISTS(SELECT 1 FROM feed.promotion_campaigns campaign
+       WHERE campaign.tenant_id=p.tenant_id AND campaign.post_id=p.id
+        AND campaign.state='active' AND campaign.remaining_views>0
+        AND campaign.reviewed_by IS NOT NULL
+        AND (campaign.expires_at IS NULL OR campaign.expires_at>statement_timestamp()))
+      AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences blocked
+       WHERE blocked.tenant_id=p.tenant_id AND blocked.blocked AND
+        ((blocked.viewer_user_id=$3 AND blocked.subject_user_id=p.author_user_id)
+        OR (blocked.viewer_user_id=p.author_user_id AND blocked.subject_user_id=$3)))`,
+    [t,post,viewer]);
+  if(!rows.rows[0])fail('destination_unavailable',404);
+  let url:string|null;
+  try{url=reviewedPromotionDestination(rows.rows[0].url);}
+  catch{fail('destination_unavailable',404);}
+  if(!url)fail('destination_unavailable',404);
+  return {url,openMode:'external_browser' as const,
+   noInAppHumanChat:true,noopener:true,noreferrer:true};
+ }
  async adminQueue(t:string,editor:string){actor(t,editor);
   const r=await this.pool.query(`SELECT c.id,c.post_id,c.sponsor_id,c.kind,
    c.target_views,c.remaining_views,c.delivered_views,c.created_at,
