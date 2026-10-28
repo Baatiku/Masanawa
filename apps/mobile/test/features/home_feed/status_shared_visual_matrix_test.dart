@@ -148,7 +148,6 @@ void main() {
   testWidgets('offline authorized-image failure is retryable, semantic and never a fake original',
       (tester) async {
     final semantics=tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     final offline=_OfflineImageGrant();
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:
       FeedInlineMediaCard(
@@ -172,5 +171,7 @@ void main() {
       reason:'Retry asks for a fresh scoped grant instead of displaying stale bytes');
     expect(find.text('Never present an offline original'),findsNothing);
     expect(tester.takeException(),isNull);
+    // Flutter verifies active semantics handles before addTearDown callbacks.
+    semantics.dispose();
   });
 }
