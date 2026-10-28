@@ -13,7 +13,9 @@ const report={visibleFraction:0.9,foreground:true,engaged:true};
 
 describe('consented guest proof persists only reviewable, nonpayable evidence',()=>{
  const db=new PGlite();
- const query=(statement:string,params?:unknown[])=>db.query(statement,params as never);
+ const query=(statement:string,params?:unknown[])=>(
+  db.query(statement,params as never) as Promise<{rows:Record<string,unknown>[]}>
+ );
  const pool={query,connect:async()=>({query,release:()=>undefined})} as unknown as Pool;
  let service:PgStatusGuestProofs,postId:string;
  let validToken='';
