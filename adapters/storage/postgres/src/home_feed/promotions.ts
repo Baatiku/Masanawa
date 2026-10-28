@@ -348,7 +348,8 @@ export class PgStatusPromotions {
  async share(t:string,sharer:string,post:string){actor(t,sharer);identifier(post);
   return serial(this.pool,async c=>{
    const p=await c.query(`SELECT author_user_id FROM feed.posts
-    WHERE tenant_id=$1 AND id=$2 AND state='published'`,[t,post]);
+    WHERE tenant_id=$1 AND id=$2 AND state='published'
+      AND audience='public' AND paid_purged_at IS NULL`,[t,post]);
    if(!p.rows[0])fail('post_not_found',404);
    const source=await c.query(`SELECT id FROM feed.promotion_campaigns WHERE tenant_id=$1
     AND post_id=$2 AND sponsor_id<>$3 AND state='active' AND remaining_views>0
@@ -367,7 +368,8 @@ export class PgStatusPromotions {
   actor(t,viewer);identifier(post);
   return serial(this.pool,async c=>{
    const p=await c.query(`SELECT 1 FROM feed.posts WHERE tenant_id=$1 AND id=$2
-    AND state='published' AND paid_purged_at IS NULL`,[t,post]);
+    AND state='published' AND audience='public'
+    AND paid_purged_at IS NULL`,[t,post]);
    if(!p.rowCount)fail('post_not_found',404);
    // Issue quotas are per authenticated account digest, not shared IP: carrier
    // NAT must not cause one person's requests to penalize unrelated users.
@@ -380,8 +382,12 @@ export class PgStatusPromotions {
    if(count(recent.rows[0]?.issued??0)>=100)fail('view_challenge_rate_limited',429);
    let link:string|null=null;
    if(referral&&referral.length<=128){
-    const r=await c.query(`SELECT id FROM feed.share_links WHERE tenant_id=$1
-      AND post_id=$2 AND token_sha256=$3 AND revoked_at IS NULL`,[t,post,hash(referral)]);
+    const r=await c.query(`SELECT l.id FROM feed.share_links l
+      JOIN feed.promotion_campaigns campaign ON campaign.tenant_id=l.tenant_id
+       AND campaign.id=l.campaign_id AND campaign.post_id=l.post_id
+      WHERE l.tenant_id=$1 AND l.post_id=$2 AND l.token_sha256=$3
+       AND l.revoked_at IS NULL AND campaign.state='active'
+       AND campaign.remaining_views>0`,[t,post,hash(referral)]);
     if(r.rows[0])link=String(r.rows[0].id);
    }
    const added=await c.query(`INSERT INTO feed.view_challenges
@@ -408,7 +414,8 @@ export class PgStatusPromotions {
    if(time.rows[0]!.sec>300)fail('view_challenge_expired',409);
    const post=String(ch.post_id);
    const owner=await c.query(`SELECT author_user_id FROM feed.posts WHERE tenant_id=$1
-     AND id=$2 AND state='published' AND paid_purged_at IS NULL FOR UPDATE`,[t,post]);
+     AND id=$2 AND state='published' AND audience='public'
+     AND paid_purged_at IS NULL FOR UPDATE`,[t,post]);
    if(!owner.rows[0])fail('post_unavailable',404);
    const inserted=await c.query(`INSERT INTO feed.qualified_views
     (tenant_id,post_id,viewer_digest,challenge_id) VALUES($1,$2,$3,$4)

@@ -1650,7 +1650,7 @@ export async function startGatewayService(
         // Crawlers never obtain privileged feed/media access or create paid views.
         // Public navigation stays disabled until legal/privacy qualification.
         publicLanding:{port:new PgPublicStatusLanding(database.featurePool!),
-          enabled:()=>false},
+          enabled:()=>false,publicBaseUrl:env.MASANAWA_STATUS_PUBLIC_BASE_URL!},
         // Financial activation still requires a separately completed,
         // security-qualified full Status/public-web client composition.
         promotionsEnabled:()=>false,

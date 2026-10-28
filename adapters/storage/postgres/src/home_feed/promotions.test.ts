@@ -225,4 +225,56 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await expect(service.pause(t,'sharer',campaign.id))
     .rejects.toMatchObject({code:'campaign_not_found'});
  });
+
+ it('rejects hidden post sharing and refuses a pending challenge after visibility changes',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+    body:'A reviewed public offer may become private',targetViews:3});
+  const c=await service.confirm(t,'publisher',q.quoteId,'private-race-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const link=await service.share(t,'sharer',c.postId);
+  expect(link.earnable).toBe(true);
+  const token=new URL(link.url).searchParams.get('r')!;
+  const ch=await service.beginView(t,'viewertwo',c.postId,token);
+  await query(`UPDATE feed.view_challenges
+    SET started_at=statement_timestamp()-interval '7 seconds' WHERE id=$1`,[ch.challengeId]);
+  await query(`UPDATE feed.posts SET state='hidden' WHERE id=$1`,[c.postId]);
+  await expect(service.share(t,'sharer',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
+  await expect(service.beginView(t,'viewerone',c.postId,token))
+    .rejects.toMatchObject({code:'post_not_found'});
+  await expect(service.finishView(t,'viewertwo',ch.challengeId,
+    {visibleFraction:1,foreground:true,engaged:true}))
+    .rejects.toMatchObject({code:'post_unavailable'});
+  expect((await query(`SELECT count(*)::int AS n FROM feed.promotion_view_charges
+    WHERE campaign_id=$1`,[c.id])).rows[0]).toMatchObject({n:0});
+  await query(`UPDATE feed.posts SET state='published' WHERE id=$1`,[c.postId]);
+  expect(await service.finishView(t,'viewertwo',ch.challengeId,
+    {visibleFraction:1,foreground:true,engaged:true}))
+    .toMatchObject({qualified:true,payable:true});
+ });
+
+ it('attributes only the first qualified forwarded link, never later replay',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+    body:'Two independent sharers, one real viewer',targetViews:3});
+  const c=await service.confirm(t,'publisher',q.quoteId,'first-link-qualify-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const first=await service.share(t,'sharer',c.postId);
+  const second=await service.share(t,'booster',c.postId);
+  const ch1=await service.beginView(t,'viewertwo',c.postId,
+    new URL(first.url).searchParams.get('r')!);
+  const ch2=await service.beginView(t,'viewertwo',c.postId,
+    new URL(second.url).searchParams.get('r')!);
+  await query(`UPDATE feed.view_challenges SET started_at=
+    statement_timestamp()-interval '7 seconds' WHERE id IN ($1,$2)`,
+    [ch1.challengeId,ch2.challengeId]);
+  expect(await service.finishView(t,'viewertwo',ch1.challengeId,
+    {visibleFraction:0.8,foreground:true,engaged:true}))
+    .toMatchObject({qualified:true,payable:true});
+  expect(await service.finishView(t,'viewertwo',ch2.challengeId,
+    {visibleFraction:0.8,foreground:true,engaged:true}))
+    .toMatchObject({qualified:false,duplicate:true});
+  const receipts=await query(`SELECT c.sharer_id,c.sharer_half_mb FROM
+    feed.promotion_view_charges c WHERE c.campaign_id=$1`,[c.id]);
+  expect(receipts.rows).toEqual([{sharer_id:'sharer',sharer_half_mb:1}]);
+ });
 });

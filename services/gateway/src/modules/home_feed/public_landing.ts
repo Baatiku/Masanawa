@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 
 type PublicStatusReadPool={query(statement:string,parameters?:unknown[]):Promise<{
@@ -47,6 +48,26 @@ export class PgPublicStatusLanding {
   return {id,name:String(post.name??'Masanawa member'),body:String(post.body??''),
    kind:post.kind as 'text'|'image',imageCount:Array.isArray(post.media_ids)?post.media_ids.length:0};
  }
+
+ /** A public unfurl is never a view. This lookup merely determines whether a
+  * signed-in sharer's already-issued opaque link may survive the app handoff.
+  * Return only a boolean; no sharer, tenant or campaign identity leaves SQL. */
+ async validReferral(postId:string,token:string):Promise<boolean>{
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(postId)||
+     !/^[A-Za-z0-9_-]{20,128}$/.test(token))return false;
+  const digest=createHash('sha256').update(token).digest('hex');
+  const r=await this.pool.query(`SELECT 1 FROM feed.share_links l
+    JOIN feed.promotion_campaigns c ON c.tenant_id=l.tenant_id
+      AND c.id=l.campaign_id AND c.post_id=l.post_id
+    JOIN feed.posts p ON p.tenant_id=l.tenant_id AND p.id=l.post_id
+    WHERE l.post_id=$1::uuid AND l.token_sha256=$2 AND l.revoked_at IS NULL
+      AND c.state='active' AND c.remaining_views>0
+      AND p.state='published' AND p.audience='public'
+      AND p.paid_purged_at IS NULL
+    LIMIT 2`,[postId,digest]);
+  // A UUID collision between tenants must never pick an arbitrary sharer.
+  return r.rows.length===1;
+ }
 }
 
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,c=>({
@@ -56,17 +77,20 @@ const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,c=>({
 /** Render a crawler-safe, JS-free preview. Fetching, unfurling and link
  * scanning never invoke view challenges or create commission liabilities. */
 export function renderPublicStatusPage(post:Extract<PublicStatusPost,{gone?:false}>,
-  referral?:string):string {
+  referral?:string,publicBaseUrl='https://masanawa.com'):string {
  const name=escapeHtml(post.name.slice(0,130));
  const description=escapeHtml(post.body.replace(/\s+/g,' ').slice(0,240));
  const body=escapeHtml(post.body).replace(/\r?\n/g,'<p></p>');
- const source=`https://masanawa.com/status/${post.id}`;
+ const source=new URL(`/status/${encodeURIComponent(post.id)}`,publicBaseUrl).toString();
  const valid=referral&&/^[A-Za-z0-9_-]{20,128}$/.test(referral)?referral:null;
  const href=escapeHtml(source+(valid?`?r=${encodeURIComponent(valid)}`:''));
+ const canonical=escapeHtml(source);
  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta property="og:type" content="article"><meta property="og:title" content="${name} on Masanawa">
 <meta property="og:description" content="${description}">
+<meta property="og:url" content="${canonical}">
+<link rel="canonical" href="${canonical}">
 <meta name="description" content="${description}">
 <title>${name} · Masanawa</title><style>
 body{background:#f4f5f2;color:#1b2c23;font:16px/1.55 system-ui,sans-serif;margin:0}
@@ -83,13 +107,16 @@ Qualified views require a verified in-app or consented web session. No app insta
 }
 
 export async function registerPublicStatusLanding(app:FastifyInstance,options:{
-  port:{find(id:string):Promise<PublicStatusPost|null>};enabled:()=>boolean;
+  port:{find(id:string):Promise<PublicStatusPost|null>;
+    validReferral?(postId:string,token:string):Promise<boolean>};
+  enabled:()=>boolean;publicBaseUrl?:string;
 }){
  app.get('/status/:postId',async(req,reply)=>{
   reply.header('Cache-Control','no-store');
   reply.header('Referrer-Policy','no-referrer');
   reply.header('X-Content-Type-Options','nosniff');
   reply.header('X-Frame-Options','DENY');
+  reply.header('Permissions-Policy','camera=(), microphone=(), geolocation=()');
   reply.header('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   if(!options.enabled())return reply.code(404).type('text/plain').send('Post unavailable');
   const raw=req.params as Record<string,unknown>,id=String(raw.postId??'');
@@ -97,7 +124,9 @@ export async function registerPublicStatusLanding(app:FastifyInstance,options:{
   if(!post)return reply.code(404).type('text/plain').send('Post unavailable');
   if(post.gone)return reply.code(410).type('text/plain').send('Post removed');
   const token=(req.query as Record<string,unknown>)?.r;
+  const referral=typeof token==='string'&&/^[A-Za-z0-9_-]{20,128}$/.test(token)&&
+    await options.port.validReferral?.(id,token)?token:undefined;
   return reply.type('text/html; charset=utf-8').send(renderPublicStatusPage(post,
-    typeof token==='string'?token:undefined));
+    referral,options.publicBaseUrl));
  });
 }

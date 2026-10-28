@@ -19,7 +19,9 @@ export interface StatusRuntime {
  enabled?:()=>boolean;
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
- publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>};enabled:()=>boolean};
+ publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>;
+    validReferral?(id:string,token:string):Promise<boolean>};
+   enabled:()=>boolean;publicBaseUrl?:string};
  media?:Omit<FeedMediaOptions,"tenant"|"principal"|"enabled">;
  /** Only authenticated content editors can approve or withdraw descriptive
   * media copy. The database owns rights/revision and approval provenance. */
