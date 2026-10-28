@@ -1,0 +1,7 @@
+# Replace with a real DNS A record pointing to the VM's public IPv4.
+relay.example.com {
+  reverse_proxy 127.0.0.1:3098
+  log {
+    output discard
+  }
+}
