@@ -404,4 +404,32 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   await expect(service.share(t,'sharer',c.postId))
     .rejects.toMatchObject({code:'post_not_found'});
  });
+ it('quotes a reviewed HTTPS CTA and records its immutable moderation snapshot',async()=>{
+  await account('advertiser',15);
+  await expect(service.quote({tenantId:t,sponsorId:'advertiser',body:'Message',
+    targetViews:2,destinationUrl:'http://example.org'}))
+   .rejects.toMatchObject({code:'invalid_promotion_destination'});
+  const q=await service.quote({tenantId:t,sponsorId:'advertiser',
+   body:'Visit for details',targetViews:3,destinationUrl:'https://example.org/details'});
+  const stored=(await query(`SELECT destination_url FROM feed.promotion_quotes WHERE id=$1`,
+   [q.quoteId])).rows[0] as {destination_url:string};
+  expect(stored.destination_url).toBe('https://example.org/details');
+  const campaign=await service.confirm(t,'advertiser',q.quoteId,'advertiser-cta-001');
+  expect(campaign.state).toBe('pending_review');
+  const queue=await service.adminQueue(t,'distincteditor');
+  expect(queue.pending).toEqual(expect.arrayContaining([
+   expect.objectContaining({campaignId:campaign.id,
+    destinationUrl:'https://example.org/details'})
+  ]));
+  await service.review(t,'distincteditor',campaign.id,true,'Verified public CTA');
+  const audit=(await query(`SELECT details FROM feed.promotion_audit
+    WHERE tenant_id=$1 AND campaign_id=$2 AND action='approved'`,
+    [t,campaign.id])).rows[0] as {details:{destinationUrl:string;bodySha256:string}};
+  expect(audit.details.destinationUrl).toBe('https://example.org/details');
+  expect(audit.details.bodySha256).toMatch(/^[0-9a-f]{64}$/);
+  expect((await service.receipt(t,'advertiser',q.quoteId)).campaign)
+   .toMatchObject({id:campaign.id,state:'active'});
+  expect(await balance('advertiser')).toEqual({purchased:15,reserved:3,welcome:500});
+ });
+
 });
