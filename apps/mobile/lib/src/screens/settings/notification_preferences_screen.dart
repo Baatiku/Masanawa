@@ -336,27 +336,6 @@ class _NotificationPreferencesScreenState
                   ref.invalidate(gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch!)));
                   await _refreshHistory();
                 },child:ListView(children:[
-                  const ListTile(title:Text('Promotion updates',
-                    style:TextStyle(fontWeight:FontWeight.w700)),
-                    subtitle:Text('Private campaign events from the audit log. '
-                      'These are not push-delivery or read-receipt confirmations.')),
-                  if(promotionHistory!.isLoading&&promotionHistory.valueOrNull==null)
-                    const ListTile(title:Text('Loading promotion updates…'))
-                  else if(promotionHistory.hasError||promotionHistory.valueOrNull==null)
-                    ListTile(title:const Text('Promotion updates unavailable.'),
-                      trailing:IconButton(tooltip:'Retry promotion updates',
-                        icon:const Icon(Icons.refresh),onPressed:()=>ref.invalidate(
-                          gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch!)))))
-                  else if(promotionHistory.valueOrNull!.notices.isEmpty)
-                    const ListTile(title:Text('No campaign updates yet.'))
-                  else for(final update in promotionHistory.valueOrNull!.notices.take(20))
-                    ListTile(key:ValueKey('notification-promotion-${update.id}'),
-                      leading:const Icon(Icons.campaign_outlined),
-                      title:Text(update.label),
-                      subtitle:Text('${MaterialLocalizations.of(context).formatMediumDate(update.occurredAt.toLocal())}'
-                        '${update.reason==null?'':' · ${update.reason}'}\nPost: ${update.postId}'),
-                      isThreeLine:update.reason!=null),
-                  const Divider(height:20),
                   const ListTile(title:Text('Other account alerts',
                     style:TextStyle(fontWeight:FontWeight.w700))),
                   if(_historyLoading&&_history.isEmpty)
@@ -396,6 +375,27 @@ class _NotificationPreferencesScreenState
                         if(target!=null)context.push(target);
                       }),
                   ],
+                  const ListTile(title:Text('Promotion updates',
+                    style:TextStyle(fontWeight:FontWeight.w700)),
+                    subtitle:Text('Private campaign events from the audit log. '
+                      'These are not push-delivery or read-receipt confirmations.')),
+                  if(promotionHistory!.isLoading&&promotionHistory.valueOrNull==null)
+                    const ListTile(title:Text('Loading promotion updates…'))
+                  else if(promotionHistory.hasError||promotionHistory.valueOrNull==null)
+                    ListTile(title:const Text('Promotion updates unavailable.'),
+                      trailing:IconButton(tooltip:'Retry promotion updates',
+                        icon:const Icon(Icons.refresh),onPressed:()=>ref.invalidate(
+                          gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch!)))))
+                  else if(promotionHistory.valueOrNull!.notices.isEmpty)
+                    const ListTile(title:Text('No campaign updates yet.'))
+                  else for(final update in promotionHistory.valueOrNull!.notices.take(20))
+                    ListTile(key:ValueKey('notification-promotion-${update.id}'),
+                      leading:const Icon(Icons.campaign_outlined),
+                      title:Text(update.label),
+                      subtitle:Text('${MaterialLocalizations.of(context).formatMediumDate(update.occurredAt.toLocal())}'
+                        '${update.reason==null?'':' · ${update.reason}'}\nPost: ${update.postId}'),
+                      isThreeLine:update.reason!=null),
+                  const Divider(height:20),
                 ])),
               RefreshIndicator(onRefresh: _refresh,
                 child: ListView(children: [
