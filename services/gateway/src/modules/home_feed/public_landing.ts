@@ -103,10 +103,14 @@ export class PgPublicStatusLanding {
     JOIN feed.promotion_campaigns c ON c.tenant_id=l.tenant_id
       AND c.id=l.campaign_id AND c.post_id=l.post_id
     JOIN feed.posts p ON p.tenant_id=l.tenant_id AND p.id=l.post_id
+    JOIN identity.users sharer ON sharer.tenant_id=l.tenant_id
+      AND sharer.user_id=l.sharer_id AND sharer.state='active'
+    LEFT JOIN gb_wallet.accounts reward ON reward.tenant_id=l.tenant_id
+      AND reward.account_kind='human' AND reward.account_id=l.sharer_id
     WHERE l.post_id=$1::uuid AND l.token_sha256=$2 AND l.revoked_at IS NULL
       AND c.state='active' AND c.remaining_views>0
       AND p.state='published' AND p.audience='public'
-      AND p.paid_purged_at IS NULL
+      AND p.paid_purged_at IS NULL AND COALESCE(reward.frozen,false)=false
     LIMIT 2`,[postId,digest]);
   // A UUID collision between tenants must never pick an arbitrary sharer.
   return r.rows.length===1;

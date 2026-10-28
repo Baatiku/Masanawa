@@ -20,6 +20,8 @@ describe('public Status unfurls only approved globally public funded content',()
  beforeAll(async()=>{
   await db.exec(`CREATE SCHEMA feed; CREATE SCHEMA identity;
    CREATE SCHEMA talks; CREATE SCHEMA masana;
+   CREATE SCHEMA gb_wallet;
+   CREATE TABLE gb_wallet.accounts(tenant_id text,account_kind text,account_id text,frozen boolean);
    CREATE TABLE feed.posts(id uuid,tenant_id text,state text,kind text,
     body text,media_ids text[],paid_purged_at timestamptz,
     author_type text,author_user_id text,author_masana_id text,audience text);
@@ -27,7 +29,7 @@ describe('public Status unfurls only approved globally public funded content',()
    ALTER TABLE feed.posts ADD COLUMN paid_purge_at timestamptz;
    CREATE TABLE feed.promotion_campaigns(tenant_id text,id uuid,post_id uuid,state text,remaining_views int);
    CREATE TABLE feed.share_links(tenant_id text,post_id uuid,campaign_id uuid,
-    token_sha256 text,revoked_at timestamptz);
+    token_sha256 text,revoked_at timestamptz,sharer_id text);
    CREATE TABLE identity.users(tenant_id text,user_id text,state text);
    CREATE TABLE identity.characters(tenant_id text,character_id text,state text);
    CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text);
@@ -38,6 +40,8 @@ describe('public Status unfurls only approved globally public funded content',()
    CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text);
    CREATE TABLE talks.safety_enforcement(tenant_id text,target_kind text,target_id text,visibility text);
    INSERT INTO identity.users VALUES('tenant','member','active');
+   INSERT INTO identity.users VALUES('tenant','sharer','active');
+   INSERT INTO gb_wallet.accounts VALUES('tenant','human','sharer',false);
    INSERT INTO talks.public_profiles VALUES('tenant','member','member_valid','Amina');
    INSERT INTO identity.characters VALUES('tenant','teacher','active');
    INSERT INTO identity.character_ownership VALUES('tenant','teacher','platform');
@@ -55,7 +59,7 @@ describe('public Status unfurls only approved globally public funded content',()
      ('tenant','${campaign}','${paid}','active',2),
      ('tenant','57c63eb3-0f5e-4849-8670-2eb62c8406bf','${humanImage}','active',2),
      ('tenant','47c63eb3-0f5e-4849-8670-2eb62c8406bf','${hidden}','active',2);`);
-  await db.query(`INSERT INTO feed.share_links VALUES($1,$2,$3,$4,NULL)`,
+  await db.query(`INSERT INTO feed.share_links VALUES($1,$2,$3,$4,NULL,'sharer')`,
    ['tenant',paid,campaign,createHash('sha256').update(token).digest('hex')]);
  });
  afterAll(async()=>db.close());
@@ -127,6 +131,21 @@ describe('public Status unfurls only approved globally public funded content',()
   expect(await repository.validReferral(hidden,token)).toBe(false);
   await db.query('UPDATE feed.share_links SET revoked_at=now() WHERE post_id=$1',[paid]);
   expect(await repository.validReferral(paid,token)).toBe(false);
+ });
+ it('never advertises a suspended or frozen sharer as reward-eligible',async()=>{
+  expect(await repository.validReferral(paid,token)).toBe(false);
+  // The prior test permanently revoked this link; restore its original grant
+  // only inside this isolated proof, then remove it again at completion.
+  await db.query('UPDATE feed.share_links SET revoked_at=NULL WHERE post_id=$1',[paid]);
+  expect(await repository.validReferral(paid,token)).toBe(true);
+  await db.query("UPDATE identity.users SET state='disabled' WHERE user_id='sharer'");
+  expect(await repository.validReferral(paid,token)).toBe(false);
+  await db.query("UPDATE identity.users SET state='active' WHERE user_id='sharer'");
+  await db.query("UPDATE gb_wallet.accounts SET frozen=true WHERE account_id='sharer'");
+  expect(await repository.validReferral(paid,token)).toBe(false);
+  await db.query("UPDATE gb_wallet.accounts SET frozen=false WHERE account_id='sharer'");
+  expect(await repository.validReferral(paid,token)).toBe(true);
+  await db.query('UPDATE feed.share_links SET revoked_at=now() WHERE post_id=$1',[paid]);
  });
  it('returns only a tombstone after purge and no arbitrary cross-tenant UUID',async()=>{
   await db.query("UPDATE feed.posts SET paid_purged_at=now(),state='removed',body='' WHERE id=$1",[paid]);
