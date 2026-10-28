@@ -1182,6 +1182,13 @@
       "description": "HTTPS origin serving the canonical Status public landing and optional opaque referral URL."
     },
     {
+      "name": "MASANAWA_STATUS_APPROVED_DESTINATIONS",
+      "owner": "gateway/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional comma-separated exact canonical HTTPS advertiser URLs individually cleared by independent moderation; an absent or empty list denies all external paid-post destinations. Parsing alone is not phishing or legal clearance."
+    },
+    {
       "name": "MASANAWA_MB_REPLIES_ENABLED",
       "owner": "gateway/gb-wallet",
       "classification": "public",
