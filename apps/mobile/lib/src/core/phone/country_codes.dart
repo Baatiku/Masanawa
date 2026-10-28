@@ -109,7 +109,16 @@ String normalizeE164(String raw, {PhoneCountry country = kDefaultCountry}) {
   if (trimmed.isEmpty) return '';
   final digits = trimmed.replaceAll(RegExp(r'\D'), '');
   if (digits.isEmpty) return '';
-  if (trimmed.startsWith('+')) return '+$digits';
+  if (trimmed.startsWith('+')) {
+    // People may type a national trunk 0 after a prefilled +country prefix.
+    // It is not part of most countries' E.164 numbers. Italy keeps its 0.
+    final prefix=country.dialCode;
+    if(country.iso!='IT'&&prefix.isNotEmpty&&digits.startsWith(prefix)){
+      final national=digits.substring(prefix.length);
+      if(national.startsWith('0'))return '+$prefix${national.replaceFirst(RegExp(r'^0+'),'')}';
+    }
+    return '+$digits';
+  }
   if (trimmed.startsWith('00')) {
     final rest = digits.replaceFirst(RegExp(r'^00'), '');
     return rest.isEmpty ? '' : '+$rest';
