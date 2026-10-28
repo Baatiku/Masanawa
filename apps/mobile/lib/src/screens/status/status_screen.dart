@@ -16,6 +16,7 @@ import '../../features/home_feed/feed_post_detail_screen.dart';
 import '../../features/home_feed/saved_status_library_screen.dart';
 import '../../features/home_feed/status_promotion_api.dart';
 import '../../features/home_feed/status_promotion_sheet.dart';
+import '../../features/home_feed/my_status_promotions_screen.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
@@ -74,6 +75,11 @@ class AccountBoundFeedApi extends DioFeedApi {
   @override
   Future<void> react(String id, String? kind) =>
       _checked(() => super.react(id, kind));
+  @override
+  Future<void> hidePost(String id) => _checked(() => super.hidePost(id));
+  @override
+  Future<void> reportPost(String id,String reason) =>
+      _checked(() => super.reportPost(id,reason));
   @override
   Future<void> comment(String id, String body, String key) =>
       _checked(() => super.comment(id, body, key));
@@ -266,6 +272,7 @@ class StatusSavedScreen extends ConsumerWidget {
             authorDirectory: authors,
             engagementApi: feed,
             onSharePost: shareOriginal,
+            onManagePromotion: () => unawaited(managePromotions()),
             shareEarnEnabled: boostAvailable,
             onBoostPost: boostAvailable
                 ? (id) => unawaited(boostAction(id))
@@ -293,6 +300,23 @@ class StatusSavedScreen extends ConsumerWidget {
       );
     }
 
+    Future<void> managePromotions() async {
+      if(currentAccount()!=account)return;
+      final canBoost=await promotions.available();
+      if(!context.mounted||currentAccount()!=account)return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder:(_)=>Consumer(builder:(_,scopeRef,__) {
+          final active=scopeRef.watch(sessionProvider);
+          if(active is! SessionSignedIn||active.user.id!=account){
+            return const Scaffold(body:Center(child:Text(
+              'Sign in to manage your promotions.')));
+          }
+          return MyStatusPromotionsScreen(
+            api:promotions,canBoost:canBoost,onBoostAgain:boost);
+        }),
+      ));
+    }
+
     return FutureBuilder<bool>(
       key: ValueKey('saved-promotion-$account'),
       future: promotions.available(),
@@ -307,6 +331,7 @@ class StatusSavedScreen extends ConsumerWidget {
         onOpenMedia: openMedia,
         engagementApi: feed,
         onSharePost: shareOriginal,
+        onManagePromotion: () => unawaited(managePromotions()),
         shareEarnEnabled: ability.data == true,
         onHumanProfile: openHuman,
         onMasanaProfile: openMasana,

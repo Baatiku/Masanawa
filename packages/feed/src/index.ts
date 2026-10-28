@@ -2,6 +2,8 @@
 export type PostKind = "text"|"image"|"audio";
 export type FeedMode = "for_you"|"following"|"mine";
 export type ReactionKind = "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry";
+export type PostReportReason = "spam"|"fraud"|"harassment"|"hate"|"sexual_content"|"violence"|"impersonation"|"other";
+export const postReportReasons:readonly PostReportReason[] = ["spam","fraud","harassment","hate","sexual_content","violence","impersonation","other"];
 export const reactionKinds:readonly ReactionKind[] = ["like","love","care","haha","wow","sad","angry"];
 
 export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; permissions?:readonly string[]; approved?:boolean};
@@ -21,6 +23,10 @@ export interface Repository {
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
  setReaction?(tenant:string,fan:string,post:string,kind:ReactionKind|null):Promise<ReactionKind|null>;
  setSave(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
+ setHidden?(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
+ reportPost?(tenant:string,fan:string,post:string,reason:PostReportReason,detail:string|null):Promise<{reportId:string;status:"submitted"}>;
+ pendingPostReports?(tenant:string):Promise<unknown>;
+ resolvePostReport?(tenant:string,editor:string,reportId:string,decision:"reviewed"|"dismissed"):Promise<unknown>;
  comment(tenant:string,fan:string,post:string,text:string,key:string,pending:boolean,parentId?:string|null):Promise<Comment>;
  comments(tenant:string,post:string,viewer:string|null,before:string|null,limit:number,sort?:"newest"|"oldest"):Promise<readonly Comment[]>;
 }
@@ -108,6 +114,36 @@ export class FeedService {
  }
  async save(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);
   await this.detail(actor.tenantId,fan,post);return this.repo.setSave(actor.tenantId,fan,post,enabled)}
+ async hide(actor:Actor,post:string,enabled:boolean){const fan=this.fan(actor);requirePostId(post);
+  if(!this.repo.setHidden)throw new FeedError(503,"hide_unavailable");
+  if(enabled)await this.detail(actor.tenantId,fan,post);
+  return this.repo.setHidden(actor.tenantId,fan,post,enabled)}
+ async report(actor:Actor,post:string,reason:PostReportReason,detail?:string|null){
+  const fan=this.fan(actor);requirePostId(post);
+  if(!postReportReasons.includes(reason))throw new FeedError(422,"invalid_report_reason");
+  const text=detail?.trim()??null;
+  if(text!=null&&text.length>500)throw new FeedError(422,"invalid_report_detail");
+  if(!this.repo.reportPost)throw new FeedError(503,"report_unavailable");
+  await this.detail(actor.tenantId,fan,post);
+  return this.repo.reportPost(actor.tenantId,fan,post,reason,text||null);
+ }
+ private editor(actor:Actor){
+  if(actor.kind!=="staff"||!actor.permissions?.includes("content_editor"))
+   throw new FeedError(403,"editorial_permission_denied");
+  requireId(actor.tenantId);requireId(actor.id);
+ }
+ async pendingPostReports(actor:Actor){
+  this.editor(actor);
+  if(!this.repo.pendingPostReports)throw new FeedError(503,"post_report_review_unavailable");
+  return this.repo.pendingPostReports(actor.tenantId);
+ }
+ async resolvePostReport(actor:Actor,id:string,decision:"reviewed"|"dismissed"){
+  this.editor(actor);requirePostId(id);
+  if(decision!=="reviewed"&&decision!=="dismissed")
+   throw new FeedError(422,"invalid_report_decision");
+  if(!this.repo.resolvePostReport)throw new FeedError(503,"post_report_review_unavailable");
+  return this.repo.resolvePostReport(actor.tenantId,actor.id,id,decision);
+ }
  async comment(actor:Actor,post:string,body:string,idempotencyKey:string,isNewAccount:boolean,parentId?:string|null){
   const fan=this.fan(actor);requirePostId(post);if(!key.test(idempotencyKey))throw new FeedError(422,"invalid_idempotency_key");
   const text=body.trim();if(!text||text.length>1000)throw new FeedError(422,"invalid_comment");

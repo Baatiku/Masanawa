@@ -91,6 +91,8 @@ export class PgHomeFeedRepository {
  constructor(private readonly pool:Pool){}
  async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
+   AND ($2::text IS NULL OR NOT EXISTS(SELECT 1 FROM feed.post_viewer_hides hidden
+    WHERE hidden.tenant_id=p.tenant_id AND hidden.post_id=p.id AND hidden.viewer_id=$2))
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
     OR ($3::text='following' AND (
@@ -111,6 +113,8 @@ export class PgHomeFeedRepository {
  }
  async find(tenant:string,viewer:string|null,id:string,masanaOnly=true){
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}
+   AND ($2::text IS NULL OR NOT EXISTS(SELECT 1 FROM feed.post_viewer_hides hidden
+    WHERE hidden.tenant_id=p.tenant_id AND hidden.post_id=p.id AND hidden.viewer_id=$2))
    AND (NOT $4::boolean OR p.author_type='masana')`,[tenant,viewer,id,masanaOnly]);
   return rows.rows[0]?item(rows.rows[0]):null;
  }
@@ -192,6 +196,62 @@ export class PgHomeFeedRepository {
   }
   else await this.pool.query("DELETE FROM feed.saves WHERE tenant_id=$1 AND fan_id=$2 AND post_id=$3::uuid",[tenant,fan,id]);
   return enabled;
+ }
+ async setHidden(tenant:string,fan:string,id:string,enabled:boolean){
+  if(enabled){
+   const inserted=await this.pool.query(`WITH eligible AS (
+    SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
+     AND p.state='published' AND ${eligibleAuthor}
+   ) INSERT INTO feed.post_viewer_hides(tenant_id,viewer_id,post_id)
+     SELECT $1,$2,id FROM eligible ON CONFLICT DO NOTHING RETURNING post_id`,
+     [tenant,fan,id]);
+   // A concurrent idempotent hide may already exist; the service checked the
+   // eligible original before entry. Neither outcome leaks post data.
+   void inserted;
+  }else await this.pool.query(`DELETE FROM feed.post_viewer_hides
+   WHERE tenant_id=$1 AND viewer_id=$2 AND post_id=$3::uuid`,[tenant,fan,id]);
+  return enabled;
+ }
+ async reportPost(tenant:string,fan:string,id:string,
+  reason:"spam"|"fraud"|"harassment"|"hate"|"sexual_content"|"violence"|"impersonation"|"other",detail:string|null){
+  const created=await this.pool.query<{id:string}>(`INSERT INTO feed.post_reports
+   (tenant_id,reporter_id,post_id,reason,detail)
+   SELECT $1,$2,p.id,$4,$5 FROM feed.posts p WHERE p.tenant_id=$1
+    AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}
+   ON CONFLICT(tenant_id,reporter_id,post_id) DO NOTHING RETURNING id`,
+   [tenant,fan,id,reason,detail]);
+  const report=created.rows[0]??(await this.pool.query<{id:string}>(
+   `SELECT id FROM feed.post_reports WHERE tenant_id=$1 AND reporter_id=$2
+    AND post_id=$3::uuid`,[tenant,fan,id])).rows[0];
+  if(!report)throw Object.assign(new Error("post_not_found"),
+    {status:404,code:"post_not_found"});
+  return {reportId:report.id,status:"submitted" as const};
+ }
+ async pendingPostReports(tenant:string){
+  const result=await this.pool.query(`SELECT r.id,r.post_id,r.reason,r.detail,r.created_at,
+    p.state AS post_state,p.author_type
+    FROM feed.post_reports r LEFT JOIN feed.posts p
+      ON p.tenant_id=r.tenant_id AND p.id=r.post_id
+    WHERE r.tenant_id=$1 AND r.state='pending'
+    ORDER BY r.created_at,r.id LIMIT 100`,[tenant]);
+  return {reports:result.rows.map(r=>({
+    reportId:String(r.id),postId:String(r.post_id),reason:String(r.reason),
+    detail:r.detail==null?null:String(r.detail),createdAt:r.created_at,
+    postState:r.post_state==null?'removed':String(r.post_state),
+    authorType:r.author_type==null?'removed':String(r.author_type),
+  }))};
+ }
+ async resolvePostReport(tenant:string,editor:string,reportId:string,
+   decision:"reviewed"|"dismissed"){
+  const result=await this.pool.query(`UPDATE feed.post_reports SET state=$4,
+    reviewed_by=$3,reviewed_at=statement_timestamp()
+    WHERE tenant_id=$1 AND id=$2::uuid AND state='pending'
+      AND reporter_id<>$3 RETURNING id,post_id,state`,
+    [tenant,reportId,editor,decision]);
+  const row=result.rows[0];
+  if(!row)throw Object.assign(new Error('report_unavailable'),
+    {status:404,code:'report_unavailable'});
+  return {reportId:String(row.id),postId:String(row.post_id),state:String(row.state)};
  }
  async comment(tenant:string,fan:string,post:string,body:string,key:string,pending:boolean,parentId:string|null=null){
   const rows=await this.pool.query(`WITH inserted AS (

@@ -23,6 +23,8 @@ import 'my_status_promotions_screen.dart';
 import 'status_qualified_view_observer.dart';
 import 'status_reaction_picker.dart';
 import 'status_post_action_row.dart';
+import 'status_post_overflow.dart';
+import 'status_post_cta.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -378,6 +380,54 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }
   }
 
+  Future<void> hidePost(FeedPost post) async {
+    if(widget.api is! StatusModerationFeedApi||
+      pendingActions.contains(post.id))return;
+    final version=generation;
+    setState(()=>pendingActions.add(post.id));
+    try{
+      await (widget.api as StatusModerationFeedApi).hidePost(post.id);
+      if(!mounted||version!=generation)return;
+      setState(()=>items.removeWhere((p)=>p.id==post.id));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Post hidden from your Home feed. Other viewers are unaffected.',
+        'An ɓoye saƙon daga Shafinku. Hakan bai shafi sauran masu kallo ba.'))));
+    }catch(e){
+      if(!mounted||version!=generation)return;
+      if(accessLost(e)){
+        setState((){clearProjection();error=e.toString();});
+      }else{ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Post was not hidden. Try again.',
+        'Ba a ɓoye saƙon ba. Sake gwadawa.'))));}
+    }finally{
+      if(mounted&&version==generation)
+        setState(()=>pendingActions.remove(post.id));
+    }
+  }
+
+  Future<void> reportPost(FeedPost post,String reason) async {
+    if(widget.api is! StatusModerationFeedApi||
+      pendingActions.contains(post.id))return;
+    final version=generation;
+    setState(()=>pendingActions.add(post.id));
+    try{
+      await (widget.api as StatusModerationFeedApi).reportPost(post.id,reason);
+      if(!mounted||version!=generation)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Report submitted for review. This does not automatically remove the post.',
+        'An tura rahoton don dubawa. Wannan ba yana nufin an cire saƙon nan take ba.'))));
+    }catch(e){
+      if(!mounted||version!=generation)return;
+      if(accessLost(e))setState((){clearProjection();error=e.toString();});
+      else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Report was not submitted. Try again.',
+        'Ba a tura rahoton ba. Sake gwadawa.'))));
+    }finally{
+      if(mounted&&version==generation)
+        setState(()=>pendingActions.remove(post.id));
+    }
+  }
+
   Future<void> react(FeedPost post, String? kind) async {
     if (!widget.enabled ||
         widget.api is! ReactionFeedApi ||
@@ -497,6 +547,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             onBoostPost: promotionsAvailable ? (id) => openPromotion(postId: id) : null,
             engagementApi: feed,
             onSharePost: sharePost,
+            onManagePromotion: openMyPromotions,
             shareEarnEnabled: promotionsAvailable,
             enabled: widget.enabled,
           );
@@ -504,6 +555,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         },
       ),
     );
+    // A detail-route Hide or moderation takedown must not leave the old card
+    // projected in Home after the user returns to the same account.
+    if(mounted&&widget.accountKey==account)await refresh();
   }
 
   void openComments(FeedPost post) {
@@ -893,6 +947,14 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                         icon: const Icon(Icons.volunteer_activism_outlined),
                                         constraints: const BoxConstraints(minWidth:48,minHeight:48),
                                       ),
+                                    StatusPostOverflow(
+                                      post:post,accountKey:widget.accountKey,
+                                      onHide:widget.api is StatusModerationFeedApi
+                                        ? hidePost:null,
+                                      onReport:widget.api is StatusModerationFeedApi
+                                        ? reportPost:null,
+                                      onManage:openMyPromotions,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -928,6 +990,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   ),
                                 ]),
                               ),
+                              StatusPostCta(post:post,
+                                onHumanProfile:widget.onHumanProfile),
                               const Divider(height: 1),
                               StatusPostActionRow(
                                 post: post,

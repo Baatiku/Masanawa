@@ -12,6 +12,8 @@ import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 import 'status_post_action_row.dart';
 import 'status_reaction_picker.dart';
+import 'status_post_overflow.dart';
+import 'status_post_cta.dart';
 
 /// C22 uses the canonical published-post projection and moderated comment journal.
 /// AF00 owns root/deep-link registration. This screen never exposes fan publishing.
@@ -22,7 +24,7 @@ class FeedPostDetailScreen extends StatefulWidget {
     required this.sendComment,this.onMasanaProfile,this.onHumanProfile,this.onMedia,
     this.mediaApi,this.inlineMediaRenderer,this.audioPlaybackAvailable=false,
     this.authorDirectory = const {},this.onBoostPost,
-    this.engagementApi,this.onSharePost,this.shareEarnEnabled=false,
+    this.engagementApi,this.onSharePost,this.onManagePromotion,this.shareEarnEnabled=false,
     this.enabled=true,this.canReply=true});
   final FeedPost initialPost;
   final String accountKey;
@@ -39,6 +41,7 @@ class FeedPostDetailScreen extends StatefulWidget {
   final ValueChanged<String>? onBoostPost;
   final FeedApi? engagementApi;
   final Future<void> Function(FeedPost)? onSharePost;
+  final VoidCallback? onManagePromotion;
   final bool shareEarnEnabled;
   final bool enabled,canReply;
   @override State<FeedPostDetailScreen> createState()=>_FeedPostDetailState();
@@ -51,6 +54,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
   String sort='newest';
   bool loading=true,sending=false,offline=false,denied=false;
   bool reacting=false;
+  bool moderating=false;
   final _commentFocus=FocusNode();
   bool loadingMore=false,hasMore=false;
   String? pageError,commentCursor;
@@ -63,11 +67,47 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     if(old.accountKey!=widget.accountKey||old.initialPost.id!=widget.initialPost.id){
       generation++;post=null;comments=[];error=null;replyTo=null;
       pendingBody=null;pendingKey=null;pendingParent=null;sending=false;input.clear();
-      reacting=false;
+      reacting=false;moderating=false;
       loadingMore=false;hasMore=false;commentCursor=null;pageError=null;refresh();
     }else if(!old.enabled&&widget.enabled){refresh();}
   }
   @override void dispose(){generation++;input.dispose();_commentFocus.dispose();super.dispose();}
+
+  Future<void> _hide(FeedPost target) async {
+    final api=widget.engagementApi;
+    if(api is! StatusModerationFeedApi||moderating)return;
+    final ticket=generation;
+    setState(()=>moderating=true);
+    try{
+      await (api as StatusModerationFeedApi).hidePost(target.id);
+      if(!mounted||ticket!=generation)return;
+      setState((){post=null;comments=[];denied=true;});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Hidden from your Home feed. Other viewers are unaffected.',
+        'An ɓoye saƙon daga Shafinku. Bai shafi sauran mutane ba.'))));
+    }catch(_){
+      if(mounted&&ticket==generation)ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content:Text(t('Could not hide this post. Try again.',
+          'Ba a iya ɓoye saƙon ba. Sake gwadawa.'))));
+    }finally{if(mounted&&ticket==generation)setState(()=>moderating=false);}
+  }
+
+  Future<void> _report(FeedPost target,String reason) async {
+    final api=widget.engagementApi;
+    if(api is! StatusModerationFeedApi||moderating)return;
+    final ticket=generation;
+    setState(()=>moderating=true);
+    try{
+      await (api as StatusModerationFeedApi).reportPost(target.id,reason);
+      if(!mounted||ticket!=generation)return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(t(
+        'Report received for review. The post remains visible unless moderated.',
+        'An karɓi rahoton don dubawa. Saƙon zai ci gaba da bayyana har sai an tantance shi.'))));
+    }catch(_){if(mounted&&ticket==generation)ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content:Text(t('Report not submitted. Retry.',
+        'Ba a tura rahoton ba. Sake gwadawa.'))));}
+    finally{if(mounted&&ticket==generation)setState(()=>moderating=false);}
+  }
 
   Future<void> _changeReaction(String? kind) async {
     final before=post,api=widget.engagementApi;
@@ -289,7 +329,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
           Expanded(child:Center(child:Text(t('Post not available','Babu labarin'))))
         else Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(children:[
           Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            StatusPostAuthorHeader(
+            Row(children:[Expanded(child:StatusPostAuthorHeader(
               post:p,
               agent:widget.authorDirectory[p.authorMasanaId],
               onProfile:p.isHuman
@@ -297,7 +337,10 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
                     ()=>widget.onHumanProfile!(p.authorHandle!))
                 : (widget.onMasanaProfile==null?null:
                     ()=>widget.onMasanaProfile!(p.authorMasanaId)),
-            ),
+            )),StatusPostOverflow(post:p,accountKey:widget.accountKey,
+              onHide:widget.engagementApi is StatusModerationFeedApi?_hide:null,
+              onReport:widget.engagementApi is StatusModerationFeedApi?_report:null,
+              onManage:widget.onManagePromotion),]),
             const SizedBox(height:12),
             StatusPostBody(accountKey:widget.accountKey,postId:p.id,
               body:p.body,mode:StatusPostBodyMode.detail),
@@ -309,8 +352,9 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               child:StatusPostSocialProof(post:p)),
             StatusPostBoostAction(post:p,enabled:widget.onBoostPost!=null,
               onBoost:widget.onBoostPost),
+            StatusPostCta(post:p,onHumanProfile:widget.onHumanProfile),
             const Divider(height:12),
-            StatusPostActionRow(post:p,pending:reacting||loading,
+            StatusPostActionRow(post:p,pending:reacting||moderating||loading,
               shareEarnEnabled:widget.shareEarnEnabled,
               onLike:widget.engagementApi==null?null:
                 ()=>unawaited(_changeReaction(p.currentReaction=='like'?null:'like')),

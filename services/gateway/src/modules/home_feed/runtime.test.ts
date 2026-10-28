@@ -85,5 +85,54 @@ describe("connected Status canonical session and feature registration",()=>{
   expect(r.statusCode).toBe(200);expect(find).toHaveBeenCalledWith("trusted_tenant",id,"media_abcdefgh");
   expect(p.authorize).toHaveBeenCalledTimes(1);await app.close();
  });
+ it("post-specific hide/report accept only authenticated owner-scoped identifiers and bounded reasons",async()=>{
+  const p=ports(),app=Fastify(),hide=vi.fn(async()=>true),
+   report=vi.fn(async()=>({reportId:"server-report-id",status:"submitted"}));
+  await registerStatusRuntime(app,{...p.options,
+    feed:{list:p.list,hide,report} as never});
+  const id="381026c2-9d56-47b1-b73d-1784e24e41e2";
+  const endpoint=`/v1/posts/${id}`;
+  expect((await app.inject({method:"PUT",url:`${endpoint}/hide`,payload:{enabled:true}})).statusCode).toBe(401);
+  expect((await app.inject({method:"PUT",url:`${endpoint}/hide`,
+    headers:{authorization:"Bearer valid"},payload:{enabled:"true",tenantId:"forged"}})).statusCode).toBe(422);
+  const h=await app.inject({method:"PUT",url:`${endpoint}/hide`,
+    headers:{authorization:"Bearer valid","x-user-id":"spoofed"},payload:{enabled:true}});
+  expect(h.statusCode).toBe(200);
+  expect(hide).toHaveBeenCalledWith(expect.objectContaining(
+    {kind:"fan",tenantId:"trusted_tenant",id:"trusted_user"}),id,true);
+  expect((await app.inject({method:"POST",url:`${endpoint}/report`,
+    headers:{authorization:"Bearer valid"},payload:{reason:"other",privateReporter:"spoofed"}})).statusCode).toBe(422);
+  const rep=await app.inject({method:"POST",url:`${endpoint}/report`,
+    headers:{authorization:"Bearer valid"},payload:{reason:"fraud",detail:"Unapproved content"}});
+  expect(rep.statusCode).toBe(202);
+  expect(rep.json()).toEqual({reportId:"server-report-id",status:"submitted"});
+  expect(report).toHaveBeenCalledWith(expect.objectContaining(
+    {kind:"fan",tenantId:"trusted_tenant",id:"trusted_user"}),id,"fraud","Unapproved content");
+  await app.close();
+ });
+ it("reviewing post reports requires canonical editor permission; report resolution is separate from takedown",async()=>{
+  const p=ports(),app=Fastify();
+  const pendingPostReports=vi.fn(async()=>({reports:[{reportId:"report-1"}]}));
+  const resolvePostReport=vi.fn(async()=>({state:"reviewed"}));
+  await registerStatusRuntime(app,{...p.options,
+    feed:{list:p.list,pendingPostReports,resolvePostReport} as never,
+    isEditor:async s=>s.userId==="trusted_user"});
+  const request={authorization:"Bearer valid"};
+  const queue=await app.inject({url:"/v1/admin/feed/post-reports",headers:request});
+  expect(queue.statusCode).toBe(200);
+  expect(pendingPostReports).toHaveBeenCalledWith(expect.objectContaining(
+    {kind:"staff",id:"trusted_user",tenantId:"trusted_tenant"}));
+  const invalid=await app.inject({method:"POST",
+    url:"/v1/admin/feed/post-reports/report-1/resolve",headers:request,
+    payload:{decision:"approved",extra:"forged"}});
+  expect(invalid.statusCode).toBe(422);
+  const reviewed=await app.inject({method:"POST",
+    url:"/v1/admin/feed/post-reports/report-1/resolve",headers:request,
+    payload:{decision:"reviewed"}});
+  expect(reviewed.statusCode).toBe(200);
+  expect(resolvePostReport).toHaveBeenCalledWith(expect.objectContaining(
+    {kind:"staff",id:"trusted_user"}),"report-1","reviewed");
+  await app.close();
+ });
 
 });

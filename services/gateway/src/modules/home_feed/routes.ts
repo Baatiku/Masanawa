@@ -5,6 +5,10 @@ type FeedPort={
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
+ hide?(a:Actor,id:string,e:boolean):Promise<unknown>;
+ report?(a:Actor,id:string,reason:"spam"|"fraud"|"harassment"|"hate"|"sexual_content"|"violence"|"impersonation"|"other",detail?:string|null):Promise<unknown>;
+ pendingPostReports?(a:Actor):Promise<unknown>;
+ resolvePostReport?(a:Actor,id:string,decision:"reviewed"|"dismissed"):Promise<unknown>;
  react?(a:Actor,id:string,kind:"like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null):Promise<unknown>;
  comment(a:Actor,id:string,text:string,key:string,newAccount:boolean,parentId?:string|null):Promise<unknown>;
  comments(t:string,id:string,v:string|null,b?:string,sort?:"newest"|"oldest"):Promise<unknown>;
@@ -82,6 +86,46 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   return o.service.react(a,str(object(req.params).id),kind as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry"|null);
  }));
  app.put("/v1/posts/:id/save",async(req,rep)=>run(req,rep,async({actor})=>o.service.save(member(actor),str(object(req.params).id),view(object(req.body).enabled))));
+ app.put("/v1/posts/:id/hide",async(req,rep)=>run(req,rep,async({actor})=>{
+  if(!o.service.hide)return rep.code(503).send({code:"hide_unavailable"});
+  const body=object(req.body);
+  if(Object.keys(body).length!==1||typeof body.enabled!=="boolean")
+   return rep.code(422).send({code:"invalid_hide"});
+  rep.header("Cache-Control","private, no-store");
+  return o.service.hide(member(actor),str(object(req.params).id),body.enabled);
+ }));
+ app.post("/v1/posts/:id/report",async(req,rep)=>run(req,rep,async({actor})=>{
+  if(!o.service.report)return rep.code(503).send({code:"report_unavailable"});
+  const body=object(req.body),reason=body.reason;
+  if(Object.keys(body).some(key=>key!=="reason"&&key!=="detail")||
+    typeof reason!=="string"||
+    !["spam","fraud","harassment","hate","sexual_content","violence","impersonation","other"].includes(reason)||
+    body.detail!==undefined&&body.detail!==null&&
+     (typeof body.detail!=="string"||(body.detail as string).length>500))
+   return rep.code(422).send({code:"invalid_post_report"});
+  rep.header("Cache-Control","private, no-store");
+  return rep.code(202).send(await o.service.report(member(actor),str(object(req.params).id),
+    reason as "spam"|"fraud"|"harassment"|"hate"|"sexual_content"|"violence"|"impersonation"|"other",
+    body.detail as string|null|undefined));
+ }));
+ app.get("/v1/admin/feed/post-reports",async(req,rep)=>run(req,rep,async({actor})=>{
+  if(!actor||actor.kind!=="staff"||!actor.permissions?.includes("content_editor"))
+   return rep.code(403).send({code:"editorial_permission_denied"});
+  if(!o.service.pendingPostReports)return rep.code(503).send({code:"post_report_review_unavailable"});
+  rep.header("Cache-Control","private, no-store");
+  return o.service.pendingPostReports(actor);
+ }));
+ app.post("/v1/admin/feed/post-reports/:id/resolve",async(req,rep)=>run(req,rep,async({actor})=>{
+  if(!actor||actor.kind!=="staff"||!actor.permissions?.includes("content_editor"))
+   return rep.code(403).send({code:"editorial_permission_denied"});
+  if(!o.service.resolvePostReport)return rep.code(503).send({code:"post_report_review_unavailable"});
+  const body=object(req.body);
+  if(Object.keys(body).length!==1||
+    (body.decision!=="reviewed"&&body.decision!=="dismissed"))
+   return rep.code(422).send({code:"invalid_report_decision"});
+  rep.header("Cache-Control","private, no-store");
+  return o.service.resolvePostReport(actor,str(object(req.params).id),body.decision);
+ }));
  app.post("/v1/posts/:id/comments",async(req,rep)=>run(req,rep,async({actor})=>{
   const a=member(actor),b=object(req.body);
   if(b.parentId!==undefined&&b.parentId!==null&&typeof b.parentId!=="string")return rep.code(422).send({code:"invalid_parent_comment"});

@@ -13,6 +13,8 @@ import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
 import 'status_post_action_row.dart';
 import 'status_reaction_picker.dart';
+import 'status_post_overflow.dart';
+import 'status_post_cta.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// Private, server-authoritative saved Masana Status collection.
@@ -33,6 +35,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     this.onOpenMedia,
     this.engagementApi,
     this.onSharePost,
+    this.onManagePromotion,
     this.shareEarnEnabled = false,
   });
 
@@ -48,6 +51,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final FeedApi? engagementApi;
   final Future<void> Function(FeedPost)? onSharePost;
+  final VoidCallback? onManagePromotion;
   final bool shareEarnEnabled;
 
   @override
@@ -65,6 +69,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   int epoch = 0;
   final Set<String> pending = {};
   final Set<String> pendingReactions = {};
+  final Set<String> pendingModeration = {};
   // A timed-out DELETE/PUT may have reached the server. Do not encourage a
   // second toggle until a successful owner-scoped collection read confirms it.
   final Set<String> uncertainRemovals = {};
@@ -92,6 +97,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       error = null;
       pending.clear();
       pendingReactions.clear();
+      pendingModeration.clear();
       uncertainRemovals.clear();
       loading = false;
       loadingMore = false;
@@ -108,7 +114,8 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   Future<void> refresh() async {
     // A read racing a still-in-flight removal cannot establish the outcome of
     // that write; wait for it to settle before the verification refresh.
-    if (!current || pending.isNotEmpty || pendingReactions.isNotEmpty) return;
+    if (!current || pending.isNotEmpty || pendingReactions.isNotEmpty ||
+        pendingModeration.isNotEmpty) return;
     final ticket = ++epoch;
     setState(() {
       loading = true;
@@ -308,6 +315,41 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       content:Text('Reaction saved; counts may be delayed. Pull to refresh.')));
   }
 
+  Future<void> hideSaved(FeedPost post) async {
+    final api=widget.engagementApi;
+    if(!current||api is! StatusModerationFeedApi||
+      pendingModeration.contains(post.id))return;
+    final ticket=epoch;
+    setState(()=>pendingModeration.add(post.id));
+    try{
+      await (api as StatusModerationFeedApi).hidePost(post.id);
+      if(!mounted||ticket!=epoch||!current)return;
+      setState(()=>items.removeWhere((item)=>item.id==post.id));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text(
+        'Post hidden for this account. Other viewers are unaffected.')));
+    }catch(_){if(mounted&&ticket==epoch&&current)ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content:Text('Could not hide this post. Retry.')));}
+    finally{if(mounted&&ticket==epoch&&current)
+      setState(()=>pendingModeration.remove(post.id));}
+  }
+
+  Future<void> reportSaved(FeedPost post,String reason) async {
+    final api=widget.engagementApi;
+    if(!current||api is! StatusModerationFeedApi||
+      pendingModeration.contains(post.id))return;
+    final ticket=epoch;
+    setState(()=>pendingModeration.add(post.id));
+    try{
+      await (api as StatusModerationFeedApi).reportPost(post.id,reason);
+      if(!mounted||ticket!=epoch||!current)return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text(
+        'Report received for review. The post is not automatically removed.')));
+    }catch(_){if(mounted&&ticket==epoch&&current)ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content:Text('Report not submitted. Retry.')));}
+    finally{if(mounted&&ticket==epoch&&current)
+      setState(()=>pendingModeration.remove(post.id));}
+  }
+
   void _restoreReaction(SavedStatusItem item,FeedPost original){
     setState(() {
       final index=items.indexWhere((row)=>row.id==item.id);
@@ -424,7 +466,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                 if (item.post != null)
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                                    child: StatusPostAuthorHeader(
+                                    child: Row(children:[Expanded(child:StatusPostAuthorHeader(
                                       post: item.post!,
                                       agent: widget.authorDirectory[
                                           item.post!.authorMasanaId],
@@ -434,7 +476,14 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                            ()=>widget.onHumanProfile!(item.post!.authorHandle!))
                                         :(widget.onMasanaProfile==null?null:
                                            ()=>widget.onMasanaProfile!(item.post!.authorMasanaId)),
-                                    ),
+                                    )),StatusPostOverflow(
+                                      post:item.post!,accountKey:widget.accountKey,
+                                      onHide:widget.engagementApi is StatusModerationFeedApi
+                                        ? hideSaved:null,
+                                      onReport:widget.engagementApi is StatusModerationFeedApi
+                                        ? reportSaved:null,
+                                      onManage:widget.onManagePromotion,
+                                    )]),
                                   ),
                                 InkWell(
                                   onTap: canOpen ? () => open(item) : null,
@@ -478,10 +527,13 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     child: StatusPostSocialProof(post: item.post!),
                                   ),
                                 if(item.post!=null)...[
+                                  StatusPostCta(post:item.post!,
+                                    onHumanProfile:widget.onHumanProfile),
                                   const Divider(height:1),
                                   StatusPostActionRow(
                                     post:item.post!,
-                                    pending:pendingReactions.contains(item.id),
+                                    pending:pendingReactions.contains(item.id)||
+                                      pendingModeration.contains(item.id),
                                     shareEarnEnabled:widget.shareEarnEnabled,
                                     onLike:widget.engagementApi==null?null:
                                       ()=>unawaited(reactSaved(item,
@@ -505,6 +557,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     TextButton.icon(
                                       onPressed: pending.contains(_itemKey(item)) ||
                                               pendingReactions.contains(item.id) ||
+                                              pendingModeration.contains(item.id) ||
                                               uncertainRemovals.contains(_itemKey(item))
                                           ? null
                                           : () => remove(item),

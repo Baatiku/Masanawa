@@ -51,6 +51,9 @@ export class PgSavedLibraryRepository {
           'viewerSaved',true) AS payload
       FROM feed.saves s JOIN feed.posts p ON p.tenant_id=s.tenant_id AND p.id=s.post_id
       WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published'
+        AND NOT EXISTS(SELECT 1 FROM feed.post_viewer_hides hidden
+          WHERE hidden.tenant_id=p.tenant_id AND hidden.viewer_id=$2
+            AND hidden.post_id=p.id)
         AND ((p.author_type='masana' AND EXISTS(
           SELECT 1 FROM masana.character_revisions r
           JOIN identity.characters a ON a.tenant_id=r.tenant_id AND a.character_id=r.character_id

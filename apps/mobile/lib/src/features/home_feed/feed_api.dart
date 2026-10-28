@@ -276,6 +276,14 @@ abstract class ReactionFeedApi {
   Future<void> react(String postId, String? kind);
 }
 
+/// Optional, authenticated per-post safety controls. Reporting must never
+/// silently imply a public takedown or copy the reporter's identity into a
+/// shared post projection.
+abstract class StatusModerationFeedApi {
+  Future<void> hidePost(String postId);
+  Future<void> reportPost(String postId, String reason);
+}
+
 /// Search is an opt-in transport extension. Existing stubbed/author feeds keep
 /// their unmodified list behavior; the server searches ALL visible older posts.
 abstract class SearchFeedApi {
@@ -288,7 +296,8 @@ abstract class SearchFeedApi {
 
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
 class DioFeedApi
-    implements FeedApi, SearchFeedApi, ReactionFeedApi, SavedStatusLibraryApi {
+    implements FeedApi, SearchFeedApi, ReactionFeedApi,
+      SavedStatusLibraryApi, StatusModerationFeedApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -360,6 +369,25 @@ class DioFeedApi
       data: {'enabled': enabled},
       options: await _options(authRequired: true),
     );
+  }
+
+  @override
+  Future<void> hidePost(String id) async {
+    await _dio.put<void>('/v1/posts/${Uri.encodeComponent(id)}/hide',
+      data:const {'enabled':true},options:await _options(authRequired:true));
+  }
+
+  @override
+  Future<void> reportPost(String id,String reason) async {
+    if(!const {'spam','fraud','harassment','hate','sexual_content',
+      'violence','impersonation','other'}.contains(reason))
+      throw ArgumentError.value(reason,'reason');
+    final response=await _dio.post<Map<String,dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(id)}/report',
+      data:{'reason':reason},options:await _options(authRequired:true));
+    final data=response.data;
+    if(data?['reportId'] is! String||data?['status']!='submitted')
+      throw const FormatException('Unconfirmed post report');
   }
 
   @override

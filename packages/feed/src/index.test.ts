@@ -5,6 +5,53 @@ function mock(){
  return {list:vi.fn(async()=>[post]),find:vi.fn(async(t:string)=>t==="tenant"?post:null),publish:vi.fn(async()=>post),setLike:vi.fn(async()=>true),setSave:vi.fn(async()=>true),comment:vi.fn(async()=>({id:"comment",postId:post.id,body:"ok",state:"pending" as const,createdAt:"now"})),comments:vi.fn(async()=>[])} satisfies Repository;
 }
 const fan={kind:"fan" as const,tenantId:"tenant",id:"fan"};
+describe("SPE-C15 viewer-specific Status hide and abuse reporting",()=>{
+ it("only the authenticated fan can hide a visible post or unhide their own choice",async()=>{
+  const db={...mock(),setHidden:vi.fn(async()=>true)};
+  const service=new FeedService(db,async()=>true);
+  expect(await service.hide(fan,post.id,true)).toBe(true);
+  await service.hide(fan,post.id,false);
+  expect(db.setHidden).toHaveBeenNthCalledWith(1,"tenant","fan",post.id,true);
+  expect(db.setHidden).toHaveBeenNthCalledWith(2,"tenant","fan",post.id,false);
+  await expect(service.hide({...fan,kind:"staff"} as never,post.id,true))
+   .rejects.toMatchObject({code:"fan_only_action"});
+ });
+ it("validates reason and detail, and never trusts a reported author or tenant",async()=>{
+  const db={...mock(),reportPost:vi.fn(async()=>({reportId:"report",status:"submitted" as const}))};
+  const service=new FeedService(db,async()=>true);
+  expect(await service.report(fan,post.id,"fraud"," misleading promotion "))
+   .toEqual({reportId:"report",status:"submitted"});
+  expect(db.reportPost).toHaveBeenCalledWith("tenant","fan",post.id,"fraud","misleading promotion");
+  await expect(service.report(fan,post.id,"unknown" as never))
+   .rejects.toMatchObject({code:"invalid_report_reason"});
+  await expect(service.report(fan,post.id,"other","x".repeat(501)))
+   .rejects.toMatchObject({code:"invalid_report_detail"});
+  await expect(service.report({...fan,tenantId:"foreign"},post.id,"spam"))
+   .rejects.toMatchObject({status:404});
+  expect(db.reportPost).toHaveBeenCalledTimes(1);
+ });
+ it("does not advertise phantom actions when no qualified persistence port exists",async()=>{
+  const service=new FeedService(mock(),async()=>true);
+  await expect(service.hide(fan,post.id,true)).rejects.toMatchObject({status:503});
+  await expect(service.report(fan,post.id,"spam")).rejects.toMatchObject({status:503});
+ });
+ it("review queue is editor-only and separately records a bounded resolution",async()=>{
+  const db={...mock(),pendingPostReports:vi.fn(async()=>({reports:[]})),
+   resolvePostReport:vi.fn(async()=>({state:"reviewed"}))};
+  const service=new FeedService(db,async()=>true);
+  const editor={kind:"staff" as const,tenantId:"tenant",id:"editor",
+   permissions:["content_editor"]};
+  await expect(service.pendingPostReports(fan)).rejects.toMatchObject({status:403});
+  await expect(service.pendingPostReports({...editor,permissions:[]}))
+   .rejects.toMatchObject({status:403});
+  expect(await service.pendingPostReports(editor)).toEqual({reports:[]});
+  const reportId="9b8c8884-7a31-49d9-aee5-521364b54aef";
+  await service.resolvePostReport(editor,reportId,"reviewed");
+  expect(db.resolvePostReport).toHaveBeenCalledWith("tenant","editor",reportId,"reviewed");
+  await expect(service.resolvePostReport(editor,reportId,"suspicious" as never))
+   .rejects.toMatchObject({status:422});
+ });
+});
 describe("ST2 server reaction contract",()=>{
  it("sets one typed reaction from trusted fan identity, including remove",async()=>{
   const db={...mock(),setReaction:vi.fn(async(_t:string,_a:string,_p:string,k:ReactionKind|null)=>k)};

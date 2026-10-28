@@ -25,6 +25,38 @@ describe("ST2 canonical one-actor reaction row",()=>{
   await expect(repo.setReaction("tenant","fan",id,null)).rejects.toMatchObject({status:404});
  });
 });
+describe("SPE-C15 persisted tenant/viewer post visibility and report intake",()=>{
+ it("hides a post before SQL pagination and denies viewer-hidden direct detail",async()=>{
+  const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  await repo.list("tenantA","fanA","for_you",null,21);
+  await repo.find("tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2");
+  for(const [sql] of query.mock.calls){
+   expect(sql).toContain("feed.post_viewer_hides");
+   expect(sql).toContain("hidden.viewer_id=$2");
+   expect(sql).toContain("hidden.post_id=p.id");
+  }
+ });
+ it("hides/undoes one viewer-only row and admits no forged post content",async()=>{
+  const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[{post_id:"post"}]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  await repo.setHidden("tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2",true);
+  await repo.setHidden("tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2",false);
+  expect(String(query.mock.calls[0]?.[0])).toContain("ON CONFLICT DO NOTHING");
+  expect(String(query.mock.calls[0]?.[0])).toContain("p.state='published'");
+  expect(String(query.mock.calls[1]?.[0])).toContain("viewer_id=$2");
+  expect(query.mock.calls.map(call=>call[1])).toEqual([
+   ["tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2"],
+   ["tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2"]]);
+ });
+ it("deduplicates one reporter/post without relying on client-authored IDs",async()=>{
+  const query=vi.fn(async(_sql:string)=>({rows:[{id:"report-1"}]}));
+  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  const r=await repo.reportPost("tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2", "fraud",null);
+  expect(r).toEqual({reportId:"report-1",status:"submitted"});
+  expect(String(query.mock.calls[0]?.[0])).toContain("ON CONFLICT(tenant_id,reporter_id,post_id) DO NOTHING");
+ });
+});
 describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
  it("passes viewer, tenant and follows mode via SQL binds",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[]}));

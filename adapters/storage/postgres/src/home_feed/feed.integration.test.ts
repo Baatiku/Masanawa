@@ -48,9 +48,40 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(humanMigration); // historic Masana IDs retained and idempotent
   await pool.query(readFileSync(new URL("../../../../../packages/commerce/migrations/0200_gb_wallet_foundation.sql",import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0007_paid_promotions.sql",import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0010_post_viewer_moderation.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
+ it("SPE-C15 one viewer hides an eligible post while another viewer retains it; report is idempotent",async()=>{
+  const pool=isolated.pool;
+  const published=await pool.query(`INSERT INTO feed.posts
+    (tenant_id,author_masana_id,kind,body,idempotency_key,published_by)
+    VALUES('tenant_test','masana_one','text','Safety visible post',
+      'safety-post-c15-01','masana_one') RETURNING id`);
+  const post=String(published.rows[0]!.id);
+  const other='fan_other';
+  expect(await repo.find('tenant_test','fan_one',post)).not.toBeNull();
+  expect(await repo.find('tenant_test',other,post)).not.toBeNull();
+  await repo.setSave('tenant_test','fan_one',post,true);
+  expect(await repo.setHidden('tenant_test','fan_one',post,true)).toBe(true);
+  expect(await repo.find('tenant_test','fan_one',post)).toBeNull();
+  expect(await repo.find('tenant_test',other,post)).not.toBeNull();
+  const saved=new PgSavedLibraryRepository(pool);
+  expect((await saved.list('tenant_test','fan_one',null,20)).some(x=>x.id===post)).toBe(false);
+  await repo.setSave('tenant_test',other,post,true);
+  const listed=await saved.list('tenant_test',other,null,20);
+  expect(listed.some(x=>x.id===post)).toBe(true);
+  const first=await repo.reportPost('tenant_test',other,post,'spam',null);
+  const replay=await repo.reportPost('tenant_test',other,post,'fraud',null);
+  expect(replay.reportId).toBe(first.reportId);
+  const queue=await repo.pendingPostReports('tenant_test');
+  expect(queue.reports.some(x=>x.reportId===first.reportId)).toBe(true);
+  await expect(repo.resolvePostReport('tenant_test',other,first.reportId,'reviewed'))
+    .rejects.toMatchObject({status:404});
+  expect((await repo.resolvePostReport('tenant_test','staff_reviewer',first.reportId,'reviewed')).state).toBe('reviewed');
+  await repo.setHidden('tenant_test','fan_one',post,false);
+  expect(await repo.find('tenant_test','fan_one',post)).not.toBeNull();
+ });
  it("ST0/ST4 pages microsecond ties through service cursors on real PG18",async()=>{
   const pool=isolated.pool;
   await pool.query(`INSERT INTO identity.users VALUES
