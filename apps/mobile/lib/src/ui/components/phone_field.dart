@@ -42,12 +42,16 @@ class _PhoneFieldState extends State<PhoneField> {
   String _nationalPart(String raw, PhoneCountry country) {
     final trimmed = raw.trim();
     if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
-      final international = trimmed.startsWith('00')
-          ? '+${trimmed.substring(2)}' : trimmed;
-      final prefix = '+${country.dialCode}';
-      if (country.dialCode.isNotEmpty && international.startsWith(prefix)) {
-        return international.substring(prefix.length).replaceAll(RegExp(r'\D'), '');
+      // Strip separators *before* comparing the calling code. Pasted forms
+      // such as "+ 44 ..." and "00 44 ..." must not become +4444....
+      final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+      final internationalDigits = trimmed.startsWith('00')
+          ? digits.replaceFirst(RegExp(r'^00'), '') : digits;
+      if (country.dialCode.isNotEmpty &&
+          internationalDigits.startsWith(country.dialCode)) {
+        return internationalDigits.substring(country.dialCode.length);
       }
+      return internationalDigits;
     }
     return trimmed.replaceAll(RegExp(r'\D'), '');
   }

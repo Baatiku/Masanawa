@@ -102,6 +102,15 @@ void main() {
     expect(controller.text, '+442079460000');
     expect(tester.widget<TextField>(national).controller!.text, '2079460000');
     expect(find.text('+44'), findsOneWidget);
+
+    await tester.enterText(national, '+ 44 20 7946 0000');
+    await tester.pump();
+    expect(controller.text, '+442079460000');
+    expect(tester.widget<TextField>(national).controller!.text, '2079460000');
+    await tester.enterText(national, '00 44 20 7946 0000');
+    await tester.pump();
+    expect(controller.text, '+442079460000');
+    expect(tester.widget<TextField>(national).controller!.text, '2079460000');
   });
 
   testWidgets('national entry keeps digits on country switch and explicit +1',
