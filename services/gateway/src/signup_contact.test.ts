@@ -17,6 +17,8 @@ describe('private country-aware contact signup',()=>{
     subdivisionIso:'CA-ON'})).toMatchObject({countryIso:'CA'});
   expect(()=>parseSignupContact({contactPhone:'+14165550123'}))
     .toThrow(SignupContactError);
+  expect(()=>parseSignupContact({contactPhone:'+14165550123',countryIso:'US'}))
+    .toThrow(SignupContactError);
  });
  it('denies prefix, region, country or length mismatches',()=>{
   for(const input of [
