@@ -333,7 +333,7 @@ class _NotificationPreferencesScreenState
           ? const Center(child: Text('Sign in to manage notifications.'))
           : TabBarView(children: [
               RefreshIndicator(onRefresh: () async {
-                  ref.invalidate(gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch)));
+                  ref.invalidate(gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch!)));
                   await _refreshHistory();
                 },child:ListView(children:[
                   const ListTile(title:Text('Promotion updates',
@@ -346,7 +346,7 @@ class _NotificationPreferencesScreenState
                     ListTile(title:const Text('Promotion updates unavailable.'),
                       trailing:IconButton(tooltip:'Retry promotion updates',
                         icon:const Icon(Icons.refresh),onPressed:()=>ref.invalidate(
-                          gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch)))))
+                          gbPromotionJournalProvider((accountId:account,authorizationEpoch:epoch!)))))
                   else if(promotionHistory.valueOrNull!.notices.isEmpty)
                     const ListTile(title:Text('No campaign updates yet.'))
                   else for(final update in promotionHistory.valueOrNull!.notices.take(20))
