@@ -535,4 +535,21 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    .toMatchObject({targetViews:4,remainingViews:4,state:'active'});
  });
 
+ it('keeps original no-CTA campaign fingerprints replay-compatible',async()=>{
+  await account('legacy_quote_user',5);
+  const q=await service.quote({tenantId:t,sponsorId:'legacy_quote_user',
+    body:'Historic promotion without CTA',targetViews:2});
+  const c=await service.confirm(t,'legacy_quote_user',q.quoteId,'legacy-no-cta-001');
+  const oldFingerprint=createHash('sha256').update(JSON.stringify([
+   q.quoteId,'legacy_quote_user','human_primary',null,
+   'Historic promotion without CTA',2
+  ])).digest('hex');
+  const saved=await query(`SELECT fingerprint FROM feed.promotion_campaigns
+    WHERE tenant_id=$1 AND id=$2`,[t,c.id]);
+  expect(saved.rows[0]).toMatchObject({fingerprint:oldFingerprint});
+  expect(await service.confirm(t,'legacy_quote_user',q.quoteId,'legacy-no-cta-001'))
+   .toEqual(c);
+  expect(await balance('legacy_quote_user')).toMatchObject({purchased:5,reserved:2});
+ });
+
 });
