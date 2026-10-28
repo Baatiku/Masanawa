@@ -191,7 +191,7 @@ class _StatusPromotionSheetState extends State<StatusPromotionSheet> {
                 if(quote!=null)...[
                   const SizedBox(height:4),
                   Text('${t('Eligible purchased balance','MB da za a iya amfani da su')}: ${quote.eligibleMb} MB'),
-                  if(quote.insufficient)Text(t('Not enough purchased MB. Add data to continue.',
+                  if(quote.insufficient)Text(t('Not enough purchased MB. Buy Data to continue.',
                     'MB da aka saya ba su isa ba. Kara MB don ci gaba.'),
                     style:TextStyle(color:theme.colorScheme.error)),
                 ],

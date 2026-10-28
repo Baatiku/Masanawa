@@ -31,7 +31,7 @@ class GbWalletBalanceCard extends StatelessWidget {
       key: const ValueKey('wallet-card-add-data'),
       onPressed: () => context.push('/wallet/add'),
       icon: const Icon(Icons.add_rounded, size: 18),
-      label: const Text('Add data'),
+      label: const Text('Buy Data'),
       style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
     );
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;

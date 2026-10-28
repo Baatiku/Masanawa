@@ -69,16 +69,32 @@ void main() {
     expect(find.text('Request'), findsOneWidget);
     await tester.ensureVisible(find.text('Quick actions'));
     await tester.pump();
-    final redeem = tester.getCenter(find.text('Redeem'));
-    final add = tester.getCenter(find.text('Add data').last);
-    final request = tester.getCenter(find.text('Request'));
-    final send = tester.getCenter(find.text('Send'));
+    final redeem = tester.getTopLeft(find.text('Redeem Data'));
+    final add = tester.getTopLeft(find.text('Buy Data').last);
+    final request = tester.getTopLeft(find.text('Request'));
+    final send = tester.getTopLeft(find.text('Send'));
     expect(redeem.dy, add.dy);
     expect(request.dy, send.dy);
     expect(redeem.dx, lessThan(add.dx));
     expect(request.dx, lessThan(send.dx));
     expect(redeem.dy, lessThan(request.dy));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('renamed Wallet actions remain readable at 320dp large text RTL', (tester)async{
+    tester.view.physicalSize=const Size(320,1000);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_SignedOut.new)],
+      child:const MaterialApp(home:MediaQuery(data:MediaQueryData(textScaler:TextScaler.linear(2)),
+        child:Directionality(textDirection:TextDirection.rtl,child:Scaffold(body:GbWalletScreen()))))));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Redeem Data'));await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.text('Redeem Data')).maxLines,isNull);
+    expect(find.text('Buy Data'),findsNWidgets(2));
+    expect(find.text('Add data'),findsNothing);expect(find.text('Redeem'),findsNothing);
+    await tester.dragUntilVisible(find.text('Recent transactions'),find.byType(ListView),const Offset(0,-180));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(),isNull);
   });
 
   testWidgets('reads a scoped authoritative MB summary with separate welcome credit',

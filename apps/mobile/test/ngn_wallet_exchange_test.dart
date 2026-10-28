@@ -258,7 +258,7 @@ void main() {
     },
   );
   testWidgets(
-    'shared card contains data, NGN, bank number and Add data at 320dp/200% RTL',
+    'shared card contains data, NGN, bank number and Buy Data at 320dp/200% RTL',
     (tester) async {
       tester.view.physicalSize = const Size(320, 1000);
       tester.view.devicePixelRatio = 1;
@@ -280,7 +280,7 @@ void main() {
       expect(find.text('14 GB'), findsOneWidget);
       expect(find.text('₦90,000'), findsOneWidget);
       expect(find.text('0000000100'), findsOneWidget);
-      expect(find.text('Add data'), findsOneWidget);
+      expect(find.text('Buy Data'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

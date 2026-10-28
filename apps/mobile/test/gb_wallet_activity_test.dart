@@ -138,6 +138,37 @@ void main() {
     return ProviderScope.containerOf(tester.element(find.byType(GbWalletActivityScreen)));
   }
 
+  testWidgets('compact transaction list shows the first deposit without technical clutter', (tester) async {
+    tester.view.physicalSize=const Size(390,844);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    final fake=_Activity()..responses[null]=GbActivityPage([
+      item('ngn:deposit_1',10000,unit:'NGN',kind:'deposit')],null);
+    await mount(tester,fake);
+    expect(find.text('Transactions'),findsOneWidget);
+    expect(find.text('Successful'),findsOneWidget);
+    expect(find.textContaining('Ref:'),findsNothing);
+    expect(find.textContaining('UTC '),findsNothing);
+    expect(find.text('Posted activity totals'),findsNothing);
+    expect(tester.getBottomRight(find.text('+₦100.00')).dy,lessThan(744));
+    expect(tester.getSize(find.byKey(const ValueKey('activity-unit-all'))).height,greaterThanOrEqualTo(48));
+    expect(tester.getSize(find.ancestor(of:find.text('Analysis'),matching:find.byType(ListTile))).height,greaterThanOrEqualTo(48));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('maximum receipt amounts remain readable at narrow large text RTL', (tester) async {
+    tester.view.physicalSize=const Size(320,900);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.dark),
+      home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),
+        child:Directionality(textDirection:TextDirection.rtl,child:Scaffold(body:Padding(
+          padding:const EdgeInsets.all(16),child:GbActivityTile(
+            item:item('ngn:large',-9007199254740991,unit:'NGN',kind:'deposit_reversal'))))))));
+    expect(find.text('−₦90,071,992,547,409.91'),findsOneWidget);
+    expect(tester.widget<Text>(find.text('−₦90,071,992,547,409.91')).textDirection,TextDirection.ltr);
+    expect(find.text('Successful'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('real posted units, See-all pagination and duplicate replay', (tester) async {
     final fake=_Activity()
       ..responses[null]=GbActivityPage([
@@ -257,9 +288,17 @@ void main() {
       await tester.tap(finder);
       await tester.pumpAndSettle();
     }
-    await choose('activity-purpose-funding');
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>).first);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Funding').last);
+    await tester.pumpAndSettle();
     expect(fake.filters.last.purpose,'funding');
-    await choose('activity-status-reversed');
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>).last);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reversed').last);
+    await tester.pumpAndSettle();
     expect(fake.filters.last.status,'reversed');
     await choose('activity-direction-outgoing');
     expect(fake.filters.last.direction,'outgoing');
@@ -314,17 +353,22 @@ void main() {
 
   testWidgets('history dates group verified entries across loaded pages without duplicate rows',
       (tester) async {
+    tester.view.physicalSize=const Size(800,1600);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
     final fake=_Activity()
       ..responses[null]=GbActivityPage([
         item('mb:1',-100),item('mb:2',200)],'next-page')
       ..responses['next-page']=GbActivityPage([
         item('mb:2',200),item('mb:3',-30,at:DateTime.utc(2026,10,24,19))],null);
     await mount(tester,fake);
+    tester.view.physicalSize=const Size(800,1600);
+    await tester.pumpAndSettle();
     await tester.dragUntilVisible(find.text('Load more activity').hitTestable(),
       find.byType(ListView),const Offset(0,-180));
     await tester.tap(find.text('Load more activity'));
     await tester.pumpAndSettle();
-    expect(find.text('3 verified entries loaded'),findsOneWidget);
+    expect(find.byKey(const ValueKey('activity-mb:3')),findsOneWidget);
+    expect(find.text('3 verified entries loaded'),findsNothing);
     expect(find.byWidgetPredicate((widget)=>widget.key is ValueKey<String> &&
       (widget.key! as ValueKey<String>).value.startsWith('activity-date-')),
       findsNWidgets(2));
@@ -338,6 +382,8 @@ void main() {
     expect(find.text('Received: +500 MB'),findsOneWidget);
     expect(find.text('Used: −200 MB'),findsOneWidget);
     expect(find.text('Received: +₦5,000.50'),findsOneWidget);
+    await tester.tap(find.text('Last 7 days'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Last 30 days'));
     await tester.pumpAndSettle();
     expect(fake.summaryRequests,[7,30]);
@@ -401,8 +447,8 @@ void main() {
         data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:const Directionality(
           textDirection:TextDirection.rtl,child:GbWalletActivityScreen())))));
     await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('Balance details').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    await tester.tap(find.text('Balance details'));await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('Analysis').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
+    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
     await tester.dragUntilVisible(find.text('MB: Reconciled balance').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
     expect(find.text('Reserved: 250 MB'),findsOneWidget);expect(find.text('Available: 750 MB'),findsOneWidget);
     await tester.dragUntilVisible(find.text('Reversal debt: ₦900.00').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
@@ -428,6 +474,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.summaryRequests,[7,7]);expect(find.text('Available: 750 MB'),findsNothing);
     expect(find.text('MB: Reconciled balance'),findsNothing);
+    await tester.ensureVisible(find.text('Analysis'));
+    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
     expect(find.text('Balance check unavailable'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
@@ -439,8 +487,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
       gbActivityTransportProvider.overrideWithValue(fake)],child:const MaterialApp(home:GbWalletActivityScreen())));
     await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('Balance details').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    await tester.tap(find.text('Balance details'));await tester.pumpAndSettle();
+    await tester.dragUntilVisible(find.text('Analysis').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
+    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
     await tester.dragUntilVisible(find.text('No NGN wallet has been initialized.').hitTestable(),find.byType(ListView).first,const Offset(0,-160));
     expect(find.text('MB: Balance needs reconciliation'),findsOneWidget);
     expect(find.textContaining('Available:'),findsNothing);expect(find.textContaining('Reconciled balance'),findsNothing);
