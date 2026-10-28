@@ -21,6 +21,8 @@ describe('public Status unfurls only approved globally public funded content',()
    CREATE TABLE feed.posts(id uuid,tenant_id text,state text,kind text,
     body text,media_ids text[],paid_purged_at timestamptz,
     author_type text,author_user_id text,author_masana_id text,audience text);
+   ALTER TABLE feed.posts ADD COLUMN paid_disabled_at timestamptz;
+   ALTER TABLE feed.posts ADD COLUMN paid_purge_at timestamptz;
    CREATE TABLE feed.promotion_campaigns(tenant_id text,id uuid,post_id uuid,state text,remaining_views int);
    CREATE TABLE feed.share_links(tenant_id text,post_id uuid,campaign_id uuid,
     token_sha256 text,revoked_at timestamptz);
@@ -64,6 +66,31 @@ describe('public Status unfurls only approved globally public funded content',()
   await db.query('DELETE FROM talks.safety_enforcement');
   expect(await repository.find(paid)).toMatchObject({id:paid});
  });
+ it('denies public views and links throughout 72-hour disabled grace, then safely restores approved funding',async()=>{
+  await db.query(`UPDATE feed.posts SET state='hidden',
+    paid_disabled_at=statement_timestamp(),
+    paid_purge_at=statement_timestamp()+interval '72 hours'
+    WHERE id=$1`,[paid]);
+  await db.query(`UPDATE feed.promotion_campaigns SET state='completed',
+    remaining_views=0 WHERE post_id=$1`,[paid]);
+  const disabled=await db.query(`SELECT state,
+    EXTRACT(EPOCH FROM(paid_purge_at-paid_disabled_at))::int AS grace_seconds
+    FROM feed.posts WHERE id=$1`,[paid]);
+  expect(disabled.rows[0]).toMatchObject({state:'hidden',grace_seconds:259200});
+  expect(await repository.find(paid)).toBeNull();
+  expect(await repository.validReferral(paid,token)).toBe(false);
+
+  // Only a separately approved, funded reboost can cancel the old deadline.
+  await db.query(`UPDATE feed.promotion_campaigns SET state='active',
+    remaining_views=1 WHERE post_id=$1`,[paid]);
+  await db.query(`UPDATE feed.posts SET state='published',paid_disabled_at=NULL,
+    paid_purge_at=NULL WHERE id=$1`,[paid]);
+  expect(await repository.find(paid)).toMatchObject({id:paid});
+  expect(await repository.validReferral(paid,token)).toBe(true);
+  const restored=await db.query(`SELECT paid_disabled_at,paid_purge_at
+    FROM feed.posts WHERE id=$1`,[paid]);
+  expect(restored.rows[0]).toMatchObject({paid_disabled_at:null,paid_purge_at:null});
+ });
  it('preserves only active original-sharer links, never forged or revoked tokens',async()=>{
   expect(await repository.validReferral(paid,token)).toBe(true);
   expect(await repository.validReferral(paid,'SomeOtherOpaqueForwardedToken12345')).toBe(false);
@@ -75,6 +102,7 @@ describe('public Status unfurls only approved globally public funded content',()
  it('returns only a tombstone after purge and no arbitrary cross-tenant UUID',async()=>{
   await db.query("UPDATE feed.posts SET paid_purged_at=now(),state='removed',body='' WHERE id=$1",[paid]);
   expect(await repository.find(paid)).toEqual({id:paid,gone:true});
+  expect(await repository.validReferral(paid,token)).toBe(false);
   await db.query("INSERT INTO feed.posts VALUES($1,'tenant-other','published','text','Other tenant',ARRAY[]::text[],NULL,'masana',NULL,'teacher','public')",[masa]);
   // A second tenant without an eligible author cannot leak into the preview.
   expect(await repository.find(masa)).toMatchObject({id:masa});
