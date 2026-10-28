@@ -2,13 +2,18 @@ import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {reviewedPromotionDestination} from '@masanawa/feed';
 
 export interface PromotionPort {
- draft(t:string,owner:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;idempotencyKey:string}):Promise<unknown>;
- editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;expectedVersion:number}):Promise<unknown>;
+ draft(t:string,owner:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];idempotencyKey:string}):Promise<unknown>;
+ editDraft(t:string,owner:string,id:string,input:{body:string;targetViews:number;destinationUrl?:string;campaignExpiresAt?:string;mediaIds?:readonly string[];expectedVersion:number}):Promise<unknown>;
  myDrafts(t:string,owner:string):Promise<unknown>;
  discardDraft(t:string,owner:string,id:string):Promise<unknown>;
  quoteDraft(t:string,owner:string,id:string):Promise<unknown>;
+ prepareImageUpload(t:string,owner:string,input:{sha256:string;bytes:number;altText:string;idempotencyKey:string;rightsConfirmed:boolean}):Promise<{mediaId:string;objectKey:string;ready:boolean}>;
+ completeImageUpload(t:string,owner:string,id:string,sha256:string,bytes:number):Promise<{mediaId:string;state:string}>;
+ reviewImage(t:string,editor:string,post:string,mediaId:string,approve:boolean,reason:string):Promise<unknown>;
+ adminImagePreview(t:string,editor:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string;reviewState:string}>;
+ approvedImageObject(t:string,post:string,mediaId:string):Promise<{objectKey:string;altText:string}|null>;
  expireCampaigns(limit?:number):Promise<unknown>;
- quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;targetViews:number}):Promise<unknown>;
+ quote(input:{tenantId:string;sponsorId:string;postId?:string;body?:string;destinationUrl?:string;mediaIds?:readonly string[];targetViews:number}):Promise<unknown>;
  confirm(t:string,s:string,qid:string,key:string):Promise<unknown>;
  receipt(t:string,s:string,id:string):Promise<unknown>;
  review(t:string,editor:string,id:string,approved:boolean,reason?:string):Promise<unknown>;
@@ -49,6 +54,9 @@ const fields=(r:Record<string,unknown>,allowed:readonly string[])=>{
 export async function registerPromotionRoutes(app:FastifyInstance,options:{
  port:PromotionPort;principal:(r:FastifyRequest)=>Promise<Principal>;
  isEditor:(p:Principal)=>Promise<boolean>;enabled:()=>boolean;
+ imageUpload?:(input:{tenantId:string;ownerId:string;imageBase64:string;altText:string;
+  rightsConfirmed:boolean;idempotencyKey:string})=>Promise<unknown>;
+ imagePreview?:(t:string,editor:string,post:string,mediaId:string)=>Promise<unknown>;
 }){
  // Client capability discovery is intentionally safe when the financial
  // engine is disabled. Do not advertise a purchasable campaign until all
@@ -72,7 +80,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
 
  // Drafts never reserve money. Quote and confirm remain kill-switch gated.
  const draftInput=(b:Record<string,unknown>)=>{
-  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt']);
+  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt','mediaIds']);
   if(typeof b.body!=='string'||typeof b.targetViews!=='number'||
     !Number.isSafeInteger(b.targetViews)||b.targetViews<1||b.targetViews>1000000||
     (b.campaignExpiresAt!==undefined&&typeof b.campaignExpiresAt!=='string'))
@@ -80,7 +88,12 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}
   catch{fail('invalid_promotion_destination');}
+  const ids=b.mediaIds??[];
+  if(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length||
+   ids.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)))
+   fail('invalid_paid_image_ids');
   return {body:b.body as string,targetViews:b.targetViews as number,
+   ...(ids.length?{mediaIds:ids as string[]}:{}),
    ...(destinationUrl!==null?{destinationUrl}:{}),
    ...(typeof b.campaignExpiresAt==='string'?{campaignExpiresAt:b.campaignExpiresAt}:{})};
  };
@@ -99,7 +112,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
  app.put('/v1/promotions/drafts/:draftId',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
   const p=await options.principal(r),b=body(r);
-  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt','expectedVersion']);
+  fields(b,['body','targetViews','destinationUrl','campaignExpiresAt','expectedVersion','mediaIds']);
   if(typeof b.expectedVersion!=='number'||!Number.isSafeInteger(b.expectedVersion)||
    b.expectedVersion<0)fail('invalid_campaign_draft');
   const {expectedVersion,...values}=b;
@@ -116,20 +129,57 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   const p=await who(r);fields(body(r),[]);
   return options.port.quoteDraft(p.tenantId,p.userId,params(r,'draftId'));
  });
+
+ app.post('/v1/promotions/images',{bodyLimit:8*1024*1024},async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await who(r),b=body(r);
+  fields(b,['imageBase64','altText','rightsConfirmed']);
+  const key=r.headers['idempotency-key'];
+  if(!options.imageUpload)fail('paid_image_store_unavailable',503);
+  if(typeof key!=='string'||typeof b.imageBase64!=='string'||
+   typeof b.altText!=='string'||b.rightsConfirmed!==true)
+   fail('invalid_paid_image');
+  return options.imageUpload({tenantId:p.tenantId,ownerId:p.userId,
+   imageBase64:b.imageBase64 as string,altText:b.altText as string,
+   rightsConfirmed:true,idempotencyKey:key as string});
+ });
+ app.post('/v1/admin/promotions/posts/:postId/images/:mediaId/review',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r),b=body(r);
+  fields(b,['decision','reason']);
+  if((b.decision!=='approve'&&b.decision!=='reject')||
+   typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
+   fail('invalid_paid_media_review');
+  if(b.decision==='approve'&&!options.enabled())
+   fail('status_financial_qualification_missing',503);
+  return options.port.reviewImage(p.tenantId,p.userId,
+   params(r,'postId'),params(r,'mediaId'),b.decision==='approve',b.reason as string);
+ });
+ app.get('/v1/admin/promotions/posts/:postId/images/:mediaId/preview',async(r,reply)=>{
+  reply.header('Cache-Control','private, no-store');
+  const p=await admin(r);
+  if(!options.imagePreview)fail('paid_image_store_unavailable',503);
+  return options.imagePreview(p.tenantId,p.userId,params(r,'postId'),params(r,'mediaId'));
+ });
  app.post('/v1/promotions/quotes',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r),b=body(r);
-  fields(b,['postId','body','targetViews','destinationUrl']);
+  fields(b,['postId','body','targetViews','destinationUrl','mediaIds']);
   if(typeof b.targetViews!=='number'||!Number.isSafeInteger(b.targetViews)||
     (b.postId!==undefined&&typeof b.postId!=='string')||
     (b.body!==undefined&&typeof b.body!=='string'))fail('invalid_quote');
   let destinationUrl:string|null=null;
   try{destinationUrl=reviewedPromotionDestination(b.destinationUrl);}catch{fail('invalid_promotion_destination');}
   if(b.postId!==undefined&&destinationUrl!==null)fail('boost_cannot_edit_post');
+  const ids=b.mediaIds??[];
+  if(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length||
+    ids.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)))
+   fail('invalid_paid_image_ids');
   return options.port.quote({tenantId:p.tenantId,sponsorId:p.userId,
    targetViews:b.targetViews as number,
    ...(typeof b.postId==='string'?{postId:b.postId}:{}),
    ...(typeof b.body==='string'?{body:b.body}:{}),
-   ...(destinationUrl!==null?{destinationUrl}:{}),});
+   ...(destinationUrl!==null?{destinationUrl}:{}),
+   ...(ids.length?{mediaIds:ids as string[]}:{}),});
  });
  app.post('/v1/promotions/quotes/:quoteId/confirm',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await who(r);
