@@ -505,6 +505,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       key: ValueKey('status-account-$account'),
       child: MasanaFeedScreen(
         api: feed,
+        ownerName: session.user.name,
         promotions:promotions,
         statusTips:statusTips,
         accountKey: account,

@@ -43,10 +43,14 @@ class MasanaFeedScreen extends StatefulWidget {
     this.wrapAccountRoute,
     this.searchExpanded,
     this.promotions,
+    this.ownerName,
   });
   final FeedApi api;
   /// Financial controls appear only after server capability discovery.
   final StatusPromotionApi? promotions;
+  /// Current authenticated owner's display name for a truthful composer avatar.
+  /// Not used as a post-author identity or a financial account key.
+  final String? ownerName;
   final StatusTipFlow? statusTips;
   final VoidCallback? onTipCompleted;
   /// Header-owned search affordance for the Status root.
@@ -225,13 +229,14 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }catch(_){/* An accepted server event is not undone by a stale read. */}
   }
 
-  Future<void> openPromotion({String? postId}) async {
+  Future<void> openPromotion({String? postId,bool photoRequested=false}) async {
     final api=widget.promotions;
     if(api==null||!promotionsAvailable||widget.accountKey.isEmpty)return;
     final scope=generation,account=widget.accountKey;
     final result=await showModalBottomSheet<StatusPromotionCampaign>(
       context:context,isScrollControlled:true,showDragHandle:false,
       builder:(ctx)=>StatusPromotionSheet(api:api,postId:postId,
+        initialPhotoRequested:photoRequested,
         // Go directly to the existing Add MB/packages journey; the parent
         // sheet keeps its local draft and re-quotes only after returning.
         onRecharge:()async{await ctx.push<void>('/wallet/add');}),
@@ -697,22 +702,45 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           Padding(padding:const EdgeInsets.fromLTRB(12,4,12,8),
             child:Material(color:Theme.of(context).colorScheme.surface,
               borderRadius:BorderRadius.circular(14),
-              child:Padding(padding:const EdgeInsets.all(10),child:Row(children:[
-                CircleAvatar(radius:19,child:const Icon(Icons.person_outline,size:21)),
-                const SizedBox(width:10),
-                Expanded(child:OutlinedButton(
-                  onPressed:()=>openPromotion(),
-                  style:OutlinedButton.styleFrom(alignment:Alignment.centerLeft,
-                    minimumSize:const Size(0,44)),
-                  child:Text(t('What would you like to promote?',
-                    'Me kake son yadawa?'),maxLines:1,
-                    overflow:TextOverflow.ellipsis))),
-                IconButton(tooltip:t('Promote post','Yada sako'),
-                  onPressed:()=>openPromotion(),
-                  icon:const Icon(Icons.add_photo_alternate_outlined)),
-                IconButton(tooltip:t('My promotions','Tallace-tallacena'),
-                  onPressed:openMyPromotions,
-                  icon:const Icon(Icons.campaign_outlined)),
+              child:Padding(padding:const EdgeInsets.all(10),child:Column(
+                crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Row(children:[
+                  CircleAvatar(radius:20,
+                    child:(widget.ownerName?.trim().isNotEmpty??false)
+                      ? Text(widget.ownerName!.trim().characters.first.toUpperCase())
+                      :const Icon(Icons.person_outline,size:21)),
+                  const SizedBox(width:10),
+                  Expanded(child:OutlinedButton(
+                    key:const Key('status-composer-prompt'),
+                    onPressed:()=>openPromotion(),
+                    style:OutlinedButton.styleFrom(
+                      alignment:AlignmentDirectional.centerStart,
+                      minimumSize:const Size(0,48)),
+                    child:Text(t('What would you like to promote?',
+                      'Me kuke son yaɗawa?'),maxLines:1,
+                      overflow:TextOverflow.ellipsis))),
+                ]),
+                const SizedBox(height:5),
+                Wrap(alignment:WrapAlignment.spaceBetween,
+                  crossAxisAlignment:WrapCrossAlignment.center,
+                  spacing:6,runSpacing:4,children:[
+                  TextButton.icon(
+                    key:const Key('status-composer-photo'),
+                    style:TextButton.styleFrom(minimumSize:const Size(0,48)),
+                    onPressed:()=>openPromotion(photoRequested:true),
+                    icon:const Icon(Icons.photo_library_outlined,size:19),
+                    label:Text(t('Photo','Hoto'))),
+                  IconButton(
+                    key:const Key('status-composer-manage'),
+                    tooltip:t('My promotions','Tallace-tallacena'),
+                    onPressed:openMyPromotions,
+                    icon:const Icon(Icons.receipt_long_outlined,size:20)),
+                  FilledButton(
+                    key:const Key('status-composer-promote'),
+                    style:FilledButton.styleFrom(minimumSize:const Size(0,48)),
+                    onPressed:()=>openPromotion(),
+                    child:Text(t('Promote','Yaɗa'))),
+                ]),
               ]))),
           ),
         // Incident mode: new spending stays OFF, but the owner must still be
