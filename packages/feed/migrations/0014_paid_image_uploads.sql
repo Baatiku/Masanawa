@@ -24,9 +24,11 @@ ALTER TABLE feed.promotion_drafts ADD COLUMN media_ids text[] NOT NULL DEFAULT '
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN reviewed_by text;
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN reviewed_at timestamptz;
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN review_reason text;
+-- Enforce provenance for new decisions without fabricating reviewers for
+-- legacy pre-migration approvals. Legacy media are not paid-upload eligible.
 ALTER TABLE feed.paid_post_media_objects ADD CONSTRAINT paid_media_review_provenance CHECK (
  (review_state='pending' AND reviewed_by IS NULL AND reviewed_at IS NULL)
- OR (review_state IN ('approved','rejected') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL));
+ OR (review_state IN ('approved','rejected') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)) NOT VALID;
 CREATE UNIQUE INDEX paid_single_image_post ON feed.paid_image_uploads(tenant_id,id,post_id);
 -- Image proposals reuse the existing immutable-edit source checks.
 ALTER TABLE feed.promotion_edit_proposals ADD COLUMN proposed_media_ids text[];
