@@ -491,4 +491,48 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    .toMatchObject({targetViews:2,remainingViews:2,priceVersion:'2026-10-27:1MB'});
  });
 
+ it('stages edits privately and changes only independently approved copy without MB debit',async()=>{
+  await account('editing_owner',12);
+  const quote=await service.quote({tenantId:t,sponsorId:'editing_owner',
+   body:'Original approved text',targetViews:4,destinationUrl:'https://example.org/original'});
+  const c=await service.confirm(t,'editing_owner',quote.quoteId,'editing-original-001');
+  await service.review(t,'moderator_one',c.id,true,'Original text and link reviewed');
+  const first=await query(`SELECT body,paid_reviewed_destination_url,
+    paid_content_revision FROM feed.posts WHERE id=$1`,[c.postId]);
+  expect(first.rows[0]).toMatchObject({body:'Original approved text',
+   paid_reviewed_destination_url:'https://example.org/original',paid_content_revision:0});
+  const edit=await service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Revised text after review',
+   destinationUrl:'https://example.org/revised',idempotencyKey:'editing-request-001'});
+  expect(edit.state).toBe('pending');
+  expect((await query(`SELECT body,paid_reviewed_destination_url
+    FROM feed.posts WHERE id=$1`,[c.postId])).rows[0]).toMatchObject({
+     body:'Original approved text',paid_reviewed_destination_url:'https://example.org/original'});
+  expect((await service.myEdits(t,'editing_owner')).edits).toEqual(expect.arrayContaining([
+   expect.objectContaining({proposalId:edit.proposalId,state:'pending'})
+  ]));
+  expect((await service.adminEdits(t,'moderator_two')).pending).toEqual(expect.arrayContaining([
+   expect.objectContaining({proposalId:edit.proposalId,ownerId:'editing_owner'})
+  ]));
+  await expect(service.reviewEdit(t,'editing_owner',edit.proposalId,true,'Self approve'))
+   .rejects.toMatchObject({code:'separate_reviewer_required'});
+  const decided=await service.reviewEdit(t,'moderator_two',edit.proposalId,
+   true,'Content and destination approved');
+  expect(decided).toMatchObject({state:'approved',newRevision:1});
+  expect((await query(`SELECT body,paid_reviewed_destination_url,
+    paid_content_revision FROM feed.posts WHERE id=$1`,[c.postId])).rows[0])
+   .toMatchObject({body:'Revised text after review',
+    paid_reviewed_destination_url:'https://example.org/revised',paid_content_revision:1});
+  expect((await service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Revised text after review',
+   destinationUrl:'https://example.org/revised',idempotencyKey:'editing-request-001'})).proposalId)
+   .toBe(edit.proposalId);
+  await expect(service.proposeEdit(t,'editing_owner',c.postId,{
+   expectedRevision:0,body:'Stale revision',idempotencyKey:'editing-request-002'}))
+    .rejects.toMatchObject({code:'stale_post_revision'});
+  expect(await balance('editing_owner')).toMatchObject({purchased:12,reserved:4});
+  expect((await service.receipt(t,'editing_owner',quote.quoteId)).campaign)
+   .toMatchObject({targetViews:4,remainingViews:4,state:'active'});
+ });
+
 });
