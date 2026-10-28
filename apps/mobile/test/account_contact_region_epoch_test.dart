@@ -30,6 +30,53 @@ class _Session extends SessionController {
 }
 
 void main() {
+  testWidgets('private contact saves selected country, state and normalized phone',
+      (tester) async {
+    Map<String,dynamic>? captured;
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      if (!options.path.endsWith('/v1/auth/profile/contact-geography')) {
+        handler.reject(DioException(requestOptions: options,
+          type: DioExceptionType.badResponse));
+        return;
+      }
+      if (options.method == 'PATCH') {
+        captured = Map<String,dynamic>.from(options.data as Map);
+        handler.resolve(Response<Map<String,dynamic>>(requestOptions: options,
+          statusCode: 200, data: {...captured!, 'provenance': 'user_selected'}));
+        return;
+      }
+      handler.resolve(Response<Map<String,dynamic>>(requestOptions: options,
+        statusCode: 200,
+        data: const {'countryIso': 'NG', 'subdivisionIso': 'NG-FC',
+          'contactPhone': '+2348012345678', 'provenance': 'legacy_phone_hint'}));
+    }));
+    addTearDown(() => dio.close(force: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_Session.new),
+      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+    ], child: MaterialApp(
+      theme: buildMasanawaTheme(brightness: Brightness.light),
+      supportedLocales: MasanawaLocalization.supportedLocales,
+      localizationsDelegates: MasanawaLocalization.delegates,
+      home: const AccountContactRegionScreen(),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Recorded source: Legacy phone-code hint'), findsOneWidget);
+    final national = find.byKey(const Key('phone-national-number'));
+    expect(tester.widget<TextField>(national).controller!.text, '8012345678');
+    await tester.enterText(national, '08031234567');
+    await tester.pump();
+    final save = find.text('Save private contact');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(captured, {'contactPhone': '+2348031234567',
+      'countryIso': 'NG', 'subdivisionIso': 'NG-FC'});
+    expect(find.text('Recorded source: Your selection'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('same-account reauthentication closes private contact region',
       (tester) async {
     final dio = Dio();
