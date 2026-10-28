@@ -17,10 +17,10 @@ function harness(financial:boolean) {
       sql=sql.replace(/\s+/g," ").trim();
       calls.push({sql,params});
       if(sql.includes("FROM pg_catalog.pg_class"))return {rows:[
-        {name:"msnw_usdt_payouts",columns:["tenant_id","user_id","state"]},
-        {name:"msnw_p2p_orders",columns:["tenant_id","buyer_id","seller_id","state"]},
+        {schema_name:"commerce",name:"msnw_usdt_payouts",columns:["tenant_id","user_id","state"]},
+        {schema_name:"commerce",name:"msnw_p2p_orders",columns:["tenant_id","buyer_id","seller_id","state"]},
       ],rowCount:2};
-      if(sql.includes("FROM commerce."))return {rows:financial?[{present:1}]:[],rowCount:financial?1:0};
+      if(sql.includes('FROM "commerce".'))return {rows:financial?[{present:1}]:[],rowCount:financial?1:0};
       if(sql.includes("FROM identity.account_deletion_access_revocations"))
         return {rows:[{present:1}],rowCount:1};
       if(sql.includes("FROM identity.account_deletion_requests") &&
@@ -50,7 +50,7 @@ describe("account deletion financial and privacy holds",()=>{
   it("builds account-scoped, parameterized commerce queries without missing new rails",async()=>{
     const h=harness(true);
     expect(await hasFinancialFootprint(h.client as any,"tenant-a","user-a")).toBe(true);
-    const lookups=h.calls.filter(c=>c.sql.includes("FROM commerce."));
+    const lookups=h.calls.filter(c=>c.sql.includes('FROM "commerce".'));
     expect(lookups[0]?.sql).toContain('WHERE tenant_id=$1');
     expect(lookups[0]?.sql).toContain('"user_id"=$2');
     expect(lookups[0]?.params).toEqual(["tenant-a","user-a"]);

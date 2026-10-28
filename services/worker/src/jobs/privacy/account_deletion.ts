@@ -16,25 +16,42 @@ export async function redactDeletedPublicProfile(
     [tenantId,userId,'deleted_'+alias.slice(0,22),timestamp]);
 }
 
+/** Private contact/geography are erased only after canonical disablement. */
+export async function redactDeletedPrivateProfile(
+  client: Pick<PoolClient, "query">, tenantId: string, userId: string,
+  alias: string, timestamp: string,
+): Promise<void> {
+  const erased=await client.query(`UPDATE security.platform_user_profiles
+           SET display_name='Deleted account',phone=NULL,email=$3,
+             first_name=NULL,last_name=NULL,contact_phone=NULL,
+             country_iso=NULL,subdivision_iso=NULL,country_source=NULL,
+             updated_at=GREATEST(updated_at,$4::timestamptz)
+           WHERE tenant_id=$1 AND user_id=$2
+             AND EXISTS(SELECT 1 FROM identity.users
+               WHERE tenant_id=$1 AND user_id=$2 AND state='disabled')`,
+        [tenantId,userId,`removed-${alias}@deleted.masanawa.invalid`,timestamp]);
+  if(erased.rowCount!==1)throw Error("account_deletion.identity_not_disabled");
+}
+
 /**
- * Fail-closed financial preflight. All owner-associated commerce tables are
- * discovered from the schema, so a new payment rail is included automatically.
+ * Fail-closed financial preflight. Owner-associated commerce and GB wallet tables are
+ * discovered from the schema, including supported account/actor/recipient ownership columns.
  * ANY financial history requires independent lawful-retention and settlement
  * review; balances or immutable receipts are never deleted by this worker.
  */
 export async function hasFinancialFootprint(
   client: Pick<PoolClient,"query">, tenantId: string, userId: string,
 ): Promise<boolean> {
-  const catalog=await client.query<{name:string;columns:string[]}>(`
-    SELECT c.relname AS name, array_agg(a.attname ORDER BY a.attname) AS columns
+  const catalog=await client.query<{schema_name:string;name:string;columns:string[]}>(`
+    SELECT n.nspname AS schema_name, c.relname AS name, array_agg(a.attname ORDER BY a.attname) AS columns
       FROM pg_catalog.pg_class c
       JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
       JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid AND a.attnum>0
        AND NOT a.attisdropped
-     WHERE n.nspname='commerce' AND c.relkind IN ('r','p')
-     GROUP BY c.relname
+     WHERE n.nspname IN ('commerce','gb_wallet') AND c.relkind IN ('r','p')
+     GROUP BY n.nspname,c.relname
      HAVING bool_or(a.attname='tenant_id')
-     ORDER BY c.relname`);
+     ORDER BY n.nspname,c.relname`);
   if (!catalog.rows.length) throw Error("account_deletion.finance_catalog_unavailable");
   const ownerNames=new Set(["user_id","owner_id","seller_id","buyer_id",
     "payer_id","payee_id","actor_user_id","recipient_user_id",
@@ -43,13 +60,34 @@ export async function hasFinancialFootprint(
   for (const table of catalog.rows) {
     const owners=table.columns.filter(column=>
       ownerNames.has(column)||column.endsWith("_user_id"));
-    if (!owners.length) continue;
-    const predicates=owners.map(column=>`${quote(column)}=$2`).join(" OR ");
+    if (table.schema_name==='gb_wallet') {
+      for (const column of ['actor_id','account_id','requester_id','recipient_id']) {
+        if (table.columns.includes(column)) owners.push(column);
+      }
+    }
+    if (!owners.length && !(table.schema_name==='gb_wallet' && table.name==='movements')) continue;
+    let predicates=owners.map(column=>`${quote(column)}=$2`).join(" OR ");
+    if (table.schema_name==='gb_wallet' && table.name==='movements') {
+      predicates="(from_kind='human' AND from_id=$2) OR (to_kind='human' AND to_id=$2)";
+    }
+    let restriction='';
+    if (table.schema_name==='gb_wallet' && table.columns.includes('account_kind'))
+      restriction+=" AND account_kind='human'";
+    // Merely opening an empty wallet does not create a financial obligation.
+    if (table.schema_name==='gb_wallet' && table.name==='accounts')
+      restriction+=' AND (purchased_mb>0 OR welcome_mb>0 OR reserved_purchased_mb>0 OR reserved_welcome_mb>0)';
+    if (table.schema_name==='gb_wallet' && table.name==='ngn_accounts')
+      restriction+=' AND (balance_kobo>0 OR debt_kobo>0)';
     const rows=await client.query(
-      `SELECT 1 FROM commerce.${quote(table.name)}
-        WHERE tenant_id=$1 AND (${predicates}) LIMIT 1`,[tenantId,userId]);
+      `SELECT 1 FROM ${quote(table.schema_name)}.${quote(table.name)}
+        WHERE tenant_id=$1 AND (${predicates})${restriction} LIMIT 1`,[tenantId,userId]);
     if (rows.rows.length) return true;
   }
+  // Referred views can create half-MB liabilities before any wallet credit.
+  const referrals=await client.query(
+    "SELECT 1 FROM feed.promotion_view_charges WHERE tenant_id=$1 AND sharer_id=$2 AND sharer_half_mb>0 LIMIT 1",
+    [tenantId,userId]);
+  if (referrals.rows.length) return true;
   // Play Store entitlements are financial obligations outside commerce.
   // Even an expired purchase may require lawful chargeback/retention handling.
   const subscriptions=await client.query(
@@ -174,14 +212,7 @@ export function createAccountDeletionPrivacyWorker(input:{
       const alias=createHash("sha256")
         .update(["redacted",...scope].join(":")).digest("hex");
       await redactDeletedPublicProfile(client,row.tenant_id,row.user_id,alias,now());
-      const erased=await client.query(`UPDATE security.platform_user_profiles
-           SET display_name='Deleted account',phone=NULL,email=$3,
-             updated_at=GREATEST(updated_at,$4::timestamptz)
-           WHERE tenant_id=$1 AND user_id=$2
-             AND EXISTS(SELECT 1 FROM identity.users
-               WHERE tenant_id=$1 AND user_id=$2 AND state='disabled')`,
-        [...scope,`removed-${alias}@deleted.masanawa.invalid`,now()]);
-      if(erased.rowCount!==1)throw Error("account_deletion.identity_not_disabled");
+      await redactDeletedPrivateProfile(client,row.tenant_id,row.user_id,alias,now());
       await advance(client,current,"completed",now());
       return true;
     });
