@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import {registerGbActivityHoldRoutes,type GbActivityHoldPorts} from "./activity_hold_routes.js";
 
 export interface GbActivityScope {
   readonly tenantId: string;
@@ -47,7 +48,7 @@ export interface GbActivityPeriodSummary {
   readonly NGN: Readonly<{received:number;spent:number;net:number}>;
   readonly reconciliation?:Readonly<{MB:GbActivityBalanceReconciliation;NGN:GbActivityBalanceReconciliation}>;
 }
-export interface GbActivityPorts {
+export interface GbActivityPorts extends GbActivityHoldPorts {
   readonly authorize: (header: string | undefined) => Promise<GbActivityScope>;
   readonly list: (actor: GbActivityScope, limit: number,
     cursor: {readonly createdAt: string; readonly entryId: string} | null,
@@ -96,6 +97,7 @@ function pack(item: GbActivityItem, actor: GbActivityScope, unit:GbActivityUnitF
 
 /** Read-only, no-store projection. Never invent activity for unavailable ledgers. */
 export function registerGbWalletActivityRoutes(app: FastifyInstance, ports: GbActivityPorts) {
+  registerGbActivityHoldRoutes(app,ports);
   app.get("/v1/gb/wallet/activity/summary",async(request,reply)=>{
     reply.header("cache-control","no-store");
     let actor:GbActivityScope;

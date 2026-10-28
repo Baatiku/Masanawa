@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import {createGbWalletHoldRepository} from "./activity_holds.js";
 
 export interface GbActivityActor {
   readonly tenantId: string;
@@ -152,6 +153,7 @@ function project(row: Row): GbActivityEntry {
 /** Read-only projection of immutable NEW ledgers. Do not join Credits/MSNW. */
 export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
   return Object.freeze({
+    ...createGbWalletHoldRepository(db),
     async summary(actor:GbActivityActor,days:7|30,
       now?:Date):Promise<GbActivityPeriodTotals> {
       if(!validActor(actor.tenantId)||!validActor(actor.userId)||

@@ -1816,6 +1816,7 @@ export async function startGatewayService(
       list: gbActivityStorage!.list,
       find: gbActivityStorage!.find,
       summary: gbActivityStorage!.summary,
+      listHolds: gbActivityStorage!.listHolds,findHold: gbActivityStorage!.findHold,
     } : undefined);
   // No legacy Credit Send fallback. The signer is a private Railway secret,
   // never a client-supplied or generated-on-each-request review authority.
