@@ -1,4 +1,5 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {createHash} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 import {readFileSync} from 'node:fs';
 import type {Pool} from 'pg';
@@ -358,5 +359,49 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   const earn=(await service.mine(t,'sharer')).sharingEarnings;
   expect(earn.filter(x=>posts.includes(String(x.postId)))
    .map(x=>x.pendingHalfMb).sort()).toEqual([2,3]);
+ });
+
+ it('credits the original forwarded sharer, independently issued links, and no revoked rewards',async()=>{
+  const q=await service.quote({tenantId:t,sponsorId:'publisher',
+    body:'Attribution stays with the original signer',targetViews:4});
+  const c=await service.confirm(t,'publisher',q.quoteId,'forwarded-links-001');
+  await service.review(t,'distincteditor',c.id,true);
+  const original=await service.share(t,'sharer',c.postId);
+  const independentlyShared=await service.share(t,'booster',c.postId);
+  const firstToken=new URL(original.url).searchParams.get('r')!;
+  const secondToken=new URL(independentlyShared.url).searchParams.get('r')!;
+  expect(firstToken).not.toBe(secondToken);
+  const qualify=async(viewer:string,forwardedToken:string)=>{
+   await account(viewer);
+   const challenge=await service.beginView(t,viewer,c.postId,forwardedToken);
+   await query(`UPDATE feed.view_challenges SET started_at=
+    statement_timestamp()-interval '7 seconds' WHERE id=$1`,[challenge.challengeId]);
+   return service.finishView(t,viewer,challenge.challengeId,
+    {visibleFraction:0.9,foreground:true,engaged:true});
+  };
+  expect(await qualify('forwardviewera',firstToken))
+    .toMatchObject({qualified:true,payable:true});
+  expect(await qualify('forwardviewerb',secondToken))
+    .toMatchObject({qualified:true,payable:true});
+  // Revoking a token does not prevent a legitimate organic view, but cannot
+  // create a commission. A malformed forwarded token follows the same rule.
+  await query(`UPDATE feed.share_links SET revoked_at=statement_timestamp()
+    WHERE tenant_id=$1 AND post_id=$2 AND token_sha256=$3`,
+    [t,c.postId,createHash('sha256').update(firstToken).digest('hex')]);
+  expect(await qualify('forwardviewerc',firstToken))
+    .toMatchObject({qualified:true,payable:true});
+  expect(await qualify('forwardviewerd','malformed!'))
+    .toMatchObject({qualified:true,payable:true});
+  const split=await query(`SELECT coalesce(sharer_id,'organic') AS credited_to,
+    count(*)::int AS views,sum(sharer_half_mb)::int AS sharer_half_mb
+    FROM feed.promotion_view_charges WHERE tenant_id=$1 AND campaign_id=$2
+    GROUP BY credited_to ORDER BY credited_to`,[t,c.id]);
+  expect(split.rows).toEqual([
+   {credited_to:'booster',views:1,sharer_half_mb:1},
+   {credited_to:'organic',views:2,sharer_half_mb:0},
+   {credited_to:'sharer',views:1,sharer_half_mb:1},
+  ]);
+  await expect(service.share(t,'sharer',c.postId))
+    .rejects.toMatchObject({code:'post_not_found'});
  });
 });
