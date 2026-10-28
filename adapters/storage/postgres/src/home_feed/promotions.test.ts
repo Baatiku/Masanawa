@@ -240,8 +240,8 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
     body:'One archived image fixture',targetViews:2});
   const campaign=await service.confirm(t,'publisher',quote.quoteId,'media-cleanup-001');
   const media=await query(`INSERT INTO feed.paid_post_media_objects
-    (tenant_id,post_id,media_id,object_key,review_state)
-    VALUES($1,$2,gen_random_uuid(),'private/paid/media-cleanup-fixture.png','approved')
+    (tenant_id,post_id,media_id,object_key,review_state,reviewed_by,reviewed_at)
+    VALUES($1,$2,gen_random_uuid(),'private/paid/media-cleanup-fixture.png','approved','legacy_editor',statement_timestamp())
     RETURNING media_id`,[t,campaign.postId]);
   const mediaId=String((media.rows[0] as {media_id:string}).media_id);
   await service.deleteOwnPost(t,'publisher',campaign.postId);
@@ -548,7 +548,7 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
  it('invalidates a signed link after challenge start without denying a distinct organic visitor',async()=>{
   const q=await service.quote({tenantId:t,sponsorId:'publisher',
    body:'A reviewed link can be revoked while in foreground',targetViews:2});
-  const c=await service.confirm(t,'publisher',q.quoteId,'late-link-revocation-001');
+  const c=await service.confirm(t,'late_link_sponsor',q.quoteId,'late-link-revocation-001');
   await service.review(t,'distincteditor',c.id,true);
   const link=await service.share(t,'sharer',c.postId);
   const token=new URL(link.url).searchParams.get('r')!;
@@ -939,27 +939,27 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
    body:'Reported claims needing a separate human review',targetViews:3});
   const c=await service.confirm(t,'reportowner',q.quoteId,'report-primary-001');
   await service.review(t,'reviewer_other',c.id,true,'Initial copy approved');
-  const ch=await service.beginView(t,'viewerone',c.postId);
+  const ch=await service.beginView(t,'report_viewer',c.postId);
   await query(`INSERT INTO talks.safety_preferences
    (tenant_id,viewer_user_id,subject_user_id,blocked)
-   VALUES($1,'viewerone','reportowner',true)`,[t]);
+   VALUES($1,'report_viewer','reportowner',true)`,[t]);
   await query(`UPDATE feed.view_challenges SET started_at=statement_timestamp()-interval '8 seconds'
     WHERE tenant_id=$1 AND id=$2`,[t,ch.challengeId]);
-  await expect(service.finishView(t,'viewerone',ch.challengeId,
+  await expect(service.finishView(t,'report_viewer',ch.challengeId,
    {visibleFraction:0.8,foreground:true,engaged:true}))
     .rejects.toMatchObject({code:'post_unavailable'});
-  await expect(service.beginView(t,'viewerone',c.postId))
+  await expect(service.beginView(t,'report_viewer',c.postId))
     .rejects.toMatchObject({code:'post_not_found'});
   expect(await balance('reportowner')).toMatchObject({purchased:10,reserved:3});
-  const report=await service.reportPost(t,'viewerone',c.postId,
+  const report=await service.reportPost(t,'report_viewer',c.postId,
    'Suspected inaccurate commercial content');
-  const again=await service.reportPost(t,'viewerone',c.postId,
+  const again=await service.reportPost(t,'report_viewer',c.postId,
    'Suspected inaccurate commercial content');
   expect(again).toMatchObject({reportId:report.reportId,alreadySubmitted:true});
   expect((await service.adminReports(t,'independent_editor')).pending)
    .toEqual(expect.arrayContaining([
     expect.objectContaining({reportId:report.reportId,postId:c.postId})]));
-  await expect(service.resolveReport(t,'viewerone',report.reportId,true,
+  await expect(service.resolveReport(t,'report_viewer',report.reportId,true,
    'Self review attempted')).rejects.toMatchObject({code:'separate_reviewer_required'});
   const resolved=await service.resolveReport(t,'independent_editor',report.reportId,true,
    'Unsafe paid content, remove and refund');
