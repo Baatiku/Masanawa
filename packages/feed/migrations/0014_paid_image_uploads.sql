@@ -20,6 +20,7 @@ CREATE TABLE feed.paid_image_uploads (
 CREATE INDEX paid_image_upload_owner ON feed.paid_image_uploads(tenant_id,owner_id,created_at DESC);
 CREATE INDEX paid_image_upload_staging ON feed.paid_image_uploads(created_at)
  WHERE state='staging';
+ALTER TABLE feed.promotion_drafts ADD COLUMN media_ids text[] NOT NULL DEFAULT '{}' CHECK(cardinality(media_ids)<=10);
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN reviewed_by text;
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN reviewed_at timestamptz;
 ALTER TABLE feed.paid_post_media_objects ADD COLUMN review_reason text;
