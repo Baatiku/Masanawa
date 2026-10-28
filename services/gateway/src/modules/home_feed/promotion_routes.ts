@@ -107,8 +107,8 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   const key=r.headers['idempotency-key'];
   if(typeof key!=='string')fail('idempotency_key_required');
   return options.port.proposeEdit(p.tenantId,p.userId,params(r,'postId'),{
-   body:b.body,expectedRevision:b.expectedRevision as number,
-   idempotencyKey:key,...(destinationUrl!==null?{destinationUrl}:{})});
+   body:b.body as string,expectedRevision:b.expectedRevision as number,
+   idempotencyKey:key as string,...(destinationUrl!==null?{destinationUrl}:{})});
  });
  app.get('/v1/promotions/revisions/mine',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
@@ -130,7 +130,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   if(b.decision==='approve'&&!options.enabled())
    fail('status_financial_qualification_missing',503);
   return options.port.reviewEdit(p.tenantId,p.userId,params(r,'revisionId'),
-   b.decision==='approve',b.reason);
+   b.decision==='approve',b.reason as string);
  });
  app.post('/v1/promotions/:campaignId/appeal',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
@@ -139,7 +139,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
   fields(b,['reason']);
   if(typeof b.reason!=='string'||b.reason.trim().length<10||b.reason.length>500)
    fail('invalid_appeal_reason');
-  return options.port.appeal(p.tenantId,p.userId,params(r,'campaignId'),b.reason);
+  return options.port.appeal(p.tenantId,p.userId,params(r,'campaignId'),b.reason as string);
  });
  app.get('/v1/promotions/appeals/mine',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');
@@ -159,7 +159,7 @@ export async function registerPromotionRoutes(app:FastifyInstance,options:{
     typeof b.reason!=='string'||b.reason.trim().length<5||b.reason.length>500)
    fail('invalid_appeal_resolution');
   return options.port.resolveAppeal(p.tenantId,p.userId,
-   params(r,'appealId'),b.decision==='accept',b.reason);
+   params(r,'appealId'),b.decision==='accept',b.reason as string);
  });
  app.post('/v1/promotions/:campaignId/cancel',async(r,reply)=>{
   reply.header('Cache-Control','private, no-store');const p=await options.principal(r);fields(body(r),[]);
