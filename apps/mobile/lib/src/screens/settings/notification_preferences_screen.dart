@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/shell_deep_link.dart';
 import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
+import '../../gb_wallet/gb_promotion_journal.dart';
 
 const notificationCategories = <String, (String, IconData, String)>{
   'messages': ('Masana messages', Icons.chat_bubble_outline,
@@ -151,6 +152,8 @@ class _NotificationPreferencesScreenState
     final account = session is SessionSignedIn ? session.user.id : null;
     final epoch = account == null ? null
         : ref.read(sessionProvider.notifier).authorizationEpoch;
+    final promotionHistory = account == null || epoch == null ? null :
+        ref.watch(gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)));
     if (account == _owner && epoch == _ownerEpoch) return;
     ++_generation;
     ++_preferencesRequest;
@@ -329,68 +332,69 @@ class _NotificationPreferencesScreenState
         body: account == null || account != _owner || _ownerEpoch != epoch
           ? const Center(child: Text('Sign in to manage notifications.'))
           : TabBarView(children: [
-              RefreshIndicator(onRefresh: _refreshHistory,
-                child: _historyLoading && _history.isEmpty
-                ? ListView(children: const [
-                    ListTile(title: Text('Loading recent alerts…')),
-                  ])
-                : _historyError != null && _history.isEmpty
-                ? ListView(children: [
-                    ListTile(title: Text(_historyError!)),
-                    ListTile(title: const Text('Retry'),
-                      onTap: _refreshHistory),
-                  ])
-                : _history.isEmpty
-                ? ListView(children: const [
-                    SizedBox(height: 64),
-                    Icon(Icons.notifications_none_outlined, size: 48),
-                    Center(child: Padding(padding: EdgeInsets.all(20),
-                      child: Text('No recent alerts yet.'))),
-                  ])
-                : ListView.separated(
-                  itemCount: _history.length + (_historyError == null ? 0 : 1),
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    if (_historyError != null && i == 0) {
-                      return ListTile(
-                        leading: Icon(Icons.refresh, color: colors.brand),
-                        title: Text(_historyError!),
-                        subtitle: const Text('Recent alerts remain available'),
-                        onTap: _refreshHistory,
-                      );
-                    }
-                    final event = _history[i - (_historyError == null ? 0 : 1)];
-                    final date = MaterialLocalizations.of(context)
-                        .formatMediumDate(event.createdAt);
-                    final time = TimeOfDay.fromDateTime(event.createdAt)
-                        .format(context);
-                    return ListTile(
-                      leading: Icon(notificationCategories[event.category]!.$2,
-                          color: event.readAt == null ? colors.brand :
-                              Theme.of(context).colorScheme.outline),
-                      title: Text(event.title),
-                      subtitle: Text('${notificationCategories[event.category]!.$1} · $date · $time'
-                        '${_readErrors.contains(event.id) ? ' · Read failed — retry' : ''}'),
-                      trailing: event.readAt != null
-                          ? const Icon(Icons.done_all, semanticLabel: 'Read')
-                          : IconButton(
-                              tooltip: _readErrors.contains(event.id)
-                                  ? 'Retry mark as read' : 'Mark as read',
-                              onPressed: _reading.contains(event.id)
-                                  ? null : () => unawaited(_markRead(event)),
-                              icon: _reading.contains(event.id)
-                                  ? const Icon(Icons.hourglass_empty)
-                                  : Icon(_readErrors.contains(event.id)
-                                      ? Icons.refresh : Icons.circle_outlined)),
-                      onTap: () {
-                        unawaited(_markRead(event));
-                        if (event.link == null) return;
-                        final target = shellDeepLinkRoute(event.link!);
-                        if (target != null) context.push(target);
-                      },
-                    );
-                  },
-                )),
+              RefreshIndicator(onRefresh: () async {
+                  ref.invalidate(gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)));
+                  await _refreshHistory();
+                },child:ListView(children:[
+                  const ListTile(title:Text('Promotion updates',
+                    style:TextStyle(fontWeight:FontWeight.w700)),
+                    subtitle:Text('Private campaign events from the audit log. '
+                      'These are not push-delivery or read-receipt confirmations.')),
+                  if(promotionHistory!.isLoading&&promotionHistory.valueOrNull==null)
+                    const ListTile(title:Text('Loading promotion updates…'))
+                  else if(promotionHistory.hasError||promotionHistory.valueOrNull==null)
+                    ListTile(title:const Text('Promotion updates unavailable.'),
+                      trailing:IconButton(tooltip:'Retry promotion updates',
+                        icon:const Icon(Icons.refresh),onPressed:()=>ref.invalidate(
+                          gbPromotionJournalProvider((accountId:account!,authorizationEpoch:epoch!)))))
+                  else if(promotionHistory.valueOrNull!.notices.isEmpty)
+                    const ListTile(title:Text('No campaign updates yet.'))
+                  else for(final update in promotionHistory.valueOrNull!.notices.take(20))
+                    ListTile(key:ValueKey('notification-promotion-${update.id}'),
+                      leading:const Icon(Icons.campaign_outlined),
+                      title:Text(update.label),
+                      subtitle:Text('${MaterialLocalizations.of(context).formatMediumDate(update.occurredAt.toLocal())}'
+                        '${update.reason==null?'':' · ${update.reason}'}\nPost: ${update.postId}'),
+                      isThreeLine:update.reason!=null),
+                  const Divider(height:20),
+                  const ListTile(title:Text('Other account alerts',
+                    style:TextStyle(fontWeight:FontWeight.w700))),
+                  if(_historyLoading&&_history.isEmpty)
+                    const ListTile(title:Text('Loading recent alerts…'))
+                  else if(_historyError!=null&&_history.isEmpty)
+                    ListTile(title:Text(_historyError!),
+                      trailing:TextButton(onPressed:_refreshHistory,child:const Text('Retry')))
+                  else if(_history.isEmpty)
+                    const ListTile(title:Text('No recent alerts yet.')),
+                  if(_historyError!=null&&_history.isNotEmpty)
+                    ListTile(leading:Icon(Icons.refresh,color:colors.brand),
+                      title:Text(_historyError!),onTap:_refreshHistory),
+                  for(final event in _history)...[
+                    const Divider(height:1),
+                    ListTile(
+                      leading:Icon(notificationCategories[event.category]!.$2,
+                        color:event.readAt==null?colors.brand:
+                          Theme.of(context).colorScheme.outline),
+                      title:Text(event.title),
+                      subtitle:Text('${notificationCategories[event.category]!.$1} · '
+                        '${MaterialLocalizations.of(context).formatMediumDate(event.createdAt)} · '
+                        '${TimeOfDay.fromDateTime(event.createdAt).format(context)}'
+                        '${_readErrors.contains(event.id)?' · Read failed — retry':''}'),
+                      trailing:event.readAt!=null
+                        ?const Icon(Icons.done_all,semanticLabel:'Read')
+                        :IconButton(tooltip:_readErrors.contains(event.id)
+                          ?'Retry mark as read':'Mark as read',
+                          onPressed:_reading.contains(event.id)?null:
+                            ()=>unawaited(_markRead(event)),
+                          icon:Icon(_readErrors.contains(event.id)
+                            ?Icons.refresh:Icons.circle_outlined)),
+                      onTap:(){unawaited(_markRead(event));
+                        if(event.link==null)return;
+                        final target=shellDeepLinkRoute(event.link!);
+                        if(target!=null)context.push(target);
+                      }),
+                  ],
+                ])),
               RefreshIndicator(onRefresh: _refresh,
                 child: ListView(children: [
                   if (_loading || _saving) const LinearProgressIndicator(minHeight: 2),

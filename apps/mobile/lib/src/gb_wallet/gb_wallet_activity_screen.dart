@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import 'gb_promotion_journal.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
 
@@ -216,6 +217,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     final first=request==null?null:ref.watch(gbActivityPageProvider(request));
     final summaryRequest=owner==null?null:(owner:owner,days:_days);
     final summary=summaryRequest==null?null:ref.watch(gbActivitySummaryProvider(summaryRequest));
+    final promotion=owner==null?null:ref.watch(gbPromotionJournalProvider(owner));
     final totals=summary?.valueOrNull;
     final initial=first?.valueOrNull;
     final entries=<GbActivityItem>[
@@ -231,6 +233,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       RefreshIndicator(onRefresh:() async {
         setState(_reset);
         ref.invalidate(gbActivityPageProvider(request!));
+        ref.invalidate(gbPromotionJournalProvider(owner));
         try{await ref.read(gbActivityPageProvider(request).future);}catch(_){/* retry state below */}
       },child:ListView(
         key:const PageStorageKey('gb-wallet-activity-all'),
@@ -240,6 +243,47 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           const Padding(padding:EdgeInsets.only(bottom:12),
             child:Text('Posted MB and NGN movements. Pending authorizations and '
               'reservations are not counted as completed payments.')),
+          Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            Text('Promotions & Share earnings',
+              style:Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height:4),
+            const Text('Review-only campaign activity. Reserved MB is not spent; '
+              'pending referral earnings are not redeemable or included in your balance.'),
+            if(promotion!.isLoading && promotion.valueOrNull==null)
+              const ListTile(title:Text('Loading promotion history…'))
+            else if(promotion.hasError || promotion.valueOrNull==null)
+              ListTile(title:const Text('Promotion history is unavailable.'),
+                trailing:IconButton(tooltip:'Retry promotion history',
+                  icon:const Icon(Icons.refresh),
+                  onPressed:()=>ref.invalidate(gbPromotionJournalProvider(owner))))
+            else if(promotion.valueOrNull!.campaigns.isEmpty &&
+                promotion.valueOrNull!.earnings.isEmpty)
+              const ListTile(title:Text('No funded campaigns or referral allocations yet.'))
+            else ...[
+              for(final c in promotion.valueOrNull!.campaigns.take(5))
+                ListTile(
+                  key:ValueKey('wallet-promotion-${c.id}'),
+                  leading:const Icon(Icons.campaign_outlined),
+                  title:Text('${c.isBoost?'Boost':'Promotion'} · ${c.state}'),
+                  subtitle:Text('${c.deliveredViews}/${c.targetViews} qualified views · '
+                    '${c.spentMb} MB delivered\n'
+                    '${c.reservedMb} MB still reserved · '
+                    '${c.refundedUnusedMb} MB released\n'
+                    'Campaign: ${c.id}'),
+                  isThreeLine:true),
+              for(final e in promotion.valueOrNull!.earnings.take(5))
+                ListTile(key:ValueKey('wallet-referral-${e.postId}'),
+                  leading:const Icon(Icons.hourglass_bottom_outlined),
+                  title:Text('${e.views} referred qualified views'),
+                  subtitle:Text('${e.pendingMbLabel}\nPost: ${e.postId}'),
+                  isThreeLine:true),
+              if(promotion.valueOrNull!.campaigns.length>5||
+                  promotion.valueOrNull!.earnings.length>5)
+                const ListTile(title:Text('More campaign details are available in Home → My promotions.')),
+            ],
+          ]))),
+          const SizedBox(height:8),
           SingleChildScrollView(
             key:const ValueKey('wallet-activity-unit-filters'),
             scrollDirection:Axis.horizontal,
