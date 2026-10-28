@@ -471,4 +471,23 @@ describe('SPE funded campaign SQL constraints, immutable charges and expiry',()=
   expect(await balance('appealing_owner')).toMatchObject({purchased:10,reserved:0});
  });
 
+ it('forbids changes to quoted or reserved campaign economics at SQL level',async()=>{
+  await account('immutability_owner',10);
+  const q=await service.quote({tenantId:t,sponsorId:'immutability_owner',
+   body:'Immutable price and view target',targetViews:2});
+  const c=await service.confirm(t,'immutability_owner',q.quoteId,'immutable-quote-001');
+  await expect(query(`UPDATE feed.promotion_quotes SET target_views=3 WHERE id=$1`,
+   [q.quoteId])).rejects.toThrow(/immutable/i);
+  await expect(query(`DELETE FROM feed.promotion_quotes WHERE id=$1`,
+   [q.quoteId])).rejects.toThrow(/immutable/i);
+  await expect(query(`UPDATE feed.promotion_campaigns SET sponsor_id='someone_else'
+    WHERE id=$1`,[c.id])).rejects.toThrow(/economics/i);
+  await expect(query(`UPDATE feed.promotion_campaigns SET target_views=3,remaining_views=3
+    WHERE id=$1`,[c.id])).rejects.toThrow(/economics/i);
+  await expect(query(`DELETE FROM feed.promotion_campaigns WHERE id=$1`,
+   [c.id])).rejects.toThrow(/immutable/i);
+  expect((await service.receipt(t,'immutability_owner',q.quoteId)).campaign)
+   .toMatchObject({targetViews:2,remainingViews:2,priceVersion:'2026-10-27:1MB'});
+ });
+
 });
