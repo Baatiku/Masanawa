@@ -13,6 +13,14 @@ describe('SPE promotion routes inherit the established principal and staff autho
    adminQueue:async(...args:unknown[])=>{events.push(['queue',...args]);return {pending:[]};},
    adminOverview:async(...args:unknown[])=>{events.push(['overview',...args]);return {pendingReview:0};},
    adminTakedown:async(...args:unknown[])=>{events.push(['takedown',...args]);return {state:'removed'};},
+   proposeEdit:async(...args:unknown[])=>{events.push(['edit',...args]);return {state:'pending'};},
+   myEdits:async()=>({edits:[]}),
+   adminEdits:async()=>({pending:[]}),
+   reviewEdit:async(...args:unknown[])=>{events.push(['edit-review',...args]);return {state:'approved'};},
+   appeal:async(...args:unknown[])=>{events.push(['appeal',...args]);return {state:'pending'};},
+   myAppeals:async()=>({appeals:[]}),
+   adminAppeals:async()=>({pending:[]}),
+   resolveAppeal:async(...args:unknown[])=>{events.push(['resolve',...args]);return {state:'accepted',campaignReactivated:false};},
    cancel:async()=>({}),
    pause:async(...args:unknown[])=>{events.push(['pause',...args]);return {state:'paused'};},
    resume:async(...args:unknown[])=>{events.push(['resume',...args]);return {state:'active'};},
@@ -119,4 +127,72 @@ describe('SPE promotion routes inherit the established principal and staff autho
   expect(events).toHaveLength(0);
   await server.close();
  });
+ it('validates HTTPS destinations and never accepts a CTA on a booster quote',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'tenant',userId:'publisher'}),
+   isEditor:async()=>false,enabled:()=>true});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Learn safely',targetViews:10,
+     destinationUrl:'https://example.org/articles?source=home'}})).statusCode).toBe(200);
+  expect(events).toContainEqual({tenantId:'tenant',sponsorId:'publisher',body:'Learn safely',
+   targetViews:10,destinationUrl:'https://example.org/articles?source=home'});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{body:'Unsafe',targetViews:10,destinationUrl:'http://example.org'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/quotes',
+   payload:{postId:'existing',targetViews:10,destinationUrl:'https://example.org'}})).statusCode).toBe(422);
+  await server.close();
+ });
+
+ it('keeps historical appeals available under the money kill switch and independent staff reviews',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,
+   principal:async()=>({tenantId:'tenant',userId:'owner'}),
+   isEditor:async()=>true,enabled:()=>false});
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/appeal',
+   payload:{reason:'short'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url:'/v1/promotions/campaign/appeal',
+   payload:{reason:'This content was misunderstood'}})).statusCode).toBe(200);
+  expect((await server.inject({method:'GET',url:'/v1/promotions/appeals/mine'})).json())
+   .toEqual({appeals:[]});
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/appeals'})).json())
+   .toEqual({pending:[]});
+  const resolve=await server.inject({method:'POST',
+   url:'/v1/admin/promotions/appeals/appeal/resolve',
+   payload:{decision:'accept',reason:'Corrected on review'}});
+  expect(resolve.json()).toMatchObject({campaignReactivated:false});
+  expect(events).toContainEqual(['appeal','tenant','owner','campaign','This content was misunderstood']);
+  expect(events).toContainEqual(['resolve','tenant','owner','appeal',true,'Corrected on review']);
+  await server.close();
+ });
+
+ it('rejects spoofed edit authority, requires original key and staff review for new copy',async()=>{
+  const server=Fastify();const {port,events}=fake();
+  await registerPromotionRoutes(server,{port,principal:async()=>({tenantId:'tenant',userId:'writer'}),
+   isEditor:async()=>true,enabled:()=>true});
+  const url='/v1/promotions/posts/post/revisions';
+  expect((await server.inject({method:'POST',url,payload:{body:'Edited',
+   expectedRevision:0,ownerId:'attacker'},headers:{'idempotency-key':'edit-key-001'}}))
+   .statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,payload:{body:'Edited',
+   expectedRevision:0,destinationUrl:'http://unsafe.example.org'},
+    headers:{'idempotency-key':'edit-key-001'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,
+   payload:{body:'A safe change',expectedRevision:0,
+    destinationUrl:'https://example.org/update'}})).statusCode).toBe(422);
+  expect((await server.inject({method:'POST',url,
+   payload:{body:'A safe change',expectedRevision:0,
+    destinationUrl:'https://example.org/update'},
+   headers:{'idempotency-key':'edit-key-001'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['edit','tenant','writer','post',
+   {body:'A safe change',expectedRevision:0,
+    idempotencyKey:'edit-key-001',destinationUrl:'https://example.org/update'}]);
+  expect((await server.inject({method:'GET',url:'/v1/admin/promotions/revisions'})).json())
+   .toEqual({pending:[]});
+  expect((await server.inject({method:'POST',
+   url:'/v1/admin/promotions/revisions/proposal/review',
+   payload:{decision:'approve',reason:'Reviewed destination'}})).statusCode).toBe(200);
+  expect(events).toContainEqual(['edit-review','tenant','writer','proposal',true,'Reviewed destination']);
+  await server.close();
+ });
+
 });
