@@ -762,13 +762,15 @@ export async function startGatewayService(
             tenantId:activePlatformTenantId,
             catalog:roster.catalog,
           });
-          await ensureOfficialPlatformAgents({
+          const officialRoster=await ensureOfficialPlatformAgents({
             tenantId:activePlatformTenantId,pool:database.featurePool!,
             identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
             profiles:database.platformAgentProfiles!,skillAssignments:database.characterSkillAssignments!,
             skillDistribution:database.skillDistribution!,
             legacySpecialists:roster.catalog.filter(item=>!item.seed.supportAgent).map(item=>item.characterId),
           });
+          // Operational readback without biographies, citizen data or secrets.
+          process.stdout.write(JSON.stringify({event:'official_roster_ready',...officialRoster})+'\n');
         });
       } catch (error) {
         await database.close().catch(() => undefined);
