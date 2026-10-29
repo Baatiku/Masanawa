@@ -49,7 +49,7 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
   const landing=options.publicLanding;
   await registerPublicStatusLanding(app,{...landing,guestVerificationEnabled:()=>false,
    port:{find:id=>landing.port.find(id),validReferral:async()=>false,
-    readApprovedImage:landing.port.readApprovedImage?.bind(landing.port)}});
+    ...(landing.port.readApprovedImage?{readApprovedImage:landing.port.readApprovedImage.bind(landing.port)}:{})}});
  }
  if(options.guestExperience)await registerGuestExperience(app,{...options.guestExperience,enabled:()=>false});
  if(options.guestProof)await registerStatusGuestProofRoutes(app,{...options.guestProof,enabled:()=>false});
