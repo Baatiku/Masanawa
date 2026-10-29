@@ -11,6 +11,7 @@ abstract final class MasanawaFeatureColors {
   static const warmPeach = Color(0xFFFEB47B);
   static const cyan = Color(0xFF00B4DB);
   static const deepCyan = Color(0xFF0083B0);
+  static const deepEmerald = Color(0xFF006653);
   static const emerald = Color(0xFF0F9D58);
   static const brightEmerald = Color(0xFF00E676);
   static const teal = Color(0xFF00897B);

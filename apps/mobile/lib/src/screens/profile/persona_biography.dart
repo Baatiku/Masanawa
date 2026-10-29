@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../tokens/feature_colors.dart';
 import 'package:intl/intl.dart';
 import '../../agents/agent_directory.dart';
 
@@ -21,7 +22,7 @@ class PersonaBiography extends StatelessWidget {
     final theme = Theme.of(context);
     final accent = theme.brightness == Brightness.dark
         ? theme.colorScheme.primary
-        : const Color(0xFF006653);
+        : MasanawaFeatureColors.deepEmerald;
     final official = agent.publicOfficial;
     final simulation = agent.publicOfficialSimulation;
     Widget section(String title, Widget child) => Padding(

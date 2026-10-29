@@ -2,6 +2,7 @@ import '../../agents/public_official_badge.dart';
 import '../../calls/masana_voice_route.dart';
 import 'persona_biography.dart';
 import 'package:flutter/material.dart';
+import '../../tokens/feature_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -146,7 +147,7 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
     final colors = context.masanawa;
     final profileAccent = Theme.of(context).brightness == Brightness.dark
         ? colors.brand
-        : const Color(0xFF006653);
+        : MasanawaFeatureColors.deepEmerald;
     final session = ref.watch(sessionProvider);
     if (session is! SessionSignedIn ||
         session.user.id != _owner ||
