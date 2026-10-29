@@ -50,8 +50,9 @@ void main() {
     for(final key in ['status-composer-prompt','status-composer-photo','status-composer-promote'])
       expect(find.byKey(Key(key)),findsNothing);
     expect(find.byType(StatusPromotionSheet),findsNothing);
-    expect(find.byIcon(Icons.receipt_long_outlined),findsOneWidget,
-      reason:'Historic financial recovery remains accessible');
+    expect(find.byIcon(Icons.receipt_long_outlined),findsNothing,
+      reason:'The Home header stays focused; historical finance remains in Wallet Activity');
+    expect(find.text('Promotion history'),findsNothing);
     expect(tester.takeException(),isNull);
   });
 }
