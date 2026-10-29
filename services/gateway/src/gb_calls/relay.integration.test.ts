@@ -7,7 +7,7 @@ import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {createPostgresPool,type Pool} from '@masanawa/postgres';
 import {runMigrations} from '../../../../adapters/storage/postgres/src/migrations.js';
-import {foundationMigrationRoots} from '../../../../adapters/storage/postgres/src/readiness.js';
+import {characterSessionMigrationRoots} from '../../../../adapters/storage/postgres/src/readiness.js';
 import {createGbCallAdmissions} from '../../../../adapters/storage/postgres/src/gb_wallet/call_admissions.js';
 import {createGbCallRelay,installGbCallRelay,type MbRelayGrant} from './relay.js';
 
@@ -21,7 +21,7 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
   let pool:Pool;
   beforeAll(async()=>{
     pool=createPostgresPool({connectionString:connection!,applicationName:'mb-call-relay-tests'});
-    await runMigrations(pool,foundationMigrationRoots());
+    await runMigrations(pool,characterSessionMigrationRoots());
     await runMigrations(pool,[{owner:'commerce',directory:fileURLToPath(
       new URL('../../../../packages/commerce/migrations',import.meta.url))}]);
   });

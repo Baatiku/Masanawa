@@ -1,4 +1,4 @@
-import { foundationMigrationRoots } from "../readiness.js";
+import { characterSessionMigrationRoots } from "../readiness.js";
 import { randomUUID,randomInt } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,7 @@ db("AF01 staged MSN immutable quote and verified-fiat journal in actual PG18",()
   let pool:Pool;
   beforeAll(async()=>{
     pool=new Pool({connectionString:url});
-    await runMigrations(pool, foundationMigrationRoots());
+    await runMigrations(pool, characterSessionMigrationRoots());
     await runMigrations(pool,[{
       owner:"commerce",
       directory:fileURLToPath(new URL("../../../../../packages/commerce/migrations",import.meta.url)),

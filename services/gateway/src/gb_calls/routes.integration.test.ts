@@ -6,7 +6,7 @@ import {createGatewayApp} from '../app.js';
 import {CustomerAuthError,type CustomerAuthService} from '../customer_auth.js';
 import {createGbCallAdmissions} from '../../../../adapters/storage/postgres/src/gb_wallet/call_admissions.js';
 import {createPostgresGbWalletRepository} from '../../../../adapters/storage/postgres/src/gb_wallet/repository.js';
-import {foundationMigrationRoots} from '../../../../adapters/storage/postgres/src/readiness.js';
+import {characterSessionMigrationRoots} from '../../../../adapters/storage/postgres/src/readiness.js';
 import {runMigrations} from '../../../../adapters/storage/postgres/src/migrations.js';
 import {GbCallReviewError,type GbCallPorts} from './review.js';
 
@@ -15,7 +15,7 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
   let pool:Pool;
   beforeAll(async()=>{
     pool=createPostgresPool({connectionString:connection!,applicationName:'gb-call-http-tests'});
-    await runMigrations(pool,foundationMigrationRoots());
+    await runMigrations(pool,characterSessionMigrationRoots());
     await runMigrations(pool,[{owner:'commerce',directory:fileURLToPath(
       new URL('../../../../packages/commerce/migrations',import.meta.url))}]);
   });
