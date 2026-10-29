@@ -32,6 +32,9 @@ it('retires paid attribution even with stale enabled flags, retaining consent wi
  await registerStatusRuntime(app,{sessions:{authorize:async()=>({tenantId:'t',userId:'owner'})},
   feed:{} as never,editorial:{} as never,
   promotions:{share:write,beginView:write,finishView:write} as never,promotionsEnabled:()=>true,
+  publicLanding:{enabled:()=>true,guestVerificationEnabled:()=>true,
+   port:{find:async()=>({id:'post',name:'Official',body:'Original public text',kind:'text',imageCount:0}),
+    validReferral:async()=>true}},
   guestProof:{port:{begin:write,complete:write,withdraw,revoked:async()=>false},signer,
    enabled:()=>true,publicBaseUrl:'https://status.example.test'}});
  try{
@@ -40,6 +43,11 @@ it('retires paid attribution even with stale enabled flags, retaining consent wi
    '/v1/views/challenge/qualify']){
    expect((await app.inject({method:'POST',url,headers,payload:{}})).statusCode).toBe(503);
   }
+  const publicPage=await app.inject('/status/post?r=opaqueAlphaBeta012345678901');
+  expect(publicPage.statusCode).toBe(200);expect(publicPage.body).toContain('Original public text');
+  expect(publicPage.body).not.toContain('may earn');
+  expect(publicPage.body).not.toContain('Open with referral attribution');
+  expect(publicPage.body).not.toContain('/verify');
   const guestHeaders={origin:'https://status.example.test','content-type':'application/json'};
   expect((await app.inject({method:'POST',url:'/v1/status/guest/consent',
    headers:guestHeaders,payload:{consent:true}})).statusCode).toBe(503);

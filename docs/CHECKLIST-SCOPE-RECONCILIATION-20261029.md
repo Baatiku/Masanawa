@@ -2,7 +2,7 @@
 
 The owner removed Share & Earn, paid sharing and paid Boost, including admin-funded official-post rewards. Ordinary Share and purchased-MB tips remain. This register does not mark removed work implemented. Original checked boxes remain historical evidence of delivered work; the earlier 29/88 count is not an active-scope completion count.
 
-New promotion admissions remain disabled regardless of stale deployment flags. Mobile sharing no longer asks for referral links or shows paid-sharing promises from stale campaign metadata. Guest attribution/verification admissions are disabled; existing consent withdrawal remains accessible. Original financial receipt/cancel/delete and account-scoped recovery remain. No balances or history are rewritten.
+New promotion admissions remain disabled regardless of stale deployment flags. Mobile sharing no longer asks for referral links or shows paid-sharing promises from stale campaign metadata. Old public referral URLs now render as ordinary links without reward promises. Guest attribution/verification admissions are disabled; existing consent withdrawal remains accessible. Original financial receipt/cancel/delete and account-scoped recovery remain. No balances or history are rewritten.
 
 ## Original SPE requirements
 
@@ -109,4 +109,4 @@ Retained SPE audit scope: existing MB/NGN wallet separation, tip/recovery receip
 
 ## Verification for this correction
 
-Consolidated mobile sharing/tipping/feed/detail/layout batch: 45 tests PASS. Flutter analysis: zero errors/warnings; 460 existing informational findings. Gateway TypeScript PASS. Gateway retirement/consent/runtime regression batch: 14 tests PASS. Exact-head hosted CI remains a delivery gate. No APK, live financial operation, source import activation or deployment performed.
+Consolidated mobile sharing/tipping/feed/detail/layout batch: 45 tests PASS. Flutter analysis: zero errors/warnings; 460 existing informational findings. Gateway TypeScript PASS. Gateway retirement/consent/runtime regression batch: 19 tests PASS. Exact-head hosted CI remains a delivery gate. No APK, live financial operation, source import activation or deployment performed.

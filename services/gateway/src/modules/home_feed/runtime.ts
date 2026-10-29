@@ -45,7 +45,12 @@ export interface StatusRuntime {
  * separate session store, publisher, ledger or PostgreSQL connection. */
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
  // This route is a read-only crawler preview outside the signed-in fan scope.
- if(options.publicLanding)await registerPublicStatusLanding(app,options.publicLanding);
+ if(options.publicLanding){
+  const landing=options.publicLanding;
+  await registerPublicStatusLanding(app,{...landing,guestVerificationEnabled:()=>false,
+   port:{find:id=>landing.port.find(id),validReferral:async()=>false,
+    readApprovedImage:landing.port.readApprovedImage?.bind(landing.port)}});
+ }
  if(options.guestExperience)await registerGuestExperience(app,{...options.guestExperience,enabled:()=>false});
  if(options.guestProof)await registerStatusGuestProofRoutes(app,{...options.guestProof,enabled:()=>false});
  await app.register(async scope=>{
