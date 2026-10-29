@@ -1,3 +1,4 @@
+import {registerGbRetainedFinanceRoutes,type GbRetainedFinancePorts} from './gb_wallet/retained_finance_routes.js';
 import {registerUsernameRoutes,type UsernamePorts} from './usernames.js';
 import {MbCallAdmissionRequiredError} from "./gb_calls/public_token_policy.js";
 import {replyWalletFailure} from "./gb_wallet/reply_errors.js";
@@ -114,6 +115,7 @@ export interface GatewayAppOptions {
   readonly ngnWallet?: NgnWalletPorts;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
   readonly gbWalletActivity?: GbActivityPorts;
+  readonly gbRetainedFinance?:GbRetainedFinancePorts;
   /** New review-confirmed purchased-MB transfer; no legacy Credits. */
   readonly usernames?:UsernamePorts;
   readonly gbSendReview?: GbSendPorts;
@@ -261,6 +263,7 @@ const ReadinessResponseSchema = Type.Object(
 export function createGatewayApp(options: GatewayAppOptions = {}) {
   const app = Fastify({
     logger: false,
+    routerOptions: { maxParamLength: 1024 },
     bodyLimit: 1_048_576,
     requestTimeout: 30_000,
   }).withTypeProvider<TypeBoxTypeProvider>();
@@ -388,6 +391,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
   if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
   if (options.gbWalletActivity) registerGbWalletActivityRoutes(app,options.gbWalletActivity);
+  if(options.gbRetainedFinance)app.register(async scope=>{
+    await registerGbRetainedFinanceRoutes(scope,options.gbRetainedFinance!);
+  });
   if(options.usernames)registerUsernameRoutes(app,options.usernames);
   if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
   if (options.gbStatusTips) registerGbStatusTipRoutes(app, options.gbStatusTips);

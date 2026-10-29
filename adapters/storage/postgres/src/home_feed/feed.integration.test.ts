@@ -57,6 +57,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    "0012_reviewed_paid_post_edits.sql","0013_campaign_drafts_and_expiry.sql",
   ])await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/"+name,import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0023_post_safety.sql",import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0024_report_content_versions.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -416,12 +417,16 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await safety.hide(tenant,'reader',id,false);
   expect(await reader.find(tenant,'reader',id)).toMatchObject({body:'Unchanged original text'});
   expect(await saved.list(tenant,'reader',null,20)).toHaveLength(1);
+  await pool.query(`UPDATE feed.posts SET body='Edited original content' WHERE tenant_id=$1 AND id=$2`,[tenant,id]);
+  const editedReport=await safety.report(tenant,'reader',id,'inaccurate');
+  expect(editedReport.id).not.toBe(reports[0]!.id);
+  expect((await safety.list(tenant)).items[0]).toMatchObject({content_changed:false});
   await pool.query(`UPDATE identity.users SET state='disabled' WHERE tenant_id=$1 AND user_id='reader'`,[tenant]);
   await expect(safety.hide(tenant,'reader',id,true)).rejects.toMatchObject({status:401});
   await expect(safety.report(tenant,'reader',id,'privacy')).rejects.toMatchObject({status:401});
   // A bounded quota cannot be bypassed by concurrent new reasons; original retry still works.
-  await pool.query(`INSERT INTO feed.post_reports(tenant_id,reporter_id,post_id,reason,created_at)
-   SELECT $1,'limited',p.id,'spam',clock_timestamp() FROM feed.posts p WHERE p.tenant_id=$1`,[tenant]);
+  await pool.query(`INSERT INTO feed.post_reports(tenant_id,reporter_id,post_id,reason,created_at,content_sha256)
+   SELECT $1,'limited',p.id,'spam',clock_timestamp(),encode(sha256(convert_to(p.body,'UTF8')),'hex') FROM feed.posts p WHERE p.tenant_id=$1`,[tenant]);
   // Set up 50 different valid original posts for this reporter.
   const limitPosts=await pool.query(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,idempotency_key,published_by)
    SELECT $1,'safe_masana','text','Post '||n,'limit-post-'||n,'safe_masana' FROM generate_series(1,49)n RETURNING id`,[tenant]);

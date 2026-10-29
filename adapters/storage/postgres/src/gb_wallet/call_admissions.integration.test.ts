@@ -3,7 +3,7 @@ import {Pool} from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {runMigrations} from '../migrations.js';
-import {foundationMigrationRoots} from '../readiness.js';
+import {characterSessionMigrationRoots} from '../readiness.js';
 import {createGbCallAdmissions} from './call_admissions.js';
 import {createGbUsageReservations} from './reservations.js';
 
@@ -12,7 +12,7 @@ const connection=process.env.MASANAWA_TEST_DATABASE_URL;
   let pool:Pool;
   beforeAll(async()=>{
     pool=new Pool({connectionString:connection});
-    await runMigrations(pool,foundationMigrationRoots());
+    await runMigrations(pool,characterSessionMigrationRoots());
     await runMigrations(pool,[{owner:'commerce',directory:fileURLToPath(
       new URL('../../../../../packages/commerce/migrations',import.meta.url))}]);
   });

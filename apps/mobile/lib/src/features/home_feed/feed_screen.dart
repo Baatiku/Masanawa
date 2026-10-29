@@ -651,7 +651,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             child: TextButton.icon(
               onPressed: openMyPromotions,
               icon: const Icon(Icons.receipt_long_outlined, size: 18),
-              label: Text(t('My promotions', 'Tallace-tallacena')),
+              label: Text(t('Promotion history', 'Tarihin tallace-tallace')),
             ),
           ),
         if (!widget.authorScoped &&

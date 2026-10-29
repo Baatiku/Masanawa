@@ -1,3 +1,4 @@
+import '../gb_wallet/gb_retained_finance_screens.dart';
 import '../gb_wallet/ngn_funding_screen.dart';
 import '../gb_wallet/recharge_screen.dart';
 import '../gb_wallet/gb_send_screen.dart';
@@ -205,6 +206,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (_, __) => '/home?tab=wallet',
       ),
       GoRoute(path: '/wallet', redirect: (_, __) => '/home?tab=wallet'),
+      GoRoute(path:'/wallet/inquiries',builder:(_,_)=>const GbWalletInquiriesScreen()),
+      GoRoute(path:'/wallet/inquiries/:inquiryId',builder:(_,state)=>GbWalletInquiriesScreen(caseId:state.pathParameters['inquiryId']!)),
       GoRoute(path: '/wallet/activity',
         builder: (_, __) => const GbWalletActivityScreen()),
       GoRoute(path: '/wallet/activity/:entryId',

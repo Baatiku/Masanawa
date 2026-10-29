@@ -35,13 +35,13 @@ class _GbPromotionActivityPanelState extends State<GbPromotionActivityPanel> {
 
     return Card(child: Padding(padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('Promotions & Share earnings',
+        Text('Historical promotion records',
           style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
         const Text('Review-only campaign activity. Reserved MB is not spent; '
           'pending referral earnings are not redeemable or included in your balance.'),
         _SummaryLine(key: const ValueKey('wallet-pending-sharing-total'),
-          title: 'Sharing earnings · pending shown',
+          title: 'Historical allocation · pending shown',
           detail: 'Across up to 100 private earning groups. Not released or redeemable.',
           amount: journal.pendingEarnedLabel),
         _SummaryLine(key: const ValueKey('wallet-campaign-reserved-total'),
@@ -108,7 +108,7 @@ class _GbPromotionActivityPanelState extends State<GbPromotionActivityPanel> {
             ])),
         if (campaigns.length > 20 || earnings.length > 20)
           Text('Showing the first 20 matching rows in each category. '
-            'More details remain available in Home → My promotions.',
+            'Open full historical activity for older records and exact receipts.',
             style: Theme.of(context).textTheme.bodySmall),
       ])));
   }

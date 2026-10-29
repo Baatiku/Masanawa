@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCanonicalId } from "@masanawa/contracts";
-import { foundationMigrationRoots } from "../readiness.js";
+import { characterSessionMigrationRoots } from "../readiness.js";
 import { runMigrations } from "../migrations.js";
 import { createGbUsageReservations } from "./reservations.js";
 
@@ -13,7 +13,7 @@ testDb("GB reserved welcome and provider-proof usage semantics",()=>{
   let pool:Pool;
   beforeAll(async()=>{
     pool=new Pool({connectionString:conn});
-    await runMigrations(pool,foundationMigrationRoots());
+    await runMigrations(pool,characterSessionMigrationRoots());
     await runMigrations(pool,[{
       owner:"commerce",
       directory:fileURLToPath(new URL("../../../../../packages/commerce/migrations",import.meta.url)),

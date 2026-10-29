@@ -1,4 +1,4 @@
-import { foundationMigrationRoots } from "../readiness.js";
+import { characterSessionMigrationRoots } from "../readiness.js";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ describeDatabase("Twin economy PostgreSQL acceptance", () => {
 
   beforeAll(async () => {
     pool = new Pool({ connectionString });
-    await runMigrations(pool, foundationMigrationRoots());
+    await runMigrations(pool, characterSessionMigrationRoots());
     await runMigrations(pool, [{
       owner: "commerce",
       directory: fileURLToPath(

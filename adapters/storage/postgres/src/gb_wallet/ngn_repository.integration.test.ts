@@ -3,13 +3,13 @@ import {Pool} from "pg";
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {createCanonicalId} from "@masanawa/contracts";
 import {runMigrations} from "../migrations.js";
-import {foundationMigrationRoots} from "../readiness.js";
+import {characterSessionMigrationRoots} from "../readiness.js";
 import {createNgnWalletRepository} from "./ngn_repository.js";
 import {createGbBillstackRepository} from "./billstack_repository.js";
 const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
 (connectionString?describe:describe.skip)("separate NGN funding and atomic MB exchange",()=>{
  let pool:Pool;
- beforeAll(async()=>{pool=new Pool({connectionString});await runMigrations(pool,foundationMigrationRoots());await runMigrations(pool,[{owner:"commerce",directory:fileURLToPath(new URL("../../../../../packages/commerce/migrations",import.meta.url))}]);});
+ beforeAll(async()=>{pool=new Pool({connectionString});await runMigrations(pool,characterSessionMigrationRoots());await runMigrations(pool,[{owner:"commerce",directory:fileURLToPath(new URL("../../../../../packages/commerce/migrations",import.meta.url))}]);});
  afterAll(async()=>{await pool?.end();});
  const repo=()=>createNgnWalletRepository(pool);
  async function account(amountKobo=1_000_000){

@@ -31,7 +31,7 @@ describe("notification outbox delivery", () => {
     expect(send).toHaveBeenCalledWith({
       scope: { tenantId: event.tenant_id, userId: event.user_id },
       title: "Wallet update",
-      body: "Open Wallet to view the verified update",
+      body: "Open Wallet to review this update",
       data: {
         type: "wallet_transfer", eventId: event.event_id,
         deepLink: event.deep_link,

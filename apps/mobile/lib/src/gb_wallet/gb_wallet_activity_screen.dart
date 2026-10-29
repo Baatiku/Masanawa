@@ -1,3 +1,4 @@
+import 'gb_retained_finance_screens.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -701,7 +702,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                   const Divider(height: 24),
                   ListTile(
                     key: const ValueKey('wallet-promotion-history-toggle'),
-                    title: const Text('Promotions & Share earnings'),
+                    title: const Text('Historical promotion records'),
                     subtitle: const Text(
                       'Review reserved, spent and pending MB separately from posted activity.',
                     ),
@@ -714,6 +715,12 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                       () => _showPromotionHistory = !_showPromotionHistory,
                     ),
                   ),
+                  ListTile(key:const ValueKey('wallet-inquiries'),title:const Text('Wallet inquiries'),
+                    subtitle:const Text('Review requests linked to your original receipts'),
+                    trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push<void>(context,MaterialPageRoute(
+                      builder:(_)=>const GbWalletInquiriesScreen()))),
+                  if(_showPromotionHistory)TextButton(onPressed:()=>Navigator.push<void>(context,MaterialPageRoute(
+                    builder:(_)=>const GbLegacyFinanceHistoryScreen())),child:const Text('Full historical activity and receipts')),
                   if (_showPromotionHistory && promotion?.isLoading == true)
                     const ListTile(
                       title: Text('Loading private promotion history…'),

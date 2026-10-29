@@ -1,3 +1,4 @@
+import 'gb_retained_finance_screens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -119,6 +120,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
               ]))),
             const SizedBox(height:16),
             GbReceiptActions(owner:owner,entryId:item.id),
+            GbWalletInquiryButton(targetKind:'activity',reference:item.id),
             const Padding(padding:EdgeInsets.all(16),
               child:Text('This is an authorized posted ledger entry. '
                 'It is not proof of external bank settlement or data delivery.')),
