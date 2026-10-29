@@ -49,12 +49,13 @@ export interface MasanaBiographicalFacts {
   readonly dateOfBirth?: string;
   readonly stateOfOrigin?: string;
   readonly cityOfOrigin?: string;
+  readonly birthPlace?: string;
 }
 export function validateMasanaBiographicalFacts(value: unknown): MasanaBiographicalFacts {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('invalid_biographicalFacts');
   const raw=value as Record<string,unknown>, result:Record<string,string>={};
   for(const key of Object.keys(raw)) {
-    if(!['dateOfBirth','stateOfOrigin','cityOfOrigin'].includes(key)) throw new TypeError('invalid_biographicalFacts');
+    if(!['dateOfBirth','stateOfOrigin','cityOfOrigin','birthPlace'].includes(key)) throw new TypeError('invalid_biographicalFacts');
     const v=raw[key];
     if(typeof v!=='string'||!v.trim()||v.length>100||/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(v)) throw new TypeError('invalid_'+key);
     if(key==='dateOfBirth') {

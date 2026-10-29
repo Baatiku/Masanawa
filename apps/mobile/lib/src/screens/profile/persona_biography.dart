@@ -25,6 +25,7 @@ class PersonaBiography extends StatelessWidget {
         : MasanawaFeatureColors.deepEmerald;
     final official = agent.publicOfficial;
     final simulation = agent.publicOfficialSimulation;
+    final biography = official?.biography ?? agent.about;
     Widget section(String title, Widget child) => Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
@@ -50,16 +51,26 @@ class PersonaBiography extends StatelessWidget {
             Localizations.localeOf(context).toString(),
           ).format(DateTime.parse(birth)),
         ),
-      if (official?.stateOfOrigin != null || official?.cityOfOrigin != null)
+      if (official?.stateOfOrigin != null ||
+          official?.cityOfOrigin != null ||
+          official?.birthPlace != null)
         (
           icon: Icons.location_on_outlined,
           label: official?.stateOfOrigin != null
               ? 'State of origin'
-              : 'City of origin',
-          value: [
-            official?.cityOfOrigin,
-            official?.stateOfOrigin,
-          ].whereType<String>().join(', '),
+              : official?.cityOfOrigin != null
+              ? 'City of origin'
+              : 'Birthplace',
+          value:
+              [
+                official?.cityOfOrigin,
+                official?.stateOfOrigin,
+              ].whereType<String>().join(', ').isNotEmpty
+              ? [
+                  official?.cityOfOrigin,
+                  official?.stateOfOrigin,
+                ].whereType<String>().join(', ')
+              : official!.birthPlace!,
         ),
       (
         icon: Icons.work_outline,
@@ -142,13 +153,13 @@ class PersonaBiography extends StatelessWidget {
         ),
         section(
           'Biography',
-          agent.about.trim().isEmpty
+          biography.trim().isEmpty
               ? Text(
                   'A published biography is not available yet.',
                   style: theme.textTheme.bodyLarge,
                 )
               : SelectableText(
-                  agent.about,
+                  biography,
                   style: theme.textTheme.bodyLarge?.copyWith(height: 1.65),
                 ),
         ),

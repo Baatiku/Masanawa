@@ -1,5 +1,8 @@
 import {createHash} from 'node:crypto';
 import {readFile,stat} from 'node:fs/promises';
+import {parseCanonicalId} from '@masanawa/contracts';
+import {activateAdmittedOfficialRoster} from './official_roster_bootstrap.js';
+import {createPostgresAgentPresentationRepository} from '@masanawa/postgres';
 import {createPostgresPool} from '@masanawa/postgres';
 import {validateOfficialDossierPacket,admitOfficialDossier} from './official_dossier_admission.js';
 import {parseOfficialDossierCommand} from './official_dossier_command.js';
@@ -19,7 +22,10 @@ try{
   const connectionString=process.env.MASANAWA_DATABASE_URL??process.env.DATABASE_URL;
   if(!connectionString)throw Error('database_required');
   const pool=createPostgresPool({connectionString,applicationName:'masanawa-official-dossier-review',max:1});
-  try{const result=await admitOfficialDossier(pool,packet,reviewer);process.stdout.write(JSON.stringify({mode:'applied',...result})+'\n');}
+  try{const result=await admitOfficialDossier(pool,packet,reviewer);
+   const activation=packet.publicProfile?await activateAdmittedOfficialRoster({pool,tenantId:parseCanonicalId('tenant',packet.tenantId),
+    presentations:createPostgresAgentPresentationRepository(pool)}):undefined;
+   process.stdout.write(JSON.stringify({mode:'applied',...result,...(activation?{activation}:{})})+'\n');}
   finally{await pool.end();}
  }
 }catch{

@@ -88,8 +88,18 @@ export function normalizeCharacterConstitution(
     throw new TypeError("disclosurePolicy must be an object");
   }
 
+  let publicOfficial: CharacterConstitution['publicOfficial'];
+  if (input.publicOfficial !== undefined) {
+    const marker = input.publicOfficial;
+    if (!marker || typeof marker !== 'object' || Array.isArray(marker) || marker.countryCode !== 'NG' ||
+        typeof marker.officialName !== 'string' || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(marker.officialName)) {
+      throw new TypeError('publicOfficial identity is invalid');
+    }
+    publicOfficial = Object.freeze({officialName: bounded(marker.officialName, 'officialName', 160), countryCode: 'NG' as const});
+  }
   return Object.freeze({
     schemaVersion: 1 as const,
+    ...(publicOfficial ? {publicOfficial} : {}),
     displayName: bounded(input.displayName, "displayName", 200),
     biography: bounded(input.biography, "biography", 20_000, true),
     personality: strings(input.personality, "personality", 128, 1000),

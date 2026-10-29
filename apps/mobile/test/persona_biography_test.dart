@@ -6,7 +6,10 @@ import 'package:masanawa/src/screens/profile/persona_biography.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
 
 // Synthetic identity: no unresearched real official is presented as admitted.
-AgentDirectoryEntry example({bool reviewed = true}) => AgentDirectoryEntry(
+AgentDirectoryEntry example({
+  bool reviewed = true,
+  String? biography,
+}) => AgentDirectoryEntry(
   characterId: 'fixture-official',
   characterVersionId: 'fixture-v1',
   displayName: 'Example Public Official',
@@ -29,6 +32,7 @@ AgentDirectoryEntry example({bool reviewed = true}) => AgentDirectoryEntry(
           'https://grokipedia.com/page/Example',
           DateTime.utc(2026, 10, 28),
           DateTime.utc(2099),
+          biography: biography,
           dateOfBirth: '1964-05-14',
           stateOfOrigin: 'Kaduna',
         )
@@ -37,6 +41,37 @@ AgentDirectoryEntry example({bool reviewed = true}) => AgentDirectoryEntry(
 
 void main() {
   setUpAll(loadVisualTestFonts);
+  testWidgets(
+    'current reviewed full biography replaces the short directory overview',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PersonaBiography(
+                agent: example(
+                  biography:
+                      'Reviewed full public history for the selected identity.',
+                ),
+                onQuestion: (_) {},
+                onSource: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Reviewed full public history for the selected identity.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('This synthetic biography demonstrates'),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets(
     'biography and source are readable with working question actions',
     (tester) async {
