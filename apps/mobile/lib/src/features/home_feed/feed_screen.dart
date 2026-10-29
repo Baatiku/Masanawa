@@ -479,7 +479,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             onBoostPost:null,
             engagementApi: feed,
             onSharePost: sharePost,
-            shareEarnEnabled: promotionsAvailable,
+            shareEarnEnabled: false,
             enabled: widget.enabled,
           );
           return guard?.call(detail) ?? detail;
@@ -504,10 +504,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       final currentPost = widget.api is DioFeedApi
           ? await (widget.api as DioFeedApi).detail(post.id) : post;
       if (!current()) return;
-      final linked=promotionsAvailable&&widget.promotions!=null
-        ?await widget.promotions!.share(currentPost.id):null;
-      if(!current())return;
-      await SharePlus.instance.share(ShareParams(text:linked??
+      await SharePlus.instance.share(ShareParams(text:
         '${currentPost.displayAuthor}\n\n${currentPost.body}'));
     } catch (_) {
       if (!current()) return;
@@ -785,7 +782,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                       final post = items[i];
                       return StatusQualifiedViewObserver(
                         postId:post.id,accountKey:widget.accountKey,
-                        enabled:promotionsAvailable&&widget.promotions!=null,
+                        enabled:false,
                         api:widget.promotions,
                         onVerified:(_)=>unawaited(reconcileQualifiedView(post.id,generation)),
                         child:Card(
@@ -870,7 +867,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                               StatusPostActionRow(
                                 post: post,
                                 pending: pendingActions.contains(post.id),
-                                shareEarnEnabled: promotionsAvailable,
+                                shareEarnEnabled: false,
                                 onLike: () => likePost(post),
                                 onComment: () => openComments(post),
                                 onShare: sharingPosts.contains(post.id) ? null : () => sharePost(post),

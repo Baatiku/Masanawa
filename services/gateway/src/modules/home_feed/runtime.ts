@@ -45,9 +45,14 @@ export interface StatusRuntime {
  * separate session store, publisher, ledger or PostgreSQL connection. */
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
  // This route is a read-only crawler preview outside the signed-in fan scope.
- if(options.publicLanding)await registerPublicStatusLanding(app,options.publicLanding);
- if(options.guestExperience)await registerGuestExperience(app,options.guestExperience);
- if(options.guestProof)await registerStatusGuestProofRoutes(app,options.guestProof);
+ if(options.publicLanding){
+  const landing=options.publicLanding;
+  await registerPublicStatusLanding(app,{...landing,guestVerificationEnabled:()=>false,
+   port:{find:id=>landing.port.find(id),validReferral:async()=>false,
+    ...(landing.port.readApprovedImage?{readApprovedImage:landing.port.readApprovedImage.bind(landing.port)}:{})}});
+ }
+ if(options.guestExperience)await registerGuestExperience(app,{...options.guestExperience,enabled:()=>false});
+ if(options.guestProof)await registerStatusGuestProofRoutes(app,{...options.guestProof,enabled:()=>false});
  await app.register(async scope=>{
   scope.setErrorHandler((error,_request,reply)=>{
    const problem=error as {status?:number;statusCode?:number;code?:string};
@@ -122,7 +127,7 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
   if(options.guestReview)await registerStatusGuestReviewRoutes(scope,{
     port:options.guestReview.port,principal:resolve,
     isEditor:async session=>await options.isEditor?.(session)===true,
-    enabled:options.guestReview.enabled,
+    enabled:()=>false,
   });
   if(options.media)await registerFeedMediaRoutes(scope,{...options.media,principal,tenant,enabled});
   if(options.updateMediaAlt)scope.put('/v1/admin/feed/media/:mediaId/alt',async(request,reply)=>{

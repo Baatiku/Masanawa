@@ -218,12 +218,8 @@ class StatusSavedScreen extends ConsumerWidget {
         // Reauthorize the current original before sharing its text or link.
         final fresh=await feed.detail(post.id);
         if(!context.mounted||currentAccount()!=account)return;
-        String? link;
-        if(await promotions.available()){
-          link=await promotions.share(fresh.id);
-        }
         if(!context.mounted||currentAccount()!=account)return;
-        await SharePlus.instance.share(ShareParams(text:link??
+        await SharePlus.instance.share(ShareParams(text:
           '${fresh.displayAuthor}\n\n${fresh.body}'));
       }catch(_){
         if(context.mounted&&currentAccount()==account){
@@ -264,7 +260,7 @@ class StatusSavedScreen extends ConsumerWidget {
             authorDirectory: authors,
             engagementApi: feed,
             onSharePost: shareOriginal,
-            shareEarnEnabled: boostAvailable,
+            shareEarnEnabled: false,
             onBoostPost: null,
           );
         }),
@@ -285,7 +281,7 @@ class StatusSavedScreen extends ConsumerWidget {
         onOpenMedia: openMedia,
         engagementApi: feed,
         onSharePost: shareOriginal,
-        shareEarnEnabled: ability.data == true,
+        shareEarnEnabled: false,
         onHumanProfile: openHuman,
         onMasanaProfile: openMasana,
         onBoostPost: null,

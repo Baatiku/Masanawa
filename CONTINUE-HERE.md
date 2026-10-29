@@ -1,3 +1,7 @@
+**Current disposition register:** [All 88 SPE IDs and retained qualification work](docs/CHECKLIST-SCOPE-RECONCILIATION-20261029.md). Retired requirements are not completed features.
+
+**Owner scope correction, 29 October 2026:** Remove Share & Earn, paid sharing and paid Boost, including admin-funded rewards on official posts. Keep ordinary Share and purchased-MB tipping. Earlier monetization requirements are retired, not completed. Preserve historical receipts, liabilities, refunds and recovery; never erase financial history or repurpose reward balances. This instruction supersedes older paid-promotion scope below.
+
 # Continue Masanawa — lightweight five-tab GB product
 
 **Owner pivot, 28 October 2026 — supersedes human paid-post/composer scope:** Remove user post submission/composer. Refocus new Masana identities on clearly identified AI simulations of Nigerian public officials, grounded in reviewed biographical/public-record evidence, with Grokipedia as a requested reference and corroborating primary sources. Status should preserve permitted original X/Facebook source text and attribution, with no generated replacement posts. A verification tick means checked persona/source provenance, never official endorsement or a real call to the office. Preserve chat/call billing, private memory isolation, five tabs and historical financial recovery. The former 12-item Home-composer batch is paused/superseded; do not complete or reactivate its publishing features. See [pivot plan](docs/PUBLIC-OFFICIAL-PERSONA-PIVOT-20261028.md).

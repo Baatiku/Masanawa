@@ -1,3 +1,5 @@
+**Owner scope correction, 29 October 2026:** Remove Share & Earn, paid sharing and paid Boost, including admin-funded rewards on official posts. Keep ordinary Share and purchased-MB tipping. Earlier monetization requirements are retired, not completed. Preserve historical receipts, liabilities, refunds and recovery; never erase financial history or repurpose reward balances. This instruction supersedes older paid-promotion scope below.
+
 # Nigerian public-official personas — owner pivot, 28 October 2026
 
 ## Scope and delivery status

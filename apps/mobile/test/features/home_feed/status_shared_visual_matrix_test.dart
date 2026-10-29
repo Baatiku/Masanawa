@@ -25,6 +25,7 @@ FeedPost _fixture() => FeedPost.fromJson({
   'viewerLiked': false,
   'verifiedViewCount': 0,
   'boostEligible': true,
+  'shareEarnEligible': true,
 });
 
 class _StaleImageGrants implements FeedMediaApi {
@@ -38,6 +39,17 @@ class _StaleImageGrants implements FeedMediaApi {
 }
 
 void main() {
+  testWidgets('stale paid-sharing eligibility still presents ordinary Share', (tester) async {
+    var shared = false;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body:
+      StatusPostActionRow(post: _fixture(), shareEarnEnabled: true,
+        onShare: () => shared = true))));
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.textContaining('Share & Earn'), findsNothing);
+    await tester.tap(find.text('Share'));
+    expect(shared, isTrue);
+  });
+
   testWidgets('shared post body, counts and Boost survive 320dp/200% Hausa, RTL, dark and reduced motion',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 700));
