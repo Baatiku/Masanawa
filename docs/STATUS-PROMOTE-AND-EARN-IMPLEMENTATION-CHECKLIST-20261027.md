@@ -1,3 +1,7 @@
+**Current disposition register:** [All 88 SPE IDs and retained qualification work](CHECKLIST-SCOPE-RECONCILIATION-20261029.md). Retired requirements are not completed features.
+
+**Owner scope correction, 29 October 2026:** Remove Share & Earn, paid sharing and paid Boost, including admin-funded rewards on official posts. Keep ordinary Share and purchased-MB tipping. Earlier monetization requirements are retired, not completed. Preserve historical receipts, liabilities, refunds and recovery; never erase financial history or repurpose reward balances. This instruction supersedes older paid-promotion scope below.
+
 # Masanawa — Paid Status Promotions, View Counts and Share & Earn
 **Owner-approved implementation checklist · 27 October 2026 · 88 tasks in six coordinated batches**
 

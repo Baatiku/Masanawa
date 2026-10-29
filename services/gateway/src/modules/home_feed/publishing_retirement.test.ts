@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import {expect,it,vi} from 'vitest';
+import {GuestConsentSigner} from './guest_consent.js';
 import {registerStatusRuntime} from './runtime.js';
 it('blocks legacy submission before writes while retaining authenticated history and cancellation',async()=>{
  const app=Fastify();const write=vi.fn(),mine=vi.fn(async()=>({campaigns:[]})),cancel=vi.fn(async()=>({state:'cancelled'}));
@@ -22,5 +23,29 @@ it('blocks legacy submission before writes while retaining authenticated history
  expect((await app.inject({method:'POST',url:'/v1/promotions/old/cancel',headers,payload:{}})).statusCode).toBe(200);
  expect(cancel).toHaveBeenCalledWith('t','owner','old');
  expect((await app.inject({method:'POST',url:'/v1/promotions/drafts',payload:{}})).statusCode).toBe(401);
+ }finally{await app.close();}
+});
+
+it('retires paid attribution even with stale enabled flags, retaining consent withdrawal',async()=>{
+ const app=Fastify(),write=vi.fn(),withdraw=vi.fn(async()=>{});
+ const signer=new GuestConsentSigner('retirement-test-only-secret-over-32-bytes');
+ await registerStatusRuntime(app,{sessions:{authorize:async()=>({tenantId:'t',userId:'owner'})},
+  feed:{} as never,editorial:{} as never,
+  promotions:{share:write,beginView:write,finishView:write} as never,promotionsEnabled:()=>true,
+  guestProof:{port:{begin:write,complete:write,withdraw,revoked:async()=>false},signer,
+   enabled:()=>true,publicBaseUrl:'https://status.example.test'}});
+ try{
+  const headers={authorization:'Bearer owner'};
+  for(const url of ['/v1/posts/post/share-link','/v1/posts/post/view-challenges',
+   '/v1/views/challenge/qualify']){
+   expect((await app.inject({method:'POST',url,headers,payload:{}})).statusCode).toBe(503);
+  }
+  const guestHeaders={origin:'https://status.example.test','content-type':'application/json'};
+  expect((await app.inject({method:'POST',url:'/v1/status/guest/consent',
+   headers:guestHeaders,payload:{consent:true}})).statusCode).toBe(503);
+  const result=await app.inject({method:'DELETE',url:'/v1/status/guest/consent',
+   headers:{origin:guestHeaders.origin,cookie:`__Host-Masanawa-Status-Guest=${signer.issue()}`}});
+  expect(result.statusCode).toBe(200);expect(withdraw).toHaveBeenCalledOnce();
+  expect(write).not.toHaveBeenCalled();
  }finally{await app.close();}
 });
