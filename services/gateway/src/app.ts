@@ -172,6 +172,21 @@ const AgentDirectoryEntrySchema = Type.Object(
     defaultPlatformAgent: Type.Boolean(),
     voiceProvider: Type.Union([Type.String(), Type.Null()]),
     voiceName: Type.Union([Type.String(), Type.Null()]),
+    portraitKey: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9_-]{1,39}$'})),
+    following: Type.Optional(Type.Boolean()),
+    countryCode: Type.Optional(Type.Union([Type.String({pattern:'^[A-Z]{2}$'}),Type.Null()])),
+    countryName: Type.Optional(Type.Union([Type.String(),Type.Null()])),
+    conversationStarters: Type.Optional(Type.Array(Type.String({maxLength:160}),{maxItems:4})),
+    socialChannels: Type.Optional(Type.Array(Type.Object({
+      platform:Type.Union([Type.Literal('whatsapp'),Type.Literal('telegram'),Type.Literal('youtube'),Type.Literal('tiktok'),Type.Literal('facebook'),Type.Literal('instagram'),Type.Literal('x')]),
+      url:Type.String({maxLength:2048}),
+    },{additionalProperties:false}),{maxItems:7})),
+    publicOfficialSimulation: Type.Optional(Type.Boolean()),
+    publicOfficial: Type.Optional(Type.Object({
+      officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
+      reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
+      verification:Type.Literal('source_reviewed'),representation:Type.Literal('ai_simulation'),
+    },{additionalProperties:false})),
   },
   { additionalProperties: false },
 );
@@ -852,11 +867,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         },
       },
       async (request) => ({
-        agents: [
-          ...(await directory.list({
-            authorizationHeader: request.headers.authorization,
-          })),
-        ],
+        agents: (await directory.list({authorizationHeader:request.headers.authorization})).map(entry=>{
+          const {conversationStarters,socialChannels,publicOfficial,...rest}=entry;
+          return {...rest,
+            ...(conversationStarters?{conversationStarters:[...conversationStarters]}:{}),
+            ...(socialChannels?{socialChannels:socialChannels.map(channel=>({...channel}))}:{}),
+            ...(publicOfficial?{publicOfficial:{...publicOfficial}}:{}),
+          };
+        }),
       }),
     );
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'visual_test_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +12,7 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 
 class _Session extends Mock implements LiveVoiceSession {}
 
-Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false}) async {
+Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false,Future<void>? readiness}) async {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   const toneChannel = MethodChannel('masanawa/call_tone');
   messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
@@ -19,7 +21,7 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
   when(() => session.audioInterrupted).thenReturn(false);
   when(() => session.errors).thenAnswer((_) => const Stream<String>.empty());
   when(() => session.states).thenAnswer((_) => Stream.value(LiveVoiceState.listening));
-  when(() => session.ready).thenAnswer((_) => Future<void>.value());
+  when(() => session.ready).thenAnswer((_) => readiness ?? Future<void>.value());
   when(() => session.start()).thenAnswer((_) async {});
   when(() => session.close()).thenAnswer((_) async {});
   when(() => session.mute(any())).thenAnswer((_) async {});
@@ -27,7 +29,7 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
   final agent = AgentDirectoryEntry(
     characterId: 'agent', characterVersionId: 'v1',
     displayName: 'Amina', roleLabel: 'Medicine', about: '',
-    presence: AgentPresence.available,publicOfficialSimulation:official,
+    presence: AgentPresence.available,publicOfficialSimulation:official,portraitKey:official?null:'amina',
   );
   await tester.pumpWidget(MaterialApp(
     theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -53,6 +55,25 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
 }
 
 void main() {
+  setUpAll(loadVisualTestFonts);
+  testWidgets('outgoing call stage and persistent controls have a reviewed phone portrait baseline',(tester)async{
+    tester.view.physicalSize=const Size(390,844);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    final readiness=Completer<void>();
+    final session=await _openCall(tester,readiness:readiness.future);
+    final context=tester.element(find.byKey(const ValueKey('live-call-masana-portrait')));
+    await tester.runAsync(()=>precacheImage(const AssetImage('assets/masana/portraits/amina.webp'),context));
+    await tester.pump();
+    expect(tester.getCenter(find.byKey(const ValueKey('live-call-masana-portrait'))).dx,closeTo(195,1));
+    expect(tester.getCenter(find.byTooltip('Speaker')).dy,greaterThan(650));
+    expect(tester.getCenter(find.byTooltip('Mute')).dy,greaterThan(650));
+    expect(tester.getCenter(find.byTooltip('End call')).dy,greaterThan(650));
+    await expectLater(find.byKey(const ValueKey('masanawa-live-call-screen')),
+      matchesGoldenFile('goldens/masana-call-phone.png'));
+    readiness.complete();await tester.pump();
+    await tester.tap(find.text('End call'));await tester.pump();await tester.pump(const Duration(milliseconds:400));
+    verify(()=>session.close()).called(greaterThanOrEqualTo(1));
+  });
   testWidgets('public-official call discloses simulation at 320dp and 200% text', (tester) async {
     tester.view.physicalSize=const Size(320,568);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
@@ -68,7 +89,7 @@ void main() {
     expect(tester.getSize(screen),const Size(800,600));
     expect(find.byType(BottomSheet),findsNothing);
     expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
-      const ValueKey('live-call-masana-portrait'))).size, 160);
+      const ValueKey('live-call-masana-portrait'))).size, 200);
     expect(find.text('Mute'),findsOneWidget);
     expect(find.text('Speaker'),findsOneWidget);
     expect(find.text('End call'), findsOneWidget);
@@ -95,7 +116,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final session = await _openCall(tester, largeText: true);
     expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
-      const ValueKey('live-call-masana-portrait'))).size, 144);
+      const ValueKey('live-call-masana-portrait'))).size, 176);
     await tester.drag(find.byType(SingleChildScrollView),
       const Offset(0, -450));
     await tester.pump(const Duration(milliseconds: 250));
@@ -122,7 +143,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await _openCall(tester, largeText: true);
     expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
-      const ValueKey('live-call-masana-portrait'))).size, 116);
+      const ValueKey('live-call-masana-portrait'))).size, 128);
     expect(find.byTooltip('Mute'), findsOneWidget);
     expect(find.byTooltip('Speaker'), findsOneWidget);
     await tester.drag(find.byType(SingleChildScrollView),

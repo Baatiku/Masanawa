@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +38,7 @@ void main() {
       "Prof. Mei Lin",
     ];
     expect(names.length, 26);
+    final decodedPhotos=<String>{};
     for (final name in names) {
       final photo = portraitPhotoAssetFor(name);
       final avatar = portraitAssetFor(name);
@@ -44,11 +47,16 @@ void main() {
       expect(photo!.endsWith('.webp'), isTrue, reason: 'Expected .webp for $name');
       final bytes = await rootBundle.load(photo);
       expect(bytes.lengthInBytes, greaterThan(1000), reason: 'Photo byte size for $name');
+      final raw=bytes.buffer.asUint8List(bytes.offsetInBytes,bytes.lengthInBytes);
+      final codec=await ui.instantiateImageCodec(raw),frame=await codec.getNextFrame();
+      expect(frame.image.width,greaterThanOrEqualTo(384));expect(frame.image.height,greaterThanOrEqualTo(384));
+      decodedPhotos.add(sha256.convert(raw).toString());frame.image.dispose();codec.dispose();
       expect(avatar, isNotNull, reason: name);
       expect(banner, isNotNull, reason: name);
       expect((await rootBundle.loadString(avatar!)).contains('<svg'), true);
       expect((await rootBundle.loadString(banner!)).contains('<svg'), true);
     }
+    expect(decodedPhotos,hasLength(26),reason:'Every packaged portrait must decode and be distinct');
     // Server-assigned canonical IDs alone never imply which bundled portrait
     // belongs to the agent. Only an approved server portraitKey may bind it.
     const keys = [

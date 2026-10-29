@@ -1,3 +1,4 @@
+import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -29,6 +30,10 @@ class _SignedIn extends SessionController {
   }
 }
 
+class _EmptyDirectory extends AgentDirectoryController {
+  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false);
+}
+
 class _EmptyStatus implements FeedApi {
   @override Future<FeedPage> list({required String mode,String? cursor}) async =>
     const FeedPage([],null);
@@ -46,7 +51,7 @@ void main(){
       contains('status'));
     expect(MasanawaRootTab.fromQuery('status'),MasanawaRootTab.status);
     expect(MasanawaRootTab.fromQuery('home'),MasanawaRootTab.status);
-    expect(MasanawaRootTab.fromQuery('data').location,'/home?tab=data');
+    expect(MasanawaRootTab.fromQuery('data').location,'/home?tab=wallet');
     final router=File('lib/src/router/app_router.dart').readAsStringSync();
     final shell=File('lib/src/shell/five_tab_shell.dart').readAsStringSync();
     expect(router,contains("initialLocation: '/home'"));
@@ -66,6 +71,7 @@ void main(){
     try {
     await tester.pumpWidget(ProviderScope(overrides:[
       sessionProvider.overrideWith(_SignedIn.new),
+      agentDirectoryProvider.overrideWith(_EmptyDirectory.new),
       statusFeedApiProvider.overrideWithValue(_EmptyStatus()),
     ],child:MaterialApp(
       locale:const Locale('ha'),
@@ -80,7 +86,7 @@ void main(){
     expect(nav.destinations.length,5);
     final labels=nav.destinations
       .map((destination)=>(destination as NavigationDestination).label).toList();
-    expect(labels,['Gida','Chats','Walati','Calls','Data']);
+    expect(labels,['Gida','Chats','Walati','Calls','Bayanan martaba']);
     expect(MasanawaRootTab.values.length,5);
     expect(MasanawaRootTab.fromQuery('status'),MasanawaRootTab.status);
     expect(MasanawaRootTab.fromQuery('home'),MasanawaRootTab.status);
@@ -100,6 +106,8 @@ void main(){
 
   testWidgets('Notifications push and Back restore the same Home tab',
       (tester) async {
+    final semantics=tester.ensureSemantics();
+    try {
     final dio=Dio();
     dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
       final data=options.path.endsWith('/agent/notifications/preferences')
@@ -112,13 +120,15 @@ void main(){
     }));
     addTearDown(()=>dio.close(force:true));
     final router=GoRouter(initialLocation:'/home',routes:[
-      GoRoute(path:'/home',builder:(_,__)=>const FiveTabShell()),
+      GoRoute(path:'/home',builder:(_,state)=>FiveTabShell(initialIndex:MasanawaRootTab.fromQuery(state.uri.queryParameters['tab']).index)),
+      GoRoute(path:'/wallet/redeem',builder:(_,_)=>const Scaffold(body:Text('Data redemption route'))),
       GoRoute(path:'/notifications',builder:(_,__)=>
         const NotificationPreferencesScreen()),
     ]);
     addTearDown(router.dispose);
     await tester.pumpWidget(ProviderScope(overrides:[
       sessionProvider.overrideWith(_SignedIn.new),
+      agentDirectoryProvider.overrideWith(_EmptyDirectory.new),
       statusFeedApiProvider.overrideWithValue(_EmptyStatus()),
       apiClientProvider.overrideWithValue(ApiClient(dio:dio)),
     ],child:MaterialApp.router(
@@ -136,6 +146,18 @@ void main(){
     await tester.pumpAndSettle();
     expect(find.byType(StatusScreen),findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,0);
+    await tester.tap(find.descendant(of:find.byType(NavigationBar),matching:find.text('Bayanan martaba')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,4);
+    expect(find.bySemanticsLabel(RegExp('Edit your profile')),findsOneWidget);
+    expect(find.text('Settings'),findsNothing,reason:'Embedded profile must not add a second heading');
+    await tester.tap(find.descendant(of:find.byType(NavigationBar),matching:find.text('Walati')));
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet'),findsNothing,reason:'Wallet has no redundant root heading');
+    await tester.ensureVisible(find.text('Redeem Data'));await tester.tap(find.text('Redeem Data'));
+    await tester.pumpAndSettle();expect(find.text('Data redemption route'),findsOneWidget);
+    expect(router.canPop(),isTrue);
     expect(tester.takeException(),isNull);
+    } finally {semantics.dispose();}
   });
 }

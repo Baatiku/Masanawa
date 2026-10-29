@@ -1,3 +1,5 @@
+**29 October owner navigation update:** Exactly five roots are Home, Chats, Wallet, Calls, Profile. Profile replaces the dedicated Data root; Wallet keeps Buy Data and Redeem Data as authenticated secondary journeys. Legacy Data links continue to redemption, never to Profile. Remove redundant Status/Saved root controls and Wallet/Calls headings; preserve the shared branded header, source-grounded personas, ordinary sharing and MB tips. Older Data-root wording below is superseded.
+
 **Owner scope correction, 29 October 2026:** Remove Share & Earn, paid sharing and paid Boost, including admin-funded rewards on official posts. Keep ordinary Share and purchased-MB tipping. Earlier monetization requirements are retired, not completed. Preserve historical receipts, liabilities, refunds and recovery; never erase financial history or repurpose reward balances. This instruction supersedes older paid-promotion scope below.
 
 # Masanawa — canonical product roadmap

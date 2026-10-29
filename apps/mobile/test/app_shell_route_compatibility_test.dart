@@ -11,7 +11,8 @@ void main() {
     expect(shellRootTabIndex('status'), 0);
     expect(shellRootTabIndex('wallet'), 2);
     expect(shellRootTabIndex('calls'), 3);
-    expect(shellRootTabIndex('data'), 4);
+    expect(shellRootTabIndex('profile'), 4);
+    expect(shellRootTabIndex('data'), 2);
     expect(shellRootTabIndex('rooms'), 0);
     expect(shellRootTabIndex('home'), 0);
     expect(shellRootTabIndex('agents'), 0);

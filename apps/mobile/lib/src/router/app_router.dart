@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import '../gb_wallet/data_redemption_screen.dart';
 import '../gb_wallet/gb_retained_finance_screens.dart';
 import '../gb_wallet/ngn_funding_screen.dart';
 import '../gb_wallet/recharge_screen.dart';
@@ -54,6 +56,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final path = state.matchedLocation;
 
+      if (path == '/home' && state.uri.queryParameters['tab'] == 'data') return '/wallet/redeem';
       if (path == '/splash') return '/home';
       if (path == '/chat' || path == '/chats') return '/home?tab=chats';
       if (path == '/agents') return '/home?tab=chats';
@@ -277,7 +280,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/privacy', redirect: (_, __) => '/settings'),
       GoRoute(path: '/human/requests', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
-      GoRoute(path: '/billing', redirect: (_, __) => '/home?tab=data'),
+      GoRoute(path: '/billing', redirect: (_, __) => '/wallet/redeem'),
+      GoRoute(path: '/wallet/redeem', builder: (context, _) => Scaffold(
+        appBar: AppBar(title: const Text('Redeem Data'),leading:BackButton(
+          onPressed:()=>context.canPop()?context.pop():context.go('/home?tab=wallet'))),
+        body: const DataRedemptionScreen())),
       GoRoute(path: '/crypto', redirect: (_, __) => '/home?tab=wallet'),
       GoRoute(path: '/profile', builder: (_, _) => const EditProfileScreen()),
     ],

@@ -117,6 +117,11 @@ export function createGeminiLiveTokenService(input: {
             characterId,
           }))
         : null;
+      // Configured platform personas must keep their explicit assigned voice.
+      // Missing/revoked metadata must never make every persona use the global default.
+      if(input.platformProfiles && (!profile || profile.voiceProvider.toLowerCase()!=='gemini' || !profile.voiceName.trim())) {
+        throw new CallHistoryError('calls.masana_unavailable',403);
+      }
       const creatorVoice = profile ? null : await observe("published-voice", async () => input.creatorVoiceReader?.readPublished({
         tenantId:admission.scope.tenantId,characterId,
       }) ?? null);

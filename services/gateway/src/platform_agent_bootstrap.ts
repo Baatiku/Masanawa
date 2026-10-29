@@ -188,7 +188,8 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
    }else if(profile.voiceProvider.toLowerCase()==="gemini" && profile.voiceName!==seed.voiceName &&
      // Migrate only old shared stock voices. Preserve staff-selected voices.
      ((seed.key==="gwana"&&["Sulafat","Fora"].includes(profile.voiceName)) ||
-      (seed.key!=="gwani"&&seed.key!=="gwana"&&["Bodi","Fora"].includes(profile.voiceName)))){
+      (seed.key!=="gwani"&&seed.key!=="gwana"&&["Bodi","Fora"].includes(profile.voiceName)) ||
+      (profile.revision===1 && ["Aoede","Kore","Sulafat"].includes(profile.voiceName)))){
      // Owner-authorized 26-persona roster revision. Preserve identity and use
      // optimistic revision fencing; never create replacement Masana.
      await input.profiles.put({expectedRevision:profile.revision,profile:{

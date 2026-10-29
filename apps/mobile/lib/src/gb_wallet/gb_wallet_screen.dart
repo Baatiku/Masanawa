@@ -53,12 +53,6 @@ class GbWalletScreen extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text('Wallet',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700)),
-          ),
           GbWalletBalanceCard(balance: balance, loading: loading, compact: true,
             ownerName: session is SessionSignedIn ? session.user.name : null),
           if (balance == null && !loading)
@@ -114,7 +108,7 @@ class GbWalletScreen extends ConsumerWidget {
                   width: tileWidth,
                   label: 'Redeem Data',
                   icon: Icons.sim_card_outlined,
-                  onTap: () => context.go('/home?tab=data'),
+                  onTap: () => context.push('/wallet/redeem'),
                 ),
                 _WalletShortcut(
                   width: tileWidth,
