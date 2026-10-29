@@ -98,13 +98,13 @@ export async function admitOfficialDossier(pool:Pool,raw:unknown,reviewedBy:stri
   if(packet.socialSource){
    const s=packet.socialSource;
    // Preserve stable account bindings and old-source history on platform changes.
-   await c.query(`UPDATE feed.official_social_sources SET state='suspended',lease_token=NULL,lease_until=NULL
+   await c.query(`UPDATE feed.official_social_sources SET state='suspended',lease_token=NULL,lease_until=NULL,inspection_lease=NULL,inspection_lease_until=NULL
     WHERE tenant_id=$1 AND character_id=$2 AND state='approved'`,[packet.tenantId,packet.characterId]);
    const source=await c.query(`INSERT INTO feed.official_social_sources(tenant_id,character_id,platform,account_id,handle,
     rights_basis,state,reviewed_by,review_expires_at) VALUES($1,$2,$3,$4,$5,$6,'approved',$7,$8)
     ON CONFLICT(tenant_id,platform,account_id) DO UPDATE SET handle=EXCLUDED.handle,rights_basis=EXCLUDED.rights_basis,
      state='approved',reviewed_by=EXCLUDED.reviewed_by,review_expires_at=EXCLUDED.review_expires_at,
-     cursor=NULL,next_sync_at=clock_timestamp(),lease_token=NULL,lease_until=NULL
+     cursor=NULL,next_sync_at=clock_timestamp(),next_inspection_at=clock_timestamp(),lease_token=NULL,lease_until=NULL,inspection_lease=NULL,inspection_lease_until=NULL
     WHERE feed.official_social_sources.character_id=EXCLUDED.character_id RETURNING id`,
     [packet.tenantId,packet.characterId,s.platform,s.accountId,s.handle,s.rightsBasis,reviewedBy,s.reviewExpiresAt]);
    if(!source.rows[0])throw Error('official_social_identity_reassignment_forbidden');

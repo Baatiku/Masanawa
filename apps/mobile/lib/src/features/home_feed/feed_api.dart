@@ -18,7 +18,7 @@ class OfficialPostSource {
     final valid = platform == 'x'
       ? url.host == 'x.com' && RegExp(r'^/[A-Za-z0-9_]{1,15}/status/[0-9]+$').hasMatch(url.path)
       : platform == 'facebook' && ['facebook.com','www.facebook.com'].contains(url.host) &&
-        (RegExp(r'^/[^/]+/posts/[^/]+/?$').hasMatch(url.path) || url.path == '/permalink.php' && url.queryParameters.containsKey('story_fbid') && url.queryParameters.containsKey('id'));
+        (RegExp(r'^/[^/]+/posts/[^/]+/?$').hasMatch(url.path) || ['/permalink.php','/story.php'].contains(url.path) && RegExp(r'^[0-9]{1,30}$').hasMatch(url.queryParameters['story_fbid']??'') && RegExp(r'^[0-9]{1,30}$').hasMatch(url.queryParameters['id']??'') || ['/photo.php','/photo','/photo/'].contains(url.path) && RegExp(r'^[0-9]{1,30}$').hasMatch(url.queryParameters['fbid']??''));
     return valid ? OfficialPostSource(platform as String, url, at, revision) : null;
   }
 }

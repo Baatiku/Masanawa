@@ -44,3 +44,10 @@ it('rejects Facebook redirect links even when their hostname is genuine',async()
   {id:'123_42',from:{id:'123'},message:'Original',created_time:'2026-10-01',permalink_url:'https://facebook.com/l.php?u=https://evil.test'}]})});
  await expect(fetcher({...account,platform:'facebook'})).rejects.toThrow('invalid_official_permalink');
 });
+it('normalizes X edit IDs to one original while rejecting old versions',async()=>{
+ const fetcher=createOfficialSocialFetcher({xBearer:'key',fetchImpl:async()=>Response.json({data:[
+  {id:'43',author_id:'123',text:'Actual edited text',created_at:'2026-10-01',edit_history_tweet_ids:['42','43']},
+  {id:'42',author_id:'123',text:'Old text',created_at:'2026-10-01',edit_history_tweet_ids:['42','43']}]})});
+ const result=await fetcher(account);expect(result.posts).toHaveLength(1);
+ expect(result.posts[0]).toMatchObject({externalId:'42',providerId:'43',editVersion:2,originalText:'Actual edited text',sourceUrl:'https://x.com/official/status/43'});
+});

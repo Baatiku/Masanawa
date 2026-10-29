@@ -16,7 +16,7 @@ node --conditions=production services/gateway/dist/official_dossier_cli.js /secu
 
 Preview includes the normalized packet hash and optional source-account metadata for review. Applying the same latest approved packet returns the same receipt.
 
-The command reads `MASANAWA_DATABASE_URL` or `DATABASE_URL` from the environment. Never pass a database URL as an argument or paste it into chat. Output contains preview metadata or a review receipt/hash; errors omit connection strings and source contents. Application requires migrations through Masana 0012 and Feed 0018. It never provisions identities, changes financial flags or enables the social importer.
+The command reads `MASANAWA_DATABASE_URL` or `DATABASE_URL` from the environment. Never pass a database URL as an argument or paste it into chat. Output contains preview metadata or a review receipt/hash; errors omit connection strings and source contents. Application requires migrations through Masana 0012 and Feed 0022. It never provisions identities, changes financial flags or enables the social importer.
 
 ## Packet fields
 
@@ -50,4 +50,28 @@ A source-account packet is part of the same atomic review. Switching the chosen 
 
 Text questions and nonempty media captions supply at most 500 characters of search input through the authorized tenant/persona/version admission. The reader keeps required biography/primary identity evidence and ranks the remaining bounded excerpts using sanitized terms against the public corpus. Excerpts center on matching terms (including matches beyond the beginning of a document), retain source URLs/dates, and use bounded UTF-8/JSON evidence budgets. A question about an older position can retrieve that record instead of only recent statements. Search input never updates the shared corpus or changes private conversation scope.
 
-This is lexical retrieval, with no guarantee of semantic or cross-language coverage. Voice notes with no caption and ongoing live calls still use the reviewed baseline evidence; live speech-to-retrieval integration, factual evaluations, actual source packets, provider deletion compliance and the live pilot remain open. Do not describe this tool or passing tests as verified impersonation quality or a production launch.
+Public text and captionless voice notes use ephemeral multilingual query translation before retrieval, after the paid-turn hold. Verified source IDs and literal quotations are checked before output; uncertainty falls back safely. Calls have a server-controlled read-only public-evidence tool with fresh account/version checks. These controls do not establish the accuracy of every possible model answer; actual reviewed packets and model qualification remain required. Do not describe this tool or passing tests as verified impersonation quality or a production launch.
+
+## Reviewed gold-case evaluation
+
+Create 5–30 reviewed cases covering `fact`, `unknown`, `quotation`, `injection` and `language`. Each has `id`, `kind`, `question`, optional `mustInclude`/`mustNotInclude`; factual, quotation and language cases require expected answer fragments and a reviewed `sourceUrl`. Gold cases are reviewed assertions, not generated truths. Include changing office/party dates, disputed claims, exact quotations, English/Hausa/Yoruba/Igbo questions and unsupported private/promissory requests.
+
+Preview validates the packet/cases without contacting a provider:
+
+```sh
+node --conditions=production services/gateway/dist/official_evaluation_cli.js /secure/path/packet.json /secure/path/cases.json
+```
+
+An explicit provider run uses the operator's existing server `MASANAWA_GEMINI_API_KEY` and `MASANAWA_GEMINI_MODEL` and incurs inference usage:
+
+```sh
+node --conditions=production services/gateway/dist/official_evaluation_cli.js /secure/path/packet.json /secure/path/cases.json --run
+```
+
+The report binds the normalized packet hash, model and case IDs. It logs no secret values or raw provider responses. The offline packet evaluator is a gold-case smoke test, not live-call or complete production retrieval acceptance. Keep failed/NOT_RUN cohorts hidden. Human source/rights review and an actual sourced pilot remain required; passing fixtures cannot activate anyone.
+
+## Original-source operations
+
+Head polling runs independently of backfill, so historical pagination cannot hide new posts. Two workers process at most eight source/inspection jobs per timer tick; the timer does not overlap an unfinished batch. Actual cadence depends on provider access and quotas. HTTP 429 backoff is durable per platform across instances; explicit access denial suspends a source and hides its originals at read time.
+
+An independent bounded per-object lookup checks previously imported posts for edits, withdrawal/withholding and access loss. Missing timeline entries and partial lookup responses do not prove deletion. Only explicit per-ID absence/access evidence withdraws content; hashes and required receipts remain. X edit history binds one canonical original to the latest provider ID, old edits cannot overwrite newer ones, original publication timestamps remain stable, and Facebook photo/story links retain attribution. Inspection failures preserve original data and retry checkpoints.

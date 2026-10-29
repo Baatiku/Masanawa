@@ -1,5 +1,5 @@
 import {createOfficialSocialSync} from './official_social_store.js';
-import {createOfficialSocialFetcher} from './official_social_import.js';
+import {createOfficialSocialFetcher,createOfficialSocialInspector} from './official_social_import.js';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 import {createUsernameStore} from './usernames.js';
 import {createGbRecipientDirectory} from './gb_wallet/recipient_directory.js';
@@ -817,7 +817,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
-      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool))} : {}),
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,{includeSocial:true}))} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
@@ -1476,7 +1476,7 @@ export async function startGatewayService(
             ? { activity: database.mobileActivity }
             : {}),
           ...(database.featurePool ? {
-            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool)),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,{includeSocial:true})),
           } : {}),
         })
       : undefined);
@@ -1802,14 +1802,21 @@ export async function startGatewayService(
           throw new GbCallReviewError('gb.call.not_reserved',409);
         if(!await approvedCallMasana(actor,admission.characterId))
           throw new GbCallReviewError('gb.call.masana_unavailable',404);
-        const validateOwner=async()=>{
-          const current=await conversationAuthorizer!.authorize({
-            authorizationHeader,characterId:parseCanonicalId('character',admission.characterId),
-          });
-          if(current.scope.tenantId!==actor.tenantId||current.scope.userId!==actor.userId)
-            throw new Error('gb.call.unauthorized');
+        const initial=await conversationAuthorizer!.authorize({authorizationHeader,characterId:parseCanonicalId('character',admission.characterId)});
+        const authorizeOwner=async(query?:string)=>{
+          const current=await conversationAuthorizer!.authorize({authorizationHeader,
+            characterId:parseCanonicalId('character',admission.characterId),...(query?{evidenceQuery:query.slice(0,500)}:{})});
+          if(current.scope.tenantId!==actor.tenantId||current.scope.userId!==actor.userId||
+            current.characterVersionId!==initial.characterVersionId)throw new Error('gb.call.unauthorized');
+          return current;
         };
+        const validateOwner=async()=>{await authorizeOwner();};
         await validateOwner();
+        const readOfficialEvidence=initial.presentation.narrative?.publicOfficial?async(query:string)=>{
+          const current=await authorizeOwner(query);
+          if(!current.presentation.narrative?.publicOfficial)throw Error('official_evidence_unavailable');
+          return current.presentation.narrative.publicOfficial;
+        }:undefined;
         const provider=await mbLiveVoiceTokens!.mint({authorizationHeader,
           characterId:admission.characterId});
         // One history identity per durable admission, including grant retries.
@@ -1825,7 +1832,7 @@ export async function startGatewayService(
             createCanonicalId('request').slice('request_'.length),admission.characterId,admission.expiresAt,id]);
         const callId=history.rows[0]?.call_id;
         if(!callId)throw new GbCallReviewError('gb.call.masana_unavailable',404);
-        return mbRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner);
+        return mbRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner,readOfficialEvidence);
       },
       finish:(actor,id)=>mbRelay!.finish(actor,id),
     }:undefined);
@@ -2194,13 +2201,14 @@ export async function startGatewayService(
   });
 
   if(database.featurePool&&env.MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED==='true'){
-    const sync=createOfficialSocialSync(database.featurePool,createOfficialSocialFetcher({
+    const socialConfig={
       ...(env.MASANAWA_OFFICIAL_X_BEARER?{xBearer:env.MASANAWA_OFFICIAL_X_BEARER}:{}),
       ...(env.MASANAWA_OFFICIAL_FACEBOOK_BEARER?{facebookBearer:env.MASANAWA_OFFICIAL_FACEBOOK_BEARER}:{}),
       ...(env.MASANAWA_OFFICIAL_FACEBOOK_VERSION?{facebookVersion:env.MASANAWA_OFFICIAL_FACEBOOK_VERSION}:{}),
-    }));
+    };
+    const sync=createOfficialSocialSync(database.featurePool,createOfficialSocialFetcher(socialConfig),createOfficialSocialInspector(socialConfig));
     const run=async()=>{if(officialSocialRunning||drain.isDraining())return;officialSocialRunning=true;
-      try{await sync.runOnce();}catch{console.error(JSON.stringify({event:'official.source_sync_unavailable'}));}
+      try{const results=await sync.runBatch(2);if(results.some(r=>r.status==='rejected'))console.error(JSON.stringify({event:'official.source_sync_unavailable'}));}catch{console.error(JSON.stringify({event:'official.source_sync_unavailable'}));}
       finally{officialSocialRunning=false;}};
     officialSocialTimer=setInterval(()=>{void run();},60000);officialSocialTimer.unref();
   }

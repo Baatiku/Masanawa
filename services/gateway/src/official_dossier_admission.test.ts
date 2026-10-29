@@ -36,7 +36,7 @@ it('atomically admits only exact new official identities, preserves withdrawn ev
  await db.query(`INSERT INTO masana.character_revisions VALUES($1,$2,'approved')`,[p.tenantId,p.characterId]);
  const pg={query:(s:string,v?:unknown[])=>db.query(s,v),connect:async()=>({query:(s:string,v?:unknown[])=>db.query(s,v),release(){}})};
  await db.exec(await readFile(new URL('../../../packages/feed/migrations/0001_feed.sql',import.meta.url),'utf8'));
- for(const name of ['0017_official_social_sources.sql','0018_official_social_review_history.sql'])await db.exec(await readFile(new URL('../../../packages/feed/migrations/'+name,import.meta.url),'utf8'));
+ for(const name of ['0017_official_social_sources.sql','0018_official_social_review_history.sql','0022_official_social_reconciliation.sql'])await db.exec(await readFile(new URL('../../../packages/feed/migrations/'+name,import.meta.url),'utf8'));
  const source={platform:'x',accountId:'123',handle:'example',rightsBasis:'Reviewed original account usage',reviewExpiresAt:p.reviewExpiresAt};
  const first=await admitOfficialDossier(pg as never,p,'reviewer');expect(first.evidenceCount).toBe(2);expect(first.packetSha256).toHaveLength(64);
  expect(await admitOfficialDossier(pg as never,p,'reviewer')).toEqual(first);

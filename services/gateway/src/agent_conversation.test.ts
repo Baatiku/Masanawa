@@ -376,3 +376,28 @@ it.each(['turn','mediaTurn','mediaSetTurn'] as const)('MB %s prevents inference 
  await expect(admitted[method](request)).rejects.toThrow('run storage failed');
  expect(failTurn).toHaveBeenCalledOnce();expect(execute).not.toHaveBeenCalled();
 });
+
+it('official retrieval runs after the turn hold and cannot change the admitted user or version',async()=>{
+ const f=fixture(),session=sessionFor(f);let held=false,foreign=false;const fail=vi.fn(async()=>{});
+ const official={officialName:'Example Official',office:'Governor',countryCode:'NG' as const,identitySourceUrl:'https://example.gov.ng',reviewedAt:'2026-10-01',reviewExpiresAt:'2099-01-01',evidence:[]};
+ const admission={...f.admission,presentation:{...f.admission.presentation,narrative:{biography:'',personality:[],languages:[],publicOfficial:official}}};
+ const service=createAgentConversationService({sessions:{read:async()=>session} as never,runs:{create:async()=>({}),finish:async()=>({})} as never,
+  authorizer:{authorize:async input=>{
+   if(input.evidenceQuery==='older history'){expect(held).toBe(true);return foreign?{...admission,scope:{...admission.scope,userId:createCanonicalId('user')}}:admission;}
+   return admission;
+  }},strategy:{execute:async input=>{expect(await input.readPublicEvidence!('older history')).toBe(official);return {reply:'Checked response',parts:[]};}},
+  mobileShell:{claimTurn:async()=>{held=true;return {state:'created'};},appendEvent:async()=>{},completeTurn:async()=>{},failTurn:fail,listHistory:async()=>[]} as never,sessionDurationMs:60000});
+ const request=()=>({authorizationHeader:'Bearer customer',characterId:f.scope.characterId,characterSessionId:session.characterSessionId,text:'Historical office?',requestId:createCanonicalId('request'),correlationId:createCanonicalId('correlation')});
+ expect((await service.turn(request())).reply).toBe('Checked response');foreign=true;
+ await expect(service.turn(request())).rejects.toThrow('official_evidence_scope_changed');expect(fail).toHaveBeenCalled();
+});
+
+it('requires a fresh official session after a published-version change before creating a turn hold',async()=>{
+ const f=fixture(),session=sessionFor(f);let held=false;
+ const admission={...f.admission,characterVersionId:createCanonicalId('character-version'),presentation:{...f.admission.presentation,
+  narrative:{biography:'',personality:[],languages:[],publicOfficial:{officialName:'Example Official',office:'Governor',countryCode:'NG' as const,identitySourceUrl:'https://example.gov.ng',reviewedAt:'2026-10-01',reviewExpiresAt:'2099-01-01',evidence:[]}}}};
+ const service=createAgentConversationService({sessions:{read:async()=>session} as never,runs:{} as never,authorizer:{authorize:async()=>admission},strategy:{} as never,
+  mobileShell:{claimTurn:async()=>{held=true;throw Error('must not reserve');}} as never,sessionDurationMs:60000});
+ await expect(service.turn({authorizationHeader:'Bearer customer',characterId:f.scope.characterId,characterSessionId:session.characterSessionId,text:'Hello',requestId:createCanonicalId('request'),correlationId:createCanonicalId('correlation')})).rejects.toMatchObject({code:'agents.session_closed'});
+ expect(held).toBe(false);
+});

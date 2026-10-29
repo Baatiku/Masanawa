@@ -25,6 +25,11 @@ void main() {
     expect(post.source?.url.toString(), 'https://x.com/official/status/123');
     expect(post.source?.revision, 1);
   });
+  test('accepts original Facebook photo and story links without accepting redirects', () {
+    for(final url in ['https://www.facebook.com/photo.php?fbid=42&id=123','https://www.facebook.com/story.php?story_fbid=42&id=123']) {
+      expect(OfficialPostSource.parse({'platform':'facebook','url':url,'originalPublishedAt':'2026-10-01T00:00:00Z','revision':1})?.url.toString(),url);
+    }
+  });
   test('rejects unsafe or redirect source links', () {
     for (final url in [
       'http://x.com/official/status/123',
