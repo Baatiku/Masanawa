@@ -36,7 +36,8 @@ beforeAll(async()=>{
     [tenant,`masana_${kind}_${seed.key}`,id,kind,`assets/${seed.key}`]);
   }
   const profile={handle:seed.handle,displayName:"Staff renamed "+seed.key,profession:seed.roleLabel,
-   portraitMediaId:"masana_portrait_"+seed.key,bannerMediaId:"masana_banner_"+seed.key};
+   portraitMediaId:"masana_portrait_"+seed.key,bannerMediaId:"masana_banner_"+seed.key,
+   ...(index===0?{biographicalFacts:{dateOfBirth:"1964-05-14",stateOfOrigin:"Kaduna"}}:{})};
   await db.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
    VALUES($1,$2,1,'approved',$3::jsonb,'staff',now()),($1,$2,2,'draft',$4::jsonb,NULL,NULL)`,
    [tenant,id,JSON.stringify(profile),JSON.stringify({...profile,portraitMediaId:"masana_portrait_mei"})]);
@@ -95,4 +96,21 @@ it("rejects cross-character media and inactive or creator-owned stock lookalikes
  await db.query("UPDATE identity.characters SET state='active' WHERE tenant_id=$1 AND character_id=$2",[tenant,id]);
  await db.query("UPDATE identity.character_ownership SET kind='creator' WHERE tenant_id=$1 AND character_id=$2",[tenant,id]);
  expect((await read()).has(id)).toBe(false);
+});
+it('projects optional approved biography facts through SQL and the actual HTTP serializer',async()=>{
+ const id=ids[0]!;
+ const officials={read:async()=>null,simulations:async()=>new Set([id]),directory:async()=>new Map([[id,{
+  officialName:'Synthetic official',office:'Synthetic office',identitySourceUrl:'https://grokipedia.com/page/Example',
+  reviewedAt:'2026-10-28T00:00:00Z',reviewExpiresAt:'2099-01-01T00:00:00Z',verification:'source_reviewed' as const,representation:'ai_simulation' as const}]])};
+ const reader=createPgAgentMasanaIdentityReader({query},officials);
+ const service=createAgentDirectoryService({presentations,identities:reader,
+  authorizer:{authorize:async()=>({tenantId:tenant,userId:user,characterIds:[id]})}});
+ const app=createGatewayApp({agentDirectory:service});
+ try{
+  const response=await app.inject({url:'/agent/directory',headers:{authorization:'Bearer owner'}});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().agents[0].publicOfficial.biographicalFacts).toEqual({dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'});
+  // The same approved revision cannot grant public-official facts without a current dossier.
+  expect((await identities.read({tenantId:tenant,userId:user,characterIds:[id]})).get(id)?.publicOfficial).toBeUndefined();
+ }finally{await app.close();}
 });

@@ -8,6 +8,19 @@ Map<String,dynamic> profile()=>{'characterId':'official-1','characterVersionId':
   'identitySourceUrl':'https://example.gov.ng/governor','reviewedAt':'2020-01-01T00:00:00Z',
   'reviewExpiresAt':'2099-01-01T00:00:00Z','verification':'source_reviewed','representation':'ai_simulation'}};
 void main(){
+ test('optional birth and origin facts survive live parsing but never offline verification',(){
+  final raw=profile();
+  raw['publicOfficial']=Map<String,dynamic>.from(raw['publicOfficial'] as Map);
+  (raw['publicOfficial'] as Map)['biographicalFacts']={'dateOfBirth':'1964-05-14','stateOfOrigin':'Kaduna'};
+  final agent=AgentDirectoryEntry.fromJson(raw);
+  expect(agent.publicOfficial?.dateOfBirth,'1964-05-14');
+  expect(agent.publicOfficial?.stateOfOrigin,'Kaduna');
+  expect(AgentDirectoryEntry.fromJson(agent.toJson()).publicOfficial,isNull);
+  for(final birth in ['1964-02-30','3000-01-01','not-a-date']){
+   (raw['publicOfficial'] as Map)['biographicalFacts']={'dateOfBirth':birth};
+   expect(AgentDirectoryEntry.fromJson(raw).publicOfficial?.dateOfBirth,isNull);
+  }
+ });
  test('fresh reviewed metadata earns provenance tick; offline cache preserves AI disclosure only',(){
   final agent=AgentDirectoryEntry.fromJson(profile());
   expect(agent.publicOfficialSimulation,isTrue);expect(agent.publicOfficial?.current,isTrue);

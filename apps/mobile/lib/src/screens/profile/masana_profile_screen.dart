@@ -2,6 +2,7 @@ import '../../agents/public_official_badge.dart';
 import '../../calls/masana_voice_route.dart';
 import 'persona_biography.dart';
 import 'package:flutter/material.dart';
+import '../../tokens/feature_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -144,6 +145,9 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
     final current = directory.find(widget.agent.characterId);
     final agent = current ?? widget.agent;
     final colors = context.masanawa;
+    final profileAccent = Theme.of(context).brightness == Brightness.dark
+        ? colors.brand
+        : MasanawaFeatureColors.deepEmerald;
     final session = ref.watch(sessionProvider);
     if (session is! SessionSignedIn ||
         session.user.id != _owner ||
@@ -200,20 +204,13 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Theme.of(context).colorScheme.primaryContainer,
-                          Theme.of(context).colorScheme.surfaceContainerLow,
-                        ],
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: profileAccent.withValues(alpha: .07),
                       ),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Center(
                       child: MasanaPortraitAvatar(agent: agent, size: 132),
                     ),
                   ),
@@ -232,26 +229,34 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                         PublicOfficialBadge(identity: agent.publicOfficial!),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      agent.publicOfficial?.office ?? agent.roleLabel,
+                      if (agent.countryName != null) agent.countryName!,
+                    ].join(' · '),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.textMuted, fontSize: 16),
+                  ),
                   if (agent.publicOfficialSimulation)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text(
-                        'AI persona · Not the official or their office',
-                        textAlign: TextAlign.center,
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: profileAccent.withValues(alpha: .08),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Text(
+                          'AI persona · Not the real official',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: profileAccent, fontSize: 12),
+                        ),
                       ),
                     ),
-                  const SizedBox(height: 6),
-                  Text(
-                    agent.roleLabel,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: colors.brand, fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    agent.presenceLabel,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: colors.textMuted),
-                  ),
                   if (directory.error != null || current == null) ...[
                     const SizedBox(height: 12),
                     Card(
@@ -290,45 +295,94 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: _openChat,
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        label: const Text('Chat'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          if (_sameAccount) {
-                            context.push(
-                              masanaLiveVoiceRoute(agent.characterId),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.call_outlined),
-                        label: const Text('Call'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _followPending ? null : _toggleFollow,
-                        icon: _followPending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                _following
-                                    ? Icons.check
-                                    : Icons.person_add_alt_outlined,
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: profileAccent,
+                              foregroundColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                  : Colors.white,
+                              minimumSize: const Size(0, 56),
+                              textStyle: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
                               ),
-                        label: Text(_following ? 'Following' : 'Follow'),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: _openChat,
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text('Chat'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 56),
+                              textStyle: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              backgroundColor: profileAccent.withValues(
+                                alpha: .09,
+                              ),
+                              foregroundColor: profileAccent,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: () {
+                              if (_sameAccount) {
+                                context.push(
+                                  masanaLiveVoiceRoute(agent.characterId),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.call_outlined),
+                            label: const Text('Call'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(144, 44),
                       ),
-                    ],
+                      onPressed: _followPending ? null : _toggleFollow,
+                      icon: _followPending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              _following
+                                  ? Icons.check
+                                  : Icons.person_add_alt_outlined,
+                            ),
+                      label: Text(_following ? 'Following' : 'Follow'),
+                    ),
                   ),
                   PersonaBiography(
                     agent: agent,

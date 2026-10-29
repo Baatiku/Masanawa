@@ -186,6 +186,7 @@ const AgentDirectoryEntrySchema = Type.Object(
       officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
       reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
       verification:Type.Literal('source_reviewed'),representation:Type.Literal('ai_simulation'),
+      biographicalFacts:Type.Optional(Type.Object({dateOfBirth:Type.Optional(Type.String({pattern:'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'})),stateOfOrigin:Type.Optional(Type.String({maxLength:100})),cityOfOrigin:Type.Optional(Type.String({maxLength:100}))},{additionalProperties:false})),
     },{additionalProperties:false})),
   },
   { additionalProperties: false },

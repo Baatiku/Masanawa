@@ -29,6 +29,8 @@ AgentDirectoryEntry example({bool reviewed = true}) => AgentDirectoryEntry(
           'https://grokipedia.com/page/Example',
           DateTime.utc(2026, 10, 28),
           DateTime.utc(2099),
+          dateOfBirth: '1964-05-14',
+          stateOfOrigin: 'Kaduna',
         )
       : null,
 );
@@ -61,6 +63,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Biography'), findsOneWidget);
       expect(find.text('Nigeria'), findsOneWidget);
+      expect(find.text('May 14, 1964'), findsOneWidget);
+      final birth = tester.getRect(
+        find.byKey(const ValueKey('quick-fact-Date of birth')),
+      );
+      final origin = tester.getRect(
+        find.byKey(const ValueKey('quick-fact-State of origin')),
+      );
+      expect(birth.size, origin.size);
+      expect(birth.top, origin.top);
+      expect(birth.right, lessThan(origin.left));
       await tester.tap(find.text('What shaped your public service?'));
       expect(questions, ['What shaped your public service?']);
       await tester.ensureVisible(find.text('Read biography source'));
@@ -105,6 +117,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Read biography source'), findsNothing);
+      expect(find.text('Date of birth'), findsNothing);
+      expect(find.text('State of origin'), findsNothing);
       await tester.ensureVisible(
         find.textContaining('A current source review is unavailable.'),
       );

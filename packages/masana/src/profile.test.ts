@@ -34,3 +34,12 @@ describe("Masana profile admission",()=>{
   });
 
 });
+
+import {validateMasanaBiographicalFacts} from './index.js';
+it('preserves optional approved facts and rejects impossible or invented fact fields',()=>{
+ expect(validateMasanaProfile({...profile,biographicalFacts:{dateOfBirth:'1964-05-14',stateOfOrigin:' Kaduna '}}).biographicalFacts)
+  .toEqual({dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'});
+ expect(validateMasanaProfile(profile).biographicalFacts).toBeUndefined();
+ for(const facts of [{dateOfBirth:'1964-02-30'},{dateOfBirth:'3000-01-01'},{cityOfOrigin:''},{stateOfOrigin:'A\u202eB'},{party:'guessed'},[]])
+  expect(()=>validateMasanaBiographicalFacts(facts)).toThrow();
+});

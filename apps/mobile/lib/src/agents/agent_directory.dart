@@ -1,7 +1,8 @@
 class PublicOfficialIdentity {
-  const PublicOfficialIdentity(this.officialName,this.office,this.sourceUrl,this.reviewedAt,this.expiresAt);
+  const PublicOfficialIdentity(this.officialName,this.office,this.sourceUrl,this.reviewedAt,this.expiresAt,{this.dateOfBirth,this.stateOfOrigin,this.cityOfOrigin});
   final String officialName,office,sourceUrl;
   final DateTime reviewedAt,expiresAt;
+  final String? dateOfBirth,stateOfOrigin,cityOfOrigin;
   bool get current=>!reviewedAt.isAfter(DateTime.now().toUtc())&&expiresAt.isAfter(DateTime.now().toUtc());
   static PublicOfficialIdentity? read(Object? raw){
     if(raw is! Map||raw['verification']!='source_reviewed'||raw['representation']!='ai_simulation')return null;
@@ -11,7 +12,14 @@ class PublicOfficialIdentity {
     if(name is! String||name.trim().isEmpty||name.length>160||office is! String||office.isEmpty||office.length>240||
       uri==null||uri.scheme!='https'||uri.host.isEmpty||uri.userInfo.isNotEmpty||uri.hasFragment||
       reviewed==null||expires==null||!expires.isAfter(reviewed))return null;
-    final result=PublicOfficialIdentity(name,office,url as String,reviewed,expires);
+    final facts=raw['biographicalFacts'];
+    String? fact(String key) { final v=facts is Map?facts[key]:null;
+      return v is String && v.trim().isNotEmpty && v.length<=100 ? v.trim():null; }
+    final birth=fact('dateOfBirth');
+    final date=birth==null?null:DateTime.tryParse(birth);
+    final validBirth=birth!=null&&RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(birth)&&date!=null&&date.toIso8601String().startsWith(birth)&&!date.isAfter(DateTime.now().toUtc());
+    final result=PublicOfficialIdentity(name,office,url as String,reviewed,expires,
+      dateOfBirth:validBirth?birth:null,stateOfOrigin:fact('stateOfOrigin'),cityOfOrigin:fact('cityOfOrigin'));
     return result.current?result:null;
   }
 }
