@@ -14,6 +14,16 @@ import {OFFICIAL_LAUNCH_BIOGRAPHIES} from './official_launch_biographies.js';
 
 export type {OfficialRosterSubject} from './official_roster_manifest.js';
 export function officialRosterIntroduction(name:string){return `Independent AI simulation based on ${name}. Not the official or their office.`;}
+// Generic synthetic voices, never a clone of an official. Keep the first
+// presidential group distinct and avoid assigning the former shared female
+// default to male public figures. Existing staff voice selections are preserved.
+export function officialRosterVoice(subject:OfficialRosterSubject,index:number):string{
+ if(subject.officialName==='Dahiru Aishatu Ahmed')return 'Fola';
+ const maleVoices=['Algenib','Algieba','Charon','Puck','Bodi','Zeno','Mako','Varo','Knox','Rami','Gero','Olin','Daro'];
+ const voice=maleVoices[index%maleVoices.length]!;
+ if(!APPROVED_MASANA_VOICES.some(v=>v===voice))throw Error('official_voice_not_approved');
+ return voice;
+}
 /** Called inside the existing tenant catalogue advisory lock. Register new
  * canonical subjects first; do not advertise an incomplete biography as a
  * working official. No fictional identity, conversation or money is reassigned. */
@@ -26,7 +36,6 @@ export async function ensureOfficialPlatformAgents(input:{
 }){
  const roster=input.roster??OFFICIAL_ROSTER_MANIFEST;
  const all=[...await input.presentations.listAll({tenantId:input.tenantId})];
- const voices=APPROVED_MASANA_VOICES;
  const skills=(await input.skillDistribution.listForAudience('platform-support')).filter(s=>s.installMode!=='hidden').map(s=>s.skillVersionId);
  let registered=0;
  for(const [index,subject] of roster.entries()){
@@ -65,7 +74,7 @@ export async function ensureOfficialPlatformAgents(input:{
   }
   if(!await input.profiles.readForCharacter({tenantId:input.tenantId,characterId})){
    await input.profiles.put({expectedRevision:null,profile:{schemaVersion:1,tenantId:input.tenantId,characterId,
-    supportAgent:false,defaultForNewUsers:false,voiceProvider:'gemini',voiceName:voices[index%voices.length]!,revision:1}});
+    supportAgent:false,defaultForNewUsers:false,voiceProvider:'gemini',voiceName:officialRosterVoice(subject,index),revision:1}});
   }
   if(!await input.skillAssignments.readForCharacter({tenantId:input.tenantId,characterId})){
    await input.skillAssignments.put({expectedRevision:null,assignment:{schemaVersion:1,tenantId:input.tenantId,characterId,

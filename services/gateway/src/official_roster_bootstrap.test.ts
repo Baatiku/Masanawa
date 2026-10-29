@@ -5,7 +5,7 @@ import {createCanonicalId,nowInstant} from '@masanawa/contracts';
 import {withTransaction,createPostgresIdentityRepository,createPostgresAgentPresentationRepository,
  createPostgresCharacterSkillAssignmentRepository,createPostgresPlatformAgentProfileRepository,
  createPostgresCharacterVersionReader} from '@masanawa/postgres';
-import {ensureOfficialPlatformAgents,activateAdmittedOfficialRoster,type OfficialRosterSubject} from './official_roster_bootstrap.js';
+import {ensureOfficialPlatformAgents,activateAdmittedOfficialRoster,officialRosterVoice,type OfficialRosterSubject} from './official_roster_bootstrap.js';
 import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 import {admitOfficialDossier} from './official_dossier_admission.js';
 import {createPublishedPersonaReader} from './persona_narrative.js';
@@ -18,6 +18,8 @@ it('keeps stable separate person IDs for four presidential and 102 reported gove
  expect(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state===null).map(s=>s.party).sort()).toEqual(['ADC','APC','NDC','PDP']);
  expect(new Set(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state!==null).map(s=>s.state)).size).toBe(28);
  expect(OFFICIAL_ROSTER_MANIFEST.every(s=>!s.biographyReady)).toBe(true);
+ expect(OFFICIAL_ROSTER_MANIFEST.slice(0,4).map(officialRosterVoice)).toEqual(['Algenib','Algieba','Charon','Puck']);
+ expect(officialRosterVoice(OFFICIAL_ROSTER_MANIFEST[10]!,10)).toBe('Fola');
 });
 it('creates real canonical officials, admits an actual reviewed packet, activates and retires public specialists without reassigning history',async()=>{
  const db=new PGlite();const tenantId=createCanonicalId('tenant');
