@@ -110,3 +110,9 @@ Retained SPE audit scope: existing MB/NGN wallet separation, tip/recovery receip
 ## Verification for this correction
 
 Consolidated mobile sharing/tipping/feed/detail/layout batch: 45 tests PASS. Flutter analysis: zero errors/warnings; 460 existing informational findings. Gateway TypeScript PASS. Gateway retirement/consent/runtime regression batch: 19 tests PASS. Exact-head hosted CI remains a delivery gate. No APK, live financial operation, source import activation or deployment performed.
+
+## Retained privacy batch — 29 October
+
+Selected: SPE-F08 private contact/geography deletion propagation and SPE-D10 notification lifecycle privacy, with SPE-D01/D03/D09 financial-record preservation. Audit found newer notification preferences, Activity presentation history and queued alerts missing from qualified erasure. The deletion worker now removes those optional copies only after canonical disablement and financial clearance, inside its existing erasure transaction. Push registrations/presence are already revoked by the canonical access revoker. Financial journals and receipts remain intact. This is a focused repair, not closure of the entire retained checklist or provider qualification.
+
+Validation: consolidated privacy/identity/contact backend batch 38 PASS; 8 real-Postgres tests skipped locally and required on hosted CI. Country/contact/profile/account-epoch/deletion Flutter batch 55 PASS. Worker TypeScript and diff checks PASS. Exact-head hosted checks remain required. No production deletion or notification dispatch is performed.

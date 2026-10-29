@@ -16,6 +16,7 @@ function harness(financial:boolean) {
     async query(sql:string,params:unknown[]=[]):Promise<any>{
       sql=sql.replace(/\s+/g," ").trim();
       calls.push({sql,params});
+      if(sql.startsWith("SELECT 1 FROM identity.users"))return {rows:[{present:1}],rowCount:1};
       if(sql.includes("FROM pg_catalog.pg_class"))return {rows:[
         {schema_name:"commerce",name:"msnw_usdt_payouts",columns:["tenant_id","user_id","state"]},
         {schema_name:"commerce",name:"msnw_p2p_orders",columns:["tenant_id","buyer_id","seller_id","state"]},
@@ -80,7 +81,11 @@ describe("account deletion financial and privacy holds",()=>{
       expectedRevision:3,now:"2026-10-18T12:00:00.000Z",
     });
     const deletes=h.calls.filter(c=>c.sql.includes("DELETE FROM"));
-    expect(deletes).toHaveLength(14);
+    expect(deletes.map(c=>c.sql)).toEqual(expect.arrayContaining([
+      expect.stringContaining('DELETE FROM agents.mobile_notification_outbox'),
+      expect.stringContaining('DELETE FROM agents.mobile_notification_history'),
+      expect.stringContaining('DELETE FROM agents.mobile_notification_preferences'),
+    ]));
     expect(deletes.every(c=>c.params[0]==="tenant-a"&&c.params[1]==="user-a"))
       .toBe(true);
     expect(deletes.every(c=>!c.sql.includes("commerce."))).toBe(true);
