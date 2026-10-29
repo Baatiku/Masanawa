@@ -33,6 +33,25 @@ export async function redactDeletedPrivateProfile(
   if(erased.rowCount!==1)throw Error("account_deletion.identity_not_disabled");
 }
 
+/** Remove optional notification state after identity disablement, never financial journals.
+ * The caller owns the erasure transaction; repeated cleanup is safe. */
+export async function redactDeletedNotifications(
+  client: Pick<PoolClient, "query">, tenantId: string, userId: string,
+): Promise<void> {
+  const disabled=await client.query(`SELECT 1 FROM identity.users
+    WHERE tenant_id=$1 AND user_id=$2 AND state='disabled'`,[tenantId,userId]);
+  if(disabled.rows.length!==1)throw Error("account_deletion.identity_not_disabled");
+  // Delete queued delivery first, then its presentation history and preferences.
+  // These are optional copies; immutable transaction receipts live elsewhere.
+  for(const table of ['mobile_notification_outbox','mobile_notification_history',
+    'mobile_notification_preferences']){
+    await client.query(`DELETE FROM agents.${table}
+      WHERE tenant_id=$1 AND user_id=$2
+        AND EXISTS(SELECT 1 FROM identity.users
+          WHERE tenant_id=$1 AND user_id=$2 AND state='disabled')`,[tenantId,userId]);
+  }
+}
+
 /**
  * Fail-closed financial preflight. Owner-associated commerce and GB wallet tables are
  * discovered from the schema, including supported account/actor/recipient ownership columns.
@@ -213,6 +232,7 @@ export function createAccountDeletionPrivacyWorker(input:{
         .update(["redacted",...scope].join(":")).digest("hex");
       await redactDeletedPublicProfile(client,row.tenant_id,row.user_id,alias,now());
       await redactDeletedPrivateProfile(client,row.tenant_id,row.user_id,alias,now());
+      await redactDeletedNotifications(client,row.tenant_id,row.user_id);
       await advance(client,current,"completed",now());
       return true;
     });
