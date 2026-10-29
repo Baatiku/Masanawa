@@ -1,4 +1,4 @@
-import {statusAuthorOwnership} from "./author_scope.js";
+import {statusAuthorOwnership,officialSourceEligibility} from "./author_scope.js";
 import type {Pool} from "pg";
 /** PG18 tenant-scoped implementation. Composition injects the canonical Masana approved-revision check. */
 type Row=Record<string,unknown>;
@@ -13,6 +13,7 @@ function item(r:Row){
   avatarUrl:r.author_avatar==null?null:String(r.author_avatar),
  }:{type:'masana' as const,id:authorMasanaId,displayName:authorName};
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
+  ...(r.source_provenance?{source:r.source_provenance as {platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number}}:{}),
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
@@ -83,16 +84,19 @@ const projection=`p.*,
 // Resolve comment authors only through tenant-matched active user public profiles.
 // Comments bind $2 as the post UUID; the signed-in viewer is $3, unlike
 // list/detail/reaction endpoints. Never compare a UUID slot with a human ID.
-const commentEligibleAuthor=eligibleAuthor.replace(/\$2\b/g,"$3");
+
 const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  AND person.handle ~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$'
  THEN jsonb_build_object('type','human','id',person.user_id,
    'handle',person.handle,'displayName',person.display_name)
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
- constructor(private readonly pool:Pool){}
+ // Production enables the new schema policy; false supports pre-migration fixture stores.
+ constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false){}
+ private get access(){return this.enforceOfficialSources?`(${eligibleAuthor} AND ${officialSourceEligibility})`:eligibleAuthor;}
+ private get commentAccess(){return this.access.replace(/\$2\b/g,"$3");}
  async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true) {
-  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${eligibleAuthor}
+  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${this.access}
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
     OR ($3::text='following' AND (
@@ -112,7 +116,7 @@ export class PgHomeFeedRepository {
   return rows.rows.map(item);
  }
  async find(tenant:string,viewer:string|null,id:string,masanaOnly=true){
-  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor}
+  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access}
    AND (NOT $4::boolean OR p.author_type='masana')`,[tenant,viewer,id,masanaOnly]);
   return rows.rows[0]?item(rows.rows[0]):null;
  }
@@ -125,6 +129,7 @@ export class PgHomeFeedRepository {
    JOIN masana.character_revisions m USING(tenant_id,character_id)
    WHERE a.tenant_id=$1 AND a.character_id=$3 AND $2=$3
      AND a.state='active' AND o.kind='platform' AND m.state='approved'
+     ${this.enforceOfficialSources?"AND NOT EXISTS(SELECT 1 FROM masana.public_official_dossiers d WHERE d.tenant_id=a.tenant_id AND d.character_id=a.character_id)":''}
    ON CONFLICT(tenant_id,published_by,idempotency_key) DO NOTHING
    RETURNING id`,[tenant,publisher,v.authorMasanaId,v.kind,v.body,v.media,v.transcript,v.idempotencyKey]);
   const existing=await this.pool.query(`SELECT id,author_masana_id,kind,body,media_ids,transcript FROM feed.posts
@@ -143,7 +148,7 @@ export class PgHomeFeedRepository {
   if(enabled){
    const result=await this.pool.query(`WITH eligible AS (
     SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
-     AND p.state='published' AND ${eligibleAuthor}
+     AND p.state='published' AND ${this.access}
    ), inserted AS (
     INSERT INTO feed.likes(tenant_id,post_id,fan_id,reaction_kind)
     SELECT $1,id,$2,'like' FROM eligible
@@ -160,7 +165,7 @@ export class PgHomeFeedRepository {
   if(kind!==null){
    const result=await this.pool.query(` WITH eligible AS (
     SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
-     AND p.state='published' AND ${eligibleAuthor}
+     AND p.state='published' AND ${this.access}
    ), changed AS (
     INSERT INTO feed.likes(tenant_id,post_id,fan_id,reaction_kind)
     SELECT $1,id,$2,$4 FROM eligible
@@ -171,7 +176,7 @@ export class PgHomeFeedRepository {
   }else{
    const result=await this.pool.query(` WITH eligible AS (
     SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
-     AND p.state='published' AND ${eligibleAuthor}
+     AND p.state='published' AND ${this.access}
    ), deleted AS (
     DELETE FROM feed.likes l USING eligible e
     WHERE l.tenant_id=$1 AND l.post_id=e.id AND l.fan_id=$2
@@ -185,7 +190,7 @@ export class PgHomeFeedRepository {
   if(enabled){
    const result=await this.pool.query(`WITH eligible AS (
     SELECT p.id FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid
-     AND p.state='published' AND ${eligibleAuthor}
+     AND p.state='published' AND ${this.access}
    ), inserted AS (
     INSERT INTO feed.saves(tenant_id,post_id,fan_id)
     SELECT $1,id,$2 FROM eligible WHERE true ON CONFLICT DO NOTHING RETURNING post_id
@@ -198,7 +203,7 @@ export class PgHomeFeedRepository {
  async comment(tenant:string,fan:string,post:string,body:string,key:string,pending:boolean,parentId:string|null=null){
   const rows=await this.pool.query(`WITH inserted AS (
    INSERT INTO feed.comments(tenant_id,post_id,fan_id,body,state,idempotency_key,parent_comment_id)
-   SELECT $1,p.id,$2,$4,$5,$6,$7::uuid FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${eligibleAuthor} AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM feed.comments parent WHERE parent.tenant_id=$1 AND parent.post_id=p.id AND parent.id=$7::uuid AND parent.state='visible' AND parent.parent_comment_id IS NULL))
+   SELECT $1,p.id,$2,$4,$5,$6,$7::uuid FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access} AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM feed.comments parent WHERE parent.tenant_id=$1 AND parent.post_id=p.id AND parent.id=$7::uuid AND parent.state='visible' AND parent.parent_comment_id IS NULL))
    ON CONFLICT(tenant_id,fan_id,idempotency_key) DO UPDATE
    SET idempotency_key=EXCLUDED.idempotency_key
    WHERE feed.comments.post_id=EXCLUDED.post_id AND feed.comments.body=EXCLUDED.body AND feed.comments.parent_comment_id IS NOT DISTINCT FROM EXCLUDED.parent_comment_id
@@ -233,7 +238,7 @@ export class PgHomeFeedRepository {
    LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
      AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
-   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${commentEligibleAuthor})
+   AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${this.commentAccess})
    AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3))
    AND ($4::uuid IS NULL OR (CASE WHEN $6::text='newest' THEN (c.created_at,c.id)<(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) ELSE (c.created_at,c.id)>(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) END))
    ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,[tenant,post,viewer,before,limit,sort]);

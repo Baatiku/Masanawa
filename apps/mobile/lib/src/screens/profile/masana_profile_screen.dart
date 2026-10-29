@@ -1,3 +1,4 @@
+import '../../agents/public_official_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -82,6 +83,15 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
     }
   }
 
+  Future<void> _openBiographySource(String url) async {
+    if (!_sameAccount) return;
+    try {
+      if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) throw StateError('Unavailable');
+    } catch (_) {
+      if (_sameAccount) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Could not open the biography source.')));
+    }
+  }
+
   String _channelName(String platform) => switch (platform) {
     'whatsapp' => 'WhatsApp',
     'telegram' => 'Telegram',
@@ -132,8 +142,16 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Center(child: MasanaPortraitAvatar(agent: agent, size: 112)),
           const SizedBox(height: 16),
-          Text(agent.displayName, textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall),
+          Wrap(alignment:WrapAlignment.center,crossAxisAlignment:WrapCrossAlignment.center,spacing:6,children:[
+            Text(agent.displayName, textAlign: TextAlign.center,style:Theme.of(context).textTheme.headlineSmall),
+            if(agent.publicOfficial!=null)PublicOfficialBadge(identity:agent.publicOfficial!),
+          ]),
+          if(agent.publicOfficialSimulation)const Padding(padding:EdgeInsets.only(top:6),child:Text(
+            'AI persona · Not the official or their office',textAlign:TextAlign.center)),
+          if(agent.publicOfficial!=null)TextButton.icon(
+            onPressed:()=>_openBiographySource(agent.publicOfficial!.sourceUrl),
+            icon:const Icon(Icons.open_in_new,size:16),
+            label:Text('Biography source · Reviewed ${MaterialLocalizations.of(context).formatMediumDate(agent.publicOfficial!.reviewedAt.toLocal())}',textAlign:TextAlign.center)),
           const SizedBox(height: 6),
           Text(agent.roleLabel, textAlign: TextAlign.center,
               style: TextStyle(color: colors.brand, fontSize: 16)),

@@ -1,3 +1,21 @@
+class PublicOfficialIdentity {
+  const PublicOfficialIdentity(this.officialName,this.office,this.sourceUrl,this.reviewedAt,this.expiresAt);
+  final String officialName,office,sourceUrl;
+  final DateTime reviewedAt,expiresAt;
+  bool get current=>!reviewedAt.isAfter(DateTime.now().toUtc())&&expiresAt.isAfter(DateTime.now().toUtc());
+  static PublicOfficialIdentity? read(Object? raw){
+    if(raw is! Map||raw['verification']!='source_reviewed'||raw['representation']!='ai_simulation')return null;
+    final name=raw['officialName'],office=raw['office'],url=raw['identitySourceUrl'];
+    final reviewed=DateTime.tryParse('${raw['reviewedAt']}'),expires=DateTime.tryParse('${raw['reviewExpiresAt']}');
+    final uri=url is String?Uri.tryParse(url):null;
+    if(name is! String||name.trim().isEmpty||name.length>160||office is! String||office.isEmpty||office.length>240||
+      uri==null||uri.scheme!='https'||uri.host.isEmpty||uri.userInfo.isNotEmpty||uri.hasFragment||
+      reviewed==null||expires==null||!expires.isAfter(reviewed))return null;
+    final result=PublicOfficialIdentity(name,office,url as String,reviewed,expires);
+    return result.current?result:null;
+  }
+}
+
 /// A public official channel admitted through an approved server revision.
 class AgentSocialChannel {
   const AgentSocialChannel({required this.platform, required this.url});
@@ -93,8 +111,12 @@ class AgentDirectoryEntry {
     this.socialChannels = const [],
     this.countryCode,
     this.countryName,
+    this.publicOfficial,
+    this.publicOfficialSimulation=false,
   });
 
+  final PublicOfficialIdentity? publicOfficial;
+  final bool publicOfficialSimulation;
   final String characterId;
   final String characterVersionId;
   final String displayName;
@@ -147,6 +169,7 @@ class AgentDirectoryEntry {
         conversationStarters: conversationStarters,
         socialChannels: socialChannels,
         countryCode:countryCode,countryName:countryName,
+        publicOfficialSimulation:publicOfficialSimulation,
       );
 
   String get initial =>
@@ -163,6 +186,7 @@ class AgentDirectoryEntry {
         'characterId': characterId,
         'characterVersionId': characterVersionId,
         'displayName': displayName,
+        if(publicOfficialSimulation) 'publicOfficialSimulation':true,
         'roleLabel': roleLabel,
         'about': about,
         'presence': switch (presence) {
@@ -199,6 +223,8 @@ class AgentDirectoryEntry {
 
     final work = json['activeWorkCount'];
     return AgentDirectoryEntry(
+      publicOfficial:PublicOfficialIdentity.read(json['publicOfficial']),
+      publicOfficialSimulation:json['publicOfficialSimulation']==true||json['publicOfficial'] is Map,
       characterId: requiredString('characterId'),
       characterVersionId: requiredString('characterVersionId'),
       displayName: requiredString('displayName'),

@@ -15,7 +15,6 @@ import '../../features/home_feed/feed_screen.dart';
 import '../../features/home_feed/feed_post_detail_screen.dart';
 import '../../features/home_feed/saved_status_library_screen.dart';
 import '../../features/home_feed/status_promotion_api.dart';
-import '../../features/home_feed/status_promotion_sheet.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
@@ -237,7 +236,6 @@ class StatusSavedScreen extends ConsumerWidget {
     Future<void> openPost(
       FeedPost post,
       bool boostAvailable,
-      Future<void> Function(String) boostAction,
     ) async {
       if (currentAccount() != account) return;
       final latest = await feed.detail(post.id);
@@ -267,30 +265,10 @@ class StatusSavedScreen extends ConsumerWidget {
             engagementApi: feed,
             onSharePost: shareOriginal,
             shareEarnEnabled: boostAvailable,
-            onBoostPost: boostAvailable
-                ? (id) => unawaited(boostAction(id))
-                : null,
+            onBoostPost: null,
           );
         }),
       ));
-    }
-
-    Future<void> boost(String postId) async {
-      if (currentAccount() != account) return;
-      // Repeat capability discovery at the moment of an attempted spend.
-      if (!await promotions.available()) return;
-      if (!context.mounted || currentAccount() != account) return;
-      await showModalBottomSheet<StatusPromotionCampaign>(
-        context: context,
-        isScrollControlled: true,
-        builder: (sheetContext) => StatusPromotionSheet(
-          api: promotions,
-          postId: postId,
-          onRecharge: () async {
-            await sheetContext.push<void>('/wallet/add');
-          },
-        ),
-      );
     }
 
     return FutureBuilder<bool>(
@@ -301,7 +279,7 @@ class StatusSavedScreen extends ConsumerWidget {
         api: feed,
         accountKey: account,
         isAccountCurrent: () => currentAccount() == account,
-        openPost: (post) => openPost(post, ability.data == true, boost),
+        openPost: (post) => openPost(post, ability.data == true),
         authorDirectory: authors,
         mediaApi: media,
         onOpenMedia: openMedia,
@@ -310,9 +288,7 @@ class StatusSavedScreen extends ConsumerWidget {
         shareEarnEnabled: ability.data == true,
         onHumanProfile: openHuman,
         onMasanaProfile: openMasana,
-        onBoostPost: ability.data == true
-            ? (id) => unawaited(boost(id))
-            : null,
+        onBoostPost: null,
       ),
     );
   }

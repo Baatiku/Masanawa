@@ -1,8 +1,10 @@
+import '../../agents/public_official_badge.dart';
 import 'package:flutter/material.dart';
 
 import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import 'feed_api.dart';
+import 'official_post_source_link.dart';
 
 /// A post's display name is not authority to choose a portrait. Only a
 /// matching, account-scoped directory identity supplies an approved photo.
@@ -73,14 +75,12 @@ class StatusPostAuthorHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
+                  Row(children:[Expanded(child:Text(name,maxLines:2,overflow:TextOverflow.ellipsis,
+                    style:Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight:FontWeight.w700))),
+                    if(canonical?.publicOfficial!=null)PublicOfficialBadge(identity:canonical!.publicOfficial!),
+                  ]),
+                  if(canonical?.publicOfficialSimulation==true)Text('AI persona',style:Theme.of(context).textTheme.labelSmall),
+                  if(post.source!=null) OfficialPostSourceLink(source:post.source!),
                   const SizedBox(height: 2),
                   Tooltip(
                     message: absoluteTime,

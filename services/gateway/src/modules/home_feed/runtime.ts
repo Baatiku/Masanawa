@@ -71,6 +71,18 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
    return identity;
   };
   const enabled=options.enabled??(()=>true);
+  // Owner pivot: reject old-client publication/spending entry points before
+  // any repository write; historical receipt/cancel/delete recovery survives.
+  scope.addHook('preHandler',async(request,reply)=>{
+    const path=request.routeOptions.url??'';
+    const writing=request.method==='POST'||request.method==='PUT'||request.method==='PATCH';
+    const retired=writing&&path.startsWith('/v1/promotions/')&&(
+      (path==='/v1/promotions/drafts'||path.startsWith('/v1/promotions/drafts/')&&!path.endsWith('/discard'))||
+      path.startsWith('/v1/promotions/quotes')||path.endsWith('/revisions')||path.endsWith('/resume'));
+    if(retired){await resolve(request);return reply.code(410).header('Cache-Control','private, no-store')
+      .send({code:'user_publishing_retired'});}
+  });
+
   // Media routes read the tenant before principal; authenticate once before
   // any feature handler so every existing route observes the same session.
   scope.addHook("preHandler",async request=>{if(enabled())await resolve(request);});
@@ -105,7 +117,7 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
   if(options.promotions)await registerPromotionRoutes(scope,{
     port:options.promotions,principal:resolve,
     isEditor:async session=>await options.isEditor?.(session)===true,
-    enabled:options.promotionsEnabled??(()=>false),
+    enabled:()=>false,
   });
   if(options.guestReview)await registerStatusGuestReviewRoutes(scope,{
     port:options.guestReview.port,principal:resolve,

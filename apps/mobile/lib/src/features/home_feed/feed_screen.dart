@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../agents/agent_directory.dart';
 import '../../theme/masanawa_theme.dart';
@@ -18,7 +17,6 @@ import 'status_post_social_proof.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 import 'feed_post_detail_screen.dart';
 import 'status_promotion_api.dart';
-import 'status_promotion_sheet.dart';
 import 'my_status_promotions_screen.dart';
 import 'status_qualified_view_observer.dart';
 import 'status_reaction_picker.dart';
@@ -235,33 +233,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     }catch(_){/* An accepted server event is not undone by a stale read. */}
   }
 
-  Future<void> openPromotion({String? postId,bool photoRequested=false}) async {
-    final api=widget.promotions;
-    if(api==null||!promotionsAvailable||widget.accountKey.isEmpty)return;
-    final scope=generation,account=widget.accountKey;
-    final result=await showModalBottomSheet<StatusPromotionCampaign>(
-      context:context,isScrollControlled:true,showDragHandle:false,
-      builder:(ctx)=>StatusPromotionSheet(api:api,postId:postId,
-        initialPhotoRequested:photoRequested,
-        // Go directly to the existing Add MB/packages journey; the parent
-        // sheet keeps its local draft and re-quotes only after returning.
-        onRecharge:()async{await ctx.push<void>('/wallet/add');}),
-    );
-    if(!mounted||scope!=generation||widget.accountKey!=account||result==null)return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
-      result.state=='pending_review'
-        ?t('Submitted for review. Budget reserved.','An tura don dubawa. An ajiye MB.')
-        :t('Boost confirmed. Budget reserved.','An tabbatar da kara yadawa. An ajiye MB.'))));
-    await refresh();
-  }
-
   Future<void> openMyPromotions() async {
     final api=widget.promotions;
     if(api==null||widget.accountKey.isEmpty)return;
     final account=widget.accountKey,scope=generation;
-    final page=MyStatusPromotionsScreen(api:api,canBoost:promotionsAvailable,
-      onBoostAgain:(postId)=>openPromotion(postId:postId),
-      onCreatePromotion:()=>openPromotion());
+    final page=MyStatusPromotionsScreen(api:api,canBoost:false,
+      onCreatePromotion:null);
     await Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>
       widget.wrapAccountRoute?.call(page)??page));
     if(mounted&&scope==generation&&account==widget.accountKey)await refresh();
@@ -499,7 +476,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             inlineMediaRenderer: widget.inlineMediaRenderer,
             audioPlaybackAvailable: widget.audioPlaybackAvailable,
             authorDirectory: widget.authorDirectory,
-            onBoostPost: promotionsAvailable ? (id) => openPromotion(postId: id) : null,
+            onBoostPost:null,
             engagementApi: feed,
             onSharePost: sharePost,
             shareEarnEnabled: promotionsAvailable,
@@ -664,55 +641,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               },
             ),
           ),
-        if (!widget.authorScoped&&!widget.ownPostsOnly&&promotionsAvailable)
-          Padding(padding:const EdgeInsets.fromLTRB(12,4,12,8),
-            child:Material(color:Theme.of(context).colorScheme.surface,
-              borderRadius:BorderRadius.circular(14),
-              child:Padding(padding:const EdgeInsets.all(10),child:Column(
-                crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-                Row(children:[
-                  CircleAvatar(radius:20,
-                    child:(widget.ownerName?.trim().isNotEmpty??false)
-                      ? Text(widget.ownerName!.trim().characters.first.toUpperCase())
-                      :const Icon(Icons.person_outline,size:21)),
-                  const SizedBox(width:10),
-                  Expanded(child:OutlinedButton(
-                    key:const Key('status-composer-prompt'),
-                    onPressed:()=>openPromotion(),
-                    style:OutlinedButton.styleFrom(
-                      alignment:AlignmentDirectional.centerStart,
-                      minimumSize:const Size(0,48)),
-                    child:Text(t('What would you like to promote?',
-                      'Me kuke son yaɗawa?'),maxLines:1,
-                      overflow:TextOverflow.ellipsis))),
-                ]),
-                const SizedBox(height:5),
-                Wrap(alignment:WrapAlignment.spaceBetween,
-                  crossAxisAlignment:WrapCrossAlignment.center,
-                  spacing:6,runSpacing:4,children:[
-                  TextButton.icon(
-                    key:const Key('status-composer-photo'),
-                    style:TextButton.styleFrom(minimumSize:const Size(0,48)),
-                    onPressed:()=>openPromotion(photoRequested:true),
-                    icon:const Icon(Icons.photo_library_outlined,size:19),
-                    label:Text(t('Photo','Hoto'))),
-                  IconButton(
-                    key:const Key('status-composer-manage'),
-                    tooltip:t('My promotions','Tallace-tallacena'),
-                    onPressed:openMyPromotions,
-                    icon:const Icon(Icons.receipt_long_outlined,size:20)),
-                  FilledButton(
-                    key:const Key('status-composer-promote'),
-                    style:FilledButton.styleFrom(minimumSize:const Size(0,48)),
-                    onPressed:()=>openPromotion(),
-                    child:Text(t('Promote','Yaɗa'))),
-                ]),
-              ]))),
-          ),
         // Incident mode: new spending stays OFF, but the owner must still be
         // able to review receipts, cancel reserves and delete their post.
         if (!widget.authorScoped && !widget.ownPostsOnly &&
-            !promotionsAvailable && widget.promotions != null &&
+            widget.promotions != null &&
             widget.accountKey.isNotEmpty)
           Align(
             alignment: AlignmentDirectional.centerEnd,
@@ -929,8 +861,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   StatusPostSocialProof(post: post),
                                   StatusPostBoostAction(
                                     post: post,
-                                    enabled: promotionsAvailable,
-                                    onBoost: (id) => openPromotion(postId: id),
+                                    enabled: false,
+                                    onBoost: null,
                                   ),
                                 ]),
                               ),
