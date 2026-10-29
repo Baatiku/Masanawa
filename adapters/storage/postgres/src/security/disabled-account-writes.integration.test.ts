@@ -103,10 +103,15 @@ describeDatabase("R12 account disabled write barriers", () => {
       );
       // Requests are launched while the user row is locked, so they cannot
       // write until this transaction has resolved the new canonical state.
+      const profileRepo=createPostgresPlatformSessionRepository(pool);
       const pending = Promise.allSettled([
         createPostgresPlatformSessionRepository(pool).issueSession(session()),
         createPostgresCustomerChannelRepository(pool).putLink(link()),
         createPostgresMobilePushRepository(pool).register(installation()),
+        profileRepo.updateContactGeography!({tenantId,userId,contactPhone:'+2348031234567',countryIso:'NG',subdivisionIso:'NG-FC'}),
+        profileRepo.registerDevice({tenantId,userId,deviceId:'late-private-device',at:createdAt}),
+        profileRepo.setPasswordCredential({tenantId,userId,passwordHash:'late-password-hash',createdAt}),
+        profileRepo.attachIdentity!({tenantId,userId,channel:'sms',identifier:'+2348031234567',linkedAt:createdAt}),
       ]);
       await new Promise<void>((resolve) => setTimeout(resolve, 35));
       await holder.query(
@@ -118,7 +123,10 @@ describeDatabase("R12 account disabled write barriers", () => {
       await holder.query("COMMIT");
       committed = true;
       const results = await pending;
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(7);
+      expect((await pool.query(`SELECT contact_phone FROM security.platform_user_profiles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.contact_phone).toBeNull();
+      expect((await pool.query(`SELECT 1 FROM security.platform_auth_devices WHERE tenant_id=$1 AND user_id=$2 AND device_id='late-private-device'`,[tenantId,userId])).rows).toEqual([]);
+      expect((await pool.query(`SELECT 1 FROM security.platform_device_passwords WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows).toEqual([]);
       for (const result of results) {
         expect(result.status).toBe("rejected");
         if (result.status === "rejected") {

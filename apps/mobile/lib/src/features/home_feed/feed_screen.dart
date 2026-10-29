@@ -1,3 +1,4 @@
+import 'status_post_safety_menu.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -85,6 +86,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   String mode = 'for_you';
   bool localSearchExpanded = false;
   List<FeedPost> items = [];
+  final locallyHiddenPosts=<String>{};
   String? cursor, error;
   bool loading = false, fetchingMore = false, offline = false;
   bool promotionsAvailable = false;
@@ -193,6 +195,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   @override
   void didUpdateWidget(covariant MasanaFeedScreen old) {
     super.didUpdateWidget(old);
+    if(old.accountKey!=widget.accountKey){locallyHiddenPosts.clear();}
     if (old.searchExpanded != widget.searchExpanded) {
       old.searchExpanded?.removeListener(_onExternalSearchChanged);
       widget.searchExpanded?.addListener(_onExternalSearchChanged);
@@ -269,7 +272,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       verifyOwnerProjection(page);
       if (!mounted || ticket != generation) return;
       setState(() {
-        items = page.items;
+        items = page.items.where((p)=>!locallyHiddenPosts.contains(p.id)).toList();
         cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
@@ -304,7 +307,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if (!mounted || ticket != generation) return;
       setState(() {
         final seen = items.map((p) => p.id).toSet();
-        items = [...items, ...page.items.where((p) => seen.add(p.id))];
+        items = [...items, ...page.items.where((p) => !locallyHiddenPosts.contains(p.id)&&seen.add(p.id))];
         // Avoid an infinite Load more loop for empty pages or a server cursor
         // that did not advance. Keep already loaded authorized posts.
         cursor = page.items.isEmpty || page.nextCursor == after
@@ -820,6 +823,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                                     post.authorMasanaId,
                                                   )),
                                     )),
+                                    StatusPostSafetyMenu(postId:post.id,accountKey:widget.accountKey,
+                                      api:widget.api is FeedSafetyApi?widget.api as FeedSafetyApi:null,
+                                      isCurrent:()=>mounted&&widget.enabled,
+                                      onHidden:()=>setState((){locallyHiddenPosts.add(post.id);items.removeWhere((p)=>p.id==post.id);})),
                                     if (widget.statusTips != null && !post.isHuman)
                                       IconButton(
                                         tooltip: t('Tip MB', 'Kyautar MB'),

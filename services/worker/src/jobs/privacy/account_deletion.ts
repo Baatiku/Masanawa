@@ -198,6 +198,7 @@ export function createAccountDeletionPrivacyWorker(input:{
         "DELETE FROM masana.fan_chat_preferences WHERE tenant_id=$1 AND fan_user_id=$2",
         // Deleting a follow also cascades to its per-fan mute preferences.
         "DELETE FROM masana.follows WHERE tenant_id=$1 AND fan_user_id=$2",
+        "DELETE FROM feed.hidden_posts WHERE tenant_id=$1 AND fan_id=$2",
         "DELETE FROM feed.likes WHERE tenant_id=$1 AND fan_id=$2",
         "DELETE FROM feed.saves WHERE tenant_id=$1 AND fan_id=$2",
         "DELETE FROM feed.saved_videos WHERE tenant_id=$1 AND fan_id=$2",

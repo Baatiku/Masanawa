@@ -4,6 +4,7 @@ import {createIsolatedPostgresTestDatabase} from "./isolated_test_database.js";
 import {SavedLibraryService} from "@masanawa/feed";
 import {PgSavedLibraryRepository} from "./saved_repository.js";
 import {FeedService} from "@masanawa/feed";
+import {PgPostSafetyRepository} from './safety_repository.js';
 import {PgHomeFeedRepository} from "./repository.js";
 import {PgEditorialReviewRepository} from "./review_repository.js";
 import {PgStatusPromotions} from "./promotions.js";
@@ -55,6 +56,7 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    "0010_promotion_rejection_appeals.sql","0011_promotion_budget_immutability.sql",
    "0012_reviewed_paid_post_edits.sql","0013_campaign_drafts_and_expiry.sql",
   ])await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/"+name,import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0023_post_safety.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -382,6 +384,51 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   expect(await editorial.releaseScheduled("tenant_test",draft.id,2,now)).toBe(false);
   const audit=await isolated.pool.query("SELECT count(*)::int AS n FROM feed.editorial_events WHERE post_id=$1 AND action='scheduled_release'",[draft.id]);
   expect(audit.rows[0]?.n).toBe(1);
+ });
+
+ it('persists private hiding across feed/detail/Saved and deduplicates concurrent reports without changing public content',async()=>{
+  const pool=isolated.pool;
+  await pool.query(`INSERT INTO identity.users VALUES('tenant_safety','reader','active'),('tenant_safety','limited','active'),('tenant_safety','reviewer','active');
+   INSERT INTO identity.characters VALUES('tenant_safety','safe_masana','active');
+   INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES('tenant_safety','safe_masana','platform');
+   INSERT INTO masana.character_revisions VALUES('tenant_safety','safe_masana','approved','{}');`);
+  const added=await pool.query(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,idempotency_key,published_by)
+   VALUES('tenant_safety','safe_masana','text','Unchanged original text','safety-post-key','safe_masana') RETURNING id`);
+  const id=String(added.rows[0]!.id),tenant='tenant_safety';
+  await pool.query(`INSERT INTO feed.saves(tenant_id,fan_id,post_id) VALUES($1,'reader',$2::uuid)`,[tenant,id]);
+  const reader=new PgHomeFeedRepository(pool,false,true),saved=new PgSavedLibraryRepository(pool,false,true);
+  const safety=new PgPostSafetyRepository(pool,(t,u,p)=>repo.find(t,u,p,true));
+  expect((await reader.list(tenant,'reader','for_you',null,20))).toHaveLength(1);
+  await safety.hide(tenant,'reader',id,true);await safety.hide(tenant,'reader',id,true);
+  expect(await reader.list(tenant,'reader','for_you',null,20)).toEqual([]);
+  expect(await reader.find(tenant,'reader',id)).toBeNull();
+  expect(await saved.list(tenant,'reader',null,20)).toEqual([]);
+  expect(await reader.find(tenant,'other',id)).not.toBeNull();
+  const reports=await Promise.all(Array.from({length:8},()=>safety.report(tenant,'reader',id,'inaccurate')));
+  expect(new Set(reports.map(r=>r.id)).size).toBe(1);
+  const queue=await safety.list(tenant);expect(queue.items).toHaveLength(1);
+  expect(queue.items[0]).not.toHaveProperty('reporter_id');
+  await expect(safety.report('other_tenant','reader',id,'inaccurate')).rejects.toMatchObject({status:404});
+  await safety.resolve(tenant,'reviewer',reports[0]!.id,'reviewed');
+  await safety.resolve(tenant,'reviewer',reports[0]!.id,'reviewed');
+  await expect(safety.resolve(tenant,'reviewer',reports[0]!.id,'dismissed')).rejects.toMatchObject({status:409});
+  expect((await safety.list(tenant)).items).toEqual([]);
+  await safety.hide(tenant,'reader',id,false);
+  expect(await reader.find(tenant,'reader',id)).toMatchObject({body:'Unchanged original text'});
+  expect(await saved.list(tenant,'reader',null,20)).toHaveLength(1);
+  await pool.query(`UPDATE identity.users SET state='disabled' WHERE tenant_id=$1 AND user_id='reader'`,[tenant]);
+  await expect(safety.hide(tenant,'reader',id,true)).rejects.toMatchObject({status:401});
+  await expect(safety.report(tenant,'reader',id,'privacy')).rejects.toMatchObject({status:401});
+  // A bounded quota cannot be bypassed by concurrent new reasons; original retry still works.
+  await pool.query(`INSERT INTO feed.post_reports(tenant_id,reporter_id,post_id,reason,created_at)
+   SELECT $1,'limited',p.id,'spam',clock_timestamp() FROM feed.posts p WHERE p.tenant_id=$1`,[tenant]);
+  // Set up 50 different valid original posts for this reporter.
+  const limitPosts=await pool.query(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,idempotency_key,published_by)
+   SELECT $1,'safe_masana','text','Post '||n,'limit-post-'||n,'safe_masana' FROM generate_series(1,49)n RETURNING id`,[tenant]);
+  for(const row of limitPosts.rows)await pool.query(`INSERT INTO feed.post_reports(tenant_id,reporter_id,post_id,reason)
+   VALUES($1,'limited',$2,'spam')`,[tenant,row.id]);
+  await expect(safety.report(tenant,'limited',id,'privacy')).rejects.toMatchObject({status:429});
+  expect(await safety.report(tenant,'limited',id,'spam')).toHaveProperty('id');
  });
 
 });

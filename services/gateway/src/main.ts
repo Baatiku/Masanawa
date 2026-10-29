@@ -32,7 +32,7 @@ import { createPublishedPersonaReader } from "./persona_narrative.js";
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
 import {
-  createMasanaPostgresStore, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
+  createMasanaPostgresStore, PgPostSafetyRepository, PgHomeFeedRepository, PgEditorialReviewRepository, PgStatusEligibility,
   PgStatusPromotions,
   PgStatusGuestProofs,
   PgFeedMediaAuthorization,
@@ -348,7 +348,7 @@ function createDefaultDatabaseDependency(
     readinessCheck: database.readinessCheck,
     featurePool: database.pool,
     status: {
-      feed: new PgHomeFeedRepository(database.pool,true),
+      feed: new PgHomeFeedRepository(database.pool,true,true),
       editorial: new PgEditorialReviewRepository(database.pool),
       eligibility: new PgStatusEligibility(database.pool),
       published: new PgFeedMediaAuthorization(database.pool),
@@ -1657,6 +1657,8 @@ export async function startGatewayService(
       createApprovedPublicImageReader(publicPreview,mediaConfiguration):undefined;
     status = {
       sessions,
+      ...(database.featurePool?{safety:new PgPostSafetyRepository(database.featurePool,
+        (t,u,id)=>new PgHomeFeedRepository(database.featurePool!,true).find(t,u,id,true))}:{}),
       feed: new FeedService(
         feed, author, mediaRuntime.approved,
         true,
@@ -1686,7 +1688,7 @@ export async function startGatewayService(
       }:{}),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
       ...(database.featurePool ? {saved:new SavedLibraryService(
-        new PgSavedLibraryRepository(database.featurePool,true))} : {}),
+        new PgSavedLibraryRepository(database.featurePool,true,true))} : {}),
       isEditor: async session => editors.has(session.userId),
       // Publication and media access require explicit runtime qualification;
       // a mounted route must not implicitly activate editorial operations.

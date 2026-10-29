@@ -1,3 +1,4 @@
+import 'status_post_safety_menu.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -57,6 +58,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
 
 class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   List<SavedStatusItem> items = [];
+  final locallyHiddenPosts=<String>{};
   String? cursor;
   String? error;
   bool loading = false;
@@ -84,6 +86,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
   @override
   void didUpdateWidget(covariant SavedStatusLibraryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if(oldWidget.accountKey!=widget.accountKey){locallyHiddenPosts.clear();}
     if (oldWidget.accountKey != widget.accountKey ||
         oldWidget.api != widget.api) {
       epoch++;
@@ -125,7 +128,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
       final page = await widget.api.saved();
       if (!mounted || ticket != epoch || !current) return;
       setState(() {
-        items = page.items;
+        items = page.items.where((p)=>!locallyHiddenPosts.contains(p.id)).toList();
         cursor = page.items.isEmpty ? null : page.nextCursor;
         loading = false;
         offline = false;
@@ -162,7 +165,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
         final ids = items.map((item) => '${item.isPost}-${item.id}').toSet();
         items = [
           ...items,
-          ...page.items.where((item) => ids.add('${item.isPost}-${item.id}')),
+          ...page.items.where((item) => !locallyHiddenPosts.contains(item.id)&&ids.add('${item.isPost}-${item.id}')),
         ];
         // A repeated or empty continuation is terminal, not an invitation to
         // request the same saved page forever.
@@ -424,7 +427,7 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                 if (item.post != null)
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                                    child: StatusPostAuthorHeader(
+                                    child: Row(children:[Expanded(child:StatusPostAuthorHeader(
                                       post: item.post!,
                                       agent: widget.authorDirectory[
                                           item.post!.authorMasanaId],
@@ -434,7 +437,12 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                            ()=>widget.onHumanProfile!(item.post!.authorHandle!))
                                         :(widget.onMasanaProfile==null?null:
                                            ()=>widget.onMasanaProfile!(item.post!.authorMasanaId)),
-                                    ),
+                                    )),
+                                      StatusPostSafetyMenu(postId:item.id,accountKey:widget.accountKey,
+                                        api:widget.engagementApi is FeedSafetyApi?widget.engagementApi as FeedSafetyApi:null,
+                                        isCurrent:()=>mounted&&widget.isAccountCurrent(),
+                                        onHidden:()=>setState((){locallyHiddenPosts.add(item.id);items.removeWhere((p)=>p.id==item.id);})),
+                                    ]),
                                   ),
                                 InkWell(
                                   onTap: canOpen ? () => open(item) : null,

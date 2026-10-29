@@ -61,3 +61,5 @@ export {createNgnWalletRepository} from "./gb_wallet/ngn_repository.js";
 export type {NgnActor,NgnBalance,NgnExchange,NgnReceipt} from "./gb_wallet/ngn_repository.js";
 
 export { recoverExpiredMbReplies } from "./agents/mobile-shell.js";
+
+export {PgPostSafetyRepository} from './home_feed/safety_repository.js';
