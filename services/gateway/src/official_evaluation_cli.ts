@@ -22,8 +22,8 @@ try{
    reviewedAt:new Date().toISOString(),reviewExpiresAt:packet.reviewExpiresAt,evidence:packet.evidence.map((e,i)=>({id:'evidence-'+i,sourceUrl:e.sourceUrl,title:e.title,content:e.content,sourceDate:e.sourceDate,kind:e.kind}))};
   const read=async(query:string)=>{
    const terms=(query.toLowerCase().match(/[\p{L}\p{N}]+/gu)??[]).filter(t=>t.length>=4);
-   const required=[official.evidence.find(e=>e.kind==='grokipedia')!,official.evidence.find(e=>e.kind==='official_record')!];
-   const remaining=official.evidence.filter(e=>!required.includes(e)).sort((a,b)=>terms.filter(t=>b.content.toLowerCase().includes(t)).length-terms.filter(t=>a.content.toLowerCase().includes(t)).length).slice(0,4);
+   const required=[official.evidence.find(e=>e.kind==='grokipedia')!];
+   const remaining=official.evidence.filter(e=>!required.includes(e)).sort((a,b)=>terms.filter(t=>b.content.toLowerCase().includes(t)).length-terms.filter(t=>a.content.toLowerCase().includes(t)).length).slice(0,5);
    return {...official,evidence:[...required,...remaining]};
   };
   const strategy=createProductionAgentStrategy({inference:createGeminiCredentialPoolInferenceProvider({pool:{apiKeys:[apiKey],models:[model]}}),skills:{} as never,guides:{} as never});

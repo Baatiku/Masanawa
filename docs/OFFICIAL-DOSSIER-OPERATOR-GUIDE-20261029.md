@@ -1,3 +1,7 @@
+**Grokipedia-only knowledge scope:** Chat/call persona evidence excludes X/Facebook posts as well as other biography sources. The requested verbatim X/Facebook Status feed remains separate and unchanged.
+
+**29 October owner clarification:** Grokipedia is the sole persona biography source. One actual reviewed Grokipedia article/chunk is sufficient; a second source and individual official permission are not admission requirements. Preserve source URL/content/date/audit basis. Do not substitute newspapers or an official website as biography evidence. Separately configured original social posts remain supported for the owner's requested status feed. The owner owns manual provider/live acceptance; admission still requires actual source contents, not invented biography text.
+
 # Reviewed public-official dossier admission
 
 This is a trusted server-operator tool, not a customer upload or automatic verification service. Do not run apply until the biography, source ownership, usage basis and canonical identity have been reviewed. No real official biographies are bundled in this change.
@@ -16,7 +20,7 @@ node --conditions=production services/gateway/dist/official_dossier_cli.js /secu
 
 Preview includes the normalized packet hash and optional source-account metadata for review. Applying the same latest approved packet returns the same receipt.
 
-The command reads `MASANAWA_DATABASE_URL` or `DATABASE_URL` from the environment. Never pass a database URL as an argument or paste it into chat. Output contains preview metadata or a review receipt/hash; errors omit connection strings and source contents. Application requires migrations through Masana 0012 and Feed 0022. It never provisions identities, changes financial flags or enables the social importer.
+The command reads `MASANAWA_DATABASE_URL` or `DATABASE_URL` from the environment. Never pass a database URL as an argument or paste it into chat. Output contains preview metadata or a review receipt/hash; errors omit connection strings and source contents. Application requires migrations through Masana 0013 and Feed 0022. It never provisions identities, changes financial flags or enables the social importer.
 
 ## Packet fields
 
@@ -25,12 +29,12 @@ The command reads `MASANAWA_DATABASE_URL` or `DATABASE_URL` from the environment
 | `tenantId`, `characterId`, `characterVersionId` | Existing canonical IDs with the correct kind/prefix. |
 | `officialName`, `office` | Reviewed public name and a dated office/role description; 2–160 and 2–240 characters. |
 | `countryCode` | `NG`. |
-| `identitySourceUrl` | Reviewed HTTPS reference, no credentials, custom port or fragment. |
+| `identitySourceUrl` | Direct HTTPS Grokipedia `/page/Article` reference, no credentials, query, custom port or fragment. |
 | `reviewExpiresAt` | Future ISO timestamp, at most 90 days away. A shorter period is appropriate for changing candidate/party status. |
 | `socialSource` (optional) | One reviewed original account: `platform` (`x`/`facebook`), stable numeric `accountId`, canonical `handle`, `rightsBasis`, and `reviewExpiresAt` no later than the dossier expiry. Never put API tokens in a packet. |
-| `evidence` | 2–100 reviewed records, including Grokipedia and a separate primary official record. |
+| `evidence` | 1–100 reviewed Grokipedia article/chunk records; no separate primary source. |
 
-Each evidence record has `sourceUrl`, `kind` (`grokipedia`, `official_record`, `speech`, `official_social`), `title`, `content` (1–4000 characters), `sourceDate` (`YYYY-MM-DD`), `validUntil` and `licenseBasis`. Preserve quotations exactly and distinguish factual statements, allegations and promises in the reviewed content. Chunk longer documents into coherent dated records. Source dates cannot be invalid/future dates; validity must extend beyond the present and cannot exceed the dossier review. A Grokipedia URL cannot also qualify as the required primary official record. Record page-level licensing and primary-record attribution; the tool cannot independently verify ownership or rights from a URL.
+Each evidence record has `sourceUrl`, `kind` (`grokipedia` only), `title`, `content` (1–4000 characters), `sourceDate` (`YYYY-MM-DD`), `validUntil` and `licenseBasis`. Preserve quotations exactly and distinguish factual statements, allegations and promises in the reviewed content. Chunk longer documents into coherent dated records. Source dates cannot be invalid/future dates; validity must extend beyond the present and cannot exceed the dossier review. No independent official record is required. `licenseBasis` is retained audit metadata for the actual source/use basis, not a request for individual consent or a declaration that all public content has unrestricted rights. Never invent a license or source contents.
 
 ## Canonical identity requirements and recovery
 
@@ -48,7 +52,7 @@ A source-account packet is part of the same atomic review. Switching the chosen 
 
 ## Retrieval and remaining qualification
 
-Text questions and nonempty media captions supply at most 500 characters of search input through the authorized tenant/persona/version admission. The reader keeps required biography/primary identity evidence and ranks the remaining bounded excerpts using sanitized terms against the public corpus. Excerpts center on matching terms (including matches beyond the beginning of a document), retain source URLs/dates, and use bounded UTF-8/JSON evidence budgets. A question about an older position can retrieve that record instead of only recent statements. Search input never updates the shared corpus or changes private conversation scope.
+Text questions and nonempty media captions supply at most 500 characters of search input through the authorized tenant/persona/version admission. The reader keeps current Grokipedia biography evidence and ranks the remaining bounded excerpts using sanitized terms against the public corpus. Excerpts center on matching terms (including matches beyond the beginning of a document), retain source URLs/dates, and use bounded UTF-8/JSON evidence budgets. A question about an older position can retrieve that record instead of only recent statements. Search input never updates the shared corpus or changes private conversation scope.
 
 Public text and captionless voice notes use ephemeral multilingual query translation before retrieval, after the paid-turn hold. Verified source IDs and literal quotations are checked before output; uncertainty falls back safely. Calls have a server-controlled read-only public-evidence tool with fresh account/version checks. These controls do not establish the accuracy of every possible model answer; actual reviewed packets and model qualification remain required. Do not describe this tool or passing tests as verified impersonation quality or a production launch.
 

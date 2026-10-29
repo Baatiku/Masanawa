@@ -1,8 +1,9 @@
 import {createHash,randomUUID} from 'node:crypto';
+import {isGrokipediaArticleUrl} from '@masanawa/agents';
 import {parseCanonicalId} from '@masanawa/contracts';
 import {withTransaction,type Pool} from '@masanawa/postgres';
 
-type EvidenceKind='grokipedia'|'official_record'|'speech'|'official_social';
+type EvidenceKind='grokipedia';
 export interface OfficialDossierPacket {
  tenantId:string;characterId:string;characterVersionId:string;
  officialName:string;office:string;countryCode:'NG';identitySourceUrl:string;reviewExpiresAt:string;
@@ -23,20 +24,19 @@ export function validateOfficialDossierPacket(raw:unknown,now=new Date()):Offici
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return reject();const r=raw as Record<string,unknown>;
  const expires=Date.parse(String(r.reviewExpiresAt));
  if(r.countryCode!=='NG'||!Number.isFinite(expires)||expires<=+now||expires>+now+90*86400000||
-  !Array.isArray(r.evidence)||r.evidence.length<2||r.evidence.length>100)return reject();
+  !Array.isArray(r.evidence)||r.evidence.length<1||r.evidence.length>100)return reject();
  const evidence=r.evidence.map(value=>{
   if(!value||typeof value!=='object'||Array.isArray(value))return reject();const e=value as Record<string,unknown>;
-  if(!['grokipedia','official_record','speech','official_social'].includes(String(e.kind)))return reject();
+  if(e.kind!=='grokipedia')return reject();
   const sourceUrl=url(e.sourceUrl),kind=e.kind as EvidenceKind;
-  const grokipedia=['grokipedia.com','www.grokipedia.com'].includes(new URL(sourceUrl).hostname);
-  if(kind==='grokipedia'&&!grokipedia||kind==='official_record'&&grokipedia)return reject();
+  if(!isGrokipediaArticleUrl(sourceUrl))return reject();
   const sourceDate=text(e.sourceDate,10,10),date=Date.parse(sourceDate+'T00:00:00Z'),until=Date.parse(String(e.validUntil));
   if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||!Number.isFinite(date)||new Date(date).toISOString().slice(0,10)!==sourceDate||
    date>+now||!Number.isFinite(until)||until<=+now||until>expires)return reject();
   return {sourceUrl,kind,title:text(e.title,1,240),content:text(e.content,1,4000),sourceDate,
    validUntil:new Date(until).toISOString(),licenseBasis:text(e.licenseBasis,5,500)};
  });
- if(!evidence.some(e=>e.kind==='grokipedia')||!evidence.some(e=>e.kind==='official_record'))return reject();
+ if(!isGrokipediaArticleUrl(r.identitySourceUrl))return reject();
  if(new Set(evidence.map(e=>JSON.stringify([e.sourceUrl,e.content]))).size!==evidence.length)return reject();
  let socialSource:OfficialDossierPacket['socialSource'];
  if(r.socialSource!==undefined){
