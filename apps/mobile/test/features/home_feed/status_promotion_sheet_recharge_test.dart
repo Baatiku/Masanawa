@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -56,12 +55,6 @@ class _QuoteStub extends StatusPromotionApi {
 }
 
 void main() {
-  test('the existing Home composer takes insufficient MB directly to Add MB', () {
-    final source=File('lib/src/features/home_feed/feed_screen.dart')
-      .readAsStringSync();
-    expect(source,contains("ctx.push<void>('/wallet/add')"));
-  });
-
   testWidgets('recharge return retains draft and views, refreshes quote, never auto-confirms',
       (tester) async {
     final api=_QuoteStub();

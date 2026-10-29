@@ -4,6 +4,8 @@ import type { CharacterId } from "@masanawa/contracts";
 /** Tenant and user-scoped approved identity and follow preferences. Identity
  * is looked up through the canonical server character ID, never by display name. */
 export interface ApprovedMasanaDirectoryIdentity {
+  readonly publicOfficialSimulation?:boolean;
+  readonly publicOfficial?:{officialName:string;office:string;identitySourceUrl:string;reviewedAt:string;reviewExpiresAt:string;verification:'source_reviewed';representation:'ai_simulation'};
   readonly portraitKey: string | null;
   readonly following: boolean;
   readonly socialChannels: readonly MasanaSocialChannel[];
@@ -17,6 +19,7 @@ export interface AgentMasanaIdentityReader {
 }
 export function createPgAgentMasanaIdentityReader(
   db:{query(sql:string,params:unknown[]):Promise<{rows:unknown[]}>},
+  officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>,
 ):AgentMasanaIdentityReader {
   return Object.freeze({
     async read({tenantId,userId,characterIds}:Parameters<AgentMasanaIdentityReader["read"]>[0]) {
@@ -41,6 +44,8 @@ export function createPgAgentMasanaIdentityReader(
           AND owner.character_id=revision.character_id AND owner.kind='platform'
         WHERE revision.tenant_id=$1 AND revision.character_id=ANY($2::text[])
           AND revision.state='approved'`,[tenantId,characterIds,userId]);
+      const publicRecords=await officials?.directory(tenantId,characterIds);
+      const simulations=await officials?.simulations(tenantId,characterIds);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
         const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown};
@@ -55,7 +60,7 @@ export function createPgAgentMasanaIdentityReader(
         const portraitKey=/^[a-z][a-z0-9_-]{1,39}$/.test(key) &&
           Object.hasOwn(MASANA_CHARACTER_DESIGNS,key)?key:null;
         result.set(row.character_id as CharacterId,
-          Object.freeze({portraitKey,following:row.following===true,
+          Object.freeze({...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:publicRecords.get(row.character_id)}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
       return result;

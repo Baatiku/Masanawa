@@ -2,12 +2,34 @@ import 'package:dio/dio.dart';
 
 /// Typed Status authors preserve the legacy Masana projection without
 /// misrouting human posts to Masana profiles.
+class OfficialPostSource {
+  const OfficialPostSource(this.platform, this.url, this.originalPublishedAt, this.revision);
+  final String platform;
+  final Uri url;
+  final DateTime originalPublishedAt;
+  final int revision;
+  static OfficialPostSource? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final platform = raw['platform'];
+    final url = raw['url'] is String ? Uri.tryParse(raw['url'] as String) : null;
+    final at = raw['originalPublishedAt'] is String ? DateTime.tryParse(raw['originalPublishedAt'] as String) : null;
+    final revision = raw['revision'];
+    if (url == null || url.scheme != 'https' || url.userInfo.isNotEmpty || url.hasFragment || url.hasPort || at == null || revision is! int || revision < 1) return null;
+    final valid = platform == 'x'
+      ? url.host == 'x.com' && RegExp(r'^/[A-Za-z0-9_]{1,15}/status/[0-9]+$').hasMatch(url.path)
+      : platform == 'facebook' && ['facebook.com','www.facebook.com'].contains(url.host) &&
+        (RegExp(r'^/[^/]+/posts/[^/]+/?$').hasMatch(url.path) || url.path == '/permalink.php' && url.queryParameters.containsKey('story_fbid') && url.queryParameters.containsKey('id'));
+    return valid ? OfficialPostSource(platform as String, url, at, revision) : null;
+  }
+}
+
 class FeedPost {
   const FeedPost({
     required this.id,
     required this.authorMasanaId,
     required this.kind,
     this.authorName,
+    this.source,
     this.authorType = 'masana',
     this.authorId,
     this.authorHandle,
@@ -26,6 +48,7 @@ class FeedPost {
     this.shareEarnEligible = false,
     this.boostEligible = false,
   });
+  final OfficialPostSource? source;
   final String id, authorMasanaId, kind, body, authorType;
   final String? authorName, authorId, authorHandle;
   final List<String> mediaIds;
@@ -110,6 +133,7 @@ class FeedPost {
       throw const FormatException('Invalid Status name');
     return FeedPost(
       id: json['id'] as String,
+      source: OfficialPostSource.parse(json['source']),
       authorMasanaId: type == 'masana' ? id : '',
       authorType: type as String,
       authorId: id,
@@ -154,6 +178,7 @@ class FeedPost {
     if (kind != null) counts[kind] = (counts[kind] ?? 0) + 1;
     return FeedPost(
       id: id,
+      source: source,
       authorMasanaId: authorMasanaId,
       kind: this.kind,
       authorName: authorName,
@@ -183,6 +208,7 @@ class FeedPost {
         : withReaction(liked ? 'like' : null);
     return FeedPost(
       id: result.id,
+      source: result.source,
       authorMasanaId: result.authorMasanaId,
       kind: result.kind,
       authorName: result.authorName,

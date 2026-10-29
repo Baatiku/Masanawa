@@ -3,7 +3,7 @@ import type { AgentPersonaNarrative } from '@masanawa/agents';
 import type { CharacterId, CharacterVersionId, TenantId } from '@masanawa/contracts';
 
 /** Read only the exact admitted published identity, never a draft or another tenant. */
-export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>) {
+export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>) {
   return Object.freeze({
     async readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: CharacterVersionId}): Promise<AgentPersonaNarrative | null> {
       const result = await pool.query(`SELECT v.constitution FROM identity.character_versions v
@@ -18,7 +18,8 @@ export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>) {
       if (typeof value.biography !== 'string') return null;
       const list = (key: string, max: number, length: number) => Object.freeze(Array.isArray(value[key])
         ? (value[key] as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, max).map(v => v.slice(0, length)) : []);
-      return Object.freeze({biography: value.biography.slice(0, 8000), personality: list('personality', 8, 300), languages: list('languages', 12, 32)});
+      const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId);
+      return Object.freeze({...(official?{publicOfficial:official}:{}),biography: value.biography.slice(0, 8000), personality: list('personality', 8, 300), languages: list('languages', 12, 32)});
     },
   });
 }

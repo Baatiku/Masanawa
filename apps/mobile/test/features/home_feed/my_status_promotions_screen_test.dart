@@ -18,7 +18,7 @@ class _Draft implements StatusPromotionDraftStore {
 }
 
 void main(){
- testWidgets('private Draft remains non-spendable and resumes only on owner action',
+ testWidgets('retired private Draft remains readable with no Continue action',
   (tester)async{
    final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
    dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
@@ -38,9 +38,8 @@ void main(){
    expect(find.text('Draft · Promotion'),findsOneWidget);
    expect(find.textContaining('250 selected views · no budget reserved yet'),findsOneWidget);
    expect(resumed,0);
-   await tester.tap(find.text('Continue'));
-   await tester.pumpAndSettle();
-   expect(resumed,1);
+   expect(find.text('Continue'),findsNothing);
+   expect(resumed,0);
    expect(tester.takeException(),isNull);
  });
  testWidgets('owner can review original inactive content, historical views and 72h grace',
@@ -71,9 +70,8 @@ void main(){
    expect(find.text('Owner original lesson'),findsOneWidget);
    expect(find.text('17 historical verified views'),findsOneWidget);
    expect(find.text('Expires in 71h 0m'),findsOneWidget);
-   await tester.tap(find.text('Boost again'));
-   await tester.pumpAndSettle();
-   expect(boosts,1);
+   expect(find.text('Boost again'),findsNothing);
+   expect(boosts,0);
    await tester.pumpWidget(const SizedBox.shrink());
  });
 
@@ -102,7 +100,7 @@ void main(){
    await tester.pumpWidget(MaterialApp(home:MyStatusPromotionsScreen(
      api:api,canBoost:false,onBoostAgain:(_)async{})));
    await tester.pumpAndSettle();
-   expect(find.text('New promotion spending is temporarily unavailable.'),findsOneWidget);
+   expect(find.text('User posting has been retired.'),findsOneWidget);
    expect(find.textContaining('3/8 qualified views'),findsOneWidget);
    expect(find.textContaining('0 MB still reserved'),findsNWidgets(2));
    expect(find.textContaining('5 MB still reserved'),findsNothing);

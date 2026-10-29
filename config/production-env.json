@@ -1215,6 +1215,34 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in original official social-post importer. Default off; reviewed sources, API access, provenance and compliance qualification required."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_X_BEARER",
+      "owner": "gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only X API read bearer for reviewed public-official account posts. Never exposed to mobile or logs."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_FACEBOOK_BEARER",
+      "owner": "gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only Meta bearer with approved Page read access for reviewed official sources."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_FACEBOOK_VERSION",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Pinned supported Meta Graph API version for the original official Page importer, for example v26.0; validate provider support before enabling."
     }
   ]
 }

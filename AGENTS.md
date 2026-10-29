@@ -1,5 +1,7 @@
 # Masanawa — contribution and agent execution rules
 
+**Owner pivot, 28 October 2026 — supersedes human paid-post/composer scope:** Remove user post submission/composer. Refocus new Masana identities on clearly identified AI simulations of Nigerian public officials, grounded in reviewed biographical/public-record evidence, with Grokipedia as a requested reference and corroborating primary sources. Status should preserve permitted original X/Facebook source text and attribution, with no generated replacement posts. A verification tick means checked persona/source provenance, never official endorsement or a real call to the office. Preserve chat/call billing, private memory isolation, five tabs and historical financial recovery. The former 12-item Home-composer batch is paused/superseded; do not complete or reactivate its publishing features. See [pivot plan](docs/PUBLIC-OFFICIAL-PERSONA-PIVOT-20261028.md).
+
 **Owner Data override, 27 October 2026:** The explicit 36-plan selection supersedes
 whole-GB/minimum-1000-MB restrictions for approved Data products. Support exact
 integer MB (1 GB = 1000 MB), purchased funds only, and separately described

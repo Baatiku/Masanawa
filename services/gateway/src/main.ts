@@ -1,3 +1,6 @@
+import {createOfficialSocialSync} from './official_social_store.js';
+import {createOfficialSocialFetcher} from './official_social_import.js';
+import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 import {createUsernameStore} from './usernames.js';
 import {createGbRecipientDirectory} from './gb_wallet/recipient_directory.js';
 import {flutterwaveTransportConfiguration} from "./gb_data/transport_configuration.js";
@@ -345,7 +348,7 @@ function createDefaultDatabaseDependency(
     readinessCheck: database.readinessCheck,
     featurePool: database.pool,
     status: {
-      feed: new PgHomeFeedRepository(database.pool),
+      feed: new PgHomeFeedRepository(database.pool,true),
       editorial: new PgEditorialReviewRepository(database.pool),
       eligibility: new PgStatusEligibility(database.pool),
       published: new PgFeedMediaAuthorization(database.pool),
@@ -814,7 +817,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
-      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool)} : {}),
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool))} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
@@ -1473,7 +1476,7 @@ export async function startGatewayService(
             ? { activity: database.mobileActivity }
             : {}),
           ...(database.featurePool ? {
-            identities: createPgAgentMasanaIdentityReader(database.featurePool),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool)),
           } : {}),
         })
       : undefined);
@@ -1683,7 +1686,7 @@ export async function startGatewayService(
       }:{}),
       editorial: new EditorialReviewService(editorial,author,mediaRuntime.approved),
       ...(database.featurePool ? {saved:new SavedLibraryService(
-        new PgSavedLibraryRepository(database.featurePool))} : {}),
+        new PgSavedLibraryRepository(database.featurePool,true))} : {}),
       isEditor: async session => editors.has(session.userId),
       // Publication and media access require explicit runtime qualification;
       // a mounted route must not implicitly activate editorial operations.
@@ -2147,6 +2150,8 @@ export async function startGatewayService(
     throw error;
   }
 
+  let officialSocialTimer:ReturnType<typeof setInterval>|undefined;
+  let officialSocialRunning=false;
   let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
   let statusRetention: StatusRetentionWorker | undefined;
   let replyRecoveryRunning=false;
@@ -2166,6 +2171,7 @@ export async function startGatewayService(
     onDraining: () => {
       drain.beginDraining();
       clearInterval(replyRecoveryTimer);
+      clearInterval(officialSocialTimer);
       void statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
@@ -2174,6 +2180,7 @@ export async function startGatewayService(
     },
     onAfterClose: async () => {
       clearInterval(replyRecoveryTimer);
+      clearInterval(officialSocialTimer);
       await statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
@@ -2186,6 +2193,17 @@ export async function startGatewayService(
     },
   });
 
+  if(database.featurePool&&env.MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED==='true'){
+    const sync=createOfficialSocialSync(database.featurePool,createOfficialSocialFetcher({
+      ...(env.MASANAWA_OFFICIAL_X_BEARER?{xBearer:env.MASANAWA_OFFICIAL_X_BEARER}:{}),
+      ...(env.MASANAWA_OFFICIAL_FACEBOOK_BEARER?{facebookBearer:env.MASANAWA_OFFICIAL_FACEBOOK_BEARER}:{}),
+      ...(env.MASANAWA_OFFICIAL_FACEBOOK_VERSION?{facebookVersion:env.MASANAWA_OFFICIAL_FACEBOOK_VERSION}:{}),
+    }));
+    const run=async()=>{if(officialSocialRunning||drain.isDraining())return;officialSocialRunning=true;
+      try{await sync.runOnce();}catch{console.error(JSON.stringify({event:'official.source_sync_unavailable'}));}
+      finally{officialSocialRunning=false;}};
+    officialSocialTimer=setInterval(()=>{void run();},60000);officialSocialTimer.unref();
+  }
   if(database.featurePool){
     await recoverReplies();
     replyRecoveryTimer=setInterval(()=>{void recoverReplies()},30000);

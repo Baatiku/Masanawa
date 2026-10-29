@@ -8,10 +8,10 @@ import 'status_promotion_api.dart';
 /// Inactive content is shown only by this signed-in session until server purge.
 class MyStatusPromotionsScreen extends StatefulWidget {
   const MyStatusPromotionsScreen({super.key,required this.api,
-    required this.onBoostAgain,this.canBoost=true,
+    this.onBoostAgain,this.canBoost=false,
     this.draftStore,this.onCreatePromotion});
   final StatusPromotionApi api;
-  final Future<void> Function(String postId) onBoostAgain;
+  final Future<void> Function(String postId)? onBoostAgain;
   final Future<void> Function()? onCreatePromotion;
   final StatusPromotionDraftStore? draftStore;
   /// Read-only receipts and deletion remain available if live spending pauses.
@@ -170,7 +170,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
           child:Text(error!))),
         if(!widget.canBoost)const ListTile(
           leading:Icon(Icons.info_outline),
-          title:Text('New promotion spending is temporarily unavailable.'),
+          title:Text('User posting has been retired.'),
           subtitle:Text('Your existing receipts and post deletion are still available.')),
         Text('My campaigns',style:Theme.of(context).textTheme.titleLarge),
         if(draft!=null)Card(child:ListTile(
@@ -179,9 +179,8 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
           subtitle:Text('${draft!.body.isEmpty?'Untitled promotion':draft!.body}\n'
             '${draft!.targetViews} selected views · no budget reserved yet',
             maxLines:3,overflow:TextOverflow.ellipsis),
-          trailing:TextButton(onPressed:widget.canBoost&&
-              widget.onCreatePromotion!=null?continueDraft:null,
-            child:const Text('Continue')))),
+          trailing:widget.canBoost&&widget.onCreatePromotion!=null?TextButton(onPressed:continueDraft,
+            child:const Text('Continue')):null)),
         SingleChildScrollView(scrollDirection:Axis.horizontal,
           child:Row(children:[
             for(final filter in const <(String,String)>[
@@ -258,10 +257,9 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
             Row(mainAxisAlignment:MainAxisAlignment.end,children:[
               TextButton(onPressed:pending.contains(p['postId'])?null:
                 ()=>delete('${p['postId']}'),child:const Text('Delete')),
-              TextButton(onPressed:pending.contains(p['postId'])||
-                !widget.canBoost||
+              if(widget.canBoost&&widget.onBoostAgain!=null) TextButton(onPressed:pending.contains(p['postId'])||
                 (_remaining(p['purgeAt'])??Duration.zero)<=Duration.zero?null:() async {
-                await widget.onBoostAgain('${p['postId']}');
+                await widget.onBoostAgain?.call('${p['postId']}');
                 if(mounted)await refresh();
               },child:const Text('Boost again')),
             ]),

@@ -12,7 +12,6 @@ import '../../ui/components/masanawa_profile_skeleton.dart';
 import '../../core/providers.dart';
 import '../../features/home_feed/my_status_promotions_screen.dart';
 import '../../features/home_feed/status_promotion_api.dart';
-import '../../features/home_feed/status_promotion_sheet.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -53,12 +52,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
         accessToken: () async => ref.read(apiClientProvider).accessToken,
         journal: SecureStatusPromotionJournal(owner),
       );
-      // The read-only owner ledger must remain reachable during a new-spend
-      // freeze; only Boost Again requires a positive server capability.
-      bool canBoost = false;
-      try { canBoost = await promotions.available(); } catch (_) {}
       if (!mounted || currentAccount() != owner) return;
-      final spendingEnabled = canBoost;
       await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) =>
         Consumer(builder: (context, routeRef, __) {
           final current = routeRef.watch(sessionProvider);
@@ -68,23 +62,7 @@ class _PersonProfileScreenState extends ConsumerState<PersonProfileScreen> {
               'This account changed. Go back to reopen your own posts.')));
           }
           return MyStatusPromotionsScreen(
-            api: promotions, canBoost: spendingEnabled,
-            onBoostAgain: (postId) async {
-              if (!spendingEnabled || currentAccount() != owner) return;
-              await showModalBottomSheet<StatusPromotionCampaign>(
-                context: context, isScrollControlled: true,
-                builder: (sheetContext) => Consumer(builder: (sheetContext, sheetRef, _) {
-                  final active = sheetRef.watch(sessionProvider);
-                  if (active is! SessionSignedIn || active.user.id != owner ||
-                      sheetRef.read(sessionProvider.notifier).authorizationEpoch != authEpoch) {
-                    return const SafeArea(child: Padding(padding: EdgeInsets.all(24),
-                      child: Text('Session changed. Close and reopen your own posts.')));
-                  }
-                  return StatusPromotionSheet(api: promotions, postId: postId,
-                    onRecharge: () async { await sheetContext.push<void>('/wallet'); });
-                }),
-              );
-            },
+            api: promotions, canBoost: false,
           );
         }),
       ));

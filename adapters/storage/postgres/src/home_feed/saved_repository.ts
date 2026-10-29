@@ -1,12 +1,12 @@
 import type {Pool} from "pg";
-import {statusAuthorOwnership} from "./author_scope.js";
+import {statusAuthorOwnership,officialSourceEligibility} from "./author_scope.js";
 // Structural DTO equivalent to the canonical packages/feed/src/saved.ts port.
 type SavedCursor={at:string;kind:"post";id:string};
 type SavedItem={kind:"post";id:string;savedAt:string;post?:Record<string,unknown>};
 
 /** One fan-private projection of the same eligible public Home posts as the feed. */
 export class PgSavedLibraryRepository {
-  constructor(private readonly pool:Pool){}
+  constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false){}
   async list(tenant:string,fan:string,before:SavedCursor|null,limit:number):Promise<readonly SavedItem[]> {
     const sql=String.raw`WITH saved_items AS (
       SELECT 'post'::text AS kind, s.post_id AS id, s.created_at AS saved_at,
@@ -21,7 +21,7 @@ export class PgSavedLibraryRepository {
                 FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id
                 AND r.character_id=p.author_masana_id AND r.state='approved'
                 LIMIT 1),p.author_masana_id)) END,
-          'kind',p.kind,'body',p.body,'media',p.media_ids,'transcript',p.transcript,
+          'source',${this.enforceOfficialSources?'p.source_provenance':"NULL"},'kind',p.kind,'body',p.body,'media',p.media_ids,'transcript',p.transcript,
           'publishedAt',p.published_at,'likeCount',
             (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like'),
           'reactionCounts',COALESCE((SELECT jsonb_object_agg(rc.reaction_kind,rc.n)
@@ -50,7 +50,7 @@ export class PgSavedLibraryRepository {
           'boostEligible',(p.paid_purged_at IS NULL AND p.state='published'),
           'viewerSaved',true) AS payload
       FROM feed.saves s JOIN feed.posts p ON p.tenant_id=s.tenant_id AND p.id=s.post_id
-      WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published'
+      WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published' AND ${this.enforceOfficialSources?officialSourceEligibility:'true'}
         AND ((p.author_type='masana' AND EXISTS(
           SELECT 1 FROM masana.character_revisions r
           JOIN identity.characters a ON a.tenant_id=r.tenant_id AND a.character_id=r.character_id
