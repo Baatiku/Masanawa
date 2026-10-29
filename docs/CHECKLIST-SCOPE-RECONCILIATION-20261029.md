@@ -1,3 +1,5 @@
+**Latest owner clarification, 29 October:** Earlier 16-open qualification counts remain a historical inventory, not 16 engineering tasks or approval requests. The owner confirms Billstack deposits and owns later manual Data/provider/persona live acceptance. Current coding must not wait for those manual checks. PO01 uses latest dated online reporting, with no mandatory INEC download; PO02 biographies use Grokipedia only, with no mandatory secondary record or per-official approval. External API availability and actual source retrieval remain practical dependencies, not invented permission requirements. No blocked-source item is marked implemented without its actual evidence.
+
 # Checklist reconciliation after paid-sharing retirement — 29 October 2026
 
 The owner removed Share & Earn, paid sharing and paid Boost, including admin-funded official-post rewards. Ordinary Share and purchased-MB tips remain. This register does not mark removed work implemented. Original checked boxes remain historical evidence of delivered work; the earlier 29/88 count is not an active-scope completion count.

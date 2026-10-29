@@ -12,7 +12,13 @@
       "https://grokipedia.com/page/Atiku_Abubakar",
       "https://grokipedia.com/page/Peter_Obi",
       "https://grokipedia.com/page/Sandy_Onor"
-    ]
+    ],
+    "accessDiagnosis": {
+      "workspace": "restricted enforced allowlist excludes grokipedia.com",
+      "supportedWebReader": "article/root open failed non-retryably; Grokipedia-only queries empty",
+      "higgsfieldSandbox": "tool is scoped to Higgsfield media and hosted website work, not general web research",
+      "requiredEnvironmentChange": "Add grokipedia.com and www.grokipedia.com to allowed domains through supported environment configuration; no proxy bypass attempted"
+    }
   },
   "pendingPrimaryStates": [
     "Akwa Ibom",
@@ -29,5 +35,12 @@
     "Official-account ownership and stable IDs",
     "Authorized X/Meta API access",
     "Real-provider factual/multilingual/voice evaluation and pilot"
-  ]
+  ],
+  "ownerClarification": {
+    "biographySource": "Grokipedia only",
+    "candidateDiscovery": "latest dated online reporting; INEC optional",
+    "liveProviderAndPersonaAcceptance": "owner-run",
+    "billstackDeposits": "owner-confirmed working",
+    "individualOfficialPermissionRequired": false
+  }
 }

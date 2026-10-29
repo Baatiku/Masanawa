@@ -1,3 +1,5 @@
+**Owner clarification, 29 October 2026:** Use Grokipedia exclusively for persona biographies and documented biographical positions; do not require independent official-record/INEC corroboration. Use recent accessible online reporting for candidate discovery/status, clearly distinguishing aspirants from confirmed nominations. Original X/Facebook status imports remain separately requested. The owner confirms Billstack deposits and owns later live Data/provider/persona qualification. No individual official's approval request is an engineering admission requirement; source attribution/account identity/API availability still have to be real. Older source/qualification wording below is superseded where it conflicts.
+
 **Owner scope correction, 29 October 2026:** Remove Share & Earn, paid sharing and paid Boost, including admin-funded rewards on official posts. Keep ordinary Share and purchased-MB tipping. Earlier monetization requirements are retired, not completed. Preserve historical receipts, liabilities, refunds and recovery; never erase financial history or repurpose reward balances. This instruction supersedes older paid-promotion scope below.
 
 # Nigerian public-official personas — owner pivot, 28 October 2026
@@ -21,7 +23,7 @@ Maintain two separately authorized knowledge domains:
 
 Every persona must clearly identify itself as an AI simulation. It may explain documented views and quote evidence, but must distinguish quotations, supported facts and inference. It must not invent private knowledge, new policy promises, real-world actions or endorsement. Calls use the same evidence and disclosures with generic voices; the product does not connect callers to an actual officeholder.
 
-Grokipedia is the requested biographical reference, corroborated by primary records. Access to its pages could not be verified in this environment, so no biography has been fabricated or marked reviewed. Check applicable [xAI terms](https://x.ai/legal/terms-of-service) and page-level licenses before ingestion; attribution alone is not a blanket reuse license.
+Grokipedia is the sole biographical reference selected by the owner. Access to its pages could not be verified in this environment, so no biography has been fabricated or marked reviewed. Check applicable [xAI terms](https://x.ai/legal/terms-of-service) and page-level licenses before ingestion; attribution alone is not a blanket reuse license.
 
 ## Research scope
 
@@ -42,13 +44,13 @@ These are source changes, not a claim of production readiness. Tests already cov
 
 The nine code checkpoints close with this batch after its exact-head required checks pass and merge. Six actual data/access/launch checkpoints remain open; none is an owner-phone-only gate.
 
-- [ ] **PO01** Finish primary nomination/party review for the remaining 26 governorship tickets. Four presidential and 76 governorship tickets are already text-matched to primary documents.
-- [ ] **PO02** Obtain accessible licensed Grokipedia/primary biographies, dated speeches/positions and cleared imagery for the first cohort; record actual reviewer decisions.
+- [ ] **PO01** Refresh the APC/ADC/NDC/PDP presidential and governorship roster from the latest accessible dated online reporting. Label confirmed nominations, declared aspirants and reported contenders separately. INEC documents are optional sources, not completion prerequisites; earlier rows require freshness review.
+- [ ] **PO02** Retrieve actual Grokipedia biographies and dated information for the first cohort; preserve direct article provenance and actual review decisions. No secondary biography source or individual permission request is required. Do not fabricate contents when access is unavailable.
 - [x] **PO03** Trusted operator dossier/source admission, exact canonical/version binding, no fictional-persona reassignment, immutable hashed receipts and safe retries.
 - [x] **PO04** Bounded public-evidence retrieval for text/captions and approved original social posts, with content-hash-bound citation identities and final freshness checks.
 - [x] **PO05** Captionless speech transcription, multilingual query expansion and server-owned live-call evidence lookup with current account/version checks and bounded read-only tools.
 - [x] **PO06** Checked source IDs/URLs and literal quotations before citizen output, honest insufficient-evidence fallback, and reviewed gold-case evaluation tooling. This validates provenance contracts, not all possible factual claims.
-- [ ] **PO07** Run the first cohort against real reviewed biographies and configured models/providers: factual accuracy, dated affiliations, quotations, unknowns, injection, multilingual and chat/voice consistency. Synthetic fixtures are not live qualification.
+- [ ] **PO07** Owner-run live acceptance against real Grokipedia biographies and configured models/providers: factual accuracy, dated affiliations, quotations, unknowns, injection, multilingual and chat/voice consistency. Synthetic fixtures are not live qualification.
 - [ ] **PO08** Verify each selected official account's ownership and stable provider ID; choose one active source per person.
 - [ ] **PO09** Configure authorized X/Meta secrets and qualify actual access, usage rights, quotas and provider compliance obligations. Required variable names are absent from Railway's read-only inventory.
 - [x] **PO10** Original-source attribution shared across Home/detail/Saved; safe photo/story source links and metadata retained through reactions/save.
@@ -56,7 +58,7 @@ The nine code checkpoints close with this batch after its exact-head required ch
 - [x] **PO12** Explicit per-object deletion/access reconciliation, X edit-history normalization, stable original timestamps, platform-wide rate backoff, bounded concurrency and independent head/backfill recovery.
 - [x] **PO13** Consolidated schema/recovery, source isolation, accessibility and historical-finance regression checks. Local: 197 backend tests and 62 mobile tests PASS; required hosted PostgreSQL/full-suite checks gate merge.
 - [x] **PO14** Scoped source PR, review and exact-head required checks before merge. Source-closed on the completion batch's green merge, not a deployment claim.
-- [ ] **PO15** Qualify production rollout and a genuinely sourced live pilot after PO02/PO07/PO08/PO09. No official profile, source account or importer has been activated by this batch.
+- [ ] **PO15** Owner-run live pilot and rollout acceptance after PO02/PO07/PO08/PO09. No official profile, source account or importer has been activated by this batch.
 
 Do not mark these items complete merely because an adapter or schema exists. Do not retire old user finances or enable public profiles based on a research shortlist.
 

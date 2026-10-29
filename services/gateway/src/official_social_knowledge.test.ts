@@ -11,9 +11,9 @@ it('retrieves originals as dated statements with hash-bound IDs and removes with
  INSERT INTO identity.characters VALUES('t','official','v1','active');INSERT INTO identity.character_ownership VALUES('t','official','platform');`);
  await db.exec(await readFile(new URL('../../../packages/masana/migrations/0011_public_official_dossiers.sql',import.meta.url),'utf8'));
  for(const name of ['0001_feed.sql','0017_official_social_sources.sql'])await db.exec(await readFile(new URL('../../../packages/feed/migrations/'+name,import.meta.url),'utf8'));
- await db.exec(`INSERT INTO masana.public_official_dossiers VALUES('t','official','v1','Example Official','Governor','NG','https://example.gov.ng/bio','reviewer',now(),now()+interval '7 days','approved');
+ await db.exec(`INSERT INTO masana.public_official_dossiers VALUES('t','official','v1','Example Official','Governor','NG','https://grokipedia.com/page/example','reviewer',now(),now()+interval '7 days','approved');
  INSERT INTO masana.public_official_evidence(tenant_id,character_id,source_url,source_kind,title,content,content_sha256,source_date,valid_until,state,license_basis,reviewed_by)
- SELECT 't','official','https://example.gov.ng/'||kind,kind,'Reviewed record','Public biography',repeat('a',64),'2026-10-01',now()+interval '7 days','approved','Reviewed rights','reviewer' FROM unnest(ARRAY['grokipedia','official_record']) AS kind;
+ SELECT 't','official','https://grokipedia.com/page/example',kind,'Reviewed record','Public biography',repeat('a',64),'2026-10-01',now()+interval '7 days','approved','Reviewed rights','reviewer' FROM unnest(ARRAY['grokipedia']) AS kind;
  INSERT INTO feed.official_social_sources(tenant_id,character_id,platform,account_id,handle,rights_basis,state,reviewed_by,review_expires_at) VALUES('t','official','x','123','official','Reviewed account rights','approved','reviewer',now()+interval '7 days');`);
  const text='Today I spoke about fuel subsidy policy.',sha=createHash('sha256').update(text).digest('hex');
  const source=(await db.query<{id:string}>('SELECT id FROM feed.official_social_sources')).rows[0]!.id;
